@@ -313,7 +313,7 @@ StyledPopup {
 
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            text: "laptop_chromebook"
+                            text: Battery.available ? "laptop_chromebook" : "desktop_windows"
                             iconSize: 36
                             color: Appearance.m3colors.m3onPrimary
                         }
