@@ -78,6 +78,7 @@ Rectangle {
 
     property bool isFirst: itemIndex === 0
     property bool isLast: itemIndex === totalItems - 1
+    property bool isAlone: totalItems === 1
 
     readonly property bool isPressed: false
 
@@ -141,10 +142,11 @@ Rectangle {
         return false;
     }
 
-    topLeftRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    topRightRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    bottomLeftRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    bottomRightRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    topLeftRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : ((isFirst || isAlone) ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    topRightRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : ((isFirst || isAlone) ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    bottomLeftRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : ((isLast || isAlone) ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    bottomRightRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : ((isLast || isAlone) ? Appearance.rounding.large : Appearance.rounding.verysmall)
+
 
     Behavior on topLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
     Behavior on topRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
