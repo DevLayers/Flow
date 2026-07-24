@@ -49,7 +49,7 @@ Singleton {
         "id": "wallpaper",
         "name": "Background",
         "icon": "wallpaper",
-        "component": "modules/settings/configs/WallpaperConfig.qml",
+        "component": "modules/settings/configs/BackgroundConfig.qml",
         "subPages": [],
         "aliases": ["Wallpaper", "Backgrounds", "Wallpaper Engine"]
     }, {
