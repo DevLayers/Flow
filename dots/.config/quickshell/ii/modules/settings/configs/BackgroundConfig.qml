@@ -97,7 +97,6 @@ ContentPage {
                 Config.options.background.parallax.workspaceZoom = value / 100;
             }
         }
-
     }
 
     ContentSection {
@@ -121,48 +120,57 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.background.wallpaperAnimation
-                onSelected: (newValue) => {
+                onSelected: newValue => {
                     Config.options.background.wallpaperAnimation = newValue;
                 }
-                options: [{
-                    "displayName": Translation.tr("Random"),
-                    "icon": "shuffle",
-                    "value": "random"
-                }, {
-                    "displayName": Translation.tr("Crossfade"),
-                    "icon": "blur_on",
-                    "value": ""
-                }, {
-                    "displayName": Translation.tr("Circle Pit"),
-                    "icon": "circle",
-                    "value": "circlePit"
-                }, {
-                    "displayName": Translation.tr("Circle Select"),
-                    "icon": "radio_button_checked",
-                    "value": "circleSelect"
-                }, {
-                    "displayName": Translation.tr("Magic"),
-                    "icon": "auto_awesome",
-                    "value": "magic"
-                }, {
-                    "displayName": Translation.tr("Peel"),
-                    "icon": "sticky_note_2",
-                    "value": "Peel"
-                }, {
-                    "displayName": Translation.tr("Transition"),
-                    "icon": "swap_horiz",
-                    "value": "transition"
-                }, {
-                    "displayName": Translation.tr("Pixelate"),
-                    "icon": "grid_on",
-                    "value": "pixelate"
-                }, {
-                    "displayName": Translation.tr("Stripes"),
-                    "icon": "view_column",
-                    "value": "stripes"
-                }]
+                options: [
+                    {
+                        "displayName": Translation.tr("Random"),
+                        "icon": "shuffle",
+                        "value": "random"
+                    },
+                    {
+                        "displayName": Translation.tr("Crossfade"),
+                        "icon": "blur_on",
+                        "value": ""
+                    },
+                    {
+                        "displayName": Translation.tr("Circle Pit"),
+                        "icon": "circle",
+                        "value": "circlePit"
+                    },
+                    {
+                        "displayName": Translation.tr("Circle Select"),
+                        "icon": "radio_button_checked",
+                        "value": "circleSelect"
+                    },
+                    {
+                        "displayName": Translation.tr("Magic"),
+                        "icon": "auto_awesome",
+                        "value": "magic"
+                    },
+                    {
+                        "displayName": Translation.tr("Peel"),
+                        "icon": "sticky_note_2",
+                        "value": "Peel"
+                    },
+                    {
+                        "displayName": Translation.tr("Transition"),
+                        "icon": "swap_horiz",
+                        "value": "transition"
+                    },
+                    {
+                        "displayName": Translation.tr("Pixelate"),
+                        "icon": "grid_on",
+                        "value": "pixelate"
+                    },
+                    {
+                        "displayName": Translation.tr("Stripes"),
+                        "icon": "view_column",
+                        "value": "stripes"
+                    }
+                ]
             }
-
         }
 
         ConfigSwitch {
@@ -176,7 +184,6 @@ ContentPage {
             StyledToolTip {
                 text: Translation.tr("Experimental - Blur the wallpaper and widgets when a window is open on the current workspace.")
             }
-
         }
 
         ConfigSlider {
@@ -204,7 +211,6 @@ ContentPage {
             StyledToolTip {
                 text: Translation.tr("Apply a gradient blur effect across the wallpaper for a smooth transition from sharp to blurred.")
             }
-
         }
 
         ConfigSlider {
@@ -229,28 +235,32 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.background.gradientBlur.direction ?? "top-to-bottom"
-                onSelected: (newValue) => {
+                onSelected: newValue => {
                     Config.options.background.gradientBlur.direction = newValue;
                 }
-                options: [{
-                    "displayName": Translation.tr("Top → Bottom"),
-                    "icon": "arrow_downward",
-                    "value": "top-to-bottom"
-                }, {
-                    "displayName": Translation.tr("Bottom → Top"),
-                    "icon": "arrow_upward",
-                    "value": "bottom-to-top"
-                }, {
-                    "displayName": Translation.tr("Left → Right"),
-                    "icon": "arrow_forward",
-                    "value": "left-to-right"
-                }, {
-                    "displayName": Translation.tr("Right → Left"),
-                    "icon": "arrow_back",
-                    "value": "right-to-left"
-                }]
+                options: [
+                    {
+                        "displayName": Translation.tr("Top → Bottom"),
+                        "icon": "arrow_downward",
+                        "value": "top-to-bottom"
+                    },
+                    {
+                        "displayName": Translation.tr("Bottom → Top"),
+                        "icon": "arrow_upward",
+                        "value": "bottom-to-top"
+                    },
+                    {
+                        "displayName": Translation.tr("Left → Right"),
+                        "icon": "arrow_forward",
+                        "value": "left-to-right"
+                    },
+                    {
+                        "displayName": Translation.tr("Right → Left"),
+                        "icon": "arrow_back",
+                        "value": "right-to-left"
+                    }
+                ]
             }
-
         }
 
         ConfigSwitch {
@@ -264,7 +274,6 @@ ContentPage {
             StyledToolTip {
                 text: Translation.tr("Experimental - Scale windows with wallpaper when Overview/Cheatsheet is opened, this is a work in progress, expect bugs and a lags on low end hardware.")
             }
-
         }
 
         ContentSubsection {
@@ -275,24 +284,27 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.background.zoomOutStyle
-                onSelected: (newValue) => {
+                onSelected: newValue => {
                     Config.options.background.zoomOutStyle = newValue;
                 }
-                options: [{
-                    "displayName": Translation.tr("Gnome Like"),
-                    "icon": "blur_on",
-                    "value": 0
-                }, {
-                    "displayName": Translation.tr("Default"),
-                    "icon": "grid_view",
-                    "value": 1
-                }, {
-                    "displayName": Translation.tr("Zoom In"),
-                    "icon": "zoom_in",
-                    "value": 2
-                }]
+                options: [
+                    {
+                        "displayName": Translation.tr("Gnome Like"),
+                        "icon": "blur_on",
+                        "value": 0
+                    },
+                    {
+                        "displayName": Translation.tr("Default"),
+                        "icon": "grid_view",
+                        "value": 1
+                    },
+                    {
+                        "displayName": Translation.tr("Zoom In"),
+                        "icon": "zoom_in",
+                        "value": 2
+                    }
+                ]
             }
-
         }
 
         ConfigSwitch {
@@ -307,7 +319,6 @@ ContentPage {
             StyledToolTip {
                 text: Translation.tr("Shows scaled ScreencopyView of windows zooming out with the wallpaper when the overview opens.\nWindows on the active workspace follow the wallpaper zoom animation.\nWorkspace switching slides the window previews alongside the workspace animation.")
             }
-
         }
 
         ConfigSwitch {
@@ -322,17 +333,28 @@ ContentPage {
             StyledToolTip {
                 text: Translation.tr("When enabled, window previews stay live instead of freezing on overview open.\nDisable for better performance (freezes capture on open).")
             }
-
         }
-
     }
 
     ContentSection {
         title: Translation.tr("Media Mode Background")
         icon: "music_note"
 
+        KeyboardShortcutBox {
+            Layout.fillWidth: true
+            text: Translation.tr("Toggle Media Mode")
+            keys: ["Super", "Z"]
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            isFirst: true
+            text: Translation.tr("These settings apply exclusively to the full-screen Media Mode background overlay.")
+        }
+
         ConfigSwitch {
             buttonIcon: "lyrics"
+
             text: Translation.tr("Show synchronized lyrics panel")
             checked: Config.options.background.mediaMode.showLyrics ?? true
             onCheckedChanged: {
@@ -365,26 +387,31 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.background.mediaMode.visualizerMode ?? 1
-                onSelected: (newValue) => {
+                onSelected: newValue => {
                     Config.options.background.mediaMode.visualizerMode = newValue;
                 }
-                options: [{
-                    "displayName": Translation.tr("Off"),
-                    "icon": "equalizer",
-                    "value": 0
-                }, {
-                    "displayName": Translation.tr("Waves"),
-                    "icon": "waves",
-                    "value": 1
-                }, {
-                    "displayName": Translation.tr("Bars"),
-                    "icon": "bar_chart",
-                    "value": 2
-                }, {
-                    "displayName": Translation.tr("Radial"),
-                    "icon": "blur_circular",
-                    "value": 3
-                }]
+                options: [
+                    {
+                        "displayName": Translation.tr("Off"),
+                        "icon": "equalizer",
+                        "value": 0
+                    },
+                    {
+                        "displayName": Translation.tr("Waves"),
+                        "icon": "waves",
+                        "value": 1
+                    },
+                    {
+                        "displayName": Translation.tr("Bars"),
+                        "icon": "bar_chart",
+                        "value": 2
+                    },
+                    {
+                        "displayName": Translation.tr("Radial"),
+                        "icon": "blur_circular",
+                        "value": 3
+                    }
+                ]
             }
         }
 
@@ -439,7 +466,6 @@ ContentPage {
                 extraVisibleCondition: spinBoxMouseArea.containsMouse
                 text: Translation.tr("1: very slow | 10: default | 20: 2x speed...")
             }
-
         }
 
         ConfigSpinBox {
@@ -461,10 +487,10 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.background.mediaMode.backgroundShape
-                onSelected: (newValue) => {
+                onSelected: newValue => {
                     Config.options.background.mediaMode.backgroundShape = newValue;
                 }
-                options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map((icon) => {
+                options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map(icon => {
                     return {
                         "displayName": "",
                         "shape": icon,
@@ -472,7 +498,6 @@ ContentPage {
                     };
                 })
             }
-
         }
 
         ConfigSwitch {
@@ -491,20 +516,22 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.background.mediaMode.syllable.textHighlightStyle
-                onSelected: (newValue) => {
+                onSelected: newValue => {
                     Config.options.background.mediaMode.syllable.textHighlightStyle = newValue;
                 }
-                options: [{
-                    "displayName": Translation.tr("Vertical"),
-                    "icon": "vertical_distribute",
-                    "value": 0
-                }, {
-                    "displayName": Translation.tr("Horizontal"),
-                    "icon": "horizontal_distribute",
-                    "value": 1
-                }]
+                options: [
+                    {
+                        "displayName": Translation.tr("Vertical"),
+                        "icon": "vertical_distribute",
+                        "value": 0
+                    },
+                    {
+                        "displayName": Translation.tr("Horizontal"),
+                        "icon": "horizontal_distribute",
+                        "value": 1
+                    }
+                ]
             }
-
         }
 
         ConfigSwitch {
@@ -515,7 +542,6 @@ ContentPage {
                 Config.options.background.mediaMode.togglePerMonitor = checked;
             }
         }
-
     }
 
     ShortcutBox {
@@ -524,7 +550,6 @@ ContentPage {
         targetPageId: "widgets"
         targetSectionTitle: Translation.tr("Widget Manager")
     }
-
 
     ContentSection {
         icon: "link"
