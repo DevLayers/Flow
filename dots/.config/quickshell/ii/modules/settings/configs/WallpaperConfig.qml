@@ -327,11 +327,24 @@ ContentPage {
 
     }
 
+    KeyboardShortcutBox {
+        Layout.fillWidth: true
+        text: Translation.tr("Toggle Media Mode")
+        keys: ["Super", "Z"]
+    }
+
     ContentSection {
         title: Translation.tr("Media Mode Background")
         icon: "music_note"
 
+        NoticeBox {
+            Layout.fillWidth: true
+            isFirst: true
+            text: Translation.tr("These settings apply exclusively to the full-screen Media Mode background overlay.")
+        }
+
         ConfigSwitch {
+
             buttonIcon: "lyrics"
             text: Translation.tr("Show synchronized lyrics panel")
             checked: Config.options.background.mediaMode.showLyrics ?? true
