@@ -1,5 +1,6 @@
 pragma Singleton
 
+import QtQuick
 import qs.modules.common
 import qs.modules.common.functions
 import Quickshell
@@ -166,12 +167,22 @@ Singleton {
 
     property var _iconCache: ({})
 
+    // Desktop entries populate asynchronously on startup; a guess made before that
+    // finishes can wrongly cache a giveup icon forever. Clear the cache once the
+    // scan completes so any poisoned entries get re-guessed correctly.
+    Connections {
+        target: DesktopEntries
+        function onApplicationsChanged() {
+            root._iconCache = {};
+        }
+    }
+
     function guessIcon(str) {
         if (!str || str.length == 0)
             return "image-missing";
         if (_iconCache[str] !== undefined)
             return _iconCache[str];
-        
+
         let result = _guessIconImpl(str);
         _iconCache[str] = result;
         return result;

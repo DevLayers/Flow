@@ -285,6 +285,8 @@ PROTECTED_PATTERNS=(
     "*.env"
     ".env"
     "user/generated/*.json"
+    "scripts/hyprland/workspace_compactor"
+    "scripts/hyprland/workspace_profile_manager"
 )
 
 # populate PROTECTED_FILES array based on whether destination == current fork

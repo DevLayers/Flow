@@ -331,8 +331,11 @@ Item {
             verticalTranslation
         ]
 
+        readonly property bool trayEmpty: modelData.id === "system_tray"
+            && TrayService.pinnedItems.length === 0 && TrayService.unpinnedItems.length === 0
         readonly property bool paddingless: registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial
             || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
+            || trayEmpty
         padding:       paddingless ? 0 : 5
         leftPadding:   paddingless ? 0 : padding
         rightPadding:  paddingless ? 0 : padding

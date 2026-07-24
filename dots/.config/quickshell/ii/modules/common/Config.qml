@@ -342,6 +342,7 @@ Singleton {
                     property int maxSize: 0
                     property int videoBuffer: 0  // scrcpy 4.0 default is 0ms — 80ms adds visible latency
                     property bool useWireless: false
+                    property bool autoWirelessIp: true  // resolve IP live from KDE Connect instead of the manual field
                     property string wirelessIp: ""
                     property string wirelessPort: "5555"
                     property bool showTerminal: false
@@ -1567,7 +1568,13 @@ Singleton {
                 }
                 property JsonObject annotation: JsonObject {
                     property bool useSatty: false
-                    property bool enableInlineEditor: false
+                    property bool enableInlineEditor: true
+                    property real fillOpacity: 0.25
+                    property real highlighterOpacity: 0.4
+                    property int badgeStartNumber: 1
+                    // Pixelation coarseness for the blur tool (source-px divisor):
+                    // bigger = chunkier blocks. Independent of line thickness.
+                    property int blurStrength: 24
                 }
             }
 
