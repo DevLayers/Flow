@@ -372,6 +372,9 @@ PanelWindow {
             asynchronous: true
             sourceComponent: MediaMode {}
             opacity: mediaModeLoader.status === Loader.Ready ? 1 : 0
+            onActiveChanged: {
+                GlobalStates.setMediaModeActiveForScreen(bgRoot.screen ? bgRoot.screen.name : "", active);
+            }
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }

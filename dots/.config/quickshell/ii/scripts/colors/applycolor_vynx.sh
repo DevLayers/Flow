@@ -133,19 +133,8 @@ with open(tmp_path, "w") as f:
 os.rename(tmp_path, output_path)
 ' "$STATE_DIR/user/generated/material_colors.scss" "$SCRIPT_DIR/terminal/sequences.txt" "$STATE_DIR/user/generated/terminal/sequences.txt" "$term_alpha"
 
-  # Build the set of ptys with an attached process in a single ps call
-  # (avoids forking ps once per pty; kwrited's console pty has none).
-  local -A ptys_with_procs=()
-  local tty
-  while read -r tty; do
-    [[ $tty == pts/* ]] && ptys_with_procs[${tty#pts/}]=1
-  done < <(ps -e -o tty=)
-
   for file in /dev/pts/*; do
-    if [[ $file =~ ^/dev/pts/([0-9]+)$ ]]; then
-      # Skip ptys with no attached foreground process (e.g. kwrited's console pty),
-      # which misinterpret the raw OSC sequence as a wall(1)/write(1) message.
-      [[ -n ${ptys_with_procs[${BASH_REMATCH[1]}]:-} ]] || continue
+    if [[ $file =~ ^/dev/pts/[0-9]+$ ]]; then
       {
       cat "$STATE_DIR"/user/generated/terminal/sequences.txt >"$file"
       } & disown || true

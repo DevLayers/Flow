@@ -40,26 +40,6 @@ ContentPage {
             }
         }
 
-        ConfigSwitch {
-            buttonIcon: "sync_alt"
-            text: Translation.tr("Auto-detect IP (KDE Connect)")
-            checked: Config.options.phone.scrcpy.autoWirelessIp
-            onCheckedChanged: {
-                Config.options.phone.scrcpy.autoWirelessIp = checked;
-            }
-            enabled: Config.options.phone.scrcpy.useWireless
-        }
-
-        StyledText {
-            Layout.fillWidth: true
-            Layout.leftMargin: 4
-            visible: Config.options.phone.scrcpy.useWireless && Config.options.phone.scrcpy.autoWirelessIp
-            text: KdeConnectService.resolvedWirelessHost !== "" ? Translation.tr("Will connect to %1").arg(KdeConnectService.resolvedWirelessHost) : Translation.tr("Waiting for KDE Connect to report the phone's IP…")
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colSubtext
-            wrapMode: Text.Wrap
-        }
-
         ConfigTextField {
             icon: "dns"
             text: Translation.tr("Wireless IP")
@@ -68,8 +48,7 @@ ContentPage {
             textField.onTextChanged: {
                 Config.options.phone.scrcpy.wirelessIp = textField.text;
             }
-            visible: Config.options.phone.scrcpy.useWireless && !Config.options.phone.scrcpy.autoWirelessIp
-            enabled: visible
+            enabled: Config.options.phone.scrcpy.useWireless
         }
 
         ConfigTextField {
@@ -80,8 +59,7 @@ ContentPage {
             textField.onTextChanged: {
                 Config.options.phone.scrcpy.wirelessPort = textField.text;
             }
-            visible: Config.options.phone.scrcpy.useWireless && !Config.options.phone.scrcpy.autoWirelessIp
-            enabled: visible
+            enabled: Config.options.phone.scrcpy.useWireless
         }
 
         ConfigSwitch {

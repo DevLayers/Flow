@@ -335,6 +335,7 @@ ContentPage {
             }
         }
     }
+
     KeyboardShortcutBox {
         Layout.fillWidth: true
         text: Translation.tr("Toggle Media Mode")
@@ -342,7 +343,7 @@ ContentPage {
     }
 
     ContentSection {
-        title: Translation.tr("Media Mode Background")
+        title: Translation.tr("Media Mode")
         icon: "music_note"
 
         NoticeBox {

@@ -90,32 +90,6 @@ Singleton {
      *  quick actions (screenshot, power key, volume, am start). */
     property bool adbReachable: false
 
-    /** Live wireless ADB target ("ip:port") the next scrcpy launch will use.
-     *  In auto mode this tracks KDE Connect's reported reachable address so
-     *  the user never has to type an IP that changes (VPN, DHCP, etc.).
-     *  Empty when no host can be resolved. Bound reactively — reads the
-     *  device list, active device id, and scrcpy config so it refreshes
-     *  whenever any of them change. */
-    /** "ip:port" discovered via mDNS (avahi) for the phone's Android 11+
-     *  wireless-debugging service. Carries the CURRENT randomly-assigned
-     *  port, which changes on every toggle/reboot. Empty when not found
-     *  (avahi missing, wireless debugging off, or nothing on the network).
-     *  Refreshed by mdnsProber while wireless auto mode is active. */
-    property string mdnsWirelessHost: ""
-
-    readonly property string resolvedWirelessHost: {
-        root.devices
-        root.activeDeviceId
-        root.mdnsWirelessHost
-        const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
-        if (c) {
-            c.autoWirelessIp
-            c.wirelessIp
-            c.wirelessPort
-        }
-        return root._resolveWirelessHost(root.activeDeviceId)
-    }
-
     property var notifications: []
     readonly property int notificationCount: notifications.length
     onNotificationsChanged: {
@@ -572,7 +546,6 @@ Singleton {
             signalStrength: ev.signalStrength ?? 0,
             supportedPlugins: ev.supported_plugins ?? [],
             loadedPlugins: ev.loaded_plugins ?? [],
-            reachableAddresses: ev.reachableAddresses ?? [],
         }
         if (idx < 0) devices.push(normalized)
         else devices[idx] = Object.assign({}, devices[idx], normalized)
@@ -659,8 +632,6 @@ Singleton {
         }
         if ("loadedPlugins" in changed) patch.loadedPlugins = changed.loadedPlugins.slice(0)
         if ("supportedPlugins" in changed) patch.supportedPlugins = changed.supportedPlugins.slice(0)
-        if ("reachableAddresses" in changed && changed.reachableAddresses)
-            patch.reachableAddresses = changed.reachableAddresses.slice(0)
         root._patchDevice(id, patch)
     }
 
@@ -1054,25 +1025,17 @@ Singleton {
     Process {
         id: adbProbeProc
         running: false
-        command: {
-            const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
-            const useWl = c && c.useWireless
-            const wantIp = useWl ? root._kdeConnectIp(root.activeDeviceId) : ""
-            const fallback = useWl ? root._resolveWirelessHost(root.activeDeviceId) : ""
-            const fb = fallback ? root._shellQuote(fallback) : "''"
-            // In wireless mode, discover the live ip:port via mDNS, falling
-            // back to the KDE Connect / manual host if avahi finds nothing.
-            const resolveIp = useWl
-                ? "IP=$(" + root._mdnsDiscoverSnippet(wantIp) + "); [ -z \"$IP\" ] && IP=" + fb + "; "
-                : "IP=''; "
-            return ["bash", "-c",
-                "if command -v adb >/dev/null 2>&1; then " +
-                resolveIp +
-                "  if [ -n \"$IP\" ]; then adb connect \"$IP\" 2>/dev/null; fi; " +
-                "  STATE=$(adb get-state 2>/dev/null); " +
-                "  [ \"$STATE\" = \"device\" ] && exit 0 || exit 1; " +
-                "else exit 1; fi"]
-        }
+        command: ["bash", "-c",
+            "if command -v adb >/dev/null 2>&1; then " +
+            "  IP=" + root._shellQuote((Config.options.phone && Config.options.phone.scrcpy)
+                                      ? (Config.options.phone.scrcpy.wirelessIp || "")
+                                      : "") + "; " +
+            "  if [ -n \"$IP\" ]; then " +
+            "    adb connect \"$IP\" 2>/dev/null; " +
+            "  fi; " +
+            "  STATE=$(adb get-state 2>/dev/null); " +
+            "  [ \"$STATE\" = \"device\" ] && exit 0 || exit 1; " +
+            "else exit 1; fi"]
         onExited: (code, status) => {
             const now = (code === 0)
             if (now !== root.adbReachable) {
@@ -1085,38 +1048,6 @@ Singleton {
     function _probeAdb() {
         adbProbeProc.running = false
         adbProbeProc.running = true
-    }
-
-    // ─── mDNS discovery of the phone's wireless-debugging port ────
-    // Android 11+ wireless debugging listens on a RANDOM port that changes
-    // on every toggle/reboot. avahi discovers the live ip:port so the user
-    // never has to look it up. Only runs while wireless auto mode is on.
-    Timer {
-        id: mdnsProber
-        interval: 12000
-        repeat: true
-        triggeredOnStart: true
-        running: root.ready && root._enabled
-            && Config.options.phone && Config.options.phone.scrcpy
-            && Config.options.phone.scrcpy.useWireless
-            && Config.options.phone.scrcpy.autoWirelessIp
-        onTriggered: root._probeMdns()
-    }
-
-    Process {
-        id: mdnsProbeProc
-        running: false
-        command: ["bash", "-c", root._mdnsDiscoverSnippet(root._kdeConnectIp(root.activeDeviceId))]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.mdnsWirelessHost = this.text.trim()
-            }
-        }
-    }
-
-    function _probeMdns() {
-        mdnsProbeProc.running = false
-        mdnsProbeProc.running = true
     }
 
     /**
@@ -1161,12 +1092,13 @@ Singleton {
 
         const scrcpyConf = Config.options.phone ? Config.options.phone.scrcpy : null
         const useWireless = scrcpyConf ? scrcpyConf.useWireless : false
-        const wirelessHost = useWireless ? root._resolveWirelessHost(root.activeDeviceId) : ""
+        const wirelessIp = scrcpyConf ? (scrcpyConf.wirelessIp || "") : ""
+        const wirelessPort = scrcpyConf ? (scrcpyConf.wirelessPort || "5555") : "5555"
 
         // Build shell command — delay monkey by 1s so scrcpy starts first.
         let cmd = ""
-        if (wirelessHost.length > 0) {
-            cmd += "adb connect " + root._shellQuote(wirelessHost) + " >/dev/null 2>&1; "
+        if (useWireless && wirelessIp.length > 0) {
+            cmd += "adb connect " + root._shellQuote(wirelessIp + ":" + wirelessPort) + " >/dev/null 2>&1; "
         }
         cmd += "sleep 1; "
         cmd += "adb shell monkey -p " + root._shellQuote(pkg) +
@@ -1347,15 +1279,6 @@ Singleton {
     property string _wirelessPromptDevId: ""
 
     function promptWirelessConnect(devId) {
-        // Auto mode: skip the IP:port dialog entirely — resolve the host
-        // live from KDE Connect and connect straight away.
-        const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
-        if (c && c.autoWirelessIp && root._resolveWirelessHost(devId)) {
-            c.useWireless = true
-            root.launchScrcpy(devId, "wireless")
-            return
-        }
-
         root._wirelessPromptDevId = devId || ""
         wirelessPromptProc.command = [
             "bash", "-c",
@@ -1393,8 +1316,6 @@ Singleton {
                         Config.options.phone.scrcpy.wirelessIp = ip
                         Config.options.phone.scrcpy.wirelessPort = port
                         Config.options.phone.scrcpy.useWireless = true
-                        // User typed an explicit IP — respect it over auto.
-                        Config.options.phone.scrcpy.autoWirelessIp = false
                     }
                     root.launchScrcpy(root._wirelessPromptDevId, "wireless")
                 }
@@ -1406,60 +1327,6 @@ Singleton {
         return "'" + String(s).replace(/'/g, "'\\''") + "'"
     }
 
-    /** Bash pipeline that prints "ip:port" for the phone's Android 11+
-     *  wireless-debugging endpoint (_adb-tls-connect._tcp), discovered via
-     *  mDNS with avahi. This is how we learn the CURRENT random port. When
-     *  `wantIp` is given, the line whose address matches it wins (so the
-     *  right phone is picked with several on the LAN); otherwise the first
-     *  discovered service is used. Prints nothing if avahi is missing or no
-     *  service is advertised. */
-    function _mdnsDiscoverSnippet(wantIp) {
-        const want = root._shellQuote(wantIp || "")
-        return "avahi-browse -rpt _adb-tls-connect._tcp 2>/dev/null | "
-            + "awk -F';' -v want=" + want + " '"
-            + "/^=/ { if (want != \"\" && $8 == want) { print $8\":\"$9; found = 1; exit } "
-            + "if (f == \"\") f = $8\":\"$9 } "
-            + "END { if (!found && f != \"\") print f }'"
-    }
-
-    /** First non-empty LAN address KDE Connect currently reports for the
-     *  device — the address it is actively using, so it stays correct
-     *  across DHCP/VPN changes. Empty string if none is known yet. */
-    function _kdeConnectIp(devId) {
-        const dev = root._findDevice(devId || root.activeDeviceId)
-        if (!dev) return ""
-        const addrs = dev.reachableAddresses || []
-        for (let i = 0; i < addrs.length; i++) {
-            const a = String(addrs[i]).trim()
-            if (a.length > 0) return a
-        }
-        return ""
-    }
-
-    /** Resolves the wireless ADB target as "ip:port". In auto mode the IP
-     *  comes from KDE Connect (falling back to the manual field if KDE
-     *  Connect has nothing yet); in manual mode it's the configured field.
-     *  Returns "" when no IP is available. */
-    function _resolveWirelessHost(devId) {
-        const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
-        if (!c) return ""
-        // Auto mode: prefer the mDNS-discovered host — it carries the phone's
-        // current wireless-debugging port. Only trust the cache when its IP
-        // matches this device (or the device's IP is unknown).
-        if (c.autoWirelessIp && root.mdnsWirelessHost.indexOf(":") > 0) {
-            const mip = root.mdnsWirelessHost.split(":")[0]
-            const kip = root._kdeConnectIp(devId)
-            if (!kip || mip === kip) return root.mdnsWirelessHost
-        }
-        const port = (c.wirelessPort && String(c.wirelessPort).trim() !== "")
-            ? String(c.wirelessPort).trim() : "5555"
-        let ip = ""
-        if (c.autoWirelessIp) ip = root._kdeConnectIp(devId)
-        if (!ip) ip = (c.wirelessIp || "").trim()
-        if (!ip) return ""
-        return (ip.indexOf(":") < 0) ? (ip + ":" + port) : ip
-    }
-
     function launchScrcpy(devId, mode, deepLink) {
         if (!devId) return
 
@@ -1467,8 +1334,10 @@ Singleton {
         // Without it, scrcpy has no device to connect to and the error is
         // just "unknown" — unhelpful. Early return with a descriptive message.
         if (!root.adbReachable) {
-            const wirelessHostPreflight = root._resolveWirelessHost(devId)
-            if (!wirelessHostPreflight || mode === "usb") {
+            const wirelessIp = Config.options.phone && Config.options.phone.scrcpy
+                ? (Config.options.phone.scrcpy.wirelessIp || "").trim()
+                : ""
+            if (!wirelessIp || mode === "usb") {
                 root.scrcpyLaunchError = Translation.tr("Phone not connected via ADB.\n\n"
                     + "To mirror your screen you need ADB access:\n"
                     + "  • USB: plug your phone AND enable USB debugging\n"
@@ -1567,20 +1436,22 @@ Singleton {
         if (maxSize > 0) scrcpyArgs.push("--max-size=" + maxSize)
         if (videoBuffer > 0) scrcpyArgs.push("--video-buffer=" + videoBuffer)
 
+        let wirelessHost = ""
+        if (useWireless && wirelessIp && wirelessIp.trim() !== "") {
+            const ip = wirelessIp.trim()
+            const port = (wirelessPort && wirelessPort.trim() !== "") ? wirelessPort.trim() : "5555"
+            if (ip.indexOf(":") < 0) {
+                wirelessHost = ip + ":" + port
+            } else {
+                wirelessHost = ip
+            }
+        }
+
         let baseCmd = ""
-        if (useWireless) {
-            // Android 11+ wireless debugging uses a RANDOM port that changes
-            // on every toggle/reboot, so resolve the live ip:port via mDNS
-            // (avahi) at launch time. Fall back to the KDE Connect / manual
-            // host (e.g. legacy `adb tcpip 5555`) when mDNS finds nothing.
-            const wantIp = root._kdeConnectIp(devId)
-            const fallback = root._resolveWirelessHost(devId)
-            const fb = fallback ? root._shellQuote(fallback) : "''"
-            baseCmd = "HOST=$(" + root._mdnsDiscoverSnippet(wantIp) + "); "
-                + "[ -z \"$HOST\" ] && HOST=" + fb + "; "
-                + "adb connect \"$HOST\" && "
-            // Unquoted so the shell expands $HOST inside the same bash -c.
-            scrcpyArgs.push("--serial=\"$HOST\"")
+        if (useWireless && wirelessHost !== "") {
+            const quotedHost = root._shellQuote(wirelessHost)
+            baseCmd = "adb connect " + quotedHost + " && "
+            scrcpyArgs.push("--serial=" + quotedHost)
         }
 
         // Deep-link pre-launch: if we got an `am start` intent from a

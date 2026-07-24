@@ -11,8 +11,12 @@ Item {
     property real topPadding: padding
     property real bottomPadding: padding
 
-    implicitWidth: vertical ? Appearance.sizes.baseVerticalBarWidth : (gridLayout.implicitWidth + leftPadding + rightPadding)
-    implicitHeight: vertical ? (gridLayout.implicitHeight + topPadding + bottomPadding) : Appearance.sizes.baseBarHeight
+    implicitWidth: vertical 
+        ? Appearance.sizes.baseVerticalBarWidth 
+        : (gridLayout.implicitWidth > 0 ? (gridLayout.implicitWidth + leftPadding + rightPadding) : 0)
+    implicitHeight: vertical 
+        ? (gridLayout.implicitHeight > 0 ? (gridLayout.implicitHeight + topPadding + bottomPadding) : 0) 
+        : Appearance.sizes.baseBarHeight
     default property alias items: gridLayout.children
     property var startRadius // left - top
     property var endRadius // right - bottom
@@ -21,6 +25,7 @@ Item {
 
     Rectangle {
         id: background
+        visible: root.vertical ? (gridLayout.implicitHeight > 0) : (gridLayout.implicitWidth > 0)
         anchors {
             fill: parent
             topMargin: root.vertical ? 0 : 4

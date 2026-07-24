@@ -185,8 +185,8 @@ PanelWindow {
     // 1. Wrapped Frame Visuals
     Loader {
         id: frameLoader
-        active: topPanel.usingWrappedFrame && !GlobalStates.screenLocked && !GlobalStates.mediaModeActive
-        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.mediaModeActive
+        active: topPanel.usingWrappedFrame && !GlobalStates.screenLocked && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
         anchors.fill: parent
         sourceComponent: Frame.WrappedFrameVisuals {
             showBarBackground: horizontalBarLoader.item ? horizontalBarLoader.item.showBarBackground : (verticalBarLoader.item ? verticalBarLoader.item.showBarBackground : false)
@@ -206,8 +206,8 @@ PanelWindow {
     // 2. Horizontal Bar Visual Layer
     Loader {
         id: horizontalBarLoader
-        active: !topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && hasBarOnThisMonitor && !GlobalStates.mediaModeActive
-        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.mediaModeActive
+        active: !topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && hasBarOnThisMonitor && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
         anchors.fill: parent
         sourceComponent: Component {
             Item {
@@ -399,8 +399,8 @@ PanelWindow {
     // 3. Vertical Bar Visual Layer
     Loader {
         id: verticalBarLoader
-        active: topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && hasBarOnThisMonitor && !GlobalStates.mediaModeActive
-        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.mediaModeActive
+        active: topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && hasBarOnThisMonitor && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
         anchors.fill: parent
         sourceComponent: Component {
             Item {

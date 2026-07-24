@@ -177,7 +177,6 @@ def fetch_device_props(dev_id):
         "paired": bool(props.get("isPaired", False)),
         "supported_plugins": [str(p) for p in props.get("supportedPlugins", [])],
         "loaded_plugins": [str(p) for p in props.get("loadedPlugins", [])],
-        "reachableAddresses": [str(a) for a in props.get("reachableAddresses", [])],
     }
 
 

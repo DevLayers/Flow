@@ -16,6 +16,27 @@ Singleton {
     property bool barOpen: true
     property int mediaModeCount: 0
     readonly property bool mediaModeActive: mediaModeCount > 0
+    property var mediaModeMonitors: []
+
+    function setMediaModeActiveForScreen(screenName, active) {
+        if (!screenName) return;
+        var list = mediaModeMonitors.slice();
+        var index = list.indexOf(screenName);
+        if (active && index === -1) {
+            list.push(screenName);
+        } else if (!active && index !== -1) {
+            list.splice(index, 1);
+        }
+        mediaModeMonitors = list;
+    }
+
+    function isMediaModeActiveForScreen(screenName) {
+        if (!Config.options.background.mediaMode.togglePerMonitor) {
+            return mediaModeActive;
+        }
+        if (!screenName) return false;
+        return mediaModeMonitors.includes(screenName);
+    }
     property bool alarmRinging: false
     property bool cheatsheetOpen: false
     property bool crosshairOpen: false

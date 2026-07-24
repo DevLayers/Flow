@@ -157,7 +157,7 @@ Item {
         return modelData.id === modeState._displayMode;
     }
 
-    readonly property real targetWidth: isWidgetVisibleInNotch ? wrapper.implicitWidth : 0
+    readonly property real targetWidth: (isWidgetVisibleInNotch && wrapper.implicitWidth > 0) ? wrapper.implicitWidth : 0
 
     implicitWidth: targetWidth
     Behavior on implicitWidth {
@@ -169,7 +169,7 @@ Item {
         }
     }
 
-    opacity: 1.0
+    opacity: targetWidth > 0 ? 1.0 : 0.0
     visible: opacity > 0.01
 
     readonly property bool isNotchMode: isNotchActive && !isNotchExpanded
@@ -331,11 +331,8 @@ Item {
             verticalTranslation
         ]
 
-        readonly property bool trayEmpty: modelData.id === "system_tray"
-            && TrayService.pinnedItems.length === 0 && TrayService.unpinnedItems.length === 0
         readonly property bool paddingless: registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial
             || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
-            || trayEmpty
         padding:       paddingless ? 0 : 5
         leftPadding:   paddingless ? 0 : padding
         rightPadding:  paddingless ? 0 : padding

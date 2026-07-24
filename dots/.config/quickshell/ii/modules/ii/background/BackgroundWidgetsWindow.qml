@@ -225,7 +225,14 @@ PanelWindow {
         id: transformContainer
         anchors.fill: parent
 
-        opacity: 1.0
+        opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "") ? 0.0 : 1.0
+        visible: opacity > 0
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Math.round(350 * Appearance.animMultiplier)
+                easing.type: Easing.OutCubic
+            }
+        }
         antialiasing: true
         smooth: true
 

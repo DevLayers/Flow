@@ -16,7 +16,18 @@ if [ ! -d "$STATE_DIR"/user/generated ]; then
 fi
 cd "$CONFIG_DIR" || exit
 
-apply_kitty() {
+colornames=''
+colorstrings=''
+colorlist=()
+colorvalues=()
+
+colornames=$(cat $STATE_DIR/user/generated/material_colors.scss | cut -d: -f1)
+colorstrings=$(cat $STATE_DIR/user/generated/material_colors.scss | cut -d: -f2 | cut -d ' ' -f2 | cut -d ";" -f1)
+IFS=$'\n'
+colorlist=($colornames)     # Array of color names
+colorvalues=($colorstrings) # Array of color values
+
+apply_kitty() {  
   # Check if terminal escape sequence template exists
   if [ ! -f "$SCRIPT_DIR/terminal/kitty-theme.conf" ]; then
     echo "Template file not found for Kitty theme. Skipping that."
@@ -133,19 +144,8 @@ with open(tmp_path, "w") as f:
 os.rename(tmp_path, output_path)
 ' "$STATE_DIR/user/generated/material_colors.scss" "$SCRIPT_DIR/terminal/sequences.txt" "$STATE_DIR/user/generated/terminal/sequences.txt" "$term_alpha"
 
-  # Build the set of ptys with an attached process in a single ps call
-  # (avoids forking ps once per pty; kwrited's console pty has none).
-  local -A ptys_with_procs=()
-  local tty
-  while read -r tty; do
-    [[ $tty == pts/* ]] && ptys_with_procs[${tty#pts/}]=1
-  done < <(ps -e -o tty=)
-
   for file in /dev/pts/*; do
-    if [[ $file =~ ^/dev/pts/([0-9]+)$ ]]; then
-      # Skip ptys with no attached foreground process (e.g. kwrited's console pty),
-      # which misinterpret the raw OSC sequence as a wall(1)/write(1) message.
-      [[ -n ${ptys_with_procs[${BASH_REMATCH[1]}]:-} ]] || continue
+    if [[ $file =~ ^/dev/pts/[0-9]+$ ]]; then
       {
       cat "$STATE_DIR"/user/generated/terminal/sequences.txt >"$file"
       } & disown || true
@@ -165,14 +165,14 @@ apply_openrgb() {
 # Check if terminal theming is enabled in config
 CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
 if [ -f "$CONFIG_FILE" ]; then
-  IFS=$'\t' read -r enable_terminal enable_openrgb openrgb_duration < <(
-    jq -r '[.appearance.wallpaperTheming.enableTerminal, .appearance.openrgb.enable, .appearance.openrgb.fadeDuration] | @tsv' "$CONFIG_FILE"
-  )
+  enable_terminal=$(jq -r '.appearance.wallpaperTheming.enableTerminal' "$CONFIG_FILE")
+  enable_openrgb=$(jq -r '.appearance.openrgb.enable' "$CONFIG_FILE")
   if [ "$enable_terminal" = "true" ]; then
     apply_term &
   fi
   if [ "$enable_openrgb" = "true" ]; then
-    python "$CONFIG_DIR/scripts/colors/openRGB/apply_openrgb.py" -d "$openrgb_duration"
+    openrgb_duration=$(jq -r '.appearance.openrgb.fadeDuration' "$CONFIG_FILE")
+    python "$CONFIG_DIR/scripts/colors/openRGB/apply_openrgb.py" -d $openrgb_duration
   fi
 else
   echo "Config file not found at $CONFIG_FILE. Applying terminal theming by default."
