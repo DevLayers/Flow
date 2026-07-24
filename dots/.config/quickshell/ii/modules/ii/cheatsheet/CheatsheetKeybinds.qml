@@ -393,8 +393,44 @@ Item {
         onTriggered: root.dragReorderCooldown = false
     }
 
-    Item {
-        id: contentArea
+    // Scrollbar indicator
+    Rectangle {
+        id: scrollIndicator
+        z: 3
+        width: 3
+        radius: 1.5
+        color: Appearance.colors.colOnLayer0
+        opacity: flickable.moving || scrollIndicatorTimer.running ? 0.45 : 0
+        anchors {
+            right: parent.right
+            rightMargin: 3
+        }
+        y: flickable.height > 0 && flickable.contentHeight > flickable.height
+           ? flickable.contentY / flickable.contentHeight * flickable.height
+           : 0
+        height: flickable.height > 0 && flickable.contentHeight > flickable.height
+                ? Math.max(32, flickable.height * flickable.height / flickable.contentHeight)
+                : 0
+        visible: flickable.contentHeight > flickable.height
+
+        Behavior on opacity {
+            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+        }
+
+        Timer {
+            id: scrollIndicatorTimer
+            interval: 1200
+            repeat: false
+        }
+
+        Connections {
+            target: flickable
+            function onContentYChanged() { scrollIndicatorTimer.restart() }
+        }
+    }
+
+    Flickable {
+        id: flickable
         anchors {
             top: parent.top
             left: parent.left
@@ -402,13 +438,42 @@ Item {
             bottom: parent.bottom
         }
         clip: true
+        flickableDirection: Flickable.VerticalFlick
+        // contentHeight computed from tallest column (see contentArea.totalContentHeight)
+        contentHeight: contentArea.totalContentHeight + root.cardSpacing
+        contentWidth: width
+        boundsBehavior: Flickable.StopAtBounds
+        // Allow mouse wheel scroll when not dragging a card
+        interactive: !root.dragging
+
+    Item {
+        id: contentArea
+        width: flickable.width
+        height: flickable.contentHeight
+        clip: false
 
         property int layoutRevision: 0
+
+        // Total content height = tallest column; used to drive Flickable.contentHeight
+        property real totalContentHeight: {
+            var _rev = layoutRevision;
+            var h = [0, 0, 0, 0];
+            for (var i = 0; i < sectionOrderModel.count; i++) {
+                var child = cardRepeater.itemAt(i);
+                if (!child) continue;
+                var childH = child.hasMatches ? (child.implicitHeight || 100) : 0;
+                if (childH <= 0) continue;
+                var minIdx = 0;
+                for (var j = 1; j < 4; j++) { if (h[j] < h[minIdx]) minIdx = j; }
+                h[minIdx] += childH + root.cardSpacing;
+            }
+            return Math.max(h[0], h[1], h[2], h[3]);
+        }
 
         function getColumnIndex(targetIndex) {
             var h = [0, 0, 0, 0];
             var count = 0;
-            var maxH = contentArea.height > 0 ? contentArea.height : 99999;
+            var maxH = 99999;  // no vertical clip — Flickable handles overflow
             for (var i = 0; i < sectionOrderModel.count; i++) {
                 var child = cardRepeater.itemAt(i);
                 if (!child) continue;
@@ -445,7 +510,7 @@ Item {
         function getY(targetIndex) {
             var h = [0, 0, 0, 0];
             var count = 0;
-            var maxH = contentArea.height > 0 ? contentArea.height : 99999;
+            var maxH = 99999;  // no vertical clip — Flickable handles overflow
             for (var i = 0; i < sectionOrderModel.count; i++) {
                 var child = cardRepeater.itemAt(i);
                 if (!child) continue;
@@ -691,7 +756,8 @@ Item {
             repeat: false
             onTriggered: contentArea.layoutRevision = contentArea.layoutRevision + 1
         }
-    }
+    }  // end contentArea
+    }  // end Flickable
 
     Toolbar {
         id: extraOptions
