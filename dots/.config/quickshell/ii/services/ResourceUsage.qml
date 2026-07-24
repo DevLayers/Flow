@@ -326,7 +326,10 @@ Singleton {
     // zombie sleep loop waiting on a SIGTERM that never comes).
     Process {
         id: diskSpaceProc
-        command: ["bash", "-c", "LANG=C LC_ALL=C df -B1 / | awk 'NR==2{print $2, $3, $4}'"]
+        command: ["bash", "-c", "LANG=C LC_ALL=C df -B1 \"$DISKPATH\" | awk 'NR==2{print $2, $3, $4}'"]
+        environment: ({
+            DISKPATH: Config.options?.resources?.diskMount ?? "/"
+        })
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
@@ -349,6 +352,15 @@ Singleton {
             diskSpaceProc.running = false
             diskSpaceProc.running = true
             interval = Config.options?.resources?.diskInterval ?? 30000
+        }
+    }
+
+    // Re-poll immediately when the user changes the monitored mount point
+    Connections {
+        target: Config.options?.resources ?? null
+        function onDiskMountChanged() {
+            diskSpaceProc.running = false
+            diskSpaceProc.running = true
         }
     }
 

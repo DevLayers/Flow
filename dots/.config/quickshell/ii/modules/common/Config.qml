@@ -1580,6 +1580,9 @@ Singleton {
                 // Which GPU to monitor on hybrid iGPU+dGPU systems.
                 // "auto" (NVIDIA → AMD → Intel priority) | "nvidia" | "amd" | "intel"
                 property string gpuPreference: "auto"
+                // Mount point / path to monitor with df for disk usage.
+                // Default: "/" (root filesystem). Change to e.g. "/home" or "/mnt/data".
+                property string diskMount: "/"
                 // Toggle for Docker section popup. When false, all Docker
                 // polls (docker stats, docker ps) are suppressed and the
                 // events stream is not subscribed.

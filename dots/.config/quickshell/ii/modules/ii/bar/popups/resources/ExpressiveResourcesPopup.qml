@@ -1836,7 +1836,7 @@ StyledPopup {
                     spacing: -2
                     StyledText {
                         id: diskLabel
-                        text: "DISK"
+                        text: "DISK · " + (Config.options?.resources?.diskMount ?? "/")
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         font.weight: Font.Bold
                         color: Appearance.colors.colOnSecondaryContainer

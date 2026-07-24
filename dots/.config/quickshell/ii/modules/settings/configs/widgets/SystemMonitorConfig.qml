@@ -105,6 +105,35 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "hard_drive"
+        title: Translation.tr("Disk")
+
+        ConfigTextField {
+            text: Translation.tr("Mount point to monitor")
+            icon: "folder"
+            placeholderText: Translation.tr("e.g. / or /home or /mnt/data")
+            inputText: Config.options.resources.diskMount
+            textField.onEditingFinished: {
+                const v = textField.text.trim();
+                if (v.length > 0)
+                    Config.options.resources.diskMount = v;
+            }
+        }
+
+        ConfigSpinBox {
+            icon: "schedule"
+            text: Translation.tr("Disk polling interval (ms)")
+            value: Config.options.resources.diskInterval
+            from: 5000
+            to: 300000
+            stepSize: 5000
+            onValueChanged: {
+                Config.options.resources.diskInterval = value;
+            }
+        }
+    }
+
+    ContentSection {
         icon: "developer_board"
         title: Translation.tr("GPU")
 
