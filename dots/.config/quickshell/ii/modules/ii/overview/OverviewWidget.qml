@@ -14,9 +14,11 @@ import Quickshell.Hyprland
 Item {
     id: root
     property bool hyprscrollingEnabled: false //FIXME
+    readonly property real monitorScale: (monitor?.scale > 0) ? monitor.scale : 1
+    readonly property real workspaceLayoutScale: root.scale / root.monitorScale
     property int minWorkspaceWidth: (monitorData?.transform % 2 === 1) 
-        ? ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.scale) 
-        : ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.scale)
+        ? ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.workspaceLayoutScale) 
+        : ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.workspaceLayoutScale)
     required property var panelWindow
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
     readonly property var toplevels: ToplevelManager.toplevels
@@ -66,8 +68,8 @@ Item {
 
     property real workspaceImplicitWidth: minWorkspaceWidth
     property real workspaceImplicitHeight: (monitorData?.transform % 2 === 1) 
-        ? ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.scale) 
-        : ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.scale)
+        ? ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.workspaceLayoutScale) 
+        : ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.workspaceLayoutScale)
     property real largeWorkspaceRadius: Appearance.rounding.large
     property real smallWorkspaceRadius: Appearance.rounding.verysmall
 
@@ -99,8 +101,8 @@ Item {
         return Math.max(max, minWorkspaceWidth);
     }
 
-    property real workspaceNumberMargin: 80
-    property real workspaceNumberSize: 250 * monitor.scale
+    // uh oh, workspace number size as a fraction of the workspace preview (monitor-scale independent).
+    readonly property real workspaceNumberPixelSize: Math.min(root.workspaceImplicitWidth, root.workspaceImplicitHeight) * 0.232
     property int workspaceZ: 0
     property int windowZ: 1
     property int windowDraggingZ: 99999
@@ -206,7 +208,7 @@ Item {
                                 anchors.centerIn: parent
                                 text: workspace.workspaceValue
                                 font {
-                                    pixelSize: root.workspaceNumberSize * root.scale
+                                    pixelSize: root.workspaceNumberPixelSize
                                     weight: Font.DemiBold
                                     family: Appearance.font.family.expressive
                                 }
