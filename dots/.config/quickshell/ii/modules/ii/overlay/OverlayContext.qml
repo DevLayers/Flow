@@ -53,7 +53,7 @@ Singleton {
         }
     }
 
-    function registerClickableWidget(widget: var, clickable = true) {
+    function registerClickableWidget(widget: QtObject, clickable = true) {
         if (clickable) {
             if (!root.clickableWidgets.includes(widget)) {
                 root.clickableWidgets.push(widget)
