@@ -336,15 +336,15 @@ ContentPage {
         }
     }
 
+    KeyboardShortcutBox {
+        Layout.fillWidth: true
+        text: Translation.tr("Toggle Media Mode")
+        keys: ["Super", "Z"]
+    }
+
     ContentSection {
         title: Translation.tr("Media Mode Background")
         icon: "music_note"
-
-        KeyboardShortcutBox {
-            Layout.fillWidth: true
-            text: Translation.tr("Toggle Media Mode")
-            keys: ["Super", "Z"]
-        }
 
         NoticeBox {
             Layout.fillWidth: true
@@ -353,6 +353,7 @@ ContentPage {
         }
 
         ConfigSwitch {
+
             buttonIcon: "lyrics"
 
             text: Translation.tr("Show synchronized lyrics panel")
