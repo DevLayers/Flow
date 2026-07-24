@@ -114,6 +114,7 @@ Item {
             StyledPopup {
                 id: overflowPopup
                 hoverTarget: trayOverflowButton
+                forceClick: true
                 active: sysTrayRoot.trayOverflowOpen && sysTrayRoot.unpinnedItems.length > 0
 
                 GridLayout {

@@ -95,10 +95,13 @@ Item {
         active: (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate || root.isDynamicIslandTop || root.isDynamicIslandBottom) && !root.anyDialogVisible
         anchors.fill: sidebarRightBackground
         sourceComponent: Component {
-            StyledDropShadow {
-                target: sidebarRightBackground
-                radius: Math.round(0.9 * Appearance.sizes.elevationMargin)
-                opacity: sidebarRightBackground.opacity
+            Item {
+                anchors.fill: parent
+                StyledDropShadow {
+                    target: parent
+                    radius: Math.round(0.9 * Appearance.sizes.elevationMargin)
+                    opacity: sidebarRightBackground.opacity
+                }
             }
         }
     }

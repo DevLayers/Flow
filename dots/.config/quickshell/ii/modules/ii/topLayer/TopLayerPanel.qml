@@ -632,8 +632,7 @@ PanelWindow {
 
         Loader {
             id: leftSidebarContentLoader
-            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !GlobalStates.policiesDetached && (topPanel.leftSidebarActiveOnMonitor || topPanel.leftSidebarWarmOnMonitor)
-            asynchronous: true
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !GlobalStates.policiesDetached
             anchors.fill: parent
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
@@ -717,8 +716,7 @@ PanelWindow {
 
         Loader {
             id: rightSidebarContentLoader
-            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && (topPanel.rightSidebarActiveOnMonitor || topPanel.rightSidebarWarmOnMonitor)
-            asynchronous: true
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate
             anchors.fill: parent
             sourceComponent: {
                 const pos = Config.options.sidebar.position;

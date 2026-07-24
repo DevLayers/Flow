@@ -11,12 +11,21 @@ Item {
     property real topPadding: padding
     property real bottomPadding: padding
 
+    readonly property bool hasVisibleChild: {
+        if (!gridLayout.children) return false;
+        for (let i = 0; i < gridLayout.children.length; i++) {
+            let child = gridLayout.children[i];
+            if (child && child.visible) return true;
+        }
+        return false;
+    }
+
     implicitWidth: vertical 
-        ? Appearance.sizes.baseVerticalBarWidth 
-        : (gridLayout.implicitWidth > 0 ? (gridLayout.implicitWidth + leftPadding + rightPadding) : 0)
+        ? (hasVisibleChild ? Appearance.sizes.baseVerticalBarWidth : 0)
+        : (hasVisibleChild && gridLayout.implicitWidth > 0 ? (gridLayout.implicitWidth + leftPadding + rightPadding) : 0)
     implicitHeight: vertical 
-        ? (gridLayout.implicitHeight > 0 ? (gridLayout.implicitHeight + topPadding + bottomPadding) : 0) 
-        : Appearance.sizes.baseBarHeight
+        ? (hasVisibleChild && gridLayout.implicitHeight > 0 ? (gridLayout.implicitHeight + topPadding + bottomPadding) : 0) 
+        : (hasVisibleChild ? Appearance.sizes.baseBarHeight : 0)
     default property alias items: gridLayout.children
     property var startRadius // left - top
     property var endRadius // right - bottom
@@ -25,7 +34,7 @@ Item {
 
     Rectangle {
         id: background
-        visible: root.vertical ? (gridLayout.implicitHeight > 0) : (gridLayout.implicitWidth > 0)
+        visible: hasVisibleChild && (root.vertical ? (gridLayout.implicitHeight > 0) : (gridLayout.implicitWidth > 0))
         anchors {
             fill: parent
             topMargin: root.vertical ? 0 : 4

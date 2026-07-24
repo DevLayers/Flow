@@ -27,8 +27,9 @@ MouseArea {
             rootItem.toggleVisible(hasDevices)
     }
 
-    implicitWidth: chip.implicitWidth
-    implicitHeight: Appearance.sizes.baseBarHeight
+    visible: hasDevices
+    implicitWidth: hasDevices ? chip.implicitWidth : 0
+    implicitHeight: hasDevices ? Appearance.sizes.baseBarHeight : 0
 
     
 

@@ -226,7 +226,7 @@ Item {
         onScrollDown: if (Config.options.bar.enableBrightnessScroll) Brightness.decreaseBrightness()
         onScrollUp:   if (Config.options.bar.enableBrightnessScroll) Brightness.increaseBrightness()
         onMovedAway:  GlobalStates.osdBrightnessOpen = false
-        onPressed: event => { if (event.button === Qt.LeftButton) GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen; }
+        onPressed: event => { if (event.button === Qt.LeftButton) GlobalStates.toggleLeftSidebar(root.screen?.name); }
 
         ScrollHint {
             reveal: barLeftSideMouseArea.hovered && Config.options.bar.enableBrightnessScroll
@@ -245,7 +245,7 @@ Item {
         onScrollDown: if (Config.options.bar.enableVolumeScroll) Audio.decrementVolume()
         onScrollUp:   if (Config.options.bar.enableVolumeScroll) Audio.incrementVolume()
         onMovedAway:  GlobalStates.osdVolumeOpen = false
-        onPressed: event => { if (event.button === Qt.LeftButton) GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen; }
+        onPressed: event => { if (event.button === Qt.LeftButton) GlobalStates.toggleRightSidebar(root.screen?.name); }
 
         ScrollHint {
             reveal: barRightSideMouseArea.hovered && Config.options.bar.enableVolumeScroll

@@ -55,22 +55,8 @@ Item {
 
     onEntranceTriggerChanged: {
         if (entranceTrigger >= 0) {
-            // Reset values
-            deviceChip.opacity = 0
-            deviceChipTransform.x = -30
-            deviceChip.scale = 0.85
-
-            signalPill.opacity = 0
-            signalPillTransform.x = 30
-            signalPill.scale = 0.85
-
-            batteryPill.opacity = 0
-            batteryPill.scale = 0.85
-
-            Qt.callLater(function() {
-                headerEntranceAnim.stop()
-                headerEntranceAnim.start()
-            })
+            headerEntranceAnim.stop()
+            headerEntranceAnim.start()
         }
     }
 
@@ -124,16 +110,16 @@ Item {
             Layout.minimumWidth: 140
             Layout.maximumWidth: 280
             enabled: KdeConnectService.hasDevices && pairedDevices.length > 0
-            opacity: 0
+            opacity: enabled ? 1.0 : 0.5
             buttonRadius: Appearance.rounding.full
             colBackground: Appearance.colors.colLayer3
             colBackgroundHover: Appearance.colors.colLayer3Hover
 
             transform: Translate {
                 id: deviceChipTransform
-                x: -30
+                x: 0
             }
-            scale: 0.85
+            scale: 1.0
 
             // Subtle tactile feedback on the whole chip.
             Behavior on scale {
@@ -200,13 +186,13 @@ Item {
             Layout.preferredWidth: signalRow.implicitWidth + 24
             radius: Appearance.rounding.full
             color: Appearance.colors.colLayer3
-            opacity: 0
+            opacity: KdeConnectService.activeReachable ? 1.0 : 0.4
 
             transform: Translate {
                 id: signalPillTransform
-                x: 30
+                x: 0
             }
-            scale: 0.85
+            scale: 1.0
 
             RectangularShadow {
                 anchors.fill: parent
@@ -259,8 +245,8 @@ Item {
             Layout.preferredWidth: batRow.implicitWidth + 28
             radius: Appearance.rounding.full
             color: Appearance.colors.colLayer3
-            opacity: 0
-            scale: 0.85
+            opacity: root._battery >= 0 ? 1.0 : 0.4
+            scale: 1.0
             Behavior on scale {
                 enabled: !headerEntranceAnim.running
                 NumberAnimation {

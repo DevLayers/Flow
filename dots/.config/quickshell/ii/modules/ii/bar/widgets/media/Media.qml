@@ -18,6 +18,15 @@ Item {
 
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
     readonly property string cleanedTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || Translation.tr("No media")
+    readonly property bool hasTrack: (activePlayer?.trackTitle ?? "").length > 0
+
+    visible: hasTrack
+
+    onHasTrackChanged: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
+    }
 
     property int customSize: Config.options.bar.mediaPlayer.customSize
     property int lyricsCustomSize: Config.options.bar.mediaPlayer.lyrics.customSize
@@ -35,8 +44,8 @@ Item {
 
     property int textMetricsSpacing: artworkEnabled ? 70 : 50
     property int textMetricsAdvance: Math.min(textMetrics.advanceWidth + textMetricsSpacing, Config.options.bar.mediaPlayer.maxSize)
-    implicitWidth: LyricsService.hasSyncedLines && root.lyricsEnabled ? lyricsCustomSize : useFixedSize ? customSize : textMetricsAdvance
-    implicitHeight: Appearance.sizes.baseBarHeight
+    implicitWidth: hasTrack ? (LyricsService.hasSyncedLines && root.lyricsEnabled ? lyricsCustomSize : useFixedSize ? customSize : textMetricsAdvance) : 0
+    implicitHeight: hasTrack ? Appearance.sizes.baseBarHeight : 0
 
     Behavior on implicitWidth {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
@@ -44,6 +53,9 @@ Item {
 
     Component.onCompleted: {
         LyricsService.initiliazeLyrics();
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
     }
 
     readonly property string artUrl: MprisController.artUrl

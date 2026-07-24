@@ -28,17 +28,8 @@ Item {
     property int entranceTrigger: -1
     onEntranceTriggerChanged: {
         if (entranceTrigger >= 0) {
-            btn1.opacity = 0; btn1Transform.y = 15; btn1.scale = 0.8
-            btn2.opacity = 0; btn2Transform.y = 15; btn2.scale = 0.8
-            btn3.opacity = 0; btn3Transform.y = 15; btn3.scale = 0.8
-            btn4.opacity = 0; btn4Transform.y = 15; btn4.scale = 0.8
-            btn5.opacity = 0; btn5Transform.y = 15; btn5.scale = 0.8
-            btn6.opacity = 0; btn6Transform.y = 15; btn6.scale = 0.8
-
-            Qt.callLater(function() {
-                actionsEntranceAnim.stop()
-                actionsEntranceAnim.start()
-            })
+            actionsEntranceAnim.stop()
+            actionsEntranceAnim.start()
         }
     }
 
@@ -231,8 +222,8 @@ Item {
         colBackgroundHover: Appearance.colors.colPrimaryContainerHover
         colRipple: Appearance.colors.colPrimaryContainerActive
 
-        opacity: 0
-        scale: 0.8
+        opacity: enabled ? 1.0 : 0.4
+        scale: 1.0
 
         // Springy "press" pop on hover/press for a more connected feel.
         Behavior on scale {

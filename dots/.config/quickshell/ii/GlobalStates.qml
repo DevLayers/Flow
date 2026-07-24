@@ -467,11 +467,7 @@ Singleton {
             leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             leftSidebarAnimation.easing.type = Easing.OutQuart;
             leftSidebarAnimation.to = leftSidebarTargetWidth;
-            Qt.callLater(() => {
-                if (root.leftSidebarTargetWidth > 0) {
-                    leftSidebarAnimation.start();
-                }
-            });
+            leftSidebarAnimation.start();
         } else {
             leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             leftSidebarAnimation.easing.type = Easing.OutQuart;
@@ -490,11 +486,7 @@ Singleton {
             rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             rightSidebarAnimation.easing.type = Easing.OutQuart;
             rightSidebarAnimation.to = rightSidebarTargetWidth;
-            Qt.callLater(() => {
-                if (root.rightSidebarTargetWidth > 0) {
-                    rightSidebarAnimation.start();
-                }
-            });
+            rightSidebarAnimation.start();
         } else {
             rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             rightSidebarAnimation.easing.type = Easing.OutQuart;

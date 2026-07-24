@@ -27,8 +27,9 @@ MouseArea {
             rootItem.toggleVisible(hasDevices)
     }
 
-    implicitWidth: Appearance.sizes.baseVerticalBarWidth
-    implicitHeight: chip.implicitHeight
+    visible: hasDevices
+    implicitWidth: hasDevices ? Appearance.sizes.baseVerticalBarWidth : 0
+    implicitHeight: hasDevices ? chip.implicitHeight : 0
 
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 

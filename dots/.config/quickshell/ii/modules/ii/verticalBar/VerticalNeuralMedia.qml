@@ -36,8 +36,20 @@ MouseArea {
         return artDownloaded ? Qt.resolvedUrl(artFilePath) : artUrl;
     }
 
-    implicitWidth: Appearance.sizes.verticalBarWidth - 8
-    implicitHeight: visible ? pillHeight : 0
+    onHasTrackChanged: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
+    }
+
+    Component.onCompleted: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
+    }
+
+    implicitWidth: hasTrack ? (Appearance.sizes.verticalBarWidth - 8) : 0
+    implicitHeight: hasTrack ? pillHeight : 0
     Layout.fillHeight: true
     visible: hasTrack
 

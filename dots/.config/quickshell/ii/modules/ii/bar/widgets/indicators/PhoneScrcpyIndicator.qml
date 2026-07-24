@@ -23,12 +23,12 @@ MouseArea {
     readonly property bool running: KdeConnectService.scrcpyRunning
     readonly property int elapsedSeconds: Math.floor(KdeConnectService.scrcpyElapsedMs / 1000)
 
-    implicitWidth: vertical
-        ? Appearance.sizes.verticalBarWidth
-        : (running ? layoutHoriz.implicitWidth : 0)
-    implicitHeight: vertical
-        ? (running ? layoutVert.implicitHeight : 0)
-        : Appearance.sizes.baseBarHeight
+    implicitWidth: running
+        ? (vertical ? Appearance.sizes.verticalBarWidth : layoutHoriz.implicitWidth)
+        : 0
+    implicitHeight: running
+        ? (vertical ? layoutVert.implicitHeight : Appearance.sizes.baseBarHeight)
+        : 0
 
     visible: running
 

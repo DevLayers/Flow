@@ -20,20 +20,8 @@ PopupWindow {
     color: "transparent"
     property real padding: Appearance.sizes.elevationMargin
 
-    implicitHeight: {
-        let result = 0;
-        for (let child of stackView.children) {
-            result = Math.max(child.implicitHeight, result);
-        }
-        return result + popupBackground.padding * 2 + root.padding * 2;
-    }
-    implicitWidth: {
-        let result = 0;
-        for (let child of stackView.children) {
-            result = Math.max(child.implicitWidth, result);
-        }
-        return result + popupBackground.padding * 2 + root.padding * 2;
-    }
+    implicitHeight: (stackView.currentItem ? stackView.currentItem.implicitHeight : 100) + popupBackground.padding * 2 + root.padding * 2
+    implicitWidth: (stackView.currentItem ? stackView.currentItem.implicitWidth : 200) + popupBackground.padding * 2 + root.padding * 2
 
     function open() {
         root.visible = true;
@@ -104,8 +92,8 @@ PopupWindow {
                 popEnter: NoAnim {}
                 popExit: NoAnim {}
 
-                implicitWidth: currentItem.implicitWidth
-                implicitHeight: currentItem.implicitHeight
+                implicitWidth: currentItem ? currentItem.implicitWidth : 180
+                implicitHeight: currentItem ? currentItem.implicitHeight : 80
 
                 initialItem: SubMenu {
                     handle: root.trayItemMenuHandle
@@ -134,7 +122,6 @@ PopupWindow {
         Component.onCompleted: shown = true
         StackView.onActivating: shown = true
         StackView.onDeactivating: shown = false
-        StackView.onRemoved: destroy()
 
         QsMenuOpener {
             id: menuOpener

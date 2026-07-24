@@ -66,11 +66,7 @@ Item {
         phoneFooter.entranceTrigger = root.entranceTrigger;
     }
 
-    Component.onCompleted: {
-        Qt.callLater(() => {
-            triggerContentEntrance();
-        })
-    }
+    Component.onCompleted: {}
 
     function openSubPage(url: url): void {
         root.activeSubPage = Qt.resolvedUrl(url)

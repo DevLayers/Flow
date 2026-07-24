@@ -228,10 +228,10 @@ Item {
                            ? swipePillRadius
                            : (root.isLastInGroup ? root.outerRadius : root.innerRadius)
 
-        Behavior on topLeftRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
-        Behavior on topRightRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
-        Behavior on bottomLeftRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
-        Behavior on bottomRightRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+        Behavior on topLeftRadius { enabled: !dragManager.dragging; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+        Behavior on topRightRadius { enabled: !dragManager.dragging; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+        Behavior on bottomLeftRadius { enabled: !dragManager.dragging; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+        Behavior on bottomRightRadius { enabled: !dragManager.dragging; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
         anchors.leftMargin: root.xOffset
 

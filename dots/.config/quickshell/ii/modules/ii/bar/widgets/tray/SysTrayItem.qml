@@ -150,9 +150,11 @@ MouseArea {
 
         IconImage {
             id: trayIcon
-            visible: !Config.options.tray.monochromeIcons
+            visible: true
             source: root.item.icon
-            anchors.fill: parent
+            anchors.centerIn: parent
+            width: Math.min(parent.width, 20)
+            height: Math.min(parent.height, 20)
         }
 
         Loader {

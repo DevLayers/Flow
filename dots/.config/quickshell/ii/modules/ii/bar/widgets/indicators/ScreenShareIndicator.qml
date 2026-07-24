@@ -14,8 +14,9 @@ MouseArea {
     property bool vertical: false
     property bool activelyScreenSharing: false
 
-    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : 40
-    implicitHeight: vertical ? 40 : Appearance.sizes.baseBarHeight
+    visible: activelyScreenSharing
+    implicitWidth: activelyScreenSharing ? (vertical ? Appearance.sizes.verticalBarWidth : 40) : 0
+    implicitHeight: activelyScreenSharing ? (vertical ? 40 : Appearance.sizes.baseBarHeight) : 0
     hoverEnabled: true
     Component.onCompleted: rootItem.toggleHighlight(true)
 

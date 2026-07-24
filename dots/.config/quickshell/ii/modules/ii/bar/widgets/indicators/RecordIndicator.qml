@@ -23,12 +23,12 @@ MouseArea {
     cursorShape: Qt.PointingHandCursor
 
     // Size calculation (dynamic and perfectly padded to prevent any overlapping)
-    implicitWidth: vertical 
-        ? Appearance.sizes.verticalBarWidth 
-        : (activelyRecording || isLoading ? layoutHoriz.implicitWidth : 0)
-    implicitHeight: vertical 
-        ? (activelyRecording || isLoading ? layoutVert.implicitHeight : 0) 
-        : Appearance.sizes.baseBarHeight
+    implicitWidth: (activelyRecording || isLoading)
+        ? (vertical ? Appearance.sizes.verticalBarWidth : layoutHoriz.implicitWidth)
+        : 0
+    implicitHeight: (activelyRecording || isLoading)
+        ? (vertical ? layoutVert.implicitHeight : Appearance.sizes.baseBarHeight)
+        : 0
 
     visible: activelyRecording || isLoading
 

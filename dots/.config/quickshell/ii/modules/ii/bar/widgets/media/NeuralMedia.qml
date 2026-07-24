@@ -96,12 +96,15 @@ Item {
     readonly property int textWidth: Math.max(titleMetrics.advanceWidth, artistMetrics.advanceWidth)
     readonly property int calculatedPillWidth: Math.min(textWidth + 24, Config.options.bar.mediaPlayer.maxSize)
 
-    implicitWidth: (lyricsEnabled && LyricsService.hasSyncedLines)
-        ? lyricsCustomSize
-        : useFixedSize
-            ? customSize
-            : (calculatedPillWidth + visualizerWidth + 24)
-    implicitHeight: Appearance.sizes.baseBarHeight - 8
+    visible: hasTrack
+    implicitWidth: hasTrack
+        ? ((lyricsEnabled && LyricsService.hasSyncedLines)
+            ? lyricsCustomSize
+            : useFixedSize
+                ? customSize
+                : (calculatedPillWidth + visualizerWidth + 24))
+        : 0
+    implicitHeight: hasTrack ? Appearance.sizes.baseBarHeight - 8 : 0
     height: implicitHeight
 
     Behavior on implicitWidth {
