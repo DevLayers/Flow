@@ -342,6 +342,7 @@ Singleton {
                     property int maxSize: 0
                     property int videoBuffer: 0  // scrcpy 4.0 default is 0ms — 80ms adds visible latency
                     property bool useWireless: false
+                    property bool autoWirelessIp: true  // resolve IP live from KDE Connect instead of the manual field
                     property string wirelessIp: ""
                     property string wirelessPort: "5555"
                     property bool showTerminal: false
@@ -947,7 +948,7 @@ Singleton {
                 property bool bottom: false // Instead of top
                 property int cornerStyle: 0 // 0: Hug | 1: Float | 2: Plain rectangle
                 property bool floatStyleShadow: true // Show shadow behind bar when cornerStyle == 1 (Float)
-                property bool dropShadow: false
+                property bool dropShadow: true
                 property int dynamicIslandSpacingHorizontal: 48
                 property int dynamicIslandSpacingVertical: 16
                 property bool dynamicIslandLoadBalance: true
@@ -1567,7 +1568,13 @@ Singleton {
                 }
                 property JsonObject annotation: JsonObject {
                     property bool useSatty: false
-                    property bool enableInlineEditor: false
+                    property bool enableInlineEditor: true
+                    property real fillOpacity: 0.25
+                    property real highlighterOpacity: 0.4
+                    property int badgeStartNumber: 1
+                    // Pixelation coarseness for the blur tool (source-px divisor):
+                    // bigger = chunkier blocks. Independent of line thickness.
+                    property int blurStrength: 24
                 }
             }
 
@@ -1709,9 +1716,9 @@ Singleton {
 
             property JsonObject sidebar: JsonObject {
                 property JsonObject dashboardHeader: JsonObject {
-                    property string profileImageType: "distro" // "custom", "distro", "none"
+                    property string profileImageType: "custom" // "custom", "distro", "none"
                     property string profileImagePath: Directories.home + "/.config/quickshell/ii/assets/profile.png"
-                    property string textMode: "uptime" // "username", "uptime", "none", "custom"
+                    property string textMode: "username" // "username", "uptime", "none", "custom"
                     property string customText: ""
                 }
                 property string position: "default"
