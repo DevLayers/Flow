@@ -71,8 +71,6 @@ ContentPage {
                             return MaterialShape.Shape.Cookie9Sided;
                         case "Cookie12Sided":
                             return MaterialShape.Shape.Cookie12Sided;
-                        case "Squircle":
-                            return MaterialShape.Shape.Squircle;
                         case "Circle":
                             return MaterialShape.Shape.Circle;
                         case "Clover4Leaf":
@@ -266,7 +264,7 @@ ContentPage {
                 onSelected: (v) => {
                     return Config.options.userProfile.avatarShape = v;
                 }
-                options: (["Cookie9Sided", "Cookie12Sided", "Squircle", "Circle", "Clover4Leaf", "Burst", "Heart", "Bun"]).map((s) => {
+                options: (["Cookie9Sided", "Cookie12Sided", "Circle", "Clover4Leaf", "Burst", "Heart", "Bun"]).map((s) => {
                     return ({
                         "displayName": "",
                         "shape": s,

@@ -512,8 +512,6 @@ Item {
                                     return MaterialShape.Shape.Cookie9Sided;
                                 case "Cookie12Sided":
                                     return MaterialShape.Shape.Cookie12Sided;
-                                case "Squircle":
-                                    return MaterialShape.Shape.Squircle;
                                 case "Circle":
                                     return MaterialShape.Shape.Circle;
                                 case "Clover4Leaf":
