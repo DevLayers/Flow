@@ -1304,10 +1304,11 @@ Singleton {
                 property JsonObject discordVoice: JsonObject {
                     property int maxAvatars: 8
                     property int avatarSize: 52
-                    property string participantBackground: "none"
+                    property string participantBackground: "name"
                     property real participantBackgroundOpacity: 0.72
-                    property string layoutMode: "row"
+                    property string layoutMode: "column"
                     property bool blurEnabled: true
+                    property bool autoResize: true
                 }
             }
 

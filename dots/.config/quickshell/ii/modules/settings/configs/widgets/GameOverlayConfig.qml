@@ -246,6 +246,15 @@ ContentPage {
             }
 
             ConfigSwitch {
+                buttonIcon: "fit_width"
+                text: Translation.tr("Auto-resize overlay")
+                checked: Config.options.overlay.discordVoice.autoResize
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.autoResize = checked;
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "blur_on"
                 text: Translation.tr("Blur background")
                 checked: Config.options.overlay.discordVoice.blurEnabled

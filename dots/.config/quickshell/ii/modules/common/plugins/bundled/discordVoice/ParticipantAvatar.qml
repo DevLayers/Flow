@@ -23,11 +23,13 @@ Item {
     property real transitionRotation: 0
     property bool componentReady: false
     property var displayedShape: MaterialShape.Shape.Circle
+    // Speaking is signalled by scale + glow, not by morphing the outline, so the
+    // avatar shape reflects only the persistent mute/deaf state.
     readonly property var avatarShape: participant?.deaf
         ? MaterialShape.Shape.Boom
         : (participant?.mute
             ? MaterialShape.Shape.Cookie4Sided
-            : (root.speaking ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Circle))
+            : MaterialShape.Shape.Circle)
 
     implicitWidth: root.horizontalLayout
         ? Math.max(176, root.avatarSize + root.maxNameWidth + Appearance.spacing.space100)
@@ -80,6 +82,32 @@ Item {
         color: ColorUtils.transparentize(Appearance.colors.colLayer2, 1 - root.backgroundOpacity)
         border.width: Appearance.borderWidth.standard
         border.color: Appearance.colors.colLayer0Border
+    }
+
+    // Speaking glow: a soft primary-coloured halo bloomed from the avatar
+    // outline. Declared before the ring so it renders behind it, and driven by
+    // opacity + scale so entering/leaving the speaking state fades and swells.
+    MaterialShape {
+        id: glowSource
+        anchors.centerIn: ring
+        width: ring.width
+        height: ring.height
+        shape: root.displayedShape
+        color: Appearance.colors.colPrimary
+        visible: false
+    }
+    Glow {
+        anchors.fill: glowSource
+        source: glowSource
+        color: Appearance.colors.colPrimary
+        radius: 18
+        samples: 25
+        spread: 0.35
+        transparentBorder: true
+        opacity: root.speaking ? 0.9 : 0
+        scale: root.speaking ? 1.18 : 0.9
+        Behavior on opacity { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+        Behavior on scale { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutBack } }
     }
 
     MaterialShape {

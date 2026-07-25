@@ -15,6 +15,7 @@ Rectangle {
     readonly property string participantBackground: Config.options.overlay.discordVoice.participantBackground
     readonly property real participantBackgroundOpacity: Config.options.overlay.discordVoice.participantBackgroundOpacity
     readonly property bool blurEnabled: Config.options.overlay.discordVoice.blurEnabled
+    readonly property bool autoResize: Config.options.overlay.discordVoice.autoResize
     readonly property real backgroundOpacity: 0.85
     readonly property string layoutMode: Config.options.overlay.discordVoice.layoutMode
     readonly property bool columnMode: layoutMode === "column"
@@ -51,7 +52,13 @@ Rectangle {
             - (columnMode ? Appearance.spacing.space75 : Appearance.spacing.space200)
         : 0
 
-    implicitWidth: Math.max(columnMode ? 256 : 344,
+    // When auto-resize is on, drop the fixed 256/344 minimum and let the header
+    // (channel + controls) set the floor via content.implicitWidth, so the panel
+    // shrinks to the least width that still fits its contents. content.implicitWidth
+    // is a natural size derived from children and does not depend on content.width,
+    // so reading it here cannot form a binding loop.
+    implicitWidth: Math.max(
+        root.autoResize ? content.implicitWidth + Appearance.spacing.space150 * 2 : (columnMode ? 256 : 344),
         participantGridWidth + Appearance.spacing.space150 * 2)
     implicitHeight: content.implicitHeight + Appearance.spacing.space300
     width: implicitWidth
