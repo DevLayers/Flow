@@ -322,7 +322,6 @@ Item { // Fullscreen MediaMode instance
 
                                 onClicked: {
                                     var nextMode = (root.visualizerMode + 1) % 4;
-                                    root.visualizerMode = nextMode;
                                     Config.options.background.mediaMode.visualizerMode = nextMode;
                                 }
 
