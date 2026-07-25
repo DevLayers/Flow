@@ -329,20 +329,42 @@ Item {
         visible: opacity > 0.01
 
         opacity: root.isOverviewVisible ? 1.0 : 0.0
-        transform: Translate {
-            y: root.isOverviewVisible ? 0 : (root.isBottomBar ? -30 : 30)
-            Behavior on y {
-                NumberAnimation {
-                    duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+        transform: [
+            Translate {
+                y: root.isOverviewVisible ? 0 : (root.isBottomBar ? -30 : 30)
+                Behavior on y {
+                    NumberAnimation {
+                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+                    }
+                }
+            },
+            Scale {
+                origin.x: overviewLoader.implicitWidth / 2
+                origin.y: overviewLoader.implicitHeight / 2
+                xScale: root.isOverviewVisible ? 1.0 : 0.93
+                yScale: root.isOverviewVisible ? 1.0 : 0.93
+                Behavior on xScale {
+                    NumberAnimation {
+                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+                    }
+                }
+                Behavior on yScale {
+                    NumberAnimation {
+                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+                    }
                 }
             }
-        }
+        ]
 
         Behavior on opacity {
             NumberAnimation {
-                duration: root.isOverviewVisible ? root._animDurationOpen : Math.round(60 * Appearance.animMultiplier)
+                duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
             }
@@ -364,20 +386,42 @@ Item {
         visible: opacity > 0.01
 
         opacity: root.isOverviewVisible ? 1.0 : 0.0
-        transform: Translate {
-            y: root.isOverviewVisible ? 0 : (root.isBottomBar ? -30 : 30)
-            Behavior on y {
-                NumberAnimation {
-                    duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+        transform: [
+            Translate {
+                y: root.isOverviewVisible ? 0 : (root.isBottomBar ? -30 : 30)
+                Behavior on y {
+                    NumberAnimation {
+                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+                    }
+                }
+            },
+            Scale {
+                origin.x: scrollingOverviewLoader.width / 2
+                origin.y: scrollingOverviewLoader.height / 2
+                xScale: root.isOverviewVisible ? 1.0 : 0.93
+                yScale: root.isOverviewVisible ? 1.0 : 0.93
+                Behavior on xScale {
+                    NumberAnimation {
+                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+                    }
+                }
+                Behavior on yScale {
+                    NumberAnimation {
+                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+                    }
                 }
             }
-        }
+        ]
 
         Behavior on opacity {
             NumberAnimation {
-                duration: root.isOverviewVisible ? root._animDurationOpen : Math.round(60 * Appearance.animMultiplier)
+                duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
             }
