@@ -46,6 +46,7 @@ Scope {
                         readonly property bool isBottomBar: !Config.options.bar.vertical && Config.options.bar.bottom
 
                         readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+                        readonly property string animStyle: Config.options.overview.animationStyle ?? "bounce"
                         property string searchingText: ""
 
                         WlrLayershell.namespace: "quickshell:overview"
@@ -157,15 +158,24 @@ Scope {
 
                                 // Slide from top/bottom — direction matches top bar / bottom bar
                                 readonly property real slideOffset: (root.isBottomBar ? 1 : -1) * (implicitHeight + root.margin * 2 + Appearance.sizes.elevationMargin + 40)
+                                readonly property real initialYOffset: root.animStyle === "zoom" ? (root.isBottomBar ? 20 : -20) : searchWidgetWrapper.slideOffset
 
                                 // Driven directly — no Behavior, to avoid QML skipping anim while invisible
-                                property real slideY: slideOffset
+                                property real slideY: initialYOffset
                                 property real slideOpacity: 0.0
 
                                 opacity: isNotchMode ? 0.0 : slideOpacity
-                                transform: Translate {
-                                    y: searchWidgetWrapper.slideY
-                                }
+                                transform: [
+                                    Translate {
+                                        y: searchWidgetWrapper.slideY
+                                    },
+                                    Scale {
+                                        origin.x: searchWidgetWrapper.width / 2
+                                        origin.y: searchWidgetWrapper.height / 2
+                                        xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * searchWidgetWrapper.slideOpacity) : 1.0
+                                        yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * searchWidgetWrapper.slideOpacity) : 1.0
+                                    }
+                                ]
 
                                 layer.enabled: !isNotchMode
                                 layer.effect: MultiEffect {
@@ -179,7 +189,7 @@ Scope {
                                     interval: 16 // 1 frame at 60fps — ensures QML paints reset before animating
                                     repeat: false
                                     onTriggered: {
-                                        slideInYAnim.from = searchWidgetWrapper.slideOffset;
+                                        slideInYAnim.from = searchWidgetWrapper.initialYOffset;
                                         slideInYAnim.to = 0;
                                         slideInOpacityAnim.from = 0.0;
                                         slideInOpacityAnim.to = 1.0;
@@ -191,9 +201,9 @@ Scope {
                                     slideOutParallel.stop();
                                     slideInParallel.stop();
                                     slideInStartTimer.stop();
-                                    searchWidgetWrapper.slideY = searchWidgetWrapper.slideOffset;
+                                    searchWidgetWrapper.slideY = searchWidgetWrapper.initialYOffset;
                                     searchWidgetWrapper.slideOpacity = 0.0;
-                                    slideInYAnim.from = searchWidgetWrapper.slideOffset;
+                                    slideInYAnim.from = searchWidgetWrapper.initialYOffset;
                                     slideInYAnim.to = 0;
                                     slideInOpacityAnim.from = 0.0;
                                     slideInOpacityAnim.to = 1.0;
@@ -204,7 +214,7 @@ Scope {
                                     slideInParallel.stop();
                                     slideOutParallel.stop();
                                     slideOutYAnim.from = searchWidgetWrapper.slideY;
-                                    slideOutYAnim.to = searchWidgetWrapper.slideOffset;
+                                    slideOutYAnim.to = searchWidgetWrapper.initialYOffset;
                                     slideOutOpacityAnim.from = searchWidgetWrapper.slideOpacity;
                                     slideOutOpacityAnim.to = 0.0;
                                     slideOutParallel.start();
@@ -217,8 +227,8 @@ Scope {
                                         target: searchWidgetWrapper
                                         property: "slideY"
                                         duration: root.animDurationEnter
-                                        easing.type: Easing.OutBack
-                                        easing.overshoot: 1.2
+                                        easing.type: root.animStyle === "bounce" ? Easing.OutBack : Easing.OutCubic
+                                        easing.overshoot: root.animStyle === "bounce" ? 1.2 : 0
                                     }
                                     NumberAnimation {
                                         id: slideInOpacityAnim
@@ -311,13 +321,13 @@ Scope {
 
                                 transform: [
                                     Translate {
-                                        y: (1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)
+                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY
                                     },
                                     Scale {
                                         origin.x: overviewLoader.implicitWidth / 2
                                         origin.y: overviewLoader.implicitHeight / 2
-                                        xScale: 0.93 + 0.07 * Math.min(1.0, Math.max(0.0, overviewLoader.opacity))
-                                        yScale: 0.93 + 0.07 * Math.min(1.0, Math.max(0.0, overviewLoader.opacity))
+                                        xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) : 1.0
+                                        yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) : 1.0
                                     }
                                 ]
 
@@ -343,13 +353,13 @@ Scope {
 
                                 transform: [
                                     Translate {
-                                        y: (1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)
+                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY
                                     },
                                     Scale {
                                         origin.x: scrollingOverviewLoader.width / 2
                                         origin.y: scrollingOverviewLoader.height / 2
-                                        xScale: 0.93 + 0.07 * Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))
-                                        yScale: 0.93 + 0.07 * Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))
+                                        xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) : 1.0
+                                        yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) : 1.0
                                     }
                                 ]
 

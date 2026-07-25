@@ -84,6 +84,19 @@ ContentPage {
             }
 
             ConfigSpinBox {
+                enabled: Config.options.overview.enable && !Config.options.overview.enableManualScale
+                icon: "zoom_in_map"
+                text: Translation.tr("Auto-Scale Factor (%)")
+                value: (Config.options.overview.autoScaleFactor ?? 1.0) * 100
+                from: 50
+                to: 150
+                stepSize: 5
+                onValueChanged: {
+                    Config.options.overview.autoScaleFactor = value / 100;
+                }
+            }
+
+            ConfigSpinBox {
                 enabled: Config.options.overview.enable && Config.options.overview.enableManualScale
                 icon: "aspect_ratio"
                 text: Translation.tr("Custom Scale (%)")
@@ -93,6 +106,24 @@ ContentPage {
                 stepSize: 5
                 onValueChanged: {
                     Config.options.overview.scale = value / 100;
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Animation Style")
+                icon: "animation"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.overview.animationStyle ?? "bounce"
+                    onSelected: newValue => {
+                        Config.options.overview.animationStyle = newValue;
+                    }
+                    options: [
+                        { displayName: Translation.tr("Slide + Bounce"), icon: "animation", value: "bounce" },
+                        { displayName: Translation.tr("Smooth Slide"), icon: "swipe", value: "smooth" },
+                        { displayName: Translation.tr("Zoom In"), icon: "zoom_in", value: "zoom" }
+                    ]
                 }
             }
 

@@ -320,6 +320,8 @@ Item {
         }
     }
 
+    readonly property string animStyle: Config.options.overview.animationStyle ?? "bounce"
+
     Loader { // Classic overview
         id: overviewLoader
         y: root.isBottomBar ? (dropContainer.y - height - 10) : (dropContainer.y + dropContainer.height + 10)
@@ -327,48 +329,19 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         active: root.isWidgetActive && !root.isScrollingLayout
         visible: opacity > 0.01
+        opacity: root.isOverviewVisible ? root.openProgress : 0.0
 
-        opacity: root.isOverviewVisible ? 1.0 : 0.0
         transform: [
             Translate {
-                y: root.isOverviewVisible ? 0 : (root.isBottomBar ? -30 : 30)
-                Behavior on y {
-                    NumberAnimation {
-                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-                    }
-                }
+                y: (1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30)
             },
             Scale {
                 origin.x: overviewLoader.implicitWidth / 2
                 origin.y: overviewLoader.implicitHeight / 2
-                xScale: root.isOverviewVisible ? 1.0 : 0.93
-                yScale: root.isOverviewVisible ? 1.0 : 0.93
-                Behavior on xScale {
-                    NumberAnimation {
-                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-                    }
-                }
-                Behavior on yScale {
-                    NumberAnimation {
-                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-                    }
-                }
+                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
+                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
             }
         ]
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-            }
-        }
 
         sourceComponent: OverviewWidget {
             panelWindow: root.panelWindow
@@ -384,48 +357,19 @@ Item {
         anchors.right: parent.right
         active: root.isWidgetActive && root.isScrollingLayout
         visible: opacity > 0.01
+        opacity: root.isOverviewVisible ? root.openProgress : 0.0
 
-        opacity: root.isOverviewVisible ? 1.0 : 0.0
         transform: [
             Translate {
-                y: root.isOverviewVisible ? 0 : (root.isBottomBar ? -30 : 30)
-                Behavior on y {
-                    NumberAnimation {
-                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-                    }
-                }
+                y: (1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30)
             },
             Scale {
                 origin.x: scrollingOverviewLoader.width / 2
                 origin.y: scrollingOverviewLoader.height / 2
-                xScale: root.isOverviewVisible ? 1.0 : 0.93
-                yScale: root.isOverviewVisible ? 1.0 : 0.93
-                Behavior on xScale {
-                    NumberAnimation {
-                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-                    }
-                }
-                Behavior on yScale {
-                    NumberAnimation {
-                        duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-                    }
-                }
+                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
+                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
             }
         ]
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-            }
-        }
 
         sourceComponent: ScrollingOverviewWidget {
             anchors.fill: parent

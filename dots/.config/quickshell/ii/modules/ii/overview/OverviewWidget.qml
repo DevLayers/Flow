@@ -15,12 +15,14 @@ Item {
     id: root
     property bool hyprscrollingEnabled: false //FIXME
     readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
+    readonly property real autoScaleFactor: Config.options.overview.autoScaleFactor ?? 1.0
     readonly property real autoScale: {
         let cols = Math.max(1, Config.options.overview.columns || 5);
         let rows = Math.max(1, Config.options.overview.rows || 2);
         let widthScale = 0.88 / cols;
         let heightScale = 0.74 / rows;
-        return Math.min(widthScale, heightScale);
+        let baseScale = Math.min(widthScale, heightScale);
+        return baseScale * root.autoScaleFactor;
     }
     readonly property real activeScale: enableManualScale ? Config.options.overview.scale : autoScale
     property real scale: activeScale
