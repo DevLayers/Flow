@@ -390,11 +390,15 @@ LazyLoader {
                     transformOrigin: Item.Center
                     clip: false
 
-                Component.onDestruction: {
-                    if (root && root.contentItem) {
-                        root.contentItem.parent = root;
+                    // contentItem is owned by root, which is a LazyLoader (not an Item), so it
+                    // outlives this window. Detach it before the window's item tree is torn down,
+                    // otherwise it keeps a dangling visual parent and anchors into freed items.
+                    Component.onDestruction: {
+                        if (!root || !root.contentItem)
+                            return;
+                        root.contentItem.anchors.fill = undefined;
+                        root.contentItem.parent = null;
                     }
-                }
 
                 Component.onCompleted: {
                     if (root.contentItem) {

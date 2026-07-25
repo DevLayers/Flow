@@ -40,8 +40,16 @@ Item {
         active: root.internalVisibleCondition
         sourceComponent: PopupWindow {
             visible: true
+
+            // contentItem is owned by root and outlives this window, so detach it before the
+            // window's item tree is torn down instead of leaving a dangling visual parent.
+            Component.onDestruction: {
+                if (root.contentItem)
+                    root.contentItem.parent = null;
+            }
+
             anchor {
-                window: root.QsWindow.window
+                window: root.QsWindow?.window ?? null
                 item: root.parent
                 edges: root.anchorEdges
                 gravity: root.anchorGravity

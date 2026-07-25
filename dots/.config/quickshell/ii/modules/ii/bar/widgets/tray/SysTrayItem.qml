@@ -92,7 +92,7 @@ MouseArea {
             trayItemId: root.item ? (root.item.id || "") : ""
 
             anchor {
-                window: root.QsWindow.window
+                window: root.QsWindow?.window ?? null
 
                 rect: {
                     var gap = Appearance.sizes.elevationMargin; // SysTrayItem menu gap
