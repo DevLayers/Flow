@@ -810,6 +810,27 @@ Singleton {
                         property real y: 200
                         property bool expressiveColors: false
                     }
+                    property JsonObject ai_chat: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject notes_widget: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject notes_widget_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
                     property JsonObject media_cd: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"

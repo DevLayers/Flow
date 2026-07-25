@@ -42,13 +42,22 @@ Singleton {
             "configPage": "widgets/DesktopClockWidgetConfig.qml"
         },
         {
+            "widgetId": "clock_flex",
+            "name": Translation.tr("Flex Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/FlexClock.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A 1x1 2x2 grid clock with Google Sans Flex font, checkerboard diagonal colors, and die-cut sticker cutout effect."),
+            "configPage": "widgets/DesktopFlexClockConfig.qml"
+        },
+        {
             "widgetId": "nagasaki_text",
             "name": Translation.tr("Nagasaki Text Clock"),
             "category": "Clock",
             "qmlPath": Qt.resolvedUrl("clock/NagasakiTextClock.qml"),
             "icon": "schedule",
             "description": Translation.tr("A minimal 1x1 clock displaying time in Nagasaki font with solid color text."),
-            "configPage": ""
+            "configPage": "widgets/DesktopNagasakiTextClockConfig.qml"
         },
         {
             "widgetId": "clock_dial",
@@ -374,6 +383,33 @@ Singleton {
             "icon": "mail",
             "description": Translation.tr("2x1 wide email inbox widget displaying latest received emails and quick action button."),
             "configPage": "widgets/DesktopEmailWidgetConfig.qml"
+        },
+        {
+            "widgetId": "ai_chat",
+            "name": Translation.tr("AI Chat"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/AiChatWidget.qml"),
+            "icon": "auto_awesome",
+            "description": Translation.tr("1x1 AI assistant widget with spark icon and quick access to AI chat sidebar."),
+            "configPage": "widgets/DesktopAiChatConfig.qml"
+        },
+        {
+            "widgetId": "notes_widget",
+            "name": Translation.tr("Notes (1x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/NotesWidget.qml"),
+            "icon": "note_stack",
+            "description": Translation.tr("1x1 notes widget with vertical scroll and direct notes editor."),
+            "configPage": "widgets/DesktopNotesWidgetConfig.qml"
+        },
+        {
+            "widgetId": "notes_widget_2x1",
+            "name": Translation.tr("Notes (2x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/NotesWidget2x1.qml"),
+            "icon": "note_stack",
+            "description": Translation.tr("2x1 wide notes widget with header, vertical scroll, and direct notes editor."),
+            "configPage": "widgets/DesktopNotesWidgetConfig.qml"
         }
     ]
 

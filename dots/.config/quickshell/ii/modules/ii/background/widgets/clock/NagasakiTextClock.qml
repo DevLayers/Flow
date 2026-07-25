@@ -55,6 +55,6 @@ AbstractBackgroundWidget {
 
     StyledDropShadow {
         target: timeLabel
-        visible: Config.options.background.widgets.enableShadows ?? true
+        visible: Config.options.background.widgets.enableShadows ?? false
     }
 }

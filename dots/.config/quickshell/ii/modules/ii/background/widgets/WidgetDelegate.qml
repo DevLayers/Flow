@@ -87,6 +87,17 @@ Item {
     }
 
     Component {
+        id: component_clock_flex
+        FlexClock {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_clock_dial
         ClockWidget {
             styleOverride: "dial"
@@ -484,11 +495,45 @@ Item {
         }
     }
 
+    Component {
+        id: component_ai_chat
+        AiChatWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_notes_widget
+        NotesWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_notes_widget_2x1
+        NotesWidget2x1 {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
     readonly property var widgetComponentMap: ({
             "clock_cookie": component_clock_cookie,
             "clock_digital": component_clock_digital,
             "clock_nagasaki": component_clock_nagasaki,
             "nagasaki_text": component_nagasaki_text,
+            "clock_flex": component_clock_flex,
             "clock_dial": component_clock_dial,
             "clock_wearos": component_clock_wearos,
             "circular_media": component_circular_media,
@@ -524,7 +569,10 @@ Item {
             "devices_battery_list_1x1": component_devices_battery_list_1x1,
             "bluetooth_earbuds_stem": component_bluetooth_earbuds_stem,
             "email_inbox": component_email_inbox,
-            "email_inbox_2x1": component_email_inbox_2x1
+            "email_inbox_2x1": component_email_inbox_2x1,
+            "ai_chat": component_ai_chat,
+            "notes_widget": component_notes_widget,
+            "notes_widget_2x1": component_notes_widget_2x1
         })
 
     function getExtUrl(extId) {
