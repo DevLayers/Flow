@@ -21,6 +21,11 @@ Item {
     readonly property string backgroundStyle: Config.options.overview.scrollingStyle.backgroundStyle
 
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
+    readonly property real monitorScale: (monitor?.scale > 0) ? monitor.scale : 1
+    readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
+    readonly property real autoScale: 0.26
+    readonly property real overviewWindowScale: enableManualScale ? (Config.options.overview.scale * 1.25) : root.autoScale
+    readonly property real workspaceLayoutScale: overviewWindowScale / monitorScale
     readonly property int hyprlandMonitorIndex: {
         if (!monitor || !monitor.name) return 0;
         let idx = HyprlandData.monitors.findIndex(mon => mon.name === monitor.name);
@@ -61,11 +66,11 @@ Item {
     property real normalWindowOffset: root.hyprscrollingEnabled ? 0 : root.workspaceImplicitWidth / 2 // if someone uses default layout with this scrolling overview, we have to add this offset to center the windows
 
     property real workspaceImplicitWidth: (monitorData?.transform % 2 === 1)
-        ? ((monitor.height - (monitorData?.reserved?.[1] ?? 0) - (monitorData?.reserved?.[3] ?? 0)) * root.scaleRatio)
-        : ((monitor.width - (monitorData?.reserved?.[0] ?? 0) - (monitorData?.reserved?.[2] ?? 0)) * root.scaleRatio)
+        ? ((monitor.height - (monitorData?.reserved?.[1] ?? 0) - (monitorData?.reserved?.[3] ?? 0)) * root.workspaceLayoutScale)
+        : ((monitor.width - (monitorData?.reserved?.[0] ?? 0) - (monitorData?.reserved?.[2] ?? 0)) * root.workspaceLayoutScale)
     property real workspaceImplicitHeight: (monitorData?.transform % 2 === 1)
-        ? ((monitor.width - (monitorData?.reserved?.[0] ?? 0) - (monitorData?.reserved?.[2] ?? 0)) * root.scaleRatio)
-        : ((monitor.height - (monitorData?.reserved?.[1] ?? 0) - (monitorData?.reserved?.[3] ?? 0)) * root.scaleRatio)
+        ? ((monitor.width - (monitorData?.reserved?.[0] ?? 0) - (monitorData?.reserved?.[2] ?? 0)) * root.workspaceLayoutScale)
+        : ((monitor.height - (monitorData?.reserved?.[1] ?? 0) - (monitorData?.reserved?.[3] ?? 0)) * root.workspaceLayoutScale)
 
     implicitWidth: monitor.width
     implicitHeight: monitor.height
@@ -88,7 +93,7 @@ Item {
     property var activeWindowData
     property var activeWindow: windows.find(w => w.focusHistoryID === 0 && w.workspace?.id === monitor.activeWorkspace?.id && w.monitor === monitor.id)
 
-    property real scaleRatio: Config.options.overview.scale * 1.25 // 1.25 to make it almost same size as classic overview
+    property real scaleRatio: root.overviewWindowScale
 
     property int currentWorkspace: {
         let activeId = monitor.activeWorkspace?.id;

@@ -73,10 +73,20 @@ ContentPage {
             Layout.fillWidth: true
             spacing: 4
 
-            ConfigSpinBox {
+            ConfigSwitch {
                 enabled: Config.options.overview.enable
+                buttonIcon: "tune"
+                text: Translation.tr("Manual Scale (Override Auto-Scale)")
+                checked: Config.options.overview.enableManualScale
+                onCheckedChanged: {
+                    Config.options.overview.enableManualScale = checked;
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.overview.enable && Config.options.overview.enableManualScale
                 icon: "aspect_ratio"
-                text: Translation.tr("Scale (%)")
+                text: Translation.tr("Custom Scale (%)")
                 value: Config.options.overview.scale * 100
                 from: 10
                 to: 100
