@@ -309,9 +309,17 @@ Scope {
                                     blur: (1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * 1.0
                                 }
 
-                                transform: Translate {
-                                    y: (1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 40 : -40)
-                                }
+                                transform: [
+                                    Translate {
+                                        y: (1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)
+                                    },
+                                    Scale {
+                                        origin.x: overviewLoader.implicitWidth / 2
+                                        origin.y: overviewLoader.implicitHeight / 2
+                                        xScale: 0.93 + 0.07 * Math.min(1.0, Math.max(0.0, overviewLoader.opacity))
+                                        yScale: 0.93 + 0.07 * Math.min(1.0, Math.max(0.0, overviewLoader.opacity))
+                                    }
+                                ]
 
                                 sourceComponent: OverviewWidget {
                                     panelWindow: root
@@ -333,9 +341,17 @@ Scope {
                                     blur: (1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * 1.0
                                 }
 
-                                transform: Translate {
-                                    y: (1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 40 : -40)
-                                }
+                                transform: [
+                                    Translate {
+                                        y: (1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)
+                                    },
+                                    Scale {
+                                        origin.x: scrollingOverviewLoader.width / 2
+                                        origin.y: scrollingOverviewLoader.height / 2
+                                        xScale: 0.93 + 0.07 * Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))
+                                        yScale: 0.93 + 0.07 * Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))
+                                    }
+                                ]
 
                                 sourceComponent: ScrollingOverviewWidget {
                                     anchors.fill: parent
