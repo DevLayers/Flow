@@ -69,7 +69,8 @@ Item {
         onCleared: {
             sysTrayRoot.trayOverflowOpen = false;
             if (sysTrayRoot.activeMenu) {
-                sysTrayRoot.activeMenu.close();
+                if (typeof sysTrayRoot.activeMenu.close === "function")
+                    sysTrayRoot.activeMenu.close();
                 sysTrayRoot.activeMenu = null;
             }
         }

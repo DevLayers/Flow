@@ -209,15 +209,21 @@ PopupWindow {
         Repeater {
             id: menuEntriesRepeater
             property bool iconColumnNeeded: {
-                for (let i = 0; i < menuOpener.children.values.length; i++) {
-                    if (menuOpener.children.values[i].icon.length > 0)
+                if (!menuOpener || !menuOpener.children || !menuOpener.children.values) return false;
+                let vals = menuOpener.children.values;
+                for (let i = 0; i < vals.length; i++) {
+                    let entry = vals[i];
+                    if (entry && entry.icon && entry.icon.length > 0)
                         return true;
                 }
                 return false;
             }
             property bool specialInteractionColumnNeeded: {
-                for (let i = 0; i < menuOpener.children.values.length; i++) {
-                    if (menuOpener.children.values[i].buttonType !== QsMenuButtonType.None)
+                if (!menuOpener || !menuOpener.children || !menuOpener.children.values) return false;
+                let vals = menuOpener.children.values;
+                for (let i = 0; i < vals.length; i++) {
+                    let entry = vals[i];
+                    if (entry && entry.buttonType !== undefined && entry.buttonType !== QsMenuButtonType.None)
                         return true;
                 }
                 return false;

@@ -15,7 +15,9 @@ Item {
         if (!gridLayout.children) return false;
         for (let i = 0; i < gridLayout.children.length; i++) {
             let child = gridLayout.children[i];
-            if (child && child.visible) return true;
+            if (!child) continue;
+            let isVis = child.hasOwnProperty("item") ? (child.item && child.item.visible && child.visible) : child.visible;
+            if (isVis) return true;
         }
         return false;
     }
