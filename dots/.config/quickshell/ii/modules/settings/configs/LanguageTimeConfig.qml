@@ -8,10 +8,17 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 
-ContentPage {
+// The `contentY` alias lets settings.qml search-scroll still work.
+Item {
     id: root
 
-    forceWidth: false
+    property alias contentY: page.contentY
+    // Active sub-page URL ("" = none)
+    property alias activeSubPage: subPageOverlay.activeSubPage
+
+    function openSubPage(url) {
+        root.activeSubPage = Qt.resolvedUrl(url);
+    }
 
     property var languages: ["auto"]
     property var languagesModel: [{ "displayName": "auto", "value": "auto" }]
@@ -48,6 +55,14 @@ ContentPage {
             property string locale: ""
             command: [Directories.aiTranslationScriptPath, translationProc.locale]
         }
+
+    ContentPage {
+        id: page
+
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
+        visible: opacity > 0
 
     ContentSection {
         icon: "language"
@@ -218,10 +233,7 @@ ContentPage {
             ConfigSelectionArray {
                 currentValue: Config.options.time.format
                 onSelected: (newValue) => {
-                    if (newValue === "hh:mm")
-                        Quickshell.execDetached(["bash", "-c", `sed -i 's/\\TIME12\\b/TIME/' '${FileUtils.trimFileProtocol(Directories.config)}/hypr/hyprlock.conf'`]);
-                    else
-                        Quickshell.execDetached(["bash", "-c", `sed -i 's/\\TIME\\b/TIME12/' '${FileUtils.trimFileProtocol(Directories.config)}/hypr/hyprlock.conf'`]);
+                    DateUtils.syncHyprlockTimeFormat(newValue);
                     Config.options.time.format = newValue;
                 }
                 options: [{
@@ -258,6 +270,22 @@ ContentPage {
                 }]
             }
 
+        }
+
+        // Own ColumnLayout so the card's auto first/last rounding sees no unrelated siblings
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            spacing: 4
+
+            ServiceCard {
+                cardIcon: "edit_calendar"
+                cardHue: 280
+                cardShape: "Cookie9Sided"
+                title: Translation.tr("Custom format strings")
+                description: Translation.tr("Fine-tune how dates and times are shown across the shell")
+                onOpenCard: root.openSubPage("widgets/TimeDateFormatsConfig.qml")
+            }
         }
 
         ContentSubsection {
@@ -481,5 +509,14 @@ ContentPage {
 
     }
 
+    }
+
+    // Sub-page overlay (slides in from the right)
+    ConfigSubPageHost {
+        id: subPageOverlay
+
+        anchors.fill: parent
+        z: 10
+    }
 
 }
