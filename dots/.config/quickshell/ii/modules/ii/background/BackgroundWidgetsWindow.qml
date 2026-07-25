@@ -38,15 +38,27 @@ PanelWindow {
     }
 
     // Fullscreen deferral logic
-    property var workspacesForMonitor: Hyprland.workspaces.values.filter(function(workspace) { return workspace.monitor && workspace.monitor.name == monitor.name; })
-    property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(function(workspace) { return ((workspace.toplevels.values.filter(function(window) { return window.wayland && window.wayland.fullscreen; })[0] != undefined) && workspace.active); })[0]
+    property var workspacesForMonitor: Hyprland.workspaces.values.filter(function (workspace) {
+        return workspace.monitor && workspace.monitor.name == monitor.name;
+    })
+    property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(function (workspace) {
+        return ((workspace.toplevels.values.filter(function (window) {
+                    return window.wayland && window.wayland.fullscreen;
+                })[0] != undefined) && workspace.active);
+    })[0]
     property bool isFullscreen: activeWorkspaceWithFullscreen != undefined
-    property var activeWorkspace: workspacesForMonitor.filter(function(workspace) { return workspace.active; })[0]
+    property var activeWorkspace: workspacesForMonitor.filter(function (workspace) {
+        return workspace.active;
+    })[0]
     property bool hasWindowsInActiveWorkspace: {
-        if (activeWorkspace == undefined) return false;
+        if (activeWorkspace == undefined)
+            return false;
         let activeId = activeWorkspace.id;
-        if (activeId > 1000000) activeId = 2147483647 - activeId;
-        return HyprlandData.windowList.some(function(w) { return w.workspace.id === activeId; });
+        if (activeId > 1000000)
+            activeId = 2147483647 - activeId;
+        return HyprlandData.windowList.some(function (w) {
+            return w.workspace.id === activeId;
+        });
     }
     property bool deferredFullscreen: false
     Timer {
@@ -65,7 +77,8 @@ PanelWindow {
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
     readonly property int chunkSize: {
         let intensity = Config.options.background.parallax.intensity;
-        if (intensity === undefined || isNaN(intensity)) intensity = 4;
+        if (intensity === undefined || isNaN(intensity))
+            intensity = 4;
         let idx = Math.max(1, Math.min(10, intensity)) - 1;
         return intensitySpans[idx] !== undefined ? intensitySpans[idx] : 10;
     }
@@ -100,9 +113,7 @@ PanelWindow {
         return path !== "" && (path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mkv") || path.endsWith(".avi") || path.endsWith(".mov"));
     }
     property string wallpaperPath: {
-        const rawPath = wallpaperIsVideo
-            ? (Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "")
-            : (Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "");
+        const rawPath = wallpaperIsVideo ? (Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "") : (Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "");
         if (rawPath !== "")
             return rawPath;
         return `${Directories.assetsPath}/images/default_wallpaper.png`;
@@ -115,7 +126,7 @@ PanelWindow {
     WallpaperSizeProbe {
         id: getWallpaperSizeProc
         path: bgWidgetsWindow.wallpaperPath
-        onSizeDetected: function(w, h) {
+        onSizeDetected: function (w, h) {
             bgWidgetsWindow.wallpaperWidth = w;
             bgWidgetsWindow.wallpaperHeight = h;
             bgWidgetsWindow.recalcWallpaperScale();
@@ -149,8 +160,9 @@ PanelWindow {
         const height = bgWidgetsWindow.wallpaperHeight;
         const screenW = bgWidgetsWindow.screen.width;
         const screenH = bgWidgetsWindow.screen.height;
-        if (width <= 0 || height <= 0) return;
-        
+        if (width <= 0 || height <= 0)
+            return;
+
         let targetScale = 1.0;
         if (Config.options.background.scaleLargeWallpapers) {
             if (width <= screenW || height <= screenH) {
@@ -159,11 +171,11 @@ PanelWindow {
                 targetScale = Math.min(bgWidgetsWindow.preferredWallpaperScale, width / screenW, height / screenH);
             }
         }
-        
+
         if (Config.options.background.blurWhenWindowsOpen || Config.options.lock.blur.enable) {
             targetScale *= 1.03;
         }
-        
+
         bgWidgetsWindow.baseWallpaperScale = targetScale;
     }
 
@@ -202,15 +214,15 @@ PanelWindow {
     }
 
     property var zoomLevels: ({
-        "in": {
-            default: 1.04,
-            zoomed: 1
-        },
-        "out": {
-            default: 1,
-            zoomed: 1.01
-        }
-    })
+            "in": {
+                default: 1.04,
+                zoomed: 1
+            },
+            "out": {
+                default: 1,
+                zoomed: 1.01
+            }
+        })
     readonly property bool zoomInStyle: Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"

@@ -81,7 +81,7 @@ AbstractBackgroundWidget {
                     id: headphoneCompleteGroup
                     anchors.centerIn: parent
                     width: parent.width
-                    height: parent.height * 0.85
+                    height: parent.height
                     opacity: root.isConnected ? 1.0 : 0.35
 
                     readonly property string completeImageSource: Qt.resolvedUrl("../../../../../assets/images/devices/pixel_headphone_2_complete.png")
@@ -153,7 +153,7 @@ AbstractBackgroundWidget {
                     id: headphoneFrontGroup
                     anchors.centerIn: parent
                     width: parent.width
-                    height: parent.height * 0.85
+                    height: parent.height
                     opacity: root.isConnected ? 1.0 : 0.35
 
                     readonly property string frontImageSource: Qt.resolvedUrl("../../../../../assets/images/devices/pixel_headphone_2_front.png")

@@ -37,7 +37,6 @@ AbstractBackgroundWidget {
     Rectangle {
         id: bgRect
         anchors.fill: parent
-        anchors.margins: 10
         color: root.cardBgColor
         radius: Appearance.rounding.windowRounding
 
@@ -168,7 +167,7 @@ AbstractBackgroundWidget {
                     anchors.fill: parent
                     visible: false
 
-                    // Upper Right Earbud (Rotated -170 degrees, Y lowered by +16px to y:26, x tightened to 80)
+                    // Upper Right Earbud (Rotated -170 degrees, shifted right +12px for centering)
                     Image {
                         source: budsGroup.budsImageSource
                         width: 112
@@ -176,12 +175,12 @@ AbstractBackgroundWidget {
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         mipmap: true
-                        x: 80
+                        x: 92
                         y: 26
                         rotation: -170
                     }
 
-                    // Lower Left Earbud (Rotated 0 degrees, Y lowered by +16px to y:81, x tightened to 26)
+                    // Lower Left Earbud (Rotated 0 degrees, shifted right +12px for centering)
                     Image {
                         source: budsGroup.budsImageSource
                         width: 112
@@ -189,7 +188,7 @@ AbstractBackgroundWidget {
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         mipmap: true
-                        x: 26
+                        x: 38
                         y: 81
                         rotation: 0
                     }
@@ -218,7 +217,7 @@ AbstractBackgroundWidget {
                     id: sharpBudsContainer
                     anchors.fill: parent
 
-                    // Upper Right Earbud (Rotated -170 degrees)
+                    // Upper Right Earbud (Rotated -170 degrees, shifted right +12px for centering)
                     Image {
                         source: budsGroup.budsImageSource
                         width: 112
@@ -226,12 +225,12 @@ AbstractBackgroundWidget {
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         mipmap: true
-                        x: 80
+                        x: 92
                         y: 26
                         rotation: -170
                     }
 
-                    // Lower Left Earbud (Rotated 0 degrees)
+                    // Lower Left Earbud (Rotated 0 degrees, shifted right +12px for centering)
                     Image {
                         source: budsGroup.budsImageSource
                         width: 112
@@ -239,7 +238,7 @@ AbstractBackgroundWidget {
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         mipmap: true
-                        x: 26
+                        x: 38
                         y: 81
                         rotation: 0
                     }

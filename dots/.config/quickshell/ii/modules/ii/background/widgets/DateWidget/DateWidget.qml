@@ -28,7 +28,6 @@ AbstractBackgroundWidget {
     Rectangle {
         id: bgRect
         anchors.fill: parent
-        anchors.margins: 10
         color: WidgetColorScheme.cardBgColor
         radius: Appearance.rounding.windowRounding
 

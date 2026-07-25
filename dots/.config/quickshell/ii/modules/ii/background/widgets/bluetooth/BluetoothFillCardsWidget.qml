@@ -64,7 +64,6 @@ AbstractBackgroundWidget {
     Rectangle {
         id: outerCardBg
         anchors.fill: parent
-        anchors.margins: 10
         color: root.expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerLow
         radius: Appearance.rounding.windowRounding
 
