@@ -127,6 +127,16 @@ ContentPage {
                 }
             }
 
+            ConfigSwitch {
+                enabled: Config.options.overview.enable
+                buttonIcon: "auto_awesome"
+                text: Translation.tr("Cascade Workspace Entrance")
+                checked: Config.options.overview.enableCascadeAnimation ?? true
+                onCheckedChanged: {
+                    Config.options.overview.enableCascadeAnimation = checked;
+                }
+            }
+
         }
     }
 
