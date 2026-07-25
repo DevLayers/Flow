@@ -109,7 +109,7 @@ Item {
         id: sidebarRightBackground
 
         anchors.fill: parent
-        implicitHeight: parent.height - Appearance.sizes.hyprlandGapsOut * 2
+        implicitHeight: Math.max(0, parent.height - Appearance.sizes.hyprlandGapsOut * 2)
         implicitWidth: sidebarWidth - Appearance.sizes.hyprlandGapsOut * 2
         color: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? "transparent" : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0)
         border.width: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? 0 : 1

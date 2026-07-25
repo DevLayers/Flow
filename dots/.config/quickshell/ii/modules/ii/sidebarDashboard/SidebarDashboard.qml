@@ -70,7 +70,7 @@ Scope {
                 sourceComponent: SidebarDashboardContent {}
                 
                 width: root.sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin
-                height: parent.height - (Appearance.sizes.hyprlandGapsOut * 2)
+                height: Math.max(0, parent.height - (Appearance.sizes.hyprlandGapsOut * 2))
                 y: Appearance.sizes.hyprlandGapsOut
 
                 focus: GlobalStates.sidebarRightOpen

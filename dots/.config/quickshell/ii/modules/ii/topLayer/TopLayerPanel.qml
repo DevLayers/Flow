@@ -607,7 +607,7 @@ PanelWindow {
         x: -(width - GlobalStates.animatedLeftSidebarWidth)
         y: topPanel.sidebarTopOffset
         width: Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
-        height: Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset)
+        height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset))
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
         border.width: GlobalStates.connectModeActive ? 0 : 1
         border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
@@ -700,7 +700,7 @@ PanelWindow {
         x: parent.width - Math.round(GlobalStates.animatedRightSidebarWidth)
         y: topPanel.sidebarTopOffset
         width: Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
-        height: Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset)
+        height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset))
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
         border.width: GlobalStates.connectModeActive ? 0 : 1
         border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
