@@ -245,6 +245,37 @@ ContentPage {
             }
         }
 
+        ContentSubsection {
+            title: Translation.tr("Remember Night Light")
+            icon: "history"
+            tooltip: Translation.tr("Restores the Night Light toggle and gamma level after a restart. With automatic mode on, a restored toggle still gives way at the next start or end time.")
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.light.night.persistManual
+                onSelected: newValue => {
+                    Config.options.light.night.persistManual = newValue;
+                }
+                options: [
+                    {
+                        "displayName": Translation.tr("Never"),
+                        "icon": "block",
+                        "value": "never"
+                    },
+                    {
+                        "displayName": Translation.tr("Until reboot"),
+                        "icon": "restart_alt",
+                        "value": "session"
+                    },
+                    {
+                        "displayName": Translation.tr("Always"),
+                        "icon": "all_inclusive",
+                        "value": "always"
+                    }
+                ]
+            }
+        }
+
         ConfigSwitch {
             buttonIcon: "flash_off"
             text: Translation.tr("Anti-flashbang light filter")

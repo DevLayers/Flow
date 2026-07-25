@@ -1398,6 +1398,12 @@ Singleton {
                 property string defaultHyprlandLayout: "dwindle" // Options: dwindle, monocle, master // It's best to not use scrolling
             }
 
+            property JsonObject idle: JsonObject {
+                // How long the "Keep awake" inhibitor should survive:
+                // "never" (always off at startup), "session" (until logout/reboot), "always"
+                property string persistInhibit: "session"
+            }
+
             property JsonObject interactions: JsonObject {
                 property JsonObject scrolling: JsonObject {
                     property bool fasterTouchpadScroll: false // Enable faster scrolling with touchpad
@@ -1446,6 +1452,10 @@ Singleton {
                     property string from: "19:00" // Format: "HH:mm", 24-hour time
                     property string to: "06:30"   // Format: "HH:mm", 24-hour time
                     property int colorTemperature: 5000
+                    // How long a manual Night Light toggle (and the gamma level) should survive:
+                    // "never" (always off at startup), "session" (until logout/reboot), "always".
+                    // With automatic mode on, a restored toggle still expires at the next start/end time.
+                    property string persistManual: "always"
                 }
                 property JsonObject antiFlashbang: JsonObject {
                     property bool enable: false

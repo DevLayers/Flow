@@ -77,6 +77,37 @@ ContentPage {
                 Config.options.battery.full = value;
             }
         }
+
+        ContentSubsection {
+            title: Translation.tr("Remember Keep awake")
+            icon: "coffee"
+            tooltip: Translation.tr("Restores the Keep awake toggle after a restart. A forgotten inhibitor can keep the system from sleeping, so this is limited to the current session by default.")
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.idle.persistInhibit
+                onSelected: newValue => {
+                    Config.options.idle.persistInhibit = newValue;
+                }
+                options: [
+                    {
+                        "displayName": Translation.tr("Never"),
+                        "icon": "block",
+                        "value": "never"
+                    },
+                    {
+                        "displayName": Translation.tr("Until reboot"),
+                        "icon": "restart_alt",
+                        "value": "session"
+                    },
+                    {
+                        "displayName": Translation.tr("Always"),
+                        "icon": "all_inclusive",
+                        "value": "always"
+                    }
+                ]
+            }
+        }
     }
 
     ContentSection {

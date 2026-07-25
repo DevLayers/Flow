@@ -160,6 +160,14 @@ Singleton {
                 property string sessionId: ""
             }
 
+            property JsonObject nightLight: JsonObject {
+                property bool hasManual: false // Whether a manual toggle is currently overriding automatic mode
+                property bool manualActive: false
+                property real manualSetAt: 0 // Epoch ms, used to tell whether the override has expired
+                property int gamma: 100
+                property string sessionId: ""
+            }
+
             property JsonObject overlay: JsonObject {
                 property list<string> open: ["crosshair", "recorder", "media", "volumeMixer", "resources"]
                 property JsonObject crosshair: JsonObject {
