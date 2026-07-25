@@ -933,6 +933,7 @@ Singleton {
                 property JsonObject activeWindow: JsonObject {
                     property bool fixedSize: false
                     property int customSize: 225
+                    property bool showOnAllMonitors: false
                 }
 
                 property JsonObject autoHide: JsonObject {
