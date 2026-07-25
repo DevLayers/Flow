@@ -352,14 +352,14 @@ class Bridge:
                 self.clear_token()
                 emit("auth_required")
             else:
-                emit("error", message=payload.get("data", {}).get("message", "Discord RPC error"))
+                emit("error", message=(payload.get("data") or {}).get("message", "Discord RPC error"))
             return
         if nonce in self.pending:
             self.cancel_authorization_timeout(nonce)
-            await self.response(self.pending.pop(nonce), payload.get("data", {}))
+            await self.response(self.pending.pop(nonce), payload.get("data") or {})
             return
         if payload.get("cmd") == "DISPATCH":
-            await self.dispatch(event, payload.get("data", {}))
+            await self.dispatch(event, payload.get("data") or {})
 
     async def response(self, command: str, data: dict[str, Any]) -> None:
         if command == "AUTHORIZE":
@@ -379,7 +379,7 @@ class Bridge:
             await self.subscribe("VOICE_SETTINGS_UPDATE")
             await self.command("GET_SELECTED_VOICE_CHANNEL")
         elif command == "GET_SELECTED_VOICE_CHANNEL":
-            await self.select_channel(data if data.get("id") else None)
+            await self.select_channel(data if data and data.get("id") else None)
         elif command in ("GET_VOICE_SETTINGS", "SET_VOICE_SETTINGS"):
             self.settings = {"mute": bool(data.get("mute")), "deaf": bool(data.get("deaf"))}
             emit("voice_settings", **self.settings)

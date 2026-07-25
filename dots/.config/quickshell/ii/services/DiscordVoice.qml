@@ -111,7 +111,7 @@ Singleton {
         switch (message.type) {
         case "ready": connect(); break;
         case "backend": backend = message.backend || ""; break;
-        case "connected": status = "connected"; break;
+        case "connected": status = "connected"; reconnectTimer.stop(); break;
         case "auth_required": status = "auth_required"; break;
         case "authorizing":
             status = "authorizing";
@@ -130,12 +130,12 @@ Singleton {
             muted = message.mute === true;
             deafened = message.deaf === true;
             break;
-        case "unavailable": status = "unavailable"; errorMessage = message.message || ""; break;
+        case "unavailable": status = "unavailable"; errorMessage = message.message || ""; reconnectTimer.restart(); break;
         // The companion is one of two backends. Its failure leaves Discord's
         // own RPC usable, so this reports the reason without moving `status`
         // into an authorization state the user cannot act on.
         case "companion_error": errorMessage = message.message || ""; break;
-        case "disconnected": status = "disconnected"; backend = ""; channel = null; updateParticipants([]); break;
+        case "disconnected": status = "disconnected"; backend = ""; channel = null; updateParticipants([]); reconnectTimer.restart(); break;
         case "error":
             status = "auth_required";
             errorMessage = message.message || "Discord RPC error";
@@ -148,6 +148,16 @@ Singleton {
     Timer {
         id: restartTimer
         onTriggered: root.start(false)
+    }
+
+    // The bridge process stays alive after Discord drops the RPC socket (e.g. a
+    // Discord restart), but it will not reconnect on its own. Re-issue connect on
+    // a fixed cadence until the socket is back; connect() no-ops once linked.
+    Timer {
+        id: reconnectTimer
+        interval: 3000
+        repeat: true
+        onTriggered: root.connect()
     }
 
     Timer {
