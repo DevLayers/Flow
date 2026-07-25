@@ -53,7 +53,7 @@ Item {
 
     readonly property string trackTitle: player?.trackTitle || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
-    readonly property string artUrl: player?.trackArtUrl || ""
+    readonly property string artUrl: MprisController.artUrl
     readonly property bool isLocalArt: artUrl.startsWith("file://")
 
     property string artDownloadLocation: Directories.coverArt
