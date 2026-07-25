@@ -38,25 +38,32 @@ AbstractBackgroundWidget {
             anchors.fill: parent
             shape: MaterialShape.Shape.Cookie12Sided
             color: root.expressive ? root.expressiveInnerShape : Appearance.colors.colSurfaceContainerLow
+        }
 
-            Image {
-                id: photoImage
-                anchors.fill: parent
-                source: {
-                    let path = Config.options.background.widgets.photo.imagePath;
-                    if (!path || path === "") return "";
-                    return "file://" + path;
-                }
-                fillMode: Image.PreserveAspectCrop
-                visible: false
-            }
+        MaterialShape {
+            id: maskShape
+            anchors.fill: parent
+            shape: MaterialShape.Shape.Cookie12Sided
+            visible: false
+        }
 
-            OpacityMask {
-                anchors.fill: parent
-                source: photoImage
-                maskSource: photoShape
-                visible: photoImage.status === Image.Ready
+        Image {
+            id: photoImage
+            anchors.fill: parent
+            source: {
+                let path = Config.options.background.widgets.photo.imagePath;
+                if (!path || path === "") return "";
+                return "file://" + path;
             }
+            fillMode: Image.PreserveAspectCrop
+            visible: false
+        }
+
+        OpacityMask {
+            anchors.fill: parent
+            source: photoImage
+            maskSource: maskShape
+            visible: photoImage.status === Image.Ready
         }
     }
 }

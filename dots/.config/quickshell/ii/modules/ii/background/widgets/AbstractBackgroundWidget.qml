@@ -215,7 +215,6 @@ AbstractWidget {
 
     Item {
         id: dragProxy
-        parent: root.parent
         x: root.x
         y: root.y
     }

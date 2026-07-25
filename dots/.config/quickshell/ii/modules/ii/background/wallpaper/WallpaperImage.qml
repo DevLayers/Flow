@@ -102,7 +102,8 @@ Item {
         opacity: 1.0
         mipmap: false
         antialiasing: false
-        sourceSize: Qt.size(screen.width > 0 ? Math.round(screen.width / 4) : 480, screen.height > 0 ? Math.round(screen.height / 4) : 270)
+        // GPU: /8 instead of /4 — blurred backing needs no detail; saves ~75% VRAM for this texture in 4K
+        sourceSize: Qt.size(screen.width > 0 ? Math.round(screen.width / 8) : 240, screen.height > 0 ? Math.round(screen.height / 8) : 135)
         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
     }
 
@@ -221,7 +222,13 @@ Item {
 
             Item {
                 id: wallpaperContent
-                layer.enabled: true
+                // GPU: only enable offscreen layer when effects that need it are actually active.
+                // Always-on layer.enabled in 4K = full-res texture recomposed every frame.
+                layer.enabled: wallpaperImageRoot.lockAnimationActive
+                    || GlobalStates.screenLocked
+                    || wallpaperImageRoot.wallpaperClipRadius > 0
+                    || Config.options.lock.blur.enable
+                    || (Config.options.background.blurWhenWindowsOpen && wallpaperImageRoot.hasWindowsInActiveWorkspace)
                 width: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperW : parent.width
                 height: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperH : parent.height
 
@@ -271,14 +278,21 @@ Item {
 
                         visible: opacity > 0 && !wallpaperIsVideo
                         opacity: (wallpaper.status === Image.Ready && !wallpaperIsVideo) ? 1 : 0
-                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
+                        // GPU: cap sourceSize to screen resolution — loading > native res wastes VRAM with no visual gain.
+                        // Clamp to max 110% of screen (enough for parallax headroom).
+                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(
+                            screen.width > 0 ? Math.min(Math.round(screen.width * preferredWallpaperScale), Math.round(screen.width * 1.1)) : 1920,
+                            screen.height > 0 ? Math.min(Math.round(screen.height * preferredWallpaperScale), Math.round(screen.height * 1.1)) : 1080
+                        ) : Qt.size(-1, -1)
 
                         imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation
                         shadersPath: Qt.resolvedUrl("../shaders")
                         fillMode: Image.PreserveAspectCrop
-                        mipmap: true
+                        // GPU: mipmap:false — mip-chain generation on GPU is wasteful for a full-screen image.
+                        // The image is displayed at near-native size; mipmaps provide no quality benefit here.
+                        mipmap: false
                         antialiasing: false
                         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                     }
@@ -298,13 +312,17 @@ Item {
                             }
                         }
 
-                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
+                        // GPU: same sourceSize cap as main wallpaper
+                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(
+                            screen.width > 0 ? Math.min(Math.round(screen.width * preferredWallpaperScale), Math.round(screen.width * 1.1)) : 1920,
+                            screen.height > 0 ? Math.min(Math.round(screen.height * preferredWallpaperScale), Math.round(screen.height * 1.1)) : 1080
+                        ) : Qt.size(-1, -1)
                         imageSource: (isActive && !wallpaperSafetyTriggered) ? wallpaperImageRoot.lockscreenWallpaperPath : ""
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation
                         shadersPath: Qt.resolvedUrl("../shaders")
                         fillMode: Image.PreserveAspectCrop
-                        mipmap: true
+                        mipmap: false
                         antialiasing: false
                         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                     }
@@ -354,10 +372,6 @@ Item {
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                 }
 
-                GradientBlur {
-                    anchors.fill: parent
-                    wallpaperPath: GlobalStates.screenLocked && wallpaperImageRoot.useSeparateLockscreenWallpaper && wallpaperImageRoot.lockscreenWallpaperPath !== "" ? wallpaperImageRoot.lockscreenWallpaperPath : wallpaperImageRoot.wallpaperPath
-                }
 
                 WindowBlur {
                     anchors.fill: parent

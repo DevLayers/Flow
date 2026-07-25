@@ -30,6 +30,23 @@ ListView {
         root.dragDistance = 0;
     }
 
+    // Suppress animated contentY during external resize (e.g. sidebar bottom group collapsing).
+    // When the ListView height changes, Qt auto-adjusts contentY to preserve scroll position.
+    // If Behavior on contentY is active during resize, items appear to overlap/jump.
+    property bool _suppressScrollAnim: false
+
+    onHeightChanged: {
+        root._suppressScrollAnim = true;
+        resizeDebounce.restart();
+    }
+
+    Timer {
+        id: resizeDebounce
+        interval: 80
+        repeat: false
+        onTriggered: root._suppressScrollAnim = false
+    }
+
     maximumFlickVelocity: 3500
     boundsBehavior: Flickable.DragOverBounds
     ScrollBar.vertical: StyledScrollBar {}
@@ -55,6 +72,7 @@ ListView {
     }
 
     Behavior on contentY {
+        enabled: !root._suppressScrollAnim
         NumberAnimation {
             id: scrollAnim
             alwaysRunToEnd: true
