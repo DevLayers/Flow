@@ -362,6 +362,68 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "light_mode"
+            text: Translation.tr("Separate Light Mode Wallpaper")
+            checked: Config.options.background.useSeparateLightModeWallpaper
+            onCheckedChanged: {
+                Config.options.background.useSeparateLightModeWallpaper = checked;
+                if (checked && !Config.options.background.lightModeWallpaperPath) {
+                    Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLightmode"]);
+                }
+            }
+            StyledToolTip {
+                text: Translation.tr("Use a different wallpaper when in light mode. The current desktop wallpaper will be used for dark mode.")
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            visible: Config.options.background.useSeparateLightModeWallpaper
+
+            ConfigWallpaperSelector {
+                targetMode: "lightmode"
+                text: Translation.tr("Light Mode Wallpaper Selector")
+            }
+
+            ColumnLayout {
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+                spacing: 8
+
+                RippleButtonWithIcon {
+                    useDynamicRadius: true
+                    Layout.fillWidth: true
+                    materialIcon: "wallpaper"
+                    mainText: Translation.tr("Select Light Mode Wallpaper")
+                    onClicked: {
+                        Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLightmode"]);
+                    }
+                }
+
+                RippleButtonWithIcon {
+                    useDynamicRadius: true
+                    Layout.fillWidth: true
+                    materialIcon: "swap_horiz"
+                    mainText: Translation.tr("Swap Dark & Light Wallpapers")
+                    onClicked: {
+                        const darkWall = Config.options.background.wallpaperPath;
+                        const lightWall = Config.options.background.lightModeWallpaperPath;
+                        if (darkWall && lightWall) {
+                            Config.options.background.wallpaperPath = lightWall;
+                            Config.options.background.lightModeWallpaperPath = darkWall;
+                            // Re-apply current mode's wallpaper
+                            if (Appearance.m3colors.darkmode) {
+                                Wallpapers.apply(darkWall, true);
+                            } else {
+                                Wallpapers.applyLightModeWallpaper(lightWall);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "palette"
             text: Translation.tr("OpenRGB integration")
             checked: Config.options.appearance.openrgb.enable

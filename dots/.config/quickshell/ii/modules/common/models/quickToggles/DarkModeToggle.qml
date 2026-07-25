@@ -15,6 +15,23 @@ QuickToggleModel {
     hasMenu: true
     
     mainAction: () => {
+        if (Config.options?.background?.useSeparateLightModeWallpaper) {
+            if (Appearance.m3colors.darkmode) {
+                // Switching to light mode
+                const lightPath = Config.options.background.lightModeWallpaperPath;
+                if (lightPath && lightPath !== "") {
+                    Wallpapers.applyLightModeWallpaper(lightPath);
+                    return;
+                }
+            } else {
+                // Switching to dark mode
+                const darkPath = Config.options.background.wallpaperPath;
+                if (darkPath && darkPath !== "") {
+                    Wallpapers.apply(darkPath, true);
+                    return;
+                }
+            }
+        }
         if (Appearance.m3colors.darkmode) {
             Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "light", "--noswitch"]);
         } else {

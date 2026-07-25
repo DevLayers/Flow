@@ -26,7 +26,7 @@ Shape {
             if (!starRoot.s || !starRoot.s.fill)
                 return "transparent";
             var c = Qt.color(starRoot.s.fill);
-            return Qt.rgba(c.r, c.g, c.b, starRoot.s.fillOpacity ?? 1.0);
+            return Qt.rgba(c.r, c.g, c.b, starRoot.s.fillOpacity ?? 0.25);
         }
         capStyle: ShapePath.RoundCap
         joinStyle: ShapePath.RoundJoin

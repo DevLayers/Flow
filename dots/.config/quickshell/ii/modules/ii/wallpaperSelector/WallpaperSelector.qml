@@ -89,6 +89,10 @@ Scope {
             root.toggleWallpaperSelector("lockscreen");
         }
 
+        function toggleLightmode(): void {
+            root.toggleWallpaperSelector("lightmode");
+        }
+
         function random(): void {
             Wallpapers.randomFromCurrentFolder();
         }

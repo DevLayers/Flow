@@ -100,6 +100,12 @@ Singleton {
         root.changed()
     }
 
+    function applyLightModeWallpaper(path) {
+        if (!path || path.length === 0) return;
+        Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "light", "--image", path, "--lightmode"]);
+        root.changed()
+    }
+
     Connections {
         target: GlobalStates
         ignoreUnknownSignals: true
@@ -125,15 +131,37 @@ Singleton {
         }
     }
 
+    Connections {
+        target: Appearance.m3colors
+        function onDarkmodeChanged() {
+            if (!Config.options || !Config.options.background) return;
+            if (!Config.options.background.useSeparateLightModeWallpaper) return;
+            const lightPath = Config.options.background.lightModeWallpaperPath;
+            const darkPath = Config.options.background.wallpaperPath;
+            
+            if (Appearance.m3colors.darkmode) {
+                // Switched to dark mode — apply dark wallpaper
+                if (darkPath && darkPath !== "") {
+                    root.apply(darkPath, true);
+                }
+            } else {
+                // Switched to light mode — apply light wallpaper
+                if (lightPath && lightPath !== "") {
+                    root.applyLightModeWallpaper(lightPath);
+                }
+            }
+        }
+    }
+
     Process {
         id: selectProc
         property string filePath: ""
         property bool darkMode: Appearance.m3colors.darkmode
-        property bool isLockscreen: false
-        function select(filePath, darkMode = Appearance.m3colors.darkmode, targetLockscreen = false) {
+        property string targetMode: "desktop"
+        function select(filePath, darkMode = Appearance.m3colors.darkmode, targetMode = "desktop") {
             selectProc.filePath = filePath
             selectProc.darkMode = darkMode
-            selectProc.isLockscreen = targetLockscreen
+            selectProc.targetMode = targetMode
             selectProc.exec(["test", "-d", FileUtils.trimFileProtocol(filePath)])
         }
         onExited: (exitCode, exitStatus) => {
@@ -141,20 +169,36 @@ Singleton {
                 setDirectory(selectProc.filePath);
                 return;
             }
-            if (selectProc.isLockscreen) {
+            if (selectProc.targetMode === "lockscreen") {
                 root.applyLockscreen(selectProc.filePath, selectProc.darkMode);
+            } else if (selectProc.targetMode === "lightmode") {
+                root.selectLightmode(selectProc.filePath, selectProc.darkMode);
             } else {
-                root.apply(selectProc.filePath, selectProc.darkMode);
+                if (Config.options?.background?.useSeparateLightModeWallpaper && !Appearance.m3colors.darkmode) {
+                    root.applyLightModeWallpaper(selectProc.filePath);
+                } else {
+                    root.apply(selectProc.filePath, selectProc.darkMode);
+                }
             }
         }
     }
 
     function select(filePath, darkMode = Appearance.m3colors.darkmode) {
-        selectProc.select(filePath, darkMode, false);
+        selectProc.select(filePath, darkMode, "desktop");
     }
 
     function selectLockscreen(filePath, darkMode = Appearance.m3colors.darkmode) {
-        selectProc.select(filePath, darkMode, true);
+        selectProc.select(filePath, darkMode, "lockscreen");
+    }
+
+    function selectLightmode(filePath, darkMode = Appearance.m3colors.darkmode) {
+        if (!filePath || filePath.length === 0) return;
+        if (Config.options?.background?.useSeparateLightModeWallpaper && !Appearance.m3colors.darkmode) {
+            root.applyLightModeWallpaper(filePath);
+        } else {
+            Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", darkMode ? "dark" : "light", "--image", filePath, "--lightmode", "--noswitch"]);
+            root.changed()
+        }
     }
 
     function randomFromCurrentFolder(darkMode = Appearance.m3colors.darkmode) {

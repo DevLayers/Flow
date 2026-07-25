@@ -10,7 +10,7 @@ import qs.modules.common.functions
 Item {
     id: wallpaperSelectorRoot
     property string text: ""
-    property string targetMode: "desktop" // "desktop" or "lockscreen"
+    property string targetMode: "desktop" // "desktop", "lockscreen", or "lightmode"
 
     implicitWidth: 360
     implicitHeight: 220
@@ -19,6 +19,10 @@ Item {
         if (targetMode === "lockscreen") {
             const lockPath = Config.options.background.lockscreenWallpaperPath;
             return (lockPath && lockPath !== "") ? lockPath : Config.options.background.wallpaperPath;
+        }
+        if (targetMode === "lightmode") {
+            const lightPath = Config.options.background.lightModeWallpaperPath;
+            return (lightPath && lightPath !== "") ? lightPath : Config.options.background.wallpaperPath;
         }
         return Config.options.background.wallpaperPath;
     }
@@ -53,7 +57,9 @@ Item {
             if (Config.options.wallpaperSelector.useSystemFileDialog) {
                 Wallpapers.openFallbackPicker(Appearance.m3colors.darkmode, wallpaperSelectorRoot.targetMode === "lockscreen");
             } else {
-                const action = wallpaperSelectorRoot.targetMode === "lockscreen" ? "toggleLockscreen" : "toggle";
+                let action = "toggle";
+                if (wallpaperSelectorRoot.targetMode === "lockscreen") action = "toggleLockscreen";
+                else if (wallpaperSelectorRoot.targetMode === "lightmode") action = "toggleLightmode";
                 Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", action]);
             }
         }
@@ -89,10 +95,15 @@ Item {
                     return "Wallpaper Engine: " + parts[parts.length - 1];
                 }
                 const path = wallpaperSelectorRoot.effectivePath;
-                if (path === "")
-                    return wallpaperSelectorRoot.targetMode === "lockscreen" ? "Select lockscreen wallpaper" : "Click to select wallpaper";
+                if (path === "") {
+                    if (wallpaperSelectorRoot.targetMode === "lockscreen") return "Select lockscreen wallpaper";
+                    if (wallpaperSelectorRoot.targetMode === "lightmode") return "Select light mode wallpaper";
+                    return "Click to select wallpaper";
+                }
                 const parts = path.split("/");
-                const prefix = wallpaperSelectorRoot.targetMode === "lockscreen" ? "Lockscreen: " : "";
+                let prefix = "";
+                if (wallpaperSelectorRoot.targetMode === "lockscreen") prefix = "Lockscreen: ";
+                else if (wallpaperSelectorRoot.targetMode === "lightmode") prefix = "Light mode: ";
                 return prefix + parts[parts.length - 1];
             }
             text: fileName.length > 30 ? fileName.slice(0, 27) + "..." : fileName

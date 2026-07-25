@@ -17,7 +17,25 @@ RippleButton {
     colBackground: Appearance.colors.colLayer2
     toggled: Appearance.m3colors.darkmode === dark
     onClicked: {
-        Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode ${dark ? "dark" : "light"} --noswitch`])
+        if (Config.options?.background?.useSeparateLightModeWallpaper) {
+            if (dark) {
+                const darkPath = Config.options.background.wallpaperPath;
+                if (darkPath && darkPath !== "") {
+                    Wallpapers.apply(darkPath, true);
+                } else {
+                    Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode dark --noswitch`]);
+                }
+            } else {
+                const lightPath = Config.options.background.lightModeWallpaperPath;
+                if (lightPath && lightPath !== "") {
+                    Wallpapers.applyLightModeWallpaper(lightPath);
+                } else {
+                    Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode light --noswitch`]);
+                }
+            }
+        } else {
+            Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode ${dark ? "dark" : "light"} --noswitch`]);
+        }
     }
     contentItem: Item {
         anchors.centerIn: parent

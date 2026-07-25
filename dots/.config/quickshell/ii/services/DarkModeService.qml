@@ -2,6 +2,7 @@ pragma Singleton
 
 import QtQuick
 import qs.modules.common
+import qs.services
 import Quickshell
 
 Singleton {
@@ -63,12 +64,26 @@ Singleton {
 
     function enableDarkMode() {
         if (!Appearance.m3colors.darkmode) {
+            if (Config.options?.background?.useSeparateLightModeWallpaper) {
+                const darkPath = Config.options.background.wallpaperPath;
+                if (darkPath && darkPath !== "") {
+                    Wallpapers.apply(darkPath, true);
+                    return;
+                }
+            }
             Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "dark", "--noswitch"]);
         }
     }
 
     function disableDarkMode() {
         if (Appearance.m3colors.darkmode) {
+            if (Config.options?.background?.useSeparateLightModeWallpaper) {
+                const lightPath = Config.options.background.lightModeWallpaperPath;
+                if (lightPath && lightPath !== "") {
+                    Wallpapers.applyLightModeWallpaper(lightPath);
+                    return;
+                }
+            }
             Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "light", "--noswitch"]);
         }
     }

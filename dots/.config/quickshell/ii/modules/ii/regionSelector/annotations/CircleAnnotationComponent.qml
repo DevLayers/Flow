@@ -15,7 +15,7 @@ Rectangle {
         if (!s || !s.fill)
             return "transparent";
         var c = Qt.color(s.fill);
-        return Qt.rgba(c.r, c.g, c.b, s.fillOpacity ?? 1.0);
+        return Qt.rgba(c.r, c.g, c.b, s.fillOpacity ?? 0.25);
     }
     opacity: s?.opacity ?? 1
     border.color: s?.stroke ?? s?.color ?? "transparent"

@@ -76,6 +76,17 @@ Item {
     }
 
     Component {
+        id: component_nagasaki_text
+        NagasakiTextClock {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_clock_dial
         ClockWidget {
             styleOverride: "dial"
@@ -477,6 +488,7 @@ Item {
             "clock_cookie": component_clock_cookie,
             "clock_digital": component_clock_digital,
             "clock_nagasaki": component_clock_nagasaki,
+            "nagasaki_text": component_nagasaki_text,
             "clock_dial": component_clock_dial,
             "clock_wearos": component_clock_wearos,
             "circular_media": component_circular_media,

@@ -20,7 +20,7 @@ Singleton {
             "stroke": String(color),
             "strokeWidth": lineWidth,
             "fill": null,
-            "fillOpacity": 1.0,
+            "fillOpacity": 0.4,
             "opacity": 1,
             "fontPx": 20
         };

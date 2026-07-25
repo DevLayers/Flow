@@ -42,6 +42,15 @@ Singleton {
             "configPage": "widgets/DesktopClockWidgetConfig.qml"
         },
         {
+            "widgetId": "nagasaki_text",
+            "name": Translation.tr("Nagasaki Text Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/NagasakiTextClock.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A minimal 1x1 clock displaying time in Nagasaki font with solid color text."),
+            "configPage": ""
+        },
+        {
             "widgetId": "clock_dial",
             "name": Translation.tr("Dial Clock"),
             "category": "Clock",

@@ -182,8 +182,11 @@ EOF
 
 set_wallpaper_path() {
     local path="$1"
+    local target="$2"
     if [ -f "$SHELL_CONFIG_FILE" ]; then
-        if [[ "$lockscreen_flag" == "1" ]]; then
+        if [[ "$target" == "lightmode" ]]; then
+            jq --indent 4 --arg path "$path" '.background.lightModeWallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
+        elif [[ "$target" == "lockscreen" ]]; then
             jq --indent 4 --arg path "$path" '.background.lockscreenWallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
         else
             jq --indent 4 --arg path "$path" '.background.wallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
@@ -484,7 +487,13 @@ done"
 
             # Set wallpaper path
             if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
-                set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+                if [[ -n "$lightmode_flag" ]]; then
+                    set_wallpaper_path "$imgpath" "lightmode"
+                elif [[ -n "$lockscreen_flag" ]]; then
+                    set_wallpaper_path "$imgpath" "lockscreen"
+                else
+                    set_wallpaper_path "$imgpath" "desktop"
+                fi
             fi
 
             # Set video wallpaper
@@ -516,7 +525,13 @@ done"
             generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
             if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
-                set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+                if [[ -n "$lightmode_flag" ]]; then
+                    set_wallpaper_path "$imgpath" "lightmode"
+                elif [[ -n "$lockscreen_flag" ]]; then
+                    set_wallpaper_path "$imgpath" "lockscreen"
+                else
+                    set_wallpaper_path "$imgpath" "desktop"
+                fi
             fi
             remove_restore
         fi
@@ -628,6 +643,7 @@ main() {
 
     lockscreen_flag=""
     colors_only_flag=""
+    lightmode_flag=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -641,6 +657,10 @@ main() {
                 ;;
             --lockscreen)
                 lockscreen_flag="1"
+                shift
+                ;;
+            --lightmode)
+                lightmode_flag="1"
                 shift
                 ;;
             --colors-only)
@@ -742,9 +762,19 @@ main() {
         exit 0
     fi
 
+    # If --lightmode is passed and --noswitch is passed:
+    # Only save to config without running matugen or changing theme colors
+    if [[ -n "$lightmode_flag" && -n "$noswitch_flag" ]]; then
+        set_wallpaper_path "$imgpath" "lightmode"
+        echo "[switchwall_vynx.sh] Saved light mode wallpaper path."
+        exit 0
+    fi
+
     # Update config wallpaper path unless colors_only_flag or noswitch_flag is set
     if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
-        if [[ -n "$lockscreen_flag" ]]; then
+        if [[ -n "$lightmode_flag" ]]; then
+            set_wallpaper_path "$imgpath" "lightmode"
+        elif [[ -n "$lockscreen_flag" ]]; then
             set_wallpaper_path "$imgpath" "lockscreen"
         else
             set_wallpaper_path "$imgpath" "desktop"

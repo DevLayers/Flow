@@ -214,6 +214,23 @@ Singleton {
 
     function toggleLightDark() {
         const currentlyDark = Appearance.m3colors.darkmode;
+        if (Config.options?.background?.useSeparateLightModeWallpaper) {
+            if (currentlyDark) {
+                // Switching to light mode
+                const lightPath = Config.options.background.lightModeWallpaperPath;
+                if (lightPath && lightPath !== "") {
+                    Wallpapers.applyLightModeWallpaper(lightPath);
+                    return;
+                }
+            } else {
+                // Switching to dark mode
+                const darkPath = Config.options.background.wallpaperPath;
+                if (darkPath && darkPath !== "") {
+                    Wallpapers.apply(darkPath, true);
+                    return;
+                }
+            }
+        }
         Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", currentlyDark ? "light" : "dark", "--noswitch"]);
     }
 

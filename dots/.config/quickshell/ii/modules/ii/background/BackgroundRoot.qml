@@ -159,11 +159,16 @@ PanelWindow {
     property int lastWorkspaceId: workspaceOffset + (workspaceGroup + 1) * chunkSize
 
     // Wallpaper options
+    property bool useSeparateLightModeWallpaper: Config.options && Config.options.background ? (Config.options.background.useSeparateLightModeWallpaper ?? false) : false
+    property string lightModeWallpaperPath: Config.options && Config.options.background && Config.options.background.lightModeWallpaperPath ? Config.options.background.lightModeWallpaperPath : ""
     property bool wallpaperIsVideo: {
         const path = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
         return path !== "" && (path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mkv") || path.endsWith(".avi") || path.endsWith(".mov"));
     }
     property string wallpaperPath: {
+        if (!Appearance.m3colors.darkmode && useSeparateLightModeWallpaper && lightModeWallpaperPath !== "") {
+            return lightModeWallpaperPath;
+        }
         const rawPath = wallpaperIsVideo
             ? (Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "")
             : (Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "");
@@ -292,16 +297,24 @@ PanelWindow {
     }
 
     property bool mediaModeOpen: mediaModeLoader.active && MprisController.activePlayer
+    function applyCurrentWallpaper() {
+        if (useSeparateLightModeWallpaper && !Appearance.m3colors.darkmode && lightModeWallpaperPath !== "") {
+            Wallpapers.applyLightModeWallpaper(lightModeWallpaperPath);
+        } else if (Config.options.background.wallpaperPath !== "") {
+            Wallpapers.apply(Config.options.background.wallpaperPath);
+        }
+    }
+
     onMediaModeOpenChanged: {
         if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
-            Wallpapers.apply(Config.options.background.wallpaperPath);
+            bgRoot.applyCurrentWallpaper();
             LyricsService.shellColorChanged = false;
         }
     }
 
     Component.onCompleted: {
         if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
-            Wallpapers.apply(Config.options.background.wallpaperPath);
+            bgRoot.applyCurrentWallpaper();
         }
     }
 

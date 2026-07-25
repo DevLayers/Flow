@@ -564,6 +564,12 @@ Singleton {
                             property string text: ""
                         }
                     }
+                    property JsonObject nagasaki_text: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                    }
                     property JsonObject media: JsonObject {
                         property bool enable: true
                         property string style: "circular" // circular, expressive
@@ -848,6 +854,8 @@ Singleton {
                 property string wallpaperPath: ""
                 property string lockscreenWallpaperPath: ""
                 property bool useSeparateLockscreenWallpaper: false
+                property string lightModeWallpaperPath: ""
+                property bool useSeparateLightModeWallpaper: false
                 property string thumbnailPath: ""
                 property bool hideWhenFullscreen: true
                 property bool useWallpaperEngine: false

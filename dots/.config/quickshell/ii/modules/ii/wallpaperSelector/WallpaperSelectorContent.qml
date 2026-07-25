@@ -236,6 +236,8 @@ MouseArea {
         if (filePath && filePath.length > 0) {
             if (GlobalStates.wallpaperSelectorTarget === "lockscreen") {
                 Wallpapers.selectLockscreen(filePath, wallpaperSelectorContent.useDarkMode);
+            } else if (GlobalStates.wallpaperSelectorTarget === "lightmode") {
+                Wallpapers.selectLightmode(filePath, wallpaperSelectorContent.useDarkMode);
             } else {
                 Wallpapers.select(filePath, wallpaperSelectorContent.useDarkMode);
             }
@@ -423,8 +425,8 @@ MouseArea {
                         Layout.margins: 12
                         spacing: 6
                         MaterialSymbol {
-                            visible: GlobalStates.wallpaperSelectorTarget === "lockscreen"
-                            text: "lock"
+                            visible: GlobalStates.wallpaperSelectorTarget === "lockscreen" || GlobalStates.wallpaperSelectorTarget === "lightmode"
+                            text: GlobalStates.wallpaperSelectorTarget === "lockscreen" ? "lock" : "light_mode"
                             color: Appearance.colors.colPrimary
                             iconSize: 18
                         }
@@ -433,8 +435,12 @@ MouseArea {
                                 pixelSize: Appearance.font.pixelSize.normal
                                 weight: Font.Medium
                             }
-                            text: GlobalStates.wallpaperSelectorTarget === "lockscreen" ? Translation.tr("Lockscreen Wallpaper") : Translation.tr("Pick a wallpaper")
-                            color: GlobalStates.wallpaperSelectorTarget === "lockscreen" ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                            text: {
+                                if (GlobalStates.wallpaperSelectorTarget === "lockscreen") return Translation.tr("Lockscreen Wallpaper");
+                                if (GlobalStates.wallpaperSelectorTarget === "lightmode") return Translation.tr("Light Mode Wallpaper");
+                                return Translation.tr("Pick a wallpaper");
+                            }
+                            color: (GlobalStates.wallpaperSelectorTarget === "lockscreen" || GlobalStates.wallpaperSelectorTarget === "lightmode") ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
                         }
                     }
                     Item {
