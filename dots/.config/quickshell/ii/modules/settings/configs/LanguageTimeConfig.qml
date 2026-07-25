@@ -8,10 +8,17 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 
-ContentPage {
+// The `contentY` alias lets settings.qml search-scroll still work.
+Item {
     id: root
 
-    forceWidth: false
+    property alias contentY: page.contentY
+    // Active sub-page URL ("" = none)
+    property alias activeSubPage: subPageOverlay.activeSubPage
+
+    function openSubPage(url) {
+        root.activeSubPage = Qt.resolvedUrl(url);
+    }
 
     property var languages: ["auto"]
     property var languagesModel: [{ "displayName": "auto", "value": "auto" }]
@@ -48,6 +55,14 @@ ContentPage {
             property string locale: ""
             command: [Directories.aiTranslationScriptPath, translationProc.locale]
         }
+
+    ContentPage {
+        id: page
+
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
+        visible: opacity > 0
 
     ContentSection {
         icon: "language"
@@ -257,15 +272,19 @@ ContentPage {
 
         }
 
-        ContentSubsection {
-            title: Translation.tr("Custom format strings")
-            icon: "edit_calendar"
-            tooltip: Translation.tr("Fine-tune how dates and times are shown across the shell")
+        // Own ColumnLayout so the card's auto first/last rounding sees no unrelated siblings
+        ColumnLayout {
             Layout.fillWidth: true
+            Layout.topMargin: 8
+            spacing: 4
 
-            Loader {
-                Layout.fillWidth: true
-                source: Qt.resolvedUrl("widgets/TimeDateFormatFields.qml")
+            ServiceCard {
+                cardIcon: "edit_calendar"
+                cardHue: 280
+                cardShape: "Cookie9Sided"
+                title: Translation.tr("Custom format strings")
+                description: Translation.tr("Fine-tune how dates and times are shown across the shell")
+                onOpenCard: root.openSubPage("widgets/TimeDateFormatsConfig.qml")
             }
         }
 
@@ -490,5 +509,14 @@ ContentPage {
 
     }
 
+    }
+
+    // Sub-page overlay (slides in from the right)
+    ConfigSubPageHost {
+        id: subPageOverlay
+
+        anchors.fill: parent
+        z: 10
+    }
 
 }

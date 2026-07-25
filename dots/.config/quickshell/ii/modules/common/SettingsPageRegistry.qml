@@ -176,8 +176,8 @@ Singleton {
         "name": "Language & Time",
         "icon": "translate",
         "component": "modules/settings/configs/LanguageTimeConfig.qml",
-        "subPages": [],
-        "aliases": ["Core Services", "Language & Translation", "Time & Date", "World Clocks", "Alarms", "Translator"]
+        "subPages": ["widgets/TimeDateFormatsConfig.qml"],
+        "aliases": ["Core Services", "Language & Translation", "Time & Date", "World Clocks", "Alarms", "Translator", "Date format", "Clock format", "Custom format strings"]
     }, {
         "id": "weather",
         "name": "Weather",
