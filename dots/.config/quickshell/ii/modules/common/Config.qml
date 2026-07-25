@@ -62,6 +62,14 @@ Singleton {
         obj[keys[keys.length - 1]] = convertedValue;
     }
 
+    // Persist options immediately (e.g. kill dialog "Always" in a short-lived process).
+    function saveOptionsNow() {
+        root.blockWrites = false;
+        if (!root.ready)
+            return;
+        configFileView.writeAdapter();
+    }
+
     Timer {
         id: fileReloadTimer
         interval: root.readWriteDelay
