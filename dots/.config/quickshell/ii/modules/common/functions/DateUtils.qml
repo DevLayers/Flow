@@ -1,8 +1,25 @@
 pragma Singleton
 import Quickshell
+import qs.modules.common
+import qs.modules.common.functions
 
 Singleton {
     id: root
+
+    /** Qt locale time format uses 12h clock when it includes an am/pm field (ap/AP). */
+    function is12HourTimeFormat(format) {
+        if (!format)
+            return false;
+        return format.toLowerCase().includes("ap");
+    }
+
+    function syncHyprlockTimeFormat(format) {
+        const configPath = FileUtils.trimFileProtocol(Directories.config) + "/hypr/hyprlock.conf";
+        if (root.is12HourTimeFormat(format))
+            Quickshell.execDetached(["bash", "-c", `sed -i 's/\\TIME\\b/TIME12/' '${configPath}'`]);
+        else
+            Quickshell.execDetached(["bash", "-c", `sed -i 's/\\TIME12\\b/TIME/' '${configPath}'`]);
+    }
 
     function getFirstDayOfWeek(date, firstDay = 1) {
         const d = new Date(date); // Copy

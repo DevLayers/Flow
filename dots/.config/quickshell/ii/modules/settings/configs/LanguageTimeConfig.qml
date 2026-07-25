@@ -218,10 +218,7 @@ ContentPage {
             ConfigSelectionArray {
                 currentValue: Config.options.time.format
                 onSelected: (newValue) => {
-                    if (newValue === "hh:mm")
-                        Quickshell.execDetached(["bash", "-c", `sed -i 's/\\TIME12\\b/TIME/' '${FileUtils.trimFileProtocol(Directories.config)}/hypr/hyprlock.conf'`]);
-                    else
-                        Quickshell.execDetached(["bash", "-c", `sed -i 's/\\TIME\\b/TIME12/' '${FileUtils.trimFileProtocol(Directories.config)}/hypr/hyprlock.conf'`]);
+                    DateUtils.syncHyprlockTimeFormat(newValue);
                     Config.options.time.format = newValue;
                 }
                 options: [{
@@ -258,6 +255,18 @@ ContentPage {
                 }]
             }
 
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Custom format strings")
+            icon: "edit_calendar"
+            tooltip: Translation.tr("Fine-tune how dates and times are shown across the shell")
+            Layout.fillWidth: true
+
+            Loader {
+                Layout.fillWidth: true
+                source: Qt.resolvedUrl("widgets/TimeDateFormatFields.qml")
+            }
         }
 
         ContentSubsection {
