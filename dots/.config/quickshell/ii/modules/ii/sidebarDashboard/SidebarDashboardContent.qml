@@ -389,8 +389,10 @@ Item {
             }
 
             property int rowLeftMargin: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile" ? 6 : 14
+            readonly property bool _hasText: Config.options.sidebar.dashboardHeader.textMode !== "none"
+            readonly property int rowRightMargin: _hasText ? 14 : rowLeftMargin
 
-            implicitWidth: uptimeRow.implicitWidth + rowLeftMargin + 14
+            implicitWidth: uptimeRow.implicitWidth + rowLeftMargin + rowRightMargin
             implicitHeight: Math.max(32, uptimeRow.implicitHeight + (Config.options.sidebar.dashboardHeader.profileImageType === "user_profile" ? 4 : 12))
 
             Row {
