@@ -74,6 +74,15 @@ Item {
         edge: root.barEdge
         role: "first"
         fillColor: root.actualColor
+
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         anchors {
             top: parent.top
             bottom: parent.bottom
@@ -89,6 +98,15 @@ Item {
         edge: root.barEdge
         role: "middle"
         fillColor: root.actualColor
+
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         anchors {
             top: middleSection.top
             bottom: middleSection.bottom
@@ -104,6 +122,15 @@ Item {
         edge: root.barEdge
         role: "last"
         fillColor: root.actualColor
+
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         anchors {
             top: parent.top
             bottom: parent.bottom
@@ -199,7 +226,7 @@ Item {
         onScrollDown: if (Config.options.bar.enableBrightnessScroll) Brightness.decreaseBrightness()
         onScrollUp:   if (Config.options.bar.enableBrightnessScroll) Brightness.increaseBrightness()
         onMovedAway:  GlobalStates.osdBrightnessOpen = false
-        onPressed: event => { if (event.button === Qt.LeftButton) GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen; }
+        onPressed: event => { if (event.button === Qt.LeftButton) GlobalStates.toggleLeftSidebar(root.screen?.name); }
 
         ScrollHint {
             reveal: barLeftSideMouseArea.hovered && Config.options.bar.enableBrightnessScroll
@@ -218,7 +245,7 @@ Item {
         onScrollDown: if (Config.options.bar.enableVolumeScroll) Audio.decrementVolume()
         onScrollUp:   if (Config.options.bar.enableVolumeScroll) Audio.incrementVolume()
         onMovedAway:  GlobalStates.osdVolumeOpen = false
-        onPressed: event => { if (event.button === Qt.LeftButton) GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen; }
+        onPressed: event => { if (event.button === Qt.LeftButton) GlobalStates.toggleRightSidebar(root.screen?.name); }
 
         ScrollHint {
             reveal: barRightSideMouseArea.hovered && Config.options.bar.enableVolumeScroll

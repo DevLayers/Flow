@@ -73,10 +73,33 @@ ContentPage {
             Layout.fillWidth: true
             spacing: 4
 
-            ConfigSpinBox {
+            ConfigSwitch {
                 enabled: Config.options.overview.enable
+                buttonIcon: "tune"
+                text: Translation.tr("Manual Scale (Override Auto-Scale)")
+                checked: Config.options.overview.enableManualScale
+                onCheckedChanged: {
+                    Config.options.overview.enableManualScale = checked;
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.overview.enable && !Config.options.overview.enableManualScale
+                icon: "zoom_in_map"
+                text: Translation.tr("Auto-Scale Factor (%)")
+                value: (Config.options.overview.autoScaleFactor ?? 1.0) * 100
+                from: 50
+                to: 150
+                stepSize: 5
+                onValueChanged: {
+                    Config.options.overview.autoScaleFactor = value / 100;
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.overview.enable && Config.options.overview.enableManualScale
                 icon: "aspect_ratio"
-                text: Translation.tr("Scale %")
+                text: Translation.tr("Custom Scale (%)")
                 value: Config.options.overview.scale * 100
                 from: 10
                 to: 100
@@ -86,33 +109,24 @@ ContentPage {
                 }
             }
 
-            ConfigSwitch {
-                enabled: Config.options.overview.enable
-                buttonIcon: "animation"
-                text: Translation.tr("Enable zoom animation")
-                checked: Config.options.overview.showOpeningAnimation
-                onCheckedChanged: {
-                    Config.options.overview.showOpeningAnimation = checked;
-                }
-            }
-
             ContentSubsection {
-                visible: Config.options.overview.enable && Config.options.overview.showOpeningAnimation
-                title: Translation.tr("Zoom style")
-                icon: "zoom_in"
+                title: Translation.tr("Animation Style")
+                icon: "animation"
                 Layout.fillWidth: true
 
                 ConfigSelectionArray {
-                    currentValue: Config.options.overview.scrollingStyle.zoomStyle
+                    currentValue: Config.options.overview.animationStyle ?? "bounce"
                     onSelected: newValue => {
-                        Config.options.overview.scrollingStyle.zoomStyle = newValue;
+                        Config.options.overview.animationStyle = newValue;
                     }
                     options: [
-                        { displayName: Translation.tr("In"), icon: "zoom_in", value: "in" },
-                        { displayName: Translation.tr("Out"), icon: "zoom_out", value: "out" }
+                        { displayName: Translation.tr("Slide + Bounce"), icon: "animation", value: "bounce" },
+                        { displayName: Translation.tr("Smooth Slide"), icon: "swipe", value: "smooth" },
+                        { displayName: Translation.tr("Zoom In"), icon: "zoom_in", value: "zoom" }
                     ]
                 }
             }
+
         }
     }
 
@@ -183,45 +197,5 @@ ContentPage {
             }
         }
     }
-
-    ContentSection {
-        title: Translation.tr("Background Style")
-        icon: "wallpaper"
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            ContentSubsection {
-                title: Translation.tr("Background style")
-                icon: "style"
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.overview.scrollingStyle.backgroundStyle
-                    onSelected: newValue => {
-                        Config.options.overview.scrollingStyle.backgroundStyle = newValue;
-                    }
-                    options: [
-                        { displayName: Translation.tr("Blur"), icon: "blur_on", value: "blur" },
-                        { displayName: Translation.tr("Dim"), icon: "brightness_medium", value: "dim" },
-                        { displayName: Translation.tr("Transparent"), icon: "visibility_off", value: "transparent" }
-                    ]
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: Config.options.overview.scrollingStyle.backgroundStyle === "dim"
-                icon: "contrast"
-                text: Translation.tr("Dim percentage")
-                value: Config.options.overview.scrollingStyle.dimPercentage
-                from: 0
-                to: 100
-                stepSize: 5
-                onValueChanged: {
-                    Config.options.overview.scrollingStyle.dimPercentage = value;
-                }
-            }
-        }
-    }
+    
 }

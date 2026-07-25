@@ -7,7 +7,7 @@ import "../../common/plugins/bundled/discordVoice" as DiscordPackage
 
 Singleton {
     id: root
-    
+
     signal requestCenter(string identifier)
 
     readonly property var discordVoiceIcon: Component { DiscordPackage.TaskbarGlyph {} }
@@ -61,7 +61,7 @@ Singleton {
         }
     }
 
-    function registerClickableWidget(widget: var, clickable = true) {
+    function registerClickableWidget(widget: QtObject, clickable = true) {
         if (clickable) {
             if (!root.clickableWidgets.includes(widget)) {
                 root.clickableWidgets.push(widget)

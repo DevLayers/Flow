@@ -15,10 +15,11 @@ Item {
     property bool showPomodoro: Config.options.bar.timers.showPomodoro
     property bool showStopwatch: Config.options.bar.timers.showStopwatch
 
-    implicitWidth: rowLayout.implicitWidth + rowLayout.spacing * 5
-    implicitHeight: Appearance.sizes.baseBarHeight
-
     property bool compVisible: ((hasStop || sRunning) && root.showStopwatch) || ((pRunning || hasPomo) && root.showPomodoro)
+
+    visible: compVisible
+    implicitWidth: compVisible ? (rowLayout.implicitWidth + (rowLayout.implicitWidth > 0 ? rowLayout.spacing * 5 : 0)) : 0
+    implicitHeight: compVisible ? Appearance.sizes.baseBarHeight : 0
 
     onCompVisibleChanged: rootItem.toggleVisible(compVisible)
     Component.onCompleted: {

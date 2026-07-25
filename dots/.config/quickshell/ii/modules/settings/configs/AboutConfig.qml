@@ -372,7 +372,7 @@ command: ["bash", "-c",
                 topRightRadius: Appearance.rounding.verysmall
                 bottomLeftRadius: Appearance.rounding.verysmall
                 bottomRightRadius: Appearance.rounding.large
-                title: Translation.tr("My Fork Info")
+                title: Translation.tr("This fork info")
                 icon: "call_split"
 
                 RowLayout {
@@ -390,12 +390,12 @@ command: ["bash", "-c",
                     ColumnLayout {
                         Layout.alignment: Qt.AlignVCenter
                         StyledText {
-                            text: Translation.tr("My Fork (ii-p3drovfx)")
+                            text: Translation.tr("ii-p3drovfx")
                             font.pixelSize: Appearance.font.pixelSize.normal
                             font.weight: Font.Bold
                         }
                         StyledText {
-                            text: "<a href='https://github.com/P3DROVFX/ii-vynx-fork'>github.com/P3DROVFX/...</a>"
+                            text: "<a href='https://github.com/P3DROVFX/ii-p3drovfx'>github.com/P3DROVFX/...</a>"
                             font.pixelSize: Appearance.font.pixelSize.small
                             textFormat: Text.RichText
                             onLinkActivated: link => Qt.openUrlExternally(link)
@@ -898,6 +898,34 @@ command: ["bash", "-c",
                         opacity: 0.85
                     }
                 }
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "tune"
+        title: Translation.tr("Advanced")
+
+        MaterialTextArea {
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("User agent string")
+            text: Config.options.networking.userAgent
+            wrapMode: TextEdit.Wrap
+            onTextChanged: {
+                Config.options.networking.userAgent = text;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "memory"
+            text: Translation.tr("Free Settings memory after closing")
+            checked: Config.options.settingsApp.unloadAfterSeconds > 0
+            onCheckedChanged: {
+                Config.options.settingsApp.unloadAfterSeconds = checked ? 300 : 0;
+            }
+
+            StyledToolTip {
+                text: Translation.tr("When enabled, the Settings app is removed from memory 5 minutes after it is closed. The next opening will have a short cold-start delay.")
             }
         }
     }

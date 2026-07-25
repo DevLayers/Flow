@@ -892,51 +892,50 @@ ContentPage {
             }
         }
 
-        ContentSubsection {
-            title: Translation.tr("Position")
-            icon: "place"
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 12
+        ContentSubsectionLabel {
+            text: Translation.tr("Position")
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 12
 
-                ConfigSpinBox {
-                    Layout.fillWidth: true
-                    icon: "swap_horiz"
-                    text: Translation.tr("Position X")
-                    value: (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) ? (monitorConfig.monitors[monitorCanvas.selectedIndex].x || 0) : 0
-                    from: 0
-                    to: 7680
-                    stepSize: 1
-                    onValueChanged: {
-                        if (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) {
-                            let currentVal = monitorConfig.monitors[monitorCanvas.selectedIndex].x || 0;
-                            if (value !== currentVal) {
-                                monitorConfig.updateMonitor(monitorCanvas.selectedIndex, {
-                                    x: value
-                                });
-                                monitorConfig.applyAndSave(monitorCanvas.selectedIndex);
-                            }
+            ConfigSpinBox {
+                Layout.fillWidth: true
+                icon: "swap_horiz"
+                text: Translation.tr("Position X")
+                value: (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) ? (monitorConfig.monitors[monitorCanvas.selectedIndex].x || 0) : 0
+                from: 0
+                to: 7680
+                stepSize: 1
+                onValueChanged: {
+                    if (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) {
+                        let currentVal = monitorConfig.monitors[monitorCanvas.selectedIndex].x || 0;
+                        if (value !== currentVal) {
+                            monitorConfig.updateMonitor(monitorCanvas.selectedIndex, {
+                                x: value
+                            });
+                            monitorConfig.applyAndSave(monitorCanvas.selectedIndex);
                         }
                     }
                 }
+            }
 
-                ConfigSpinBox {
-                    Layout.fillWidth: true
-                    icon: "swap_vert"
-                    text: Translation.tr("Position Y")
-                    value: (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) ? (monitorConfig.monitors[monitorCanvas.selectedIndex].y || 0) : 0
-                    from: 0
-                    to: 4320
-                    stepSize: 1
-                    onValueChanged: {
-                        if (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) {
-                            let currentVal = monitorConfig.monitors[monitorCanvas.selectedIndex].y || 0;
-                            if (value !== currentVal) {
-                                monitorConfig.updateMonitor(monitorCanvas.selectedIndex, {
-                                    y: value
-                                });
-                                monitorConfig.applyAndSave(monitorCanvas.selectedIndex);
-                            }
+            ConfigSpinBox {
+                Layout.fillWidth: true
+                icon: "swap_vert"
+                text: Translation.tr("Position Y")
+                value: (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) ? (monitorConfig.monitors[monitorCanvas.selectedIndex].y || 0) : 0
+                from: 0
+                to: 4320
+                stepSize: 1
+                onValueChanged: {
+                    if (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) {
+                        let currentVal = monitorConfig.monitors[monitorCanvas.selectedIndex].y || 0;
+                        if (value !== currentVal) {
+                            monitorConfig.updateMonitor(monitorCanvas.selectedIndex, {
+                                y: value
+                            });
+                            monitorConfig.applyAndSave(monitorCanvas.selectedIndex);
                         }
                     }
                 }

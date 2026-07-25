@@ -409,7 +409,7 @@ Item {
                 StyledImage {
                     id: blurredBg
                     anchors.fill: parent
-                    source: widgetRoot.artSource
+                    source: (widgetRoot.artSource && widgetRoot.artSource.length > 0 && widgetRoot.artSource !== "file://" && widgetRoot.artSource !== "file:///") ? widgetRoot.artSource : ""
                     fillMode: Image.PreserveAspectCrop
                     cache: false
                     asynchronous: true

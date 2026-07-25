@@ -32,6 +32,7 @@ AbstractBackgroundWidget {
     readonly property string trackTitle: StringUtils.cleanMusicTitle(player?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string identity: player ? (player.identity ?? "") : ""
+    readonly property bool hasTrack: (player?.trackTitle ?? "").length > 0
 
     property bool isLocalArt: artUrl.startsWith("file://")
     property string artDownloadLocation: Directories.coverArt
@@ -199,7 +200,7 @@ AbstractBackgroundWidget {
         Rectangle {
             id: mainBg
             anchors.fill: parent
-            color: Appearance.colors.colLayer0
+            color: Appearance.m3colors.m3secondaryContainer
             radius: Appearance.rounding.windowRounding + 16
             clip: true
 
@@ -214,6 +215,7 @@ AbstractBackgroundWidget {
 
             Item {
                 anchors.fill: parent
+                visible: root.hasTrack
 
                 Image {
                     id: artBlurredUnderlay
@@ -232,42 +234,15 @@ AbstractBackgroundWidget {
                 Item {
                     id: vignetteMask
                     anchors.fill: parent
-                    visible: true
 
-                    Rectangle {
-                        id: hMask
+                    RadialGradient {
                         anchors.fill: parent
                         gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop { position: 0.0; color: "transparent" }
-                            GradientStop { position: 0.08; color: "transparent" }
-                            GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
-                            GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                            GradientStop { position: 0.45; color: "white" }
-                            GradientStop { position: 0.55; color: "white" }
-                            GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                            GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
-                            GradientStop { position: 0.92; color: "transparent" }
-                            GradientStop { position: 1.0; color: "transparent" }
+                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 1) }
+                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
                         }
-                    }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        gradient: Gradient {
-                            orientation: Gradient.Vertical
-                            GradientStop { position: 0.0; color: "transparent" }
-                            GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
-                            GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                            GradientStop { position: 0.5; color: "white" }
-                            GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                            GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
-                            GradientStop { position: 1.0; color: "transparent" }
-                        }
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: hMask
-                        }
+                        horizontalRadius: width * 0.65
+                        verticalRadius: height * 0.65
                     }
                 }
 
@@ -291,6 +266,7 @@ AbstractBackgroundWidget {
 
             Item {
                 anchors.fill: parent
+                visible: root.hasTrack
                 opacity: root.playing ? 0.55 : 0.75
 
                 Behavior on opacity {
@@ -321,6 +297,22 @@ AbstractBackgroundWidget {
                             easing.type: Easing.OutCubic
                         }
                     }
+                }
+            }
+
+            Item {
+                anchors.fill: parent
+                visible: root.hasTrack
+                opacity: 0.3
+
+                RadialGradient {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
+                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.9) }
+                    }
+                    horizontalRadius: width * 0.7
+                    verticalRadius: height * 0.7
                 }
             }
 
@@ -356,6 +348,7 @@ AbstractBackgroundWidget {
                         Loader {
                             anchors.fill: parent
                             active: !appIconLoader.active
+                            visible: root.hasTrack
                             sourceComponent: MaterialSymbol {
                                 anchors.centerIn: parent
                                 text: "music_note"
@@ -432,6 +425,7 @@ AbstractBackgroundWidget {
                             id: lyricsWrapper
                             Layout.fillWidth: true
                             Layout.fillHeight: true
+                            visible: root.hasTrack
                             clip: true
 
                             Column {
@@ -538,6 +532,7 @@ AbstractBackgroundWidget {
 
                         StyledText {
                             Layout.fillWidth: true
+                            visible: root.hasTrack
                             font.family: Appearance.font.family.main
                             font.pixelSize: 16
                             color: root.artSubtextColor
@@ -545,10 +540,61 @@ AbstractBackgroundWidget {
                             maximumLineCount: 1
                             elide: Text.ElideRight
                         }
+
+                        RowLayout {
+                            visible: !root.hasTrack
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            spacing: 16
+
+                            MaterialShape {
+                                Layout.preferredWidth: 80
+                                Layout.preferredHeight: 80
+                                Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                                shapeString: "Cookie9Sided"
+                                color: Appearance.colors.colPrimaryContainer
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "graphic_eq"
+                                    iconSize: 42
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
+                                spacing: 4
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    font.family: Appearance.font.family.main
+                                    font.pixelSize: 22
+                                    font.weight: Font.Bold
+                                    font.styleName: "Rounded"
+                                    color: Appearance.colors.colOnSurface
+                                    text: Translation.tr("No media playing")
+                                    elide: Text.ElideRight
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    font.family: Appearance.font.family.main
+                                    font.pixelSize: 14
+                                    font.weight: Font.Normal
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                    text: Translation.tr("Play music or video to start")
+                                    elide: Text.ElideRight
+                                    opacity: 0.85
+                                }
+                            }
+                        }
                     }
 
                     RippleButton {
                         id: playBtn
+                        visible: root.hasTrack
                         implicitWidth: 64
                         implicitHeight: 64
                         buttonRadius: 22

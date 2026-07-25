@@ -62,6 +62,14 @@ Singleton {
         obj[keys[keys.length - 1]] = convertedValue;
     }
 
+    // Persist options immediately (e.g. kill dialog "Always" in a short-lived process).
+    function saveOptionsNow() {
+        root.blockWrites = false;
+        if (!root.ready)
+            return;
+        configFileView.writeAdapter();
+    }
+
     Timer {
         id: fileReloadTimer
         interval: root.readWriteDelay
@@ -120,7 +128,8 @@ Singleton {
     function isWidgetActive(widgetId) {
         let list = root.options.background.activeWidgets || [];
         for (let i = 0; i < list.length; i++) {
-            if (list[i].widgetId === widgetId) return true;
+            if (list[i].widgetId === widgetId)
+                return true;
         }
         return false;
     }
@@ -128,7 +137,8 @@ Singleton {
     function getWidgetLockBehavior(widgetId) {
         let list = root.options.background.activeWidgets || [];
         for (let i = 0; i < list.length; i++) {
-            if (list[i].widgetId === widgetId) return list[i].lockBehavior || "hide";
+            if (list[i].widgetId === widgetId)
+                return list[i].lockBehavior || "hide";
         }
         return "hide";
     }
@@ -147,12 +157,13 @@ Singleton {
     function addWidgetToDesktop(widgetId, defaultX, defaultY) {
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
         for (let i = 0; i < cloned.length; i++) {
-            if (cloned[i].widgetId === widgetId) return;
+            if (cloned[i].widgetId === widgetId)
+                return;
         }
-        
+
         let startX = defaultX !== undefined ? defaultX : 200;
         let startY = defaultY !== undefined ? defaultY : 200;
-        
+
         if (defaultX === undefined && defaultY === undefined) {
             let offset = 0;
             while (true) {
@@ -171,7 +182,7 @@ Singleton {
                 offset += 80;
             }
         }
-        
+
         let instanceId = "widget_" + widgetId + "_" + Date.now();
         cloned.push({
             "id": instanceId,
@@ -231,7 +242,8 @@ Singleton {
     }
 
     function migrateRoundingConfig() {
-        if (root.options.appearance.roundingValue >= 0) return;
+        if (root.options.appearance.roundingValue >= 0)
+            return;
         var oldMode = root.options.appearance.globalRounding || "large";
         if (oldMode === "sharp") {
             root.options.appearance.roundingValue = 0;
@@ -246,19 +258,13 @@ Singleton {
     }
 
     function migrateWidgetLockBehavior() {
-        if (Persistent.states.background.lockBehaviorMigrated) return;
+        if (Persistent.states.background.lockBehaviorMigrated)
+            return;
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
-        let centerWidget = root.options.lock.centerWidget || "none";
         let changed = false;
         for (let i = 0; i < cloned.length; i++) {
             if (!cloned[i].lockBehavior) {
-                if (centerWidget === "clock" && cloned[i].widgetId && cloned[i].widgetId.startsWith("clock")) {
-                    cloned[i].lockBehavior = "center";
-                } else if (centerWidget === "media" && cloned[i].widgetId && cloned[i].widgetId.startsWith("media")) {
-                    cloned[i].lockBehavior = "center";
-                } else {
-                    cloned[i].lockBehavior = "hide";
-                }
+                cloned[i].lockBehavior = "hide";
                 changed = true;
             }
         }
@@ -282,7 +288,10 @@ Singleton {
         // SIGKILL during shell update).
         atomicWrites: true
         onFileChanged: fileReloadTimer.restart()
-        onAdapterUpdated: { if (root.ready && !root.blockWrites) fileWriteTimer.restart(); }
+        onAdapterUpdated: {
+            if (root.ready && !root.blockWrites)
+                fileWriteTimer.restart();
+        }
         onLoaded: {
             root.ready = true;
             migrateRoundingConfig();
@@ -341,6 +350,7 @@ Singleton {
                     property int maxSize: 0
                     property int videoBuffer: 0  // scrcpy 4.0 default is 0ms — 80ms adds visible latency
                     property bool useWireless: false
+                    property bool autoWirelessIp: true  // resolve IP live from KDE Connect instead of the manual field
                     property string wirelessIp: ""
                     property string wirelessPort: "5555"
                     property bool showTerminal: false
@@ -464,7 +474,7 @@ Singleton {
                 property string colorEngine: "vynx" // "vynx" | "fork" — color generation engine
                 property string iconTheme: "Papirus"
                 property JsonObject palette: JsonObject {
-                    property string type: "scheme-fidelity" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot
+                    property string type: "scheme-fidelity" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-intense, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot, scheme-vibrant
                     property string accentColor: ""
                 }
                 property list<string> customColorSchemes: []
@@ -509,6 +519,7 @@ Singleton {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
                 property bool blurGradientExperiment: false
                 property JsonObject widgets: JsonObject {
+                    property string colorScheme: "default"
                     property JsonObject clock: JsonObject {
                         property bool enable: true
                         property bool showOnlyWhenLocked: false
@@ -554,11 +565,18 @@ Singleton {
                             property bool showMinuteHand: true
                             property bool enableShadows: true
                             property bool enableInnerShadow: false
+                            property bool expressiveColors: false
                         }
                         property JsonObject quote: JsonObject {
                             property bool enable: false
                             property string text: ""
                         }
+                    }
+                    property JsonObject nagasaki_text: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
                     }
                     property JsonObject media: JsonObject {
                         property bool enable: true
@@ -605,12 +623,106 @@ Singleton {
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
                         property real x: 400
                         property real y: 100
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject weather_forecast: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
+                    property JsonObject weather_card: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
+                    property JsonObject weather_icon: JsonObject {
+                        property bool enable: false
+                        property string backgroundShape: "Cookie12Sided"
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
+                    property JsonObject weather_pill: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
+                    property JsonObject weather_circle: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
+                    property JsonObject weather_typography: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
+                    property JsonObject weather_hourly: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
                     }
                     property JsonObject date: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
                         property real x: 100
                         property real y: 100
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject calendar_minimal: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject calendar_grid: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject calendar_agenda: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject calendar_next_event: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject calendar_pill: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject calendar_upcoming_3days: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
                     }
                     property JsonObject photo: JsonObject {
                         property bool enable: false
@@ -618,17 +730,146 @@ Singleton {
                         property real x: 200
                         property real y: 200
                         property string imagePath: ""
+                        property bool expressiveColors: false
                     }
-                    property bool enableInnerShadow: true
-                    property bool enableShadows: true
+                    property JsonObject bluetooth_battery: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject bluetooth_headphone: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool halfSize: true
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject mobile_battery: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject bluetooth_headphone_cookie: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property string materialShape: "Cookie12Sided"
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject bluetooth_fill_cards: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject pc_battery_bars: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject pc_battery_cable: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject devices_battery_list: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject devices_battery_list_1x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject bluetooth_earbuds_stem: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject email_inbox: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject email_inbox_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject ai_chat: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject notes_widget: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject notes_widget_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject media_cd: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property bool enableInnerShadow: false
+                    property bool enableShadows: false
                     property bool enableGrid: false
                     property bool enableSnap: false
                     property real widgetsScale: 1.0
                     property bool lockWidgetPositions: false
                 }
                 property list<var> activeWidgets: [
-                    { "id": "widget_clock_cookie", "widgetId": "clock_cookie", "x": 1518.98, "y": 168.8, "placementStrategy": "free", "lockBehavior": "center" },
-                    { "id": "widget_media_circular", "widgetId": "media_circular", "x": 249.21, "y": 612.92, "placementStrategy": "free", "lockBehavior": "hide" }
+                    {
+                        "id": "widget_clock_cookie",
+                        "widgetId": "clock_cookie",
+                        "x": 1518.98,
+                        "y": 168.8,
+                        "placementStrategy": "free",
+                        "lockBehavior": "center"
+                    },
+                    {
+                        "id": "widget_media_circular",
+                        "widgetId": "media_circular",
+                        "x": 249.21,
+                        "y": 612.92,
+                        "placementStrategy": "free",
+                        "lockBehavior": "hide"
+                    }
                 ]
                 property bool scaleLargeWallpapers: true
                 property bool animateWallpaperChanges: true
@@ -640,6 +881,10 @@ Singleton {
                 property bool overviewZoomOut: true
                 property bool workspaceBlur: false
                 property string wallpaperPath: ""
+                property string lockscreenWallpaperPath: ""
+                property bool useSeparateLockscreenWallpaper: false
+                property string lightModeWallpaperPath: ""
+                property bool useSeparateLightModeWallpaper: false
                 property string thumbnailPath: ""
                 property bool hideWhenFullscreen: true
                 property bool useWallpaperEngine: false
@@ -695,6 +940,7 @@ Singleton {
 
             property JsonObject bar: JsonObject {
                 property bool borderless: false
+                property bool expressiveGroupColor: false
                 property JsonObject clock: JsonObject {
                     property bool showSeconds: true
                     property bool secondaryOpposite: false
@@ -760,6 +1006,7 @@ Singleton {
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""
+                    property bool extraCompact: false
 
                     // Disables
                     property bool disableWorkspaces: false
@@ -1123,6 +1370,7 @@ Singleton {
                 property bool enable: true
                 property bool smartGrouping: false
                 property bool isolateMonitors: false
+                property bool showOnlyOnFocusedMonitor: false
                 property bool monochromeIcons: false
                 property bool dimInactiveIcons: false
                 property bool enableShapeMask: false
@@ -1212,7 +1460,19 @@ Singleton {
                     property real radius: 100
                     property real extraZoom: 1.1
                 }
-                property string centerWidget: "clock" // "clock" | "media" | "none"
+                property JsonObject desaturate: JsonObject {
+                    property bool enable: false
+                    property real amount: 1.0
+                }
+                property JsonObject colorWash: JsonObject {
+                    property bool enable: false
+                    property real amount: 0.5
+                }
+                property JsonObject vignette: JsonObject {
+                    property bool enable: false
+                    property real amount: 0.7
+                }
+
                 property real centerSpacing: 20 // spacing between multiple centered widgets
                 property string centerAlignment: "horizontal" // "vertical" | "horizontal"
                 property bool showLockedText: true
@@ -1222,6 +1482,9 @@ Singleton {
                 }
                 property bool materialShapeChars: true
                 property bool rippleEffect: true
+                property bool nowPlaying: true
+                property bool showAlarm: true
+                property bool showWeather: true
                 property JsonObject zoomAnimation: JsonObject {
                     property bool enabled: true
                 }
@@ -1263,8 +1526,17 @@ Singleton {
                 }
             }
 
+            property JsonObject oledSaver: JsonObject {
+                property int cursorHideDelay: 5 // seconds of no mouse movement before the cursor hides again
+                property int hintExtraDelay: 10 // extra seconds the dismiss hint stays visible after the cursor hides
+            }
+
             property JsonObject osd: JsonObject {
+                property bool enable: true
+                property string position: "right"
+                property int height: 500
                 property int timeout: 2500
+                property bool showValues: true
             }
 
             property JsonObject osk: JsonObject {
@@ -1276,17 +1548,7 @@ Singleton {
                 property bool openingZoomAnimation: true
                 property bool darkenScreen: true
                 property real clickthroughOpacity: 0.8
-                property list<string> buttons: [
-                    "crosshair",
-                    "fpsLimiter",
-                    "floatingImage",
-                    "recorder",
-                    "media",
-                    "resources",
-                    "notes",
-                    "volumeMixer",
-                    "discordVoice"
-                ]
+                property list<string> buttons: ["crosshair", "recorder", "media", "volumeMixer", "resources", "discordVoice"]
                 property JsonObject floatingImage: JsonObject {
                     property string imageSource: "https://media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif"
                     property real scale: 0.5
@@ -1315,7 +1577,10 @@ Singleton {
             property JsonObject overview: JsonObject {
                 property bool enable: true
                 property bool showWindowPreviews: true
-                property real scale: 0.18 // Relative to screen size
+                property bool enableManualScale: false
+                property real autoScaleFactor: 1.0 // Multiplier for automatic scaling (0.5 to 1.5)
+                property real scale: 0.18 // Relative to screen size (used when enableManualScale is true)
+                property string animationStyle: "bounce" // Options: "bounce", "smooth", "zoom"
                 property real rows: 2
                 property real columns: 5
                 property bool orderRightLeft: false
@@ -1353,7 +1618,13 @@ Singleton {
                 }
                 property JsonObject annotation: JsonObject {
                     property bool useSatty: false
-                    property bool enableInlineEditor: false
+                    property bool enableInlineEditor: true
+                    property real fillOpacity: 0.25
+                    property real highlighterOpacity: 0.4
+                    property int badgeStartNumber: 1
+                    // Pixelation coarseness for the blur tool (source-px divisor):
+                    // bigger = chunkier blocks. Independent of line thickness.
+                    property int blurStrength: 24
                 }
             }
 
@@ -1363,6 +1634,12 @@ Singleton {
                 // New keys (zero-cost on AMD; only NVIDIA/Intel invoke nvidia-smi one-shot)
                 property int diskInterval: 30000
                 property int gpuInterval: 3000
+                // Which GPU to monitor on hybrid iGPU+dGPU systems.
+                // "auto" (NVIDIA → AMD → Intel priority) | "nvidia" | "amd" | "intel"
+                property string gpuPreference: "auto"
+                // Mount point / path to monitor with df for disk usage.
+                // Default: "/" (root filesystem). Change to e.g. "/home" or "/mnt/data".
+                property string diskMount: "/"
                 // Toggle for Docker section popup. When false, all Docker
                 // polls (docker stats, docker ps) are suppressed and the
                 // events stream is not subscribed.
@@ -1373,6 +1650,10 @@ Singleton {
                 property bool enable: true
                 property bool enableGenius: true
                 property bool enableLrclib: true
+                property bool enableYtmusic: false  // requires ytmusicapi in venv
+                // "auto" | "lrclib" | "ytmusic" | "genius"
+                // auto = lrclib synced → lrclib plain → ytmusic → genius
+                property string lyricsProvider: "auto"
             }
 
             property JsonObject tray: JsonObject {
@@ -1380,7 +1661,7 @@ Singleton {
                 property bool showItemId: false
                 property bool invertPinnedItems: true // Makes the below a whitelist for the tray and blacklist for the pinned area
                 property list<var> pinnedItems: ["Fcitx"]
-                property bool filterPassive: true
+                property bool filterPassive: false
             }
 
             // Settings app memory management. After the user closes the
@@ -1493,6 +1774,7 @@ Singleton {
                 property string position: "default"
                 property string sidebarStyle: "connect" // "default" | "connect"
                 property bool keepRightSidebarLoaded: true
+                property bool volumeDialogMediaWidget: true
                 property JsonObject translator: JsonObject {
                     property bool enable: false
                     property int delay: 300 // Delay before sending request. Reduces (potential) rate limits and lag.
@@ -1592,7 +1874,7 @@ Singleton {
             property JsonObject sounds: JsonObject {
                 property bool enable: true
                 property string theme: "freedesktop"
-                property int volume: 100
+                property bool monoAudio: false
 
                 property bool notifications: true
                 property bool volumeChange: true
@@ -1605,15 +1887,10 @@ Singleton {
                 property bool lock: false
 
                 property bool alarmFadeIn: false
-                property int alarmFadeInSeconds: 30
 
-                property JsonObject notificationApps: JsonObject {
-                    property string defaultPolicy: "play" // "play" | "mute"
-                    property list<string> alwaysPlayApps: []
-                    property list<string> neverPlayApps: []
-                }
-
-                // Per-event custom sound file overrides (absolute paths)
+                property string notificationDefaultPolicy: "play" // "play" | "mute"
+                property var alwaysPlayApps: []
+                property var neverPlayApps: []
                 property JsonObject custom: JsonObject {
                     property string notifications: ""
                     property string volumeChange: ""

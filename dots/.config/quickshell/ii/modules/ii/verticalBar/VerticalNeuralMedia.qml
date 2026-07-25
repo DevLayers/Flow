@@ -36,10 +36,21 @@ MouseArea {
         return artDownloaded ? Qt.resolvedUrl(artFilePath) : artUrl;
     }
 
-    implicitWidth: Appearance.sizes.verticalBarWidth
-    implicitHeight: pillHeight
-    width: implicitWidth
-    height: implicitHeight
+    onHasTrackChanged: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
+    }
+
+    Component.onCompleted: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
+    }
+
+    implicitWidth: hasTrack ? (Appearance.sizes.verticalBarWidth - 8) : 0
+    implicitHeight: hasTrack ? pillHeight : 0
+    Layout.fillHeight: true
     visible: hasTrack
 
     cursorShape: Qt.PointingHandCursor
@@ -140,9 +151,7 @@ MouseArea {
 
     Rectangle {
         id: pillContainer
-        anchors.centerIn: parent
-        width: root.pillWidth
-        height: root.pillHeight
+        anchors.fill: parent
         radius: Appearance.rounding.full
         color: Appearance.colors.colPrimaryContainer
 

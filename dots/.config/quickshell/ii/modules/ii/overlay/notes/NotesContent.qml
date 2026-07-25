@@ -35,7 +35,7 @@ OverlayBackground {
         tabs: root.defaultTabs
     })
 
-    property list<var> defaultTabs: [
+    property var defaultTabs: [
         { title: "Tab 1", icon: "article", content: "" },
         { title: "Tab 2", icon: "article", content: "" },
         { title: "Tab 3", icon: "article", content: "" }
@@ -95,22 +95,34 @@ OverlayBackground {
     }
 
     function deleteCurrentTab() {
-        if (root.tabsData.tabs.length <= 1) { // not deleting the last tab
+        if (root.tabsData.tabs.length <= 1) {
+            let newTabs = [{
+                title: "Tab 1",
+                icon: "article",
+                content: ""
+            }];
+            root.tabsData = { tabs: newTabs };
+            Persistent.states.overlay.notes.tabIndex = 0;
+            root.content = "";
+            saveToFile();
+            Qt.callLater(() => {
+                updateCopyListEntries();
+            });
             return;
         }
-        
+
         const deletedIndex = currentTabIndex;
         let newTabs = root.tabsData.tabs.slice();
         newTabs.splice(deletedIndex, 1);
-        
+
         const newIndex = Math.min(deletedIndex, newTabs.length - 1);
-        
+
         root.tabsData = { tabs: newTabs };
         Persistent.states.overlay.notes.tabIndex = newIndex;
         root.content = newTabs[newIndex].content || "";
-        
+
         saveToFile();
-        
+
         Qt.callLater(() => {
             updateCopyListEntries();
         });
@@ -140,7 +152,7 @@ OverlayBackground {
         if (!textInput)
             return;
         if (immediate) {
-            copyListDebounce?.stop();
+            if (copyListDebounce) copyListDebounce.stop();
             updateCopyListEntries();
         } else {
             copyListDebounce.restart();
@@ -294,6 +306,12 @@ OverlayBackground {
                             icon: "add",
                             value: 1,
                             releaseAction: (() => root.addNewTab())
+                        },
+                        {
+                            displayName: "",
+                            icon: "delete",
+                            value: 2,
+                            releaseAction: (() => root.deleteCurrentTab())
                         }
                     ]
                 }
@@ -349,9 +367,7 @@ OverlayBackground {
                 padding: 12
 
                 onTextChanged: {
-                    if (textInput.activeFocus) {
-                        saveDebounce.restart();
-                    }
+                    saveDebounce.restart();
                     root.scheduleCopylistUpdate(true);
                 }
 

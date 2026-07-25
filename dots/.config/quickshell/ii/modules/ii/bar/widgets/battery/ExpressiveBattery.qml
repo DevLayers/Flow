@@ -11,12 +11,16 @@ MouseArea {
     property bool vertical: false
     property bool isMaterial: true // Forced expressive
 
-    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth
-    implicitHeight: vertical ? (batteryIcon.implicitHeight > 0 ? batteryIcon.implicitHeight : 0) + 8 : Appearance.sizes.baseBarHeight
+    implicitWidth: Battery.available ? (vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth) : 0
+    implicitHeight: Battery.available ? (vertical ? (batteryIcon.implicitHeight > 0 ? batteryIcon.implicitHeight : 0) + 8 : Appearance.sizes.baseBarHeight) : 0
     width: implicitWidth
     height: implicitHeight
     visible: Battery.available
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
+
+    Behavior on implicitWidth {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
 
     Component.onCompleted: {
         if (typeof rootItem !== "undefined") {

@@ -2,6 +2,7 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 import qs.modules.common
+import qs.modules.common.functions
 import qs
 import QtQuick
 import Quickshell
@@ -89,6 +90,32 @@ Singleton {
      *  quick actions (screenshot, power key, volume, am start). */
     property bool adbReachable: false
 
+    /** Live wireless ADB target ("ip:port") the next scrcpy launch will use.
+     *  In auto mode this tracks KDE Connect's reported reachable address so
+     *  the user never has to type an IP that changes (VPN, DHCP, etc.).
+     *  Empty when no host can be resolved. Bound reactively — reads the
+     *  device list, active device id, and scrcpy config so it refreshes
+     *  whenever any of them change. */
+    /** "ip:port" discovered via mDNS (avahi) for the phone's Android 11+
+     *  wireless-debugging service. Carries the CURRENT randomly-assigned
+     *  port, which changes on every toggle/reboot. Empty when not found
+     *  (avahi missing, wireless debugging off, or nothing on the network).
+     *  Refreshed by mdnsProber while wireless auto mode is active. */
+    property string mdnsWirelessHost: ""
+
+    readonly property string resolvedWirelessHost: {
+        root.devices
+        root.activeDeviceId
+        root.mdnsWirelessHost
+        const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
+        if (c) {
+            c.autoWirelessIp
+            c.wirelessIp
+            c.wirelessPort
+        }
+        return root._resolveWirelessHost(root.activeDeviceId)
+    }
+
     property var notifications: []
     readonly property int notificationCount: notifications.length
     onNotificationsChanged: {
@@ -170,8 +197,8 @@ Singleton {
     property int _previousBattery: -1
     property bool _lowBatteryNotified: false
 
-    readonly property string _scriptPath: Directories.scriptPath + "/kdeconnect/monitor.py"
-    readonly property string _fetchNotifsScriptPath: Directories.scriptPath + "/kdeconnect/fetch_notifications.py"
+    readonly property string _scriptPath: FileUtils.trimFileProtocol(Directories.scriptPath + "/kdeconnect/monitor.py")
+    readonly property string _fetchNotifsScriptPath: FileUtils.trimFileProtocol(Directories.scriptPath + "/kdeconnect/fetch_notifications.py")
 
     IpcHandler {
         target: "kdeconnect"
@@ -369,10 +396,19 @@ Singleton {
         }
     }
 
+    Process {
+        id: cleanupProc
+        running: false
+        command: ["pkill", "-f", "kdeconnect/monitor.py"]
+        onExited: (code, status) => {
+            monitorProc.command = ["python3", root._scriptPath]
+            monitorProc.running = true
+        }
+    }
+
     function startMonitor() {
         if (monitorProc.running) return
-        monitorProc.command = ["python3", root._scriptPath]
-        monitorProc.running = true
+        cleanupProc.running = true
     }
 
     Process {
@@ -536,6 +572,7 @@ Singleton {
             signalStrength: ev.signalStrength ?? 0,
             supportedPlugins: ev.supported_plugins ?? [],
             loadedPlugins: ev.loaded_plugins ?? [],
+            reachableAddresses: ev.reachableAddresses ?? [],
         }
         if (idx < 0) devices.push(normalized)
         else devices[idx] = Object.assign({}, devices[idx], normalized)
@@ -622,6 +659,8 @@ Singleton {
         }
         if ("loadedPlugins" in changed) patch.loadedPlugins = changed.loadedPlugins.slice(0)
         if ("supportedPlugins" in changed) patch.supportedPlugins = changed.supportedPlugins.slice(0)
+        if ("reachableAddresses" in changed && changed.reachableAddresses)
+            patch.reachableAddresses = changed.reachableAddresses.slice(0)
         root._patchDevice(id, patch)
     }
 
@@ -691,13 +730,6 @@ Singleton {
     }
 
     function _normaliseNotifications(list) {
-        // Build a lookup of existing notification timestamps AND content by
-        // publicId so we can:
-        //   1. PRESERVE timestamps across syncs (so "Now" → "1m" works)
-        //   2. UPDATE the timestamp when the notification content changes
-        //      (e.g. WhatsApp group receives a new message — the publicId
-        //      stays the same but the ticker/body changes, and the group
-        //      should move to the top of the notification list)
         const existing = {}
         for (let i = 0; i < root.notifications.length; i++) {
             const n = root.notifications[i]
@@ -719,15 +751,11 @@ Singleton {
             let time
             const prev = existing[publicId]
             if (prev) {
-                // Notification already existed — check if content changed.
                 const contentChanged = (ticker !== prev.ticker)
                     || (body !== prev.body)
                 if (contentChanged) {
-                    // Content changed (new message in a conversation, etc.)
-                    // Update timestamp so the group moves to the top.
                     time = Date.now()
                 } else {
-                    // No content change — preserve existing timestamp.
                     time = prev.time
                 }
             } else if (typeof n.time === "number") {
@@ -735,9 +763,9 @@ Singleton {
             } else if (n.time) {
                 time = parseInt(n.time, 10)
             } else {
-                // New notification — use current time.
                 time = Date.now()
             }
+            const image = root._extractNotificationImage(n)
             return {
                 publicId: publicId,
                 appName: appName,
@@ -749,6 +777,7 @@ Singleton {
                     ? Boolean(n.dismissable)
                     : (n.isCancel !== false),
                 iconPath: n.iconPath ?? "",
+                image: image,
                 actions: (n.actions ?? []).map(a => ({
                     key: a.key ?? "",
                     label: a.label ?? a.text ?? "",
@@ -758,6 +787,21 @@ Singleton {
                 package: n.package ?? "",
             }
         })
+    }
+
+    function _extractNotificationImage(n) {
+        const internalId = n.internalId ?? ""
+        if (internalId.indexOf("com.google.android.youtube") >= 0) {
+            const segments = internalId.split("|")
+            if (segments.length >= 4) {
+                const videoIdPart = segments[3]
+                const videoId = videoIdPart.split("::")[0]
+                if (videoId && videoId.length === 11) {
+                    return "https://i.ytimg.com/vi/" + videoId + "/hqdefault.jpg"
+                }
+            }
+        }
+        return ""
     }
 
     function requestNotificationsRefresh() {
@@ -818,7 +862,8 @@ Singleton {
                                  "/notifications/" + notif.publicId
                 Quickshell.execDetached([
                     "bash", "-c",
-                    "qdbus-qt6 org.kde.kdeconnect " + leafPath +
+                    "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+                    "$QDBUS org.kde.kdeconnect " + leafPath +
                     " org.kde.kdeconnect.device.notifications.notification.dismiss" +
                     " >/dev/null 2>&1 || true"
                 ])
@@ -851,7 +896,8 @@ Singleton {
                          "/notifications/" + publicId
         Quickshell.execDetached([
             "bash", "-c",
-            "qdbus-qt6 org.kde.kdeconnect " + leafPath +
+            "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+            "$QDBUS org.kde.kdeconnect " + leafPath +
             " org.kde.kdeconnect.device.notifications.notification.dismiss" +
             " >/dev/null 2>&1 || true"
         ])
@@ -937,7 +983,8 @@ Singleton {
         if (!devId) return
         Quickshell.execDetached([
             "bash", "-c",
-            "qdbus-qt6 org.kde.kdeconnect /modules/kdeconnect/devices/" +
+            "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+            "$QDBUS org.kde.kdeconnect /modules/kdeconnect/devices/" +
             devId + " org.kde.kdeconnect.device.acceptPairing " +
             ">/dev/null 2>&1 || true"
         ])
@@ -951,7 +998,8 @@ Singleton {
         if (!devId) return
         Quickshell.execDetached([
             "bash", "-c",
-            "qdbus-qt6 org.kde.kdeconnect /modules/kdeconnect/devices/" +
+            "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+            "$QDBUS org.kde.kdeconnect /modules/kdeconnect/devices/" +
             devId + " org.kde.kdeconnect.device.cancelPairing " +
             ">/dev/null 2>&1 || true"
         ])
@@ -1006,17 +1054,25 @@ Singleton {
     Process {
         id: adbProbeProc
         running: false
-        command: ["bash", "-c",
-            "if command -v adb >/dev/null 2>&1; then " +
-            "  IP=" + root._shellQuote((Config.options.phone && Config.options.phone.scrcpy)
-                                      ? (Config.options.phone.scrcpy.wirelessIp || "")
-                                      : "") + "; " +
-            "  if [ -n \"$IP\" ]; then " +
-            "    adb connect \"$IP\" 2>/dev/null; " +
-            "  fi; " +
-            "  STATE=$(adb get-state 2>/dev/null); " +
-            "  [ \"$STATE\" = \"device\" ] && exit 0 || exit 1; " +
-            "else exit 1; fi"]
+        command: {
+            const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
+            const useWl = c && c.useWireless
+            const wantIp = useWl ? root._kdeConnectIp(root.activeDeviceId) : ""
+            const fallback = useWl ? root._resolveWirelessHost(root.activeDeviceId) : ""
+            const fb = fallback ? root._shellQuote(fallback) : "''"
+            // In wireless mode, discover the live ip:port via mDNS, falling
+            // back to the KDE Connect / manual host if avahi finds nothing.
+            const resolveIp = useWl
+                ? "IP=$(" + root._mdnsDiscoverSnippet(wantIp) + "); [ -z \"$IP\" ] && IP=" + fb + "; "
+                : "IP=''; "
+            return ["bash", "-c",
+                "if command -v adb >/dev/null 2>&1; then " +
+                resolveIp +
+                "  if [ -n \"$IP\" ]; then adb connect \"$IP\" 2>/dev/null; fi; " +
+                "  STATE=$(adb get-state 2>/dev/null); " +
+                "  [ \"$STATE\" = \"device\" ] && exit 0 || exit 1; " +
+                "else exit 1; fi"]
+        }
         onExited: (code, status) => {
             const now = (code === 0)
             if (now !== root.adbReachable) {
@@ -1029,6 +1085,38 @@ Singleton {
     function _probeAdb() {
         adbProbeProc.running = false
         adbProbeProc.running = true
+    }
+
+    // ─── mDNS discovery of the phone's wireless-debugging port ────
+    // Android 11+ wireless debugging listens on a RANDOM port that changes
+    // on every toggle/reboot. avahi discovers the live ip:port so the user
+    // never has to look it up. Only runs while wireless auto mode is on.
+    Timer {
+        id: mdnsProber
+        interval: 12000
+        repeat: true
+        triggeredOnStart: true
+        running: root.ready && root._enabled
+            && Config.options.phone && Config.options.phone.scrcpy
+            && Config.options.phone.scrcpy.useWireless
+            && Config.options.phone.scrcpy.autoWirelessIp
+        onTriggered: root._probeMdns()
+    }
+
+    Process {
+        id: mdnsProbeProc
+        running: false
+        command: ["bash", "-c", root._mdnsDiscoverSnippet(root._kdeConnectIp(root.activeDeviceId))]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.mdnsWirelessHost = this.text.trim()
+            }
+        }
+    }
+
+    function _probeMdns() {
+        mdnsProbeProc.running = false
+        mdnsProbeProc.running = true
     }
 
     /**
@@ -1073,13 +1161,12 @@ Singleton {
 
         const scrcpyConf = Config.options.phone ? Config.options.phone.scrcpy : null
         const useWireless = scrcpyConf ? scrcpyConf.useWireless : false
-        const wirelessIp = scrcpyConf ? (scrcpyConf.wirelessIp || "") : ""
-        const wirelessPort = scrcpyConf ? (scrcpyConf.wirelessPort || "5555") : "5555"
+        const wirelessHost = useWireless ? root._resolveWirelessHost(root.activeDeviceId) : ""
 
         // Build shell command — delay monkey by 1s so scrcpy starts first.
         let cmd = ""
-        if (useWireless && wirelessIp.length > 0) {
-            cmd += "adb connect " + root._shellQuote(wirelessIp + ":" + wirelessPort) + " >/dev/null 2>&1; "
+        if (wirelessHost.length > 0) {
+            cmd += "adb connect " + root._shellQuote(wirelessHost) + " >/dev/null 2>&1; "
         }
         cmd += "sleep 1; "
         cmd += "adb shell monkey -p " + root._shellQuote(pkg) +
@@ -1193,19 +1280,24 @@ Singleton {
             if (!devId) return
             Quickshell.execDetached([
                 "bash", "-c",
-                "MOUNT=$(qdbus-qt6 org.kde.kdeconnect /modules/kdeconnect/devices/"
+                "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); "
+                + "MOUNT=$($QDBUS org.kde.kdeconnect /modules/kdeconnect/devices/"
+                + devId + "/sftp org.kde.kdeconnect.device.sftp.mountPoint 2>/dev/null); "
+                + "if [ -z \"$MOUNT\" ]; then MOUNT=$($QDBUS org.kde.kdeconnect /modules/kdeconnect/devices/"
                 + devId + "/sftp org.freedesktop.DBus.Properties.Get "
                 + "org.kde.kdeconnect.device.sftp mountPoint 2>/dev/null "
-                + " | sed 's/^.*: \"\\(.*\\)\"/\\1/'); "
+                + " | sed 's/^.*: \"\\(.*\\)\"/\\1/'); fi; "
                 + "if [ -n \"$MOUNT\" ]; then "
+                + "  TARGET=\"$MOUNT\"; "
+                + "  if [ -d \"$MOUNT/storage/emulated/0\" ]; then TARGET=\"$MOUNT/storage/emulated/0\"; fi; "
                 // gio open respects the system's default file manager via
                 // GVFS mimetype associations — unlike xdg-open which can
                 // route to the browser if inode/directory is misassociated.
                 + "  if command -v gio >/dev/null 2>&1; then "
-                + "    gio open \"$MOUNT\" >/dev/null 2>&1 & exit 0; "
+                + "    gio open \"$TARGET\" >/dev/null 2>&1 & exit 0; "
                 + "  fi; "
                 // Fall back to xdg-open if gio is unavailable.
-                + "  xdg-open \"$MOUNT\" >/dev/null 2>&1 & "
+                + "  xdg-open \"$TARGET\" >/dev/null 2>&1 & "
                 + "fi"
             ])
         }
@@ -1245,7 +1337,8 @@ Singleton {
         const argString = (args || []).join(" ")
         Quickshell.execDetached([
             "bash", "-c",
-            "qdbus-qt6 org.kde.kdeconnect " + path + " " + fullMethod
+            "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+            "$QDBUS org.kde.kdeconnect " + path + " " + fullMethod
                 + (argString.length > 0 ? " " + argString : "")
                 + " >/dev/null 2>&1 || true"
         ])
@@ -1254,6 +1347,15 @@ Singleton {
     property string _wirelessPromptDevId: ""
 
     function promptWirelessConnect(devId) {
+        // Auto mode: skip the IP:port dialog entirely — resolve the host
+        // live from KDE Connect and connect straight away.
+        const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
+        if (c && c.autoWirelessIp && root._resolveWirelessHost(devId)) {
+            c.useWireless = true
+            root.launchScrcpy(devId, "wireless")
+            return
+        }
+
         root._wirelessPromptDevId = devId || ""
         wirelessPromptProc.command = [
             "bash", "-c",
@@ -1291,6 +1393,8 @@ Singleton {
                         Config.options.phone.scrcpy.wirelessIp = ip
                         Config.options.phone.scrcpy.wirelessPort = port
                         Config.options.phone.scrcpy.useWireless = true
+                        // User typed an explicit IP — respect it over auto.
+                        Config.options.phone.scrcpy.autoWirelessIp = false
                     }
                     root.launchScrcpy(root._wirelessPromptDevId, "wireless")
                 }
@@ -1302,6 +1406,60 @@ Singleton {
         return "'" + String(s).replace(/'/g, "'\\''") + "'"
     }
 
+    /** Bash pipeline that prints "ip:port" for the phone's Android 11+
+     *  wireless-debugging endpoint (_adb-tls-connect._tcp), discovered via
+     *  mDNS with avahi. This is how we learn the CURRENT random port. When
+     *  `wantIp` is given, the line whose address matches it wins (so the
+     *  right phone is picked with several on the LAN); otherwise the first
+     *  discovered service is used. Prints nothing if avahi is missing or no
+     *  service is advertised. */
+    function _mdnsDiscoverSnippet(wantIp) {
+        const want = root._shellQuote(wantIp || "")
+        return "avahi-browse -rpt _adb-tls-connect._tcp 2>/dev/null | "
+            + "awk -F';' -v want=" + want + " '"
+            + "/^=/ { if (want != \"\" && $8 == want) { print $8\":\"$9; found = 1; exit } "
+            + "if (f == \"\") f = $8\":\"$9 } "
+            + "END { if (!found && f != \"\") print f }'"
+    }
+
+    /** First non-empty LAN address KDE Connect currently reports for the
+     *  device — the address it is actively using, so it stays correct
+     *  across DHCP/VPN changes. Empty string if none is known yet. */
+    function _kdeConnectIp(devId) {
+        const dev = root._findDevice(devId || root.activeDeviceId)
+        if (!dev) return ""
+        const addrs = dev.reachableAddresses || []
+        for (let i = 0; i < addrs.length; i++) {
+            const a = String(addrs[i]).trim()
+            if (a.length > 0) return a
+        }
+        return ""
+    }
+
+    /** Resolves the wireless ADB target as "ip:port". In auto mode the IP
+     *  comes from KDE Connect (falling back to the manual field if KDE
+     *  Connect has nothing yet); in manual mode it's the configured field.
+     *  Returns "" when no IP is available. */
+    function _resolveWirelessHost(devId) {
+        const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
+        if (!c) return ""
+        // Auto mode: prefer the mDNS-discovered host — it carries the phone's
+        // current wireless-debugging port. Only trust the cache when its IP
+        // matches this device (or the device's IP is unknown).
+        if (c.autoWirelessIp && root.mdnsWirelessHost.indexOf(":") > 0) {
+            const mip = root.mdnsWirelessHost.split(":")[0]
+            const kip = root._kdeConnectIp(devId)
+            if (!kip || mip === kip) return root.mdnsWirelessHost
+        }
+        const port = (c.wirelessPort && String(c.wirelessPort).trim() !== "")
+            ? String(c.wirelessPort).trim() : "5555"
+        let ip = ""
+        if (c.autoWirelessIp) ip = root._kdeConnectIp(devId)
+        if (!ip) ip = (c.wirelessIp || "").trim()
+        if (!ip) return ""
+        return (ip.indexOf(":") < 0) ? (ip + ":" + port) : ip
+    }
+
     function launchScrcpy(devId, mode, deepLink) {
         if (!devId) return
 
@@ -1309,10 +1467,8 @@ Singleton {
         // Without it, scrcpy has no device to connect to and the error is
         // just "unknown" — unhelpful. Early return with a descriptive message.
         if (!root.adbReachable) {
-            const wirelessIp = Config.options.phone && Config.options.phone.scrcpy
-                ? (Config.options.phone.scrcpy.wirelessIp || "").trim()
-                : ""
-            if (!wirelessIp || mode === "usb") {
+            const wirelessHostPreflight = root._resolveWirelessHost(devId)
+            if (!wirelessHostPreflight || mode === "usb") {
                 root.scrcpyLaunchError = Translation.tr("Phone not connected via ADB.\n\n"
                     + "To mirror your screen you need ADB access:\n"
                     + "  • USB: plug your phone AND enable USB debugging\n"
@@ -1411,22 +1567,20 @@ Singleton {
         if (maxSize > 0) scrcpyArgs.push("--max-size=" + maxSize)
         if (videoBuffer > 0) scrcpyArgs.push("--video-buffer=" + videoBuffer)
 
-        let wirelessHost = ""
-        if (useWireless && wirelessIp && wirelessIp.trim() !== "") {
-            const ip = wirelessIp.trim()
-            const port = (wirelessPort && wirelessPort.trim() !== "") ? wirelessPort.trim() : "5555"
-            if (ip.indexOf(":") < 0) {
-                wirelessHost = ip + ":" + port
-            } else {
-                wirelessHost = ip
-            }
-        }
-
         let baseCmd = ""
-        if (useWireless && wirelessHost !== "") {
-            const quotedHost = root._shellQuote(wirelessHost)
-            baseCmd = "adb connect " + quotedHost + " && "
-            scrcpyArgs.push("--serial=" + quotedHost)
+        if (useWireless) {
+            // Android 11+ wireless debugging uses a RANDOM port that changes
+            // on every toggle/reboot, so resolve the live ip:port via mDNS
+            // (avahi) at launch time. Fall back to the KDE Connect / manual
+            // host (e.g. legacy `adb tcpip 5555`) when mDNS finds nothing.
+            const wantIp = root._kdeConnectIp(devId)
+            const fallback = root._resolveWirelessHost(devId)
+            const fb = fallback ? root._shellQuote(fallback) : "''"
+            baseCmd = "HOST=$(" + root._mdnsDiscoverSnippet(wantIp) + "); "
+                + "[ -z \"$HOST\" ] && HOST=" + fb + "; "
+                + "adb connect \"$HOST\" && "
+            // Unquoted so the shell expands $HOST inside the same bash -c.
+            scrcpyArgs.push("--serial=\"$HOST\"")
         }
 
         // Deep-link pre-launch: if we got an `am start` intent from a
@@ -1517,6 +1671,7 @@ Singleton {
             replyPlaceholder: n.replyPlaceholder,
             dismissable: n.dismissable,
             iconPath: n.iconPath,
+            image: n.image,
             actions: (n.actions || []).map(a => ({ key: a.key, label: a.label }))
         }))
         root._notificationsCache[root.activeDeviceId] = {

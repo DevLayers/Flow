@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.background.widgets
 import Qt5Compat.GraphicalEffects
@@ -14,6 +15,8 @@ AbstractBackgroundWidget {
     implicitWidth: 260
     implicitHeight: 260
 
+    readonly property color expressiveInnerShape: WidgetColorScheme.innerShapeColor
+
     StyledDropShadow {
         target: outerCircle
         visible: Config.options.background.widgets.enableShadows ?? true
@@ -23,10 +26,7 @@ AbstractBackgroundWidget {
         id: outerCircle
         anchors.fill: parent
         anchors.margins: 10
-        color: {
-            let base = Appearance.colors.colSurfaceContainerHigh;
-            return Qt.rgba(base.r, base.g, base.b, 1.0);
-        }
+        color: WidgetColorScheme.cardBgColor
         radius: width / 2
     }
 
@@ -38,10 +38,7 @@ AbstractBackgroundWidget {
             id: photoShape
             anchors.fill: parent
             shape: MaterialShape.Shape.Cookie12Sided
-            color: {
-                let base = Appearance.colors.colSurfaceContainerLow;
-                return Qt.rgba(base.r, base.g, base.b, 1.0);
-            }
+            color: root.expressive ? root.expressiveInnerShape : Appearance.colors.colSurfaceContainerLow
 
             Image {
                 id: photoImage

@@ -25,6 +25,67 @@ Item {
     implicitHeight: actionsRow.implicitHeight + 16
     height: implicitHeight
 
+    property int entranceTrigger: -1
+    onEntranceTriggerChanged: {
+        if (entranceTrigger >= 0) {
+            actionsEntranceAnim.stop()
+            actionsEntranceAnim.start()
+        }
+    }
+
+    ParallelAnimation {
+        id: actionsEntranceAnim
+
+        SequentialAnimation {
+            PauseAnimation { duration: 60 }
+            ParallelAnimation {
+                NumberAnimation { target: btn1; property: "opacity"; to: (btn1.enabled ? 1.0 : 0.4); duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: btn1Transform; property: "y"; to: 0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.5 }
+                NumberAnimation { target: btn1; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.5 }
+            }
+        }
+        SequentialAnimation {
+            PauseAnimation { duration: 90 }
+            ParallelAnimation {
+                NumberAnimation { target: btn2; property: "opacity"; to: (btn2.enabled ? 1.0 : 0.4); duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: btn2Transform; property: "y"; to: 0; duration: 400; easing.type: Easing.OutExpo }
+                NumberAnimation { target: btn2; property: "scale"; to: 1.0; duration: 400; easing.type: Easing.OutExpo }
+            }
+        }
+        SequentialAnimation {
+            PauseAnimation { duration: 120 }
+            ParallelAnimation {
+                NumberAnimation { target: btn3; property: "opacity"; to: (btn3.enabled ? 1.0 : 0.4); duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: btn3Transform; property: "y"; to: 0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+                NumberAnimation { target: btn3; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+            }
+        }
+        SequentialAnimation {
+            PauseAnimation { duration: 150 }
+            ParallelAnimation {
+                NumberAnimation { target: btn4; property: "opacity"; to: (btn4.enabled ? 1.0 : 0.4); duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: btn4Transform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                NumberAnimation { target: btn4; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutCubic }
+            }
+        }
+        SequentialAnimation {
+            PauseAnimation { duration: 180 }
+            ParallelAnimation {
+                NumberAnimation { target: btn5; property: "opacity"; to: (btn5.enabled ? 1.0 : 0.4); duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: btn5Transform; property: "y"; to: 0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
+                NumberAnimation { target: btn5; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
+            }
+        }
+        SequentialAnimation {
+            PauseAnimation { duration: 210 }
+            ParallelAnimation {
+                NumberAnimation { target: btn6; property: "opacity"; to: (btn6.enabled ? 1.0 : 0.4); duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: btn6Transform; property: "y"; to: 0; duration: 400; easing.type: Easing.OutExpo }
+                NumberAnimation { target: btn6; property: "scale"; to: 1.0; duration: 400; easing.type: Easing.OutExpo }
+            }
+        }
+    }
+
     readonly property string _devId: KdeConnectService.activeDeviceId || ""
     readonly property var _plugins: KdeConnectService.activeDevice
         ? (KdeConnectService.activeDevice.supportedPlugins || [])
@@ -47,10 +108,12 @@ Item {
 
         // Find My Phone
         ActionIconButton {
+            id: btn1
             anchors.verticalCenter: parent.verticalCenter
             iconName: "phone_in_talk"
             toolTipText: Translation.tr("Ring phone")
             enabled: root._has("kdeconnect_findmyphone")
+            transform: Translate { id: btn1Transform; y: 0 }
             onClicked: {
                 KdeConnectService.findMyPhone(root._devId)
                 root._feedback(Translation.tr("Ringing phone…"), true)
@@ -59,10 +122,12 @@ Item {
 
         // Ping
         ActionIconButton {
+            id: btn2
             anchors.verticalCenter: parent.verticalCenter
             iconName: "notifications_active"
             toolTipText: Translation.tr("Send a ping")
             enabled: root._has("kdeconnect_ping")
+            transform: Translate { id: btn2Transform; y: 0 }
             onClicked: {
                 KdeConnectService.sendPing(root._devId,
                     Translation.tr("Ping from ii"))
@@ -72,10 +137,12 @@ Item {
 
         // Send clipboard
         ActionIconButton {
+            id: btn3
             anchors.verticalCenter: parent.verticalCenter
             iconName: "content_paste"
             toolTipText: Translation.tr("Send clipboard to phone")
             enabled: root._has("kdeconnect_clipboard")
+            transform: Translate { id: btn3Transform; y: 0 }
             onClicked: {
                 if (Quickshell.clipboardText.length > 0) {
                     KdeConnectService.sendClipboard(root._devId)
@@ -88,10 +155,12 @@ Item {
 
         // Send file
         ActionIconButton {
+            id: btn4
             anchors.verticalCenter: parent.verticalCenter
             iconName: "file_upload"
             toolTipText: Translation.tr("Send file…")
             enabled: root._has("kdeconnect_share")
+            transform: Translate { id: btn4Transform; y: 0 }
             onClicked: {
                 KdeConnectService.sendFile(root._devId)
                 root._feedback(Translation.tr("Pick a file to send…"), true)
@@ -100,10 +169,12 @@ Item {
 
         // Send current clipboard as URL/text
         ActionIconButton {
+            id: btn5
             anchors.verticalCenter: parent.verticalCenter
             iconName: "link"
             toolTipText: Translation.tr("Share desktop clipboard as link/text")
             enabled: root._has("kdeconnect_share") && Quickshell.clipboardText.length > 0
+            transform: Translate { id: btn5Transform; y: 0 }
             onClicked: {
                 const clip = String(Quickshell.clipboardText).trim()
                 if (!clip) {
@@ -124,10 +195,12 @@ Item {
 
         // Browse files (SFTP)
         ActionIconButton {
+            id: btn6
             anchors.verticalCenter: parent.verticalCenter
             iconName: "folder_shared"
             toolTipText: Translation.tr("Browse phone files (SFTP)")
             enabled: root._has("kdeconnect_sftp")
+            transform: Translate { id: btn6Transform; y: 0 }
             onClicked: {
                 KdeConnectService.browseFiles(root._devId)
                 root._feedback(Translation.tr("Mounting SFTP storage…"), true)
@@ -150,10 +223,11 @@ Item {
         colRipple: Appearance.colors.colPrimaryContainerActive
 
         opacity: enabled ? 1.0 : 0.4
+        scale: 1.0
 
         // Springy "press" pop on hover/press for a more connected feel.
-        scale: down ? 0.92 : (hovered ? 1.09 : 1.0)
         Behavior on scale {
+            enabled: !actionsEntranceAnim.running
             NumberAnimation {
                 duration: 220
                 easing.type: Easing.OutBack

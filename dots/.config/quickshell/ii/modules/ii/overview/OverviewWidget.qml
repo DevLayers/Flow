@@ -14,9 +14,23 @@ import Quickshell.Hyprland
 Item {
     id: root
     property bool hyprscrollingEnabled: false //FIXME
+    readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
+    readonly property real autoScaleFactor: Config.options.overview.autoScaleFactor ?? 1.0
+    readonly property real autoScale: {
+        let cols = Math.max(1, Config.options.overview.columns || 5);
+        let rows = Math.max(1, Config.options.overview.rows || 2);
+        let widthScale = 0.88 / cols;
+        let heightScale = 0.74 / rows;
+        let baseScale = Math.min(widthScale, heightScale);
+        return baseScale * root.autoScaleFactor;
+    }
+    readonly property real activeScale: enableManualScale ? Config.options.overview.scale : autoScale
+    property real scale: activeScale
+    readonly property real monitorScale: (monitor?.scale > 0) ? monitor.scale : 1
+    readonly property real workspaceLayoutScale: root.scale / root.monitorScale
     property int minWorkspaceWidth: (monitorData?.transform % 2 === 1) 
-        ? ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.scale) 
-        : ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.scale)
+        ? ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.workspaceLayoutScale) 
+        : ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.workspaceLayoutScale)
     required property var panelWindow
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
     readonly property var toplevels: ToplevelManager.toplevels
@@ -61,30 +75,45 @@ Item {
     property var windowByAddress: HyprlandData.windowByAddress
     property var windowAddresses: HyprlandData.addresses
     property var monitorData: HyprlandData.monitors.find(m => m.id === root.monitor?.id)
-    property real scale: Config.options.overview.scale
     property color activeBorderColor: Appearance.colors.colSecondary
 
     property real workspaceImplicitWidth: minWorkspaceWidth
     property real workspaceImplicitHeight: (monitorData?.transform % 2 === 1) 
-        ? ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.scale) 
-        : ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.scale)
+        ? ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.workspaceLayoutScale) 
+        : ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.workspaceLayoutScale)
     property real largeWorkspaceRadius: Appearance.rounding.large
     property real smallWorkspaceRadius: Appearance.rounding.verysmall
 
-    // we are using a width map to get all windows width and settings workspaceImplicitWidth to the maximum item of this list/map
+    // We are using a width map to get all windows width and setting workspaceImplicitWidth to the maximum item of this list/map
     property list<int> widthMap: []
 
-    onWidthMapChanged: root.workspaceImplicitWidth = getMaxWidth()
+    onMinWorkspaceWidthChanged: {
+        if (!root.hyprscrollingEnabled)
+            root.workspaceImplicitWidth = minWorkspaceWidth;
+    }
+
+    onWorkspaceGroupChanged: {
+        root.widthMap = [];
+        root.workspaceImplicitWidth = minWorkspaceWidth;
+    }
+
+    onWidthMapChanged: {
+        if (root.hyprscrollingEnabled) {
+            root.workspaceImplicitWidth = getMaxWidth();
+        } else {
+            root.workspaceImplicitWidth = minWorkspaceWidth;
+        }
+    }
 
     function getMaxWidth() {
         if (widthMap.length === 0)
             return minWorkspaceWidth;
         const max = Math.max(...widthMap);
-        return max;
+        return Math.max(max, minWorkspaceWidth);
     }
 
     property real workspaceNumberMargin: 80
-    property real workspaceNumberSize: 250 * monitor.scale
+    readonly property real workspaceNumberPixelSize: Math.min(root.workspaceImplicitWidth, root.workspaceImplicitHeight) * 0.36
     property int workspaceZ: 0
     property int windowZ: 1
     property int windowDraggingZ: 99999
@@ -190,9 +219,9 @@ Item {
                                 anchors.centerIn: parent
                                 text: workspace.workspaceValue
                                 font {
-                                    pixelSize: root.workspaceNumberSize * root.scale
+                                    pixelSize: root.workspaceNumberPixelSize
                                     weight: Font.DemiBold
-                                    family: Appearance.font.family.expressive
+                                    family: Appearance.font.family.numbers
                                 }
                                 color: ColorUtils.transparentize(Appearance.colors.colOnLayer1, 0.8)
                                 horizontalAlignment: Text.AlignHCenter

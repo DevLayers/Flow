@@ -43,7 +43,7 @@ MouseArea {
             dragStartY = event.y;
             dragged = false;
         } else if (event.button === Qt.RightButton) {
-            if (item.hasMenu) {
+            if (root.item && root.item.hasMenu) {
                 if (menu.active && menu.item && typeof menu.item.close === "function")
                     menu.item.close();
                 else
@@ -58,24 +58,25 @@ MouseArea {
             var dx = event.x - dragStartX;
             var dy = event.y - dragStartY;
             var dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist > 25 && !dragged) {
+            if (dist > 25 && !dragged && root.item) {
                 dragged = true;
-                TrayService.togglePin(root.item.id);
+                TrayService.togglePin(root.item);
             }
         }
     }
 
     onReleased: event => {
         if (event.button === Qt.LeftButton) {
-            if (!dragged) {
-                item.activate();
+            if (!dragged && root.item) {
+                root.item.activate();
             }
             dragged = false;
         }
         event.accepted = true;
     }
     onEntered: {
-        tooltip.text = TrayService.getTooltipForItem(root.item);
+        if (root.item)
+            tooltip.text = TrayService.getTooltipForItem(root.item);
     }
 
     Loader {
@@ -87,8 +88,8 @@ MouseArea {
 
         sourceComponent: SysTrayMenu {
             Component.onCompleted: this.open()
-            trayItemMenuHandle: root.item.menu
-            trayItemId: root.item.id
+            trayItemMenuHandle: root.item ? root.item.menu : null
+            trayItemId: root.item ? (root.item.id || "") : ""
 
             anchor {
                 window: root.QsWindow.window
@@ -150,9 +151,11 @@ MouseArea {
 
         IconImage {
             id: trayIcon
-            visible: !Config.options.tray.monochromeIcons
-            source: root.item.icon
-            anchors.fill: parent
+            visible: true
+            source: (root.item && root.item.icon) ? root.item.icon : ""
+            anchors.centerIn: parent
+            width: Math.min(parent.width, 20)
+            height: Math.min(parent.height, 20)
         }
 
         Loader {

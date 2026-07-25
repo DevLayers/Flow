@@ -1,10 +1,11 @@
 import QtQuick
+import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
-import qs.modules.common.widgets.widgetCanvas
 import qs.modules.ii.background.widgets
 
 AbstractBackgroundWidget {
@@ -12,47 +13,71 @@ AbstractBackgroundWidget {
 
     configEntryName: "weather"
 
-    implicitHeight: backgroundShape.implicitHeight
-    implicitWidth: backgroundShape.implicitWidth
+    readonly property bool expressive: Config.options.background.widgets.weather.expressiveColors ?? false
+
+    implicitWidth: 240
+    implicitHeight: 240
+
+    readonly property color cardBgColor: expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
+    readonly property color iconColor: expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
 
     StyledDropShadow {
-        target: backgroundShape
+        id: shadowEffect
+        target: mainShape
         visible: Config.options.background.widgets.enableShadows ?? true
     }
 
     MaterialShape {
-        id: backgroundShape
-        anchors.fill: parent
+        id: mainShape
+        anchors.centerIn: parent
+        implicitSize: Math.min(root.width, root.height)
         shape: MaterialShape.Shape.Pill
-        color: Appearance.colors.colPrimaryContainer
-        implicitSize: 240
+        color: "transparent"
 
-        StyledText {
-            font {
-                pixelSize: 80
-                family: Appearance.font.family.expressive
-                weight: Font.Medium
-            }
-            color: Appearance.colors.colPrimary
-            text: Weather.data?.temp.substring(0,Weather.data?.temp.length - 1) ?? "--°"
-            anchors {
-                right: parent.right
-                top: parent.top
-                rightMargin: 16
-                topMargin: 20
-            }
+        MaterialShape {
+            id: bgShape
+            anchors.fill: parent
+            shape: parent.shape
+            color: root.cardBgColor
+            visible: !(Config.options.background.widgets.enableInnerShadow ?? true)
         }
 
-        MaterialSymbol {
-            iconSize: 80
-            color: Appearance.colors.colOnPrimaryContainer
-            text: Icons.getWeatherIcon(Weather.data.wCode) ?? "cloud"
-            anchors {
-                left: parent.left
-                bottom: parent.bottom
+        InnerShadow {
+            id: innerShadow
+            anchors.fill: parent
+            radius: 24
+            samples: 49
+            color: Qt.rgba(0, 0, 0, 0.35)
+            source: bgShape
+            visible: Config.options.background.widgets.enableInnerShadow ?? true
+        }
 
-                leftMargin: 16
-                bottomMargin: 20
+        Item {
+            anchors.fill: parent
+
+            StyledText {
+                font.pixelSize: 88
+                font.family: Appearance.font.family.main
+                font.weight: Font.Black
+                color: Appearance.colors.colPrimary
+                text: Weather.data?.temp ? Weather.data.temp.replace("°C", "°").replace("°F", "°") : ""
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.rightMargin: 28
+                anchors.topMargin: 36
+                z: 1
+            }
+
+            MaterialSymbol {
+                iconSize: 130
+                color: root.iconColor
+                text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "cloud"
+                fill: 1.0
+                anchors.left: parent.left
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 18
+                anchors.bottomMargin: 18
+                z: 2
             }
         }
     }

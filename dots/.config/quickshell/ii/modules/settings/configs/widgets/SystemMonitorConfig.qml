@@ -90,6 +90,81 @@ ContentPage {
             checked: Config.options.bar.resources.showDocker
             onCheckedChanged: Config.options.bar.resources.showDocker = checked
         }
+
+        ConfigSpinBox {
+            icon: "memory"
+            text: Translation.tr("Resources polling interval (ms)")
+            value: Config.options.resources.updateInterval
+            from: 100
+            to: 10000
+            stepSize: 100
+            onValueChanged: {
+                Config.options.resources.updateInterval = value;
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "hard_drive"
+        title: Translation.tr("Disk")
+
+        ConfigTextField {
+            text: Translation.tr("Mount point to monitor")
+            icon: "folder"
+            placeholderText: Translation.tr("e.g. / or /home or /mnt/data")
+            inputText: Config.options.resources.diskMount
+            textField.onEditingFinished: {
+                const v = textField.text.trim();
+                if (v.length > 0)
+                    Config.options.resources.diskMount = v;
+            }
+        }
+
+        ConfigSpinBox {
+            icon: "schedule"
+            text: Translation.tr("Disk polling interval (ms)")
+            value: Config.options.resources.diskInterval
+            from: 5000
+            to: 300000
+            stepSize: 5000
+            onValueChanged: {
+                Config.options.resources.diskInterval = value;
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "developer_board"
+        title: Translation.tr("GPU")
+
+        ConfigSelectionArray {
+            currentValue: Config.options.resources.gpuPreference
+            onSelected: newValue => {
+                Config.options.resources.gpuPreference = newValue;
+            }
+            options: [
+                {
+                    displayName: Translation.tr("Auto"),
+                    icon: "auto_awesome",
+                    value: "auto"
+                },
+                {
+                    displayName: "NVIDIA",
+                    icon: "developer_board",
+                    value: "nvidia"
+                },
+                {
+                    displayName: "AMD",
+                    icon: "developer_board",
+                    value: "amd"
+                },
+                {
+                    displayName: "Intel",
+                    icon: "developer_board",
+                    value: "intel"
+                }
+            ]
+        }
     }
 
     ContentSection {

@@ -14,10 +14,25 @@ MouseArea {
     id: root
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
     readonly property string cleanedTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || Translation.tr("No media")
+    readonly property bool hasTrack: (activePlayer?.trackTitle ?? "").length > 0
+
+    visible: hasTrack
+
+    onHasTrackChanged: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
+    }
+
+    Component.onCompleted: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
+    }
 
     Layout.fillHeight: true
-    implicitHeight: mediaCircProg.implicitHeight + 10 // +10 for padding it looks so small if we dont add it
-    implicitWidth: Appearance.sizes.verticalBarWidth
+    implicitHeight: hasTrack ? (mediaCircProg.implicitHeight + 10) : 0
+    implicitWidth: hasTrack ? Appearance.sizes.verticalBarWidth : 0
 
     Timer {
         running: activePlayer?.playbackState == MprisPlaybackState.Playing

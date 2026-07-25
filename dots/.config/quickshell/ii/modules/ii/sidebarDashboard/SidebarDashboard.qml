@@ -38,7 +38,7 @@ Scope {
             exclusiveZone: 0
             implicitWidth: sidebarWidth
             WlrLayershell.namespace: root.isOnRight ? "quickshell:sidebarRight" : "quickshell:sidebarLeft"
-            WlrLayershell.keyboardFocus: GlobalStates.sidebarRightOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
             color: "transparent"
 
             anchors {
@@ -70,7 +70,7 @@ Scope {
                 sourceComponent: SidebarDashboardContent {}
                 
                 width: root.sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin
-                height: parent.height - (Appearance.sizes.hyprlandGapsOut * 2)
+                height: Math.max(0, parent.height - (Appearance.sizes.hyprlandGapsOut * 2))
                 y: Appearance.sizes.hyprlandGapsOut
 
                 focus: GlobalStates.sidebarRightOpen

@@ -11,48 +11,102 @@ Rectangle {
     readonly property int itemIndex: {
         var p = parent;
         if (!p) return 0;
-        var idx = 0;
-        for (var i = 0; i < p.children.length; ++i) {
-            if (p.children[i] === root) return idx;
-            if (p.children[i].visible && typeof p.children[i].topLeftRadius !== "undefined") idx++;
+        var children = p.children;
+        var selfIdx = -1;
+        for (var i = 0; i < children.length; ++i) {
+            if (children[i] === root) {
+                selfIdx = i;
+                break;
+            }
         }
-        return 0;
+        if (selfIdx === -1) return 0;
+        
+        var startIdx = 0;
+        for (var i = selfIdx - 1; i >= 0; --i) {
+            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
+                startIdx = i + 1;
+                break;
+            }
+        }
+        
+        var idx = 0;
+        for (var i = startIdx; i < selfIdx; ++i) {
+            if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
+                idx++;
+            }
+        }
+        return idx;
     }
 
     readonly property int totalItems: {
         var p = parent;
         if (!p) return 1;
+        var children = p.children;
+        var selfIdx = -1;
+        for (var i = 0; i < children.length; ++i) {
+            if (children[i] === root) {
+                selfIdx = i;
+                break;
+            }
+        }
+        if (selfIdx === -1) return 1;
+        
+        var startIdx = 0;
+        for (var i = selfIdx - 1; i >= 0; --i) {
+            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
+                startIdx = i + 1;
+                break;
+            }
+        }
+        
+        var endIdx = children.length - 1;
+        for (var i = selfIdx + 1; i < children.length; ++i) {
+            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
+                endIdx = i - 1;
+                break;
+            }
+        }
+        
         var count = 0;
-        for (var i = 0; i < p.children.length; ++i) {
-            if (p.children[i].visible && typeof p.children[i].topLeftRadius !== "undefined") count++;
+        for (var i = startIdx; i <= endIdx; ++i) {
+            if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
+                count++;
+            }
         }
         return count;
     }
 
     property bool isFirst: itemIndex === 0
     property bool isLast: itemIndex === totalItems - 1
+    property bool isAlone: totalItems === 1
 
     readonly property bool isPressed: false
 
     readonly property bool prevIsPressed: {
         var p = parent;
         if (!p) return false;
-        for (var i = 0; i < p.children.length; ++i) {
-            var child = p.children[i];
-            if (child === root) return false;
+        var children = p.children;
+        var selfIdx = -1;
+        for (var i = 0; i < children.length; ++i) {
+            if (children[i] === root) {
+                selfIdx = i;
+                break;
+            }
+        }
+        if (selfIdx <= 0) return false;
+        
+        var startIdx = 0;
+        for (var i = selfIdx - 1; i >= 0; --i) {
+            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
+                startIdx = i + 1;
+                break;
+            }
+        }
+        
+        for (var i = selfIdx - 1; i >= startIdx; --i) {
+            var child = children[i];
             if (child.visible && typeof child.topLeftRadius !== "undefined") {
-                var isImmediatePrev = true;
-                for (var j = i + 1; j < p.children.length; ++j) {
-                    var midChild = p.children[j];
-                    if (midChild === root) break;
-                    if (midChild.visible && typeof midChild.topLeftRadius !== "undefined") {
-                        isImmediatePrev = false;
-                        break;
-                    }
-                }
-                if (isImmediatePrev) {
-                    return child.isPressed === true || (child.down !== undefined && child.down === true);
-                }
+                return child.isPressed === true || (child.down !== undefined && child.down === true);
             }
         }
         return false;
@@ -61,29 +115,44 @@ Rectangle {
     readonly property bool nextIsPressed: {
         var p = parent;
         if (!p) return false;
-        var foundSelf = false;
-        for (var i = 0; i < p.children.length; ++i) {
-            var child = p.children[i];
-            if (child === root) {
-                foundSelf = true;
-                continue;
+        var children = p.children;
+        var selfIdx = -1;
+        for (var i = 0; i < children.length; ++i) {
+            if (children[i] === root) {
+                selfIdx = i;
+                break;
             }
-            if (foundSelf && child.visible && typeof child.topLeftRadius !== "undefined") {
+        }
+        if (selfIdx === -1 || selfIdx >= children.length - 1) return false;
+        
+        var endIdx = children.length - 1;
+        for (var i = selfIdx + 1; i < children.length; ++i) {
+            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
+                endIdx = i - 1;
+                break;
+            }
+        }
+        
+        for (var i = selfIdx + 1; i <= endIdx; ++i) {
+            var child = children[i];
+            if (child.visible && typeof child.topLeftRadius !== "undefined") {
                 return child.isPressed === true || (child.down !== undefined && child.down === true);
             }
         }
         return false;
     }
 
-    topLeftRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    topRightRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    bottomLeftRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    bottomRightRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    topLeftRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : ((isFirst || isAlone) ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    topRightRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : ((isFirst || isAlone) ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    bottomLeftRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : ((isLast || isAlone) ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    bottomRightRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : ((isLast || isAlone) ? Appearance.rounding.large : Appearance.rounding.verysmall)
+
 
     Behavior on topLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
     Behavior on topRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
     Behavior on bottomLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
     Behavior on bottomRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
+
 
     color: Appearance.colors.colSurfaceContainer
     implicitWidth: mainRowLayout.implicitWidth + mainRowLayout.anchors.margins * 2

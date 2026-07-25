@@ -15,26 +15,30 @@ MouseArea {
     property int deviceIndex: 0
     readonly property var primaryDevice: activeDevices.length > 0 ? activeDevices[deviceIndex % activeDevices.length] : null
     readonly property bool hasDevices: activeDevices.length > 0
-    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : layout.implicitWidth + 8
-
-    implicitHeight: vertical ? layoutVert.implicitHeight + 8 : Appearance.sizes.baseBarHeight
+    implicitWidth: hasDevices ? (vertical ? Appearance.sizes.verticalBarWidth : layout.implicitWidth + 8) : 0
+    implicitHeight: hasDevices ? (vertical ? layoutVert.implicitHeight + 8 : Appearance.sizes.baseBarHeight) : 0
     width: implicitWidth
     height: implicitHeight
     visible: hasDevices
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
     cursorShape: Qt.PointingHandCursor
 
+    onHasDevicesChanged: {
+        if (typeof rootItem !== "undefined" && typeof rootItem.toggleVisible === "function")
+            rootItem.toggleVisible(hasDevices);
+    }
+
     Connections {
         target: BluetoothStatus
         function onConnectedDevicesChanged() {
-            if (typeof rootItem !== "undefined")
-                rootItem.toggleVisible(BluetoothStatus.connectedDevices.length > 0)
+            if (typeof rootItem !== "undefined" && typeof rootItem.toggleVisible === "function")
+                rootItem.toggleVisible(BluetoothStatus.connectedDevices.length > 0);
         }
     }
 
     Component.onCompleted: {
-        if (typeof rootItem !== "undefined")
-            rootItem.toggleVisible(hasDevices)
+        if (typeof rootItem !== "undefined" && typeof rootItem.toggleVisible === "function")
+            rootItem.toggleVisible(hasDevices);
     }
 
     onClicked: {
@@ -47,7 +51,7 @@ MouseArea {
         id: layout
         anchors.centerIn: parent
         spacing: 4
-        visible: !root.vertical
+        visible: !root.vertical && root.hasDevices
 
         MaterialShape {
             shapeString: "Cookie7Sided"
@@ -108,7 +112,7 @@ MouseArea {
         id: layoutVert
         anchors.centerIn: parent
         spacing: 4
-        visible: root.vertical
+        visible: root.vertical && root.hasDevices
 
         MaterialShape {
             Layout.alignment: Qt.AlignHCenter
