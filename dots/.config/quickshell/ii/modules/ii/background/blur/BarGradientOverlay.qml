@@ -45,7 +45,8 @@ Item {
             y: barBlurOverlay.overlayY
             width: barBlurOverlay.overlayW
             height: barBlurOverlay.overlayH
-            layer.enabled: true
+            // Released while hidden so the mask FBO isn't held for the whole session
+            layer.enabled: barBlurOverlay.visible
             layer.effect: OpacityMask {
                 maskSource: barBlurGradientMask
             }
@@ -56,7 +57,10 @@ Item {
                 sourceRect: Qt.rect(barBlurOverlay.overlayX, barBlurOverlay.overlayY, barBlurOverlay.overlayW, barBlurOverlay.overlayH)
                 width: barBlurOverlay.overlayW
                 height: barBlurOverlay.overlayH
-                live: true
+                // Only capture while the overlay is actually on screen. A permanently
+                // live full-width source feeds the blur below every frame, which is
+                // pure wasted fill rate at high resolutions when the overlay is hidden.
+                live: barBlurOverlay.visible
                 hideSource: false
                 visible: false
             }

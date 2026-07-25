@@ -68,7 +68,12 @@ PanelWindow {
         onTriggered: bgWidgetsWindow.deferredFullscreen = bgWidgetsWindow.isFullscreen
     }
     onIsFullscreenChanged: fullscreenDeferTimer.restart()
-    visible: GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen)
+
+    // Without widgets this window has nothing to draw, and an always-mapped fullscreen
+    // transparent surface still costs the compositor a blend (and possibly a blur) pass
+    // every frame — which scales with resolution. Keep it unmapped until it has content.
+    readonly property bool hasWidgets: widgetStateManager && widgetStateManager.model ? widgetStateManager.model.count > 0 : false
+    visible: hasWidgets && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen))
 
     // Monitor & Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
