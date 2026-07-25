@@ -10,8 +10,12 @@ import QtQuick.Controls
  */
 TextField {
     id: root
+
+    // Set to show the M3 error state (red outline + red caret/selection accent)
+    property bool error: false
+
     Material.theme: Material.System
-    Material.accent: Appearance.m3colors.m3primary
+    Material.accent: root.error ? Appearance.m3colors.m3error : Appearance.m3colors.m3primary
     Material.primary: Appearance.m3colors.m3primary
     Material.background: Appearance.m3colors.m3surface
     Material.foreground: Appearance.m3colors.m3onSurface
@@ -36,7 +40,7 @@ TextField {
         radius: Appearance.rounding.normal
         color: Appearance.m3colors.m3surface
         border.width: root.activeFocus ? 2 : 1
-        border.color: root.activeFocus ? Appearance.m3colors.m3primary : 
+        border.color: root.error ? Appearance.m3colors.m3error : root.activeFocus ? Appearance.m3colors.m3primary :
                        root.hovered ? Appearance.m3colors.m3outline : Appearance.m3colors.m3outlineVariant
 
         Behavior on border.color {
