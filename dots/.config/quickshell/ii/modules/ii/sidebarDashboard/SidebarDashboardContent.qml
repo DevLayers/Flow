@@ -93,15 +93,10 @@ Item {
     Loader {
         id: sidebarRightShadowLoader
         active: (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate || root.isDynamicIslandTop || root.isDynamicIslandBottom) && !root.anyDialogVisible
-        anchors.fill: sidebarRightBackground
         sourceComponent: Component {
-            Item {
-                anchors.fill: parent
-                StyledDropShadow {
-                    target: parent
-                    radius: Math.round(0.9 * Appearance.sizes.elevationMargin)
-                    opacity: sidebarRightBackground.opacity
-                }
+            StyledRectangularShadow {
+                target: sidebarRightBackground
+                radius: sidebarRightBackground.radius
             }
         }
     }
