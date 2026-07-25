@@ -44,8 +44,8 @@ MouseArea {
             dragged = false;
         } else if (event.button === Qt.RightButton) {
             if (root.item && root.item.hasMenu) {
-                if (menu.active && menu.item && typeof menu.item.close === "function")
-                    menu.item.close();
+                if (menu.active)
+                    menu.close();
                 else
                     menu.open();
             }
@@ -79,16 +79,33 @@ MouseArea {
             tooltip.text = TrayService.getTooltipForItem(root.item);
     }
 
+    // The menu window anchors to this item, so it must never outlive the window this item
+    // lives in — inside the tray overflow popup that window is destroyed on close.
+    readonly property var hostWindow: root.QsWindow?.window ?? null
+    onHostWindowChanged: {
+        if (!root.hostWindow)
+            menu.close();
+    }
+    Component.onDestruction: menu.close()
+
     Loader {
         id: menu
         function open() {
             menu.active = true;
+        }
+        function close() {
+            if (!menu.active)
+                return;
+            if (menu.item && typeof menu.item.close === "function")
+                menu.item.close();
+            menu.active = false;
         }
         active: false
 
         sourceComponent: SysTrayMenu {
             Component.onCompleted: this.open()
             trayItemMenuHandle: root.item ? root.item.menu : null
+            trayItem: root.item
             trayItemId: root.item ? (root.item.id || "") : ""
 
             anchor {

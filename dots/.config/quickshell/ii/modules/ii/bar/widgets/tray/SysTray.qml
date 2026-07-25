@@ -34,26 +34,33 @@ Item {
         }
     }
 
+    readonly property var overflowWindow: trayOverflowLayout.QsWindow?.window ?? null
+
     function grabFocus() {
-        focusGrab.active = true;
+        focusGrab.wanted = true;
+    }
+
+    function closeActiveMenu() {
+        if (!sysTrayRoot.activeMenu)
+            return;
+        if (typeof sysTrayRoot.activeMenu.close === "function")
+            sysTrayRoot.activeMenu.close();
+        sysTrayRoot.activeMenu = null;
     }
 
     function setExtraWindowAndGrabFocus(window) {
-        if (sysTrayRoot.activeMenu && sysTrayRoot.activeMenu !== window) {
-            if (typeof sysTrayRoot.activeMenu.close === "function")
-                sysTrayRoot.activeMenu.close();
-            sysTrayRoot.activeMenu = null;
-        }
+        if (sysTrayRoot.activeMenu && sysTrayRoot.activeMenu !== window)
+            sysTrayRoot.closeActiveMenu();
         sysTrayRoot.activeMenu = window;
         sysTrayRoot.grabFocus();
     }
 
     function releaseFocus() {
-        focusGrab.active = false;
+        focusGrab.wanted = false;
     }
 
     function closeOverflowMenu() {
-        focusGrab.active = false;
+        focusGrab.wanted = false;
     }
 
     onTrayOverflowOpenChanged: {
@@ -64,15 +71,19 @@ Item {
 
     HyprlandFocusGrab {
         id: focusGrab
-        active: false
-        windows: [trayOverflowLayout.QsWindow?.window, sysTrayRoot.activeMenu]
+        property bool wanted: false
+
+        // The popup window only exists a moment after trayOverflowOpen flips, so grabbing
+        // eagerly would start a grab with no windows in it — Hyprland clears those
+        // immediately and the popup would snap shut before it finished opening.
+        active: wanted && (sysTrayRoot.overflowWindow !== null || sysTrayRoot.activeMenu !== null)
+        windows: [sysTrayRoot.overflowWindow, sysTrayRoot.activeMenu]
         onCleared: {
+            // Close the menu before collapsing the overflow popup: the menu window is
+            // anchored to an item living inside that popup, so tearing the popup down
+            // first leaves the anchor pointing into a destroyed window.
+            sysTrayRoot.closeActiveMenu();
             sysTrayRoot.trayOverflowOpen = false;
-            if (sysTrayRoot.activeMenu) {
-                if (typeof sysTrayRoot.activeMenu.close === "function")
-                    sysTrayRoot.activeMenu.close();
-                sysTrayRoot.activeMenu = null;
-            }
         }
     }
 
@@ -116,6 +127,9 @@ Item {
                 id: overflowPopup
                 hoverTarget: trayOverflowButton
                 forceClick: true
+                // We run our own focus grab below, which also has to cover the tray menu
+                // window. A second grab from the popup would clear ours and snap it shut.
+                selfDismiss: false
                 active: sysTrayRoot.trayOverflowOpen && sysTrayRoot.unpinnedItems.length > 0
 
                 GridLayout {

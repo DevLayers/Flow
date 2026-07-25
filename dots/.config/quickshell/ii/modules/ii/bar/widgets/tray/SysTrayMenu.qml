@@ -7,11 +7,15 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Services.SystemTray
 
 PopupWindow {
     id: root
     required property QsMenuHandle trayItemMenuHandle
+    // Prefer the item over its id: ids are not unique for Electron/Chrome tray icons.
+    property SystemTrayItem trayItem: null
     property string trayItemId: ""
+    readonly property var pinTarget: root.trayItem ?? root.trayItemId
     property real popupBackgroundMargin: 0
 
     signal menuClosed
@@ -174,7 +178,13 @@ PopupWindow {
             Layout.fillWidth: true
 
             visible: root.trayItemId !== undefined && root.trayItemId.length > 0 && stackView.depth === 1
-            releaseAction: () => TrayService.togglePin(root.trayItemId);
+            // Repinning moves the item between the bar and the overflow popup, which
+            // destroys whatever this menu is anchored to. Close first, then toggle.
+            releaseAction: () => {
+                const target = root.pinTarget;
+                root.close();
+                TrayService.togglePin(target);
+            }
 
             contentItem: RowLayout {
                 anchors {
@@ -193,7 +203,7 @@ PopupWindow {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: TrayService.isPinned(root.trayItemId) ? Translation.tr("Unpin") : Translation.tr("Pin")
+                    text: TrayService.isPinned(root.pinTarget) ? Translation.tr("Unpin") : Translation.tr("Pin")
                 }
             }
         }

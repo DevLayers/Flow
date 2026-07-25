@@ -53,6 +53,9 @@ LazyLoader {
     property bool _popupHovered: false
     property bool _stickyActive: false
     property bool forceClick: false
+    // Set false when the user of this popup runs its own focus grab. Hyprland honours only
+    // one grab per client, so a second one silently clears the first.
+    property bool selfDismiss: true
     property bool _targetHovered: hoverTarget ? (hoverTarget.containsMouse !== undefined ? hoverTarget.containsMouse : (hoverTarget.hovered !== undefined ? hoverTarget.hovered : false)) : false
     property bool _clickActive: false
     property bool _isClosing: false
@@ -177,7 +180,7 @@ LazyLoader {
         HyprlandFocusGrab {
             id: dismissGrab
             windows: [popupWindow]
-            active: (Config.options.bar.tooltips.clickToShow || root.forceClick) && root._computedActive
+            active: root.selfDismiss && (Config.options.bar.tooltips.clickToShow || root.forceClick) && root._computedActive
                 && popupWindow._dismissGrabArmed
             onCleared: () => {
                 root._clickActive = false;
@@ -277,7 +280,7 @@ LazyLoader {
                 }
             }
             function on_ComputedActiveChanged() {
-                if (root._computedActive) {
+                if (root._computedActive && root.selfDismiss) {
                     popupWindow._dismissGrabArmed = false;
                     dismissGrabArmTimer.restart();
                 } else {
@@ -288,7 +291,7 @@ LazyLoader {
         }
 
         Component.onCompleted: {
-            if (Config.options.bar.tooltips.clickToShow) {
+            if (root.selfDismiss && Config.options.bar.tooltips.clickToShow) {
                 dismissGrabArmTimer.restart();
             }
             popupWindow.animProgress = 0.0;
