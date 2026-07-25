@@ -128,8 +128,20 @@ LazyLoader {
         implicitWidth: popupBackground.targetWidth + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
         implicitHeight: popupBackground.targetHeight + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
 
+        // The input region must not follow the open animation. popupBackground lives inside
+        // animContainer, which carries a Translate transform, and a transform change does not
+        // emit the geometry signals Region listens to — so the committed region can stay stuck
+        // at the animation's starting offset and swallow clicks aimed at the popup's contents.
+        Item {
+            id: maskRect
+            x: popupBackground.x
+            y: popupBackground.y
+            width: popupBackground.width
+            height: popupBackground.height
+        }
+
         mask: Region {
-            item: popupBackground
+            item: maskRect
         }
 
         exclusionMode: ExclusionMode.Ignore
