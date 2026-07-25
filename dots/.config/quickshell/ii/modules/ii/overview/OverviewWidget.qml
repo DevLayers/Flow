@@ -14,6 +14,16 @@ import Quickshell.Hyprland
 Item {
     id: root
     property bool hyprscrollingEnabled: false //FIXME
+    readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
+    readonly property real autoScale: {
+        let cols = Math.max(1, Config.options.overview.columns || 5);
+        let rows = Math.max(1, Config.options.overview.rows || 2);
+        let widthScale = 0.88 / cols;
+        let heightScale = 0.74 / rows;
+        return Math.min(widthScale, heightScale);
+    }
+    readonly property real activeScale: enableManualScale ? Config.options.overview.scale : autoScale
+    property real scale: activeScale
     readonly property real monitorScale: (monitor?.scale > 0) ? monitor.scale : 1
     readonly property real workspaceLayoutScale: root.scale / root.monitorScale
     property int minWorkspaceWidth: (monitorData?.transform % 2 === 1) 
@@ -63,7 +73,6 @@ Item {
     property var windowByAddress: HyprlandData.windowByAddress
     property var windowAddresses: HyprlandData.addresses
     property var monitorData: HyprlandData.monitors.find(m => m.id === root.monitor?.id)
-    property real scale: Config.options.overview.scale
     property color activeBorderColor: Appearance.colors.colSecondary
 
     property real workspaceImplicitWidth: minWorkspaceWidth
@@ -101,8 +110,8 @@ Item {
         return Math.max(max, minWorkspaceWidth);
     }
 
-    // uh oh, workspace number size as a fraction of the workspace preview (monitor-scale independent).
-    readonly property real workspaceNumberPixelSize: Math.min(root.workspaceImplicitWidth, root.workspaceImplicitHeight) * 0.232
+    property real workspaceNumberMargin: 80
+    readonly property real workspaceNumberPixelSize: Math.min(root.workspaceImplicitWidth, root.workspaceImplicitHeight) * 0.36
     property int workspaceZ: 0
     property int windowZ: 1
     property int windowDraggingZ: 99999
@@ -210,7 +219,7 @@ Item {
                                 font {
                                     pixelSize: root.workspaceNumberPixelSize
                                     weight: Font.DemiBold
-                                    family: Appearance.font.family.expressive
+                                    family: Appearance.font.family.numbers
                                 }
                                 color: ColorUtils.transparentize(Appearance.colors.colOnLayer1, 0.8)
                                 horizontalAlignment: Text.AlignHCenter

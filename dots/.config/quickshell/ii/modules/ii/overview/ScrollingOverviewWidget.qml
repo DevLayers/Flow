@@ -22,7 +22,9 @@ Item {
 
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
     readonly property real monitorScale: (monitor?.scale > 0) ? monitor.scale : 1
-    readonly property real overviewWindowScale: Config.options.overview.scale * 1.25 // ~classic overview size
+    readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
+    readonly property real autoScale: 0.26
+    readonly property real overviewWindowScale: enableManualScale ? (Config.options.overview.scale * 1.25) : root.autoScale
     readonly property real workspaceLayoutScale: overviewWindowScale / monitorScale
     readonly property int hyprlandMonitorIndex: {
         if (!monitor || !monitor.name) return 0;

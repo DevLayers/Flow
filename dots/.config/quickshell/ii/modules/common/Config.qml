@@ -62,6 +62,14 @@ Singleton {
         obj[keys[keys.length - 1]] = convertedValue;
     }
 
+    // Persist options immediately (e.g. kill dialog "Always" in a short-lived process).
+    function saveOptionsNow() {
+        root.blockWrites = false;
+        if (!root.ready)
+            return;
+        configFileView.writeAdapter();
+    }
+
     Timer {
         id: fileReloadTimer
         interval: root.readWriteDelay
@@ -564,6 +572,12 @@ Singleton {
                             property string text: ""
                         }
                     }
+                    property JsonObject nagasaki_text: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                    }
                     property JsonObject media: JsonObject {
                         property bool enable: true
                         property string style: "circular" // circular, expressive
@@ -804,6 +818,27 @@ Singleton {
                         property real y: 200
                         property bool expressiveColors: false
                     }
+                    property JsonObject ai_chat: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject notes_widget: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject notes_widget_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
                     property JsonObject media_cd: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
@@ -848,6 +883,8 @@ Singleton {
                 property string wallpaperPath: ""
                 property string lockscreenWallpaperPath: ""
                 property bool useSeparateLockscreenWallpaper: false
+                property string lightModeWallpaperPath: ""
+                property bool useSeparateLightModeWallpaper: false
                 property string thumbnailPath: ""
                 property bool hideWhenFullscreen: true
                 property bool useWallpaperEngine: false
@@ -1511,6 +1548,7 @@ Singleton {
                 property bool openingZoomAnimation: true
                 property bool darkenScreen: true
                 property real clickthroughOpacity: 0.8
+                property list<string> buttons: ["crosshair", "recorder", "media", "volumeMixer", "resources"]
                 property JsonObject floatingImage: JsonObject {
                     property string imageSource: "https://media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif"
                     property real scale: 0.5
@@ -1530,7 +1568,8 @@ Singleton {
             property JsonObject overview: JsonObject {
                 property bool enable: true
                 property bool showWindowPreviews: true
-                property real scale: 0.18 // Relative to screen size
+                property bool enableManualScale: false
+                property real scale: 0.18 // Relative to screen size (used when enableManualScale is true)
                 property real rows: 2
                 property real columns: 5
                 property bool orderRightLeft: false
@@ -1611,7 +1650,7 @@ Singleton {
                 property bool showItemId: false
                 property bool invertPinnedItems: true // Makes the below a whitelist for the tray and blacklist for the pinned area
                 property list<var> pinnedItems: ["Fcitx"]
-                property bool filterPassive: true
+                property bool filterPassive: false
             }
 
             // Settings app memory management. After the user closes the
