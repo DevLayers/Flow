@@ -49,6 +49,23 @@ ContentPage {
         icon: "ad"
         title: Translation.tr("Active Window")
 
+        TipBox {
+            Layout.fillWidth: true
+            isFirst: true
+            text: Translation.tr(
+                "When off: the bar on the monitor you are using shows the focused window; bars on other monitors show the largest window on that workspace (or Workspace when empty). "
+                + "When on: every bar shows the same globally focused window.")
+        }
+
+        ConfigSwitch {
+            buttonIcon: "desktop_windows"
+            text: Translation.tr("Show focused window on every monitor")
+            checked: Config.options.bar.activeWindow.showOnAllMonitors
+            onCheckedChanged: {
+                Config.options.bar.activeWindow.showOnAllMonitors = checked;
+            }
+        }
+
         ConfigSwitch {
             buttonIcon: "crop_free"
             text: Translation.tr("Use fixed size")
