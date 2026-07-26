@@ -24,34 +24,14 @@ QtObject {
     // ── Radius ────────────────────────────────────────────────────────────────
     readonly property real startRadius: {
         if (barGroupStyle === 1) return Appearance.rounding.windowRounding;
-        if (barSection === 0) {
-            return originalIndex === 0
-                ? Appearance.rounding.full
-                : Appearance.rounding.verysmall;
-        } else if (barSection === 2) {
-            const hasLeft = list.slice(0, originalIndex).some(i => i.visible !== false);
-            return hasLeft ? Appearance.rounding.verysmall : Appearance.rounding.full;
-        } else { // center
-            if (list.length === 1) return Appearance.rounding.full;
-            const hasLeft = list.slice(0, originalIndex).some(i => i.visible !== false);
-            return hasLeft ? Appearance.rounding.verysmall : Appearance.rounding.full;
-        }
+        const hasLeft = list.slice(0, originalIndex).some(i => i.visible !== false);
+        return hasLeft ? Appearance.rounding.verysmall : Appearance.rounding.full;
     }
 
     readonly property real endRadius: {
         if (barGroupStyle === 1) return Appearance.rounding.windowRounding;
-        if (barSection === 2) {
-            return originalIndex === list.length - 1
-                ? Appearance.rounding.full
-                : Appearance.rounding.verysmall;
-        } else if (barSection === 0) {
-            const hasRight = list.slice(originalIndex + 1).some(i => i.visible !== false);
-            return hasRight ? Appearance.rounding.verysmall : Appearance.rounding.full;
-        } else { // center
-            if (list.length === 1) return Appearance.rounding.full;
-            const hasRight = list.slice(originalIndex + 1).some(i => i.visible !== false);
-            return hasRight ? Appearance.rounding.verysmall : Appearance.rounding.full;
-        }
+        const hasRight = list.slice(originalIndex + 1).some(i => i.visible !== false);
+        return hasRight ? Appearance.rounding.verysmall : Appearance.rounding.full;
     }
 
     // ── Colors ────────────────────────────────────────────────────────────────

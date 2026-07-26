@@ -14,11 +14,38 @@ Singleton {
     property alias sidebarRightOpen: root.dashboardPanelOpen // Until all sidebars naming is fixed
 
     property bool barOpen: true
+    property int mediaModeCount: 0
+    readonly property bool mediaModeActive: mediaModeCount > 0
+    property var mediaModeMonitors: []
+
+    function setMediaModeActiveForScreen(screenName, active) {
+        if (!screenName) return;
+        var list = mediaModeMonitors.slice();
+        var index = list.indexOf(screenName);
+        if (active && index === -1) {
+            list.push(screenName);
+        } else if (!active && index !== -1) {
+            list.splice(index, 1);
+        }
+        mediaModeMonitors = list;
+    }
+
+    function isMediaModeActiveForScreen(screenName) {
+        if (!Config.options.background.mediaMode.togglePerMonitor) {
+            return mediaModeActive;
+        }
+        if (!screenName) return false;
+        return mediaModeMonitors.includes(screenName);
+    }
     property bool alarmRinging: false
     property bool cheatsheetOpen: false
     property bool crosshairOpen: false
+    property bool notesOpen: false
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
+    // Names of screens currently blacked out by the OLED saver overlay. Independent
+    // per monitor: toggling one monitor doesn't affect the others.
+    property var oledSaverMonitors: []
     property bool osdBrightnessOpen: false
     property bool osdVolumeOpen: false
     property bool oskOpen: false
@@ -34,6 +61,8 @@ Singleton {
     property bool regionSelectorOpen: false
     property bool searchOpen: false
     property bool screenLocked: false
+    property bool lockScreenCentered: false
+    property bool lockAnimationActive: false
     property bool workspaceRestoreInProgress: false
     property bool capsLockActive: false
     property bool screenLockContainsCharacters: false
@@ -46,6 +75,7 @@ Singleton {
     property bool superDown: false
     property bool superReleaseMightTrigger: true
     property bool wallpaperSelectorOpen: false
+    property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
     property bool workspaceShowNumbers: false
     property bool filePickerOpen: false
     property bool videoEditorPopupOpen: false
@@ -327,9 +357,20 @@ Singleton {
         }
     }
 
+    property real _lastPoliciesWidth: Appearance.sizes.sidebarWidth + 300
+
+    onPoliciesWidthChanged: {
+        if (Config.ready && !policiesExtended) {
+            _lastPoliciesWidth = policiesWidth;
+        }
+    }
+
     readonly property real policiesWidth: {
         if (policiesExtended)
             return Appearance.sizes.sidebarWidthExtended;
+
+        if (!Config.ready)
+            return _lastPoliciesWidth;
 
         const p = Config.options.policies;
         let activeCount = 0;
@@ -419,34 +460,51 @@ Singleton {
 
     onLeftSidebarTargetWidthChanged: {
         leftSidebarAnimation.stop();
+        if ((Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25) {
+            animatedLeftSidebarWidth = leftSidebarTargetWidth;
+            return;
+        }
         if (leftSidebarTargetWidth > 0) {
             leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             leftSidebarAnimation.easing.type = Easing.OutQuart;
+            leftSidebarAnimation.to = leftSidebarTargetWidth;
+            leftSidebarAnimation.start();
         } else {
             leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             leftSidebarAnimation.easing.type = Easing.OutQuart;
+            leftSidebarAnimation.to = leftSidebarTargetWidth;
+            leftSidebarAnimation.start();
         }
-        leftSidebarAnimation.to = leftSidebarTargetWidth;
-        leftSidebarAnimation.start();
     }
 
     onRightSidebarTargetWidthChanged: {
         rightSidebarAnimation.stop();
+        if ((Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25) {
+            animatedRightSidebarWidth = rightSidebarTargetWidth;
+            return;
+        }
         if (rightSidebarTargetWidth > 0) {
             rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             rightSidebarAnimation.easing.type = Easing.OutQuart;
+            rightSidebarAnimation.to = rightSidebarTargetWidth;
+            rightSidebarAnimation.start();
         } else {
             rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             rightSidebarAnimation.easing.type = Easing.OutQuart;
+            rightSidebarAnimation.to = rightSidebarTargetWidth;
+            rightSidebarAnimation.start();
         }
-        rightSidebarAnimation.to = rightSidebarTargetWidth;
-        rightSidebarAnimation.start();
     }
 
     Component.onCompleted: {
         animatedLeftSidebarWidth = leftSidebarTargetWidth;
         animatedRightSidebarWidth = rightSidebarTargetWidth;
         root.enforceSidebarStyle();
+        // Instantiate sidebars immediately on startup on the primary/focused screen to keep them warm
+        Qt.callLater(() => {
+            root.activeLeftSidebarMonitor = Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "";
+            root.activeRightSidebarMonitor = Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "";
+        });
     }
 
     property bool dashboardPanelOpen: false // formerly sidebarRightOpen
@@ -525,28 +583,33 @@ Singleton {
         root.overviewOpen = true;
     }
 
-    onOverviewOpenChanged: {
-        if (root.overviewOpen && (root.searchConnectActive || Config.options.bar.floatingNotch.enable) && root.activeSearchMonitor === "") {
-            root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? "";
+    Timer {
+        id: resetSearchOnlyModeTimer
+        interval: 300
+        repeat: false
+        onTriggered: {
+            if (!root.overviewOpen) {
+                root.searchOnlyMode = false;
+            }
         }
-        if (!root.overviewOpen && (root.searchConnectActive || Config.options.bar.floatingNotch.enable)) {
+    }
+
+    onOverviewOpenChanged: {
+        if (root.overviewOpen) {
+            resetSearchOnlyModeTimer.stop();
+            if (root.activeSearchMonitor === "") {
+                root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? "";
+            }
+        } else {
             root.activeSearchMonitor = "";
-            // Overview.qml's PanelWindow (which resets searchOnlyMode) is inactive in
-            // connect mode — reset it here so the next SUPER press opens the full overview.
-            root.searchOnlyMode = false;
+            resetSearchOnlyModeTimer.start();
         }
     }
 
     onAnimatedLeftSidebarWidthChanged: {
-        if (animatedLeftSidebarWidth === 0 && !policiesPanelOpen) {
-            root.activeLeftSidebarMonitor = "";
-        }
     }
 
     onAnimatedRightSidebarWidthChanged: {
-        if (animatedRightSidebarWidth === 0 && !dashboardPanelOpen) {
-            root.activeRightSidebarMonitor = "";
-        }
     }
 
     onPoliciesPanelOpenChanged: {

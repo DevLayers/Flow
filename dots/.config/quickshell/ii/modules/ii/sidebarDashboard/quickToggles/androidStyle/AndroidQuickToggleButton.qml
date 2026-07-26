@@ -60,6 +60,15 @@ Item {
     property var mainAction: toggleModel?.mainAction ?? null
     property var altAction: toggleModel?.hasMenu ? (() => root.openMenu()) : (toggleModel?.altAction ?? null)
 
+    // Optional custom layout for 2x2 size — set by subclasses to override ios2x2Layout
+    property Component wide2x2OverrideComponent: null
+
+    // Optional custom layout for 1x2 (tall) size — set by subclasses to override tallLayout
+    property Component tall1x2OverrideComponent: null
+
+    // Optional background icon for wifi signal effect (ghost behind foreground)
+    property string backgroundIcon: ""
+
     // Edit mode state
     property bool editMode: false
     property bool isUnused: false // injected by delegate chooser
@@ -71,28 +80,48 @@ Item {
     property var panel: null
     property var gridRef: null
 
-    // Entrance animation
+    // Entrance animation (Reorder animation effect - tuned delay & full opacity fade)
     property int entranceTrigger: -1
     property real _entranceOpacity: 0
-    property real _entranceScale: 0.85
-    property real _entranceTranslateY: 20
+    property real _entranceScale: 0.92
+    property real _entranceOffsetX: ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18)
+    property real _entranceOffsetY: ((buttonIndex % 2 === 0) ? -12 : 12)
     property bool _entranceDone: false
+    readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
 
     onEntranceTriggerChanged: {
+        if (_animationsDisabled) {
+            _entranceDone = true;
+            _entranceOpacity = 1;
+            _entranceScale = 1;
+            _entranceOffsetX = 0;
+            _entranceOffsetY = 0;
+            return;
+        }
         _entranceDone = false;
         _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
+        _entranceScale = 0.92;
+        _entranceOffsetX = ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18);
+        _entranceOffsetY = ((buttonIndex % 2 === 0) ? -12 : 12);
         Qt.callLater(function() {
             entranceAnim.start();
         });
     }
 
     Component.onCompleted: {
+        if (_animationsDisabled) {
+            _entranceDone = true;
+            _entranceOpacity = 1;
+            _entranceScale = 1;
+            _entranceOffsetX = 0;
+            _entranceOffsetY = 0;
+            return;
+        }
         _entranceDone = false;
         _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
+        _entranceScale = 0.92;
+        _entranceOffsetX = ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18);
+        _entranceOffsetY = ((buttonIndex % 2 === 0) ? -12 : 12);
         Qt.callLater(function() {
             entranceAnim.start();
         });
@@ -100,11 +129,12 @@ Item {
 
     SequentialAnimation {
         id: entranceAnim
-        PauseAnimation { duration: Math.min(Math.max(root.buttonIndex, 0), 15) * 35 }
+        PauseAnimation { duration: 80 + Math.min(Math.max(root.buttonIndex, 0), 15) * 25 }
         ParallelAnimation {
-            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_entranceScale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 300; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceScale"; from: 0.92; to: 1.0; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
+            NumberAnimation { target: root; property: "_entranceOffsetX"; from: ((root.buttonIndex % 3 === 0) ? -18 : (root.buttonIndex % 3 === 1) ? 0 : 18); to: 0; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
+            NumberAnimation { target: root; property: "_entranceOffsetY"; from: ((root.buttonIndex % 2 === 0) ? -12 : 12); to: 0; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
         }
         PropertyAction { target: root; property: "_entranceDone"; value: true }
     }
@@ -116,7 +146,9 @@ Item {
 
     Connections {
         target: root.panel
-        ignoreUnknownSignals: true
+        function onDragScrollPageChanged(newPage) {
+            // Drag scroll handler
+        }
         function onCurrentPageChanged() {
             if (root.panel && root.panel.currentPage === root.pageIndex && root.pageIndex !== -1) {
                 pageEntranceAnimation.restart();
@@ -166,16 +198,16 @@ Item {
         id: visualButton
         
         parent: root.pageIndex === -1 ? root : (root.parent ? root.parent.parent : root)
-        
+
         x: root.isDragging ? dragAbsX : (root.pageIndex === -1 ? 0 : (root.parent ? root.parent.x + root.x : root.x))
         y: root.isDragging ? dragAbsY : (root.pageIndex === -1 ? 0 : (root.parent ? root.parent.y + root.y : root.y))
         
         Behavior on x {
-            enabled: !root.isDragging
+            enabled: !root.isDragging && !entranceAnim.running
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
         Behavior on y {
-            enabled: !root.isDragging
+            enabled: !root.isDragging && !entranceAnim.running
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
         
@@ -198,9 +230,10 @@ Item {
             return 1.0;
         }
         z: root.isDragging ? 99 : 1
-        
+
         transform: Translate {
-            y: root._entranceDone ? 0 : root._entranceTranslateY
+            x: root._entranceDone ? 0 : root._entranceOffsetX
+            y: root._entranceDone ? 0 : root._entranceOffsetY
         }
         
         Behavior on scale {
@@ -236,7 +269,7 @@ Item {
 
         onClicked: {
             if (is3WaySlider) return;
-            if (root.expandedSize && root.altAction)
+            if ((root.expandedSize || root.isTall) && root.altAction)
                 root.altAction();
             else
                 root.mainAction();
@@ -246,7 +279,9 @@ Item {
             id: contentItemLoader
             anchors.fill: parent
             sourceComponent: is3WaySlider ? threeWaySliderLayout
+                           : (root.isWide && root.isTall && root.wide2x2OverrideComponent) ? root.wide2x2OverrideComponent
                            : (root.isWide && root.isTall) ? ios2x2Layout
+                           : (root.isTall && !root.isWide && root.tall1x2OverrideComponent) ? root.tall1x2OverrideComponent
                            : (root.isTall && !root.isWide) ? tallLayout
                            : standardLayout
         }
@@ -257,33 +292,65 @@ Item {
             anchors.fill: parent
             anchors.margins: 4
 
-            Rectangle {
-                id: tallIconBg
+            MouseArea {
+                id: tallIconMouseArea
                 width: 54
                 height: 54
                 anchors.top: parent.top
                 anchors.topMargin: 4
                 anchors.horizontalCenter: parent.horizontalCenter
-                radius: width / 2
-                color: root.toggled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
+                hoverEnabled: true
+                acceptedButtons: root.altAction ? Qt.LeftButton : Qt.NoButton
+                cursorShape: Qt.PointingHandCursor
 
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(tallIconBg)
-                }
+                onClicked: root.mainAction()
 
-                Item {
-                    width: parent.width
-                    height: parent.width // 54x54, matching the top circle of the pill
-                    anchors.top: parent.top
+                Rectangle {
+                    id: tallIconBg
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: root.toggled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
 
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        fill: root.toggled ? 1 : 0
-                        iconSize: 26
-                        color: root.toggled ? Appearance.colors.colOnPrimary : visualButton.colIcon
-                        text: root.buttonIcon
-                        Behavior on color {
-                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(tallIconBg)
+                    }
+
+                    Item {
+                        width: parent.width
+                        height: parent.width // 54x54, matching the top circle of the pill
+                        anchors.top: parent.top
+
+                        MaterialSymbol {
+                            visible: root.backgroundIcon !== ""
+                            anchors.centerIn: parent
+                            iconSize: 26
+                            opacity: 0.3
+                            color: root.toggled ? Appearance.colors.colOnPrimary : visualButton.colIcon
+                            text: root.backgroundIcon
+                        }
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            fill: root.toggled ? 1 : 0
+                            iconSize: 26
+                            color: root.toggled ? Appearance.colors.colOnPrimary : visualButton.colIcon
+                            text: root.buttonIcon
+                            Behavior on color {
+                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                            }
+                        }
+                    }
+
+                    // Hover/Press state layer
+                    Loader {
+                        anchors.fill: parent
+                        active: root.altAction
+                        sourceComponent: Rectangle {
+                            radius: tallIconBg.radius
+                            color: ColorUtils.transparentize(visualButton.colIcon, tallIconMouseArea.containsPress ? 0.88 : tallIconMouseArea.containsMouse ? 0.95 : 1)
+                            Behavior on color {
+                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                            }
                         }
                     }
                 }
@@ -362,6 +429,15 @@ Item {
 
                     Behavior on color {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+
+                    MaterialSymbol {
+                        visible: root.backgroundIcon !== ""
+                        anchors.centerIn: parent
+                        iconSize: 22
+                        opacity: 0.3
+                        color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                        text: root.backgroundIcon
                     }
 
                     MaterialSymbol {
@@ -478,6 +554,15 @@ Item {
                     }
                     Behavior on color {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+
+                    MaterialSymbol {
+                        visible: root.backgroundIcon !== ""
+                        anchors.centerIn: parent
+                        iconSize: root.isWide ? 22 : 24
+                        opacity: 0.3
+                        color: visualButton.colIcon
+                        text: root.backgroundIcon
                     }
 
                     MaterialSymbol {

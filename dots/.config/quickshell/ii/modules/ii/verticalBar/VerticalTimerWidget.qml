@@ -17,10 +17,11 @@ Item {
     property bool showPomodoro: Config.options.bar.timers.showPomodoro
     property bool showStopwatch: Config.options.bar.timers.showStopwatch
 
-    implicitWidth: Appearance.sizes.verticalBarWidth
-    implicitHeight: columnLayout.implicitHeight + columnLayout.spacing * 4
-
     property bool compVisible: ((hasStop || sRunning) && root.showStopwatch) || ((pRunning || hasPomo) && root.showPomodoro)
+
+    visible: compVisible
+    implicitWidth: compVisible ? Appearance.sizes.verticalBarWidth : 0
+    implicitHeight: compVisible ? (columnLayout.implicitHeight + columnLayout.spacing * 4) : 0
 
     onCompVisibleChanged: rootItem.toggleVisible(compVisible)
     Component.onCompleted: {

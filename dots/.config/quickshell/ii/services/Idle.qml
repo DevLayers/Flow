@@ -12,18 +12,25 @@ Singleton {
 
     readonly property string _sessionId: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || ""
 
+    // "never" | "session" | "always" — see Config.options.idle.persistInhibit
+    readonly property string persistScope: (Config.options && Config.options.idle && Config.options.idle.persistInhibit) ? Config.options.idle.persistInhibit : "session"
+
     Timer {
         id: restoreTimer
         interval: 0
         repeat: false
         onTriggered: {
-            if (!Persistent.ready) return
-            const storedId = Persistent.states.idle.sessionId || ""
-            if (storedId === root._sessionId) {
-                root.inhibit = Persistent.states.idle.inhibit ?? false
-            } else {
-                root.inhibit = false
+            if (!Persistent.ready || !Config.ready) return;
+            if (root.persistScope === "never") {
+                root.inhibit = false;
+                return;
             }
+            const storedId = Persistent.states.idle.sessionId || "";
+            if (root.persistScope === "session" && storedId !== root._sessionId) {
+                root.inhibit = false;
+                return;
+            }
+            root.inhibit = Persistent.states.idle.inhibit ?? false;
         }
     }
 
@@ -31,6 +38,14 @@ Singleton {
         target: Persistent
         function onReadyChanged() { restoreTimer.restart() }
     }
+
+    Connections {
+        target: Config
+        function onReadyChanged() { restoreTimer.restart() }
+    }
+
+    // Both singletons may already be ready by the time this one loads
+    Component.onCompleted: restoreTimer.restart()
 
     function toggleInhibit(active = null) {
         root.inhibit = active !== null ? active : !root.inhibit

@@ -34,12 +34,10 @@ AbstractBackgroundWidget {
         if (root.styleOverride !== "") return root.styleOverride;
         return GlobalStates.screenLocked ? Config.options.background.widgets.clock.styleLocked : Config.options.background.widgets.clock.style;
     }
-    readonly property bool shouldShow: (!Config.options.background.widgets.clock.showOnlyWhenLocked || GlobalStates.screenLocked)
     property bool wallpaperSafetyTriggered: false
 
     visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "clock")
     opacity: {
-        if (!root.shouldShow) return 0;
         if (root.lockBehavior === "lockOnly") return GlobalStates.screenLocked ? 1 : 0;
         if (GlobalStates.screenLocked && !visibleWhenLocked) return 0;
         return 1;
@@ -66,7 +64,7 @@ AbstractBackgroundWidget {
             id: cookieClockLoader
             anchors.horizontalCenter: parent.horizontalCenter
             active: root.clockStyle === "cookie"
-            visible: active && (root.shouldShow)
+            visible: active
             sourceComponent: Column {
                 spacing: 10
                 CookieClock {
@@ -84,7 +82,7 @@ AbstractBackgroundWidget {
             id: digitalClockLoader
             anchors.horizontalCenter: parent.horizontalCenter
             active: root.clockStyle === "digital"
-            visible: active && (root.shouldShow)
+            visible: active
             sourceComponent: DigitalClock {
                 colText: root.colText
                 colTextSecondary: root.colTextSecondary
@@ -97,7 +95,7 @@ AbstractBackgroundWidget {
             id: nagasakiClockLoader
             anchors.horizontalCenter: parent.horizontalCenter
             active: root.clockStyle === "nagasaki"
-            visible: active && (root.shouldShow)
+            visible: active
             sourceComponent: NagasakiClock {}
         }
 
@@ -105,7 +103,7 @@ AbstractBackgroundWidget {
             id: dialClockLoader
             anchors.horizontalCenter: parent.horizontalCenter
             active: root.clockStyle === "dial"
-            visible: active && (root.shouldShow)
+            visible: active
             sourceComponent: DialClock {}
         }
 

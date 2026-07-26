@@ -17,10 +17,11 @@ Item {
     property bool trayOverflowOpen: false
     property bool showSeparator: true
     property bool showOverflowMenu: true
+    property bool circleItems: false
     property var activeMenu: null
 
-    property list<var> pinnedItems: TrayService.pinnedItems
-    property list<var> unpinnedItems: TrayService.unpinnedItems
+    property var pinnedItems: TrayService.pinnedItems
+    property var unpinnedItems: TrayService.unpinnedItems
     onPinnedItemsChanged: updateVisibility()
     onUnpinnedItemsChanged: updateVisibility()
 
@@ -33,26 +34,33 @@ Item {
         }
     }
 
+    readonly property var overflowWindow: trayOverflowLayout.QsWindow ? trayOverflowLayout.QsWindow.window : null
+
     function grabFocus() {
-        focusGrab.active = true;
+        focusGrab.wanted = true;
+    }
+
+    function closeActiveMenu() {
+        if (!sysTrayRoot.activeMenu)
+            return;
+        if (typeof sysTrayRoot.activeMenu.close === "function")
+            sysTrayRoot.activeMenu.close();
+        sysTrayRoot.activeMenu = null;
     }
 
     function setExtraWindowAndGrabFocus(window) {
-        if (sysTrayRoot.activeMenu && sysTrayRoot.activeMenu !== window) {
-            if (typeof sysTrayRoot.activeMenu.close === "function")
-                sysTrayRoot.activeMenu.close();
-            sysTrayRoot.activeMenu = null;
-        }
+        if (sysTrayRoot.activeMenu && sysTrayRoot.activeMenu !== window)
+            sysTrayRoot.closeActiveMenu();
         sysTrayRoot.activeMenu = window;
         sysTrayRoot.grabFocus();
     }
 
     function releaseFocus() {
-        focusGrab.active = false;
+        focusGrab.wanted = false;
     }
 
     function closeOverflowMenu() {
-        focusGrab.active = false;
+        focusGrab.wanted = false;
     }
 
     onTrayOverflowOpenChanged: {
@@ -63,14 +71,19 @@ Item {
 
     HyprlandFocusGrab {
         id: focusGrab
-        active: false
-        windows: [trayOverflowLayout.QsWindow?.window, sysTrayRoot.activeMenu]
+        property bool wanted: false
+
+        // The popup window only exists a moment after trayOverflowOpen flips, so grabbing
+        // eagerly would start a grab with no windows in it — Hyprland clears those
+        // immediately and the popup would snap shut before it finished opening.
+        active: wanted && (sysTrayRoot.overflowWindow !== null || sysTrayRoot.activeMenu !== null)
+        windows: [sysTrayRoot.overflowWindow, sysTrayRoot.activeMenu]
         onCleared: {
+            // Close the menu before collapsing the overflow popup: the menu window is
+            // anchored to an item living inside that popup, so tearing the popup down
+            // first leaves the anchor pointing into a destroyed window.
+            sysTrayRoot.closeActiveMenu();
             sysTrayRoot.trayOverflowOpen = false;
-            if (sysTrayRoot.activeMenu) {
-                sysTrayRoot.activeMenu.close();
-                sysTrayRoot.activeMenu = null;
-            }
         }
     }
 
@@ -78,8 +91,8 @@ Item {
         id: gridLayout
         columns: sysTrayRoot.vertical ? 1 : -1
         anchors.fill: parent
-        rowSpacing: 8
-        columnSpacing: 15
+        rowSpacing: sysTrayRoot.circleItems ? 4 : 8
+        columnSpacing: sysTrayRoot.circleItems ? 4 : 15
 
         RippleButton {
             id: trayOverflowButton
@@ -113,6 +126,10 @@ Item {
             StyledPopup {
                 id: overflowPopup
                 hoverTarget: trayOverflowButton
+                forceClick: true
+                // We run our own focus grab below, which also has to cover the tray menu
+                // window. A second grab from the popup would clear ours and snap it shut.
+                selfDismiss: false
                 active: sysTrayRoot.trayOverflowOpen && sysTrayRoot.unpinnedItems.length > 0
 
                 GridLayout {
@@ -143,14 +160,32 @@ Item {
                 values: sysTrayRoot.pinnedItems
             }
 
-            delegate: SysTrayItem {
+            delegate: Item {
+                id: circleDelegate
                 required property SystemTrayItem modelData
-                item: modelData
-                Layout.fillHeight: !sysTrayRoot.vertical
-                Layout.fillWidth: sysTrayRoot.vertical
-                onMenuClosed: sysTrayRoot.releaseFocus()
-                onMenuOpened: qsWindow => {
-                    sysTrayRoot.setExtraWindowAndGrabFocus(qsWindow);
+                property bool useCircle: sysTrayRoot.circleItems
+                Layout.fillHeight: !sysTrayRoot.vertical && !useCircle
+                Layout.fillWidth: sysTrayRoot.vertical && !useCircle
+                implicitWidth: useCircle ? 26 : trayItem.implicitWidth
+                implicitHeight: useCircle ? 26 : trayItem.implicitHeight
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.width
+                    height: parent.height
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colPrimaryContainer
+                    visible: circleDelegate.useCircle
+                }
+
+                SysTrayItem {
+                    id: trayItem
+                    anchors.centerIn: parent
+                    item: circleDelegate.modelData
+                    onMenuClosed: sysTrayRoot.releaseFocus()
+                    onMenuOpened: qsWindow => {
+                        sysTrayRoot.setExtraWindowAndGrabFocus(qsWindow);
+                    }
                 }
             }
         }

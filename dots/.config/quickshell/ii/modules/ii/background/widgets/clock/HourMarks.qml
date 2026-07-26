@@ -11,8 +11,8 @@ Item {
     property real implicitSize: 135
     property real markLength: 12
     property real markWidth: 4
-    property color color: Appearance.colors.colOnSecondaryContainer
-    property color colOnBackground: Appearance.colors.colSecondaryContainer
+    property color color: WidgetColorScheme.accentColor
+    property color colOnBackground: WidgetColorScheme.pillFillColor
     property real padding: 8
 
     Rectangle {

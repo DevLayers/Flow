@@ -40,14 +40,14 @@ ShellRoot {
         // runs its Component.onCompleted, which starts the DBus monitor,
         // pgrep polling, and ADB probing. For users who don't use phone
         // integration this is pure overhead.
-        if (Config.options?.policies?.phone !== 0) {
+        if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
         }
         root.applyOpenRgbIfEnabled();
     }
 
     // Panel families
-    property list<string> families: ["ii", "waffle"]
+    property var families: ["ii", "waffle"]
     function cyclePanelFamily() {
         const currentIndex = families.indexOf(Config.options.panelFamily);
         const nextIndex = (currentIndex + 1) % families.length;
@@ -59,9 +59,9 @@ ShellRoot {
             return;
         if (!Config.ready)
             return;
-        if (!Config.options?.appearance?.openrgb?.enable)
+        if (!(Config.options && Config.options.appearance && Config.options.appearance.openrgb && Config.options.appearance.openrgb.enable))
             return;
-        if (!Config.options?.appearance?.openrgb?.applyOnStartup)
+        if (!(Config.options && Config.options.appearance && Config.options.appearance.openrgb && Config.options.appearance.openrgb.applyOnStartup))
             return;
         openRgbStartupApplied = true;
         openRgbApplyProc.command = ["python", openRgbApplyScript];
@@ -112,7 +112,7 @@ ShellRoot {
         // keep the warm component.
         Timer {
             id: settingsUnloadTimer
-            interval: Math.max(0, (Config.options?.settingsApp?.unloadAfterSeconds ?? 300)) * 1000
+            interval: Math.max(0, (Config.options && Config.options.settingsApp && Config.options.settingsApp.unloadAfterSeconds !== undefined ? Config.options.settingsApp.unloadAfterSeconds : 300)) * 1000
             repeat: false
             onTriggered: {
                 if (GlobalStates.settingsOpen)
@@ -129,7 +129,7 @@ ShellRoot {
                     if (!settingsLoader.loadedOnce)
                         settingsLoader.loadedOnce = true
                 } else {
-                    const s = Config.options?.settingsApp?.unloadAfterSeconds ?? 300
+                    const s = Config.options && Config.options.settingsApp && Config.options.settingsApp.unloadAfterSeconds !== undefined ? Config.options.settingsApp.unloadAfterSeconds : 300
                     if (s > 0) {
                         settingsUnloadTimer.interval = s * 1000
                         settingsUnloadTimer.restart()
@@ -143,7 +143,7 @@ ShellRoot {
     IpcHandler {
         target: "panelFamily"
 
-        function cycle(): void {
+        function cycle() {
             root.cyclePanelFamily();
         }
     }

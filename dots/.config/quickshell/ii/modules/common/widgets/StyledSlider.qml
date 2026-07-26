@@ -68,9 +68,13 @@ Slider {
     from: 0
     to: 1
 
-    Behavior on value { // This makes the adjusted value (like volume) shift smoothly
-        SmoothedAnimation {
-            velocity: Appearance.animation.elementMoveFast.velocity
+    property int valueAnimationDuration: 0
+
+    Behavior on value {
+        enabled: root.valueAnimationDuration > 0
+        NumberAnimation {
+            duration: root.valueAnimationDuration
+            easing.type: Easing.OutCubic
         }
     }
 
@@ -152,9 +156,10 @@ Slider {
                     frequency: root.waveFrequency
                     fullLength: root.width
                     color: root.highlightColor
-                    amplitudeMultiplier: root.wavy ? 0.5 : 0
+                    lineWidth: Math.max(6, root.trackWidth)
+                    amplitudeMultiplier: root.wavy ? 0.6 : 0
                     width: parent.width
-                    height: root.trackWidth
+                    height: root.trackWidth * 1.5
                     Connections {
                         target: root
                         function onValueChanged() { wavyFill.requestPaint(); }

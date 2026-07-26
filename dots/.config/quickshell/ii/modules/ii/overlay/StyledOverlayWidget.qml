@@ -49,6 +49,7 @@ AbstractOverlayWidget {
     hoverEnabled: true
     property bool resizable: true
     property bool resizing: false
+    property bool dragLocked: false // Set to true by children (e.g. volume sliders) to prevent drag
     property int resizeXDirection: getXResizeDirection(mouseX)
     property int resizeYDirection: getYResizeDirection(mouseY)
     draggable: GlobalStates.overlayOpen
@@ -149,7 +150,8 @@ AbstractOverlayWidget {
     DragHandler {
         id: dragHandler
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-        target: (root.draggable && !root.resizing) ? root : null
+        enabled: root.draggable && !root.resizing && !root.dragLocked
+        target: root
         onActiveChanged: { // Handle drag release
             if (!active) {
                 root.resizing = false;

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import qs.modules.common
+import qs.services
 import QtQuick
 
 Item {
@@ -11,7 +12,7 @@ Item {
     property string style: "medium"
     property real handLength: 95
     property real handWidth: style === "bold" ? 20 : style === "medium" ? 12 : 5
-    property color color: Appearance.colors.colTertiary
+    property color color: WidgetColorScheme.successColor
 
     rotation: -90 + (360 / 60) * root.clockMinute
     Behavior on rotation {

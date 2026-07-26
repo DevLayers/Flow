@@ -336,8 +336,8 @@ Rectangle {
                 text: parent.parent.widgetName
                 elide: Text.ElideRight
                 color: parent.parent.isActive ?
-                Appearance.colors.colOnSecondaryContainer :
-                Appearance.colors.colOnSurface
+                    Appearance.colors.colOnSecondaryContainer :
+                    Appearance.colors.colOnSurface
                 font.pixelSize: Appearance.font.pixelSize.small
             }
 

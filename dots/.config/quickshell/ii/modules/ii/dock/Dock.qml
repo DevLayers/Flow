@@ -59,7 +59,7 @@ Scope {
             required property var modelData
             screen: modelData
             
-            visible: !GlobalStates.screenLocked && !positionChanging 
+            visible: !GlobalStates.screenLocked && !positionChanging && !GlobalStates.oledSaverMonitors.includes(modelData.name) && !GlobalStates.isMediaModeActiveForScreen(modelData ? modelData.name : "")
             // using a flag for positionChanging is not really necessary, but it prevents some graphical issues caused by qml when the dock is moving
 
             readonly property real availableW: screen?.width ?? 1920
@@ -79,7 +79,7 @@ Scope {
                 return monitor.specialWorkspace.name !== "";
             }
 
-            property bool reveal: dock.pinned || (!anySidebarOpen && ((Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen)))
+            property bool reveal: dock.pinned || (!anySidebarOpen && ((Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations
@@ -87,6 +87,10 @@ Scope {
                 const wsId = HyprlandData.activeWorkspace?.id ?? -1
                 if (wsId === -1) return true
                 return HyprlandData.hyprlandClientsForWorkspace(wsId).length === 0
+            }
+
+            readonly property bool isFocusedMonitor: {
+                return (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") === (dockRoot.screen ? dockRoot.screen.name : "")
             }
 
             readonly property var sizing: dock.computeSizes({

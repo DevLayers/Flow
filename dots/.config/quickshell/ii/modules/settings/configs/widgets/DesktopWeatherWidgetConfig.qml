@@ -104,6 +104,8 @@ ContentPage {
                 }
 
                 ConfigSwitch {
+
+                ConfigSwitch {
                     buttonIcon: "wb_sunny"
                     text: Translation.tr("Enable Shadows")
                     checked: Config.options.background.widgets.enableShadows ?? true

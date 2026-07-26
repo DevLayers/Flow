@@ -160,6 +160,19 @@ Singleton {
                 property string sessionId: ""
             }
 
+            property JsonObject keyboardBacklight: JsonObject {
+                property bool idleOffActive: false // Whether the idle monitor is the reason it's off
+                property int savedLevel: 0 // Level to return to once input resumes
+            }
+
+            property JsonObject nightLight: JsonObject {
+                property bool hasManual: false // Whether a manual toggle is currently overriding automatic mode
+                property bool manualActive: false
+                property real manualSetAt: 0 // Epoch ms, used to tell whether the override has expired
+                property int gamma: 100
+                property string sessionId: ""
+            }
+
             property JsonObject overlay: JsonObject {
                 property list<string> open: ["crosshair", "recorder", "media", "volumeMixer", "resources"]
                 property JsonObject crosshair: JsonObject {
@@ -243,6 +256,7 @@ Singleton {
             }
 
             property JsonObject settings: JsonObject {
+                property list<string> collapsedGroups: []
                 property JsonObject fonts: JsonObject {
                     property string main: "Google Sans Flex"
                     property string numbers: "Google Sans Flex"

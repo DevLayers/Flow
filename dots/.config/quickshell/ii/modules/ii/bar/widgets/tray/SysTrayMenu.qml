@@ -1,5 +1,3 @@
-pragma ComponentBehavior: Bound
-
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -7,11 +5,15 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Services.SystemTray
 
 PopupWindow {
     id: root
     required property QsMenuHandle trayItemMenuHandle
+    // Prefer the item over its id: ids are not unique for Electron/Chrome tray icons.
+    property SystemTrayItem trayItem: null
     property string trayItemId: ""
+    readonly property var pinTarget: root.trayItem ?? root.trayItemId
     property real popupBackgroundMargin: 0
 
     signal menuClosed
@@ -20,20 +22,8 @@ PopupWindow {
     color: "transparent"
     property real padding: Appearance.sizes.elevationMargin
 
-    implicitHeight: {
-        let result = 0;
-        for (let child of stackView.children) {
-            result = Math.max(child.implicitHeight, result);
-        }
-        return result + popupBackground.padding * 2 + root.padding * 2;
-    }
-    implicitWidth: {
-        let result = 0;
-        for (let child of stackView.children) {
-            result = Math.max(child.implicitWidth, result);
-        }
-        return result + popupBackground.padding * 2 + root.padding * 2;
-    }
+    implicitHeight: (stackView.currentItem ? stackView.currentItem.implicitHeight : 100) + popupBackground.padding * 2 + root.padding * 2
+    implicitWidth: (stackView.currentItem ? stackView.currentItem.implicitWidth : 200) + popupBackground.padding * 2 + root.padding * 2
 
     function open() {
         root.visible = true;
@@ -104,8 +94,8 @@ PopupWindow {
                 popEnter: NoAnim {}
                 popExit: NoAnim {}
 
-                implicitWidth: currentItem.implicitWidth
-                implicitHeight: currentItem.implicitHeight
+                implicitWidth: currentItem ? currentItem.implicitWidth : 180
+                implicitHeight: currentItem ? currentItem.implicitHeight : 80
 
                 initialItem: SubMenu {
                     handle: root.trayItemMenuHandle
@@ -187,7 +177,15 @@ PopupWindow {
             Layout.fillWidth: true
 
             visible: root.trayItemId !== undefined && root.trayItemId.length > 0 && stackView.depth === 1
-            releaseAction: () => TrayService.togglePin(root.trayItemId);
+            // Repinning moves the item between the bar and the overflow popup, which
+            // destroys whatever this menu is anchored to. Close first, then defer the
+            // toggle so the menu PopupWindow finishes tearing down before its anchor
+            // host is removed from the bar/overflow.
+            releaseAction: () => {
+                const target = root.pinTarget;
+                root.close();
+                Qt.callLater(() => TrayService.togglePin(target));
+            }
 
             contentItem: RowLayout {
                 anchors {
@@ -206,7 +204,7 @@ PopupWindow {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: TrayService.isPinned(root.trayItemId) ? Translation.tr("Unpin") : Translation.tr("Pin")
+                    text: TrayService.isPinned(root.pinTarget) ? Translation.tr("Unpin") : Translation.tr("Pin")
                 }
             }
         }
@@ -222,15 +220,21 @@ PopupWindow {
         Repeater {
             id: menuEntriesRepeater
             property bool iconColumnNeeded: {
-                for (let i = 0; i < menuOpener.children.values.length; i++) {
-                    if (menuOpener.children.values[i].icon.length > 0)
+                if (!menuOpener || !menuOpener.children || !menuOpener.children.values) return false;
+                let vals = menuOpener.children.values;
+                for (let i = 0; i < vals.length; i++) {
+                    let entry = vals[i];
+                    if (entry && entry.icon && entry.icon.length > 0)
                         return true;
                 }
                 return false;
             }
             property bool specialInteractionColumnNeeded: {
-                for (let i = 0; i < menuOpener.children.values.length; i++) {
-                    if (menuOpener.children.values[i].buttonType !== QsMenuButtonType.None)
+                if (!menuOpener || !menuOpener.children || !menuOpener.children.values) return false;
+                let vals = menuOpener.children.values;
+                for (let i = 0; i < vals.length; i++) {
+                    let entry = vals[i];
+                    if (entry && entry.buttonType !== undefined && entry.buttonType !== QsMenuButtonType.None)
                         return true;
                 }
                 return false;

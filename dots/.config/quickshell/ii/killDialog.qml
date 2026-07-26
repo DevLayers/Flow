@@ -92,6 +92,7 @@ ApplicationWindow {
                 onClicked: {
                     Quickshell.execDetached(["killall", ...conflictGroup.programs])
                     conflictGroup.alwaysSelected()
+                    Config.saveOptionsNow()
                     conflictGroup.visible = false
                 }
             }

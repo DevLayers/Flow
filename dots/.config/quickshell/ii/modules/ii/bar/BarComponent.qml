@@ -42,10 +42,7 @@ Item {
     required property int index
     property var originalIndex: index
     property bool vertical: false
-    property bool highlighted: false
-    property color groupBgColor: (groupTheme.activated || groupTheme.highlighted) ? groupTheme.colBackgroundHighlight : groupTheme.colBackground
-    property real groupStartRadius: groupTheme.startRadius
-    property real groupEndRadius: groupTheme.endRadius
+    property bool widgetSelfVisible: true
 
     // ── Smooth Slide and Move Animations ──────────────────────────────────────
     property real oldX: x
@@ -145,31 +142,36 @@ Item {
     readonly property bool isNotchActive: !!modeState && modeState.notchModeEnabled
     readonly property bool isNotchExpanded: !!modeState && modeState.expanded
     readonly property bool isWidgetVisibleInNotch: {
-        if (!isNotchActive) return true;
-        if (isNotchExpanded) return true;
-        
+        if (!isNotchActive)
+            return true;
+        if (isNotchExpanded)
+            return true;
+
         const isAllowed = Config.options.bar.dynamicIsland.notchMode.visibleWidgets.indexOf(modelData.id) !== -1;
-        if (!isAllowed) return false;
+        if (!isAllowed)
+            return false;
 
-        if (modelData.id === modeState._displayMode) return true;
+        if (modelData.id === modeState._displayMode)
+            return true;
 
-        if (barSection !== 1) return false;
+        if (barSection !== 1)
+            return false;
         return modelData.id === modeState._displayMode;
     }
 
-    readonly property real targetWidth: isWidgetVisibleInNotch ? wrapper.implicitWidth : 0
+    readonly property real targetWidth: (rootItem.widgetSelfVisible && (wrapper.itemIsVisible) && isWidgetVisibleInNotch && wrapper.implicitWidth > 0) ? wrapper.implicitWidth : 0
 
     implicitWidth: targetWidth
     Behavior on implicitWidth {
         enabled: !rootItem.isNotchActive || rootItem.isNotchExpanded
         NumberAnimation {
             duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : 250
-            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Easing.OutBack
-            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : null
+            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Easing.OutCubic
+            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : [0, 0, 1, 1]
         }
     }
 
-    opacity: 1.0
+    opacity: targetWidth > 0 ? 1.0 : 0.0
     visible: opacity > 0.01
 
     readonly property bool isNotchMode: isNotchActive && !isNotchExpanded
@@ -203,7 +205,8 @@ Item {
 
     transitions: [
         Transition {
-            from: "hidden"; to: "visible"
+            from: "hidden"
+            to: "visible"
             ParallelAnimation {
                 NumberAnimation {
                     target: verticalTranslation
@@ -220,7 +223,8 @@ Item {
             }
         },
         Transition {
-            from: "visible"; to: "hidden"
+            from: "visible"
+            to: "hidden"
             ParallelAnimation {
                 NumberAnimation {
                     target: verticalTranslation
@@ -242,12 +246,14 @@ Item {
     implicitHeight: wrapper.implicitHeight
 
     // ── Registry ──────────────────────────────────────────────────────────────
-    BarWidgetRegistry { id: registry }
+    BarWidgetRegistry {
+        id: registry
+    }
 
     // Widget style resolution — single source of truth
     readonly property string widgetStyle: registry.getStyle(modelData.id)
     readonly property bool isExpressiveFromRegistry: widgetStyle === "expressive"
-    readonly property bool isMinimal:    widgetStyle === "minimal"
+    readonly property bool isMinimal: widgetStyle === "minimal"
 
     // ── Explicit style checks (HEAD) – keep them for maximum compatibility ──
     readonly property bool isMaterial: {
@@ -265,7 +271,7 @@ Item {
     readonly property bool isExpressive: {
         if (modelData.id === "clock" && Config.options.bar.styles.clock === "expressive")
             return true;
-        if (modelData.id === "music_player" && Config.options.bar.styles.media === "expressive")
+        if (modelData.id === "music_player" && (Config.options.bar.styles.media === "expressive" || Config.options.bar.styles.media === "neural"))
             return true;
         if (modelData.id === "workspaces" && Config.options.bar.styles.workspaces === "expressive")
             return true;
@@ -302,10 +308,12 @@ Item {
 
     // ── Radius convenience aliases (from upstream/dev) ──────────────────────
     property real startRadius: groupTheme.startRadius
-    property real endRadius:   groupTheme.endRadius
+    property real endRadius: groupTheme.endRadius
 
     // ── Theme ─────────────────────────────────────────────────────────────────
-    BarThemes { id: barThemes }
+    BarThemes {
+        id: barThemes
+    }
     property var activeTheme: barThemes.themes[Config.options.bar.expressiveColorTheme] || barThemes.themes["content"]
 
     // ── BarGroup wrapper ──────────────────────────────────────────────────────
@@ -321,26 +329,21 @@ Item {
             horizontalCenter: (rootItem.isNotchMode || rootItem.vertical) ? undefined : rootItem.horizontalCenter
         }
 
-        x: rootItem.isNotchMode
-            ? (rootItem.parent ? (rootItem.parent.width / 2 - rootItem.x - wrapper.implicitWidth / 2) : 0)
-            : 0
+        x: rootItem.isNotchMode ? (rootItem.parent ? (rootItem.parent.width / 2 - rootItem.x - wrapper.implicitWidth / 2) : 0) : 0
 
-        transform: [
-            entryTranslation,
-            moveTranslation,
-            verticalTranslation
-        ]
+        transform: [entryTranslation, moveTranslation, verticalTranslation]
 
-        readonly property bool paddingless: registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial
-        padding:       paddingless ? 0 : 5
-        leftPadding:   paddingless ? 0 : padding
-        rightPadding:  paddingless ? 0 : padding
-        topPadding:    rootItem.vertical ? (paddingless ? 0 : padding) : 0
+        readonly property bool itemIsVisible: rootItem.widgetSelfVisible && (itemLoader.item ? itemLoader.item.visible : false)
+        readonly property bool paddingless: !itemIsVisible || registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
+        padding: paddingless ? 0 : 5
+        leftPadding: paddingless ? 0 : padding
+        rightPadding: paddingless ? 0 : padding
+        topPadding: rootItem.vertical ? (paddingless ? 0 : padding) : 0
         bottomPadding: rootItem.vertical ? (paddingless ? 0 : padding) : 0
 
         startRadius: rootItem.startRadius
-        endRadius:   rootItem.endRadius
-        colBackground: rootItem.isMaterial ? "transparent" : groupTheme.resolvedBackground
+        endRadius: rootItem.endRadius
+        colBackground: (rootItem.isMaterial || rootItem.isExpressive) ? "transparent" : groupTheme.resolvedBackground
 
         Loader {
             id: itemLoader
@@ -371,7 +374,9 @@ Item {
                             item.width = Qt.binding(() => Appearance.sizes.verticalBarWidth - 8);
                         }
 
-                        if (item.implicitWidth === item.implicitHeight) {
+                        if (item.Layout !== undefined && item.Layout.fillHeight) {
+                            item.height = Qt.binding(() => itemLoader.height);
+                        } else if (item.implicitWidth === item.implicitHeight) {
                             item.height = Qt.binding(() => item.width);
                         }
                     }
@@ -390,72 +395,108 @@ Item {
         const isExp = style === "expressive";
         const isMin = style === "minimal";
         switch (id) {
-            case "workspaces":
-                if (isMin) return workspaceCompMinimal;
-                if (isExp) return workspaceCompExpressive;
-                if (style === "dock") return workspaceCompDock;
-                return workspaceComp;
-            case "music_player":
-                if (isExp) return musicPlayerCompExpressive;
-                if (style === "neural") return isVert ? neuralMediaCompVert : neuralMediaComp;
-                return isVert ? musicPlayerCompVert : musicPlayerComp;
-            case "system_monitor":
-                if (isExp) return systemMonitorCompExpressive;
-                return isVert ? systemMonitorCompVert : systemMonitorComp;
-            case "clock":
-                if (isExp) return clockCompExpressive;
-                return isVert ? clockCompVert : clockComp;
-            case "battery":
-                if (isExp) return batteryCompExpressive;
-                return isVert ? batteryCompVert : batteryComp;
-            case "keyboard_layout":
-                if (isExp) return keyboardCompExpressive;
-                return isVert ? keyboardCompVert : keyboardComp;
-            case "utility_buttons":
-                if (isExp) return utilityButtonsCompExpressive;
-                return utilityButtonsComp;
-            case "system_tray":
-                if (isExp) return systemTrayCompExpressive;
-                return systemTrayComp;
-            case "active_window":
-                if (isExp) return activeWindowCompExpressive;
-                return activeWindowComp;
-            case "weather":
-                if (isExp) return weatherCompExpressive;
-                return weatherComp;
-            case "policies_panel_button":
-                if (isExp) return policiesPanelButtonExpressive;
-                return policiesPanelButton;
-            case "dashboard_panel_button":
-                if (isExp) return isVert ? dashboardPanelButtonExpressiveVert : dashboardPanelButtonExpressive;
-                return isVert ? dashboardPanelButtonVert : dashboardPanelButton;
-            case "bluetooth_devices":
-                if (isExp) return bluetoothCompExpressive;
-                return isVert ? bluetoothCompVert : bluetoothComp;
-            case "sports":
-                if (isExp) return sportsCompExpressive;
-                return sportsComp;
-            case "power":
-                if (isExp) return powerCompExpressive;
-                return powerComp;
-            case "date":          return dateCompVert;
-            case "timer":         return isVert ? timerCompVert : timerComp;
-            case "record_indicator":        return recordIndicatorComp;
-            case "phone_scrcpy_indicator":  return phoneScrcpyIndicatorComp;
-            case "screen_share_indicator":  return screenshareIndicatorComp;
-            default:              return null;
+        case "workspaces":
+            if (isMin)
+                return workspaceCompMinimal;
+            if (isExp)
+                return workspaceCompExpressive;
+            if (style === "dock")
+                return workspaceCompDock;
+            return workspaceComp;
+        case "music_player":
+            if (isExp)
+                return musicPlayerCompExpressive;
+            if (style === "neural")
+                return isVert ? neuralMediaCompVert : neuralMediaComp;
+            return isVert ? musicPlayerCompVert : musicPlayerComp;
+        case "system_monitor":
+            if (isExp)
+                return systemMonitorCompExpressive;
+            return isVert ? systemMonitorCompVert : systemMonitorComp;
+        case "clock":
+            if (isExp)
+                return clockCompExpressive;
+            return isVert ? clockCompVert : clockComp;
+        case "battery":
+            if (isExp)
+                return batteryCompExpressive;
+            return isVert ? batteryCompVert : batteryComp;
+        case "keyboard_layout":
+            if (isExp)
+                return keyboardCompExpressive;
+            return isVert ? keyboardCompVert : keyboardComp;
+        case "utility_buttons":
+            if (isExp)
+                return utilityButtonsCompExpressive;
+            return utilityButtonsComp;
+        case "system_tray":
+            if (isExp)
+                return systemTrayCompExpressive;
+            return systemTrayComp;
+        case "active_window":
+            if (isExp)
+                return activeWindowCompExpressive;
+            return activeWindowComp;
+        case "weather":
+            if (isExp)
+                return weatherCompExpressive;
+            return weatherComp;
+        case "policies_panel_button":
+            if (isExp)
+                return policiesPanelButtonExpressive;
+            return policiesPanelButton;
+        case "dashboard_panel_button":
+            if (isExp)
+                return isVert ? dashboardPanelButtonExpressiveVert : dashboardPanelButtonExpressive;
+            return isVert ? dashboardPanelButtonVert : dashboardPanelButton;
+        case "bluetooth_devices":
+            if (isExp)
+                return bluetoothCompExpressive;
+            return isVert ? bluetoothCompVert : bluetoothComp;
+        case "sports":
+            if (isExp)
+                return sportsCompExpressive;
+            return sportsComp;
+        case "power":
+            if (isExp)
+                return powerCompExpressive;
+            return powerComp;
+        case "date":
+            return dateCompVert;
+        case "timer":
+            return isVert ? timerCompVert : timerComp;
+        case "record_indicator":
+            return recordIndicatorComp;
+        case "phone_scrcpy_indicator":
+            return phoneScrcpyIndicatorComp;
+        case "screen_share_indicator":
+            return screenshareIndicatorComp;
+        default:
+            return null;
         }
     }
 
-    // ── Visibility helpers ────────────────────────────────────────────────────
     function toggleVisible(visibility) {
-        if (visible !== visibility) visible = visibility;
+        rootItem.widgetSelfVisible = visibility;
+        if (visible !== visibility)
+            visible = visibility;
         let item = null;
-        if (barSection == 0)      item = Config.options.bar.layouts.left[originalIndex];
-        else if (barSection == 1) item = Config.options.bar.layouts.center[originalIndex];
-        else if (barSection == 2) item = Config.options.bar.layouts.right[originalIndex];
+        if (barSection == 0)
+            item = Config.options.bar.layouts.left[originalIndex];
+        else if (barSection == 1)
+            item = Config.options.bar.layouts.center[originalIndex];
+        else if (barSection == 2)
+            item = Config.options.bar.layouts.right[originalIndex];
         if (item !== undefined && item !== null) {
-            if (item.visible !== visibility) item.visible = visibility;
+            if (item.visible !== visibility) {
+                item.visible = visibility;
+                if (barSection == 0)
+                    Config.options.bar.layouts.left = Config.options.bar.layouts.left;
+                else if (barSection == 1)
+                    Config.options.bar.layouts.center = Config.options.bar.layouts.center;
+                else if (barSection == 2)
+                    Config.options.bar.layouts.right = Config.options.bar.layouts.right;
+            }
         }
     }
 
@@ -466,66 +507,279 @@ Item {
     // ── Group theme ────────────────────────────────────────────────────────────
     BarGroupTheme {
         id: groupTheme
-        barSection:    rootItem.barSection
-        list:          rootItem.list
+        barSection: rootItem.barSection
+        list: rootItem.list
         originalIndex: rootItem.originalIndex
-        isExpressive:  rootItem.isExpressive
-        highlighted:   rootItem.highlighted
-        activated:     itemLoader.item?.activated ?? false
-        activeTheme:   rootItem.activeTheme
-        widgetId:      modelData.id
+        isExpressive: rootItem.isExpressive
+        highlighted: rootItem.highlighted
+        activated: itemLoader.item?.activated ?? false
+        activeTheme: rootItem.activeTheme
+        widgetId: modelData.id
     }
 
     // ── Widget Components ─────────────────────────────────────────────────────
     // Default variants
-    Component { id: weatherComp;           WeatherBar          { vertical: rootItem.vertical } }
-    Component { id: timerComp;             TimerWidget         {} }
-    Component { id: timerCompVert;         Vertical.VerticalTimerWidget {} }
-    Component { id: screenshareIndicatorComp; ScreenShareIndicator {} }
-    Component { id: recordIndicatorComp;   RecordIndicator     { vertical: rootItem.vertical } }
-    Component { id: phoneScrcpyIndicatorComp; PhoneScrcpyIndicator { vertical: rootItem.vertical } }
-    Component { id: activeWindowComp;      ActiveWindow        { vertical: rootItem.vertical } }
-    Component { id: systemMonitorComp;     Resources           {} }
-    Component { id: systemMonitorCompVert; Vertical.Resources  {} }
-    Component { id: musicPlayerCompVert;   Vertical.VerticalMedia {} }
-    Component { id: musicPlayerComp;       Media               {} }
-    Component { id: neuralMediaComp;       NeuralMedia         { vertical: rootItem.vertical } }
-    Component { id: neuralMediaCompVert;   Vertical.VerticalNeuralMedia {} }
-    Component { id: utilityButtonsComp;    UtilButtons         { vertical: rootItem.vertical } }
-    Component { id: batteryComp;           BatteryIndicator    {} }
-    Component { id: batteryCompVert;       Vertical.BatteryIndicator {} }
-    Component { id: clockCompVert;         Vertical.VerticalClockWidget {} }
-    Component { id: clockComp;             ClockWidget         {} }
-    Component { id: systemTrayComp;        SysTray             { vertical: rootItem.vertical } }
-    Component { id: dateCompVert;          Vertical.VerticalDateWidget {} }
-    Component { id: workspaceComp;         Workspaces          { vertical: rootItem.vertical } }
-    Component { id: policiesPanelButton;   PoliciesPanelButton { startRadius: rootItem.startRadius; endRadius: rootItem.endRadius } }
-    Component { id: dashboardPanelButton;  DashboardPanelButton { startRadius: rootItem.startRadius; endRadius: rootItem.endRadius } }
-    Component { id: dashboardPanelButtonVert; VerticalDashboardPanelButton { startRadius: rootItem.startRadius; endRadius: rootItem.endRadius } }
-    Component { id: bluetoothComp;         BluetoothDevicesWidget { vertical: rootItem.vertical } }
-    Component { id: bluetoothCompVert;     Vertical.VerticalBluetoothDevicesWidget {} }
-    Component { id: keyboardComp;          KeyboardLayoutWidget { vertical: rootItem.vertical } }
-    Component { id: keyboardCompVert;      Vertical.VerticalKeyboardLayoutWidget {} }
-    Component { id: sportsComp;            Sports              { vertical: rootItem.vertical } }
-    Component { id: powerComp;             PowerButton         { vertical: rootItem.vertical } }
+    Component {
+        id: weatherComp
+        WeatherBar {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: timerComp
+        TimerWidget {}
+    }
+    Component {
+        id: timerCompVert
+        Vertical.VerticalTimerWidget {}
+    }
+    Component {
+        id: screenshareIndicatorComp
+        ScreenShareIndicator {}
+    }
+    Component {
+        id: recordIndicatorComp
+        RecordIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: phoneScrcpyIndicatorComp
+        PhoneScrcpyIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: activeWindowComp
+        ActiveWindow {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: systemMonitorComp
+        Resources {}
+    }
+    Component {
+        id: systemMonitorCompVert
+        Vertical.Resources {}
+    }
+    Component {
+        id: musicPlayerCompVert
+        Vertical.VerticalMedia {}
+    }
+    Component {
+        id: musicPlayerComp
+        Media {}
+    }
+    Component {
+        id: neuralMediaComp
+        NeuralMedia {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: neuralMediaCompVert
+        Vertical.VerticalNeuralMedia {}
+    }
+    Component {
+        id: utilityButtonsComp
+        UtilButtons {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: batteryComp
+        BatteryIndicator {}
+    }
+    Component {
+        id: batteryCompVert
+        Vertical.BatteryIndicator {}
+    }
+    Component {
+        id: clockCompVert
+        Vertical.VerticalClockWidget {}
+    }
+    Component {
+        id: clockComp
+        ClockWidget {}
+    }
+    Component {
+        id: systemTrayComp
+        SysTray {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: dateCompVert
+        Vertical.VerticalDateWidget {}
+    }
+    Component {
+        id: workspaceComp
+        Workspaces {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: policiesPanelButton
+        PoliciesPanelButton {
+            startRadius: rootItem.startRadius
+            endRadius: rootItem.endRadius
+        }
+    }
+    Component {
+        id: dashboardPanelButton
+        DashboardPanelButton {
+            startRadius: rootItem.startRadius
+            endRadius: rootItem.endRadius
+        }
+    }
+    Component {
+        id: dashboardPanelButtonVert
+        VerticalDashboardPanelButton {
+            startRadius: rootItem.startRadius
+            endRadius: rootItem.endRadius
+        }
+    }
+    Component {
+        id: bluetoothComp
+        BluetoothDevicesWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: bluetoothCompVert
+        Vertical.VerticalBluetoothDevicesWidget {}
+    }
+    Component {
+        id: keyboardComp
+        KeyboardLayoutWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: keyboardCompVert
+        Vertical.VerticalKeyboardLayoutWidget {}
+    }
+    Component {
+        id: sportsComp
+        Sports {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: powerComp
+        PowerButton {
+            vertical: rootItem.vertical
+        }
+    }
 
     // Expressive variants
-    Component { id: weatherCompExpressive;        ExpressiveWeatherBar       { vertical: rootItem.vertical } }
-    Component { id: musicPlayerCompExpressive;    ExpressiveMedia            { vertical: rootItem.vertical } }
-    Component { id: utilityButtonsCompExpressive; ExpressiveUtilButtons      { vertical: rootItem.vertical } }
-    Component { id: clockCompExpressive;          ExpressiveClockWidget      { vertical: rootItem.vertical } }
-    Component { id: workspaceCompMinimal;         MinimalWorkspaces          { vertical: rootItem.vertical } }
-    Component { id: workspaceCompExpressive;      ExpressiveWorkspaces       { vertical: rootItem.vertical } }
-    Component { id: workspaceCompDock;            DockWorkspaces             { vertical: rootItem.vertical } }
-    Component { id: systemMonitorCompExpressive;  ExpressiveResources        { vertical: rootItem.vertical } }
-    Component { id: policiesPanelButtonExpressive; ExpressivePoliciesPanelButton { vertical: rootItem.vertical } }
-    Component { id: dashboardPanelButtonExpressive;     ExpressiveDashboardPanelButton { vertical: false } }
-    Component { id: dashboardPanelButtonExpressiveVert; ExpressiveDashboardPanelButton { vertical: true } }
-    Component { id: powerCompExpressive;          ExpressivePowerButton      { vertical: rootItem.vertical } }
-    Component { id: batteryCompExpressive;        ExpressiveBattery          { vertical: rootItem.vertical } }
-    Component { id: systemTrayCompExpressive;     ExpressiveSystemTray       { vertical: rootItem.vertical } }
-    Component { id: bluetoothCompExpressive;      ExpressiveBluetoothDevices { vertical: rootItem.vertical } }
-    Component { id: keyboardCompExpressive;       ExpressiveKeyboardLayout   { vertical: rootItem.vertical } }
-    Component { id: sportsCompExpressive;         ExpressiveSports           { vertical: rootItem.vertical } }
-    Component { id: activeWindowCompExpressive;   ExpressiveActiveWindow     { vertical: rootItem.vertical } }
+    Component {
+        id: weatherCompExpressive
+        ExpressiveWeatherBar {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: musicPlayerCompExpressive
+        ExpressiveMedia {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: utilityButtonsCompExpressive
+        ExpressiveUtilButtons {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: clockCompExpressive
+        ExpressiveClockWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: workspaceCompMinimal
+        MinimalWorkspaces {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: workspaceCompExpressive
+        ExpressiveWorkspaces {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: workspaceCompDock
+        DockWorkspaces {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: systemMonitorCompExpressive
+        ExpressiveResources {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: policiesPanelButtonExpressive
+        ExpressivePoliciesPanelButton {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: dashboardPanelButtonExpressive
+        ExpressiveDashboardPanelButton {
+            vertical: false
+        }
+    }
+    Component {
+        id: dashboardPanelButtonExpressiveVert
+        ExpressiveDashboardPanelButton {
+            vertical: true
+        }
+    }
+    Component {
+        id: powerCompExpressive
+        ExpressivePowerButton {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: batteryCompExpressive
+        ExpressiveBattery {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: systemTrayCompExpressive
+        ExpressiveSystemTray {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: bluetoothCompExpressive
+        ExpressiveBluetoothDevices {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: keyboardCompExpressive
+        ExpressiveKeyboardLayout {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: sportsCompExpressive
+        ExpressiveSports {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: activeWindowCompExpressive
+        ExpressiveActiveWindow {
+            vertical: rootItem.vertical
+        }
+    }
 }

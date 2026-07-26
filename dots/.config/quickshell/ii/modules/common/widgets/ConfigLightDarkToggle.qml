@@ -23,7 +23,25 @@ RowLayout {
         toggled: Appearance.m3colors.darkmode === dark
         colBackground: Appearance.colors.colLayer2
         onClicked: {
-            Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode ${dark ? "dark" : "light"} --noswitch`]);
+            if (Config.options?.background?.useSeparateLightModeWallpaper) {
+                if (dark) {
+                    const darkPath = Config.options.background.wallpaperPath;
+                    if (darkPath && darkPath !== "") {
+                        Wallpapers.apply(darkPath, true);
+                    } else {
+                        Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode dark --noswitch`]);
+                    }
+                } else {
+                    const lightPath = Config.options.background.lightModeWallpaperPath;
+                    if (lightPath && lightPath !== "") {
+                        Wallpapers.applyLightModeWallpaper(lightPath);
+                    } else {
+                        Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode light --noswitch`]);
+                    }
+                }
+            } else {
+                Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode ${dark ? "dark" : "light"} --noswitch`]);
+            }
         }
         StyledToolTip {
             extraVisibleCondition: !smallLightDarkPreferenceButton.enabled

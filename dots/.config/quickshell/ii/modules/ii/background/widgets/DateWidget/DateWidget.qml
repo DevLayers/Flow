@@ -16,6 +16,9 @@ AbstractBackgroundWidget {
     implicitWidth: 240
     implicitHeight: 240
 
+    readonly property color expressiveMonthRect: WidgetColorScheme.innerShapeColor
+    readonly property color expressiveDayNumber: WidgetColorScheme.accentColor
+
     StyledRectangularShadow {
         id: bgShadow
         target: bgRect
@@ -25,11 +28,7 @@ AbstractBackgroundWidget {
     Rectangle {
         id: bgRect
         anchors.fill: parent
-        anchors.margins: 10
-        color: {
-            let base = Appearance.colors.colSurfaceContainerHigh;
-            return Qt.rgba(base.r, base.g, base.b, 1.0);
-        }
+        color: WidgetColorScheme.cardBgColor
         radius: Appearance.rounding.windowRounding
 
         // Recorte da camada ativado apenas se a sombra interna estiver ligada
@@ -53,10 +52,7 @@ AbstractBackgroundWidget {
                 id: monthRect
                 Layout.fillWidth: true
                 Layout.preferredHeight: 70
-                color: {
-                    let base = Appearance.colors.colSurfaceContainerLow;
-                    return Qt.rgba(base.r, base.g, base.b, 1.0);
-                }
+                color: root.expressive ? root.expressiveMonthRect : WidgetColorScheme.innerShapeColor
                 radius: Appearance.rounding.normal
 
                 StyledText {
@@ -71,7 +67,7 @@ AbstractBackgroundWidget {
                         bold: true
                         family: Appearance.font.family.main
                     }
-                    color: Appearance.colors.colOnSurfaceVariant
+                    color: root.expressive ? WidgetColorScheme.onAccentColor : WidgetColorScheme.subtextColorOnBg
                 }
             }
 
@@ -89,7 +85,7 @@ AbstractBackgroundWidget {
                         family: "Google Sans Flex"
                         variableAxes: ({ "ROND": 100, "wght": 800 })
                     }
-                    color: Appearance.colors.colPrimary
+                    color: root.expressive ? root.expressiveDayNumber : WidgetColorScheme.textColorOnBg
                 }
             }
         }

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import Quickshell.Hyprland
 import qs
 import qs.services
@@ -55,6 +56,7 @@ Item {
     property bool barBottom: false
     property bool barOnLeft: false
     property bool barOnRight: false
+    readonly property bool isBottomBar: !barVertical && barBottom
     property bool usingWrappedFrame: false
     property int frameThickness: 0
     property int barHeight: Appearance.sizes.barHeight
@@ -76,7 +78,7 @@ Item {
 
     property var searchWidgetRef: null
 
-    readonly property bool isOverviewVisible: root.isOpen && (root.searchWidgetRef ? root.searchWidgetRef.searchingText === "" : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
+    readonly property bool isOverviewVisible: root.isWidgetActive && (root.searchWidgetRef ? root.searchWidgetRef.searchingText === "" : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
 
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property real launcherContentWidth: searchWidgetRef ? searchWidgetRef.implicitWidth : 0
@@ -198,7 +200,7 @@ Item {
     Item {
         id: dropContainer
         x: positioner.anchorX
-        y: root.barBottom ? (positioner.anchorY + (dropState.targetH - root.animHeight)) : positioner.anchorY
+        y: root.isBottomBar ? (positioner.anchorY + (dropState.targetH - root.animHeight)) : positioner.anchorY
         width: dropState.targetW
         height: root.animHeight
         visible: root.animHeight > 0.001
@@ -214,21 +216,20 @@ Item {
             id: dropNotch
             width: dropContainer.width
             height: dropContainer.height   // = animHeight, always matches clip edge
-            y: barBottom ? (dropContainer.height - height) : 0
+            y: isBottomBar ? (dropContainer.height - height) : 0
             disableBehaviors: true
             readonly property real _wr: Appearance.rounding.windowRounding
             // Grow topRadius from 0 immediately — no dead zone threshold.
             // animHeight * 0.8 reaches windowRounding quickly without overshoot.
-            topRadius: Math.min(_wr, root.animHeight * 0.8)
-            bottomRadius: Math.min(_wr, root.animHeight)
+            topRadius: Math.min(_wr, Math.max(0, root.animHeight * 0.8))
+            bottomRadius: Math.min(_wr, Math.max(0, root.animHeight))
             fillColor: root.themeBgColor
             transform: Scale {
                 xScale: 1
-                yScale: barBottom ? -1 : 1
+                yScale: isBottomBar ? -1 : 1
                 origin.y: dropNotch.height / 2
             }
         }
-
 
         // ── Content (clipped to growing height) ──────────────────────────────
         Item {
@@ -243,7 +244,7 @@ Item {
                 x: 200
                 width: dropContainer.width
                 height: dropState.targetH
-                y: barBottom ? parent.height - height : 0
+                y: isBottomBar ? parent.height - height : 0
 
                 Loader {
                     id: searchWidgetLoader
@@ -319,33 +320,28 @@ Item {
         }
     }
 
+    readonly property string animStyle: Config.options.overview.animationStyle ?? "bounce"
+
     Loader { // Classic overview
         id: overviewLoader
-        y: root.barBottom ? (dropContainer.y - height - 10) : (dropContainer.y + dropContainer.height + 10)
+        y: root.isBottomBar ? (dropContainer.y - height - 10) : (dropContainer.y + dropContainer.height + 10)
         height: implicitHeight
         anchors.horizontalCenter: parent.horizontalCenter
         active: root.isWidgetActive && !root.isScrollingLayout
         visible: opacity > 0.01
+        opacity: root.isOverviewVisible ? root.openProgress : 0.0
 
-        opacity: root.isOverviewVisible ? 1.0 : 0.0
-        transform: Translate {
-            y: root.isOverviewVisible ? 0 : (root.barBottom ? -30 : 30)
-            Behavior on y {
-                NumberAnimation {
-                    duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-                }
+        transform: [
+            Translate {
+                y: (1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30)
+            },
+            Scale {
+                origin.x: overviewLoader.implicitWidth / 2
+                origin.y: overviewLoader.implicitHeight / 2
+                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
+                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
             }
-        }
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.isOverviewVisible ? root._animDurationOpen : Math.round(60 * Appearance.animMultiplier)
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-            }
-        }
+        ]
 
         sourceComponent: OverviewWidget {
             panelWindow: root.panelWindow
@@ -355,32 +351,25 @@ Item {
 
     Loader { // Scrolling overview
         id: scrollingOverviewLoader
-        y: root.barBottom ? 0 : (dropContainer.y + dropContainer.height)
-        height: root.barBottom ? dropContainer.y : (parent.height - y)
+        y: root.isBottomBar ? 0 : (dropContainer.y + dropContainer.height)
+        height: root.isBottomBar ? dropContainer.y : (parent.height - y)
         anchors.left: parent.left
         anchors.right: parent.right
         active: root.isWidgetActive && root.isScrollingLayout
         visible: opacity > 0.01
+        opacity: root.isOverviewVisible ? root.openProgress : 0.0
 
-        opacity: root.isOverviewVisible ? 1.0 : 0.0
-        transform: Translate {
-            y: root.isOverviewVisible ? 0 : (root.barBottom ? -30 : 30)
-            Behavior on y {
-                NumberAnimation {
-                    duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-                }
+        transform: [
+            Translate {
+                y: (1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30)
+            },
+            Scale {
+                origin.x: scrollingOverviewLoader.width / 2
+                origin.y: scrollingOverviewLoader.height / 2
+                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
+                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
             }
-        }
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.isOverviewVisible ? root._animDurationOpen : Math.round(120 * Appearance.animMultiplier)
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-            }
-        }
+        ]
 
         sourceComponent: ScrollingOverviewWidget {
             anchors.fill: parent

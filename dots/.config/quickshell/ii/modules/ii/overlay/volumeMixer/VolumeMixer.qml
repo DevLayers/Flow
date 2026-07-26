@@ -50,21 +50,27 @@ StyledOverlayWidget {
                 onCurrentIndexChanged: {
                     Persistent.states.overlay.volumeMixer.tabIndex = swipeView.currentIndex;
                 }
+                interactive: !outputContent.isDragging && !inputContent.isDragging
                 clip: true
 
-                PaddedVolumeDialogContent { 
+                PaddedVolumeDialogContent {
+                    id: outputContent
                     isSink: true 
                 }
-                PaddedVolumeDialogContent { 
+                PaddedVolumeDialogContent {
+                    id: inputContent
                     isSink: false 
                 }
             }
         }
     }
 
+    dragLocked: outputContent.isDragging || inputContent.isDragging
+
     component PaddedVolumeDialogContent: Item {
         id: paddedVolumeDialogContent
         property alias isSink: volDialogContent.isSink
+        readonly property bool isDragging: volDialogContent.activePlaybackDragIndex >= 0 || volDialogContent.activeRecordingDragIndex >= 0
         property real padding: 12
         implicitWidth: volDialogContent.implicitWidth + padding * 2
         implicitHeight: volDialogContent.implicitHeight + padding * 2

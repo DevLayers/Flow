@@ -10,7 +10,7 @@ Rectangle {
 
     StyledText {
         anchors.centerIn: parent
-        color: Appearance.colors.colSecondaryHover
+        color: WidgetColorScheme.accentColor
         text: Qt.locale().toString(DateTime.clock.date, "dd")
         font {
             family: Appearance.font.family.expressive

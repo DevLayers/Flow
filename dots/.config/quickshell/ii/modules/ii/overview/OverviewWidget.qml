@@ -14,9 +14,24 @@ import Quickshell.Hyprland
 Item {
     id: root
     property bool hyprscrollingEnabled: false //FIXME
+    readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
+    readonly property bool enableCascade: Config.options.overview.enableCascadeAnimation ?? true
+    readonly property real autoScaleFactor: Config.options.overview.autoScaleFactor ?? 1.0
+    readonly property real autoScale: {
+        let cols = Math.max(1, Config.options.overview.columns || 5);
+        let rows = Math.max(1, Config.options.overview.rows || 2);
+        let widthScale = 0.88 / cols;
+        let heightScale = 0.74 / rows;
+        let baseScale = Math.min(widthScale, heightScale);
+        return baseScale * root.autoScaleFactor;
+    }
+    readonly property real activeScale: enableManualScale ? Config.options.overview.scale : autoScale
+    property real scale: activeScale
+    readonly property real monitorScale: (monitor?.scale > 0) ? monitor.scale : 1
+    readonly property real workspaceLayoutScale: root.scale / root.monitorScale
     property int minWorkspaceWidth: (monitorData?.transform % 2 === 1) 
-        ? ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.scale) 
-        : ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.scale)
+        ? ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.workspaceLayoutScale) 
+        : ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.workspaceLayoutScale)
     required property var panelWindow
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
     readonly property var toplevels: ToplevelManager.toplevels
@@ -61,34 +76,79 @@ Item {
     property var windowByAddress: HyprlandData.windowByAddress
     property var windowAddresses: HyprlandData.addresses
     property var monitorData: HyprlandData.monitors.find(m => m.id === root.monitor?.id)
-    property real scale: Config.options.overview.scale
     property color activeBorderColor: Appearance.colors.colSecondary
 
     property real workspaceImplicitWidth: minWorkspaceWidth
     property real workspaceImplicitHeight: (monitorData?.transform % 2 === 1) 
-        ? ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.scale) 
-        : ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.scale)
+        ? ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.workspaceLayoutScale) 
+        : ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.workspaceLayoutScale)
     property real largeWorkspaceRadius: Appearance.rounding.large
     property real smallWorkspaceRadius: Appearance.rounding.verysmall
 
-    // we are using a width map to get all windows width and settings workspaceImplicitWidth to the maximum item of this list/map
+    // We are using a width map to get all windows width and setting workspaceImplicitWidth to the maximum item of this list/map
     property list<int> widthMap: []
 
-    onWidthMapChanged: root.workspaceImplicitWidth = getMaxWidth()
+    onMinWorkspaceWidthChanged: {
+        if (!root.hyprscrollingEnabled)
+            root.workspaceImplicitWidth = minWorkspaceWidth;
+    }
+
+    onWorkspaceGroupChanged: {
+        root.widthMap = [];
+        root.workspaceImplicitWidth = minWorkspaceWidth;
+    }
+
+    onWidthMapChanged: {
+        if (root.hyprscrollingEnabled) {
+            root.workspaceImplicitWidth = getMaxWidth();
+        } else {
+            root.workspaceImplicitWidth = minWorkspaceWidth;
+        }
+    }
 
     function getMaxWidth() {
         if (widthMap.length === 0)
             return minWorkspaceWidth;
         const max = Math.max(...widthMap);
-        return max;
+        return Math.max(max, minWorkspaceWidth);
     }
 
     property real workspaceNumberMargin: 80
-    property real workspaceNumberSize: 250 * monitor.scale
+    readonly property real workspaceNumberPixelSize: Math.min(root.workspaceImplicitWidth, root.workspaceImplicitHeight) * 0.36
     property int workspaceZ: 0
     property int windowZ: 1
     property int windowDraggingZ: 99999
     property real workspaceSpacing: 10
+    property real cascadeProgress: 1.0
+
+    NumberAnimation {
+        id: cascadeAnim
+        target: root
+        property: "cascadeProgress"
+        from: 0.0
+        to: 1.0
+        duration: Math.round(480 * Appearance.animMultiplier)
+        easing.type: Easing.OutCubic
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (GlobalStates.overviewOpen) {
+                root.cascadeProgress = 0.0;
+                cascadeAnim.restart();
+            } else {
+                root.cascadeProgress = 1.0;
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        if (GlobalStates.overviewOpen) {
+            root.cascadeProgress = 0.0;
+            cascadeAnim.restart();
+        }
+    }
 
     property int dragDropType: -1 // 0: workspace, 1: window
 
@@ -172,6 +232,65 @@ Item {
                             property color hoveredBorderColor: Appearance.colors.colLayer2Hover
                             property bool hoveredWhileDragging: false
 
+                            // Cascading entrance calculation (sequential timer stagger)
+                            property int cellIndex: row.index * Config.options.overview.columns + colIndex
+                            property real animProgress: 0.0
+
+                            Timer {
+                                id: workspaceStaggerTimer
+                                interval: 80 + workspace.cellIndex * 55
+                                repeat: false
+                                onTriggered: workspaceStaggerAnim.restart()
+                            }
+
+                            NumberAnimation {
+                                id: workspaceStaggerAnim
+                                target: workspace
+                                property: "animProgress"
+                                from: 0.0
+                                to: 1.0
+                                duration: Math.round(380 * Appearance.animMultiplier)
+                                easing.type: Easing.OutBack
+                                easing.overshoot: 1.15
+                            }
+
+                            Connections {
+                                target: GlobalStates
+                                function onOverviewOpenChanged() {
+                                    if (GlobalStates.overviewOpen && root.enableCascade) {
+                                        workspace.animProgress = 0.0;
+                                        workspaceStaggerTimer.restart();
+                                    } else {
+                                        workspaceStaggerTimer.stop();
+                                        workspaceStaggerAnim.stop();
+                                        workspace.animProgress = 1.0;
+                                    }
+                                }
+                            }
+
+                            Component.onCompleted: {
+                                if (GlobalStates.overviewOpen && root.enableCascade) {
+                                    workspace.animProgress = 0.0;
+                                    workspaceStaggerTimer.restart();
+                                } else {
+                                    workspace.animProgress = 1.0;
+                                }
+                            }
+
+                            opacity: root.enableCascade ? workspace.animProgress : 1.0
+                            transform: [
+                                Translate {
+                                    x: root.enableCascade ? (1.0 - workspace.animProgress) * -15 : 0
+                                    y: root.enableCascade ? (1.0 - workspace.animProgress) * -20 : 0
+                                },
+                                Scale {
+                                    origin.x: workspace.implicitWidth / 2
+                                    origin.y: workspace.implicitHeight / 2
+                                    xScale: root.enableCascade ? (0.85 + 0.15 * workspace.animProgress) : 1.0
+                                    yScale: root.enableCascade ? (0.85 + 0.15 * workspace.animProgress) : 1.0
+                                }
+                            ]
+
                             implicitWidth: root.workspaceImplicitWidth
                             implicitHeight: root.workspaceImplicitHeight
                             color: hoveredWhileDragging ? hoveredWorkspaceColor : defaultWorkspaceColor
@@ -190,9 +309,9 @@ Item {
                                 anchors.centerIn: parent
                                 text: workspace.workspaceValue
                                 font {
-                                    pixelSize: root.workspaceNumberSize * root.scale
+                                    pixelSize: root.workspaceNumberPixelSize
                                     weight: Font.DemiBold
-                                    family: Appearance.font.family.expressive
+                                    family: Appearance.font.family.numbers
                                 }
                                 color: ColorUtils.transparentize(Appearance.colors.colOnLayer1, 0.8)
                                 horizontalAlignment: Text.AlignHCenter
@@ -268,6 +387,65 @@ Item {
                     widgetMonitor: HyprlandData.monitors.find(m => m.id == root.monitor.id)
                     windowData: windowByAddress[address]
                     hyprscrollingEnabled: root.hyprscrollingEnabled
+
+                    // Cascading entrance calculation matching workspace cell (sequential timer stagger)
+                    property int cellIndex: workspaceRowIndex * Config.options.overview.columns + workspaceColIndex
+                    property real animProgress: 0.0
+
+                    Timer {
+                        id: windowStaggerTimer
+                        interval: 80 + window.cellIndex * 55
+                        repeat: false
+                        onTriggered: windowStaggerAnim.restart()
+                    }
+
+                    NumberAnimation {
+                        id: windowStaggerAnim
+                        target: window
+                        property: "animProgress"
+                        from: 0.0
+                        to: 1.0
+                        duration: Math.round(380 * Appearance.animMultiplier)
+                        easing.type: Easing.OutBack
+                        easing.overshoot: 1.15
+                    }
+
+                    Connections {
+                        target: GlobalStates
+                        function onOverviewOpenChanged() {
+                            if (GlobalStates.overviewOpen && root.enableCascade) {
+                                window.animProgress = 0.0;
+                                windowStaggerTimer.restart();
+                            } else {
+                                windowStaggerTimer.stop();
+                                windowStaggerAnim.stop();
+                                window.animProgress = 1.0;
+                            }
+                        }
+                    }
+
+                    Component.onCompleted: {
+                        if (GlobalStates.overviewOpen && root.enableCascade) {
+                            window.animProgress = 0.0;
+                            windowStaggerTimer.restart();
+                        } else {
+                            window.animProgress = 1.0;
+                        }
+                    }
+
+                    opacity: root.enableCascade ? window.animProgress : 1.0
+                    transform: [
+                        Translate {
+                            x: root.enableCascade ? (1.0 - window.animProgress) * -15 : 0
+                            y: root.enableCascade ? (1.0 - window.animProgress) * -20 : 0
+                        },
+                        Scale {
+                            origin.x: window.width / 2
+                            origin.y: window.height / 2
+                            xScale: root.enableCascade ? (0.85 + 0.15 * window.animProgress) : 1.0
+                            yScale: root.enableCascade ? (0.85 + 0.15 * window.animProgress) : 1.0
+                        }
+                    ]
 
                     property int wsId: windowData?.workspace?.id
 

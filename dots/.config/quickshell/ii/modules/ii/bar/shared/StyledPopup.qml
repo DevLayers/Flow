@@ -35,6 +35,16 @@ LazyLoader {
     property bool animateHeight: true
     property bool stickyHover: false
     property int keyboardFocus: WlrKeyboardFocus.None
+
+    property bool customPosition: false
+    property bool anchorRight: false
+    property bool anchorLeft: false
+    property bool anchorTop: false
+    property bool anchorBottom: false
+    property int customMarginLeft: 0
+    property int customMarginRight: 0
+    property int customMarginTop: 0
+    property int customMarginBottom: 0
     
     // Expose active state to child elements so they can trigger animations,
     // exactly like WeatherPopup does for HourlyForecast.
@@ -42,11 +52,15 @@ LazyLoader {
 
     property bool _popupHovered: false
     property bool _stickyActive: false
-    property bool _targetHovered: hoverTarget ? hoverTarget.containsMouse : false
+    property bool forceClick: false
+    // Set false when the user of this popup runs its own focus grab. Hyprland honours only
+    // one grab per client, so a second one silently clears the first.
+    property bool selfDismiss: true
+    property bool _targetHovered: hoverTarget ? (hoverTarget.containsMouse !== undefined ? hoverTarget.containsMouse : (hoverTarget.hovered !== undefined ? hoverTarget.hovered : false)) : false
     property bool _clickActive: false
     property bool _isClosing: false
 
-    readonly property bool _computedActive: Config.options.bar.tooltips.clickToShow ? _clickActive : (stickyHover ? _stickyActive : (hoverTarget && hoverTarget.containsMouse))
+    readonly property bool _computedActive: (Config.options.bar.tooltips.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : _targetHovered)
 
     active: _computedActive || _isClosing
 
@@ -106,16 +120,28 @@ LazyLoader {
         readonly property real screenWidth: popupWindow.screen?.width ?? 0
         readonly property real screenHeight: popupWindow.screen?.height ?? 0
 
-        anchors.left: !Config.options.bar.vertical || (Config.options.bar.vertical && !Config.options.bar.bottom)
-        anchors.right: Config.options.bar.vertical && Config.options.bar.bottom
-        anchors.top: Config.options.bar.vertical || (!Config.options.bar.vertical && !Config.options.bar.bottom)
-        anchors.bottom: !Config.options.bar.vertical && Config.options.bar.bottom
+        anchors.left: root.customPosition ? root.anchorLeft : (!Config.options.bar.vertical || (Config.options.bar.vertical && !Config.options.bar.bottom))
+        anchors.right: root.customPosition ? root.anchorRight : (Config.options.bar.vertical && Config.options.bar.bottom)
+        anchors.top: root.customPosition ? root.anchorTop : (Config.options.bar.vertical || (!Config.options.bar.vertical && !Config.options.bar.bottom))
+        anchors.bottom: root.customPosition ? root.anchorBottom : (!Config.options.bar.vertical && Config.options.bar.bottom)
 
         implicitWidth: popupBackground.targetWidth + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
         implicitHeight: popupBackground.targetHeight + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
 
+        // The input region must not follow the open animation. popupBackground lives inside
+        // animContainer, which carries a Translate transform, and a transform change does not
+        // emit the geometry signals Region listens to — so the committed region can stay stuck
+        // at the animation's starting offset and swallow clicks aimed at the popup's contents.
+        Item {
+            id: maskRect
+            x: popupBackground.x
+            y: popupBackground.y
+            width: popupBackground.width
+            height: popupBackground.height
+        }
+
         mask: Region {
-            item: popupBackground
+            item: maskRect
         }
 
         exclusionMode: ExclusionMode.Ignore
@@ -123,6 +149,9 @@ LazyLoader {
 
         margins {
             left: {
+                if (root.customPosition) {
+                    return root.customMarginLeft;
+                }
                 if (!Config.options.bar.vertical) {
                     if (!root.hoverTarget || !root.QsWindow)
                         return 0;
@@ -136,6 +165,9 @@ LazyLoader {
             }
 
             top: {
+                if (root.customPosition) {
+                    return root.customMarginTop;
+                }
                 if (!Config.options.bar.vertical) {
                     return Appearance.sizes.barHeight;
                 }
@@ -148,17 +180,20 @@ LazyLoader {
                 return Math.max(minY, Math.min(maxY, centeredY));
             }
 
-            right: Appearance.sizes.verticalBarWidth
-            bottom: Appearance.sizes.barHeight
+            right: root.customPosition ? root.customMarginRight : Appearance.sizes.verticalBarWidth
+            bottom: root.customPosition ? root.customMarginBottom : Appearance.sizes.barHeight
         }
 
         WlrLayershell.namespace: "quickshell:popup"
         WlrLayershell.layer: WlrLayer.Overlay
 
+        property bool _dismissGrabArmed: false
+
         HyprlandFocusGrab {
             id: dismissGrab
             windows: [popupWindow]
-            active: false
+            active: root.selfDismiss && (Config.options.bar.tooltips.clickToShow || root.forceClick) && root._computedActive
+                && popupWindow._dismissGrabArmed
             onCleared: () => {
                 root._clickActive = false;
             }
@@ -249,27 +284,36 @@ LazyLoader {
                     openAnimSeq.stop();
                     closeAnim.from = popupWindow.animProgress;
                     closeAnim.start();
-                } else {
+                } else if (root._computedActive) {
                     closeAnim.stop();
                     destroyTimer.stop();
                     popupWindow.animProgress = 0.0;
                     openAnimSeq.start();
                 }
             }
+            function on_ComputedActiveChanged() {
+                if (root._computedActive && root.selfDismiss) {
+                    popupWindow._dismissGrabArmed = false;
+                    dismissGrabArmTimer.restart();
+                } else {
+                    dismissGrabArmTimer.stop();
+                    popupWindow._dismissGrabArmed = false;
+                }
+            }
         }
 
         Component.onCompleted: {
-            if (Config.options.bar.tooltips.clickToShow) {
-                grabDelayTimer.start();
+            if (root.selfDismiss && Config.options.bar.tooltips.clickToShow) {
+                dismissGrabArmTimer.restart();
             }
             popupWindow.animProgress = 0.0;
             openAnimSeq.start();
         }
 
         Timer {
-            id: grabDelayTimer
+            id: dismissGrabArmTimer
             interval: 250
-            onTriggered: dismissGrab.active = true
+            onTriggered: popupWindow._dismissGrabArmed = true
         }
 
         Item {
@@ -360,6 +404,16 @@ LazyLoader {
                     scale: root.layoutScale
                     transformOrigin: Item.Center
                     clip: false
+
+                    // contentItem is owned by root, which is a LazyLoader (not an Item), so it
+                    // outlives this window. Detach it before the window's item tree is torn down,
+                    // otherwise it keeps a dangling visual parent and anchors into freed items.
+                    Component.onDestruction: {
+                        if (!root || !root.contentItem)
+                            return;
+                        root.contentItem.anchors.fill = undefined;
+                        root.contentItem.parent = null;
+                    }
 
                 Component.onCompleted: {
                     if (root.contentItem) {

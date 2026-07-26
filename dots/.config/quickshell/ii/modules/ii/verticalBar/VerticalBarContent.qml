@@ -188,6 +188,16 @@ Item { // Bar content region
         }
         color: root.islandFillColor
         radius: Appearance.rounding.full
+
+        // GPU: only allocate FBO when island is actually visible (no widgets = invisible = no shadow needed)
+        layer.enabled: topIsland.visible && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowHorizontalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(topIsland)
         }
@@ -205,6 +215,16 @@ Item { // Bar content region
         }
         color: root.islandFillColor
         radius: Appearance.rounding.full
+
+        // GPU: only allocate FBO when island is actually visible
+        layer.enabled: middleIsland.visible && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowHorizontalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(middleIsland)
         }
@@ -222,6 +242,16 @@ Item { // Bar content region
         }
         color: root.islandFillColor
         radius: Appearance.rounding.full
+
+        // GPU: only allocate FBO when island is actually visible
+        layer.enabled: bottomIsland.visible && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowHorizontalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(bottomIsland)
         }
@@ -235,6 +265,15 @@ Item { // Bar content region
         edge: root.barEdge
         role: "first"
         fillColor: barBackground.actualColor
+
+        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowHorizontalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         anchors {
             top: parent.top
             bottom: topSection.bottom; bottomMargin: -6
@@ -250,6 +289,15 @@ Item { // Bar content region
         edge: root.barEdge
         role: "middle"
         fillColor: barBackground.actualColor
+
+        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowHorizontalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         anchors {
             top: middleSection.top; topMargin: -6
             bottom: middleSection.bottom; bottomMargin: -6
@@ -265,6 +313,15 @@ Item { // Bar content region
         edge: root.barEdge
         role: "last"
         fillColor: barBackground.actualColor
+
+        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowHorizontalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         anchors {
             top: bottomSection.top; topMargin: -6
             bottom: parent.bottom

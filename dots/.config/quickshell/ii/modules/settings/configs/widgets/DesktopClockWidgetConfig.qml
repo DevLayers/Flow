@@ -136,29 +136,11 @@ ContentPage {
                 }
 
                 ConfigSwitch {
-                    buttonIcon: "palette"
-                    text: Translation.tr("Colorful digits")
-                    checked: Config.options.background.widgets.clock.digital.colorful
-                    onCheckedChanged: {
-                        Config.options.background.widgets.clock.digital.colorful = checked;
-                    }
-                }
-
-                ConfigSwitch {
                     buttonIcon: "more_vert"
                     text: Translation.tr("Show colon")
                     checked: Config.options.background.widgets.clock.digital.showColon
                     onCheckedChanged: {
                         Config.options.background.widgets.clock.digital.showColon = checked;
-                    }
-                }
-
-                ConfigTextField {
-                    icon: "font_download"
-                    text: Translation.tr("Font family")
-                    inputText: Config.options.background.widgets.clock.digital.font.family
-                    onInputTextChanged: {
-                        Config.options.background.widgets.clock.digital.font.family = inputText;
                     }
                 }
 

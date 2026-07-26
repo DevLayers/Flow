@@ -1,14 +1,12 @@
-pragma ComponentBehavior: Bound
-
-import qs.services
-import qs.modules.common
-import qs.modules.common.widgets
-import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Quickshell.Io
-
+import qs.services
+import qs.modules.common
+import qs.modules.common.widgets
+import qs.modules.common.functions
+import qs.modules.ii.background.widgets
 import qs.modules.ii.background.widgets.clock.dateIndicator
 import qs.modules.ii.background.widgets.clock.minuteMarks
 
@@ -20,14 +18,18 @@ Item {
     property real implicitSize: 240
 
     property color colShadow: Appearance.colors.colShadow
-    property color colBackground: Appearance.colors.colPrimaryContainer
-    property color colOnBackground: ColorUtils.mix(Appearance.colors.colSecondary, Appearance.colors.colPrimaryContainer, 0.15)
-    property color colBackgroundInfo: ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colPrimaryContainer, 0.55)
-    property color colHourHand: Appearance.colors.colPrimary
-    property color colMinuteHand: Appearance.colors.colTertiary
-    property color colSecondHand: Appearance.colors.colPrimary
+    property color colBackground: WidgetColorScheme.cardBgColor
+    property color colOnBackground: WidgetColorScheme.textColorOnBg
+    property color colBackgroundInfo: WidgetColorScheme.innerShapeColor
+    property color colHourHand: WidgetColorScheme.accentColor
+    property color colMinuteHand: WidgetColorScheme.pillBgColor
+    property color colSecondHand: WidgetColorScheme.surfaceVariantColor
+    property color colHourMarks: WidgetColorScheme.accentColor
+    property color colMinuteMarks: WidgetColorScheme.subtextColorOnBg
+    property color colTimeColumn: Qt.rgba(WidgetColorScheme.textColorOnPillTrack.r, WidgetColorScheme.textColorOnPillTrack.g, WidgetColorScheme.textColorOnPillTrack.b, 0.5)
+    property color colCenterDot: WidgetColorScheme.pillFillColor
 
-    readonly property list<string> clockNumbers: DateTime.time.split(/[: ]/)
+    readonly property var clockNumbers: DateTime.time.split(/[: ]/)
     readonly property int clockHour: parseInt(clockNumbers[0]) % 12
     readonly property int clockMinute: DateTime.clock.minutes
     property int clockSecond: DateTime.clock.seconds
@@ -137,7 +139,7 @@ Item {
     // Hour/minutes numbers/dots/lines
     MinuteMarks {
         anchors.fill: parent
-        color: root.colOnBackground
+        color: root.colMinuteMarks
     }
 
     // Stupid extra hour marks in the middle
@@ -147,7 +149,7 @@ Item {
         shown: Config.options.background.widgets.clock.cookie.hourMarks
         sourceComponent: HourMarks {
             implicitSize: 135 * (1.75 - 0.75 * hourMarksLoader.opacity)
-            color: root.colOnBackground
+            color: root.colHourMarks
             colOnBackground: ColorUtils.mix(root.colBackgroundInfo, root.colOnBackground, 0.5)
         }
     }
@@ -163,7 +165,7 @@ Item {
         }
 
         sourceComponent: TimeColumn {
-            color: root.colBackgroundInfo
+            color: root.colTimeColumn
         }
     }
 
@@ -183,7 +185,7 @@ Item {
     // Hour hand
     FadeLoader {
         anchors.fill: parent
-        z: item?.style === "hollow" ? 0 : 2
+        z: (item && item.style === "hollow") ? 0 : 2
         shown: Config.options.background.widgets.clock.cookie.hourHandStyle !== "hide"
         sourceComponent: HourHand {
             clockHour: root.clockHour
@@ -213,7 +215,7 @@ Item {
         anchors.centerIn: parent
         shown: Config.options.background.widgets.clock.cookie.minuteHandStyle !== "bold"
         sourceComponent: Rectangle {
-            color: Config.options.background.widgets.clock.cookie.minuteHandStyle === "medium" ? root.colBackground : root.colMinuteHand
+            color: Config.options.background.widgets.clock.cookie.minuteHandStyle === "medium" ? root.colBackground : root.colCenterDot
             implicitWidth: 6
             implicitHeight: implicitWidth
             radius: width / 2

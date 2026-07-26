@@ -24,8 +24,11 @@ handle_kde_material_you_colors() {
     # Map $type_flag to allowed scheme variants for kde-material-you-colors-wrapper.sh
     local kde_scheme_variant=""
     case "$type_flag" in
-        scheme-content|scheme-expressive|scheme-fidelity|scheme-fruit-salad|scheme-monochrome|scheme-neutral|scheme-rainbow|scheme-tonal-spot)
+        scheme-content|scheme-expressive|scheme-fidelity|scheme-fruit-salad|scheme-monochrome|scheme-neutral|scheme-rainbow|scheme-tonal-spot|scheme-vibrant)
             kde_scheme_variant="$type_flag"
+            ;;
+        scheme-intense)
+            kde_scheme_variant="scheme-fidelity"
             ;;
         *)
             kde_scheme_variant="scheme-tonal-spot" # default
@@ -179,8 +182,15 @@ EOF
 
 set_wallpaper_path() {
     local path="$1"
+    local target="$2"
     if [ -f "$SHELL_CONFIG_FILE" ]; then
-        jq --indent 4 --arg path "$path" '.background.wallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
+        if [[ "$target" == "lightmode" ]]; then
+            jq --indent 4 --arg path "$path" '.background.lightModeWallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
+        elif [[ "$target" == "lockscreen" ]]; then
+            jq --indent 4 --arg path "$path" '.background.lockscreenWallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
+        else
+            jq --indent 4 --arg path "$path" '.background.wallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
+        fi
     fi
 }
 
@@ -476,7 +486,9 @@ done"
             fi
 
             # Set wallpaper path
-            set_wallpaper_path "$imgpath"
+            if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
+                set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+            fi
 
             # Set video wallpaper
             local video_path="$imgpath"
@@ -506,7 +518,9 @@ done"
             matugen_args+=(image "$imgpath")
             generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
-            set_wallpaper_path "$imgpath"
+            if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
+                set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+            fi
             remove_restore
         fi
     fi
@@ -531,7 +545,13 @@ done"
             generate_colors_material_args+=(--mode "$mode_flag")
         fi
     fi
-    [[ -n "$type_flag" ]] && matugen_args+=(--type "$type_flag") && generate_colors_material_args+=(--scheme "$type_flag")
+    if [[ "$type_flag" == "scheme-intense" ]]; then
+        matugen_args+=(--type "scheme-fidelity")
+    elif [[ -n "$type_flag" ]]; then
+        matugen_args+=(--type "$type_flag")
+    fi
+    matugen_args+=(--source-color-index 0)
+    generate_colors_material_args+=(--scheme "$type_flag")
     generate_colors_material_args+=(--termscheme "$terminalscheme" --blend_bg_fg)
     generate_colors_material_args+=(--cache "$STATE_DIR/user/generated/color.txt")
 
@@ -564,6 +584,10 @@ done"
         "$SCRIPT_DIR"/applycolor.sh
     else
         matugen "${matugen_args[@]}"
+        if [[ "$type_flag" == "scheme-intense" ]]; then
+            echo "[switchwall.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
+            python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
+        fi
         python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
         python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
@@ -619,6 +643,10 @@ main() {
         deactivate
     }
 
+    lockscreen_flag=""
+    colors_only_flag=""
+    lightmode_flag=""
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --mode)
@@ -628,6 +656,18 @@ main() {
             --type)
                 type_flag="$2"
                 shift 2
+                ;;
+            --lockscreen)
+                lockscreen_flag="1"
+                shift
+                ;;
+            --lightmode)
+                lightmode_flag="1"
+                shift
+                ;;
+            --colors-only)
+                colors_only_flag="1"
+                shift
                 ;;
             --color)
                 if [[ "$2" =~ ^#?[A-Fa-f0-9]{6}$ ]]; then
@@ -647,11 +687,13 @@ main() {
                 ;;
             --noswitch)
                 noswitch_flag="1"
-                use_wpe=$(jq -r '.background.useWallpaperEngine' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "false")
-                if [[ "$use_wpe" == "true" ]]; then
-                    imgpath=$(jq -r '.background.wallpaperEngineId' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
-                else
-                    imgpath=$(jq -r '.background.wallpaperPath' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
+                if [[ -z "$imgpath" ]]; then
+                    use_wpe=$(jq -r '.background.useWallpaperEngine' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "false")
+                    if [[ "$use_wpe" == "true" ]]; then
+                        imgpath=$(jq -r '.background.wallpaperEngineId' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
+                    else
+                        imgpath=$(jq -r '.background.wallpaperPath' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
+                    fi
                 fi
                 shift
                 ;;
@@ -677,7 +719,7 @@ main() {
     fi
 
     # Validate type_flag (allow 'auto' and 'scheme-auto' as well)
-    allowed_types=(scheme-content scheme-expressive scheme-fidelity scheme-fruit-salad scheme-monochrome scheme-neutral scheme-rainbow scheme-tonal-spot auto scheme-auto)
+    allowed_types=(scheme-content scheme-expressive scheme-fidelity scheme-fruit-salad scheme-monochrome scheme-neutral scheme-rainbow scheme-tonal-spot scheme-vibrant scheme-intense auto scheme-auto)
     valid_type=0
     for t in "${allowed_types[@]}"; do
         if [[ "$type_flag" == "$t" ]]; then
@@ -724,6 +766,25 @@ main() {
         imgpath="$CONFIG_DIR/assets/images/default_wallpaper.png"
     fi
 
+    # If --lightmode is passed and --noswitch is passed:
+    # Only save to config without running matugen or changing theme colors
+    if [[ -n "$lightmode_flag" && -n "$noswitch_flag" ]]; then
+        set_wallpaper_path "$imgpath" "lightmode"
+        echo "[switchwall.sh] Saved light mode wallpaper path."
+        exit 0
+    fi
+
+    # Update config wallpaper path unless colors_only_flag or noswitch_flag is set
+    if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
+        if [[ -n "$lightmode_flag" ]]; then
+            set_wallpaper_path "$imgpath" "lightmode"
+        elif [[ -n "$lockscreen_flag" ]]; then
+            set_wallpaper_path "$imgpath" "lockscreen"
+        else
+            set_wallpaper_path "$imgpath" "desktop"
+        fi
+    fi
+
     # Only clear accent color if a NEW image is provided and noswitch is NOT set
     current_wallpaper=$(jq -r '.background.wallpaperPath' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
     if [[ -n "$imgpath" && -z "$noswitch_flag" && "$imgpath" != "$current_wallpaper" ]]; then
@@ -752,6 +813,20 @@ main() {
             fi
         else
             echo "[switchwall] Warning: No image to auto-detect scheme from, defaulting to 'scheme-tonal-spot'" >&2
+            type_flag="scheme-tonal-spot"
+        fi
+    fi
+
+    # Resolve light theme variant when mode is light
+    if [[ -n "$theme_file" && "$mode_flag" == "light" ]]; then
+        local light_theme_file="${theme_file%.json}_light.json"
+        if [[ -f "$light_theme_file" ]]; then
+            theme_file="$light_theme_file"
+            echo "[switchwall.sh] Using light theme variant: $type_flag"
+        else
+            echo "[switchwall.sh] No light variant for '$type_flag', falling back to matugen generation"
+            theme_file=""
+            # Must be a valid matugen scheme (not "auto" — matugen rejects it)
             type_flag="scheme-tonal-spot"
         fi
     fi

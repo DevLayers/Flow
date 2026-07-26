@@ -25,15 +25,15 @@ MouseArea { // Notification group area
 
     // Entrance animation properties
     property real _entranceOpacity: 0
-    property real _entranceScale: 0.75
-    property real _entranceTranslateY: 35
+    property real _entranceScale: 0.65
+    property real _entranceTranslateY: 50
     property bool _entranceDone: false
 
     onEntranceTriggerChanged: {
         _entranceDone = false;
         _entranceOpacity = 0;
-        _entranceScale = 0.75;
-        _entranceTranslateY = 35;
+        _entranceScale = 0.65;
+        _entranceTranslateY = 50;
         Qt.callLater(function() {
             entranceAnim.start();
         });
@@ -42,8 +42,8 @@ MouseArea { // Notification group area
     Component.onCompleted: {
         _entranceDone = false;
         _entranceOpacity = 0;
-        _entranceScale = 0.75;
-        _entranceTranslateY = 35;
+        _entranceScale = 0.65;
+        _entranceTranslateY = 50;
         Qt.callLater(function() {
             entranceAnim.start();
         });
@@ -51,11 +51,11 @@ MouseArea { // Notification group area
 
     SequentialAnimation {
         id: entranceAnim
-        PauseAnimation { duration: Math.min(Math.max(root.globalIndex, 0), 15) * 35 }
+        PauseAnimation { duration: 150 + Math.min(Math.max(root.globalIndex, 0), 15) * 65 }
         ParallelAnimation {
-            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_entranceScale"; from: 0.75; to: 1.0; duration: 350; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 35; to: 0; duration: 320; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceScale"; from: 0.65; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 0.8 }
+            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 50; to: 0; duration: 380; easing.type: Easing.OutQuart }
         }
         PropertyAction { target: root; property: "_entranceDone"; value: true }
     }
@@ -87,6 +87,19 @@ MouseArea { // Notification group area
     }
     property real padding: 10 * zoom
     implicitHeight: background.implicitHeight
+    // Fix: scale on root so the ListView's allocated space matches the visual size.
+    // When scale was on the child (background), ListView allocated full implicitHeight
+    // but rendered the item smaller — next item was positioned correctly in layout but
+    // appeared to overlap the shrunken card above it.
+    scale: _entranceDone ? 1.0 : _entranceScale
+    Behavior on scale {
+        enabled: !entranceAnim.running
+        NumberAnimation {
+            duration: 350
+            easing.type: Easing.OutBack
+            easing.overshoot: 0.8
+        }
+    }
 
     property real dragConfirmThreshold: 70 // Drag further to discard notification
     property real dismissOvershoot: 20 // Account for gaps and bouncy animations
@@ -155,11 +168,10 @@ MouseArea { // Notification group area
             }
         }
         onFinished: () => {
-            root.notifications.forEach(notif => {
-                Qt.callLater(() => {
-                    Notifications.discardNotification(notif.notificationId);
-                });
-            });
+            const ids = root.notifications.map(n => n.notificationId);
+            if (ids.length > 0) {
+                Notifications.discardMultipleNotifications(ids);
+            }
         }
     }
 
@@ -224,7 +236,13 @@ MouseArea { // Notification group area
             var u = root.width > 0 ? Math.min(1.0, Math.abs(root.xOffset) / root.width) : 0.0;
             return (1.0 - u * u * u) * (1.0 - u * u * u);
         }
-        scale: root._entranceDone ? 1.0 : root._entranceScale
+        scale: 1.0
+        // Fix: translateY only for popup. In sidebar the +50px shift pushed the card
+        // into the next item's ListView slot causing visible overlap.
+        transform: Translate {
+            y: (root._entranceDone || !root.popup) ? 0 : root._entranceTranslateY
+        }
+
         Behavior on opacity {
             enabled: !entranceAnim.running
             NumberAnimation {
@@ -232,18 +250,6 @@ MouseArea { // Notification group area
                 easing.type: Appearance.animation.elementMove.type
                 easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
             }
-        }
-
-        Behavior on scale {
-            enabled: !entranceAnim.running
-            NumberAnimation {
-                duration: 350
-                easing.type: Easing.OutBack
-            }
-        }
-
-        transform: Translate {
-            y: root._entranceDone ? 0 : root._entranceTranslateY
         }
 
         Behavior on anchors.leftMargin {
@@ -260,6 +266,12 @@ MouseArea { // Notification group area
 
         Behavior on implicitHeight {
             id: implicitHeightAnim
+            // Only animate implicitHeight when manually expanding/collapsing.
+            // When NOT expanded, new notifications arriving can cause row.implicitHeight
+            // to momentarily resolve to a lower value (before layout settles), triggering
+            // this Behavior and animating the card to a wrong intermediate height — which
+            // desynchronizes the outer ListView's item positions, producing the overlap look.
+            enabled: root.expanded
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
 

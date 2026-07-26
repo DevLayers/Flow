@@ -16,7 +16,7 @@ import Quickshell.Services.Mpris
 Item { // Player instance
     id: root
     required property MprisPlayer player
-    property var artUrl: MprisController.artUrl    
+    property var artUrl: MprisController.artUrl
     property string artDownloadLocation: Directories.coverArt
     property string artFileName: Qt.md5(artUrl)
     property string artFilePath: `${artDownloadLocation}/${artFileName}`

@@ -23,6 +23,12 @@ Item {
     property bool containsDrag: false
     property string previewPath: ""
 
+    property int entranceTrigger: -1
+
+    function triggerContentEntrance() {
+        root.entranceTrigger++;
+    }
+
     onFocusChanged: focus => {
         if (focus) {
             root.inputField.forceActiveFocus();
@@ -250,9 +256,55 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         property string icon
         property string statusText
         property string description
+        property int animIndex: 0
+        property var rootRef: null
         hoverEnabled: true
         implicitHeight: statusItemRowLayout.implicitHeight
         implicitWidth: statusItemRowLayout.implicitWidth
+
+        opacity: 0.0
+        transform: [
+            Translate {
+                id: statusItemTransform
+                x: 0
+                y: 0
+            },
+            Rotation {
+                id: statusItemRotation
+                origin.x: statusItem.width / 2
+                origin.y: statusItem.height / 2
+                axis { x: 1; y: 0; z: 0 }
+                angle: 0
+            }
+        ]
+
+        Connections {
+            target: statusItem.rootRef
+            function onEntranceTriggerChanged() {
+                if (statusItem.rootRef && statusItem.rootRef.entranceTrigger >= 0) {
+                    statusItem.opacity = 0.0;
+                    statusItem.scale = statusItem.animIndex === 2 ? 0.2 : 1.0;
+                    statusItemTransform.x = statusItem.animIndex === 1 ? -20 : 0;
+                    statusItemTransform.y = statusItem.animIndex === 0 ? 15 : 0;
+                    statusItemRotation.angle = statusItem.animIndex === 0 ? 90 : 0;
+                    Qt.callLater(function() {
+                        statusItemAnim.start();
+                    });
+                }
+            }
+        }
+
+        SequentialAnimation {
+            id: statusItemAnim
+            PauseAnimation { duration: 140 + statusItem.animIndex * 80 }
+            ParallelAnimation {
+                NumberAnimation { target: statusItem; property: "opacity"; from: 0.0; to: 1.0; duration: 280 }
+                NumberAnimation { target: statusItem; property: "scale"; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                NumberAnimation { target: statusItemTransform; property: "x"; to: 0; duration: 350; easing.type: Easing.OutBack }
+                NumberAnimation { target: statusItemTransform; property: "y"; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                NumberAnimation { target: statusItemRotation; property: "angle"; to: 0; duration: 350; easing.type: Easing.OutBack }
+            }
+        }
 
         RowLayout {
             id: statusItemRowLayout
@@ -293,6 +345,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         spacing: root.padding
 
         Item {
+            id: messagesArea
             // Messages
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -302,6 +355,38 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     width: swipeView.width
                     height: swipeView.height
                     radius: Appearance.rounding.small
+                }
+            }
+
+            // Animation properties
+            opacity: 0.0
+            scale: 0.85
+            transform: Translate {
+                id: messagesAreaTransform
+                y: 25
+            }
+
+            Connections {
+                target: root
+                function onEntranceTriggerChanged() {
+                    if (root.entranceTrigger >= 0) {
+                        messagesArea.opacity = 0.0;
+                        messagesArea.scale = 0.85;
+                        messagesAreaTransform.y = 25;
+                        Qt.callLater(function() {
+                            messagesAreaAnim.start();
+                        });
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: messagesAreaAnim
+                PauseAnimation { duration: 100 }
+                ParallelAnimation {
+                    NumberAnimation { target: messagesArea; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                    NumberAnimation { target: messagesArea; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: messagesAreaTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -335,12 +420,16 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     spacing: 10
 
                     StatusItem {
+                        rootRef: root
+                        animIndex: 0
                         icon: Ai.currentModelHasApiKey ? "key" : "key_off"
                         statusText: ""
                         description: Ai.currentModelHasApiKey ? Translation.tr("API key is set\nChange with /key YOUR_API_KEY") : Translation.tr("No API key\nSet it with /key YOUR_API_KEY")
                     }
                     StatusSeparator {}
                     StatusItem {
+                        rootRef: root
+                        animIndex: 1
                         icon: "device_thermostat"
                         statusText: Ai.temperature.toFixed(1)
                         description: Translation.tr("Temperature\nChange with /temp VALUE")
@@ -349,6 +438,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         visible: Ai.tokenCount.total > 0
                     }
                     StatusItem {
+                        rootRef: root
+                        animIndex: 2
                         visible: Ai.tokenCount.total > 0
                         icon: "token"
                         statusText: Ai.tokenCount.total
@@ -369,21 +460,25 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 anchors.fill: parent
                 spacing: 10
                 popin: false
+                animateAppearance: false
                 topMargin: statusBg.implicitHeight + statusBg.anchors.topMargin * 2
 
                 touchpadScrollFactor: Config.options.interactions.scrolling.touchpadScrollFactor * 1.4
                 mouseScrollFactor: Config.options.interactions.scrolling.mouseScrollFactor * 1.4
 
                 property int lastResponseLength: 0
-                // onContentHeightChanged: {
-                //     if (atYEnd)
-                //         Qt.callLater(positionViewAtEnd);
-                // }
-                // onCountChanged: {
-                //     // Auto-scroll when new messages are added
-                //     if (atYEnd)
-                //         Qt.callLater(positionViewAtEnd);
-                // }
+                onContentHeightChanged: {
+                    if (atYEnd) {
+                        Qt.callLater(function() {
+                            messageListView.positionViewAtEnd();
+                        });
+                    }
+                }
+                onCountChanged: {
+                    Qt.callLater(function() {
+                        messageListView.positionViewAtEnd();
+                    });
+                }
 
                 add: null // Prevent function calls from being janky
 
@@ -401,16 +496,20 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         Ai.messageByID[modelData];
                     }
                     messageInputField: root.inputField
+                    entranceTrigger: root.entranceTrigger
                 }
             }
 
             PagePlaceholder {
+                id: emptyStatePlaceholder
                 z: 2
                 shown: Ai.messageIDs.length === 0
                 icon: "neurology"
                 title: Translation.tr("Large language models")
                 description: Translation.tr("Type /key to get started with online models\nCtrl+O to expand sidebar\nCtrl+P to pin sidebar\nCtrl+D to detach sidebar")
                 shape: MaterialShape.Shape.PixelCircle
+                animateIconOnShow: true
+                entranceTrigger: root.entranceTrigger
             }
 
             ScrollToBottomButton {
@@ -420,8 +519,40 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         }
 
         DescriptionBox {
+            id: descriptionBox
             text: root.suggestionList[suggestions.selectedIndex]?.description ?? ""
             showArrows: root.suggestionList.length > 1
+
+            opacity: 0.0
+            scale: 0.85
+            transform: Translate {
+                id: descriptionBoxTransform
+                y: 25
+            }
+
+            Connections {
+                target: root
+                function onEntranceTriggerChanged() {
+                    if (root.entranceTrigger >= 0) {
+                        descriptionBox.opacity = 0.0;
+                        descriptionBox.scale = 0.85;
+                        descriptionBoxTransform.y = 25;
+                        Qt.callLater(function() {
+                            descriptionBoxAnim.start();
+                        });
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: descriptionBoxAnim
+                PauseAnimation { duration: 160 }
+                ParallelAnimation {
+                    NumberAnimation { target: descriptionBox; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                    NumberAnimation { target: descriptionBox; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: descriptionBoxTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                }
+            }
         }
 
         Loader {
@@ -432,9 +563,70 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             active: Config.options.sidebar.ai.showProviderAndModelButtons && Ai.messageIDs.length === 0
             visible: active
 
+            opacity: 0.0
+            scale: 0.85
+            transform: Translate {
+                id: modelProviderTransform
+                y: 25
+            }
+
+            Connections {
+                target: root
+                function onEntranceTriggerChanged() {
+                    if (root.entranceTrigger >= 0 && modelAndProviderLoader.active) {
+                        modelAndProviderLoader.opacity = 0.0;
+                        modelAndProviderLoader.scale = 0.85;
+                        modelProviderTransform.y = 25;
+                        Qt.callLater(function() {
+                            modelProviderAnim.start();
+                        });
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: modelProviderAnim
+                PauseAnimation { duration: 220 }
+                ParallelAnimation {
+                    NumberAnimation { target: modelAndProviderLoader; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                    NumberAnimation { target: modelAndProviderLoader; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: modelProviderTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                }
+            }
+
             sourceComponent: ColumnLayout {
                 id: contentLayout
                 width: modelAndProviderLoader.width
+
+                Connections {
+                    target: root
+                    function onEntranceTriggerChanged() {
+                        if (root.entranceTrigger >= 0 && modelAndProviderLoader.active) {
+                            providerButton1.opacity = 0.0;
+                            providerButton1Transform.x = -35;
+                            providerButton1Transform.y = 0;
+                            
+                            providerButton2.opacity = 0.0;
+                            providerButton2Transform.x = 0;
+                            providerButton2Transform.y = 25;
+                            
+                            providerButton3.opacity = 0.0;
+                            providerButton3Transform.x = 35;
+                            providerButton3Transform.y = 0;
+                            
+                            modelSelector.opacity = 0.0;
+                            modelSelectorScale.xScale = 0.8;
+                            modelSelectorTransform.y = 0;
+                            
+                            Qt.callLater(function() {
+                                providerButton1Anim.start();
+                                providerButton2Anim.start();
+                                providerButton3Anim.start();
+                                modelSelectorAnim.start();
+                            });
+                        }
+                    }
+                }
 
                 RowLayout {
                     id: providerSelector
@@ -444,6 +636,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     property string currentValue: Persistent.states.ai.provider
 
                     SelectionGroupButton {
+                        id: providerButton1
                         Layout.fillWidth: true
                         leftmost: true
                         rightmost: false
@@ -454,8 +647,25 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             Persistent.states.ai.provider = "google";
                             Persistent.states.ai.model = Ai.modelsOfProviders["google"][0].value;
                         }
+                        
+                        opacity: 0.0
+                        transform: Translate {
+                            id: providerButton1Transform
+                            x: -35
+                            y: 0
+                        }
+                        
+                        SequentialAnimation {
+                            id: providerButton1Anim
+                            PauseAnimation { duration: 220 + 0 * 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: providerButton1; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                                NumberAnimation { target: providerButton1Transform; property: "x"; from: -35; to: 0; duration: 380; easing.type: Easing.OutBack }
+                            }
+                        }
                     }
                     SelectionGroupButton {
+                        id: providerButton2
                         Layout.fillWidth: true
                         leftmost: false
                         rightmost: false
@@ -466,8 +676,25 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             Persistent.states.ai.provider = "openrouter";
                             Persistent.states.ai.model = Ai.modelsOfProviders["openrouter"][0].value;
                         }
+                        
+                        opacity: 0.0
+                        transform: Translate {
+                            id: providerButton2Transform
+                            x: 0
+                            y: 25
+                        }
+                        
+                        SequentialAnimation {
+                            id: providerButton2Anim
+                            PauseAnimation { duration: 220 + 1 * 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: providerButton2; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                                NumberAnimation { target: providerButton2Transform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutBack }
+                            }
+                        }
                     }
                     SelectionGroupButton {
+                        id: providerButton3
                         Layout.fillWidth: true
                         leftmost: false
                         rightmost: true
@@ -477,6 +704,22 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         onClicked: {
                             Persistent.states.ai.provider = "others";
                             Persistent.states.ai.model = Ai.modelsOfProviders["others"][0].value;
+                        }
+                        
+                        opacity: 0.0
+                        transform: Translate {
+                            id: providerButton3Transform
+                            x: 35
+                            y: 0
+                        }
+                        
+                        SequentialAnimation {
+                            id: providerButton3Anim
+                            PauseAnimation { duration: 220 + 2 * 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: providerButton3; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                                NumberAnimation { target: providerButton3Transform; property: "x"; from: 35; to: 0; duration: 380; easing.type: Easing.OutBack }
+                            }
                         }
                     }
                 }
@@ -504,6 +747,30 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     }
 
                     onActivated: index => updateModel(index)
+                    
+                    opacity: 0.0
+                    transform: [
+                        Translate {
+                            id: modelSelectorTransform
+                            y: 0
+                        },
+                        Scale {
+                            id: modelSelectorScale
+                            origin.x: modelSelector.width / 2
+                            origin.y: modelSelector.height / 2
+                            xScale: 0.8
+                            yScale: 1.0
+                        }
+                    ]
+                    
+                    SequentialAnimation {
+                        id: modelSelectorAnim
+                        PauseAnimation { duration: 220 + 3 * 60 }
+                        ParallelAnimation {
+                            NumberAnimation { target: modelSelector; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                            NumberAnimation { target: modelSelectorScale; property: "xScale"; from: 0.8; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        }
+                    }
                 }
             }
         }
@@ -517,6 +784,37 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             Layout.fillWidth: true
             spacing: 5
 
+            opacity: visible ? 1.0 : 0.0
+            scale: visible ? 1.0 : 0.85
+            transform: Translate {
+                id: suggestionsTransform
+                y: visible ? 0 : 25
+            }
+
+            Connections {
+                target: root
+                function onEntranceTriggerChanged() {
+                    if (root.entranceTrigger >= 0 && suggestions.visible) {
+                        suggestions.opacity = 0.0;
+                        suggestions.scale = 0.85;
+                        suggestionsTransform.y = 25;
+                        Qt.callLater(function() {
+                            suggestionsAnim.start();
+                        });
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: suggestionsAnim
+                PauseAnimation { duration: 280 }
+                ParallelAnimation {
+                    NumberAnimation { target: suggestions; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                    NumberAnimation { target: suggestions; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: suggestionsTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                }
+            }
+
             Repeater {
                 id: suggestionRepeater
                 model: {
@@ -525,8 +823,30 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 }
                 delegate: ApiCommandButton {
                     id: commandButton
+                    required property int index
+                    required property var modelData
                     colBackground: suggestions.selectedIndex === index ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer
                     bounce: false
+                    
+                    opacity: 0.0
+                    transform: Translate {
+                        id: cmdBtnTranslate
+                        y: 10
+                    }
+
+                    Component.onCompleted: {
+                        btnEntranceAnim.start();
+                    }
+
+                    SequentialAnimation {
+                        id: btnEntranceAnim
+                        PauseAnimation { duration: index * 40 }
+                        ParallelAnimation {
+                            NumberAnimation { target: commandButton; property: "opacity"; from: 0.0; to: 1.0; duration: 250; easing.type: Easing.OutCubic }
+                            NumberAnimation { target: cmdBtnTranslate; property: "y"; from: 10; to: 0; duration: 280; easing.type: Easing.OutBack }
+                        }
+                    }
+
                     contentItem: StyledText {
                         font.pixelSize: Appearance.font.pixelSize.small
                         color: Appearance.m3colors.m3onSurface
@@ -595,6 +915,48 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             color: Appearance.colors.colLayer2
             implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.topMargin + commandButtonsRow.implicitHeight + commandButtonsRow.anchors.bottomMargin + spacing, 45) + (attachedFileIndicator.implicitHeight + spacing + attachedFileIndicator.anchors.topMargin)
             clip: true
+
+            FastBlur {
+                id: inputBlur
+                radius: 0
+            }
+
+            layer.enabled: inputBlur.radius > 0
+            layer.effect: Component {
+                FastBlur {
+                    radius: inputBlur.radius
+                }
+            }
+
+            opacity: 0.0
+            transform: Translate {
+                id: inputWrapperTransform
+                y: 40
+            }
+
+            Connections {
+                target: root
+                function onEntranceTriggerChanged() {
+                    if (root.entranceTrigger >= 0) {
+                        inputWrapper.opacity = 0.0;
+                        inputBlur.radius = 20;
+                        inputWrapperTransform.y = 40;
+                        Qt.callLater(function() {
+                            inputWrapperAnim.start();
+                        });
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: inputWrapperAnim
+                PauseAnimation { duration: 320 }
+                ParallelAnimation {
+                    NumberAnimation { target: inputWrapper; property: "opacity"; from: 0.0; to: 1.0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: inputBlur; property: "radius"; from: 20; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: inputWrapperTransform; property: "y"; from: 40; to: 0; duration: 450; easing.type: Easing.OutExpo }
+                }
+            }
 
             Behavior on implicitHeight {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
@@ -948,6 +1310,19 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     buttonRadius: Appearance.rounding.small
                     enabled: messageInputField.text.length > 0
                     toggled: enabled
+
+                    Behavior on enabled {
+                        SequentialAnimation {
+                            PauseAnimation { duration: 50 }
+                            NumberAnimation {
+                                target: sendButton
+                                property: "opacity"
+                                to: sendButton.enabled ? 1.0 : 0.5
+                                duration: 200
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
 
                     MouseArea {
                         anchors.fill: parent

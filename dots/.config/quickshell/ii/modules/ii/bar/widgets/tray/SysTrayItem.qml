@@ -1,4 +1,3 @@
-pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Quickshell
@@ -18,6 +17,9 @@ MouseArea {
     property real dragStartX: 0
     property real dragStartY: 0
     property bool dragged: false
+    // Cleared while a click/menu is in flight so the tooltip PopupWindow is destroyed
+    // before activate/menu/pin can tear down this item underneath its anchor.
+    property bool suppressTooltip: false
 
     Rectangle {
         anchors.centerIn: parent
@@ -38,14 +40,15 @@ MouseArea {
     implicitWidth: 20
     implicitHeight: 20
     onPressed: event => {
+        root.suppressTooltip = true;
         if (event.button === Qt.LeftButton) {
             dragStartX = event.x;
             dragStartY = event.y;
             dragged = false;
         } else if (event.button === Qt.RightButton) {
-            if (item.hasMenu) {
-                if (menu.active && menu.item && typeof menu.item.close === "function")
-                    menu.item.close();
+            if (root.item && root.item.hasMenu) {
+                if (menu.active)
+                    menu.close();
                 else
                     menu.open();
             }
@@ -58,68 +61,82 @@ MouseArea {
             var dx = event.x - dragStartX;
             var dy = event.y - dragStartY;
             var dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist > 25 && !dragged) {
+            if (dist > 25 && !dragged && root.item) {
                 dragged = true;
-                TrayService.togglePin(root.item.id);
+                TrayService.togglePin(root.item);
             }
         }
     }
 
     onReleased: event => {
         if (event.button === Qt.LeftButton) {
-            if (!dragged) {
-                item.activate();
+            if (!dragged && root.item) {
+                root.item.activate();
             }
             dragged = false;
         }
+        root.suppressTooltip = false;
         event.accepted = true;
     }
+    onCanceled: root.suppressTooltip = false
+    onExited: root.suppressTooltip = false
     onEntered: {
-        tooltip.text = TrayService.getTooltipForItem(root.item);
+        if (root.item)
+            tooltip.text = TrayService.getTooltipForItem(root.item);
     }
+
+    // The menu window anchors to this item, so it must never outlive the window this item
+    // lives in — inside the tray overflow popup that window is destroyed on close.
+    readonly property var hostWindow: root.QsWindow ? root.QsWindow.window : null
+    onHostWindowChanged: {
+        if (!root.hostWindow)
+            menu.close();
+    }
+    Component.onDestruction: menu.close()
 
     Loader {
         id: menu
         function open() {
+            // Without a host window there is nothing to anchor to, and PopupAnchor
+            // dereferences what it is given without a null check.
+            if (!root.hostWindow)
+                return;
             menu.active = true;
+        }
+        function close() {
+            if (!menu.active)
+                return;
+            if (menu.item && typeof menu.item.close === "function")
+                menu.item.close();
+            menu.active = false;
         }
         active: false
 
         sourceComponent: SysTrayMenu {
-            Component.onCompleted: this.open()
-            trayItemMenuHandle: root.item.menu
-            trayItemId: root.item.id
+            id: menuWindow
+            // Snapshot anchor geometry once. Live bindings re-evaluate while the host
+            // window (or this menu) is being destroyed and hand PopupAnchor a half-dead
+            // item, which segfaults inside onItemWindowChanged.
+            Component.onCompleted: {
+                menuWindow.anchor.window = root.hostWindow;
 
-            anchor {
-                window: root.QsWindow.window
-
-                rect: {
-                    var gap = Appearance.sizes.elevationMargin; // SysTrayItem menu gap
-                    var pos = root.mapToItem(null, 0, 0);
-
-                    if (Config.options.bar.vertical) {
-                        return Qt.rect(Config.options.bar.bottom ? pos.x - gap : pos.x + gap, pos.y, root.width, root.height);
-                    } else {
-                        return Qt.rect(pos.x, Config.options.bar.bottom ? pos.y - gap : pos.y + gap, root.width, root.height);
-                    }
+                var gap = Appearance.sizes.elevationMargin;
+                var pos = root.mapToItem(null, 0, 0);
+                if (Config.options.bar.vertical) {
+                    menuWindow.anchor.rect = Qt.rect(Config.options.bar.bottom ? pos.x - gap : pos.x + gap, pos.y, root.width, root.height);
+                    menuWindow.anchor.edges = Config.options.bar.bottom ? (Edges.Left | Edges.Middle) : (Edges.Right | Edges.Middle);
+                    menuWindow.anchor.gravity = Config.options.bar.bottom ? Edges.Left : Edges.Right;
+                } else {
+                    menuWindow.anchor.rect = Qt.rect(pos.x, Config.options.bar.bottom ? pos.y - gap : pos.y + gap, root.width, root.height);
+                    menuWindow.anchor.edges = Config.options.bar.bottom ? (Edges.Top | Edges.Center) : (Edges.Bottom | Edges.Center);
+                    menuWindow.anchor.gravity = Config.options.bar.bottom ? Edges.Top : Edges.Bottom;
                 }
 
-                edges: {
-                    if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? (Edges.Left | Edges.Middle) : (Edges.Right | Edges.Middle);
-                    } else {
-                        return Config.options.bar.bottom ? (Edges.Top | Edges.Center) : (Edges.Bottom | Edges.Center);
-                    }
-                }
-
-                gravity: {
-                    if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? Edges.Left : Edges.Right;
-                    } else {
-                        return Config.options.bar.bottom ? Edges.Top : Edges.Bottom;
-                    }
-                }
+                menuWindow.open();
             }
+            trayItemMenuHandle: root.item ? root.item.menu : null
+            trayItem: root.item
+            trayItemId: root.item ? (root.item.id || "") : ""
 
             onMenuOpened: window => root.menuOpened(window)
             onMenuClosed: {
@@ -150,9 +167,11 @@ MouseArea {
 
         IconImage {
             id: trayIcon
-            visible: !Config.options.tray.monochromeIcons
-            source: root.item.icon
-            anchors.fill: parent
+            visible: true
+            source: (root.item && root.item.icon) ? root.item.icon : ""
+            anchors.centerIn: parent
+            width: Math.min(parent.width, 20)
+            height: Math.min(parent.height, 20)
         }
 
         Loader {
@@ -177,7 +196,7 @@ MouseArea {
 
     PopupToolTip {
         id: tooltip
-        extraVisibleCondition: root.containsMouse
+        extraVisibleCondition: root.containsMouse && !root.suppressTooltip && !menu.active
         alternativeVisibleCondition: extraVisibleCondition
         anchorEdges: (!Config.options.bar.bottom && !Config.options.bar.vertical) ? Edges.Bottom : Edges.Top
     }

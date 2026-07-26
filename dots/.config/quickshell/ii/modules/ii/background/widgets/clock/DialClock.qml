@@ -13,13 +13,13 @@ Item {
 
     property real implicitSize: 240
 
-    property color colBackground: Appearance.m3colors.m3surfaceContainerHigh
-    property color colBorder: Appearance.colors.colOutlineVariant
-    property color colTicks: Appearance.colors.colOutlineVariant
-    property color colNumbers: Appearance.colors.colOnSurfaceVariant
-    property color colHandFill: Appearance.colors.colPrimaryContainer
-    property color colHandBorder: Appearance.colors.colPrimaryContainer
-    property color colMinuteHandFill: Appearance.colors.colTertiaryContainer
+    property color colBackground: WidgetColorScheme.cardBgColor
+    property color colBorder: WidgetColorScheme.textColorOnBg
+    property color colTicks: WidgetColorScheme.textColorOnBg
+    property color colNumbers: WidgetColorScheme.textColorOnBg
+    property color colHandFill: WidgetColorScheme.accentColor
+    property color colHandBorder: WidgetColorScheme.accentColor
+    property color colMinuteHandFill: WidgetColorScheme.onAccentColor
 
     readonly property list<string> clockNumbers: DateTime.time.split(/[: ]/)
     readonly property int clockHour: parseInt(clockNumbers[0]) % 12

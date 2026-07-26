@@ -30,10 +30,19 @@ import Quickshell
 Item {
     id: root
 
+    property var modelData: null
+    property int index: 0
     property bool expanded: false
     property bool onlyNotification: false
     property real fontSize: Appearance.font.pixelSize.small
     property real padding: onlyNotification ? 0 : 8
+    property int itemPosition: 0 // 0: single item in group, 1: top, 2: middle, 3: bottom
+    property bool isFirstInItemGroup: itemPosition === 0 || itemPosition === 1
+    property bool isLastInItemGroup: itemPosition === 0 || itemPosition === 3
+
+    readonly property real outerRadius: Appearance.rounding.large ?? 23
+    readonly property real innerRadius: Appearance.rounding.verysmall ?? 4
+
     property real summaryElideRatio: 0.85
 
     property real dragConfirmThreshold: 70
@@ -183,9 +192,37 @@ Item {
         width: parent.width
         anchors.left: parent.left
         anchors.leftMargin: root.xOffset
-        radius: Appearance.rounding.small
 
-        color: (root.expanded && !root.onlyNotification) ? Appearance.colors.colLayer3 : ColorUtils.transparentize(Appearance.colors.colLayer3)
+        readonly property real dragRatio: Math.min(1.0, Math.abs(root.xOffset) / Math.max(1, root.dragConfirmThreshold))
+        readonly property real swipePillRadius: root.innerRadius + (root.outerRadius - root.innerRadius) * dragRatio
+
+        topLeftRadius: root.xOffset < 0
+                       ? swipePillRadius
+                       : ((root.expanded && !root.onlyNotification)
+                          ? (root.isFirstInItemGroup ? root.outerRadius : root.innerRadius)
+                          : Appearance.rounding.small)
+        topRightRadius: root.xOffset > 0
+                        ? swipePillRadius
+                        : ((root.expanded && !root.onlyNotification)
+                           ? (root.isFirstInItemGroup ? root.outerRadius : root.innerRadius)
+                           : Appearance.rounding.small)
+        bottomLeftRadius: root.xOffset < 0
+                          ? swipePillRadius
+                          : ((root.expanded && !root.onlyNotification)
+                             ? (root.isLastInItemGroup ? root.outerRadius : root.innerRadius)
+                             : Appearance.rounding.small)
+        bottomRightRadius: root.xOffset > 0
+                           ? swipePillRadius
+                           : ((root.expanded && !root.onlyNotification)
+                              ? (root.isLastInItemGroup ? root.outerRadius : root.innerRadius)
+                              : Appearance.rounding.small)
+
+        Behavior on topLeftRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+        Behavior on topRightRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+        Behavior on bottomLeftRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+        Behavior on bottomRightRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+
+        color: "transparent"
 
         // Subtle hover/press feedback; suppressed during drag.
         scale: dragManager.dragging ? 1.0 : (dragManager.pressed ? 0.992 : 1.0)
@@ -196,9 +233,7 @@ Item {
             }
         }
 
-        border.width: 1
-        border.color: dragManager.containsMouse && !dragManager.dragging ? ColorUtils.transparentize(Appearance.colors.colOutline, 0.6) : "transparent"
-        Behavior on border.color {
+        Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
@@ -228,7 +263,10 @@ Item {
         implicitHeight: root.expanded ? (contentColumn.implicitHeight + root.padding * 2) : summaryRow.implicitHeight
 
         Behavior on implicitHeight {
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            NumberAnimation {
+                duration: 380
+                easing.type: Easing.OutQuart
+            }
         }
 
         clip: true
@@ -240,7 +278,10 @@ Item {
             spacing: 3
 
             Behavior on anchors.margins {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                NumberAnimation {
+                    duration: 380
+                    easing.type: Easing.OutQuart
+                }
             }
 
             RowLayout {
@@ -254,7 +295,9 @@ Item {
                     Layout.fillWidth: true
                     visible: !root.onlyNotification
                     font.pixelSize: root.fontSize
-                    color: Appearance.colors.colOnLayer3
+                    color: root.expanded
+                           ? Appearance.colors.colOnLayer3
+                           : Appearance.colors.colOnLayer3
                     elide: Text.ElideRight
                     text: root.modelData?.summary || root.modelData?.appName || Translation.tr("Notification")
                 }
@@ -263,13 +306,17 @@ Item {
                     opacity: !root.expanded ? 1 : 0
                     visible: opacity > 0
                     Layout.fillWidth: true
+                    Layout.preferredHeight: summaryText.implicitHeight
                     Behavior on opacity {
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutCubic
+                        }
                     }
                     font.pixelSize: root.fontSize
-                    color: Appearance.colors.colSubtext
+                    color: ColorUtils.transparentize(Appearance.colors.colOnLayer3, 0.35)
                     elide: Text.ElideRight
-                    wrapMode: Text.Wrap
+                    wrapMode: root.expanded ? Text.Wrap : Text.NoWrap
                     maximumLineCount: 1
                     textFormat: Text.StyledText
                     text: NotificationUtils.processNotificationBody(root.modelData?.body || "", root.modelData?.appName || "").replace(/\n/g, " ")
@@ -283,13 +330,42 @@ Item {
                 visible: opacity > 0
 
                 Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    NumberAnimation {
+                        duration: 300
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    Layout.preferredHeight: Math.round(parent.width * 9 / 16)
+                    visible: (root.modelData?.image || "") !== ""
+                    radius: Appearance.rounding.normal
+                    color: Appearance.colors.colSurfaceContainerHighest
+
+                    Image {
+                        id: expandedThumbImage
+                        anchors.fill: parent
+                        source: visible ? (root.modelData?.image || "") : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: true
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: expandedThumbImage.width
+                                height: expandedThumbImage.height
+                                radius: Appearance.rounding.normal
+                            }
+                        }
+                    }
                 }
 
                 StyledText {
                     Layout.fillWidth: true
                     font.pixelSize: root.fontSize
-                    color: Appearance.colors.colSubtext
+                    color: ColorUtils.transparentize(Appearance.colors.colOnLayer3, 0.35)
                     wrapMode: Text.Wrap
                     elide: Text.ElideRight
                     textFormat: Text.RichText
@@ -300,12 +376,8 @@ Item {
 
                     onLinkActivated: link => {
                         Qt.openUrlExternally(link);
-                        // Phone lives in the left sidebar (Policies), not the
-                        // right sidebar, so close the correct panel.
                         GlobalStates.policiesPanelOpen = false;
                     }
-
-                    PointingHandLinkHover {}
                 }
 
                 Item {
@@ -373,13 +445,13 @@ Item {
                                         leftPadding: 15
                                         rightPadding: 15
                                         buttonRadius: Appearance.rounding.small
-                                        colBackground: Appearance.colors.colLayer4
-                                        colBackgroundHover: Appearance.colors.colLayer4Hover
+                                        colBackground: Appearance.colors.colLayer2
+                                        colBackgroundHover: Appearance.colors.colLayer2Hover
                                         buttonText: _label
                                         contentItem: StyledText {
                                             text: notifAction._label
                                             font.pixelSize: Appearance.font.pixelSize.small
-                                            color: Appearance.colors.colOnLayer4
+                                            color: Appearance.colors.colOnLayer3
                                         }
                                         onClicked: {
                                             KdeConnectService.sendAction(KdeConnectService.activeDeviceId, root.publicId, modelData.key);
@@ -398,7 +470,7 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 36
                                     radius: Appearance.rounding.full
-                                    color: Appearance.colors.colLayer4
+                                    color: Appearance.colors.colPrimaryContainerHover
                                     border.width: replyField.activeFocus ? 2 : 1
                                     border.color: replyField.activeFocus ? Appearance.colors.colPrimary : Appearance.colors.colOutlineVariant
 
@@ -420,7 +492,7 @@ Item {
                                         anchors.rightMargin: 14
                                         verticalAlignment: Text.AlignVCenter
                                         text: root.replyDraft
-                                        color: Appearance.colors.colOnLayer4
+                                        color: Appearance.colors.colOnPrimaryContainer
                                         onTextEdited: root.replyDraft = text
                                         Keys.onPressed: event => {
                                             if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -437,7 +509,7 @@ Item {
                                         visible: !replyField.activeFocus && root.replyDraft.length === 0
                                         verticalAlignment: Text.AlignVCenter
                                         text: root.modelData?.replyPlaceholder || Translation.tr("Send reply…")
-                                        color: Appearance.colors.colSubtext
+                                        color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.35)
                                         font.pixelSize: Appearance.font.pixelSize.small
                                     }
                                 }
@@ -487,12 +559,15 @@ Item {
                                     Behavior on opacity {
                                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                                     }
+                                    colBackground: Appearance.colors.colPrimaryContainerHover
+                                    colBackgroundHover: Appearance.colors.colPrimaryContainerActive
+                                    colRipple: Appearance.colors.colPrimaryContainerActive
                                     buttonText: Translation.tr("Reply")
                                     onClicked: replyField.forceActiveFocus()
                                     contentItem: MaterialSymbol {
                                         iconSize: Appearance.font.pixelSize.larger
                                         horizontalAlignment: Text.AlignHCenter
-                                        color: Appearance.colors.colOnLayer4
+                                        color: Appearance.colors.colOnPrimaryContainer
                                         text: "reply"
                                     }
                                     StyledToolTip {
@@ -504,17 +579,26 @@ Item {
                                     buttonText: Translation.tr("Close")
                                     Layout.fillWidth: true
                                     onClicked: root.destroyWithAnimation()
+                                    colBackground: Appearance.colors.colPrimaryContainerHover
+                                    colBackgroundHover: Appearance.colors.colPrimaryContainerActive
+                                    colRipple: Appearance.colors.colPrimaryContainerActive
                                     contentItem: MaterialSymbol {
                                         iconSize: Appearance.font.pixelSize.larger
                                         horizontalAlignment: Text.AlignHCenter
-                                        color: Appearance.colors.colOnLayer4
+                                        color: Appearance.colors.colOnPrimaryContainer
                                         text: "close"
+                                    }
+                                    StyledToolTip {
+                                        text: Translation.tr("Dismiss this notification")
                                     }
                                 }
 
                                 NotificationActionButton {
                                     buttonText: Translation.tr("Copy")
                                     Layout.fillWidth: true
+                                    colBackground: Appearance.colors.colPrimaryContainerHover
+                                    colBackgroundHover: Appearance.colors.colPrimaryContainerActive
+                                    colRipple: Appearance.colors.colPrimaryContainerActive
                                     onClicked: {
                                         Quickshell.clipboardText = root.modelData?.body || "";
                                         copyIcon.text = "inventory";
@@ -530,8 +614,11 @@ Item {
                                         id: copyIcon
                                         iconSize: Appearance.font.pixelSize.larger
                                         horizontalAlignment: Text.AlignHCenter
-                                        color: Appearance.colors.colOnLayer4
+                                        color: Appearance.colors.colOnPrimaryContainer
                                         text: "content_copy"
+                                    }
+                                    StyledToolTip {
+                                        text: Translation.tr("Copy notification text to clipboard")
                                     }
                                 }
 
@@ -546,6 +633,9 @@ Item {
                                     Behavior on opacity {
                                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                                     }
+                                    colBackground: Appearance.colors.colPrimaryContainerHover
+                                    colBackgroundHover: Appearance.colors.colPrimaryContainerActive
+                                    colRipple: Appearance.colors.colPrimaryContainerActive
                                     buttonText: Translation.tr("Open on phone")
                                     onClicked: {
                                         KdeConnectService.openNotificationIntent(root.publicId);
@@ -553,7 +643,7 @@ Item {
                                     contentItem: MaterialSymbol {
                                         iconSize: Appearance.font.pixelSize.larger
                                         horizontalAlignment: Text.AlignHCenter
-                                        color: Appearance.colors.colOnLayer4
+                                        color: Appearance.colors.colOnPrimaryContainer
                                         text: "open_in_phone"
                                     }
                                     StyledToolTip {
