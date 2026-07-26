@@ -522,7 +522,6 @@ Singleton {
                     property string colorScheme: "default"
                     property JsonObject clock: JsonObject {
                         property bool enable: true
-                        property bool showOnlyWhenLocked: false
                         property bool disableAnimationOnLock: false
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
                         property real x: 1518.98
@@ -553,7 +552,6 @@ Singleton {
                             property bool colorful: false
                             property bool showColon: true
                             property JsonObject font: JsonObject {
-                                property string family: "Google Sans Flex"
                                 property real weight: 350
                                 property real width: 100
                                 property real size: 90

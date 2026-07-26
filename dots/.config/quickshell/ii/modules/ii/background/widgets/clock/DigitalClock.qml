@@ -11,6 +11,7 @@ ColumnLayout {
 
     readonly property bool colorful: Config.options.background.widgets.clock.digital.colorful
     readonly property bool showColon: Config.options.background.widgets.clock.digital.showColon
+    readonly property bool showSeconds: Config.options.bar.clock.showSeconds
 
     property bool isVertical: Config.options.background.widgets.clock.digital.vertical
     property color colText: WidgetColorScheme.textColorOnBg
@@ -30,7 +31,7 @@ ColumnLayout {
             font {
                 pixelSize: Config.options.background.widgets.clock.digital.font.size
                 weight: Config.options.background.widgets.clock.digital.font.weight
-                family: Config.options.background.widgets.clock.digital.font.family
+                family: Appearance.font.family.numbers
                 variableAxes: ({
                         "wdth": Config.options.background.widgets.clock.digital.font.width,
                         "ROND": Config.options.background.widgets.clock.digital.font.roundness
@@ -67,6 +68,36 @@ ColumnLayout {
                 }
             }
         }
+        Loader {
+            active: !clockColumn.isVertical && clockColumn.showSeconds && showColon
+            visible: active
+            sourceComponent: ClockText {
+                text: ":"
+                color: colorful ? clockColumn.colTextSecondary : clockColumn.colText
+                horizontalAlignment: clockColumn.textHorizontalAlignment
+                font {
+                    pixelSize: timeTextTop.font.pixelSize
+                    weight: timeTextTop.font.weight
+                    family: timeTextTop.font.family
+                    variableAxes: timeTextTop.font.variableAxes
+                }
+            }
+        }
+        Loader {
+            active: !clockColumn.isVertical && clockColumn.showSeconds
+            visible: active
+            sourceComponent: ClockText {
+                text: DateTime.seconds
+                color: colorful ? clockColumn.colTextTertiary : clockColumn.colText
+                horizontalAlignment: clockColumn.textHorizontalAlignment
+                font {
+                    pixelSize: timeTextTop.font.pixelSize
+                    weight: timeTextTop.font.weight
+                    family: timeTextTop.font.family
+                    variableAxes: timeTextTop.font.variableAxes
+                }
+            }
+        }
     }
     
 
@@ -77,7 +108,7 @@ ColumnLayout {
         visible: active
         sourceComponent: ClockText {
             id: timeTextBottom
-            text: DateTime.time.split(":")[1].split(" ")[0].padStart(2, "0")
+            text: DateTime.time.split(":")[1].split(" ")[0].padStart(2, "0") + (clockColumn.showSeconds ? ":" + DateTime.seconds : "")
             color: colorful ? clockColumn.colTextTertiary : clockColumn.colText
             horizontalAlignment: clockColumn.textHorizontalAlignment
             font {

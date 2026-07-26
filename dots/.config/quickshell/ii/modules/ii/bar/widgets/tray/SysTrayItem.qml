@@ -44,8 +44,8 @@ MouseArea {
             dragged = false;
         } else if (event.button === Qt.RightButton) {
             if (root.item && root.item.hasMenu) {
-                if (menu.active && menu.item && typeof menu.item.close === "function")
-                    menu.item.close();
+                if (menu.active)
+                    menu.close();
                 else
                     menu.open();
             }
@@ -79,21 +79,47 @@ MouseArea {
             tooltip.text = TrayService.getTooltipForItem(root.item);
     }
 
+    // The menu window anchors to this item, so it must never outlive the window this item
+    // lives in — inside the tray overflow popup that window is destroyed on close.
+    readonly property var hostWindow: root.QsWindow?.window ?? null
+    onHostWindowChanged: {
+        if (!root.hostWindow)
+            menu.close();
+    }
+    Component.onDestruction: menu.close()
+
     Loader {
         id: menu
         function open() {
+            // Without a host window there is nothing to anchor to, and PopupAnchor
+            // dereferences what it is given without a null check.
+            if (!root.hostWindow)
+                return;
             menu.active = true;
+        }
+        function close() {
+            if (!menu.active)
+                return;
+            if (menu.item && typeof menu.item.close === "function")
+                menu.item.close();
+            menu.active = false;
         }
         active: false
 
         sourceComponent: SysTrayMenu {
-            Component.onCompleted: this.open()
+            id: menuWindow
+            // Assign the anchor window once rather than binding it. A binding re-evaluates
+            // while the host window is being destroyed, which hands PopupAnchor an item
+            // that is already half torn down and crashes on it.
+            Component.onCompleted: {
+                menuWindow.anchor.window = root.hostWindow;
+                menuWindow.open();
+            }
             trayItemMenuHandle: root.item ? root.item.menu : null
+            trayItem: root.item
             trayItemId: root.item ? (root.item.id || "") : ""
 
             anchor {
-                window: root.QsWindow.window
-
                 rect: {
                     var gap = Appearance.sizes.elevationMargin; // SysTrayItem menu gap
                     var pos = root.mapToItem(null, 0, 0);

@@ -53,6 +53,9 @@ LazyLoader {
     property bool _popupHovered: false
     property bool _stickyActive: false
     property bool forceClick: false
+    // Set false when the user of this popup runs its own focus grab. Hyprland honours only
+    // one grab per client, so a second one silently clears the first.
+    property bool selfDismiss: true
     property bool _targetHovered: hoverTarget ? (hoverTarget.containsMouse !== undefined ? hoverTarget.containsMouse : (hoverTarget.hovered !== undefined ? hoverTarget.hovered : false)) : false
     property bool _clickActive: false
     property bool _isClosing: false
@@ -125,8 +128,20 @@ LazyLoader {
         implicitWidth: popupBackground.targetWidth + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
         implicitHeight: popupBackground.targetHeight + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
 
+        // The input region must not follow the open animation. popupBackground lives inside
+        // animContainer, which carries a Translate transform, and a transform change does not
+        // emit the geometry signals Region listens to — so the committed region can stay stuck
+        // at the animation's starting offset and swallow clicks aimed at the popup's contents.
+        Item {
+            id: maskRect
+            x: popupBackground.x
+            y: popupBackground.y
+            width: popupBackground.width
+            height: popupBackground.height
+        }
+
         mask: Region {
-            item: popupBackground
+            item: maskRect
         }
 
         exclusionMode: ExclusionMode.Ignore
@@ -177,7 +192,7 @@ LazyLoader {
         HyprlandFocusGrab {
             id: dismissGrab
             windows: [popupWindow]
-            active: (Config.options.bar.tooltips.clickToShow || root.forceClick) && root._computedActive
+            active: root.selfDismiss && (Config.options.bar.tooltips.clickToShow || root.forceClick) && root._computedActive
                 && popupWindow._dismissGrabArmed
             onCleared: () => {
                 root._clickActive = false;
@@ -277,7 +292,7 @@ LazyLoader {
                 }
             }
             function on_ComputedActiveChanged() {
-                if (root._computedActive) {
+                if (root._computedActive && root.selfDismiss) {
                     popupWindow._dismissGrabArmed = false;
                     dismissGrabArmTimer.restart();
                 } else {
@@ -288,7 +303,7 @@ LazyLoader {
         }
 
         Component.onCompleted: {
-            if (Config.options.bar.tooltips.clickToShow) {
+            if (root.selfDismiss && Config.options.bar.tooltips.clickToShow) {
                 dismissGrabArmTimer.restart();
             }
             popupWindow.animProgress = 0.0;
@@ -390,11 +405,15 @@ LazyLoader {
                     transformOrigin: Item.Center
                     clip: false
 
-                Component.onDestruction: {
-                    if (root && root.contentItem) {
-                        root.contentItem.parent = root;
+                    // contentItem is owned by root, which is a LazyLoader (not an Item), so it
+                    // outlives this window. Detach it before the window's item tree is torn down,
+                    // otherwise it keeps a dangling visual parent and anchors into freed items.
+                    Component.onDestruction: {
+                        if (!root || !root.contentItem)
+                            return;
+                        root.contentItem.anchors.fill = undefined;
+                        root.contentItem.parent = null;
                     }
-                }
 
                 Component.onCompleted: {
                     if (root.contentItem) {

@@ -50,8 +50,26 @@ Singleton {
     }
 
     // Pinning
-    function pin(itemOrId) {
-        var key = typeof itemOrId === "object" ? getItemKey(itemOrId) : itemOrId;
+    // Callers may pass either a live item or a bare id. A bare id is ambiguous for
+    // Electron/Chrome items, whose stored key is "<id>_<title>", so look the live item
+    // up and derive the real key from it instead of trusting the id.
+    function resolveKey(itemOrId) {
+        if (!itemOrId) return "";
+        if (typeof itemOrId === "object") return getItemKey(itemOrId);
+        var match = SystemTray.items.values.find(i => i && i.id === itemOrId);
+        return match ? getItemKey(match) : itemOrId;
+    }
+
+    function isListed(itemOrId) {
+        var key = root.resolveKey(itemOrId);
+        if (!key) return false;
+        var rawId = typeof itemOrId === "object" ? (itemOrId.id || "") : itemOrId;
+        var pins = Config.options.tray.pinnedItems || [];
+        return pins.includes(key) || (rawId.length > 0 && pins.includes(rawId));
+    }
+
+    function addToList(itemOrId) {
+        var key = root.resolveKey(itemOrId);
         if (!key) return;
         var pins = (Config.options.tray.pinnedItems || []).slice();
         if (pins.includes(key)) return;
@@ -59,32 +77,38 @@ Singleton {
         Config.options.tray.pinnedItems = pins;
     }
 
-    function unpin(itemOrId) {
-        var key = typeof itemOrId === "object" ? getItemKey(itemOrId) : itemOrId;
+    function removeFromList(itemOrId) {
+        var key = root.resolveKey(itemOrId);
         if (!key) return;
         var rawId = typeof itemOrId === "object" ? (itemOrId.id || "") : itemOrId;
         Config.options.tray.pinnedItems = (Config.options.tray.pinnedItems || []).filter(id => id !== key && id !== rawId);
     }
 
+    // With invertPins the config list is a blacklist for the pinned area, so being listed
+    // and being pinned are opposites. Everything below goes through here to keep the two
+    // modes from cancelling each other out.
+    function setPinned(itemOrId, pinned) {
+        if (invertPins ? !pinned : pinned)
+            root.addToList(itemOrId);
+        else
+            root.removeFromList(itemOrId);
+    }
+
+    function pin(itemOrId) {
+        root.setPinned(itemOrId, true);
+    }
+
+    function unpin(itemOrId) {
+        root.setPinned(itemOrId, false);
+    }
+
     function isPinned(itemOrId) {
         if (!itemOrId) return false;
-        var key = typeof itemOrId === "object" ? getItemKey(itemOrId) : itemOrId;
-        var rawId = typeof itemOrId === "object" ? (itemOrId.id || "") : itemOrId;
-        for (var i = 0; i < root.pinnedItems.length; i++) {
-            var it = root.pinnedItems[i];
-            if (!it) continue;
-            if (getItemKey(it) === key || (rawId && it.id === rawId))
-                return true;
-        }
-        return false;
+        return invertPins ? !root.isListed(itemOrId) : root.isListed(itemOrId);
     }
 
     function togglePin(itemOrId) {
-        if (isPinned(itemOrId)) {
-            unpin(itemOrId);
-        } else {
-            pin(itemOrId);
-        }
+        root.setPinned(itemOrId, !root.isPinned(itemOrId));
     }
 
 }

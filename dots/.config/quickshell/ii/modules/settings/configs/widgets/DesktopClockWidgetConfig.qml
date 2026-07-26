@@ -144,15 +144,6 @@ ContentPage {
                     }
                 }
 
-                ConfigTextField {
-                    icon: "font_download"
-                    text: Translation.tr("Font family")
-                    inputText: Config.options.background.widgets.clock.digital.font.family
-                    onInputTextChanged: {
-                        Config.options.background.widgets.clock.digital.font.family = inputText;
-                    }
-                }
-
                 ConfigSlider {
                     buttonIcon: "format_bold"
                     text: Translation.tr("Font weight")

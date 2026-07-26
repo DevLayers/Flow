@@ -21,6 +21,11 @@ Item {
     }
 
     readonly property bool internalVisibleCondition: (extraVisibleCondition && (parent.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition
+
+    // PopupAnchor dereferences whatever it is handed without a null check, so the tooltip
+    // window must not exist at all while we have nothing valid to anchor it to. That happens
+    // when the host window is torn down under us — e.g. the tray overflow popup closing.
+    readonly property var hostWindow: root.QsWindow?.window ?? null
     property var anchorEdges: Edges.Top
     property var anchorGravity: anchorEdges
 
@@ -37,12 +42,26 @@ Item {
     Loader {
         id: tooltipLoader
         anchors.fill: parent
-        active: root.internalVisibleCondition
+        active: root.internalVisibleCondition && root.hostWindow !== null && root.parent !== null
         sourceComponent: PopupWindow {
+            id: tooltipWindow
             visible: true
+
+            // Assigned once instead of bound, for the same reason as the tray menu: an
+            // anchor binding that re-evaluates during teardown crashes on a freed item.
+            Component.onCompleted: {
+                tooltipWindow.anchor.window = root.hostWindow;
+                tooltipWindow.anchor.item = root.parent;
+            }
+
+            // contentItem is owned by root and outlives this window, so detach it before the
+            // window's item tree is torn down instead of leaving a dangling visual parent.
+            Component.onDestruction: {
+                if (root.contentItem)
+                    root.contentItem.parent = null;
+            }
+
             anchor {
-                window: root.QsWindow.window
-                item: root.parent
                 edges: root.anchorEdges
                 gravity: root.anchorGravity
             }
