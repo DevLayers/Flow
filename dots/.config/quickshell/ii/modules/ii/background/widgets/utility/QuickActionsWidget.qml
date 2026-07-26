@@ -58,8 +58,8 @@ AbstractBackgroundWidget {
         id: bgRect
         anchors.fill: parent
         color: root.cardBgColor
-        topLeftRadius: Appearance.rounding.large + 24
-        topRightRadius: Appearance.rounding.large + 24
+        topLeftRadius: 48
+        topRightRadius: 48
         bottomLeftRadius: Appearance.rounding.windowRounding
         bottomRightRadius: Appearance.rounding.windowRounding
 

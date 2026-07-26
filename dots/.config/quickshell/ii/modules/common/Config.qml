@@ -843,6 +843,14 @@ Singleton {
                         property real y: 200
                         property bool expressiveColors: false
                     }
+                    property JsonObject quote: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                        property string quoteText: ""
+                    }
                     property JsonObject quick_actions: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"

@@ -583,6 +583,17 @@ Item {
         }
     }
 
+    Component {
+        id: component_quote
+        QuoteWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
     readonly property var widgetComponentMap: ({
             "clock_cookie": component_clock_cookie,
             "clock_digital": component_clock_digital,
@@ -632,7 +643,8 @@ Item {
             "ai_chat": component_ai_chat,
             "notes_widget": component_notes_widget,
             "notes_widget_2x1": component_notes_widget_2x1,
-            "quick_actions": component_quick_actions
+            "quick_actions": component_quick_actions,
+            "quote": component_quote
         })
 
     function getExtUrl(extId) {

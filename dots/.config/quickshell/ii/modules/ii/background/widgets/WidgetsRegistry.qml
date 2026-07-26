@@ -453,8 +453,17 @@ Singleton {
             "category": "Utility",
             "qmlPath": Qt.resolvedUrl("utility/QuickActionsWidget.qml"),
             "icon": "widgets",
-            "description": Translation.tr("1x1 quick launch widget with Gemini, Video, and Live shortcuts to Sidebar Policies."),
+            "description": Translation.tr("1x1 quick launch widget with Gemini, Translator, and Phone shortcuts to Sidebar Policies."),
             "configPage": "widgets/DesktopQuickActionsConfig.qml"
+        },
+        {
+            "widgetId": "quote",
+            "name": Translation.tr("Quote"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/QuoteWidget.qml"),
+            "icon": "format_quote",
+            "description": Translation.tr("1x1 widget displaying a customizable quote with decorative quote marks."),
+            "configPage": "widgets/DesktopQuoteConfig.qml"
         }
     ]
 
