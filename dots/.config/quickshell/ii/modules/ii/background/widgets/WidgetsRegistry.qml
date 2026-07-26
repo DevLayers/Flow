@@ -453,7 +453,7 @@ Singleton {
             "category": "Utility",
             "qmlPath": Qt.resolvedUrl("utility/QuickActionsWidget.qml"),
             "icon": "widgets",
-            "description": Translation.tr("1x1 quick launch widget with Gemini, Translator, and Phone shortcuts to Sidebar Policies."),
+            "description": Translation.tr("1x1 quick launch widget with configurable module shortcuts. Bottom buttons are customizable."),
             "configPage": "widgets/DesktopQuickActionsConfig.qml"
         },
         {

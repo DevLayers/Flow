@@ -88,6 +88,24 @@ ContentPage {
             }
 
             ContentSubsectionLabel {
+                text: Translation.tr("Text Size")
+            }
+
+            ConfigSlider {
+                buttonIcon: "format_size"
+                text: Translation.tr("Quote Font Size")
+                from: 10
+                to: 32
+                stepSize: 1
+                value: Config.options.background.widgets.quote.fontSize || 16
+                usePercentTooltip: false
+                tooltipContent: `${Math.round(value)}px`
+                onValueChanged: {
+                    Config.options.background.widgets.quote.fontSize = value;
+                }
+            }
+
+            ContentSubsectionLabel {
                 text: Translation.tr("Visual Options")
             }
 

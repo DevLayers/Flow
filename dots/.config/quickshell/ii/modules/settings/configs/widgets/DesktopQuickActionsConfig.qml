@@ -10,6 +10,16 @@ ContentPage {
 
     signal goBack
 
+    readonly property var moduleOptions: [
+        { "displayName": Translation.tr("Translator"), "icon": "translate", "value": "translator" },
+        { "displayName": Translation.tr("Phone"), "icon": "smartphone", "value": "phone" },
+        { "displayName": Translation.tr("Wallpapers"), "icon": "wallpaper", "value": "wallpapers" },
+        { "displayName": Translation.tr("Media"), "icon": "play_circle", "value": "media" },
+        { "displayName": Translation.tr("Dashboard"), "icon": "dashboard", "value": "sidebar_dashboard" },
+        { "displayName": Translation.tr("Cheatsheet"), "icon": "keyboard", "value": "cheatsheet" },
+        { "displayName": Translation.tr("Notes"), "icon": "sticky_note_2", "value": "notes" }
+    ]
+
     RowLayout {
         spacing: 12
 
@@ -64,6 +74,36 @@ ContentPage {
             Layout.fillWidth: true
             spacing: 4
             visible: Config.isWidgetActive("quick_actions")
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Bottom Button 1")
+            }
+
+            ConfigSelectionArray {
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                currentValue: Config.options.background.widgets.quick_actions.bottomButton1 || "translator"
+                options: root.moduleOptions
+                onSelected: newValue => {
+                    Config.options.background.widgets.quick_actions.bottomButton1 = newValue;
+                }
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Bottom Button 2")
+            }
+
+            ConfigSelectionArray {
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                currentValue: Config.options.background.widgets.quick_actions.bottomButton2 || "phone"
+                options: root.moduleOptions
+                onSelected: newValue => {
+                    Config.options.background.widgets.quick_actions.bottomButton2 = newValue;
+                }
+            }
 
             ContentSubsectionLabel {
                 text: Translation.tr("Visual Options")

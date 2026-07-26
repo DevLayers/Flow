@@ -58,6 +58,16 @@ AbstractBackgroundWidget {
     onNotesWindowOpenChanged: {
         if (!notesWindowOpen) {
             noteFile.reload();
+            GlobalStates.notesOpen = false;
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onNotesOpenChanged() {
+            if (GlobalStates.notesOpen && !root.notesWindowOpen) {
+                root.openNotes();
+            }
         }
     }
 

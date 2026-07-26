@@ -40,6 +40,7 @@ Singleton {
     property bool alarmRinging: false
     property bool cheatsheetOpen: false
     property bool crosshairOpen: false
+    property bool notesOpen: false
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
     // Names of screens currently blacked out by the OLED saver overlay. Independent

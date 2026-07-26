@@ -47,6 +47,55 @@ AbstractBackgroundWidget {
         Persistent.states.sidebar.policies.tab = findActiveTabIndex(tabName);
     }
 
+    // Module definitions for configurable bottom buttons
+    readonly property var moduleMap: ({
+        "translator": {
+            "icon": "translate",
+            "label": Translation.tr("Translator"),
+            "action": function() { root.openPoliciesTab("Translator"); }
+        },
+        "phone": {
+            "icon": "smartphone",
+            "label": Translation.tr("Phone"),
+            "action": function() { root.openPoliciesTab("Phone"); }
+        },
+        "wallpapers": {
+            "icon": "wallpaper",
+            "label": Translation.tr("Wallpapers"),
+            "action": function() { root.openPoliciesTab("Wallpapers"); }
+        },
+        "media": {
+            "icon": "play_circle",
+            "label": Translation.tr("Media"),
+            "action": function() { root.openPoliciesTab("Media"); }
+        },
+        "sidebar_dashboard": {
+            "icon": "dashboard",
+            "label": Translation.tr("Dashboard"),
+            "action": function() { GlobalStates.dashboardPanelOpen = true; }
+        },
+        "cheatsheet": {
+            "icon": "keyboard",
+            "label": Translation.tr("Cheatsheet"),
+            "action": function() { GlobalStates.cheatsheetOpen = true; }
+        },
+        "notes": {
+            "icon": "sticky_note_2",
+            "label": Translation.tr("Notes"),
+            "action": function() { GlobalStates.notesOpen = true; }
+        }
+    })
+
+    readonly property string button1Module: Config.options.background.widgets.quick_actions.bottomButton1 || "translator"
+    readonly property string button2Module: Config.options.background.widgets.quick_actions.bottomButton2 || "phone"
+    readonly property var button1Def: moduleMap[button1Module] || moduleMap["translator"]
+    readonly property var button2Def: moduleMap[button2Module] || moduleMap["phone"]
+
+    function triggerModule(moduleId) {
+        const def = moduleMap[moduleId];
+        if (def && def.action) def.action();
+    }
+
     StyledRectangularShadow {
         id: bgShadow
         target: bgRect
@@ -126,13 +175,13 @@ AbstractBackgroundWidget {
                     onClicked: root.openPoliciesTab("Intelligence")
                 }
 
-                // Bottom row: two action buttons
+                // Bottom row: two configurable action buttons
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: 12
 
-                    // Translator button
+                    // Button 1
                     RippleButton {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -147,7 +196,7 @@ AbstractBackgroundWidget {
 
                             MaterialSymbol {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "translate"
+                                text: root.button1Def.icon
                                 iconSize: 22
                                 fill: 1
                                 color: root.textColorOnBg
@@ -155,16 +204,16 @@ AbstractBackgroundWidget {
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: Translation.tr("Translator")
+                                text: root.button1Def.label
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 color: root.subtextColorOnBg
                             }
                         }
 
-                        onClicked: root.openPoliciesTab("Translator")
+                        onClicked: root.triggerModule(root.button1Module)
                     }
 
-                    // Phone button
+                    // Button 2
                     RippleButton {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -179,7 +228,7 @@ AbstractBackgroundWidget {
 
                             MaterialSymbol {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "smartphone"
+                                text: root.button2Def.icon
                                 iconSize: 22
                                 fill: 1
                                 color: root.textColorOnBg
@@ -187,13 +236,13 @@ AbstractBackgroundWidget {
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: Translation.tr("Phone")
+                                text: root.button2Def.label
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 color: root.subtextColorOnBg
                             }
                         }
 
-                        onClicked: root.openPoliciesTab("Phone")
+                        onClicked: root.triggerModule(root.button2Module)
                     }
                 }
             }

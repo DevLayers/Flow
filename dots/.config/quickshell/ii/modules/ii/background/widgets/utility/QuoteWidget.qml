@@ -67,7 +67,7 @@ AbstractBackgroundWidget {
             width: parent.width - 64
             height: parent.height - 96
             text: Config.options.background.widgets.quote.quoteText || Translation.tr("Add your favorite quote in settings.")
-            font.pixelSize: Appearance.font.pixelSize.normal
+            font.pixelSize: Config.options.background.widgets.quote.fontSize || Appearance.font.pixelSize.normal
             font.italic: true
             font.variableAxes: ({ "wght": 500, "wdth": 125 })
             color: root.textColorOnBg

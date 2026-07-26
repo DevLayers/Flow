@@ -850,6 +850,7 @@ Singleton {
                         property real y: 200
                         property bool expressiveColors: false
                         property string quoteText: ""
+                        property real fontSize: 16
                     }
                     property JsonObject quick_actions: JsonObject {
                         property bool enable: false
@@ -857,6 +858,8 @@ Singleton {
                         property real x: 200
                         property real y: 200
                         property bool expressiveColors: false
+                        property string bottomButton1: "translator"
+                        property string bottomButton2: "phone"
                     }
                     property JsonObject ai_chat: JsonObject {
                         property bool enable: false
