@@ -1,5 +1,3 @@
-pragma ComponentBehavior: Bound
-
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -126,6 +124,7 @@ PopupWindow {
         Component.onCompleted: shown = true
         StackView.onActivating: shown = true
         StackView.onDeactivating: shown = false
+        StackView.onRemoved: destroy()
 
         QsMenuOpener {
             id: menuOpener

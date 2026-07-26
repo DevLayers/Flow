@@ -20,8 +20,8 @@ Item {
     property bool circleItems: false
     property var activeMenu: null
 
-    property list<var> pinnedItems: TrayService.pinnedItems
-    property list<var> unpinnedItems: TrayService.unpinnedItems
+    property var pinnedItems: TrayService.pinnedItems
+    property var unpinnedItems: TrayService.unpinnedItems
     onPinnedItemsChanged: updateVisibility()
     onUnpinnedItemsChanged: updateVisibility()
 
@@ -34,7 +34,7 @@ Item {
         }
     }
 
-    readonly property var overflowWindow: trayOverflowLayout.QsWindow?.window ?? null
+    readonly property var overflowWindow: trayOverflowLayout.QsWindow ? trayOverflowLayout.QsWindow.window : null
 
     function grabFocus() {
         focusGrab.wanted = true;

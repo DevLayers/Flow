@@ -22,7 +22,7 @@ Item {
     property color colOnBackground: WidgetColorScheme.textColorOnBg
     property color colBackgroundInfo: WidgetColorScheme.innerShapeColor
     property color colHourHand: WidgetColorScheme.accentColor
-    property color colMinuteHand: WidgetColorScheme.pillFillColor
+    property color colMinuteHand: WidgetColorScheme.pillBgColor
     property color colSecondHand: WidgetColorScheme.onAccentColor
     property color colHourMarks: WidgetColorScheme.accentColor
     property color colMinuteMarks: WidgetColorScheme.subtextColorOnBg

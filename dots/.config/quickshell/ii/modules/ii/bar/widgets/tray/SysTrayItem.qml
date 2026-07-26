@@ -1,4 +1,3 @@
-pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Quickshell
@@ -81,7 +80,7 @@ MouseArea {
 
     // The menu window anchors to this item, so it must never outlive the window this item
     // lives in — inside the tray overflow popup that window is destroyed on close.
-    readonly property var hostWindow: root.QsWindow?.window ?? null
+    readonly property var hostWindow: root.QsWindow ? root.QsWindow.window : null
     onHostWindowChanged: {
         if (!root.hostWindow)
             menu.close();
