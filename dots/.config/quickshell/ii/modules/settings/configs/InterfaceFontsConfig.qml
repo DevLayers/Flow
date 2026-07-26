@@ -75,6 +75,28 @@ ContentPage {
         }
 
         ContentSubsection {
+            title: Translation.tr("OSD Style")
+            icon: "tune"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.osd.style ?? "default"
+                onSelected: (newValue) => {
+                    Config.options.osd.style = newValue;
+                }
+                options: [{
+                    "displayName": Translation.tr("Android"),
+                    "icon": "smartphone",
+                    "value": "default"
+                }, {
+                    "displayName": Translation.tr("Minimal"),
+                    "icon": "horizontal_rule",
+                    "value": "minimalist"
+                }]
+            }
+        }
+
+        ContentSubsection {
             title: Translation.tr("OSD Position")
             icon: "align_horizontal_right"
             Layout.fillWidth: true
