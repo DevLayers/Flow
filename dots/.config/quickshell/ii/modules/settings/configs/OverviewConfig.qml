@@ -207,5 +207,19 @@ ContentPage {
             }
         }
     }
-    
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "workspaces"
+                label: Translation.tr("Workspaces")
+            }
+        }
+    }
 }
