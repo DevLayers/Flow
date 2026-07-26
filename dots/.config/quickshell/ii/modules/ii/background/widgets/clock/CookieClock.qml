@@ -23,10 +23,10 @@ Item {
     property color colBackgroundInfo: WidgetColorScheme.innerShapeColor
     property color colHourHand: WidgetColorScheme.accentColor
     property color colMinuteHand: WidgetColorScheme.pillBgColor
-    property color colSecondHand: WidgetColorScheme.onAccentColor
+    property color colSecondHand: WidgetColorScheme.surfaceVariantColor
     property color colHourMarks: WidgetColorScheme.accentColor
     property color colMinuteMarks: WidgetColorScheme.subtextColorOnBg
-    property color colTimeColumn: WidgetColorScheme.highlightCircleColor
+    property color colTimeColumn: Qt.rgba(WidgetColorScheme.textColorOnPillTrack.r, WidgetColorScheme.textColorOnPillTrack.g, WidgetColorScheme.textColorOnPillTrack.b, 0.5)
     property color colCenterDot: WidgetColorScheme.pillFillColor
 
     readonly property var clockNumbers: DateTime.time.split(/[: ]/)

@@ -28,9 +28,10 @@ Column {
             anchors.horizontalCenter: root.horizontalCenter
             color: root.color
             font {
-                family: Appearance.font.family.expressive
+                family: Appearance.font.family.numbers
                 weight: Font.Bold
                 pixelSize: numberSize
+                variableAxes: ({ "wght": 900 })
             }
 
             Behavior on numberSize {
