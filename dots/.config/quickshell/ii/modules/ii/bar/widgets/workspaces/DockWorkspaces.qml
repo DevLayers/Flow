@@ -5,6 +5,7 @@ import qs.modules.common.models
 import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Hyprland
@@ -20,6 +21,7 @@ Item {
 
     readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
     readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
+    property real blur: scratchpadOpen ? 1 : 0
 
     readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 1
     readonly property int workspacesShown: Config.options.bar.workspaces.shown
@@ -174,6 +176,26 @@ Item {
         }
     }
 
+    Behavior on blur {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+
+    Item {
+        id: contentContainer
+        anchors.fill: parent
+        z: 0
+        opacity: root.scratchpadOpen ? 0.65 : 1
+        layer.enabled: root.blur > 0
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 32
+            blur: root.blur
+        }
+
     Flow {
         id: contentFlow
         anchors.centerIn: parent
@@ -192,16 +214,8 @@ Item {
                 readonly property int wsId: modelData
                 readonly property bool isActive: wsId === root.activeWsId
                 readonly property bool isOccupied: root.workspaceOccupied[wsId] ?? false
+                readonly property bool isShowingScratchpad: root.scratchpadOpen && isActive
                 readonly property string icon: root.getWorkspaceIcon(wsId)
-
-                opacity: root.scratchpadOpen && !wsItem.isActive ? 0.35 : 1.0
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Appearance.animation.elementMoveFast.type
-                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                    }
-                }
 
                 readonly property real iconSize: root.itemSize
                 readonly property real indicatorThickness: root.activeIndicatorSize
@@ -212,83 +226,209 @@ Item {
                 implicitHeight: root.vertical ? iconSize : iconSize + indicatorThickness + gap
 
                 Item {
-                    id: iconArea
-                    x: 0
-                    y: 0
-                    width: root.vertical ? iconSize : parent.width
-                    height: root.vertical ? parent.height : iconSize
-                    clip: true
+                    id: normalContentWrapper
+                    anchors.fill: parent
 
-                    Image {
-                        id: iconImage
-                        anchors.fill: parent
-                        anchors.margins: 2
-                        source: wsItem.icon
-                        sourceSize.width: iconSize * 2
-                        sourceSize.height: iconSize * 2
-                        fillMode: Image.PreserveAspectCrop
-                        visible: wsItem.icon !== "" && wsItem.isOccupied
-                        smooth: true
+                    opacity: wsItem.isShowingScratchpad ? 0.0 : 1.0
+                    scale: wsItem.isShowingScratchpad ? 0.8 : 1.0
 
-                        layer.enabled: Config.options.appearance.icons.enableShapeMask
-                        layer.effect: OpacityMask {
-                            maskSource: iconMaskShape
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                         }
                     }
 
-                    MaterialShape {
-                        id: iconMaskShape
-                        anchors.fill: iconImage
-                        shapeString: Config.options.appearance.icons.shapeMask
-                        visible: false
+                    Item {
+                        id: iconArea
+                        x: 0
+                        y: 0
+                        width: root.vertical ? iconSize : parent.width
+                        height: root.vertical ? parent.height : iconSize
+                        clip: true
+
+                        Image {
+                            id: iconImage
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            source: wsItem.icon
+                            sourceSize.width: iconSize * 2
+                            sourceSize.height: iconSize * 2
+                            fillMode: Image.PreserveAspectCrop
+                            visible: wsItem.icon !== "" && wsItem.isOccupied
+                            smooth: true
+
+                            layer.enabled: Config.options.appearance.icons.enableShapeMask
+                            layer.effect: OpacityMask {
+                                maskSource: iconMaskShape
+                            }
+                        }
+
+                        MaterialShape {
+                            id: iconMaskShape
+                            anchors.fill: iconImage
+                            shapeString: Config.options.appearance.icons.shapeMask
+                            visible: false
+                        }
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: wsItem.isOccupied ? 7 : 5
+                            height: width
+                            radius: width / 2
+                            color: wsItem.isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant
+                            opacity: (wsItem.icon === "" || !wsItem.isOccupied) ? 1.0 : 0
+
+                            Behavior on width {
+                                NumberAnimation {
+                                    duration: 200
+                                    easing.type: Easing.OutQuint
+                                }
+                            }
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 150
+                                }
+                            }
+                        }
                     }
 
                     Rectangle {
-                        anchors.centerIn: parent
-                        width: wsItem.isOccupied ? 7 : 5
-                        height: width
-                        radius: width / 2
-                        color: wsItem.isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant
-                        opacity: (wsItem.icon === "" || !wsItem.isOccupied) ? 1.0 : 0
+                        x: root.vertical ? iconSize + gap : parent.width / 2 - (root.vertical ? indicatorThickness / 2 : indicatorLength / 2)
+                        y: root.vertical ? parent.height / 2 - indicatorLength / 2 : iconSize + gap
+                        width: root.vertical ? indicatorThickness : indicatorLength
+                        height: root.vertical ? indicatorLength : indicatorThickness
+                        radius: indicatorThickness / 2
+                        color: Appearance.colors.colPrimary
 
                         Behavior on width {
                             NumberAnimation {
-                                duration: 200
-                                easing.type: Easing.OutQuint
+                                duration: Appearance.animation.elementMoveSmall.duration
+                                easing.type: Appearance.animation.elementMoveSmall.type
+                                easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
                             }
                         }
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 150
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveSmall.duration
+                                easing.type: Appearance.animation.elementMoveSmall.type
+                                easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
                             }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    x: root.vertical ? iconSize + gap : parent.width / 2 - (root.vertical ? indicatorThickness / 2 : indicatorLength / 2)
-                    y: root.vertical ? parent.height / 2 - indicatorLength / 2 : iconSize + gap
-                    width: root.vertical ? indicatorThickness : indicatorLength
-                    height: root.vertical ? indicatorLength : indicatorThickness
-                    radius: indicatorThickness / 2
-                    color: Appearance.colors.colPrimary
-
-                    Behavior on width {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveSmall.duration
-                            easing.type: Appearance.animation.elementMoveSmall.type
-                            easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
-                        }
-                    }
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveSmall.duration
-                            easing.type: Appearance.animation.elementMoveSmall.type
-                            easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
                         }
                     }
                 }
             }
+        }
+    }
+
+        // Position helper (invisible, inside blur container)
+        Item {
+            id: positionHelper
+            readonly property Item activeItem: contentFlow.children[0]
+                ? (() => {
+                    let items = contentFlow.children;
+                    for (let i = 0; i < items.length; i++) {
+                        if (items[i] && items[i].isActive) return items[i];
+                    }
+                    return null;
+                })()
+                : null
+
+            x: activeItem ? activeItem.x + contentFlow.x : 0
+            y: activeItem ? activeItem.y + contentFlow.y : 0
+            width: activeItem ? activeItem.width : root.itemSize
+            height: activeItem ? activeItem.height : root.itemSize
+            visible: false
+        }
+
+    } // contentContainer
+
+    // Active workspace overlay (above blur, same position, scaled up)
+    Item {
+        id: activeOverlay
+        z: 10
+
+        x: positionHelper.x
+        y: positionHelper.y
+        width: positionHelper.width
+        height: positionHelper.height
+
+        readonly property bool _show: root.scratchpadOpen && positionHelper.activeItem !== null
+        visible: _show
+        opacity: _show ? 1.0 : 0.0
+        scale: _show ? 1.1 : 1.0
+        transformOrigin: Item.Center
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+        Behavior on scale {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+
+        Item {
+            id: overlayIconArea
+            x: 0
+            y: 0
+            width: root.vertical ? root.itemSize : parent.width
+            height: root.vertical ? parent.height : root.itemSize
+
+            Image {
+                anchors.fill: parent
+                anchors.margins: 2
+                source: root.getWorkspaceIcon(root.activeWsId)
+                sourceSize.width: root.itemSize * 2
+                sourceSize.height: root.itemSize * 2
+                fillMode: Image.PreserveAspectCrop
+                visible: root.getWorkspaceIcon(root.activeWsId) !== "" && (root.workspaceOccupied[root.activeWsId] ?? false)
+                smooth: true
+
+                layer.enabled: Config.options.appearance.icons.enableShapeMask
+                layer.effect: OpacityMask {
+                    maskSource: overlayIconMask
+                }
+            }
+
+            MaterialShape {
+                id: overlayIconMask
+                anchors.fill: parent
+                shapeString: Config.options.appearance.icons.shapeMask
+                visible: false
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: (root.workspaceOccupied[root.activeWsId] ?? false) ? 7 : 5
+                height: width
+                radius: width / 2
+                color: (root.workspaceOccupied[root.activeWsId] ?? false) ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant
+                opacity: (root.getWorkspaceIcon(root.activeWsId) === "" || !(root.workspaceOccupied[root.activeWsId] ?? false)) ? 1.0 : 0
+            }
+        }
+
+        Rectangle {
+            x: root.vertical ? root.itemSize + 1 : parent.width / 2 - (root.itemSize * 0.55) / 2
+            y: root.vertical ? parent.height / 2 - (root.itemSize * 0.55) / 2 : root.itemSize - 2
+            width: root.vertical ? root.activeIndicatorSize : root.itemSize * 0.55
+            height: root.vertical ? root.itemSize * 0.55 : root.activeIndicatorSize
+            radius: root.activeIndicatorSize / 2
+            color: Appearance.colors.colPrimary
         }
     }
 

@@ -231,6 +231,7 @@ Item {
     Item {
         id: contentContainer
         anchors.fill: parent
+        z: 0
         opacity: root.scratchpadOpen ? 0.65 : 1
         layer.enabled: root.blur > 0
         layer.effect: MultiEffect {

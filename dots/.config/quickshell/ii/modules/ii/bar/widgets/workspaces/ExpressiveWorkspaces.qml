@@ -216,6 +216,7 @@ Item {
     Item {
         id: contentContainer
         anchors.fill: parent
+        z: 0
         opacity: root.scratchpadOpen ? 0.65 : 1
         layer.enabled: root.blur > 0
         layer.effect: MultiEffect {
@@ -383,21 +384,13 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                 }
 
-                Rectangle {
-                    id: innerShape
+                Item {
+                    id: normalContentWrapper
                     anchors.fill: parent
-                    radius: root.vertical ? (width / 2) : (height / 2)
 
-                    color: root.resolveCircleColor(isActive, isShowingScratchpad, hover.hovered, isOccupied)
-                    opacity: root.resolveCircleOpacity(isActive, isShowingScratchpad, hover.hovered, isOccupied)
+                    opacity: wsDelegate.isShowingScratchpad ? 0.0 : 1.0
+                    scale: wsDelegate.isShowingScratchpad ? 0.8 : 1.0
 
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
-                    }
                     Behavior on opacity {
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
@@ -405,17 +398,29 @@ Item {
                             easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                         }
                     }
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
 
-                    StyledText {
-                        anchors.centerIn: parent
-                        text: (Config.options?.bar.workspaces.numberMap[wsDelegate.wsId - 1] || wsDelegate.wsId).toString()
-                        font.pixelSize: Math.max(7, shapeDiameter - 4)
-                        font.weight: isActive ? Font.Bold : Font.Normal
-                        font.family: Appearance.font.family.numbers
+                    Rectangle {
+                        id: innerShape
+                        anchors.fill: parent
+                        radius: root.vertical ? (width / 2) : (height / 2)
 
-                        color: root.resolveTextColor(isActive, isShowingScratchpad, isOccupied)
-                        opacity: root.showNumbers ? 1.0 : 0.0
+                        color: root.resolveCircleColor(isActive, isShowingScratchpad, hover.hovered, isOccupied)
+                        opacity: root.resolveCircleOpacity(isActive, isShowingScratchpad, hover.hovered, isOccupied)
 
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
                         Behavior on opacity {
                             NumberAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
@@ -423,11 +428,30 @@ Item {
                                 easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                             }
                         }
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Appearance.animation.elementMoveFast.type
-                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            text: (Config.options?.bar.workspaces.numberMap[wsDelegate.wsId - 1] || wsDelegate.wsId).toString()
+                            font.pixelSize: Math.max(7, shapeDiameter - 4)
+                            font.weight: isActive ? Font.Bold : Font.Normal
+                            font.family: Appearance.font.family.numbers
+
+                            color: root.resolveTextColor(isActive, isShowingScratchpad, isOccupied)
+                            opacity: root.showNumbers ? 1.0 : 0.0
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                }
+                            }
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                }
                             }
                         }
                     }
@@ -452,12 +476,13 @@ Item {
         Item {
             id: activePositionHelper
             readonly property real indicatorSize: root.shapeDiameter
+            readonly property real pillLen: root.pillLength
             readonly property Item activeItem: listView.contentItem.children[root.getWsIndex(root.activeWsId)]
 
             x: activeItem ? root.vertical ? (root.width - indicatorSize) / 2 : activeItem.x + listView.x + (activeItem.width - indicatorSize) / 2 : 0
             y: activeItem ? root.vertical ? activeItem.y + listView.y + (activeItem.height - indicatorSize) / 2 : (root.height - indicatorSize) / 2 : 0
-            width: indicatorSize
-            height: indicatorSize
+            width: root.vertical ? indicatorSize : pillLen
+            height: root.vertical ? pillLen : indicatorSize
             visible: false
         }
     }

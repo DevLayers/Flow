@@ -38,8 +38,6 @@ Item {
     property string currentRandomShape: "Circle"
     property real randomRotation: 0
 
-
-
     function updateRandomShape() {
         if (!Config.options.bar.workspaces.useRandomShapeForActiveIndicator) return;
         let nextShape = currentRandomShape;
@@ -97,21 +95,9 @@ Item {
         }
     }
 
-    Item {
-        id: contentContainer
-        anchors.fill: parent
-        opacity: root.scratchpadOpen ? 0.65 : 1
-        layer.enabled: root.blur > 0
-        layer.effect: MultiEffect {
-            blurEnabled: true
-            blurMax: 32
-            blur: root.blur
-        }
-
     // Helper to get index within the shown workspaces
     function getWsIndex(wsId) {
         if (dynamicWorkspaces) {
-            // Find index in the list of visible workspaces
             for (let i = 0; i < visibleWsModel.length; i++) {
                 if (visibleWsModel[i] === wsId) return i;
             }
@@ -157,6 +143,19 @@ Item {
         }
         return true;
     }
+
+    // ── Content container that blurs/dims when scratchpad is open ─────────────
+    Item {
+        id: contentContainer
+        anchors.fill: parent
+        z: 0
+        opacity: root.scratchpadOpen ? 0.65 : 1
+        layer.enabled: root.blur > 0
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 32
+            blur: root.blur
+        }
 
     // The animated highlight (pill)
     Loader {
@@ -248,7 +247,7 @@ Item {
                 height: 18
                 radius: Appearance.rounding.full
                 color: "transparent"
-                z: 2 // Above the highlight
+                z: 2
 
                 HoverHandler {
                     id: hover
