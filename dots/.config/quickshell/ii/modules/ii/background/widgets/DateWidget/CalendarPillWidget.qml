@@ -104,7 +104,8 @@ AbstractBackgroundWidget {
                 var ry = 80;
                 var rw = mainContainer.width;
                 var rh = mainContainer.height;
-                var r = mainContainer.radius;
+                // Cap radius to half the smallest dimension for valid arcTo paths (pill shapes)
+                var r = Math.min(mainContainer.radius, Math.min(rw, rh) / 2);
 
                 ctx.moveTo(rx + r, ry);
                 ctx.arcTo(rx, ry, rx, ry + r, r);
