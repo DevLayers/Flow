@@ -22,20 +22,20 @@ Item {
     implicitHeight: compVisible ? Appearance.sizes.baseBarHeight : 0
 
     onCompVisibleChanged: rootItem.toggleVisible(compVisible)
-    Component.onCompleted: {
-        rootItem.toggleHighlight(true)
-        rootItem.toggleVisible(compVisible)
-    }
 
     Behavior on implicitWidth {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
+    Rectangle {
+        anchors.fill: parent
+        radius: Appearance.rounding.full
+        color: Appearance.colors.colPrimaryContainer
+    }
+
     function formatTime(time) {
-        const sec = Math.floor(time/100)
-        return Math.floor(sec/60).toString().padStart(2,'0') + ":" +
-        (sec%60).toString().padStart(2,'0') + "." +
-        (time%100).toString().padStart(2,'0')
+        const sec = Math.floor(time / 100);
+        return Math.floor(sec / 60).toString().padStart(2, '0') + ":" + (sec % 60).toString().padStart(2, '0') + "." + (time % 100).toString().padStart(2, '0');
     }
 
     RowLayout {
@@ -50,24 +50,24 @@ Item {
             sourceComponent: RowLayout {
                 MaterialSymbol {
                     text: root.sRunning ? "timer" : "timer_pause"
-                    color: Appearance.colors.colOnPrimary
+                    color: Appearance.colors.colOnPrimaryContainer
                     iconSize: Appearance.font.pixelSize.large
                 }
 
                 StyledText {
                     Layout.topMargin: 3
                     text: formatTime(TimerService.stopwatchTime)
-                    color: Appearance.colors.colOnPrimary
+                    color: Appearance.colors.colOnPrimaryContainer
                 }
-            }  
+            }
             MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    TimerService.toggleStopwatch()
+                    TimerService.toggleStopwatch();
                 }
-            } 
+            }
         }
 
         Item {
@@ -83,17 +83,17 @@ Item {
             sourceComponent: RowLayout {
                 MaterialSymbol {
                     text: root.pRunning ? "search_activity" : "pause_circle"
-                    color: Appearance.colors.colOnPrimary
+                    color: Appearance.colors.colOnPrimaryContainer
                     iconSize: Appearance.font.pixelSize.large
                 }
 
                 StyledText {
                     Layout.topMargin: 3
                     text: {
-                        const t = TimerService.pomodoroSecondsLeft
-                        return Math.floor(t/60).toString().padStart(2,'0') + ":" + (t%60).toString().padStart(2,'0')
+                        const t = TimerService.pomodoroSecondsLeft;
+                        return Math.floor(t / 60).toString().padStart(2, '0') + ":" + (t % 60).toString().padStart(2, '0');
                     }
-                    color: Appearance.colors.colOnPrimary
+                    color: Appearance.colors.colOnPrimaryContainer
                 }
             }
             MouseArea {
@@ -101,10 +101,9 @@ Item {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    TimerService.togglePomodoro()
+                    TimerService.togglePomodoro();
                 }
-            } 
+            }
         }
-
     }
 }

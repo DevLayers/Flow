@@ -11,7 +11,7 @@ Rectangle {
     Layout.preferredHeight: implicitHeight
     Layout.preferredWidth: implicitWidth
     implicitWidth: compactMode ? 320 : 380
-    implicitHeight: compactMode ? 100 : 180
+    implicitHeight: compactMode ? 140 : 180
 
     property bool adaptiveWidth: false
     property bool compactMode: false
@@ -185,73 +185,87 @@ Rectangle {
         }
     }
 
-    StyledText {
-        id: ampmText
-        text: heroCardRoot.parsedTitle.ampm
-        visible: text !== ""
-        font.pixelSize: heroCardRoot.titleSize * 0.45
-        font.family: Appearance.font.family.title
-        font.weight: Font.Black
-        color: heroCardRoot.textColor
+    Item {
+        id: textContainer
         anchors {
-            right: parent.right
-            rightMargin: heroCardRoot.margins
-            baseline: mainText.baseline
-        }
-    }
-
-    StyledText {
-        id: mainText
-        text: heroCardRoot.parsedTitle.main
-        font.pixelSize: heroCardRoot.titleSize
-        font.family: Appearance.font.family.title
-        font.weight: Font.Black
-        color: heroCardRoot.textColor
-        anchors {
-            right: ampmText.visible ? ampmText.left : parent.right
-            rightMargin: ampmText.visible ? 4 : heroCardRoot.margins
-            verticalCenter: parent.verticalCenter
-            verticalCenterOffset: 4
             left: parent.left
             leftMargin: heroCardRoot.iconSize + heroCardRoot.margins * 2 + 16
-        }
-        horizontalAlignment: Text.AlignRight
-        elide: Text.ElideRight
-        
-        SequentialAnimation {
-            id: titleAnim
-            PauseAnimation { duration: 160 }
-            ParallelAnimation {
-                NumberAnimation { target: mainText; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                NumberAnimation { target: mainText; property: "scale"; from: 0.9; to: 1.0; duration: 380; easing.type: Easing.OutBack }
-            }
-        }
-    }
-
-    StyledText {
-        id: subtitleText
-        text: heroCardRoot.subtitle
-        anchors {
             right: parent.right
-            left: parent.left
-            leftMargin: heroCardRoot.iconSize + heroCardRoot.margins * 2 + 16
             rightMargin: heroCardRoot.margins
+            top: pill.visible ? pill.bottom : parent.top
+            topMargin: pill.visible ? heroCardRoot.margins : heroCardRoot.margins
             bottom: parent.bottom
             bottomMargin: heroCardRoot.margins
         }
-        font {
-            pixelSize: heroCardRoot.subtitleSize
-            family: Appearance.font.family.title
-            weight: Font.Black
-        }
-        color: heroCardRoot.textColor
-        horizontalAlignment: Text.AlignRight
-        elide: Text.ElideRight
-        
-        SequentialAnimation {
-            id: subtitleAnim
-            PauseAnimation { duration: 200 }
-            NumberAnimation { target: subtitleText; property: "opacity"; from: 0.0; to: 1.0; duration: 320 }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 12
+
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                StyledText {
+                    id: ampmText
+                    text: heroCardRoot.parsedTitle.ampm
+                    visible: text !== ""
+                    font.pixelSize: heroCardRoot.titleSize * 0.45
+                    font.family: Appearance.font.family.title
+                    font.weight: Font.Black
+                    color: heroCardRoot.textColor
+                    anchors {
+                        right: parent.right
+                        baseline: mainText.baseline
+                    }
+                }
+
+                StyledText {
+                    id: mainText
+                    text: heroCardRoot.parsedTitle.main
+                    font.pixelSize: heroCardRoot.titleSize
+                    font.family: Appearance.font.family.title
+                    font.weight: Font.Black
+                    color: heroCardRoot.textColor
+                    anchors {
+                        right: ampmText.visible ? ampmText.left : parent.right
+                        rightMargin: ampmText.visible ? 4 : 0
+                        left: parent.left
+                        verticalCenter: parent.verticalCenter
+                    }
+                    horizontalAlignment: Text.AlignRight
+                    elide: Text.ElideRight
+                    
+                    SequentialAnimation {
+                        id: titleAnim
+                        PauseAnimation { duration: 160 }
+                        ParallelAnimation {
+                            NumberAnimation { target: mainText; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                            NumberAnimation { target: mainText; property: "scale"; from: 0.9; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        }
+                    }
+                }
+            }
+
+            StyledText {
+                id: subtitleText
+                text: heroCardRoot.subtitle
+                Layout.fillWidth: true
+                font {
+                    pixelSize: heroCardRoot.subtitleSize
+                    family: Appearance.font.family.title
+                    weight: Font.Black
+                }
+                color: heroCardRoot.textColor
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+                
+                SequentialAnimation {
+                    id: subtitleAnim
+                    PauseAnimation { duration: 200 }
+                    NumberAnimation { target: subtitleText; property: "opacity"; from: 0.0; to: 1.0; duration: 320 }
+                }
+            }
         }
     }
 }

@@ -318,7 +318,7 @@ Singleton {
                 const lines = text.trim().split("\n")
                 lines.forEach(line => {
                     if (line.startsWith("USAGE=")) {
-                        root.amdUsagePath = line.slice(7)
+                        root.amdUsagePath = line.slice(6)
                         amdUsageFileView.path = root.amdUsagePath
                     } else if (line.startsWith("TEMP=")) {
                         root.amdTempPath = line.slice(5)
