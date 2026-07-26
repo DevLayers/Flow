@@ -178,11 +178,13 @@ PopupWindow {
 
             visible: root.trayItemId !== undefined && root.trayItemId.length > 0 && stackView.depth === 1
             // Repinning moves the item between the bar and the overflow popup, which
-            // destroys whatever this menu is anchored to. Close first, then toggle.
+            // destroys whatever this menu is anchored to. Close first, then defer the
+            // toggle so the menu PopupWindow finishes tearing down before its anchor
+            // host is removed from the bar/overflow.
             releaseAction: () => {
                 const target = root.pinTarget;
                 root.close();
-                TrayService.togglePin(target);
+                Qt.callLater(() => TrayService.togglePin(target));
             }
 
             contentItem: RowLayout {
