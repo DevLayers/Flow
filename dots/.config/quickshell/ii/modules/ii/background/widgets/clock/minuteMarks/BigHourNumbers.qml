@@ -2,13 +2,14 @@ pragma ComponentBehavior: Bound
 
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 import QtQuick
 
 Item {
     id: root
     property real numberSize: 80
     property real margins: 10
-    property color color: Appearance.colors.colOnSecondaryContainer
+    property color color: WidgetColorScheme.textColorOnBg
 
     property int hours: 12
     property int numbers: 4

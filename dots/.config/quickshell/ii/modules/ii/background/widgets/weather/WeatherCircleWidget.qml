@@ -67,7 +67,7 @@ AbstractBackgroundWidget {
                     Layout.alignment: Qt.AlignHCenter
                     iconSize: 96
                     text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "partly_cloudy_day"
-                    color: Appearance.colors.colPrimary
+                    color: WidgetColorScheme.accentColor
                     fill: 1.0
                 }
 

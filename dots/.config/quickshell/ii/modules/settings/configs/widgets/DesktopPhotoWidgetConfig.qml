@@ -10,6 +10,10 @@ ContentPage {
     id: root
     forceWidth: false
 
+    property string configEntryName: "photo"
+    property string widgetIdName: "photo_default"
+    property string titleText: Translation.tr("Photo Widget Options")
+
     signal goBack
 
     Process {
@@ -19,7 +23,12 @@ ContentPage {
             onRead: data => {
                 let path = data.trim();
                 if (path.length > 0) {
-                    Config.options.background.widgets.photo.imagePath = path;
+                    let entry = Config.options.background.widgets[root.configEntryName];
+                    if (entry) {
+                        entry.imagePath = path;
+                    } else {
+                        Config.options.background.widgets.photo.imagePath = path;
+                    }
                 }
             }
         }
@@ -50,7 +59,7 @@ ContentPage {
         }
 
         StyledText {
-            text: Translation.tr("Photo Widget Options")
+            text: root.titleText
             font.pixelSize: Appearance.font.pixelSize.large
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
@@ -64,7 +73,7 @@ ContentPage {
         Item {
             Layout.fillWidth: true
             implicitHeight: 250
-            visible: !Config.isWidgetActive("photo_default")
+            visible: !Config.isWidgetActive(root.widgetIdName)
 
             PagePlaceholder {
                 anchors.fill: parent
@@ -78,7 +87,7 @@ ContentPage {
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
-            visible: Config.isWidgetActive("photo_default")
+            visible: Config.isWidgetActive(root.widgetIdName)
 
             RippleButtonWithIcon {
                 Layout.fillWidth: true
@@ -92,8 +101,15 @@ ContentPage {
 
             StyledText {
                 Layout.fillWidth: true
-                visible: Config.options.background.widgets.photo.imagePath !== ""
-                text: Translation.tr("Current image: %1").arg(Config.options.background.widgets.photo.imagePath)
+                visible: {
+                    let entry = Config.options.background.widgets[root.configEntryName];
+                    return entry && entry.imagePath && entry.imagePath !== "";
+                }
+                text: {
+                    let entry = Config.options.background.widgets[root.configEntryName];
+                    let path = entry ? entry.imagePath : "";
+                    return Translation.tr("Current image: %1").arg(path);
+                }
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnSurfaceVariant
                 wrapMode: Text.Wrap
@@ -101,16 +117,36 @@ ContentPage {
 
             RippleButtonWithIcon {
                 Layout.fillWidth: true
-                visible: Config.options.background.widgets.photo.imagePath !== ""
+                visible: {
+                    let entry = Config.options.background.widgets[root.configEntryName];
+                    return entry && entry.imagePath && entry.imagePath !== "";
+                }
                 materialIcon: "delete"
                 mainText: Translation.tr("Remove Image")
                 onClicked: {
-                    Config.options.background.widgets.photo.imagePath = "";
+                    let entry = Config.options.background.widgets[root.configEntryName];
+                    if (entry) entry.imagePath = "";
                 }
             }
 
             ContentSubsectionLabel {
                 text: Translation.tr("Visual Options")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "subtitles"
+                text: Translation.tr("Show Info Overlay/Badge")
+                visible: root.configEntryName !== "photo"
+                checked: {
+                    let entry = Config.options.background.widgets[root.configEntryName];
+                    return entry && entry.showOverlay !== undefined ? entry.showOverlay : true;
+                }
+                onCheckedChanged: {
+                    let entry = Config.options.background.widgets[root.configEntryName];
+                    if (entry) {
+                        entry.showOverlay = checked;
+                    }
+                }
             }
 
             ConfigSwitch {

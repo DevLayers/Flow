@@ -362,7 +362,7 @@ AbstractBackgroundWidget {
                     anchors.centerIn: parent
                     width: Math.min(680, parent.width * 0.9)
                     height: Math.min(560, parent.height * 0.85)
-                    color: Appearance.colors.colSurfaceContainerHigh
+                    color: root.cardBgColor
                     radius: Appearance.rounding.windowRounding
 
                     // Stop click propagation to backdrop
@@ -389,14 +389,14 @@ AbstractBackgroundWidget {
                             MaterialSymbol {
                                 text: "note_stack"
                                 iconSize: 22
-                                color: Appearance.colors.colPrimary
+                                color: root.accentColor
                             }
 
                             StyledText {
                                 text: Translation.tr("Notes")
                                 font.pixelSize: Appearance.font.pixelSize.large
                                 font.weight: Font.DemiBold
-                                color: Appearance.colors.colOnSurface
+                                color: root.textColorOnBg
                                 Layout.fillWidth: true
                             }
 
@@ -405,13 +405,13 @@ AbstractBackgroundWidget {
                                 implicitHeight: 32
                                 buttonRadius: Appearance.rounding.full
                                 colBackground: "transparent"
-                                colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+                                colBackgroundHover: Qt.rgba(root.textColorOnBg.r, root.textColorOnBg.g, root.textColorOnBg.b, 0.1)
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     text: "close"
                                     iconSize: 18
-                                    color: Appearance.colors.colOnSurfaceVariant
+                                    color: root.subtextColorOnBg
                                 }
 
                                 onClicked: root.notesWindowOpen = false

@@ -21,20 +21,17 @@ Item {
     Rectangle {
         id: mainRect
         anchors.fill: parent
-        color: Appearance.colors.colPrimaryContainer
+        color: WidgetColorScheme.cardBgColor
         radius: Appearance.rounding.large
         clip: true
 
         readonly property string hour: DateTime.time.split(":")[0].padStart(2, "0")
         readonly property string minute: DateTime.time.split(":")[1].split(" ")[0].padStart(2, "0")
 
-        readonly property real v_val: Appearance.m3colors.darkmode ? 0.95 : 0.8
-        readonly property real v_sat: Appearance.m3colors.darkmode ? 0.7 : 0.9
-        
-        readonly property color color1: Appearance.colors.colOnSecondaryContainer
-        readonly property color color2: Appearance.colors.colPrimary
-        readonly property color color3: Qt.hsva(Appearance.colors.colPrimary.hsvHue, v_sat, v_val, 1.0)
-        readonly property color color4: Qt.hsva(Appearance.colors.colTertiary.hsvHue, v_sat, v_val, 1.0)
+        readonly property color color1: WidgetColorScheme.textColorOnBg
+        readonly property color color2: WidgetColorScheme.accentColor
+        readonly property color color3: WidgetColorScheme.subtextColorOnBg
+        readonly property color color4: WidgetColorScheme.onAccentColor
 
         Row {
             id: contentRow

@@ -37,7 +37,7 @@ AbstractBackgroundWidget {
             id: photoShape
             anchors.fill: parent
             shape: MaterialShape.Shape.Cookie12Sided
-            color: root.expressive ? root.expressiveInnerShape : Appearance.colors.colSurfaceContainerLow
+            color: WidgetColorScheme.innerShapeColor
         }
 
         MaterialShape {

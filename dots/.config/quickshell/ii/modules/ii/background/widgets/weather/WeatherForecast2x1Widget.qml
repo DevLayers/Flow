@@ -74,7 +74,7 @@ AbstractBackgroundWidget {
                                     anchors.centerIn: parent
                                     iconSize: 58
                                     text: Icons.getWeatherIcon(root.currentData?.wCode) ?? "partly_cloudy_day"
-                                    color: Appearance.colors.colPrimary
+                                    color: WidgetColorScheme.accentColor
                                     fill: 1.0
                                 }
                             }

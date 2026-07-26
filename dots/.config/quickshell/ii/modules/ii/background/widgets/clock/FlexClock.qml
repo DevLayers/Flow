@@ -30,7 +30,7 @@ AbstractBackgroundWidget {
     readonly property color colorDiagonalB: WidgetColorScheme.accentColor
 
     // Stroke thickness around upper elements (die-cut margin)
-    readonly property real strokeWidth: root.width * 0.026
+    readonly property real strokeWidth: root.width * 0.020
 
     // Tight grid 2x2 cell dimensions
     readonly property real cellW: root.width * 0.66
@@ -38,7 +38,7 @@ AbstractBackgroundWidget {
 
     // Cell positions (fine-tuned spacing)
     readonly property real col0X: root.width * 0.00
-    readonly property real col1X: root.width * 0.34
+    readonly property real col1X: root.width * 0.30
     readonly property real row0Y: root.height * -0.04
     readonly property real row1Y: root.height * 0.42
 

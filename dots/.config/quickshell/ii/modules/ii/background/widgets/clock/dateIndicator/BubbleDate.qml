@@ -1,5 +1,3 @@
-pragma ComponentBehavior: Bound
-
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -16,10 +14,9 @@ Item {
     MaterialShape {
         id: bubble
         z: 5
-        // sides: root.isMonth ? 1 : 4
         shape: root.isMonth ? MaterialShape.Shape.Pill : MaterialShape.Shape.Pentagon
         anchors.centerIn: parent
-        color: root.isMonth ? Appearance.colors.colSecondaryContainer : Appearance.colors.colTertiaryContainer
+        color: root.isMonth ? WidgetColorScheme.pillBgColor : WidgetColorScheme.pillFillColor
         implicitSize: targetSize
     }
 
@@ -27,7 +24,7 @@ Item {
         id: bubbleText
         z: 6
         anchors.centerIn: parent
-        color: root.isMonth ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnTertiaryContainer
+        color: root.isMonth ? WidgetColorScheme.textColorOnPillTrack : WidgetColorScheme.textColorOnPillFill
         font {
             family: Appearance.font.family.expressive
             pixelSize: 30

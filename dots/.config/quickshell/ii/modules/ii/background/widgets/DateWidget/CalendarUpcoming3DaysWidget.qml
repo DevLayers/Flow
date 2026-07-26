@@ -184,8 +184,8 @@ AbstractBackgroundWidget {
                             radius: Appearance.rounding.normal
 
                             color: root.expressive 
-                                ? (dayColumn.isTodayItem ? Appearance.colors.colPrimary : Appearance.colors.colSecondary)
-                                : Appearance.colors.colSurfaceContainerLow
+                                ? (dayColumn.isTodayItem ? WidgetColorScheme.accentColor : WidgetColorScheme.innerShapeColor)
+                                : WidgetColorScheme.innerShapeColor
 
                             ColumnLayout {
                                 id: eventCol

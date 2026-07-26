@@ -732,6 +732,33 @@ Singleton {
                         property string imagePath: ""
                         property bool expressiveColors: false
                     }
+                    property JsonObject photo_weather_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property string imagePath: ""
+                        property bool showOverlay: true
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject photo_pill_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property string imagePath: ""
+                        property bool showOverlay: true
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject photo_minimal_temp_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property string imagePath: ""
+                        property bool showOverlay: true
+                        property bool expressiveColors: false
+                    }
                     property JsonObject bluetooth_battery: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"

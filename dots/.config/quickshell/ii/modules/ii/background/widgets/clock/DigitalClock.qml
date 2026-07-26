@@ -13,9 +13,9 @@ ColumnLayout {
     readonly property bool showColon: Config.options.background.widgets.clock.digital.showColon
 
     property bool isVertical: Config.options.background.widgets.clock.digital.vertical
-    property color colText: Appearance.colors.colOnSecondaryContainer
-    property color colTextSecondary: Appearance.colors.colOnLayer3
-    property color colTextTertiary: Appearance.colors.colOnLayer3
+    property color colText: WidgetColorScheme.textColorOnBg
+    property color colTextSecondary: WidgetColorScheme.subtextColorOnBg
+    property color colTextTertiary: WidgetColorScheme.accentColor
     property var textHorizontalAlignment: Text.AlignHCenter
 
     // Time

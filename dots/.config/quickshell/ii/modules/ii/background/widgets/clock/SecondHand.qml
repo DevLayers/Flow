@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 import QtQuick
 
 Item {
@@ -13,7 +14,7 @@ Item {
     property real handLength: 95
     property real dotSize: 20
     property string style: "hide"
-    property color color: Appearance.colors.colSecondary
+    property color color: WidgetColorScheme.onAccentColor
     
     rotation: (360 / 60 * clockSecond) + 90
 

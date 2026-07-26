@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import qs.modules.common
+import qs.services
 import QtQuick
 
 Item {
@@ -11,7 +12,7 @@ Item {
     property real handLength: 72
     property real handWidth: 20
     property string style: "fill"
-    property color color: Appearance.colors.colPrimary
+    property color color: WidgetColorScheme.accentColor
 
     property real fillColorAlpha: root.style === "hollow" ? 0 : 1
     Behavior on fillColorAlpha {

@@ -1,5 +1,4 @@
-pragma ComponentBehavior: Bound
-
+import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -8,7 +7,7 @@ import QtQuick
 Item {
     id: root
     property string style: "bubble"
-    property color color: Appearance.colors.colOnSecondaryContainer
+    property color color: WidgetColorScheme.textColorOnBg
     property real dateSquareSize: 64
 
     // Rotating date
@@ -31,7 +30,7 @@ Item {
         }
 
         sourceComponent: RectangleDate {
-            color: ColorUtils.mix(root.color, Appearance.colors.colSecondaryContainerHover, 0.5)
+            color: WidgetColorScheme.innerShapeColor
             radius: Appearance.rounding.small
             implicitWidth: 45 * rectLoader.opacity
             implicitHeight: 30 * rectLoader.opacity

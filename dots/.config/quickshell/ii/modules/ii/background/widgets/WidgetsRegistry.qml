@@ -277,6 +277,33 @@ Singleton {
             "configPage": "widgets/DesktopPhotoWidgetConfig.qml"
         },
         {
+            "widgetId": "photo_weather_2x1",
+            "name": Translation.tr("Photo Weather (2x1)"),
+            "category": "Photo",
+            "qmlPath": Qt.resolvedUrl("photo/PhotoWeather2x1Widget.qml"),
+            "icon": "image",
+            "description": Translation.tr("2x1 Photo widget with weather condition description, location, temperature, and condition icon."),
+            "configPage": "widgets/DesktopPhotoWeather2x1WidgetConfig.qml"
+        },
+        {
+            "widgetId": "photo_pill_2x1",
+            "name": Translation.tr("Photo Pill Badge (2x1)"),
+            "category": "Photo",
+            "qmlPath": Qt.resolvedUrl("photo/PhotoPill2x1Widget.qml"),
+            "icon": "image",
+            "description": Translation.tr("2x1 Photo widget with border and bottom-left Photos pill badge."),
+            "configPage": "widgets/DesktopPhotoPill2x1WidgetConfig.qml"
+        },
+        {
+            "widgetId": "photo_minimal_temp_2x1",
+            "name": Translation.tr("Photo Minimal Temp (2x1)"),
+            "category": "Photo",
+            "qmlPath": Qt.resolvedUrl("photo/PhotoMinimalTemp2x1Widget.qml"),
+            "icon": "image",
+            "description": Translation.tr("2x1 Photo widget with inner image container and bottom-right temperature badge."),
+            "configPage": "widgets/DesktopPhotoMinimalTemp2x1WidgetConfig.qml"
+        },
+        {
             "widgetId": "bluetooth_battery",
             "name": Translation.tr("Bluetooth Device Battery"),
             "category": "Devices",

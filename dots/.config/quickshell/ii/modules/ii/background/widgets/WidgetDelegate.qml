@@ -364,6 +364,39 @@ Item {
     }
 
     Component {
+        id: component_photo_weather_2x1
+        PhotoWeather2x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_photo_pill_2x1
+        PhotoPill2x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_photo_minimal_temp_2x1
+        PhotoMinimalTemp2x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_bluetooth_battery
         BluetoothBatteryWidget {
             screenWidth: delegateRoot.screenWidth
@@ -558,6 +591,9 @@ Item {
             "calendar_pill": component_calendar_pill,
             "calendar_upcoming_3days": component_calendar_upcoming_3days,
             "photo_default": component_photo_default,
+            "photo_weather_2x1": component_photo_weather_2x1,
+            "photo_pill_2x1": component_photo_pill_2x1,
+            "photo_minimal_temp_2x1": component_photo_minimal_temp_2x1,
             "bluetooth_battery": component_bluetooth_battery,
             "bluetooth_headphone": component_bluetooth_headphone,
             "mobile_battery": component_mobile_battery,

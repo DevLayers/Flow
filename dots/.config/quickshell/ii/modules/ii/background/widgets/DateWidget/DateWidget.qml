@@ -52,7 +52,7 @@ AbstractBackgroundWidget {
                 id: monthRect
                 Layout.fillWidth: true
                 Layout.preferredHeight: 70
-                color: root.expressive ? root.expressiveMonthRect : Appearance.colors.colSurfaceContainerLow
+                color: root.expressive ? root.expressiveMonthRect : WidgetColorScheme.innerShapeColor
                 radius: Appearance.rounding.normal
 
                 StyledText {
@@ -67,7 +67,7 @@ AbstractBackgroundWidget {
                         bold: true
                         family: Appearance.font.family.main
                     }
-                    color: root.expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+                    color: root.expressive ? WidgetColorScheme.onAccentColor : WidgetColorScheme.subtextColorOnBg
                 }
             }
 
@@ -85,7 +85,7 @@ AbstractBackgroundWidget {
                         family: "Google Sans Flex"
                         variableAxes: ({ "ROND": 100, "wght": 800 })
                     }
-                    color: root.expressive ? root.expressiveDayNumber : Appearance.colors.colPrimary
+                    color: root.expressive ? root.expressiveDayNumber : WidgetColorScheme.textColorOnBg
                 }
             }
         }

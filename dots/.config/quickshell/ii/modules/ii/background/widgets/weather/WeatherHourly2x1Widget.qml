@@ -71,7 +71,7 @@ AbstractBackgroundWidget {
                     MaterialSymbol {
                         iconSize: 34
                         text: Icons.getWeatherIcon(root.currentData?.wCode) ?? "sunny"
-                        color: Appearance.colors.colPrimary
+                        color: WidgetColorScheme.accentColor
                         fill: 1.0
                     }
 

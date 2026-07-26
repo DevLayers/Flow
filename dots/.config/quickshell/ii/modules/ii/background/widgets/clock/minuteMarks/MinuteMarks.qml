@@ -1,5 +1,3 @@
-pragma ComponentBehavior: Bound
-
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
@@ -7,7 +5,7 @@ import QtQuick
 Item {
     id: root
 
-    property color color: Appearance.colors.colOnSecondaryContainer
+    property color color: WidgetColorScheme.textColorOnBg
     property string style: Config.options.background.widgets.clock.cookie.dialNumberStyle // "dots", "numbers", "full", "hide"
     property string dateStyle : Config.options.background.widgets.clock.cookie.dateStyle
 

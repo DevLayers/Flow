@@ -1,5 +1,3 @@
-pragma ComponentBehavior: Bound
-
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -9,7 +7,7 @@ Item {
     id: root
 
     property string style: Config.options.background.widgets.clock.cookie.dateStyle
-    property color color: Appearance.colors.colOnSecondaryContainer
+    property color color: WidgetColorScheme.textColorOnBg
     property real angleStep: 12 * Math.PI / 180
     property string dateText: Qt.locale().toString(DateTime.clock.date, "ddd dd")
     
