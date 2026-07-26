@@ -234,8 +234,14 @@ Singleton {
             "}; " +
             "detect_amd() { " +
             "  for card in /sys/class/drm/card*/device; do " +
-            "    if [ -f \"$card/gpu_busy_percent\" ]; then " +
-            "      model=$(cat \"$card/device\" 2>/dev/null || basename $(dirname \"$card\")); " +
+            "    case \"$(basename \"$card\")\" in card*-*) continue ;; esac; " +
+            "    if [ -f \"$card/gpu_busy_percent\" ] || grep -q \"DRIVER=amdgpu\" \"$card/uevent\" 2>/dev/null; then " +
+            "      pci_slot=$(basename \"$(readlink \"$card\")\" 2>/dev/null); " +
+            "      model=$(lspci -s \"$pci_slot\" 2>/dev/null | sed 's/.*: //'); " +
+            "      if [ -z \"$model\" ]; then " +
+            "        model=$(cat \"$card/uevent\" 2>/dev/null | grep '^PCI_ID=' | cut -d= -f2); " +
+            "      fi; " +
+            "      [ -z \"$model\" ] && model='AMD GPU'; " +
             "      echo \"AMD|$model\"; return 0; " +
             "    fi; " +
             "  done; return 1; " +
@@ -292,8 +298,11 @@ Singleton {
         id: amdPathResolveProc
         command: ["bash", "-c",
             "for card in /sys/class/drm/card*/device; do " +
-            "  if [ -f \"$card/gpu_busy_percent\" ]; then " +
-            "    echo \"USAGE=$card/gpu_busy_percent\"; " +
+            "  case \"$(basename \"$card\")\" in card*-*) continue ;; esac; " +
+            "  if grep -q \"DRIVER=amdgpu\" \"$card/uevent\" 2>/dev/null; then " +
+            "    if [ -f \"$card/gpu_busy_percent\" ]; then " +
+            "      echo \"USAGE=$card/gpu_busy_percent\"; " +
+            "    fi; " +
             "    for hwmon in \"$card\"/hwmon/hwmon*/temp1_input; do " +
             "      if [ -f \"$hwmon\" ]; then " +
             "        echo \"TEMP=$hwmon\"; break; " +
