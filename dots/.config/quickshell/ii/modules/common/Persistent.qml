@@ -160,6 +160,11 @@ Singleton {
                 property string sessionId: ""
             }
 
+            property JsonObject keyboardBacklight: JsonObject {
+                property bool idleOffActive: false // Whether the idle monitor is the reason it's off
+                property int savedLevel: 0 // Level to return to once input resumes
+            }
+
             property JsonObject nightLight: JsonObject {
                 property bool hasManual: false // Whether a manual toggle is currently overriding automatic mode
                 property bool manualActive: false

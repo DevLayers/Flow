@@ -1516,6 +1516,13 @@ Singleton {
                 property JsonObject antiFlashbang: JsonObject {
                     property bool enable: false
                 }
+                property JsonObject keyboardBacklight: JsonObject {
+                    // Switch the keyboard backlight off after a period without keyboard
+                    // or pointer input, then restore the previous level on the next input.
+                    // Off by default: it changes hardware state without being asked to.
+                    property bool autoOff: false
+                    property int timeout: 15 // Seconds of no input
+                }
             }
 
             property JsonObject lock: JsonObject {

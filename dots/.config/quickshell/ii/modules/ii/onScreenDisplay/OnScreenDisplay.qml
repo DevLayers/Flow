@@ -224,7 +224,7 @@ Scope {
     Connections {
         target: KeyboardBacklight
         function onCurrentValueChanged() {
-            if (root.isStartup || GlobalStates.dashboardPanelOpen)
+            if (root.isStartup || GlobalStates.dashboardPanelOpen || KeyboardBacklight.suppressOsd)
                 return;
             if (!KeyboardBacklight.initialValueLoaded) {
                 KeyboardBacklight.initialValueLoaded = true;

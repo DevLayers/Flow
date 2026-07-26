@@ -111,6 +111,37 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "keyboard"
+        title: Translation.tr("Keyboard Backlight")
+        visible: KeyboardBacklight.available
+
+        ConfigSwitch {
+            buttonIcon: "bedtime"
+            text: Translation.tr("Turn off when idle")
+            checked: Config.options.light.keyboardBacklight.autoOff
+            onCheckedChanged: {
+                Config.options.light.keyboardBacklight.autoOff = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Switches the backlight off after a period without keyboard or pointer input, then restores your level on the next input. Idle inhibitors are ignored, so it still applies during video playback.")
+            }
+        }
+
+        ConfigSpinBox {
+            enabled: Config.options.light.keyboardBacklight.autoOff
+            icon: "timer"
+            text: Translation.tr("Turn off after (s)")
+            value: Config.options.light.keyboardBacklight.timeout
+            from: 5
+            to: 900
+            stepSize: 5
+            onValueChanged: {
+                Config.options.light.keyboardBacklight.timeout = value;
+            }
+        }
+    }
+
+    ContentSection {
         icon: "link"
         title: Translation.tr("Related settings")
 
