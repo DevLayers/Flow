@@ -92,7 +92,7 @@ Item {
                     }
                 }
 
-                readonly property string artUrl: player ? (player.trackArtUrl ?? "") : ""
+                readonly property string artUrl: MprisController.artUrl
                 readonly property string trackTitle: player ? (StringUtils.cleanMusicTitle(player.trackTitle) || Translation.tr("No media")) : ""
                 readonly property string trackArtist: player ? (player.trackArtist || Translation.tr("Unknown Artist")) : ""
                 readonly property bool playing: player ? player.playbackState === MprisPlaybackState.Playing : false
