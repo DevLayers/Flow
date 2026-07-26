@@ -194,6 +194,8 @@ Rectangle {
         RowLayout {
             id: headerRow
             Layout.fillWidth: true
+            Layout.topMargin: 4
+            Layout.bottomMargin: 4
             spacing: 12
 
             Loader {
@@ -206,6 +208,7 @@ Rectangle {
                     text: root.icon
                     iconSize: Appearance.font.pixelSize.large
                     color: Appearance.colors.colOnLayer2
+                    anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
@@ -214,6 +217,7 @@ Rectangle {
                 visible: root.title && root.title.length > 0
                 text: root.title
                 Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
                 color: Appearance.colors.colOnLayer2
             }
 
@@ -250,6 +254,7 @@ Rectangle {
                 visible: root.tooltip && root.tooltip.length > 0
                 text: "info"
                 iconSize: Appearance.font.pixelSize.large
+                Layout.alignment: Qt.AlignVCenter
 
                 color: Appearance.colors.colSubtext
                 MouseArea {
