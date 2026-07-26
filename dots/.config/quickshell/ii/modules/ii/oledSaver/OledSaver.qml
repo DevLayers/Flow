@@ -65,7 +65,9 @@ Scope {
         // Top (not Overlay) so OSD, notifications, polkit prompts, etc. still
         // render above the blackout instead of being hidden by it.
         WlrLayershell.layer: WlrLayer.Top
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        // OnDemand (not Exclusive) so only this monitor's input is captured;
+        // Exclusive grabs all input globally, blocking mouse on other monitors.
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         exclusionMode: ExclusionMode.Ignore
         anchors {
             top: true
@@ -74,10 +76,22 @@ Scope {
             right: true
         }
 
+        // Explicit mask constrains input to this window's bounds on this output only.
+        mask: Region {
+            item: windowMaskItem
+        }
+
         property bool cursorVisible: false
         property bool hintVisible: false
 
+        HyprlandFocusGrab {
+            id: oledGrab
+            windows: [window]
+            active: true
+        }
+
         Item {
+            id: windowMaskItem
             anchors.fill: parent
             focus: true
 
