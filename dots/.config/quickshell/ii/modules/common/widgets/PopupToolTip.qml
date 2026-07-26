@@ -47,10 +47,11 @@ Item {
             id: tooltipWindow
             visible: true
 
-            // Assigned once instead of bound, for the same reason as the tray menu: an
-            // anchor binding that re-evaluates during teardown crashes on a freed item.
+            // Assign the anchor item once. Prefer item-only: PopupAnchor::setWindow()
+            // clears any prior item through a path that null-derefs when an item was
+            // already set (quickshell bug in onItemWindowChanged). The item derives
+            // its window on its own.
             Component.onCompleted: {
-                tooltipWindow.anchor.window = root.hostWindow;
                 tooltipWindow.anchor.item = root.parent;
             }
 

@@ -17,6 +17,9 @@ MouseArea {
     property real dragStartX: 0
     property real dragStartY: 0
     property bool dragged: false
+    // Cleared while a click/menu is in flight so the tooltip PopupWindow is destroyed
+    // before activate/menu/pin can tear down this item underneath its anchor.
+    property bool suppressTooltip: false
 
     Rectangle {
         anchors.centerIn: parent
@@ -37,6 +40,7 @@ MouseArea {
     implicitWidth: 20
     implicitHeight: 20
     onPressed: event => {
+        root.suppressTooltip = true;
         if (event.button === Qt.LeftButton) {
             dragStartX = event.x;
             dragStartY = event.y;
@@ -71,8 +75,11 @@ MouseArea {
             }
             dragged = false;
         }
+        root.suppressTooltip = false;
         event.accepted = true;
     }
+    onCanceled: root.suppressTooltip = false
+    onExited: root.suppressTooltip = false
     onEntered: {
         if (root.item)
             tooltip.text = TrayService.getTooltipForItem(root.item);
@@ -107,45 +114,29 @@ MouseArea {
 
         sourceComponent: SysTrayMenu {
             id: menuWindow
-            // Assign the anchor window once rather than binding it. A binding re-evaluates
-            // while the host window is being destroyed, which hands PopupAnchor an item
-            // that is already half torn down and crashes on it.
+            // Snapshot anchor geometry once. Live bindings re-evaluate while the host
+            // window (or this menu) is being destroyed and hand PopupAnchor a half-dead
+            // item, which segfaults inside onItemWindowChanged.
             Component.onCompleted: {
                 menuWindow.anchor.window = root.hostWindow;
+
+                var gap = Appearance.sizes.elevationMargin;
+                var pos = root.mapToItem(null, 0, 0);
+                if (Config.options.bar.vertical) {
+                    menuWindow.anchor.rect = Qt.rect(Config.options.bar.bottom ? pos.x - gap : pos.x + gap, pos.y, root.width, root.height);
+                    menuWindow.anchor.edges = Config.options.bar.bottom ? (Edges.Left | Edges.Middle) : (Edges.Right | Edges.Middle);
+                    menuWindow.anchor.gravity = Config.options.bar.bottom ? Edges.Left : Edges.Right;
+                } else {
+                    menuWindow.anchor.rect = Qt.rect(pos.x, Config.options.bar.bottom ? pos.y - gap : pos.y + gap, root.width, root.height);
+                    menuWindow.anchor.edges = Config.options.bar.bottom ? (Edges.Top | Edges.Center) : (Edges.Bottom | Edges.Center);
+                    menuWindow.anchor.gravity = Config.options.bar.bottom ? Edges.Top : Edges.Bottom;
+                }
+
                 menuWindow.open();
             }
             trayItemMenuHandle: root.item ? root.item.menu : null
             trayItem: root.item
             trayItemId: root.item ? (root.item.id || "") : ""
-
-            anchor {
-                rect: {
-                    var gap = Appearance.sizes.elevationMargin; // SysTrayItem menu gap
-                    var pos = root.mapToItem(null, 0, 0);
-
-                    if (Config.options.bar.vertical) {
-                        return Qt.rect(Config.options.bar.bottom ? pos.x - gap : pos.x + gap, pos.y, root.width, root.height);
-                    } else {
-                        return Qt.rect(pos.x, Config.options.bar.bottom ? pos.y - gap : pos.y + gap, root.width, root.height);
-                    }
-                }
-
-                edges: {
-                    if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? (Edges.Left | Edges.Middle) : (Edges.Right | Edges.Middle);
-                    } else {
-                        return Config.options.bar.bottom ? (Edges.Top | Edges.Center) : (Edges.Bottom | Edges.Center);
-                    }
-                }
-
-                gravity: {
-                    if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? Edges.Left : Edges.Right;
-                    } else {
-                        return Config.options.bar.bottom ? Edges.Top : Edges.Bottom;
-                    }
-                }
-            }
 
             onMenuOpened: window => root.menuOpened(window)
             onMenuClosed: {
@@ -205,7 +196,7 @@ MouseArea {
 
     PopupToolTip {
         id: tooltip
-        extraVisibleCondition: root.containsMouse
+        extraVisibleCondition: root.containsMouse && !root.suppressTooltip && !menu.active
         alternativeVisibleCondition: extraVisibleCondition
         anchorEdges: (!Config.options.bar.bottom && !Config.options.bar.vertical) ? Edges.Bottom : Edges.Top
     }
