@@ -119,6 +119,20 @@ ContentPage {
         }
 
         ConfigSlider {
+            buttonIcon: "schedule"
+            text: Translation.tr("OSD Timeout")
+            usePercentTooltip: false
+            tooltipContent: `${(value / 1000).toFixed(1)}s`
+            from: 1000
+            to: 5000
+            stepSize: 500
+            value: Config.options.osd.timeout ?? 3000
+            onValueChanged: {
+                Config.options.osd.timeout = value;
+            }
+        }
+
+        ConfigSlider {
             buttonIcon: "height"
             text: Translation.tr("OSD Height")
             usePercentTooltip: false

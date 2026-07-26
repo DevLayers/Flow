@@ -1566,7 +1566,7 @@ Singleton {
                 property string style: "default"
                 property string position: "right"
                 property int height: 500
-                property int timeout: 2500
+                property int timeout: 3000
                 property bool showValues: true
             }
 
