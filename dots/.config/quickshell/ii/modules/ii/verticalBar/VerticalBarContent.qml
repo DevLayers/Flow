@@ -189,7 +189,8 @@ Item { // Bar content region
         color: root.islandFillColor
         radius: Appearance.rounding.full
 
-        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        // GPU: only allocate FBO when island is actually visible (no widgets = invisible = no shadow needed)
+        layer.enabled: topIsland.visible && Config.options.bar.dropShadow
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -215,7 +216,8 @@ Item { // Bar content region
         color: root.islandFillColor
         radius: Appearance.rounding.full
 
-        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        // GPU: only allocate FBO when island is actually visible
+        layer.enabled: middleIsland.visible && Config.options.bar.dropShadow
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -241,7 +243,8 @@ Item { // Bar content region
         color: root.islandFillColor
         radius: Appearance.rounding.full
 
-        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        // GPU: only allocate FBO when island is actually visible
+        layer.enabled: bottomIsland.visible && Config.options.bar.dropShadow
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)

@@ -153,7 +153,8 @@ AbstractBackgroundWidget {
                 anchors.fill: parent
                 z: 0
 
-                layer.enabled: true
+                // GPU: only allocate FBO when container is actually visible
+                layer.enabled: artBackgroundContainer.visible
                 layer.effect: OpacityMask {
                     maskSource: Rectangle {
                         width: artBackgroundContainer.width
@@ -169,7 +170,7 @@ AbstractBackgroundWidget {
                 }
 
                 // Album Art with a light blur
-                Image {
+                    Image {
                     id: albumArtImage
                     anchors.fill: parent
                     source: root.artSource
@@ -177,7 +178,8 @@ AbstractBackgroundWidget {
                     visible: root.artSource !== ""
                     asynchronous: true
 
-                    layer.enabled: true
+                    // GPU: only allocate FBO when image has art to display
+                    layer.enabled: albumArtImage.visible
                     layer.effect: FastBlur {
                         radius: 4 // light blur
                     }
@@ -396,7 +398,8 @@ AbstractBackgroundWidget {
                                 colBackgroundHover: ColorUtils.mix(root.activeAccentColor, root.activeAccentColor, 0.9)
                                 colRipple: ColorUtils.mix(root.activeAccentContainer, root.activeAccentColor, 0.8)
 
-                                layer.enabled: true
+                                // GPU: only allocate FBO when button is visible
+                                layer.enabled: playPauseButton.visible
                                 layer.effect: OpacityMask {
                                     maskSource: MaterialShape {
                                         width: playPauseButton.width
@@ -528,7 +531,8 @@ AbstractBackgroundWidget {
             enabled: false // Transparent to mouse events
             visible: Config.options.background.widgets.circular_media.enableGlassReflection ?? true
 
-            layer.enabled: true
+            // GPU: release FBO when glass reflection is disabled
+            layer.enabled: glassReflectionOverlay.visible
             layer.effect: OpacityMask {
                 maskSource: Item {
                     width: glassReflectionOverlay.width
@@ -553,7 +557,8 @@ AbstractBackgroundWidget {
             Item {
                 id: topReflectionContainer
                 anchors.fill: parent
-                layer.enabled: true
+                // GPU: cascade parent visibility to avoid FBO allocation when reflection disabled
+                layer.enabled: glassReflectionOverlay.visible
                 layer.effect: FastBlur {
                     radius: 28 // increased blur/dispersion for a softer, broader premium glass glow
                 }
@@ -598,7 +603,8 @@ AbstractBackgroundWidget {
                         GradientStop { position: 0.7; color: ColorUtils.applyAlpha("#FFFFFF", 0.42) }
                         GradientStop { position: 1.0; color: "transparent" }
                     }
-                    layer.enabled: true
+                    // GPU: cascade parent visibility to avoid FBO allocation when reflection disabled
+                    layer.enabled: glassReflectionOverlay.visible
                     layer.effect: OpacityMask {
                         maskSource: topMaskShape
                     }
@@ -609,7 +615,8 @@ AbstractBackgroundWidget {
             Item {
                 id: bottomReflectionContainer
                 anchors.fill: parent
-                layer.enabled: true
+                // GPU: cascade parent visibility to avoid FBO allocation when reflection disabled
+                layer.enabled: glassReflectionOverlay.visible
                 layer.effect: FastBlur {
                     radius: 28 // increased blur/dispersion for a softer, broader premium glass glow
                 }
@@ -654,7 +661,8 @@ AbstractBackgroundWidget {
                         GradientStop { position: 0.7; color: ColorUtils.applyAlpha("#FFFFFF", 0.28) }
                         GradientStop { position: 1.0; color: "transparent" }
                     }
-                    layer.enabled: true
+                    // GPU: cascade parent visibility to avoid FBO allocation when reflection disabled
+                    layer.enabled: glassReflectionOverlay.visible
                     layer.effect: OpacityMask {
                         maskSource: bottomMaskShape
                     }

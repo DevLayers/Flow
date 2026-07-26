@@ -110,7 +110,10 @@ Item {
     Loader {
         id: bgWallpaperBlurLoader
         anchors.fill: bgWallpaperBlurred
-        active: true
+        // GPU: only instantiate MultiEffect when zoomed-out state is active.
+        // Previously always-loaded (active:true) with opacity controlling visibility —
+        // the shader + texture stayed resident on GPU even at idle.
+        active: wallpaperImageRoot.wallpaperZoomedOut
         opacity: wallpaperImageRoot.wallpaperZoomedOut ? 1.0 : 0.0
         Behavior on opacity {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(wallpaperImageRoot)
