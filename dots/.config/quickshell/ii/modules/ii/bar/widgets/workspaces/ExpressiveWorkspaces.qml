@@ -19,16 +19,13 @@ import Qt5Compat.GraphicalEffects
 Item {
     id: root
 
-    Layout.fillHeight: !vertical
-    Layout.fillWidth: vertical
-
-    // ── Exposed Properties ────────────────────────────────────────────────────
     property bool vertical: Config.options.bar.vertical
     property bool activated: false
     property color onActivatedColor: Appearance.colors.colOnPrimary
     property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
     property var workspaceOccupied: ({})
     property bool showNumbersByMs: false
+    property real blur: scratchpadOpen ? 1 : 0
 
     // ── Monitor State ─────────────────────────────────────────────────────────
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
@@ -121,7 +118,23 @@ Item {
         }
     }
 
+    Behavior on blur {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+
     // ── Functions ─────────────────────────────────────────────────────────────
+    function getWsIndex(wsId) {
+        if (!root.visibleWsModel) return 0;
+        for (let i = 0; i < root.visibleWsModel.length; i++) {
+            if (root.visibleWsModel[i] === wsId) return i;
+        }
+        return 0;
+    }
+
     function updateOccupied() {
         let occupied = {};
         for (let ws of Hyprland.workspaces.values) {
@@ -199,10 +212,22 @@ Item {
         function onSuperReleaseMightTriggerChanged() { showNumbersTimer.stop(); }
     }
 
-    // ── Mouse Area (wheel, right-click, back button) ─────────────────────────
+    // ── Content container that blurs/dims when scratchpad is open ─────────────
+    Item {
+        id: contentContainer
+        anchors.fill: parent
+        opacity: root.scratchpadOpen ? 0.65 : 1
+        layer.enabled: root.blur > 0
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 32
+            blur: root.blur
+        }
+
+    // ── Mouse Area (wheel only, right-click/back removed) ────────────────────
     MouseArea {
         anchors.fill: parent
-        acceptedButtons: Qt.RightButton | Qt.BackButton
+        acceptedButtons: Qt.NoButton
         onWheel: wheel => {
             wheel.accepted = true;
             if (root.dynamicWorkspaces) {
@@ -219,14 +244,6 @@ Item {
                 }
                 Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
             }
-        }
-        onClicked: event => {
-            if (event.button === Qt.RightButton)
-                GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
-        }
-        onPressed: event => {
-            if (event.button === Qt.BackButton)
-                Hyprland.dispatch(`hl.dsp.workspace.toggle_special("special")`);
         }
     }
 
@@ -429,6 +446,60 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+        Item {
+            id: activePositionHelper
+            readonly property real indicatorSize: root.shapeDiameter
+            readonly property Item activeItem: listView.contentItem.children[root.getWsIndex(root.activeWsId)]
+
+            x: activeItem ? root.vertical ? (root.width - indicatorSize) / 2 : activeItem.x + listView.x + (activeItem.width - indicatorSize) / 2 : 0
+            y: activeItem ? root.vertical ? activeItem.y + listView.y + (activeItem.height - indicatorSize) / 2 : (root.height - indicatorSize) / 2 : 0
+            width: indicatorSize
+            height: indicatorSize
+            visible: false
+        }
+    }
+
+    Rectangle {
+        id: activeOverlay
+        z: 10
+
+        x: activePositionHelper.x
+        y: activePositionHelper.y
+        width: activePositionHelper.width
+        height: activePositionHelper.height
+        radius: root.vertical ? width / 2 : height / 2
+
+        readonly property bool _show: root.scratchpadOpen && root.activeWsId >= root.workspaceOffset + 1
+        color: Appearance.colors.colTertiary
+        visible: _show
+        opacity: _show ? 1.0 : 0.0
+        scale: _show ? 1.0 : 0.7
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+        Behavior on scale {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+
+        StyledText {
+            anchors.centerIn: parent
+            text: (Config.options?.bar.workspaces.numberMap[root.activeWsId - 1] || root.activeWsId).toString()
+            font.pixelSize: Math.max(7, root.shapeDiameter - 4)
+            font.weight: Font.Bold
+            font.family: Appearance.font.family.numbers
+            color: Appearance.colors.colOnTertiary
         }
     }
 }
