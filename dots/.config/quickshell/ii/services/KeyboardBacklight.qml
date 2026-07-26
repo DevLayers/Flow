@@ -103,6 +103,22 @@ Singleton {
     FileView {
         id: brightnessFileView
         path: root.deviceName ? `/sys/class/leds/${root.deviceName}/brightness` : ""
+
+        // reload() completes asynchronously, so the value has to be picked up here.
+        // Reading straight after the call returns the *previous* poll's content, which
+        // makes every real change bounce through a stale value one tick later.
+        onLoaded: {
+            const val = parseInt(brightnessFileView.text().trim())
+            if (isNaN(val) || val === root.currentValue) return
+            root.currentValue = val
+        }
+
+        // If the direct read fails (e.g. permission issue), fall back to brightnessctl
+        // via refresh() and slow the polling down to 5 seconds to save CPU.
+        onLoadFailed: {
+            if (pollTimer.interval === 1000) pollTimer.interval = 5000
+            root.refresh()
+        }
     }
 
     Timer {
@@ -110,23 +126,7 @@ Singleton {
         interval: 1000
         running: root.available && root.deviceName !== ""
         repeat: true
-        onTriggered: {
-            brightnessFileView.reload()
-            const valStr = brightnessFileView.text().trim()
-            if (valStr.length > 0) {
-                const val = parseInt(valStr)
-                if (!isNaN(val) && val !== root.currentValue) {
-                    root.currentValue = val
-                }
-            } else {
-                // If direct read fails (e.g. permission issue), fallback to brightnessctl via refresh()
-                // and slow down the polling to 5 seconds to save CPU.
-                if (pollTimer.interval === 1000) {
-                    pollTimer.interval = 5000
-                }
-                root.refresh()
-            }
-        }
+        onTriggered: brightnessFileView.reload()
     }
 
     IpcHandler {
