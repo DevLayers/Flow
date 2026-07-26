@@ -15,7 +15,7 @@ AndroidQuickToggleButton {
     wide2x2OverrideComponent: netWide2x2
 
     backgroundIcon: Network.ethernet ? "" : "wifi"
-
+    
     // ── 1x2 (tall, narrow) component ─────────────────────────────────────────
     Component {
         id: netTall1x2

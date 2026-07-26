@@ -252,7 +252,7 @@ Item {
                 property MprisPlayer player: MprisController.activePlayer
 
                 // Track downloader
-                property string artUrl: player?.trackArtUrl || ""
+                property string artUrl: MprisController.artUrl
                 property bool isLocalArt: artUrl.startsWith("file://")
                 property string artFilePath: artUrl.length > 0 && !isLocalArt ? `${Directories.coverArt}/${Qt.md5(artUrl)}` : ""
                 property string artTempPath: artFilePath + ".tmp"
@@ -375,7 +375,7 @@ Item {
                 property MprisPlayer player: MprisController.activePlayer
 
                 // Track downloader
-                property string artUrl: player?.trackArtUrl || ""
+                property string artUrl: MprisController.artUrl
                 property bool isLocalArt: artUrl.startsWith("file://")
                 property string artFilePath: artUrl.length > 0 && !isLocalArt ? `${Directories.coverArt}/${Qt.md5(artUrl)}` : ""
                 property string artTempPath: artFilePath + ".tmp"

@@ -437,6 +437,24 @@ Singleton {
             "icon": "note_stack",
             "description": Translation.tr("2x1 wide notes widget with header, vertical scroll, and direct notes editor."),
             "configPage": "widgets/DesktopNotesWidgetConfig.qml"
+        },
+        {
+            "widgetId": "compact_media",
+            "name": Translation.tr("Compact Media (2x1)"),
+            "category": "Media",
+            "qmlPath": Qt.resolvedUrl("media/CompactMediaWidget.qml"),
+            "icon": "graphic_eq",
+            "description": Translation.tr("Minimal 2x1 media widget with three colored sections: track title, play/pause, and skip next."),
+            "configPage": "widgets/DesktopMediaWidgetConfig.qml"
+        },
+        {
+            "widgetId": "quick_actions",
+            "name": Translation.tr("Quick Actions"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/QuickActionsWidget.qml"),
+            "icon": "widgets",
+            "description": Translation.tr("1x1 quick launch widget with Gemini, Video, and Live shortcuts to Sidebar Policies."),
+            "configPage": "widgets/DesktopQuickActionsConfig.qml"
         }
     ]
 

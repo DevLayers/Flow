@@ -561,6 +561,28 @@ Item {
         }
     }
 
+    Component {
+        id: component_compact_media
+        CompactMediaWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_quick_actions
+        QuickActionsWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
     readonly property var widgetComponentMap: ({
             "clock_cookie": component_clock_cookie,
             "clock_digital": component_clock_digital,
@@ -574,6 +596,7 @@ Item {
             "media_expressive": component_media_expressive,
             "media_android": component_media_android,
             "media_cd": component_media_cd,
+            "compact_media": component_compact_media,
             "weather_default": component_weather_default,
             "weather_expressive": component_weather_expressive,
             "weather_forecast": component_weather_forecast,
@@ -608,7 +631,8 @@ Item {
             "email_inbox_2x1": component_email_inbox_2x1,
             "ai_chat": component_ai_chat,
             "notes_widget": component_notes_widget,
-            "notes_widget_2x1": component_notes_widget_2x1
+            "notes_widget_2x1": component_notes_widget_2x1,
+            "quick_actions": component_quick_actions
         })
 
     function getExtUrl(extId) {

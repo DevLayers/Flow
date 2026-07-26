@@ -843,6 +843,13 @@ Singleton {
                         property real y: 200
                         property bool expressiveColors: false
                     }
+                    property JsonObject quick_actions: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
                     property JsonObject ai_chat: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
@@ -865,6 +872,13 @@ Singleton {
                         property bool expressiveColors: false
                     }
                     property JsonObject media_cd: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject compact_media: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
                         property real x: 200
