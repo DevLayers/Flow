@@ -23,7 +23,12 @@ Item {
     readonly property var rawKeybinds: {
         const defaultKeybinds = HyprlandKeybinds.defaultKeybinds.children ?? [];
         const userKeybinds = HyprlandKeybinds.userKeybinds.children ?? [];
-        const unbinds = Config.options.cheatsheet.filterUnbinds ? parseUnbinds(userKeybinds) : [];
+        const unbinds = Config.options.cheatsheet.filterUnbinds
+            ? [
+                ...(HyprlandKeybinds.userKeybinds.unbinds ?? []),
+                ...parseUnbinds(userKeybinds)
+            ]
+            : [];
         return [...(processKeymaps(defaultKeybinds, unbinds) ?? []), ...(processKeymaps(userKeybinds) ?? [])];
     }
 
@@ -31,22 +36,31 @@ Item {
 
     function flattenSections(tree) {
         const sections = [];
+        const byName = {};
         if (!tree) return sections;
-        for (let i = 0; i < tree.length; i++) {
-            const node = tree[i];
-            if (node.keybinds && node.keybinds.length > 0) {
-                sections.push({
-                    name: node.name || "",
-                    keybinds: node.keybinds
-                });
-            }
-            if (node.children && node.children.length > 0) {
-                const childSections = flattenSections(node.children);
-                for (let j = 0; j < childSections.length; j++) {
-                    sections.push(childSections[j]);
+
+        function walk(nodes) {
+            for (const node of nodes ?? []) {
+                const keybinds = node.keybinds;
+                if (keybinds?.length) {
+                    const name = node.name || "";
+                    const existing = byName[name];
+                    if (existing) {
+                        existing.keybinds.push(...keybinds);
+                    } else {
+                        byName[name] = {
+                            name,
+                            keybinds: [...keybinds],
+                            defaultCount: keybinds.length // customs append after this
+                        };
+                        sections.push(byName[name]);
+                    }
                 }
+                walk(node.children);
             }
         }
+
+        walk(tree);
         return sections;
     }
 
