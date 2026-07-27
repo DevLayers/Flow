@@ -48,6 +48,15 @@ Singleton {
             "configPage": "widgets/DesktopFlexClockConfig.qml"
         },
         {
+            "widgetId": "clock_hori",
+            "name": Translation.tr("Hori Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/HoriClock.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A 1x1 horizontal interlocking clock with HH:MM layout, colon separator, and Google Sans Flex font."),
+            "configPage": "widgets/DesktopHoriClockConfig.qml"
+        },
+        {
             "widgetId": "nagasaki_text",
             "name": Translation.tr("Nagasaki Text Clock"),
             "category": "Clock",

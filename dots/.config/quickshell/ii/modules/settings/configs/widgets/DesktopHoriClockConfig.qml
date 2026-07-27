@@ -35,7 +35,7 @@ ContentPage {
         }
 
         StyledText {
-            text: Translation.tr("Flex Clock Options")
+            text: Translation.tr("Hori Clock Options")
             font.pixelSize: Appearance.font.pixelSize.large
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
@@ -43,27 +43,27 @@ ContentPage {
     }
 
     ContentSection {
-        title: Translation.tr("Flex Clock Settings")
+        title: Translation.tr("Hori Clock Settings")
         icon: "schedule"
 
         Item {
             Layout.fillWidth: true
             implicitHeight: 250
-            visible: !Config.isWidgetActive("clock_flex")
+            visible: !Config.isWidgetActive("clock_hori")
 
             PagePlaceholder {
                 anchors.fill: parent
                 icon: "schedule"
                 shape: MaterialShape.Shape.Circle
-                title: Translation.tr("Flex Clock disabled")
-                description: Translation.tr("Enable the Flex Clock in Desktop Widgets settings to use this page.")
+                title: Translation.tr("Hori Clock disabled")
+                description: Translation.tr("Enable the Hori Clock in Desktop Widgets settings to use this page.")
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
-            visible: Config.isWidgetActive("clock_flex")
+            visible: Config.isWidgetActive("clock_hori")
 
             ContentSubsectionLabel {
                 text: Translation.tr("Size & Colors")
@@ -72,21 +72,21 @@ ContentPage {
             ConfigSlider {
                 buttonIcon: "aspect_ratio"
                 text: Translation.tr("Widget Size")
-                value: Config.options.background.widgets.clock_flex.widgetSize ?? 100
+                value: Config.options.background.widgets.clock_hori.widgetSize ?? 100
                 from: 50
                 to: 200
                 stepSize: 10
                 onValueChanged: {
-                    Config.options.background.widgets.clock_flex.widgetSize = value;
+                    Config.options.background.widgets.clock_hori.widgetSize = value;
                 }
             }
 
             ConfigSwitch {
                 buttonIcon: "palette"
                 text: Translation.tr("Use card background colors")
-                checked: Config.options.background.widgets.clock_flex.useAltColors ?? false
+                checked: Config.options.background.widgets.clock_hori.useAltColors ?? false
                 onCheckedChanged: {
-                    Config.options.background.widgets.clock_flex.useAltColors = checked;
+                    Config.options.background.widgets.clock_hori.useAltColors = checked;
                 }
             }
 

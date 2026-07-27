@@ -543,6 +543,14 @@ Singleton {
                         property bool quoteEnable: false
                         property string quoteText: ""
                     }
+                    property JsonObject clock_flex: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool useAltColors: false
+                    }
                     property JsonObject clock_digital: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
@@ -587,6 +595,14 @@ Singleton {
                         property real x: 200
                         property real y: 200
                         property int size: 200
+                    }
+                    property JsonObject clock_hori: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool useAltColors: false
                     }
                     property JsonObject media: JsonObject {
                         property bool enable: true

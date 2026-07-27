@@ -95,6 +95,17 @@ Item {
     }
 
     Component {
+        id: component_clock_hori
+        HoriClock {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_clock_dial
         DialClockWidget {
             screenWidth: delegateRoot.screenWidth
@@ -596,6 +607,7 @@ Item {
             "clock_nagasaki": component_clock_nagasaki,
             "nagasaki_text": component_nagasaki_text,
             "clock_flex": component_clock_flex,
+            "clock_hori": component_clock_hori,
             "clock_dial": component_clock_dial,
             "clock_wearos": component_clock_wearos,
             "circular_media": component_circular_media,
