@@ -99,7 +99,7 @@ Singleton {
             "qmlPath": Qt.resolvedUrl("media/ExpressiveMediaWidget.qml"),
             "icon": "music_note",
             "description": Translation.tr("Expressive and large media player widget with dynamic glow and lyrics."),
-            "configPage": "widgets/DesktopMediaWidgetConfig.qml"
+            "configPage": "widgets/DesktopExpressiveMediaConfig.qml"
         },
         {
             "widgetId": "media_android",

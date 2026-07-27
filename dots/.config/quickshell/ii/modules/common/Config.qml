@@ -599,6 +599,11 @@ Singleton {
                         property bool showPreviousToggle: true
                         property bool tintArtCover: false
                         property string backgroundShape: "Cookie12Sided"  // Options: MaterialShape.Shape enum values as string
+                        property bool rotateAlbumArt: true
+                        property bool showTimeInfo: true
+                        property bool showArtist: true
+                        property bool showProgressSlider: true
+                        property bool dynamicAlbumColors: false
                         property JsonObject glow: JsonObject {
                             property bool enable: true
                             property real brightness: 10

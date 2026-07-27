@@ -72,7 +72,6 @@ ContentPage {
             ConfigSwitch {
                 buttonIcon: "palette"
                 text: Translation.tr("Monochrome")
-                description: Translation.tr("Use a single color for all digits")
                 checked: Config.options.background.widgets.clock_nagasaki.monochrome
                 onCheckedChanged: {
                     Config.options.background.widgets.clock_nagasaki.monochrome = checked;

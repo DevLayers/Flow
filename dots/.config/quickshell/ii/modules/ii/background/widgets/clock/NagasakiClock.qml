@@ -13,6 +13,8 @@ Item {
     width: implicitSize
     height: implicitSize
 
+    readonly property bool monochrome: Config.options.background.widgets.clock_nagasaki.monochrome
+
     FontLoader {
         id: nagasakiFont
         source: "file://" + Directories.assetsPath + "/fonts/nagasaki.ttf"
@@ -27,8 +29,6 @@ Item {
 
         readonly property string hour: DateTime.time.split(":")[0].padStart(2, "0")
         readonly property string minute: DateTime.time.split(":")[1].split(" ")[0].padStart(2, "0")
-
-        readonly property bool monochrome: Config.options.background.widgets.clock_nagasaki.monochrome
 
         readonly property color color1: WidgetColorScheme.textColorOnBg
         readonly property color color2: root.monochrome ? WidgetColorScheme.textColorOnBg : WidgetColorScheme.accentColor

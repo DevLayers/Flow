@@ -40,22 +40,27 @@ AbstractBackgroundWidget {
 
     property MprisPlayer player: MprisController.activePlayer
 
-    readonly property color colBg: Appearance.colors.colPrimaryContainer
-    readonly property color colAlbumBg: Appearance.colors.colSurfaceContainerLow
-    readonly property color colControlsBg: Appearance.colors.colSecondaryContainer
-    readonly property color colText: Appearance.colors.colOnSurface
-    readonly property color colTimeMain: Appearance.colors.colOnPrimaryContainer
-    readonly property color colTimeSub: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.4)
-    readonly property color colProgressHighlight: Appearance.colors.colPrimary
-    readonly property color colProgressTrack: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.6)
-    readonly property color colBtnSecondary: Appearance.colors.colTertiaryContainer
-    readonly property color colBtnSecondaryHover: Appearance.colors.colTertiaryContainerHover
-    readonly property color colBtnSecondaryActive: Appearance.colors.colTertiaryContainerActive
-    readonly property color colBtnPlayBg: Appearance.colors.colPrimary
-    readonly property color colBtnPlayRipple: Appearance.colors.colPrimaryHover
-    readonly property color colBtnPlayIcon: Appearance.colors.colOnPrimary
-    readonly property color colBtnIcon: Appearance.colors.colOnSecondaryContainer
-    readonly property color colAlbumBorder: Appearance.colors.colOnPrimaryContainer
+    readonly property color colBg: WidgetColorScheme.cardBgColor
+    readonly property color colAlbumBg: WidgetColorScheme.innerShapeColor
+    readonly property color colControlsBg: WidgetColorScheme.pillFillColor
+    readonly property color colText: WidgetColorScheme.textColorOnBg
+    readonly property color colTimeMain: WidgetColorScheme.textColorOnPillFill
+    readonly property color colTimeSub: ColorUtils.transparentize(WidgetColorScheme.textColorOnPillFill, 0.4)
+    readonly property color colProgressHighlight: WidgetColorScheme.accentColor
+    readonly property color colProgressTrack: ColorUtils.transparentize(WidgetColorScheme.textColorOnPillFill, 0.6)
+    readonly property color colBtnSecondary: WidgetColorScheme.pillBgColor
+    readonly property color colBtnSecondary_hover: ColorUtils.mix(WidgetColorScheme.pillBgColor, WidgetColorScheme.accentColor, 0.15)
+    readonly property color colBtnSecondaryActive: ColorUtils.mix(WidgetColorScheme.pillBgColor, WidgetColorScheme.accentColor, 0.25)
+    readonly property color colBtnPlayBg: WidgetColorScheme.accentColor
+    readonly property color colBtnPlayRipple: ColorUtils.mix(WidgetColorScheme.accentColor, WidgetColorScheme.onAccentColor, 0.2)
+    readonly property color colBtnPlayIcon: WidgetColorScheme.onAccentColor
+    readonly property color colBtnIcon: WidgetColorScheme.textColorOnPillTrack
+    readonly property color colAlbumBorder: WidgetColorScheme.outlineColor
+
+    readonly property bool rotateAlbumArt: Config.options.background.widgets.media.rotateAlbumArt ?? true
+    readonly property bool showTimeInfo: Config.options.background.widgets.media.showTimeInfo ?? true
+    readonly property bool showArtist: Config.options.background.widgets.media.showArtist ?? true
+    readonly property bool showProgressSlider: Config.options.background.widgets.media.showProgressSlider ?? true
 
     readonly property int globalRadius: Appearance.rounding.large
     readonly property int controlsRadius: Appearance.rounding.large
@@ -126,7 +131,7 @@ AbstractBackgroundWidget {
 
     Timer {
         running: root.player?.playbackState == MprisPlaybackState.Playing
-        interval: Config.options.resources.updateInterval
+        interval: 500
         repeat: true
         onTriggered: root.player.positionChanged()
     }
@@ -143,7 +148,7 @@ AbstractBackgroundWidget {
         anchors.margins: 8
         color: root.colBg
         radius: root.globalRadius
-        border.color: Appearance.colors.colLayer0Border
+        border.color: WidgetColorScheme.outlineColor
         border.width: 1
         clip: true
 
@@ -181,6 +186,7 @@ AbstractBackgroundWidget {
                         anchors.centerIn: parent
                         width: parent.height - 20
                         height: parent.height - 20
+                        clip: true
 
                         RotationAnimator {
                             target: albumArtItem
@@ -188,7 +194,7 @@ AbstractBackgroundWidget {
                             to: 360
                             duration: 10000
                             loops: Animation.Infinite
-                            running: root.player?.isPlaying
+                            running: root.player?.isPlaying && root.rotateAlbumArt
                         }
 
                         Image {
@@ -198,12 +204,13 @@ AbstractBackgroundWidget {
                             source: root.artSource
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
-                            cache: false
+                            cache: true
                             antialiasing: true
                             sourceSize.width: width
                             sourceSize.height: height
 
-                            layer.enabled: true
+                            readonly property bool _needsMask: root.rotateAlbumArt
+                            layer.enabled: _needsMask
                             layer.effect: OpacityMask {
                                 maskSource: Rectangle {
                                     width: albumArtImage.width
@@ -218,7 +225,7 @@ AbstractBackgroundWidget {
                             visible: albumArtImage.status !== Image.Ready
                             iconSize: 48
                             text: "music_note"
-                            color: Appearance.colors.colSubtext
+                            color: WidgetColorScheme.subtextColorOnBg
                         }
 
                         // Inset ring border on top of image
@@ -236,7 +243,7 @@ AbstractBackgroundWidget {
                             width: root.centerDotSize
                             height: root.centerDotSize
                             radius: width / 2
-                            color: Appearance.m3colors.m3surfaceContainer
+                            color: WidgetColorScheme.highlightCircleColor
                             z: 3
                         }
                     }
@@ -265,6 +272,7 @@ AbstractBackgroundWidget {
                             Layout.alignment: Qt.AlignTop
 
                             Text {
+                                visible: root.showTimeInfo
                                 text: StringUtils.friendlyTimeForSeconds(root.player?.position ?? 0)
                                 color: root.colTimeMain
                                 font.pixelSize: root.timerPrimarySize
@@ -273,6 +281,7 @@ AbstractBackgroundWidget {
                             }
 
                             Text {
+                                visible: root.showTimeInfo
                                 text: StringUtils.friendlyTimeForSeconds(root.player?.length ?? 0)
                                 color: root.colTimeSub
                                 font.pixelSize: root.timerSecondarySize
@@ -282,6 +291,7 @@ AbstractBackgroundWidget {
                             }
 
                             StyledText {
+                                visible: root.showArtist
                                 text: root.trackArtist
                                 color: root.colTimeSub
                                 font.pixelSize: root.timerSecondarySize
@@ -299,6 +309,7 @@ AbstractBackgroundWidget {
                         }
 
                         Item {
+                            visible: root.showProgressSlider
                             Layout.fillWidth: true
                             implicitHeight: Math.max(sliderLoader.implicitHeight, progressLoader.implicitHeight)
 
