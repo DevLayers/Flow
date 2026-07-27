@@ -260,9 +260,9 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "timer_off"
             text: Translation.tr("Disable clock animation on lock")
-            checked: Config.options.background.widgets.clock.disableAnimationOnLock
+            checked: Config.options.background.widgets.clock_cookie.disableAnimationOnLock
             onCheckedChanged: {
-                Config.options.background.widgets.clock.disableAnimationOnLock = checked;
+                Config.options.background.widgets.clock_cookie.disableAnimationOnLock = checked;
             }
             StyledToolTip {
                 text: Translation.tr("Skip loading the clock widget during lock screen for better animation performance.")

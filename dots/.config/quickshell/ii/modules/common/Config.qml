@@ -520,55 +520,66 @@ Singleton {
                 property bool blurGradientExperiment: false
                 property JsonObject widgets: JsonObject {
                     property string colorScheme: "default"
-                    property JsonObject clock: JsonObject {
-                        property bool enable: true
+                    property JsonObject clock_cookie: JsonObject {
+                        property bool enable: false
                         property bool disableAnimationOnLock: false
-                        property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
+                        property string placementStrategy: "free"
                         property real x: 1518.98
                         property real y: 168.8
-                        property string style: "cookie"        // Options: "cookie", "digital", "nagasaki", "dial"
-                        property string styleLocked: "cookie"  // Options: "cookie", "digital", "nagasaki", "dial"
-                        property JsonObject cookie: JsonObject {
-                            property bool aiStyling: false
-                            property string aiStylingModel: "gemini" // Options "gemini", "openrouter"
-                            property int sides: 14
-                            property string backgroundStyle: "cookie"     // Options: "cookie", "sine", "shape"
-                            property string backgroundShape: "Arch"  // Options: MaterialShape.Shape enum values as string
-                            property string dialNumberStyle: "full"   // Options: "dots" , "numbers", "full", "shapes", "none"
-                            property string hourHandStyle: "fill"     // Options: "classic", "fill", "hollow", "hide"
-                            property string minuteHandStyle: "medium" // Options "classic", "thin", "medium", "bold", "hide"
-                            property string secondHandStyle: "dot"    // Options: "dot", "line", "classic", "hide"
-                            property string dateStyle: "bubble"       // Options: "border", "rect", "bubble" , "hide"
-                            property bool timeIndicators: true
-                            property bool hourMarks: false
-                            property bool dateInClock: true
-                            property bool constantlyRotate: false
+                        property bool aiStyling: false
+                        property string aiStylingModel: "gemini"
+                        property int sides: 14
+                        property string backgroundStyle: "cookie"
+                        property string backgroundShape: "Arch"
+                        property string dialNumberStyle: "full"
+                        property string hourHandStyle: "fill"
+                        property string minuteHandStyle: "medium"
+                        property string secondHandStyle: "dot"
+                        property string dateStyle: "bubble"
+                        property bool timeIndicators: true
+                        property bool hourMarks: false
+                        property bool dateInClock: true
+                        property bool constantlyRotate: false
+                        property bool quoteEnable: false
+                        property string quoteText: ""
+                    }
+                    property JsonObject clock_digital: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool adaptiveAlignment: true
+                        property bool showDate: true
+                        property bool animateChange: true
+                        property bool vertical: false
+                        property bool colorful: false
+                        property bool showColon: true
+                        property JsonObject font: JsonObject {
+                            property real weight: 350
+                            property real width: 100
+                            property real size: 90
+                            property real roundness: 0
                         }
-                        property JsonObject digital: JsonObject {
-                            property bool adaptiveAlignment: true
-                            property bool showDate: true
-                            property bool animateChange: true
-                            property bool vertical: false
-                            property bool colorful: false
-                            property bool showColon: true
-                            property JsonObject font: JsonObject {
-                                property real weight: 350
-                                property real width: 100
-                                property real size: 90
-                                property real roundness: 0
-                            }
-                        }
-                        property JsonObject dial: JsonObject {
-                            property bool showTicks: true
-                            property bool showMinuteHand: true
-                            property bool enableShadows: true
-                            property bool enableInnerShadow: false
-                            property bool expressiveColors: false
-                        }
-                        property JsonObject quote: JsonObject {
-                            property bool enable: false
-                            property string text: ""
-                        }
+                        property bool quoteEnable: false
+                        property string quoteText: ""
+                    }
+                    property JsonObject clock_nagasaki: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool monochrome: false
+                    }
+                    property JsonObject clock_dial: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool showTicks: true
+                        property bool showMinuteHand: true
+                        property bool enableShadows: true
+                        property bool enableInnerShadow: false
+                        property bool expressiveColors: false
                     }
                     property JsonObject nagasaki_text: JsonObject {
                         property bool enable: false
@@ -1236,8 +1247,12 @@ Singleton {
                     property int activeIndicatorOpacity: 100 // 0-100
                     property bool dynamicWorkspaces: false
                     property bool useMaterialShapeForActiveIndicator: false
-                    property bool useRandomShapeForActiveIndicator: true
-                    property string activeIndicatorShape: "Pentagon"
+                     property bool useRandomShapeForActiveIndicator: true
+                     property string activeIndicatorShape: "Pentagon"
+                     property bool dockShowActiveIndicator: true
+                     property bool dockShowWindowDots: true
+                     property bool dockHoverEffect: true
+                     property bool dockShowAppIcons: true
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false

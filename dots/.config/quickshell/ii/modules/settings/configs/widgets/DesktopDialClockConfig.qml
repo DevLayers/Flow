@@ -77,36 +77,36 @@ ContentPage {
                 ConfigSwitch {
                     buttonIcon: "wb_sunny"
                     text: Translation.tr("Enable Shadows")
-                    checked: Config.options.background.widgets.clock.dial.enableShadows ?? true
+                    checked: Config.options.background.widgets.clock_dial.enableShadows ?? true
                     onCheckedChanged: {
-                        Config.options.background.widgets.clock.dial.enableShadows = checked;
+                        Config.options.background.widgets.clock_dial.enableShadows = checked;
                     }
                 }
 
                 ConfigSwitch {
                     buttonIcon: "wb_sunny"
                     text: Translation.tr("Enable Inner Shadow")
-                    checked: Config.options.background.widgets.clock.dial.enableInnerShadow ?? true
+                    checked: Config.options.background.widgets.clock_dial.enableInnerShadow ?? true
                     onCheckedChanged: {
-                        Config.options.background.widgets.clock.dial.enableInnerShadow = checked;
+                        Config.options.background.widgets.clock_dial.enableInnerShadow = checked;
                     }
                 }
 
                 ConfigSwitch {
                     buttonIcon: "reorder"
                     text: Translation.tr("Show Dial Ticks")
-                    checked: Config.options.background.widgets.clock.dial.showTicks ?? true
+                    checked: Config.options.background.widgets.clock_dial.showTicks ?? true
                     onCheckedChanged: {
-                        Config.options.background.widgets.clock.dial.showTicks = checked;
+                        Config.options.background.widgets.clock_dial.showTicks = checked;
                     }
                 }
 
                 ConfigSwitch {
                     buttonIcon: "schedule"
                     text: Translation.tr("Show Minute Hand")
-                    checked: Config.options.background.widgets.clock.dial.showMinuteHand ?? true
+                    checked: Config.options.background.widgets.clock_dial.showMinuteHand ?? true
                     onCheckedChanged: {
-                        Config.options.background.widgets.clock.dial.showMinuteHand = checked;
+                        Config.options.background.widgets.clock_dial.showMinuteHand = checked;
                     }
                 }
             }

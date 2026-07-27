@@ -6,8 +6,8 @@ Item {
     id: root
 
     property color color: WidgetColorScheme.textColorOnBg
-    property string style: Config.options.background.widgets.clock.cookie.dialNumberStyle // "dots", "numbers", "full", "hide"
-    property string dateStyle : Config.options.background.widgets.clock.cookie.dateStyle
+    property string style: Config.options.background.widgets.clock_cookie.dialNumberStyle // "dots", "numbers", "full", "hide"
+    property string dateStyle : Config.options.background.widgets.clock_cookie.dateStyle
 
     // 12 Dots
     FadeLoader {

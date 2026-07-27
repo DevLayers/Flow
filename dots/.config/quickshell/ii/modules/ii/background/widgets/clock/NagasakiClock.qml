@@ -28,10 +28,12 @@ Item {
         readonly property string hour: DateTime.time.split(":")[0].padStart(2, "0")
         readonly property string minute: DateTime.time.split(":")[1].split(" ")[0].padStart(2, "0")
 
+        readonly property bool monochrome: Config.options.background.widgets.clock_nagasaki.monochrome
+
         readonly property color color1: WidgetColorScheme.textColorOnBg
-        readonly property color color2: WidgetColorScheme.accentColor
-        readonly property color color3: WidgetColorScheme.subtextColorOnBg
-        readonly property color color4: WidgetColorScheme.onAccentColor
+        readonly property color color2: root.monochrome ? WidgetColorScheme.textColorOnBg : WidgetColorScheme.accentColor
+        readonly property color color3: root.monochrome ? WidgetColorScheme.textColorOnBg : WidgetColorScheme.subtextColorOnBg
+        readonly property color color4: root.monochrome ? WidgetColorScheme.textColorOnBg : WidgetColorScheme.onAccentColor
 
         Row {
             id: contentRow

@@ -15,8 +15,7 @@ Singleton {
             "widgetId": "clock_cookie",
             "name": Translation.tr("Cookie Clock"),
             "category": "Clock",
-            "qmlPath": Qt.resolvedUrl("clock/ClockWidget.qml"),
-            "styleOverride": "cookie",
+            "qmlPath": Qt.resolvedUrl("clock/CookieClockWidget.qml"),
             "icon": "schedule",
             "description": Translation.tr("A beautiful analog clock with Material You shapes and customization."),
             "configPage": "widgets/DesktopClockWidgetConfig.qml"
@@ -25,21 +24,19 @@ Singleton {
             "widgetId": "clock_digital",
             "name": Translation.tr("Digital Clock"),
             "category": "Clock",
-            "qmlPath": Qt.resolvedUrl("clock/ClockWidget.qml"),
-            "styleOverride": "digital",
+            "qmlPath": Qt.resolvedUrl("clock/DigitalClockWidget.qml"),
             "icon": "schedule",
             "description": Translation.tr("A modern, resizable digital clock with date and adaptive alignment."),
-            "configPage": "widgets/DesktopClockWidgetConfig.qml"
+            "configPage": "widgets/DesktopDigitalClockConfig.qml"
         },
         {
             "widgetId": "clock_nagasaki",
             "name": Translation.tr("Nagasaki Clock"),
             "category": "Clock",
-            "qmlPath": Qt.resolvedUrl("clock/ClockWidget.qml"),
-            "styleOverride": "nagasaki",
+            "qmlPath": Qt.resolvedUrl("clock/NagasakiClockWidget.qml"),
             "icon": "schedule",
             "description": Translation.tr("A classic Nagasaki styled clock widget."),
-            "configPage": "widgets/DesktopClockWidgetConfig.qml"
+            "configPage": "widgets/DesktopNagasakiClockConfig.qml"
         },
         {
             "widgetId": "clock_flex",
@@ -63,8 +60,7 @@ Singleton {
             "widgetId": "clock_dial",
             "name": Translation.tr("Dial Clock"),
             "category": "Clock",
-            "qmlPath": Qt.resolvedUrl("clock/ClockWidget.qml"),
-            "styleOverride": "dial",
+            "qmlPath": Qt.resolvedUrl("clock/DialClockWidget.qml"),
             "icon": "schedule",
             "description": Translation.tr("A beautiful analog clock with tick marks and capsule hands."),
             "configPage": "widgets/DesktopDialClockConfig.qml"

@@ -32,7 +32,7 @@ Item {
     StyledDropShadow {
         id: outerShadow
         target: dialBody
-        visible: Config.ready ? (Config.options.background.widgets.clock.dial.enableShadows ?? true) : true
+        visible: Config.ready ? (Config.options.background.widgets.clock_dial.enableShadows ?? true) : true
     }
 
     // Base Dial Plate
@@ -48,7 +48,7 @@ Item {
             id: shadowContainer
             anchors.fill: parent
             z: 0.1 // Just above background
-            layer.enabled: Config.ready ? (Config.options.background.widgets.clock.dial.enableInnerShadow ?? true) : true
+            layer.enabled: Config.ready ? (Config.options.background.widgets.clock_dial.enableInnerShadow ?? true) : true
             layer.smooth: true
             layer.effect: OpacityMask {
                 maskSource: Rectangle {
@@ -95,7 +95,7 @@ Item {
                 color: Qt.rgba(0, 0, 0, 0.35)
                 horizontalOffset: 0
                 verticalOffset: 0
-                visible: Config.ready ? (Config.options.background.widgets.clock.dial.enableInnerShadow ?? true) : true
+                visible: Config.ready ? (Config.options.background.widgets.clock_dial.enableInnerShadow ?? true) : true
             }
         }
 
@@ -126,7 +126,7 @@ Item {
         Canvas {
             id: ticksCanvas
             anchors.fill: parent
-            visible: Config.ready ? (Config.options.background.widgets.clock.dial.showTicks ?? true) : true
+            visible: Config.ready ? (Config.options.background.widgets.clock_dial.showTicks ?? true) : true
             onPaint: {
                 var ctx = getContext("2d");
                 ctx.clearRect(0, 0, width, height);
@@ -249,7 +249,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             transformOrigin: Item.Bottom
             rotation: root.clockMinute * 6
-            visible: Config.ready ? (Config.options.background.widgets.clock.dial.showMinuteHand ?? true) : true
+            visible: Config.ready ? (Config.options.background.widgets.clock_dial.showMinuteHand ?? true) : true
 
             // Inner filled pill with spacing (gap)
             Rectangle {

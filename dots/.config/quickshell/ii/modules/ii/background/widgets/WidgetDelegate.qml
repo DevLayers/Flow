@@ -38,8 +38,7 @@ Item {
     // Static Component Definitions for built-in widgets
     Component {
         id: component_clock_cookie
-        ClockWidget {
-            styleOverride: "cookie"
+        CookieClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth
@@ -51,8 +50,7 @@ Item {
 
     Component {
         id: component_clock_digital
-        ClockWidget {
-            styleOverride: "digital"
+        DigitalClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth
@@ -64,8 +62,7 @@ Item {
 
     Component {
         id: component_clock_nagasaki
-        ClockWidget {
-            styleOverride: "nagasaki"
+        NagasakiClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth
@@ -99,8 +96,7 @@ Item {
 
     Component {
         id: component_clock_dial
-        ClockWidget {
-            styleOverride: "dial"
+        DialClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth

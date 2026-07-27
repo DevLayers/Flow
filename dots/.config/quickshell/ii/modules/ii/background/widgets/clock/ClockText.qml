@@ -15,5 +15,5 @@ StyledText {
     }
     style: Text.Raised
     styleColor: Appearance.colors.colShadow
-    animateChange: Config.options.background.widgets.clock.digital.animateChange
+    animateChange: Config.options.background.widgets.clock_digital.animateChange
 }
