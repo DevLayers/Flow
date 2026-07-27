@@ -450,7 +450,7 @@ Singleton {
             "qmlPath": Qt.resolvedUrl("media/CompactMediaWidget.qml"),
             "icon": "graphic_eq",
             "description": Translation.tr("Minimal 2x1 media widget with three colored sections: track title, play/pause, and skip next."),
-            "configPage": "widgets/DesktopMediaWidgetConfig.qml"
+            "configPage": "widgets/DesktopCompactMediaConfig.qml"
         },
         {
             "widgetId": "quick_actions",

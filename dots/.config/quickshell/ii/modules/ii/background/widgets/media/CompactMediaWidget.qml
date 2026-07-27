@@ -5,7 +5,9 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.services
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Mpris
+import qs.modules.common.models
 import qs.modules.ii.background.widgets
 
 AbstractBackgroundWidget {
@@ -15,23 +17,77 @@ AbstractBackgroundWidget {
 
     visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly"
 
-    implicitWidth: 492
-    implicitHeight: 240
+    readonly property real contentScale: (Config.options.background.widgets.compact_media.widgetSize ?? 100) / 100.0
+    implicitWidth: 492 * contentScale
+    implicitHeight: 240 * contentScale
 
     // --- Mpris ---
     property MprisPlayer player: MprisController.activePlayer
 
+    // ── Dynamic album colors pipeline ──
+    readonly property bool useDynamicColors: (Config.options.background.widgets.compact_media.dynamicAlbumColors ?? false) && root.artSource !== ""
+    readonly property string artUrl: MprisController.artUrl
+    readonly property bool isLocalArt: artUrl.startsWith("file://")
+
+    property string artDownloadLocation: Directories.coverArt
+    property string artFileName: Qt.md5(artUrl)
+    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+    property bool artDownloaded: false
+
+    readonly property string artSource: {
+        if (!artUrl) return "";
+        if (isLocalArt) return artUrl;
+        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
+    }
+
+    onArtFilePathChanged: {
+        if (!artUrl || artUrl.length === 0) { artDownloaded = false; return; }
+        if (isLocalArt) { artDownloaded = true; return; }
+        artDownloader.targetFile = artUrl;
+        artDownloader.artFilePath = artFilePath;
+        artDownloader.artTempPath = artFilePath + ".tmp";
+        artDownloaded = false;
+        artDownloader.running = true;
+    }
+
+    Process {
+        id: artDownloader
+        property string targetFile: root.artUrl
+        property string artFilePath: root.artFilePath
+        property string artTempPath: root.artFilePath + ".tmp"
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
+        onExited: { artDownloaded = true; }
+    }
+
+    ColorQuantizer {
+        id: colorQuantizer
+        source: root.artSource
+        depth: 0
+        rescaleSize: 1
+    }
+
+    readonly property color artDominantColor: {
+        if (!root.useDynamicColors) return Appearance.colors.colPrimary;
+        let raw = colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary;
+        let mixed = ColorUtils.mix(raw, Appearance.colors.colPrimaryContainer, 0.8);
+        return mixed || Appearance.m3colors.m3secondaryContainer;
+    }
+
+    property QtObject blendedColors: AdaptedMaterialScheme {
+        color: root.artDominantColor
+    }
+
     readonly property string trackTitle: player?.trackTitle || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
 
-    // --- Colors (WidgetColorScheme) ---
-    readonly property color colSectionOne: WidgetColorScheme.cardBgColor
-    readonly property color colSectionTwo: WidgetColorScheme.innerShapeColor
-    readonly property color colSectionThree: WidgetColorScheme.accentColor
-    readonly property color colTextOnOne: WidgetColorScheme.textColorOnBg
-    readonly property color colSubtextOnOne: WidgetColorScheme.subtextColorOnBg
-    readonly property color colIconOnTwo: WidgetColorScheme.textColorOnBg
-    readonly property color colIconOnThree: WidgetColorScheme.onAccentColor
+    // --- Colors (WidgetColorScheme with dynamic album colors support) ---
+    readonly property color colSectionOne: useDynamicColors ? blendedColors.colPrimaryContainer : WidgetColorScheme.cardBgColor
+    readonly property color colSectionTwo: useDynamicColors ? blendedColors.colSecondaryContainer : WidgetColorScheme.innerShapeColor
+    readonly property color colSectionThree: useDynamicColors ? blendedColors.colPrimary : WidgetColorScheme.accentColor
+    readonly property color colTextOnOne: useDynamicColors ? blendedColors.colOnPrimaryContainer : WidgetColorScheme.textColorOnBg
+    readonly property color colSubtextOnOne: useDynamicColors ? ColorUtils.transparentize(blendedColors.colOnPrimaryContainer, 0.6) : WidgetColorScheme.subtextColorOnBg
+    readonly property color colIconOnTwo: useDynamicColors ? blendedColors.colOnSecondaryContainer : WidgetColorScheme.textColorOnBg
+    readonly property color colIconOnThree: useDynamicColors ? blendedColors.colOnPrimary : WidgetColorScheme.onAccentColor
 
     // --- Layout proportions 6:4:2 (total 12) ---
     readonly property int gap: 6
@@ -47,7 +103,7 @@ AbstractBackgroundWidget {
     StyledRectangularShadow {
         id: bgShadow
         target: mainContainer
-        visible: Config.options.background.widgets.enableShadows ?? true
+        visible: Config.options.background.widgets.compact_media.enableShadows ?? true
     }
 
     Row {

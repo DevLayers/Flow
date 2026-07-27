@@ -35,7 +35,7 @@ ContentPage {
         }
 
         StyledText {
-            text: Translation.tr("CD Media Options")
+            text: Translation.tr("Compact Media Options")
             font.pixelSize: Appearance.font.pixelSize.large
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
@@ -43,27 +43,27 @@ ContentPage {
     }
 
     ContentSection {
-        title: Translation.tr("CD Media Settings")
-        icon: "album"
+        title: Translation.tr("Compact Media Settings")
+        icon: "queue_music"
 
         Item {
             Layout.fillWidth: true
             implicitHeight: 250
-            visible: !Config.isWidgetActive("media_cd")
+            visible: !Config.isWidgetActive("compact_media")
 
             PagePlaceholder {
                 anchors.fill: parent
-                icon: "album"
+                icon: "queue_music"
                 shape: MaterialShape.Shape.Circle
-                title: Translation.tr("CD Media widget disabled")
-                description: Translation.tr("Enable the CD Media widget in Desktop Widgets settings to use this page.")
+                title: Translation.tr("Compact Media disabled")
+                description: Translation.tr("Enable the Compact Media widget in Desktop Widgets settings to use this page.")
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
-            visible: Config.isWidgetActive("media_cd")
+            visible: Config.isWidgetActive("compact_media")
 
             ContentSubsectionLabel {
                 text: Translation.tr("Size")
@@ -72,21 +72,27 @@ ContentPage {
             ConfigSlider {
                 buttonIcon: "aspect_ratio"
                 text: Translation.tr("Widget Size")
-                value: Config.options.background.widgets.media_cd.widgetSize ?? 100
+                value: Config.options.background.widgets.compact_media.widgetSize ?? 100
                 from: 50
                 to: 200
                 stepSize: 10
                 onValueChanged: {
-                    Config.options.background.widgets.media_cd.widgetSize = value;
+                    Config.options.background.widgets.compact_media.widgetSize = value;
                 }
+            }
+
+            Item { Layout.preferredHeight: 4 }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Colors")
             }
 
             ConfigSwitch {
                 buttonIcon: "palette"
                 text: Translation.tr("Dynamic album colors")
-                checked: Config.options.background.widgets.media_cd.dynamicAlbumColors ?? false
+                checked: Config.options.background.widgets.compact_media.dynamicAlbumColors ?? false
                 onCheckedChanged: {
-                    Config.options.background.widgets.media_cd.dynamicAlbumColors = checked;
+                    Config.options.background.widgets.compact_media.dynamicAlbumColors = checked;
                 }
             }
 
@@ -99,18 +105,18 @@ ContentPage {
             ConfigSwitch {
                 buttonIcon: "wb_sunny"
                 text: Translation.tr("Enable Shadows")
-                checked: Config.options.background.widgets.media_cd.enableShadows ?? true
+                checked: Config.options.background.widgets.compact_media.enableShadows ?? true
                 onCheckedChanged: {
-                    Config.options.background.widgets.media_cd.enableShadows = checked;
+                    Config.options.background.widgets.compact_media.enableShadows = checked;
                 }
             }
 
             ConfigSwitch {
                 buttonIcon: "blur_on"
                 text: Translation.tr("Enable Inner Shadows")
-                checked: Config.options.background.widgets.media_cd.enableInnerShadow ?? true
+                checked: Config.options.background.widgets.compact_media.enableInnerShadow ?? true
                 onCheckedChanged: {
-                    Config.options.background.widgets.media_cd.enableInnerShadow = checked;
+                    Config.options.background.widgets.compact_media.enableInnerShadow = checked;
                 }
             }
         }

@@ -22,9 +22,15 @@ AbstractBackgroundWidget {
 
     visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
 
-    // Default size is 240x240 for 1:1 widgets as per AGENTS.md guidelines
-    implicitWidth: 240
-    implicitHeight: 240
+    // Default size is 240x240 base scaled by widgetSize
+    readonly property real contentScale: (Config.options.background.widgets.circular_media.widgetSize ?? 100) / 100.0
+    implicitWidth: 240 * contentScale
+    implicitHeight: 240 * contentScale
+
+    // ── Config visibility toggles ──
+    readonly property bool cfgShowPrevBtn: Config.ready ? (Config.options.background.widgets.circular_media.showPrevButton ?? true) : true
+    readonly property bool cfgShowNextBtn: Config.ready ? (Config.options.background.widgets.circular_media.showNextButton ?? true) : true
+    readonly property bool cfgShowDevicePill: Config.ready ? (Config.options.background.widgets.circular_media.showDevicePill ?? true) : true
 
     readonly property bool useAlbumColors: Config.ready ? (Config.options.background.widgets.circular_media.useAlbumColors ?? true) : true
     readonly property MprisPlayer player: MprisController.activePlayer
@@ -77,20 +83,15 @@ AbstractBackgroundWidget {
     ColorQuantizer {
         id: colorQuantizer
         source: root.artSource
-        depth: 2 // Extract 4 colors so we get a better color representation
+        depth: 0
         rescaleSize: 1
     }
 
-    readonly property color rawExtractedColor: colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary
-
-    // Elevate saturation and adjust lightness of the extracted color to get a highly vibrant palette
-    property color artDominantColor: {
-        if (!root.useDynamicColors)
-            return Appearance.colors.colPrimary;
-        let h = rawExtractedColor.hslHue;
-        let s = Math.max(0.45, rawExtractedColor.hslSaturation);
-        let l = Math.max(0.58, Math.min(0.65, rawExtractedColor.hslLightness));
-        return Qt.hsla(h, s, l, 1.0);
+    readonly property color artDominantColor: {
+        if (!root.useDynamicColors) return Appearance.colors.colPrimary;
+        let raw = colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary;
+        let mixed = ColorUtils.mix(raw, Appearance.colors.colPrimaryContainer, 0.8);
+        return mixed || Appearance.m3colors.m3secondaryContainer;
     }
 
     property QtObject blendedColors: AdaptedMaterialScheme {
@@ -129,7 +130,7 @@ AbstractBackgroundWidget {
     // Outer bezel shadow support
     StyledDropShadow {
         target: bezelRing
-        visible: Config.options.background.widgets.enableShadows ?? true
+        visible: Config.options.background.widgets.circular_media.enableShadows ?? true
     }
 
     // Outer Bezel Ring (Moldura) using opaque solid colBackgroundSurfaceContainer base
@@ -309,6 +310,7 @@ AbstractBackgroundWidget {
                         // Previous Button (Perfect Circle matching watch design guidelines)
                         RippleButton {
                             id: prevButton
+                            visible: root.cfgShowPrevBtn
                             width: root.width * 0.20
                             height: width // perfect circle
                             anchors.verticalCenter: parent.verticalCenter
@@ -341,7 +343,7 @@ AbstractBackgroundWidget {
                             MaterialShape {
                                 id: progressBgOutline
                                 anchors.fill: parent
-                                shapeString: "Cookie9Sided"
+                                shapeString: Config.options.background.widgets.circular_media.progressShape ?? "Cookie9Sided"
                                 color: "transparent"
                                 borderColor: ColorUtils.mix("#000000", root.activeAccentColor, 0.70)
                                 borderWidth: 0.055
@@ -350,7 +352,7 @@ AbstractBackgroundWidget {
                             MaterialShape {
                                 id: progressActiveOutline
                                 anchors.fill: parent
-                                shapeString: "Cookie9Sided"
+                                shapeString: Config.options.background.widgets.circular_media.progressShape ?? "Cookie9Sided"
                                 color: "transparent"
                                 borderColor: root.activeAccentColor
                                 borderWidth: 0.055
@@ -404,7 +406,7 @@ AbstractBackgroundWidget {
                                     maskSource: MaterialShape {
                                         width: playPauseButton.width
                                         height: playPauseButton.height
-                                        shapeString: "Cookie9Sided"
+                                        shapeString: Config.options.background.widgets.circular_media.progressShape ?? "Cookie9Sided"
                                     }
                                 }
 
@@ -427,6 +429,7 @@ AbstractBackgroundWidget {
                         // Next Button (Perfect Circle matching watch design guidelines)
                         RippleButton {
                             id: nextButton
+                            visible: root.cfgShowNextBtn
                             width: root.width * 0.20
                             height: width // perfect circle
                             anchors.verticalCenter: parent.verticalCenter
@@ -457,6 +460,7 @@ AbstractBackgroundWidget {
 
                 // Audio Output Device Pill Shape (Centered at the Bottom)
                 RowLayout {
+                    visible: root.cfgShowDevicePill
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredHeight: root.width * 0.13
 

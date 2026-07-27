@@ -585,8 +585,13 @@ Singleton {
                         property real y: 200
                         property bool showTicks: true
                         property bool showMinuteHand: true
-                        property bool enableShadows: true
+                        property bool enableShadows: false
                         property bool enableInnerShadow: false
+                        property string hourHandStyle: "fill"
+                        property string minuteHandStyle: "medium"
+                        property bool showSecondHand: false
+                        property string secondHandStyle: "dot"
+                        property bool showNumberRing: false
                         property bool expressiveColors: false
                     }
                     property JsonObject nagasaki_text: JsonObject {
@@ -638,6 +643,12 @@ Singleton {
                         property real y: 612.92
                         property bool useAlbumColors: true
                         property bool enableGlassReflection: true
+                        property bool enableShadows: false
+                        property bool showPrevButton: true
+                        property bool showNextButton: true
+                        property bool showDevicePill: true
+                        property string progressShape: "Cookie9Sided"
+                        property int widgetSize: 100
                     }
                     property JsonObject wearos_clock: JsonObject {
                         property bool enable: false
@@ -646,6 +657,20 @@ Singleton {
                         property real y: 100
                         property bool useAlbumColors: true
                         property bool enableGlassReflection: true
+                        property bool showDistroLogo: true
+                        property bool showSunsetComplication: true
+                        property bool showDigitalTimePill: true
+                        property bool showBatteryPill: true
+                        property bool showHourSubDial: true
+                        property bool showBedtimeIcon: true
+                        property bool showKdeConnect: true
+                        property bool showDateComplication: true
+                        property bool showMinuteHand: true
+                        property bool showOuterNumbers: true
+                        property bool showInnerNumbers: true
+                        property bool showBezelRing: true
+                        property bool enableShadows: false
+                        property int widgetSize: 100
                     }
                     property JsonObject weather: JsonObject {
                         property bool enable: false
@@ -920,14 +945,21 @@ Singleton {
                         property string placementStrategy: "free"
                         property real x: 200
                         property real y: 200
-                        property bool expressiveColors: false
+                        property bool dynamicAlbumColors: false
+                        property bool enableShadows: false
+                        property bool enableInnerShadow: false
+                        property int widgetSize: 100
                     }
                     property JsonObject compact_media: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
                         property real x: 200
                         property real y: 200
-                        property bool expressiveColors: false
+                        property bool dynamicAlbumColors: false
+                        property string backgroundShape: "Rectangle"
+                        property bool enableShadows: false
+                        property bool enableInnerShadow: false
+                        property int widgetSize: 100
                     }
                     property bool enableInnerShadow: false
                     property bool enableShadows: false
