@@ -112,6 +112,7 @@ LUA_BIND_RE = re.compile(r'hl\.bind\s*\(([^)]*)\)\s*', re.DOTALL)
 LUA_FIRST_ARG_RE = re.compile(r'"([^"]+)"')
 LUA_DESC_RE = re.compile(r'description\s*=\s*"([^"]*)"')
 LUA_SECTION_RE = re.compile(r'^--##!\s+(.+)$')
+LUA_COMMENT_BIND_PATTERN = re.compile(r'^--?#/#\s+(bind|unbind)\s*=')
 
 
 def parse_lua_binds(path):
@@ -169,7 +170,18 @@ def parse_lua_binds(path):
             process_lua_bind(bind_src, current, is_unbind=True)
             continue
 
-        # Skip `--#/#` documentation lines (old conf-format bind documentation, not active)
+        # Cheatsheet-only documentation binds (not registered with Hyprland)
+        # e.g. `--#/# bind = SUPER+SHIFT, ↑/↓/←/→,, # Move workspace to monitor`
+        if re.match(LUA_COMMENT_BIND_PATTERN, stripped):
+            # Strip leading `--` so conf-style parsing sees `#/# bind = ...`
+            lines[i] = stripped[2:].lstrip() if stripped.startswith("--") else stripped
+            keybind = get_keybind_at_line(i, lines)
+            if isinstance(keybind, KeyBinding):
+                current["keybinds"].append(keybind)
+            elif isinstance(keybind, Unbinding):
+                current["unbinds"].append(keybind)
+            i += 1
+            continue
 
         i += 1
 
