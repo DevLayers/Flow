@@ -10,8 +10,6 @@ RippleButton { // Right sidebar button
     id: rightSidebarButton
 
     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-    Layout.fillWidth: true
-    Layout.fillHeight: true
 
     property real startRadius: Appearance.rounding.full
     property real endRadius: Appearance.rounding.full
@@ -21,8 +19,8 @@ RippleButton { // Right sidebar button
     topRightRadius: endRadius
     bottomRightRadius: endRadius
 
-    implicitWidth: indicatorsRowLayout.implicitWidth + 12 * 2
-    implicitHeight: Appearance.sizes.baseBarHeight
+    implicitWidth: indicatorsRowLayout.implicitWidth + 10
+    implicitHeight: Math.max(indicatorsRowLayout.implicitHeight, Appearance.font.pixelSize.larger) + 10
 
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
