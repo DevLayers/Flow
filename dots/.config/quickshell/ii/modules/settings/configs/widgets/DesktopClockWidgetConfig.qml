@@ -309,6 +309,11 @@ ContentPage {
                                 value: "dots"
                             },
                             {
+                                displayName: Translation.tr("Shapes"),
+                                icon: "category",
+                                value: "shapes"
+                            },
+                            {
                                 displayName: Translation.tr("Numbers"),
                                 icon: "123",
                                 value: "numbers"

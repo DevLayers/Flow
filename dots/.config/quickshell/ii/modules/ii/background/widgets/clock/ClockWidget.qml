@@ -84,9 +84,6 @@ AbstractBackgroundWidget {
             active: root.clockStyle === "digital"
             visible: active
             sourceComponent: DigitalClock {
-                colText: root.colText
-                colTextSecondary: root.colTextSecondary
-                colTextTertiary: root.colTextTertiary
                 textHorizontalAlignment: root.textHorizontalAlignment
             }
         }

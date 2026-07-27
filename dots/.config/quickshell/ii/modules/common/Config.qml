@@ -534,7 +534,7 @@ Singleton {
                             property int sides: 14
                             property string backgroundStyle: "cookie"     // Options: "cookie", "sine", "shape"
                             property string backgroundShape: "Arch"  // Options: MaterialShape.Shape enum values as string
-                            property string dialNumberStyle: "full"   // Options: "dots" , "numbers", "full" , "none"
+                            property string dialNumberStyle: "full"   // Options: "dots" , "numbers", "full", "shapes", "none"
                             property string hourHandStyle: "fill"     // Options: "classic", "fill", "hollow", "hide"
                             property string minuteHandStyle: "medium" // Options "classic", "thin", "medium", "bold", "hide"
                             property string secondHandStyle: "dot"    // Options: "dot", "line", "classic", "hide"
@@ -575,6 +575,7 @@ Singleton {
                         property string placementStrategy: "free"
                         property real x: 200
                         property real y: 200
+                        property int size: 200
                     }
                     property JsonObject media: JsonObject {
                         property bool enable: true

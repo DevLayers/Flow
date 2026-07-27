@@ -48,5 +48,19 @@ Item {
             margins: 46 - linesLoader.opacity * 34
         }
     }
+
+    // Material Shapes
+    FadeLoader {
+        id: shapesLoader
+        anchors {
+            fill: parent
+            margins: 10
+        }
+        shown: root.style === "shapes"
+        sourceComponent: Shapes {
+            color: root.color
+            margins: 46 - shapesLoader.opacity * 34
+        }
+    }
     
 }
