@@ -1138,11 +1138,16 @@ apply_config() {
     chmod 0755 "$STAGE_DIR"
     ui_ok "Staged" "$carried protected file$([[ "$carried" == "1" ]] || printf 's') carried"
 
-    swap_in "$STAGE_DIR" "$fork" "$branch" || return 1
-
+    # Mirror before the swap, never after. The settings panel runs the mirrored
+    # copy, so a fault in swap_in used to be self-perpetuating: the swap failed,
+    # the mirror was never refreshed, and the panel kept running the same broken
+    # script with no way to heal itself. A clone that reached this point is
+    # sound, so its manager is always safe to install.
     mirror_scripts "$CLONE_DIR"
     rm -rf "$CLONE_DIR"
     CLONE_DIR=""
+
+    swap_in "$STAGE_DIR" "$fork" "$branch" || return 1
 
     handle_base_config "$verb"
     restart_quickshell
