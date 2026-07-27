@@ -69,6 +69,7 @@ Rectangle {
 
     property string shapeString: "Cookie9Sided"
     property string icon: ""
+    property url iconUrl: ""
 
     property string title: ""
     property var parsedTitle: {
@@ -124,9 +125,19 @@ Rectangle {
             }
         }
 
+        Image {
+            id: iconImage
+            visible: heroCardRoot.iconUrl.toString() !== "" && shapeItem.children.length === 0
+            anchors.centerIn: parent
+            source: heroCardRoot.iconUrl
+            sourceSize: Qt.size(heroCardRoot.iconFontSize, heroCardRoot.iconFontSize)
+            asynchronous: true
+            fillMode: Image.PreserveAspectFit
+        }
+
         MaterialSymbol {
             id: iconSymbol
-            visible: heroCardRoot.icon !== "" && shapeItem.children.length === 0
+            visible: heroCardRoot.icon !== "" && heroCardRoot.iconUrl.toString() === "" && shapeItem.children.length === 0
             anchors.centerIn: parent
             text: heroCardRoot.icon
             iconSize: heroCardRoot.iconFontSize
