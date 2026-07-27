@@ -192,17 +192,34 @@ Rectangle {
                         spacing: 4
                         Repeater {
                             model: bindRow.modelData.mods
-                            delegate: KeyChip {
+                            delegate: Row {
                                 required property var modelData
-                                chipText: cheatsheetRoot.keySubstitutions[modelData] || modelData
-                                bgColor: Appearance.colors.colSurfaceContainerLow
-                                textColor: Appearance.colors.colOnSurface
+                                required property int index
+                                spacing: 4
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: Config.options.cheatsheet.splitButtons && index > 0
+                                    text: "+"
+                                    font.family: Appearance.font.family.monospace
+                                    font.pixelSize: Config.options.cheatsheet.fontSize.key
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colPrimary
+                                }
+                                KeyChip {
+                                    chipText: cheatsheetRoot.keySubstitutions[modelData] || modelData
+                                    bgColor: Appearance.colors.colSurfaceContainerLow
+                                    textColor: Appearance.colors.colOnSurface
+                                }
                             }
                         }
                         StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
                             visible: Config.options.cheatsheet.splitButtons && !cheatsheetRoot.keyBlacklist.includes(bindRow.modelData.key) && bindRow.modelData.mods.length > 0
                             text: "+"
+                            font.family: Appearance.font.family.monospace
                             font.pixelSize: Config.options.cheatsheet.fontSize.key
+                            font.weight: Font.Bold
                             color: Appearance.colors.colPrimary
                         }
                         KeyChip {
