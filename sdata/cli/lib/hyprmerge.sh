@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
+#
+# hyprmerge — fold a repository Hyprland config into the user's persistent one,
+# key by key, never overwriting anything already set.
+#
+#   hyprmerge.sh <repo-config> [local-config] [-v]
 
-set -uo pipefail
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 
 IS_VERBOSE=false
 TEMP_ARGS=()
 
 for arg in "$@"; do
     case "$arg" in
-        -v|--verbose) IS_VERBOSE=true ;;
+        -v | --verbose) IS_VERBOSE=true ;;
         *) TEMP_ARGS+=("$arg") ;;
     esac
 done
@@ -15,7 +23,7 @@ done
 set -- "${TEMP_ARGS[@]}"
 
 REPO_CONFIG="${1:-}"
-LOCAL_CONFIG="${2:-$HOME/.local/share/ii-vynx/hyprland.conf}"
+LOCAL_CONFIG="${2:-$XDG_DATA_HOME/ii-p3drovfx/hyprland.conf}"
 VERBOSE="$IS_VERBOSE"
 
 if [[ -z "$REPO_CONFIG" || ! -f "$REPO_CONFIG" ]]; then
@@ -28,8 +36,17 @@ if [[ ! -f "$LOCAL_CONFIG" ]]; then
     touch "$LOCAL_CONFIG"
 fi
 
-log()   { [[ "$VERBOSE" == "true" ]] && echo -e "\e[1;34m[VERBOSE] [hyprmerge]\e[0m $*"; }
-skip()  { [[ "$VERBOSE" == "true" ]] && echo -e "\e[1;33m[VERBOSE] [SKIP]\e[0m: $*"; }
+# Route every write through the sibling hyprset, with the same target file.
+hyprset() { HYPRSET_CONFIG="$LOCAL_CONFIG" bash "$SCRIPT_DIR/hyprset.sh" "$@"; }
+
+log() {
+    [[ "$VERBOSE" == "true" ]] && echo -e "\e[1;34m[VERBOSE] [hyprmerge]\e[0m $*"
+    return 0
+}
+skip() {
+    [[ "$VERBOSE" == "true" ]] && echo -e "\e[1;33m[VERBOSE] [SKIP]\e[0m: $*"
+    return 0
+}
 apply() { echo -e "\e[1;32m[APPLYING]\e[0m: $*"; }
 
 key_exists_in_section() {
@@ -44,7 +61,7 @@ log "Merging $REPO_CONFIG into $LOCAL_CONFIG"
 while IFS= read -r line || [[ -n "$line" ]]; do
     # Clean whitespace and carriage returns
     trimmed=$(echo "$line" | tr -d '\r' | xargs)
-    
+
     # Ignore empty lines and comments
     [[ -z "$trimmed" || "$trimmed" =~ ^# ]] && continue
 
@@ -72,11 +89,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$field" == "animation" ]]; then
             anim_name=$(echo "$value" | cut -d',' -f1 | xargs)
             if grep -q "animation = $anim_name" "$LOCAL_CONFIG"; then
-                 skip "animation $anim_name"
+                skip "animation $anim_name"
             else
                 apply "animation $anim_name"
                 full_params=$(echo "$value" | cut -d',' -f2- | xargs)
-                vynx hyprset anim "$anim_name" "$full_params" >/dev/null 2>&1 || true
+                hyprset anim "$anim_name" "$full_params" >/dev/null 2>&1 || true
             fi
             continue
         fi
@@ -84,11 +101,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         # Process Sectioned or Global keys
         if [[ -n "$current_section" ]]; then
             if key_exists_in_section "$current_section" "$field"; then
-                 skip "${current_section}:${field}"
+                skip "${current_section}:${field}"
             else
-                 apply "${current_section}:${field}"
-                 vynx hyprset key "${current_section}:${field}" "$value" >/dev/null 2>&1 || true
-                 sleep 0.05
+                apply "${current_section}:${field}"
+                hyprset key "${current_section}:${field}" "$value" >/dev/null 2>&1 || true
+                sleep 0.05
             fi
         else
             # Rules that are appended directly to file (binds, execs, etc.)
@@ -97,7 +114,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
                     skip "rule: $field"
                 else
                     apply "rule: $field"
-                    echo "$trimmed" >> "$LOCAL_CONFIG"
+                    echo "$trimmed" >>"$LOCAL_CONFIG"
                 fi
             else
                 # Handle standard global settings
@@ -105,12 +122,12 @@ while IFS= read -r line || [[ -n "$line" ]]; do
                     skip "$field"
                 else
                     apply "$field"
-                    vynx hyprset key "$field" "$value" >/dev/null 2>&1 || true
+                    hyprset key "$field" "$value" >/dev/null 2>&1 || true
                 fi
             fi
         fi
         continue
     fi
-done < "$REPO_CONFIG"
+done <"$REPO_CONFIG"
 
 log "Merge complete."

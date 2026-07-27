@@ -24,10 +24,9 @@ Singleton {
         }
         // Apply immediately via hyprctl keyword (takes effect right away, unlike hyprset which only edits a file)
         Quickshell.execDetached(["hyprctl", "keyword", "animation", animName + ",1,7,menu_decel," + style]);
-        // Also write to persistent config file via hyprset.sh directly
-        // (vynx hyprset fails because ~/.local/bin/vynx is a symlink whose resolved
-        // basename is "setup-ii-vynx.sh", so the CLI dispatcher never activates)
-        Quickshell.execDetached(["bash", Directories.home.replace("file://", "") + "/.local/share/ii-vynx/sdata/cli/lib/hyprset.sh", "anim", animName, String(style)])
+        // Write to the persistent config through hyprset.sh. Calling the helper
+        // directly keeps this independent of whether the vynx symlink exists.
+        Quickshell.execDetached(["bash", Directories.home.replace("file://", "") + "/.local/share/ii-p3drovfx/sdata/cli/lib/hyprset.sh", "anim", animName, String(style)])
     }
 
     function setLayout(layout) {

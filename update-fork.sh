@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# update-fork.sh — thin wrapper around setup-ii-vynx.sh --update.
+# update-fork.sh — thin wrapper around `setup-ii-p3drovfx.sh update`.
 #
-# Kept for backwards compatibility. Use `vynx update` or
-# `setup-ii-vynx.sh --update` directly for new code.
+# Kept for backwards compatibility with older buttons and shell history. New
+# code should call `vynx update` or `setup-ii-p3drovfx.sh update` directly.
 set -euo pipefail
 SCRIPT_DIR="$(cd -P "$(dirname "$0")" >/dev/null 2>&1 && pwd)"
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 
-# Resolve the canonical script: prefer ~/Downloads/ii-vynx (dev clone),
-# then ~/.local/share/ii-vynx (installed copy used by UI buttons),
-# then this dir.
+# Prefer the installed copy, then this directory, then the legacy locations so
+# a wrapper left behind by an older install still finds something to run.
 SETUP=""
 for candidate in \
-    "$HOME/Downloads/ii-vynx/setup-ii-vynx.sh" \
-    "$HOME/.local/share/ii-vynx/setup-ii-vynx.sh" \
+    "$XDG_DATA_HOME/ii-p3drovfx/setup-ii-p3drovfx.sh" \
+    "$SCRIPT_DIR/setup-ii-p3drovfx.sh" \
+    "$XDG_DATA_HOME/ii-vynx/setup-ii-vynx.sh" \
     "$SCRIPT_DIR/setup-ii-vynx.sh"; do
     if [ -f "$candidate" ]; then
         SETUP="$candidate"
@@ -21,8 +22,11 @@ for candidate in \
 done
 
 if [ -z "$SETUP" ]; then
-    echo "✗ Could not locate setup-ii-vynx.sh" >&2
+    echo "✗ Could not locate setup-ii-p3drovfx.sh" >&2
     exit 1
 fi
 
-exec bash "$SETUP" --update --no-confirm --preserve-config "$@"
+case "$SETUP" in
+    *setup-ii-vynx.sh) exec bash "$SETUP" --update --no-confirm --preserve-config "$@" ;;
+    *) exec bash "$SETUP" update --yes --keep-config "$@" ;;
+esac
