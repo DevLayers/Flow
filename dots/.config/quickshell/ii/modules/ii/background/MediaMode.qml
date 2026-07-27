@@ -377,9 +377,8 @@ Item { // Fullscreen MediaMode instance
                                 onClicked: {
                                     if (typeof mediaModeLoader !== "undefined") {
                                         mediaModeLoader.active = false;
-                                    } else {
-                                        GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
                                     }
+                                    GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
                                     LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
                                 }
 

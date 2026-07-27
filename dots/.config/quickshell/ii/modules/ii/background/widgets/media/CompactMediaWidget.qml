@@ -114,27 +114,41 @@ AbstractBackgroundWidget {
         // ─── SECTION 2: Play/Pause (4/12) ───
         Rectangle {
             id: sectionTwo
-            width: root.sectionTwoWidth
+            readonly property real pressExpansion: sectionTwoMouse.pressed ? 12 : 0
+            width: root.sectionTwoWidth + pressExpansion
             height: parent.height
-            color: root.colSectionTwo
-            radius: root.globalRadius
+            radius: sectionTwoMouse.pressed ? Appearance.rounding.small : root.globalRadius
+            color: {
+                if (sectionTwoMouse.pressed) return Qt.darker(root.colSectionTwo, 1.2);
+                if (sectionTwoMouse.containsMouse) return Qt.lighter(root.colSectionTwo, 1.1);
+                return root.colSectionTwo;
+            }
 
-            RippleButton {
+            Behavior on width {
+                animation: Appearance.animation.clickBounce.numberAnimation.createObject(this)
+            }
+
+            Behavior on radius {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            Behavior on color {
+                ColorAnimation { duration: 200; easing.type: Easing.OutCubic }
+            }
+
+            MaterialSymbol {
                 anchors.centerIn: parent
-                implicitWidth: parent.width
-                implicitHeight: parent.height
-                
-                colBackground: "transparent"
-                colBackgroundHover: ColorUtils.transparentize(root.colIconOnTwo, 0.85)
-                colRipple: ColorUtils.transparentize(root.colIconOnTwo, 0.8)
+                text: root.player?.isPlaying ? "pause" : "play_arrow"
+                iconSize: 32
+                color: root.colIconOnTwo
+                fill: 1
+            }
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: root.player?.isPlaying ? "pause" : "play_arrow"
-                    iconSize: 32
-                    color: root.colIconOnTwo
-                    fill: 1
-                }
+            MouseArea {
+                id: sectionTwoMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
                 onClicked: root.player?.togglePlaying()
             }
         }
@@ -142,26 +156,41 @@ AbstractBackgroundWidget {
         // ─── SECTION 3: Next (2/12) ───
         Rectangle {
             id: sectionThree
-            width: root.sectionThreeWidth
+            readonly property real pressExpansion: sectionThreeMouse.pressed ? 12 : 0
+            width: root.sectionThreeWidth + pressExpansion
             height: parent.height
-            color: root.colSectionThree
-            radius: root.globalRadius
+            radius: sectionThreeMouse.pressed ? Appearance.rounding.small : root.globalRadius
+            color: {
+                if (sectionThreeMouse.pressed) return Qt.darker(root.colSectionThree, 1.2);
+                if (sectionThreeMouse.containsMouse) return Qt.lighter(root.colSectionThree, 1.1);
+                return root.colSectionThree;
+            }
 
-            RippleButton {
+            Behavior on width {
+                animation: Appearance.animation.clickBounce.numberAnimation.createObject(this)
+            }
+
+            Behavior on radius {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            Behavior on color {
+                ColorAnimation { duration: 200; easing.type: Easing.OutCubic }
+            }
+
+            MaterialSymbol {
                 anchors.centerIn: parent
-                implicitWidth: parent.width
-                implicitHeight: parent.height
-                colBackground: "transparent"
-                colBackgroundHover: ColorUtils.transparentize(root.colIconOnThree, 0.85)
-                colRipple: ColorUtils.transparentize(root.colIconOnThree, 0.8)
+                text: "skip_next"
+                iconSize: 22
+                color: root.colIconOnThree
+                fill: 1
+            }
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "skip_next"
-                    iconSize: 22
-                    color: root.colIconOnThree
-                    fill: 1
-                }
+            MouseArea {
+                id: sectionThreeMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
                 onClicked: root.player?.next()
             }
         }
