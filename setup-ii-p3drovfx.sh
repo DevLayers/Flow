@@ -165,68 +165,144 @@ START_EPOCH="$SECONDS"
 
 UI_TTY=false
 UI_COLOR=true
+UI_TRUECOLOR=false
 UI_GLYPHS="unicode" # nerd | unicode | ascii
 UI_WIDTH=52
-UI_INNER=48
+UI_LABELCOL=11 # shared label column, so every row type lines up
 UI_SPIN_I=0
 UI_LIVE=false # a step line is currently held open on the terminal
 UI_STEP_LABEL=""
+UI_STEP_US=0       # start of the open step, in microseconds
 UI_PIPE_MARK=0     # last milestone emitted by the non-TTY progress backend
+UI_ROW_FD=1        # stream ui_row writes to; ui_fail flips it to stderr
 ERR_REPORTED=false # a failure has already been surfaced to the user
+
+# ── Material palette ─────────────────────────────────────────────────────────
+# Matugen regenerates this on every wallpaper change; the Settings panel watches
+# the same file through MaterialThemeLoader.qml.
+M3_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/user/generated/colors.json"
+M3_PRIMARY="" M3_SECONDARY="" M3_TERTIARY="" M3_ERROR="" M3_OUTLINE=""
+
+# Pull the handful of roles we colour with straight out of the generated JSON.
+# Deliberately sed and not jq: this has to work mid-`install` on a bare machine,
+# before either jq or matugen exists.
+ui_m3_load() {
+    [[ -r "$M3_FILE" ]] || return 1
+    local k v
+    while IFS=$'\t' read -r k v; do
+        case "$k" in
+            primary) M3_PRIMARY="$v" ;;
+            secondary) M3_SECONDARY="$v" ;;
+            tertiary) M3_TERTIARY="$v" ;;
+            error) M3_ERROR="$v" ;;
+            outline) M3_OUTLINE="$v" ;;
+        esac
+    done < <(sed -n 's/^[[:space:]]*"\([a-z_]*\)"[[:space:]]*:[[:space:]]*"\(#[0-9a-fA-F]\{6\}\)".*/\1\t\2/p' "$M3_FILE" 2>/dev/null)
+    [[ -n "$M3_PRIMARY" && -n "$M3_SECONDARY" && -n "$M3_TERTIARY" &&
+        -n "$M3_ERROR" && -n "$M3_OUTLINE" ]]
+}
+
+ui_fg() {
+    printf '\033[38;2;%d;%d;%dm' "$((16#${1:1:2}))" "$((16#${1:3:2}))" "$((16#${1:5:2}))"
+}
 
 # Colours. Kept on even when piped: the Settings panel parses these SGR codes.
 ui_palette() {
-    if [[ "$UI_COLOR" == true ]]; then
-        C_RST=$'\033[0m'
-        C_B=$'\033[1m'
-        C_DIM=$'\033[2m'
-        C_IT=$'\033[3m'
-        C_UL=$'\033[4m'
-        C_ERR=$'\033[0;31m'
-        C_OK=$'\033[0;32m'
-        C_WARN=$'\033[1;33m'
-        C_STEP=$'\033[0;34m'
-        C_ACC=$'\033[0;35m'
-        C_HEAD=$'\033[1;36m'
-        C_SUB=$'\033[0;90m'
-    else
+    if [[ "$UI_COLOR" != true ]]; then
         C_RST="" C_B="" C_DIM="" C_IT="" C_UL=""
         C_ERR="" C_OK="" C_WARN="" C_STEP="" C_ACC="" C_HEAD="" C_SUB=""
+        return 0
+    fi
+    C_RST=$'\033[0m'
+    C_B=$'\033[1m'
+    C_DIM=$'\033[2m'
+    C_IT=$'\033[3m'
+    C_UL=$'\033[4m'
+    C_ERR=$'\033[0;31m'
+    C_OK=$'\033[0;32m'
+    C_WARN=$'\033[1;33m'
+    C_STEP=$'\033[0;34m'
+    C_ACC=$'\033[0;35m'
+    C_HEAD=$'\033[1;36m'
+    C_SUB=$'\033[0;90m'
+
+    # On a real 24-bit terminal, repaint from the live matugen palette. Piped
+    # output keeps the basic codes above on purpose: AboutConfig.qml maps them
+    # onto theme roles, so the Settings log box re-themes with the wallpaper
+    # instead of freezing to whatever it was when the line was written.
+    if [[ "$UI_TTY" == true && "$UI_TRUECOLOR" == true ]] && ui_m3_load; then
+        C_ERR="$(ui_fg "$M3_ERROR")"
+        C_OK="$(ui_fg "$M3_PRIMARY")"
+        C_WARN="$(ui_fg "$M3_TERTIARY")"
+        C_STEP="$(ui_fg "$M3_SECONDARY")"
+        C_ACC="$(ui_fg "$M3_TERTIARY")"
+        C_HEAD="$(ui_fg "$M3_PRIMARY")"
+        C_SUB="$(ui_fg "$M3_OUTLINE")"
     fi
 }
 
 ui_glyphset() {
+    BAR_P=()
     case "$UI_GLYPHS" in
         nerd)
-            G_OK=$'' G_ERR=$'' G_WARN=$'' G_STEP=$''
-            G_DOT=$'' G_ARROW=$'' G_SEP="·" G_W=1
-            BX_H="─" BX_V="│" BX_TL="╭" BX_TR="╮" BX_BL="╰" BX_BR="╯"
-            BX_FTL="┌" BX_FTR="┐" BX_FBL="└" BX_FBR="┘"
-            BAR_L="▕" BAR_R="▏" BAR_F="█" BAR_E="░" ELLIPSIS="…"
+            G_OK=$'' G_ERR=$'' G_WARN=$'' G_STEP=$''
+            G_DOT=$'' G_ARROW=$'' G_SEP="·" G_W=1
+            RULE="─" ELLIPSIS="…"
+            BAR_L="▕" BAR_R="▏" BAR_F="█" BAR_E="░"
+            BAR_P=(" " "▏" "▎" "▍" "▌" "▋" "▊" "▉")
             SPIN=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
             ;;
         unicode)
             G_OK="✓" G_ERR="✗" G_WARN="⚠" G_STEP="▸"
             G_DOT="●" G_ARROW="→" G_SEP="·" G_W=1
-            BX_H="─" BX_V="│" BX_TL="╭" BX_TR="╮" BX_BL="╰" BX_BR="╯"
-            BX_FTL="┌" BX_FTR="┐" BX_FBL="└" BX_FBR="┘"
-            BAR_L="▕" BAR_R="▏" BAR_F="█" BAR_E="░" ELLIPSIS="…"
+            RULE="─" ELLIPSIS="…"
+            BAR_L="▕" BAR_R="▏" BAR_F="█" BAR_E="░"
+            BAR_P=(" " "▏" "▎" "▍" "▌" "▋" "▊" "▉")
             SPIN=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
             ;;
         *)
             G_OK="ok" G_ERR="X" G_WARN="!" G_STEP=">"
             G_DOT="*" G_ARROW="->" G_SEP="-" G_W=2
-            BX_H="-" BX_V="|" BX_TL="+" BX_TR="+" BX_BL="+" BX_BR="+"
-            BX_FTL="+" BX_FTR="+" BX_FBL="+" BX_FBR="+"
-            BAR_L="[" BAR_R="]" BAR_F="#" BAR_E="-" ELLIPSIS="..."
+            RULE="-" ELLIPSIS="..."
+            BAR_L="[" BAR_R="]" BAR_F="#" BAR_E="-"
             SPIN=(- \\ \| /)
             ;;
     esac
 }
 
+# Operation icons, nerd only. They replace the generic tick on a completed row:
+# the row is already green and already in the success position, so the glyph is
+# free to say *what* finished rather than *that* it finished.
+ui_icon() {
+    [[ "$UI_GLYPHS" == "nerd" ]] || {
+        printf '%s' "$G_OK"
+        return 0
+    }
+    case "$1" in
+        Cloned | Fetched) printf '%s' $'' ;; # cloud-download
+        Copied | Staged) printf '%s' $'' ;;  # files
+        Swapped) printf '%s' $'' ;;          # exchange
+        Mirrored) printf '%s' $'' ;;         # clone
+        Restarted) printf '%s' $'' ;;        # refresh
+        Removed) printf '%s' $'' ;;          # trash
+        Reset) printf '%s' $'' ;;            # undo
+        Queried) printf '%s' $'' ;;          # git-branch
+        Deps | Configured | Compiled | Installed)
+            printf '%s' $'' # package
+            ;;
+        *) printf '%s' "$G_OK" ;;
+    esac
+}
+
 ui_has_nerd_font() {
     command -v fc-list >/dev/null 2>&1 || return 1
-    fc-list 2>/dev/null | grep -qiE 'nerd font|nerdfont'
+    # In a subshell with pipefail off: grep -q exits on the first match and
+    # SIGPIPEs fc-list, which pipefail reports as 141 — indistinguishable from
+    # "no patched font installed", so the upgrade never fired.
+    (
+        set +o pipefail
+        fc-list 2>/dev/null | grep -qiE 'nerd font|nerdfont'
+    )
 }
 
 # Provisional defaults so anything that fails before ui_init still renders.
@@ -239,6 +315,9 @@ ui_init() {
     if [[ "$OPT_NO_COLOR" == true || -n "${NO_COLOR:-}" || "${TERM:-}" == "dumb" ]]; then
         UI_COLOR=false
     fi
+    case "${COLORTERM:-}" in
+        truecolor | 24bit) UI_TRUECOLOR=true ;;
+    esac
 
     local loc="${LC_ALL:-${LC_CTYPE:-${LANG:-}}}"
     if [[ "$OPT_ASCII" == true ]] || [[ -n "${NO_UNICODE:-}" ]] ||
@@ -261,10 +340,9 @@ ui_init() {
         ((UI_WIDTH > 76)) && UI_WIDTH=76
         ((UI_WIDTH < 44)) && UI_WIDTH=44
     else
-        # Fixed width so the frames survive the Settings log box at any panel size.
+        # Fixed width so the layout survives the Settings log box at any panel size.
         UI_WIDTH=52
     fi
-    UI_INNER=$((UI_WIDTH - 4))
 
     ui_palette
     ui_glyphset
@@ -289,6 +367,29 @@ ui_trunc() {
     fi
 }
 
+# Microseconds since the epoch. EPOCHREALTIME is bash 5; the decimal separator
+# is locale-dependent, so strip it rather than assuming a dot.
+ui_now_us() {
+    local t="${EPOCHREALTIME:-}"
+    if [[ -n "$t" ]]; then
+        printf '%s' "${t/[.,]/}"
+    else
+        printf '%s000000' "$SECONDS"
+    fi
+}
+
+ui_fmt_dur() {
+    local us="$1" ms s
+    ((us < 0)) && us=0
+    ms=$((us / 1000))
+    if ((ms < 60000)); then
+        printf '%d.%ds' $((ms / 1000)) $(((ms % 1000) / 100))
+    else
+        s=$((ms / 1000))
+        printf '%dm%02ds' $((s / 60)) $((s % 60))
+    fi
+}
+
 # Append a plain, timestamped line to the log file. Never touches stdout, and
 # stays silent until open_log has proven the file is actually writable.
 ui_logline() {
@@ -301,66 +402,116 @@ ui_out() {
     printf '%s\n' "$1"
 }
 
-# ── Boxes ────────────────────────────────────────────────────────────────────
+# ── Rules and headers ────────────────────────────────────────────────────────
+
+ui_rule() {
+    local title="${1:-}" col="${2:-$C_SUB}"
+    [[ "$OPT_QUIET" == true ]] && return 0
+    if [[ -z "$title" ]]; then
+        printf '%s%s%s\n' "$col" "$(ui_repeat "$RULE" "$UI_WIDTH")" "$C_RST"
+        return 0
+    fi
+    title="$(ui_trunc "$title" $((UI_WIDTH - 8)))"
+    printf '%s%s%s %s%s%s %s%s%s\n' \
+        "$col" "$RULE$RULE" "$C_RST" "$C_B$col" "$title" "$C_RST" \
+        "$col" "$(ui_repeat "$RULE" $((UI_WIDTH - 4 - ${#title})))" "$C_RST"
+}
 
 ui_banner() {
     local title="$1" sub="${2:-}"
-    [[ "$OPT_QUIET" == true ]] && {
-        ui_logline "== $title ${sub:+- $sub}"
-        return 0
-    }
-    local text="$title"
-    [[ -n "$sub" ]] && text="$title $G_DOT $sub"
-    text="$(ui_trunc "$text" "$UI_INNER")"
-    local left=$(((UI_INNER - ${#text}) / 2))
-    local right=$((UI_INNER - ${#text} - left))
-    printf '\n%s%s%s%s%s\n' "$C_HEAD" "$BX_TL" "$(ui_repeat "$BX_H" $((UI_WIDTH - 2)))" "$BX_TR" "$C_RST"
-    printf '%s%s%s%s%s%s%s%s%s%s\n' \
-        "$C_HEAD" "$BX_V" "$C_RST" " $(ui_pad "$left")" "$C_B$C_HEAD$text$C_RST" \
-        "$(ui_pad "$right") " "$C_HEAD" "$BX_V" "$C_RST" ""
-    printf '%s%s%s%s%s\n\n' "$C_HEAD" "$BX_BL" "$(ui_repeat "$BX_H" $((UI_WIDTH - 2)))" "$BX_BR" "$C_RST"
     ui_logline "== $title ${sub:+- $sub}"
+    [[ "$OPT_QUIET" == true ]] && return 0
+    local right="" left="$title"
+    [[ -n "$sub" ]] && left="$title  $sub"
+    # `help` already puts the version in the subtitle; don't print it twice.
+    [[ "$sub" =~ ^v[0-9] ]] || right="v$SETUP_VERSION"
+    left="$(ui_trunc "$left" $((UI_WIDTH - ${#right} - 2)))"
+    printf '\n%s%s%s%s%s%s%s%s%s\n' \
+        "$C_B$C_HEAD" "$title" "$C_RST" \
+        "$C_SUB" "${left#"$title"}" "$C_RST" \
+        "$(ui_pad $((UI_WIDTH - ${#left} - ${#right})))" \
+        "$C_SUB$right" "$C_RST"
+    ui_rule
+    printf '\n'
 }
+
+# ── Buffered key/value sections ──────────────────────────────────────────────
+# Rows are collected instead of printed so the key column can be sized to the
+# widest key actually present, rather than to a hardcoded guess.
+
+UI_SECTION_TITLE=""
+UI_SECTION_ROWS=()
 
 ui_frame_open() {
-    local title="$1"
-    [[ "$OPT_QUIET" == true ]] && return 0
-    local cap=" $title "
-    cap="$(ui_trunc "$cap" $((UI_WIDTH - 6)))"
-    local fill=$((UI_WIDTH - 3 - ${#cap}))
-    printf '%s%s%s%s%s%s%s%s\n' \
-        "$C_SUB" "$BX_FTL" "$BX_H" "$C_RST" "$C_B$C_HEAD$cap$C_RST" \
-        "$C_SUB" "$(ui_repeat "$BX_H" "$fill")$BX_FTR" "$C_RST"
+    UI_SECTION_TITLE="${1:-}"
+    UI_SECTION_ROWS=()
 }
 
-ui_frame_close() {
-    [[ "$OPT_QUIET" == true ]] && return 0
-    printf '%s%s%s%s%s\n' "$C_SUB" "$BX_FBL" "$(ui_repeat "$BX_H" $((UI_WIDTH - 2)))" "$BX_FBR" "$C_RST"
-}
-
-# A framed key/value row. The key column is padded in characters, not bytes:
-# printf's %-Ns counts bytes and would under-pad anything multi-byte.
 ui_kv() {
     local key="$1" val="$2"
     ui_logline "$key: $val"
     [[ "$OPT_QUIET" == true ]] && return 0
-    local keycol=9
-    ((${#key} >= keycol)) && key="$(ui_trunc "$key" $((keycol - 1)))"
-    val="$(ui_trunc "$val" $((UI_INNER - keycol)))"
-    printf '%s%s%s %s%s%s%s%s%s %s%s%s\n' \
-        "$C_SUB" "$BX_V" "$C_RST" \
-        "$C_SUB" "$key" "$(ui_pad $((keycol - ${#key})))" "$C_RST" \
-        "$val" "$(ui_pad $((UI_INNER - keycol - ${#val})))" \
-        "$C_SUB" "$BX_V" "$C_RST"
+    UI_SECTION_ROWS+=("k"$'\t'"$key"$'\t'"$val")
 }
 
 ui_frame_row() {
-    local text="$1"
     [[ "$OPT_QUIET" == true ]] && return 0
-    text="$(ui_trunc "$text" "$UI_INNER")"
-    printf '%s%s%s %s%s %s%s%s\n' \
-        "$C_SUB" "$BX_V" "$C_RST" "$text" \
-        "$(ui_pad $((UI_INNER - ${#text})))" "$C_SUB" "$BX_V" "$C_RST"
+    UI_SECTION_ROWS+=("r"$'\t'"$1")
+}
+
+ui_frame_close() {
+    [[ "$OPT_QUIET" == true ]] && return 0
+    ((${#UI_SECTION_ROWS[@]} == 0)) && {
+        UI_SECTION_TITLE=""
+        return 0
+    }
+    local keycol=0 entry kind key val
+    for entry in "${UI_SECTION_ROWS[@]}"; do
+        IFS=$'\t' read -r kind key val <<<"$entry"
+        [[ "$kind" == "k" ]] && ((${#key} > keycol)) && keycol=${#key}
+    done
+    ((keycol > 0)) && keycol=$((keycol + 2))
+
+    ui_rule "$UI_SECTION_TITLE"
+    for entry in "${UI_SECTION_ROWS[@]}"; do
+        IFS=$'\t' read -r kind key val <<<"$entry"
+        if [[ "$kind" == "k" ]]; then
+            val="$(ui_trunc "$val" $((UI_WIDTH - 2 - keycol)))"
+            printf '  %s%s%s%s%s\n' \
+                "$C_SUB" "$key" "$(ui_pad $((keycol - ${#key})))" "$C_RST" "$val"
+        else
+            printf '  %s\n' "$(ui_trunc "$key" $((UI_WIDTH - 2)))"
+        fi
+    done
+    printf '\n'
+    UI_SECTION_TITLE=""
+    UI_SECTION_ROWS=()
+}
+
+# ── Rows ─────────────────────────────────────────────────────────────────────
+
+# One grammar for every message type, so glyph, label, detail and timing all
+# land in the same columns no matter which of them printed the line.
+# ui_row <colour> <glyph> <label> [detail] [timing]
+ui_row() {
+    local col="$1" glyph="$2" label="$3" detail="${4:-}" timing="${5:-}"
+    local room used pad="" lblpad=""
+    room=$((UI_WIDTH - 3 - G_W))
+    [[ -n "$timing" ]] && room=$((room - ${#timing} - 2))
+    ((room < 8)) && room=8
+    if [[ -n "$detail" ]]; then
+        ((${#label} < UI_LABELCOL)) && lblpad="$(ui_pad $((UI_LABELCOL - ${#label})))"
+        detail="$(ui_trunc "$detail" $((room - ${#label} - ${#lblpad} - 1)))"
+        used=$((${#label} + ${#lblpad} + 1 + ${#detail}))
+    else
+        label="$(ui_trunc "$label" "$room")"
+        used=${#label}
+    fi
+    [[ -n "$timing" ]] && pad="$(ui_pad $((room + 2 - used)))"
+    printf '  %s%-*s%s %s%s%s%s%s%s%s\n' \
+        "$col" "$G_W" "$glyph" "$C_RST" \
+        "$label" "$lblpad" "${detail:+ $C_SUB$detail$C_RST}" \
+        "$pad" "$C_SUB" "$timing" "$C_RST" >&"$UI_ROW_FD"
 }
 
 # ── Steps and progress ───────────────────────────────────────────────────────
@@ -379,14 +530,15 @@ ui_clear_line() {
 
 ui_step() {
     UI_STEP_LABEL="$1"
+    UI_STEP_US="$(ui_now_us)"
     UI_PIPE_MARK=0
     ui_logline "step: $1"
     [[ "$OPT_QUIET" == true ]] && return 0
     if [[ "$UI_TTY" == true ]]; then
-        printf '%s%-*s%s %s' "$C_STEP" "$G_W" "$(ui_spin_frame)" "$C_RST" "$1"
+        printf '  %s%-*s%s %s' "$C_STEP" "$G_W" "$(ui_spin_frame)" "$C_RST" "$1"
         UI_LIVE=true
     else
-        printf '%s%-*s%s %s\n' "$C_STEP" "$G_W" "$G_STEP" "$C_RST" "$1"
+        printf '  %s%-*s%s %s\n' "$C_STEP" "$G_W" "$G_STEP" "$C_RST" "$1"
     fi
 }
 
@@ -400,12 +552,18 @@ ui_progress() {
 
     if [[ "$UI_TTY" == true ]]; then
         local cells=12
-        local filled=$((pct * cells / 100))
-        local bar
-        bar="$BAR_L$(ui_repeat "$BAR_F" "$filled")$(ui_repeat "$BAR_E" $((cells - filled)))$BAR_R"
+        # Eighth-blocks so the bar advances smoothly instead of in 8% jumps.
+        local eighths=$((pct * cells * 8 / 100))
+        local whole=$((eighths / 8)) rem=$((eighths % 8)) bar
+        bar="$(ui_repeat "$BAR_F" "$whole")"
+        if ((rem > 0 && whole < cells && ${#BAR_P[@]} > 0)); then
+            bar+="${BAR_P[rem]}"
+            whole=$((whole + 1))
+        fi
+        bar="$BAR_L$bar$(ui_repeat "$BAR_E" $((cells - whole)))$BAR_R"
         local line
-        line="$(printf '%-11s %s/%s  %s %3s%%' "$UI_STEP_LABEL" "$cur" "$total" "$bar" "$pct")"
-        printf '\r\033[K%s%-*s%s %s' "$C_STEP" "$G_W" "$(ui_spin_frame)" "$C_RST" "$(ui_trunc "$line" $((UI_WIDTH - 2)))"
+        line="$(printf '%-*s %s/%s  %s %3s%%' "$UI_LABELCOL" "$UI_STEP_LABEL" "$cur" "$total" "$bar" "$pct")"
+        printf '\r\033[K  %s%-*s%s %s' "$C_STEP" "$G_W" "$(ui_spin_frame)" "$C_RST" "$(ui_trunc "$line" $((UI_WIDTH - 3 - G_W)))"
         UI_LIVE=true
     else
         # Same milestones, one discrete line each, so a piped consumer sees
@@ -413,47 +571,53 @@ ui_progress() {
         local mark=$((pct / 25 * 25))
         if ((mark > UI_PIPE_MARK && mark > 0 && mark < 100)); then
             UI_PIPE_MARK=$mark
-            printf '%s%-*s%s %s %s%s%%%s%s\n' "$C_SUB" "$G_W" "$G_DOT" "$C_RST" \
-                "$UI_STEP_LABEL" "$C_SUB" "$mark" "${detail:+ $G_SEP $detail}" "$C_RST"
+            ui_row "$C_SUB" "$G_DOT" "$UI_STEP_LABEL" "$mark%${detail:+ $G_SEP $detail}"
         fi
     fi
 }
 
 ui_ok() {
-    local label="$1" detail="${2:-}"
+    local label="$1" detail="${2:-}" timing=""
     ui_logline "ok: $label${detail:+ — $detail}"
+    if ((UI_STEP_US > 0)); then
+        timing="$(ui_fmt_dur $(($(ui_now_us) - UI_STEP_US)))"
+        UI_STEP_US=0
+    fi
     [[ "$OPT_QUIET" == true ]] && return 0
     ui_clear_line
-    printf '%s%-*s%s %-11s %s%s%s\n' "$C_OK" "$G_W" "$G_OK" "$C_RST" "$label" "$C_SUB" "$detail" "$C_RST"
+    ui_row "$C_OK" "$(ui_icon "$label")" "$label" "$detail" "$timing"
 }
 
 ui_fail() {
     local label="$1" detail="${2:-}"
     ERR_REPORTED=true
+    UI_STEP_US=0
     ui_logline "fail: $label${detail:+ — $detail}"
     ui_clear_line
-    printf '%s%-*s %s%s %s%s\n' "$C_ERR" "$G_W" "$G_ERR" "$label" "$C_RST" "$C_ERR$detail" "$C_RST" >&2
+    UI_ROW_FD=2
+    ui_row "$C_ERR" "$G_ERR" "$label" "$detail"
+    UI_ROW_FD=1
 }
 
 ui_warn() {
     ui_logline "warn: $1"
     [[ "$OPT_QUIET" == true ]] && return 0
     ui_clear_line
-    printf '%s%-*s %s%s\n' "$C_WARN" "$G_W" "$G_WARN" "$1" "$C_RST"
+    ui_row "$C_WARN" "$G_WARN" "$1"
 }
 
 ui_info() {
     ui_logline "info: $1"
     [[ "$OPT_QUIET" == true ]] && return 0
     ui_clear_line
-    printf '%s%-*s%s %s\n' "$C_STEP" "$G_W" "$G_STEP" "$C_RST" "$1"
+    ui_row "$C_STEP" "$G_STEP" "$1"
 }
 
 ui_note() {
     ui_logline "note: $1"
     [[ "$OPT_QUIET" == true ]] && return 0
     ui_clear_line
-    printf '%s  %s%s\n' "$C_SUB" "$1" "$C_RST"
+    printf '    %s%s%s\n' "$C_SUB" "$(ui_trunc "$1" $((UI_WIDTH - 4)))" "$C_RST"
 }
 
 ui_verbose() {
@@ -462,7 +626,7 @@ ui_verbose() {
         return 0
     }
     ui_clear_line
-    printf '%s  %s%s\n' "$C_DIM" "$1" "$C_RST"
+    printf '    %s%s%s\n' "$C_DIM" "$1" "$C_RST"
     ui_logline "debug: $1"
 }
 
@@ -481,21 +645,15 @@ ui_result() {
         return 0
     }
     ui_clear_line
-    printf '\n%s%s%s%s%s\n' "$col" "$BX_TL" "$(ui_repeat "$BX_H" $((UI_WIDTH - 2)))" "$BX_TR" "$C_RST"
-    local head="$glyph $headline"
-    head="$(ui_trunc "$head" "$UI_INNER")"
-    printf '%s%s%s %s%s%s%s %s%s%s\n' \
-        "$col" "$BX_V" "$C_RST" "$col$C_B" "$head" "$C_RST" \
-        "$(ui_pad $((UI_INNER - ${#head})))" "$col" "$BX_V" "$C_RST"
+    printf '\n'
+    ui_rule "" "$col"
+    ui_row "$col$C_B" "$glyph" "$headline"
     local line
     for line in "$@"; do
         ui_logline "  $line"
-        line="$(ui_trunc "  $line" "$UI_INNER")"
-        printf '%s%s%s %s%s%s%s %s%s%s\n' \
-            "$col" "$BX_V" "$C_RST" "$C_SUB" "$line" "$C_RST" \
-            "$(ui_pad $((UI_INNER - ${#line})))" "$col" "$BX_V" "$C_RST"
+        printf '    %s%s%s\n' "$C_SUB" "$(ui_trunc "$line" $((UI_WIDTH - 4)))" "$C_RST"
     done
-    printf '%s%s%s%s%s\n\n' "$col" "$BX_BL" "$(ui_repeat "$BX_H" $((UI_WIDTH - 2)))" "$BX_BR" "$C_RST"
+    printf '\n'
 }
 
 ui_die() {
@@ -510,9 +668,11 @@ ui_confirm() {
         ui_die "Confirmation required" "stdin is not a terminal — re-run with --yes"
     fi
     ui_clear_line
-    printf '%s%s%s %s %s(y/N)%s ' "$C_WARN" "$G_WARN" "$C_RST" "$1" "$C_SUB" "$C_RST"
+    printf '  %s%-*s%s %s %s(y/N)%s ' \
+        "$C_WARN" "$G_W" "$G_WARN" "$C_RST" "$1" "$C_SUB" "$C_RST"
     local reply
     read -r reply || reply=""
+    printf '\n'
     [[ "$reply" =~ ^[Yy]$ ]]
 }
 
@@ -534,7 +694,6 @@ ui_demo() {
     ui_kv "branch" "main"
     ui_kv "target" "${TARGET_DIR/#$HOME/\~}"
     ui_frame_close
-    printf '\n'
     ui_step "Cloning"
     local i
     for i in 3 25 50 75 99; do
@@ -543,8 +702,10 @@ ui_demo() {
     done
     ui_ok "Cloned" "1284 files $G_SEP 4.2 MB"
     ui_step "Staging"
+    [[ "$UI_TTY" == true ]] && sleep 0.2
     ui_ok "Staged" "3 protected files carried"
     ui_step "Swapping"
+    [[ "$UI_TTY" == true ]] && sleep 0.1
     ui_ok "Swapped" "backup $G_ARROW ii_end4_main_20260727-1412"
     printf '\n'
     ui_info "an informational step"
@@ -553,8 +714,9 @@ ui_demo() {
     ui_fail "a failure" "with detail"
     ui_verbose "a verbose line (only with -v)"
     ui_result ok "demo complete $G_SEP $(ui_elapsed)" \
-        "glyphs: $UI_GLYPHS $G_SEP width: $UI_WIDTH $G_SEP tty: $UI_TTY"
-    printf '%stext styles:%s %sbold%s %sdim%s %sitalic%s %sunderline%s %saccent%s\n\n' \
+        "glyphs: $UI_GLYPHS $G_SEP width: $UI_WIDTH $G_SEP tty: $UI_TTY" \
+        "palette: $([[ -n "$M3_PRIMARY" ]] && printf 'matugen %s' "$M3_PRIMARY" || printf 'ansi 16')"
+    printf '%s  text styles:%s %sbold%s %sdim%s %sitalic%s %sunderline%s %saccent%s\n\n' \
         "$C_SUB" "$C_RST" "$C_B" "$C_RST" "$C_DIM" "$C_RST" \
         "$C_IT" "$C_RST" "$C_UL" "$C_RST" "$C_ACC" "$C_RST"
 }
@@ -1141,7 +1303,6 @@ apply_config() {
     ui_kv "target" "$(tilde "$TARGET_DIR")"
     ui_kv "backup" "$([[ "$OPT_BACKUP" == true ]] && printf '%s' "$(tilde "$BACKUP_BASE_DIR")" || printf 'disabled')"
     ui_frame_close
-    printf '\n'
 
     if [[ "$OPT_ASSUME_YES" != true ]]; then
         ui_confirm "Replace $(tilde "$TARGET_DIR") with $fork/$branch?" || {
@@ -1282,7 +1443,6 @@ cmd_install() {
     ui_kv "branch" "$branch"
     ui_kv "runs" "./setup install"
     ui_frame_close
-    printf '\n'
 
     if [[ "$OPT_ASSUME_YES" != true ]]; then
         ui_confirm "Install the base dotfiles now? This installs system packages." || {
@@ -1390,7 +1550,6 @@ cmd_list_forks() {
         ui_kv "$id" "${url#https://}${aliases:+  ($aliases)}"
     done
     ui_frame_close
-    printf '\n'
     ui_note "Any https://github.com/USER/REPO also works as a --fork value."
     printf '\n'
 }
@@ -1437,7 +1596,6 @@ cmd_list_branches() {
         fi
     done
     ui_frame_close
-    printf '\n'
 }
 
 cmd_doctor() {
@@ -1455,7 +1613,6 @@ cmd_doctor() {
     ui_kv "remote" "${url#https://}"
     ui_kv "target" "$([[ -d "$TARGET_DIR" ]] && tilde "$TARGET_DIR" || printf 'missing')"
     ui_frame_close
-    printf '\n'
 
     ui_frame_open "Paths"
     ui_kv "base" "$([[ -d "$BASE_DIR" ]] && tilde "$BASE_DIR" || printf 'missing')"
@@ -1463,7 +1620,6 @@ cmd_doctor() {
     ui_kv "backups" "$(find "$BACKUP_BASE_DIR" -maxdepth 1 -type d -name 'ii_*' 2>/dev/null | wc -l) kept"
     ui_kv "log" "$(tilde "$LOG_FILE")"
     ui_frame_close
-    printf '\n'
 
     ui_frame_open "Tooling"
     local t
@@ -1472,7 +1628,6 @@ cmd_doctor() {
     done
     ui_kv "cli" "$([[ -L "$BIN_DIR/$CLI_NAME" ]] && readlink "$BIN_DIR/$CLI_NAME" || printf 'not linked')"
     ui_frame_close
-    printf '\n'
 
     ui_frame_open "Renderer"
     ui_kv "glyphs" "$UI_GLYPHS"
@@ -1480,7 +1635,6 @@ cmd_doctor() {
     ui_kv "tty" "$UI_TTY"
     ui_kv "width" "$UI_WIDTH"
     ui_frame_close
-    printf '\n'
 }
 
 cmd_hypr() {
@@ -1508,10 +1662,10 @@ show_help() {
 
     ui_banner "ii-p3drovfx" "v$SETUP_VERSION"
 
-    printf '%s%sUsage%s\n' "$C_B" "$C_HEAD" "$C_RST"
+    ui_rule "Usage"
     printf '  %s [command] [options]\n\n' "$me"
 
-    printf '%s%sCommands%s\n' "$C_B" "$C_HEAD" "$C_RST"
+    ui_rule "Commands"
     printf '  %s%-16s%s %s\n' "$C_OK" "apply" "$C_RST" "Apply the Quickshell config (default)"
     printf '  %s%-16s%s %s\n' "$C_OK" "install" "$C_RST" "Install base illogical-impulse, then apply"
     printf '  %s%-16s%s %s\n' "$C_OK" "update" "$C_RST" "Refresh the active fork+branch from GitHub"
@@ -1526,14 +1680,16 @@ show_help() {
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprmerge" "$C_RST" "Merge a Hyprland config into the local one"
     printf '  %s%-16s%s Remove the %s symlink\n' "$C_OK" "remove-cli" "$C_RST" "$CLI_NAME"
     printf '  %s%-16s%s %s\n' "$C_OK" "help, version" "$C_RST" "This message / the version"
+    printf '  %s%-16s%s %s\n' "$C_OK" "demo" "$C_RST" "Render every UI primitive and exit"
     printf '\n'
 
-    printf '%s%sOptions%s\n' "$C_B" "$C_HEAD" "$C_RST"
+    ui_rule "Options"
     printf '  %s%-24s%s %s\n' "$C_STEP" "-f, --fork <preset|url>" "$C_RST" "Target fork"
     printf '  %s%-24s%s %s\n' "$C_STEP" "-b, --branch <name>" "$C_RST" "Target branch"
     printf '  %s%-24s%s %s\n' "$C_STEP" "-y, --yes" "$C_RST" "Skip every confirmation"
     printf '  %s%-24s%s %s\n' "$C_STEP" "-v, --verbose" "$C_RST" "Echo command output as it runs"
     printf '  %s%-24s%s %s\n' "$C_STEP" "-q, --quiet" "$C_RST" "Only errors on stdout"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --backup" "$C_RST" "Keep the replaced config (default)"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-backup" "$C_RST" "Discard the previous config instead of keeping it"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --keep-config" "$C_RST" "Never reset ~/.config/illogical-impulse/config.json"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --reset-config" "$C_RST" "Always reset it (a backup is kept)"
@@ -1548,7 +1704,17 @@ show_help() {
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --demo" "$C_RST" "Render every UI primitive and exit"
     printf '\n'
 
-    printf '%s%sExamples%s\n' "$C_B" "$C_HEAD" "$C_RST"
+    ui_rule "Notes"
+    printf '  %sGiven neither --keep-config nor --reset-config, config.json is kept on%s\n' "$C_SUB" "$C_RST"
+    printf '  %supdates and branch hops and reset on fork switches, where the schema%s\n' "$C_SUB" "$C_RST"
+    printf '  %schanges.%s\n' "$C_SUB" "$C_RST"
+    printf '  %sOptions take --flag=value as well as --flag value, and everything after%s\n' "$C_SUB" "$C_RST"
+    printf '  %sa bare -- is passed through to hyprset/hyprmerge.%s\n' "$C_SUB" "$C_RST"
+    printf '  %sAliases: --no-confirm/--noconfirm (-y), --preserve-config (--keep-config),%s\n' "$C_SUB" "$C_RST"
+    printf '  %s--force-install (--skip-base-check), --no-colour (--no-color).%s\n' "$C_SUB" "$C_RST"
+    printf '\n'
+
+    ui_rule "Examples"
     printf '  %s%s install%s                  %sfirst-time setup on a bare machine%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s update%s                   %spull the latest of what you run now%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s fork end4%s                %sswitch to end-4/dots-hyprland%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
