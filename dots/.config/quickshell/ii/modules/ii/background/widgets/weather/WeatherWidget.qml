@@ -68,11 +68,9 @@ AbstractBackgroundWidget {
                 z: 1
             }
 
-            MaterialSymbol {
-                iconSize: 130
-                color: root.iconColor
-                text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "cloud"
-                fill: 1.0
+            Image {
+                source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+                sourceSize: Qt.size(130, 130)
                 anchors.left: parent.left
                 anchors.bottom: parent.bottom
                 anchors.leftMargin: 18

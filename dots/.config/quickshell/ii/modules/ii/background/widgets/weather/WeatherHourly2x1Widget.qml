@@ -68,11 +68,9 @@ AbstractBackgroundWidget {
                     spacing: 0
                     Layout.alignment: Qt.AlignTop
 
-                    MaterialSymbol {
-                        iconSize: 34
-                        text: Icons.getWeatherIcon(root.currentData?.wCode) ?? "sunny"
-                        color: WidgetColorScheme.accentColor
-                        fill: 1.0
+                    Image {
+                        source: WeatherIcons.getWeatherIcon(root.currentData?.wCode ?? 113, false)
+                        sourceSize: Qt.size(34, 34)
                     }
 
                     StyledText {
@@ -157,12 +155,10 @@ AbstractBackgroundWidget {
                                     font.weight: Font.Medium
                                 }
 
-                                MaterialSymbol {
+                                Image {
                                     Layout.alignment: Qt.AlignHCenter
-                                    iconSize: 24
-                                    text: Icons.getWeatherIcon(modelData.code) ?? "sunny"
-                                    color: Appearance.colors.colPrimary
-                                    fill: 1.0
+                                    source: WeatherIcons.getWeatherIcon(modelData.code ?? 113, false)
+                                    sourceSize: Qt.size(24, 24)
                                 }
 
                                 StyledText {
@@ -221,11 +217,9 @@ AbstractBackgroundWidget {
                                 Layout.fillWidth: true
                             }
 
-                            MaterialSymbol {
-                                iconSize: 22
-                                text: Icons.getWeatherIcon(dayFcRow.fcItem?.code) ?? "partly_cloudy_day"
-                                color: Appearance.colors.colPrimary
-                                fill: 1.0
+                            Image {
+                                source: WeatherIcons.getWeatherIcon(dayFcRow.fcItem?.code ?? 113, false)
+                                sourceSize: Qt.size(22, 22)
                             }
 
                             Item { Layout.preferredWidth: 12 }

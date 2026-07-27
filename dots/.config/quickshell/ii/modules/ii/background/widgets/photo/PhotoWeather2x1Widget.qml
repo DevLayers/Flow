@@ -196,12 +196,10 @@ AbstractBackgroundWidget {
                         radius: width / 2
                         color: Appearance.colors.colPrimary
 
-                        MaterialSymbol {
+                        Image {
                             anchors.centerIn: parent
-                            iconSize: 26
-                            text: Icons.getWeatherIcon(root.currentData ? root.currentData.wCode : undefined) ?? "partly_cloudy_day"
-                            color: Appearance.colors.colOnPrimary
-                            fill: 1.0
+                            source: WeatherIcons.getWeatherIcon(root.currentData?.wCode ?? 113, false)
+                            sourceSize: Qt.size(26, 26)
                         }
                     }
                 }

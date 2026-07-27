@@ -118,11 +118,9 @@ AbstractBackgroundWidget {
                 spacing: 10
                 Layout.maximumWidth: 200
 
-                MaterialSymbol {
-                    iconSize: root.conditionFontSize + 2
-                    text: Icons.getWeatherIcon(root.currentData?.wCode) ?? "partly_cloudy_day"
-                    color: root.boldTextColor
-                    fill: 1.0
+                Image {
+                    source: WeatherIcons.getWeatherIcon(root.currentData?.wCode ?? 113, false)
+                    sourceSize: Qt.size(root.conditionFontSize + 2, root.conditionFontSize + 2)
                 }
 
                 StyledText {
