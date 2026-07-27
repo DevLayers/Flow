@@ -5,8 +5,8 @@
 #   hyprset.sh key  <section:field|field> <value>
 #   hyprset.sh anim <name>                <params>
 #
-# Reached as `setup-ii-p3drovfx.sh hyprset ...`, as `vynx hyprset ...`, or run
-# directly by HyprlandSettings.qml. Always executed, never sourced.
+# Reached as `setup-ii-p3drovfx.sh hyprset ...`, as `ii-p3drovfx hyprset ...`,
+# or run directly by HyprlandSettings.qml. Always executed, never sourced.
 
 set -euo pipefail
 

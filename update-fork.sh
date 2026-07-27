@@ -2,7 +2,7 @@
 # update-fork.sh — thin wrapper around `setup-ii-p3drovfx.sh update`.
 #
 # Kept for backwards compatibility with older buttons and shell history. New
-# code should call `vynx update` or `setup-ii-p3drovfx.sh update` directly.
+# code should call `ii-p3drovfx update` or `setup-ii-p3drovfx.sh update`.
 set -euo pipefail
 SCRIPT_DIR="$(cd -P "$(dirname "$0")" >/dev/null 2>&1 && pwd)"
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"

@@ -6,9 +6,9 @@
 # Running it bare applies the Quickshell config only. Installing the base
 # illogical-impulse dotfiles underneath it is always an explicit request.
 #
-# The same file is symlinked to ~/.local/bin/vynx and every command below is
-# reachable through that name too, with one difference: bare `vynx` prints
-# help instead of applying.
+# The same file is symlinked to ~/.local/bin/ii-p3drovfx and every command
+# below is reachable through that name too, with one difference: bare
+# `ii-p3drovfx` prints help instead of applying.
 #
 # ── Commands ─────────────────────────────────────────────────────────────────
 #
@@ -24,7 +24,7 @@
 #   doctor                  Report resolved paths, active state and tooling
 #   hyprset <args>          Write a Hyprland key or animation
 #   hyprmerge <args>        Merge a Hyprland config into the local one
-#   remove-cli              Remove the vynx symlink
+#   remove-cli              Remove the ii-p3drovfx symlink
 #   help                    Print the full surface (alias: -h, --help)
 #   version                 Print the version (alias: -V, --version)
 #   demo                    Render every UI primitive and exit
@@ -33,6 +33,7 @@
 #
 #   -f, --fork <preset|url>   Target fork
 #   -b, --branch <name>       Target branch
+#   -l, --local <path>        Deploy from a local checkout instead of GitHub
 #   -y, --yes                 Skip every confirmation
 #   -v, --verbose             Echo command output as it runs
 #   -q, --quiet               Only errors on stdout
@@ -48,6 +49,11 @@
 #       --no-log              Do not write a run log
 #       --ascii               ASCII glyphs only
 #       --no-color            Strip ANSI colour
+#
+# --local takes either a fork checkout (with dots/.config/quickshell/ii*) or an
+# ii config dir directly. `update` will not guess a local path back: it refuses
+# and prints the --local line to re-run, so a stale checkout is never silently
+# redeployed.
 #
 # Given neither --keep-config nor --reset-config, config.json is kept on
 # updates and branch hops and reset on fork switches, where the schema changes.
@@ -90,9 +96,10 @@ BASE_CONFIG_FILE="$BASE_DIR/config.json"
 QS_DIR="$XDG_CONFIG_HOME/quickshell"
 TARGET_DIR="$QS_DIR/ii"
 BIN_DIR="$HOME/.local/bin"
-CLI_NAME="vynx"
+CLI_NAME="ii-p3drovfx"
 
 # Paths this script used to write to, migrated on first run.
+LEGACY_CLI_NAME="vynx"
 LEGACY_MIRROR_DIR="$XDG_DATA_HOME/ii-vynx"
 LEGACY_BACKUP_DIR="$XDG_DATA_HOME/ii-backups"
 LEGACY_LOG_FILE="/tmp/ii-vynx-install.log"
@@ -136,6 +143,7 @@ PROTECTED_PATTERNS=(
 COMMAND=""
 OPT_FORK=""
 OPT_BRANCH=""
+OPT_LOCAL=""
 OPT_VERBOSE=false
 OPT_QUIET=false
 OPT_ASSUME_YES=false
@@ -155,6 +163,8 @@ PASSTHRU_ARGS=()
 # ── Run state (used by the exit trap) ────────────────────────────────────────
 STAGE_DIR=""
 CLONE_DIR=""
+LOCAL_SRC=""  # resolved --local path; empty means "clone from GitHub"
+LOCAL_KIND="" # repo | ii
 DISPLACED_DIR=""
 SWAP_STATE="none" # none | moved-away | done
 START_EPOCH="$SECONDS"
@@ -279,14 +289,14 @@ ui_icon() {
         return 0
     }
     case "$1" in
-        Cloned | Fetched) printf '%s' $'' ;; # cloud-download
-        Copied | Staged) printf '%s' $'' ;;  # files
-        Swapped) printf '%s' $'' ;;          # exchange
-        Mirrored) printf '%s' $'' ;;         # clone
-        Restarted) printf '%s' $'' ;;        # refresh
-        Removed) printf '%s' $'' ;;          # trash
-        Reset) printf '%s' $'' ;;            # undo
-        Queried) printf '%s' $'' ;;          # git-branch
+        Cloned | Fetched) printf '%s' $'' ;;          # cloud-download
+        Copied | Staged | Sourced) printf '%s' $'' ;; # files
+        Swapped) printf '%s' $'' ;;                   # exchange
+        Mirrored) printf '%s' $'' ;;                  # clone
+        Restarted) printf '%s' $'' ;;                 # refresh
+        Removed) printf '%s' $'' ;;                   # trash
+        Reset) printf '%s' $'' ;;                     # undo
+        Queried) printf '%s' $'' ;;                   # git-branch
         Deps | Configured | Compiled | Installed)
             printf '%s' $'' # package
             ;;
@@ -737,6 +747,10 @@ on_err() {
 
 on_exit() {
     local rc=$?
+    # Nothing this trap does is worth an error report, and its own `return $rc`
+    # is itself a failing command on any non-zero exit — which is where the
+    # spurious second "Aborted, line 1" after a clean ui_fail came from.
+    trap - ERR
     [[ "$UI_TTY" == true ]] && {
         printf '\033[?25h'
         ui_clear_line
@@ -834,6 +848,47 @@ resolve_fork() {
     return 1
 }
 
+# resolve_local <path> -- prints "abspath|kind", kind being repo or ii.
+# A fork checkout and the ii config dir inside one are both valid sources; the
+# difference is only whether detect_ii_subdir still has work to do.
+resolve_local() {
+    local raw="${1/#\~/$HOME}" abs
+    abs="$(cd -P -- "$raw" 2>/dev/null && pwd)" || {
+        ui_fail "No such directory" "$raw"
+        return 1
+    }
+    if [[ "$abs" == "$TARGET_DIR" ]]; then
+        ui_fail "Source is the target" "$(tilde "$abs") is what gets replaced"
+        return 1
+    fi
+    if [[ -d "$abs/dots/.config/quickshell" ]]; then
+        printf '%s|repo' "$abs"
+        return 0
+    fi
+    if [[ -f "$abs/shell.qml" ]]; then
+        printf '%s|ii' "$abs"
+        return 0
+    fi
+    ui_fail "Not a source tree" "$(tilde "$abs")"
+    # 2, not 1: this is the one failure worth explaining, and the explanation
+    # has to come from the caller — ui_note writes to stdout, which the command
+    # substitution around this function would swallow.
+    return 2
+}
+
+# Sets LOCAL_SRC and LOCAL_KIND from OPT_LOCAL, or leaves both empty.
+load_local_src() {
+    [[ -n "$OPT_LOCAL" ]] || return 0
+    local pair rc=0
+    pair="$(resolve_local "$OPT_LOCAL")" || rc=$?
+    if ((rc != 0)); then
+        ((rc == 2)) && ui_note "Expected dots/.config/quickshell/ii* or a shell.qml at the top."
+        exit 1
+    fi
+    LOCAL_SRC="${pair%|*}"
+    LOCAL_KIND="${pair#*|}"
+}
+
 read_state() {
     local remote="" branch="" fork=""
     [[ -f "$TARGET_DIR/.active-remote" ]] && remote="$(<"$TARGET_DIR/.active-remote")"
@@ -845,6 +900,13 @@ read_state() {
     [[ -z "$fork" && -n "$remote" ]] && fork="$(fork_id_from_url "$remote")"
     [[ -z "$branch" ]] && branch="$FALLBACK_BRANCH"
     printf '%s|%s|%s' "$remote" "$branch" "$fork"
+}
+
+# The local path the active config was deployed from, or empty.
+read_local_state() {
+    local p=""
+    [[ -f "$TARGET_DIR/.active-local" ]] && p="$(<"$TARGET_DIR/.active-local")"
+    printf '%s' "${p//[$'\r\n']/}"
 }
 
 require_base() {
@@ -872,11 +934,25 @@ migrate_legacy() {
     if [[ -f "$LEGACY_LOG_FILE" && -O "$LEGACY_LOG_FILE" ]]; then
         rm -f "$LEGACY_LOG_FILE"
     fi
-    # A stale vynx symlink still pointing into the old mirror.
+    # A stale symlink still pointing into the old mirror.
     if [[ -L "$BIN_DIR/$CLI_NAME" ]]; then
         local dest
         dest="$(readlink "$BIN_DIR/$CLI_NAME")"
         [[ "$dest" == "$LEGACY_MIRROR_DIR"/* ]] && install_cli
+    fi
+    # The CLI used to be called vynx. Retire that name, but only when it is ours
+    # to retire and only once the new name is actually in place — a symlink
+    # pointing anywhere else belongs to something the user installed themselves.
+    if [[ -L "$BIN_DIR/$LEGACY_CLI_NAME" ]]; then
+        local old
+        old="$(readlink "$BIN_DIR/$LEGACY_CLI_NAME")"
+        if [[ "$old" == "$MIRROR_DIR"/* || "$old" == "$LEGACY_MIRROR_DIR"/* ]]; then
+            install_cli
+            if [[ -L "$BIN_DIR/$CLI_NAME" ]]; then
+                rm -f "$BIN_DIR/$LEGACY_CLI_NAME"
+                ui_note "The CLI is now called $CLI_NAME; removed the old $LEGACY_CLI_NAME link."
+            fi
+        fi
     fi
     [[ "$moved" == true ]] && ui_note "Migrated legacy ii-vynx paths to ii-p3drovfx."
     return 0
@@ -902,6 +978,14 @@ open_log() {
 #══════════════════════════════════════════════════════════════════════════════
 # Clone / copy with progress
 #══════════════════════════════════════════════════════════════════════════════
+
+# tree_stats <dir> — "1284 files ⋅ 4.2M", the tail of a Cloned/Sourced row
+tree_stats() {
+    local count size
+    count="$({ find "$1" -type f -not -path '*/.git/*' 2>/dev/null || true; } | wc -l)"
+    size="$(du -sh --exclude=.git "$1" 2>/dev/null | cut -f1)"
+    printf '%s files%s' "$count" "${size:+ $G_SEP $size}"
+}
 
 # clone_repo <url> <branch> <dest> — <branch> may be "default"
 clone_repo() {
@@ -939,10 +1023,7 @@ clone_repo() {
     # --depth=1 can silently skip a submodule pinned to an unreachable SHA.
     git -C "$dest" submodule update --init --recursive --depth=1 >>"$LOG_FILE" 2>&1 || true
 
-    local count size
-    count="$(find "$dest" -type f -not -path '*/.git/*' 2>/dev/null | wc -l)"
-    size="$(du -sh --exclude=.git "$dest" 2>/dev/null | cut -f1)"
-    ui_ok "Cloned" "$count files${size:+ $G_SEP $size}"
+    ui_ok "Cloned" "$(tree_stats "$dest")"
     return 0
 }
 
@@ -1019,7 +1100,16 @@ swap_in() {
     if [[ -d "$TARGET_DIR" ]]; then
         if [[ "$OPT_BACKUP" == true ]]; then
             mkdir -p "$BACKUP_BASE_DIR"
-            DISPLACED_DIR="$BACKUP_BASE_DIR/ii_$(path_slug "$fork")_$(path_slug "$branch")_$(date +%Y%m%d-%H%M%S)"
+            local base n=2
+            base="$BACKUP_BASE_DIR/ii_$(path_slug "$fork")_$(path_slug "$branch")_$(date +%Y%m%d-%H%M%S)"
+            # Second resolution is not enough for two runs in the same second:
+            # mv onto an existing directory nests the config inside it rather
+            # than replacing it, and the run after that fails outright.
+            DISPLACED_DIR="$base"
+            while [[ -e "$DISPLACED_DIR" ]]; do
+                DISPLACED_DIR="$base-$n"
+                n=$((n + 1))
+            done
             label="backup $G_ARROW $(basename "$DISPLACED_DIR")"
         else
             DISPLACED_DIR="$QS_DIR/.ii-discard-$$"
@@ -1292,38 +1382,70 @@ remove_cli() {
 # apply_config <url> <branch> <fork_id> <verb>
 apply_config() {
     local url="$1" branch="$2" fork="$3" verb="$4"
-    url="$(normalize_url "$url")"
-    [[ -z "$fork" ]] && fork="$(fork_id_from_url "$url")"
-    [[ -z "$branch" ]] && branch="$FALLBACK_BRANCH"
+    local head="" source_dir="" dirty=""
+
+    if [[ -n "$LOCAL_SRC" ]]; then
+        # A local deploy has no remote to speak of, so everything the state
+        # files normally carry comes off the checkout instead. .active-local
+        # marks the result, which is what makes `update` refuse later rather
+        # than silently redeploy a path it only guessed at.
+        fork="local"
+        url="$LOCAL_SRC"
+        branch="$(git -C "$LOCAL_SRC" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+        [[ -z "$branch" || "$branch" == "HEAD" ]] && branch="nobranch"
+        head="$(git -C "$LOCAL_SRC" rev-parse HEAD 2>/dev/null || true)"
+        git -C "$LOCAL_SRC" diff --quiet HEAD 2>/dev/null || dirty="uncommitted changes"
+    else
+        url="$(normalize_url "$url")"
+        [[ -z "$fork" ]] && fork="$(fork_id_from_url "$url")"
+        [[ -z "$branch" ]] && branch="$FALLBACK_BRANCH"
+    fi
 
     ui_frame_open "Resolve"
-    ui_kv "fork" "$fork"
-    ui_kv "remote" "${url#https://}"
-    ui_kv "branch" "$branch"
+    if [[ -n "$LOCAL_SRC" ]]; then
+        ui_kv "source" "local $LOCAL_KIND"
+        ui_kv "path" "$(tilde "$LOCAL_SRC")"
+        ui_kv "branch" "$branch"
+        [[ -n "$dirty" ]] && ui_kv "state" "$dirty"
+    else
+        ui_kv "fork" "$fork"
+        ui_kv "remote" "${url#https://}"
+        ui_kv "branch" "$branch"
+    fi
     ui_kv "target" "$(tilde "$TARGET_DIR")"
     ui_kv "backup" "$([[ "$OPT_BACKUP" == true ]] && printf '%s' "$(tilde "$BACKUP_BASE_DIR")" || printf 'disabled')"
     ui_frame_close
 
     if [[ "$OPT_ASSUME_YES" != true ]]; then
-        ui_confirm "Replace $(tilde "$TARGET_DIR") with $fork/$branch?" || {
+        local with="$fork/$branch"
+        [[ -n "$LOCAL_SRC" ]] && with="$(tilde "$LOCAL_SRC")"
+        ui_confirm "Replace $(tilde "$TARGET_DIR") with $with?" || {
             ui_note "Cancelled."
             return 0
         }
     fi
 
-    CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-clone-XXXXXX")"
-    clone_repo "$url" "$branch" "$CLONE_DIR" || return 1
+    if [[ -n "$LOCAL_SRC" ]]; then
+        if [[ "$LOCAL_KIND" == "repo" ]]; then
+            source_dir="$(detect_ii_subdir "$LOCAL_SRC")" || return 1
+        else
+            source_dir="$LOCAL_SRC"
+        fi
+        ui_ok "Sourced" "$(tree_stats "$source_dir")"
+        ui_verbose "source: $source_dir"
+    else
+        CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-clone-XXXXXX")"
+        clone_repo "$url" "$branch" "$CLONE_DIR" || return 1
 
-    # Clone with branch "default" resolves to whatever HEAD points at.
-    if [[ "$branch" == "default" ]]; then
-        branch="$(git -C "$CLONE_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'main')"
+        # Clone with branch "default" resolves to whatever HEAD points at.
+        if [[ "$branch" == "default" ]]; then
+            branch="$(git -C "$CLONE_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'main')"
+        fi
+        head="$(git -C "$CLONE_DIR" rev-parse HEAD 2>/dev/null || true)"
+
+        source_dir="$(detect_ii_subdir "$CLONE_DIR")" || return 1
+        ui_verbose "source: ${source_dir#"$CLONE_DIR"/}"
     fi
-    local head
-    head="$(git -C "$CLONE_DIR" rev-parse HEAD 2>/dev/null || true)"
-
-    local source_dir
-    source_dir="$(detect_ii_subdir "$CLONE_DIR")" || return 1
-    ui_verbose "source: ${source_dir#"$CLONE_DIR"/}"
 
     mkdir -p "$QS_DIR"
     STAGE_DIR="$(mktemp -d "$QS_DIR/.ii-stage-XXXXXX")"
@@ -1335,6 +1457,12 @@ apply_config() {
     printf '%s\n' "$url" >"$STAGE_DIR/.active-remote"
     printf '%s\n' "$branch" >"$STAGE_DIR/.active-branch"
     printf '%s\n' "$fork" >"$STAGE_DIR/.active-fork"
+    if [[ -n "$LOCAL_SRC" ]]; then
+        printf '%s\n' "$LOCAL_SRC" >"$STAGE_DIR/.active-local"
+    else
+        # Copied from a source tree that may itself have been deployed locally.
+        rm -f "$STAGE_DIR/.active-local"
+    fi
     [[ -n "$head" ]] && printf '%s\n' "$head" >"$STAGE_DIR/.active-commit"
     if [[ -d "$STAGE_DIR/scripts" ]]; then
         find "$STAGE_DIR/scripts" -type f \
@@ -1349,17 +1477,23 @@ apply_config() {
     # the mirror was never refreshed, and the panel kept running the same broken
     # script with no way to heal itself. A clone that reached this point is
     # sound, so its manager is always safe to install.
-    mirror_scripts "$CLONE_DIR"
-    rm -rf "$CLONE_DIR"
-    CLONE_DIR=""
+    if [[ -n "$LOCAL_SRC" ]]; then
+        mirror_scripts "$LOCAL_SRC"
+    else
+        mirror_scripts "$CLONE_DIR"
+        rm -rf "$CLONE_DIR"
+        CLONE_DIR=""
+    fi
 
     swap_in "$STAGE_DIR" "$fork" "$branch" || return 1
 
     handle_base_config "$verb"
     restart_quickshell
 
+    local summary="$fork/$branch${head:+ @ ${head:0:8}}"
+    [[ -n "$LOCAL_SRC" ]] && summary="local $G_ARROW $(tilde "$LOCAL_SRC")"
     ui_result ok "$verb complete $G_DOT $(ui_elapsed)" \
-        "$fork/$branch${head:+ @ ${head:0:8}}" \
+        "$summary" \
         "$(tilde "$TARGET_DIR")"
     return 0
 }
@@ -1399,6 +1533,7 @@ handle_base_config() {
 
 cmd_apply() {
     require_base
+    load_local_src
     local origin url branch fork
     origin="$(local_origin)"
     url="${origin%%|*}"
@@ -1419,6 +1554,13 @@ cmd_apply() {
 }
 
 cmd_install() {
+    load_local_src
+    if [[ -n "$LOCAL_SRC" && "$LOCAL_KIND" != "repo" ]]; then
+        ui_fail "Not a fork checkout" "$(tilde "$LOCAL_SRC") is an ii config dir"
+        ui_note "install runs ./setup from the repository root. Point --local at that."
+        exit 1
+    fi
+
     ui_banner "ii-p3drovfx" "install"
     ui_note "Installs illogical-impulse first, then this fork's Quickshell config."
     printf '\n'
@@ -1439,8 +1581,12 @@ cmd_install() {
     [[ -n "$OPT_BRANCH" ]] && branch="$OPT_BRANCH"
 
     ui_frame_open "Base install"
-    ui_kv "source" "${url#https://}"
-    ui_kv "branch" "$branch"
+    if [[ -n "$LOCAL_SRC" ]]; then
+        ui_kv "source" "$(tilde "$LOCAL_SRC")"
+    else
+        ui_kv "source" "${url#https://}"
+        ui_kv "branch" "$branch"
+    fi
     ui_kv "runs" "./setup install"
     ui_frame_close
 
@@ -1451,24 +1597,40 @@ cmd_install() {
         }
     fi
 
-    # The base installer lives in the repository, not in the ii config dir, so it
-    # comes from a fresh clone rather than from a possibly stale mirror.
-    CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-base-XXXXXX")"
-    clone_repo "$url" "$branch" "$CLONE_DIR" || return 1
+    # The base installer lives in the repository, not in the ii config dir, so
+    # it comes from a fresh clone rather than from a possibly stale mirror —
+    # unless a local checkout was named, which is the whole point of --local.
+    local base_root
+    if [[ -n "$LOCAL_SRC" ]]; then
+        base_root="$LOCAL_SRC"
+    else
+        CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-base-XXXXXX")"
+        clone_repo "$url" "$branch" "$CLONE_DIR" || return 1
+        base_root="$CLONE_DIR"
+    fi
 
-    if [[ ! -x "$CLONE_DIR/setup" ]]; then
-        if [[ -f "$CLONE_DIR/setup" ]]; then
-            chmod +x "$CLONE_DIR/setup"
-        else
-            ui_fail "No base installer" "$url has no ./setup at $branch"
+    local -a runner=(./setup install)
+    if [[ ! -x "$base_root/setup" ]]; then
+        if [[ ! -f "$base_root/setup" ]]; then
+            if [[ -n "$LOCAL_SRC" ]]; then
+                ui_fail "No base installer" "$(tilde "$base_root") has no ./setup"
+            else
+                ui_fail "No base installer" "$url has no ./setup at $branch"
+            fi
             return 1
+        fi
+        if [[ -n "$LOCAL_SRC" ]]; then
+            # Never chmod somebody's working tree just to run their installer.
+            runner=(bash ./setup install)
+        else
+            chmod +x "$base_root/setup"
         fi
     fi
 
     ui_info "Handing over to ./setup install — its own output follows."
     printf '\n'
     local rc=0
-    (cd "$CLONE_DIR" && ./setup install) || rc=$?
+    (cd "$base_root" && "${runner[@]}") || rc=$?
     printf '\n'
     if ((rc != 0)); then
         ui_fail "Base install failed" "./setup install exited $rc"
@@ -1476,8 +1638,10 @@ cmd_install() {
     fi
     ui_ok "Base ready" "illogical-impulse installed"
 
-    rm -rf "$CLONE_DIR"
-    CLONE_DIR=""
+    if [[ -z "$LOCAL_SRC" ]]; then
+        rm -rf "$CLONE_DIR"
+        CLONE_DIR=""
+    fi
 
     OPT_SKIP_BASE_CHECK=true
     apply_config "$url" "$branch" "$fork" "install"
@@ -1485,6 +1649,20 @@ cmd_install() {
 
 cmd_update() {
     require_base
+    load_local_src
+
+    # The active config came off somebody's working tree. Re-cloning the fork it
+    # happens to sit in would quietly undo their changes, and there is no honest
+    # way to tell whether the path is still the one they meant, so say so.
+    local prev
+    prev="$(read_local_state)"
+    if [[ -n "$prev" && -z "$LOCAL_SRC" ]]; then
+        ui_fail "Deployed from a local path" "$(tilde "$prev")"
+        ui_note "Re-run with the path:  $SCRIPT_SELF update --local $(tilde "$prev")"
+        ui_note "Or go back to a remote: $SCRIPT_SELF fork p3drovfx"
+        exit 1
+    fi
+
     local state url branch fork
     state="$(read_state)"
     url="${state%%|*}"
@@ -1492,7 +1670,7 @@ cmd_update() {
     branch="${rest%%|*}"
     fork="${rest##*|}"
 
-    if [[ -z "$url" ]]; then
+    if [[ -z "$url" && -z "$LOCAL_SRC" ]]; then
         ui_fail "Nothing to update" "no .active-remote in $(tilde "$TARGET_DIR")"
         ui_note "Pick a fork explicitly:  $SCRIPT_SELF fork p3drovfx"
         exit 1
@@ -1505,13 +1683,16 @@ cmd_update() {
 
 cmd_switch() {
     require_base
-    if [[ -z "$OPT_FORK" && -z "$OPT_BRANCH" ]]; then
-        ui_fail "Nothing to switch" "pass --fork <preset|url> and/or --branch <name>"
+    load_local_src
+    if [[ -z "$OPT_FORK" && -z "$OPT_BRANCH" && -z "$LOCAL_SRC" ]]; then
+        ui_fail "Nothing to switch" "pass --fork <preset|url>, --branch <name> or --local <path>"
         exit 1
     fi
 
-    local url branch fork
-    if [[ -n "$OPT_FORK" ]]; then
+    local url="" branch="" fork=""
+    if [[ -n "$LOCAL_SRC" ]]; then
+        : # apply_config reads the checkout itself
+    elif [[ -n "$OPT_FORK" ]]; then
         local pair
         pair="$(resolve_fork "$OPT_FORK")" || exit 1
         url="${pair%|*}"
@@ -1524,8 +1705,8 @@ cmd_switch() {
         rest="${state#*|}"
         branch="${rest%%|*}"
         fork="${rest##*|}"
-        if [[ -z "$url" ]]; then
-            ui_fail "No active fork" "no .active-remote in $(tilde "$TARGET_DIR")"
+        if [[ -z "$url" ]] || [[ -n "$(read_local_state)" ]]; then
+            ui_fail "No active fork" "no remote recorded in $(tilde "$TARGET_DIR")"
             ui_note "Pass --fork as well, or run:  $SCRIPT_SELF fork p3drovfx"
             exit 1
         fi
@@ -1607,17 +1788,24 @@ cmd_doctor() {
     branch="${rest%%|*}"
     fork="${rest##*|}"
 
+    local active_local
+    active_local="$(read_local_state)"
+
     ui_frame_open "Active config"
     ui_kv "fork" "${fork:-unknown}"
     ui_kv "branch" "${branch:-unknown}"
-    ui_kv "remote" "${url#https://}"
+    if [[ -n "$active_local" ]]; then
+        ui_kv "local" "$(tilde "$active_local")"
+    else
+        ui_kv "remote" "${url#https://}"
+    fi
     ui_kv "target" "$([[ -d "$TARGET_DIR" ]] && tilde "$TARGET_DIR" || printf 'missing')"
     ui_frame_close
 
     ui_frame_open "Paths"
     ui_kv "base" "$([[ -d "$BASE_DIR" ]] && tilde "$BASE_DIR" || printf 'missing')"
     ui_kv "mirror" "$([[ -d "$MIRROR_DIR" ]] && tilde "$MIRROR_DIR" || printf 'missing')"
-    ui_kv "backups" "$(find "$BACKUP_BASE_DIR" -maxdepth 1 -type d -name 'ii_*' 2>/dev/null | wc -l) kept"
+    ui_kv "backups" "$({ find "$BACKUP_BASE_DIR" -maxdepth 1 -type d -name 'ii_*' 2>/dev/null || true; } | wc -l) kept"
     ui_kv "log" "$(tilde "$LOG_FILE")"
     ui_frame_close
 
@@ -1686,6 +1874,7 @@ show_help() {
     ui_rule "Options"
     printf '  %s%-24s%s %s\n' "$C_STEP" "-f, --fork <preset|url>" "$C_RST" "Target fork"
     printf '  %s%-24s%s %s\n' "$C_STEP" "-b, --branch <name>" "$C_RST" "Target branch"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "-l, --local <path>" "$C_RST" "Deploy from a local checkout, not GitHub"
     printf '  %s%-24s%s %s\n' "$C_STEP" "-y, --yes" "$C_RST" "Skip every confirmation"
     printf '  %s%-24s%s %s\n' "$C_STEP" "-v, --verbose" "$C_RST" "Echo command output as it runs"
     printf '  %s%-24s%s %s\n' "$C_STEP" "-q, --quiet" "$C_RST" "Only errors on stdout"
@@ -1705,6 +1894,9 @@ show_help() {
     printf '\n'
 
     ui_rule "Notes"
+    printf '  %s--local takes a fork checkout or an ii config dir; either way nothing%s\n' "$C_SUB" "$C_RST"
+    printf '  %sis cloned. update will not guess the path back: it refuses and prints%s\n' "$C_SUB" "$C_RST"
+    printf '  %sthe --local line to re-run.%s\n' "$C_SUB" "$C_RST"
     printf '  %sGiven neither --keep-config nor --reset-config, config.json is kept on%s\n' "$C_SUB" "$C_RST"
     printf '  %supdates and branch hops and reset on fork switches, where the schema%s\n' "$C_SUB" "$C_RST"
     printf '  %schanges.%s\n' "$C_SUB" "$C_RST"
@@ -1720,6 +1912,7 @@ show_help() {
     printf '  %s%s fork end4%s                %sswitch to end-4/dots-hyprland%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s branch dev%s               %shop branches on the active fork%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s switch -f mine -b main%s   %sboth at once%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
+    printf '  %s%s apply --local .%s          %sdeploy the checkout you stand in%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '\n'
     printf '%sLog: %s%s\n' "$C_SUB" "$(tilde "$DEFAULT_LOG_FILE")" "$C_RST"
     printf '%sDocs: %shttps://ii.clsty.link%s\n\n' "$C_SUB" "$C_UL" "$C_RST"
@@ -1761,6 +1954,11 @@ parse_args() {
             -b | --branch)
                 need_value "$1" "${2:-}"
                 OPT_BRANCH="$2"
+                shift 2
+                ;;
+            -l | --local)
+                need_value "$1" "${2:-}"
+                OPT_LOCAL="$2"
                 shift 2
                 ;;
             --ii-subdir)
@@ -1877,6 +2075,9 @@ parse_args() {
         esac
     done
 
+    [[ -n "$OPT_LOCAL" && -n "$OPT_FORK" ]] &&
+        arg_error "--local and --fork name two different sources; pick one"
+
     # First positional is the command unless a legacy flag already chose one.
     if ((${#positional[@]} > 0)); then
         local first="${positional[0]}"
@@ -1928,6 +2129,13 @@ main() {
         COMMAND="help"
     fi
     [[ -z "$COMMAND" ]] && COMMAND="apply"
+
+    if [[ -n "$OPT_LOCAL" ]]; then
+        case "$COMMAND" in
+            apply | install | update | switch) ;;
+            *) arg_error "--local applies to apply, install, update and switch" ;;
+        esac
+    fi
 
     ui_init
     [[ "$UI_TTY" == true && "$COMMAND" != "help" ]] && printf '\033[?25l'
