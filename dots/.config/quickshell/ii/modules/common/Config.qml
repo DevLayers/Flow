@@ -1399,7 +1399,7 @@ Singleton {
                 property bool splitButtons: false
                 property bool useMouseSymbol: false
                 property bool useFnSymbol: false
-                property bool filterUnbinds: false
+                property bool filterUnbinds: true
                 property bool enableGmail: true
                 property bool enableTimetable: true
                 property bool timetableTodayFirst: false
