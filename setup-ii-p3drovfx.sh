@@ -4,16 +4,61 @@
 # ii-p3drovfx Quickshell configuration.
 #
 # Running it bare applies the Quickshell config only. Installing the base
-# illogical-impulse dotfiles underneath it is always an explicit request:
+# illogical-impulse dotfiles underneath it is always an explicit request.
 #
-#   ./setup-ii-p3drovfx.sh                 apply the Quickshell config
-#   ./setup-ii-p3drovfx.sh install         install base dotfiles, then apply
-#   ./setup-ii-p3drovfx.sh update          refresh the active fork+branch
-#   ./setup-ii-p3drovfx.sh fork end4       switch fork
-#   ./setup-ii-p3drovfx.sh branch dev      switch branch
+# The same file is symlinked to ~/.local/bin/vynx and every command below is
+# reachable through that name too, with one difference: bare `vynx` prints
+# help instead of applying.
 #
-# `help` prints the full surface. The same file is symlinked to ~/.local/bin/vynx
-# and every subcommand below is reachable through that name too.
+# ── Commands ─────────────────────────────────────────────────────────────────
+#
+#   apply                   Apply the Quickshell config (the default)
+#   install                 Install base illogical-impulse, then apply
+#   update                  Refresh the fork and branch you are already on
+#   switch                  Switch fork and/or branch
+#   fork <x> [branch]       Shorthand for switch --fork <x> [--branch ...]
+#   branch <name>           Shorthand for switch --branch <name>
+#   list-forks              Show the fork presets
+#   list-branches [fork]    Show a fork's remote branches
+#   restart                 Restart Quickshell (alias: run)
+#   doctor                  Report resolved paths, active state and tooling
+#   hyprset <args>          Write a Hyprland key or animation
+#   hyprmerge <args>        Merge a Hyprland config into the local one
+#   remove-cli              Remove the vynx symlink
+#   help                    Print the full surface (alias: -h, --help)
+#   version                 Print the version (alias: -V, --version)
+#   demo                    Render every UI primitive and exit
+#
+# ── Options ──────────────────────────────────────────────────────────────────
+#
+#   -f, --fork <preset|url>   Target fork
+#   -b, --branch <name>       Target branch
+#   -y, --yes                 Skip every confirmation
+#   -v, --verbose             Echo command output as it runs
+#   -q, --quiet               Only errors on stdout
+#       --backup              Keep the replaced config (default)
+#       --no-backup           Discard the replaced config instead
+#       --keep-config         Never reset ~/.config/illogical-impulse/config.json
+#       --reset-config        Always reset it (a backup is kept)
+#       --no-restart          Leave Quickshell alone when finished
+#       --rebuild-quickshell  Rebuild Quickshell from source first
+#       --skip-base-check     Do not require illogical-impulse to be present
+#       --ii-subdir <name>    Override ii* auto-detection in the clone
+#       --log-file <path>     Write the run log elsewhere
+#       --no-log              Do not write a run log
+#       --ascii               ASCII glyphs only
+#       --no-color            Strip ANSI colour
+#
+# Given neither --keep-config nor --reset-config, config.json is kept on
+# updates and branch hops and reset on fork switches, where the schema changes.
+#
+# Options take --flag=value as well as --flag value, and everything after a
+# bare -- is passed through to hyprset/hyprmerge.
+#
+# Aliases kept for muscle memory: --no-confirm/--noconfirm (-y),
+# --preserve-config (--keep-config), --force-install (--skip-base-check),
+# --no-colour (--no-color), and the flag spellings --apply, --install,
+# --update, --switch, --list-forks, --list-branches, --demo.
 
 set -Eeuo pipefail
 
