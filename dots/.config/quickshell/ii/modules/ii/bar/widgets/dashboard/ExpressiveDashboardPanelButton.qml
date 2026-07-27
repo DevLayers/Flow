@@ -46,7 +46,7 @@ Item {
         id: pill
         visible: root.isMaterial
         anchors.centerIn: parent
-        anchors.verticalCenterOffset: root.vertical ? 0 : -1
+        anchors.verticalCenterOffset: root.vertical ? 0 : -0
 
         property color pillColor: GlobalStates.sidebarRightOpen 
             ? (mouseArea.containsMouse ? Appearance.colors.colLayer4Hover : "transparent")
@@ -151,7 +151,7 @@ Item {
     Grid {
         id: flow
         anchors.centerIn: parent
-        anchors.verticalCenterOffset: root.vertical ? 0 : -1
+        anchors.verticalCenterOffset: root.vertical ? 0 : 0
         flow: root.vertical ? Grid.TopToBottom : Grid.LeftToRight
         columns: root.vertical ? 1 : Math.max(1, flow.visibleChildren.length)
         spacing: isMaterial ? 6 : 10
