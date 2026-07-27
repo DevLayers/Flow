@@ -285,8 +285,8 @@ ContentPage {
                     Config.options.appearance.fonts.main = "Google Sans Flex";
                     Config.options.appearance.fonts.numbers = "Google Sans Flex";
                     Config.options.appearance.fonts.title = "Google Sans Flex";
-                    Config.options.appearance.fonts.iconNerd = "JetBrains Mono NF";
-                    Config.options.appearance.fonts.monospace = "JetBrains Mono NF";
+                    Config.options.appearance.fonts.iconNerd = "JetBrainsMono Nerd Font";
+                    Config.options.appearance.fonts.monospace = "JetBrainsMono Nerd Font";
                     Config.options.appearance.fonts.reading = "Readex Pro";
                     Config.options.appearance.fonts.expressive = "Space Grotesk";
                 }
@@ -382,7 +382,7 @@ ContentPage {
             MaterialTextArea {
                 enabled: Config.options.appearance.fonts.enableCustom
                 Layout.fillWidth: true
-                placeholderText: Translation.tr("Font family name (e.g., JetBrains Mono NF)")
+                placeholderText: Translation.tr("Font family name (e.g., JetBrainsMono Nerd Font)")
                 text: Persistent.states.settings.fonts.monospace
                 wrapMode: TextEdit.NoWrap
                 onTextChanged: {
@@ -425,7 +425,7 @@ ContentPage {
             MaterialTextArea {
                 enabled: Config.options.appearance.fonts.enableCustom
                 Layout.fillWidth: true
-                placeholderText: Translation.tr("Font family name (e.g., JetBrains Mono NF)")
+                placeholderText: Translation.tr("Font family name (e.g., JetBrainsMono Nerd Font)")
                 text: Persistent.states.settings.fonts.iconNerd
                 wrapMode: TextEdit.NoWrap
                 onTextChanged: {

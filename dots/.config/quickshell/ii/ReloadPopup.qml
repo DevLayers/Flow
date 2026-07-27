@@ -89,7 +89,7 @@ Scope {
 
 					Text {
 						renderType: Text.NativeRendering
-						font.family: "JetBrains Mono NF"
+						font.family: "JetBrainsMono Nerd Font"
 						font.pointSize: 11
 						text: root.errorString
 						color: failed ? "#ff93000A" : "#ff0C1F13"

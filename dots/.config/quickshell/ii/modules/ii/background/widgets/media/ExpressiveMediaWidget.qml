@@ -5,11 +5,13 @@ import Qt5Compat.GraphicalEffects
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.common.models
 import qs.services
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Mpris
 import qs.modules.ii.background.widgets
+import Quickshell.Widgets
 
 AbstractBackgroundWidget {
     id: root
@@ -40,27 +42,69 @@ AbstractBackgroundWidget {
 
     property MprisPlayer player: MprisController.activePlayer
 
-    readonly property color colBg: WidgetColorScheme.cardBgColor
-    readonly property color colAlbumBg: WidgetColorScheme.innerShapeColor
-    readonly property color colControlsBg: WidgetColorScheme.pillFillColor
-    readonly property color colText: WidgetColorScheme.textColorOnBg
-    readonly property color colTimeMain: WidgetColorScheme.textColorOnPillFill
-    readonly property color colTimeSub: ColorUtils.transparentize(WidgetColorScheme.textColorOnPillFill, 0.4)
-    readonly property color colProgressHighlight: WidgetColorScheme.accentColor
-    readonly property color colProgressTrack: ColorUtils.transparentize(WidgetColorScheme.textColorOnPillFill, 0.6)
-    readonly property color colBtnSecondary: WidgetColorScheme.pillBgColor
-    readonly property color colBtnSecondary_hover: ColorUtils.mix(WidgetColorScheme.pillBgColor, WidgetColorScheme.accentColor, 0.15)
-    readonly property color colBtnSecondaryActive: ColorUtils.mix(WidgetColorScheme.pillBgColor, WidgetColorScheme.accentColor, 0.25)
-    readonly property color colBtnPlayBg: WidgetColorScheme.accentColor
-    readonly property color colBtnPlayRipple: ColorUtils.mix(WidgetColorScheme.accentColor, WidgetColorScheme.onAccentColor, 0.2)
-    readonly property color colBtnPlayIcon: WidgetColorScheme.onAccentColor
-    readonly property color colBtnIcon: WidgetColorScheme.textColorOnPillTrack
-    readonly property color colAlbumBorder: WidgetColorScheme.outlineColor
+    readonly property bool useDynamicColors: (Config.options.background.widgets.media.dynamicAlbumColors ?? false) && root.artSource !== ""
+
+    ColorQuantizer {
+        id: colorQuantizer
+        source: root.artSource
+        depth: 0
+        rescaleSize: 1
+    }
+
+    readonly property color artDominantColor: {
+        if (!root.useDynamicColors) return Appearance.colors.colPrimary;
+        let raw = colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary;
+        let mixed = ColorUtils.mix(raw, Appearance.colors.colPrimaryContainer, 0.8);
+        return mixed || Appearance.m3colors.m3secondaryContainer;
+    }
+
+    property QtObject blendedColors: AdaptedMaterialScheme {
+        color: root.artDominantColor
+    }
+
+    readonly property color colBg: useDynamicColors ? blendedColors.colPrimaryContainer : WidgetColorScheme.cardBgColor
+    readonly property color colAlbumBg: useDynamicColors ? blendedColors.colSecondaryContainer : WidgetColorScheme.innerShapeColor
+    readonly property color colControlsBg: useDynamicColors ? blendedColors.colSecondaryContainer : WidgetColorScheme.pillFillColor
+    readonly property color colText: useDynamicColors ? blendedColors.colOnSecondaryContainer : WidgetColorScheme.textColorOnBg
+    readonly property color colTimeMain: useDynamicColors ? blendedColors.colOnSecondaryContainer : WidgetColorScheme.textColorOnPillFill
+    readonly property color colTimeSub: useDynamicColors ? ColorUtils.transparentize(blendedColors.colOnSecondaryContainer, 0.4) : ColorUtils.transparentize(WidgetColorScheme.textColorOnPillFill, 0.4)
+    readonly property color colProgressHighlight: useDynamicColors ? blendedColors.colPrimary : WidgetColorScheme.accentColor
+    readonly property color colProgressTrack: useDynamicColors ? ColorUtils.transparentize(blendedColors.colOnSecondaryContainer, 0.6) : ColorUtils.transparentize(WidgetColorScheme.textColorOnPillFill, 0.6)
+    readonly property color colBtnSecondary: useDynamicColors ? blendedColors.colTertiaryContainer : WidgetColorScheme.pillBgColor
+    readonly property color colBtnSecondary_hover: useDynamicColors ? ColorUtils.mix(blendedColors.colTertiaryContainer, blendedColors.colPrimary, 0.15) : ColorUtils.mix(WidgetColorScheme.pillBgColor, WidgetColorScheme.accentColor, 0.15)
+    readonly property color colBtnSecondaryActive: useDynamicColors ? ColorUtils.mix(blendedColors.colTertiaryContainer, blendedColors.colPrimary, 0.25) : ColorUtils.mix(WidgetColorScheme.pillBgColor, WidgetColorScheme.accentColor, 0.25)
+    readonly property color colBtnPlayBg: useDynamicColors ? blendedColors.colPrimary : WidgetColorScheme.accentColor
+    readonly property color colBtnPlayRipple: useDynamicColors ? ColorUtils.mix(blendedColors.colPrimary, blendedColors.colOnPrimary, 0.2) : ColorUtils.mix(WidgetColorScheme.accentColor, WidgetColorScheme.onAccentColor, 0.2)
+    readonly property color colBtnPlayIcon: useDynamicColors ? blendedColors.colOnPrimary : WidgetColorScheme.onAccentColor
+    readonly property color colBtnIcon: useDynamicColors ? blendedColors.colOnSecondaryContainer : WidgetColorScheme.textColorOnPillTrack
+    readonly property color colAlbumBorder: useDynamicColors ? ColorUtils.transparentize(blendedColors.colOnSecondaryContainer, 0.5) : WidgetColorScheme.outlineColor
 
     readonly property bool rotateAlbumArt: Config.options.background.widgets.media.rotateAlbumArt ?? true
     readonly property bool showTimeInfo: Config.options.background.widgets.media.showTimeInfo ?? true
     readonly property bool showArtist: Config.options.background.widgets.media.showArtist ?? true
     readonly property bool showProgressSlider: Config.options.background.widgets.media.showProgressSlider ?? true
+
+    onRotateAlbumArtChanged: {
+        if (!root.rotateAlbumArt) {
+            let current = albumArtItem._rotationAngle;
+            let target = Math.round(current / 360) * 360;
+            if (target <= current) target += 360;
+            resetRotationAnim.from = current;
+            resetRotationAnim.to = target;
+            resetRotationAnim.start();
+        } else {
+            resetRotationAnim.stop();
+        }
+    }
+
+    NumberAnimation {
+        id: resetRotationAnim
+        target: albumArtItem
+        property: "_rotationAngle"
+        duration: 600
+        easing.type: Easing.OutCubic
+        onStopped: albumArtItem._rotationAngle = 0
+    }
 
     readonly property int globalRadius: Appearance.rounding.large
     readonly property int controlsRadius: Appearance.rounding.large
@@ -188,13 +232,16 @@ AbstractBackgroundWidget {
                         height: parent.height - 20
                         clip: true
 
-                        RotationAnimator {
-                            target: albumArtItem
-                            from: 0
-                            to: 360
-                            duration: 10000
-                            loops: Animation.Infinite
+                        // Timer-based rotation for reliable reset control
+                        property real _rotationAngle: 0
+                        rotation: _rotationAngle
+
+                        Timer {
+                            id: rotationTimer
                             running: root.player?.isPlaying && root.rotateAlbumArt
+                            interval: 16  // ~60fps
+                            repeat: true
+                            onTriggered: albumArtItem._rotationAngle = (albumArtItem._rotationAngle + 0.6) % 360  // 360° in 10s
                         }
 
                         Image {
@@ -204,13 +251,12 @@ AbstractBackgroundWidget {
                             source: root.artSource
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
-                            cache: true
+                            cache: false
                             antialiasing: true
                             sourceSize.width: width
                             sourceSize.height: height
 
-                            readonly property bool _needsMask: root.rotateAlbumArt
-                            layer.enabled: _needsMask
+                            layer.enabled: true
                             layer.effect: OpacityMask {
                                 maskSource: Rectangle {
                                     width: albumArtImage.width

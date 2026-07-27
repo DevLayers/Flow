@@ -434,8 +434,8 @@ Singleton {
                     property string main: "Google Sans Flex" // xmpl: right sidebar, settings, system monitor, default clock, expressive weather
                     property string numbers: "Google Sans Flex" // xmpl: styled slider, config
                     property string title: "Google Sans Flex" // settings list item, popup titles
-                    property string iconNerd: "JetBrains Mono NF"
-                    property string monospace: "JetBrains Mono NF" // clipboard metadata
+                    property string iconNerd: "JetBrainsMono Nerd Font"
+                    property string monospace: "JetBrainsMono Nerd Font" // clipboard metadata
                     property string reading: "Readex Pro" // cookie clock quote
                     property string expressive: "Space Grotesk" // desktop widgets font, overview workspace number, user profile config
                     property bool roundnessFull: false
