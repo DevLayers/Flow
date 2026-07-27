@@ -565,6 +565,15 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 tilde() { printf '%s' "${1/#$HOME/\~}"; }
 
+# Make a string safe as a single path component. Branch names legitimately
+# contain '/' (refactor/setup-p3drovfx), which would otherwise turn a backup
+# name into a nested path whose parent does not exist.
+path_slug() {
+    local s="${1//[^A-Za-z0-9._-]/-}"
+    s="${s##-}"
+    printf '%s' "${s:-unknown}"
+}
+
 # Run a command, tee its output to the log, echo it only when verbose.
 run_logged() {
     local rc=0
@@ -803,7 +812,7 @@ swap_in() {
     if [[ -d "$TARGET_DIR" ]]; then
         if [[ "$OPT_BACKUP" == true ]]; then
             mkdir -p "$BACKUP_BASE_DIR"
-            DISPLACED_DIR="$BACKUP_BASE_DIR/ii_${fork:-unknown}_${branch:-unknown}_$(date +%Y%m%d-%H%M%S)"
+            DISPLACED_DIR="$BACKUP_BASE_DIR/ii_$(path_slug "$fork")_$(path_slug "$branch")_$(date +%Y%m%d-%H%M%S)"
             label="backup $G_ARROW $(basename "$DISPLACED_DIR")"
         else
             DISPLACED_DIR="$QS_DIR/.ii-discard-$$"
