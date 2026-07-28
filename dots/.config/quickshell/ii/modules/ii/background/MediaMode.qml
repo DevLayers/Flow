@@ -145,20 +145,26 @@ Item { // Fullscreen MediaMode instance
         sourceComponent: Item {
             anchors.fill: parent
 
+            // Music video mode state
+            readonly property bool videoActive: Config.options.background.mediaMode.musicVideo.enable && MusicVideoService.videoPlaying
+            readonly property bool videoSearching: Config.options.background.mediaMode.musicVideo.enable && MusicVideoService.searchFailed === false && !MusicVideoService.videoPlaying && MusicVideoService.lastSearchQuery !== ""
+
             // Fullscreen Background Base
             Rectangle {
                 id: background
                 anchors.fill: parent
-                color: ColorUtils.applyAlpha(Appearance.colors.colLayer0, 1)
+                color: videoActive
+                    ? ColorUtils.applyAlpha(Appearance.colors.colLayer0, (Config.options.background.mediaMode.musicVideo.dimOpacity ?? 60) / 100)
+                    : ColorUtils.applyAlpha(Appearance.colors.colLayer0, 1)
 
-                // Blurred Album Art Parallax Background
+                // Blurred Album Art Parallax Background (hidden when video is playing)
                 FloatingArtBackground {
                     anchors.fill: parent
-                    opacity: Config.options.background.mediaMode.backgroundOpacity / 100
+                    opacity: videoActive ? 0 : (Config.options.background.mediaMode.backgroundOpacity / 100)
                     animationSpeedScale: Config.options.background.mediaMode.backgroundAnimation.speedScale / 10
                     artFilePath: root.displayedArtFilePath
-                    overlayColor: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.25)
-                    animationEnabled: Config.options.background.mediaMode.backgroundAnimation.enable
+                    overlayColor: ColorUtils.transparentize(Appearance.colors.colLayer0, videoActive ? 1.0 : 0.25)
+                    animationEnabled: Config.options.background.mediaMode.backgroundAnimation.enable && !videoActive
 
                     workspaceNorm: {
                         const chunkSize = Config?.options.bar.workspaces.shown ?? 10;
@@ -173,7 +179,7 @@ Item { // Fullscreen MediaMode instance
                 // Ambient Audio Wave Visualizer Layer
                 Item {
                     anchors.fill: parent
-                    visible: root.visualizerMode === 1
+                    visible: root.visualizerMode === 1 && !videoActive
 
                     WaveVisualizer {
                         anchors.fill: parent
@@ -189,7 +195,7 @@ Item { // Fullscreen MediaMode instance
                     anchors.horizontalCenter: parent.horizontalCenter
                     height: 120
                     spacing: 12
-                    visible: root.visualizerMode === 2
+                    visible: root.visualizerMode === 2 && !videoActive
 
                     Repeater {
                         model: root.visualizerPoints.length > 0 ? root.visualizerPoints.length : 16
@@ -215,7 +221,7 @@ Item { // Fullscreen MediaMode instance
                     anchors.centerIn: parent
                     width: Math.min(parent.width, parent.height) * 0.7
                     height: width
-                    visible: root.visualizerMode === 3
+                    visible: root.visualizerMode === 3 && !videoActive
 
                     RadialWaveVisualizer {
                         anchors.fill: parent
@@ -358,6 +364,48 @@ Item { // Fullscreen MediaMode instance
                                 }
                             }
 
+                            // Music Video Background Toggle
+                            RippleButton {
+                                implicitWidth: 42
+                                implicitHeight: 42
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Config.options.background.mediaMode.musicVideo.enable
+                                    ? root.dynamicAccentColor
+                                    : ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
+                                colBackgroundHover: Config.options.background.mediaMode.musicVideo.enable
+                                    ? ColorUtils.mix(root.dynamicAccentColor, Appearance.colors.colLayer1Hover, 0.85)
+                                    : Appearance.colors.colLayer2Hover
+                                colBackgroundActive: Config.options.background.mediaMode.musicVideo.enable
+                                    ? ColorUtils.mix(root.dynamicAccentColor, Appearance.colors.colLayer1Active, 0.7)
+                                    : Appearance.colors.colLayer2Active
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    iconSize: 20
+                                    color: Config.options.background.mediaMode.musicVideo.enable
+                                        ? Appearance.colors.colOnPrimary
+                                        : Appearance.colors.colSubtext
+                                    text: videoActive ? "play_circle"
+                                        : (videoSearching ? "hourglass_top" : "music_video")
+                                }
+
+                                onClicked: {
+                                    Config.options.background.mediaMode.musicVideo.enable =
+                                        !Config.options.background.mediaMode.musicVideo.enable;
+                                    if (Config.options.background.mediaMode.musicVideo.enable) {
+                                        MusicVideoService.tryPlayCurrent();
+                                    } else {
+                                        MusicVideoService.stopVideo();
+                                    }
+                                }
+
+                                StyledToolTip {
+                                    text: Config.options.background.mediaMode.musicVideo.enable
+                                        ? Translation.tr("Music Video Background: ON (click to disable)")
+                                        : Translation.tr("Music Video Background: OFF (click to enable)")
+                                }
+                            }
+
                             // Close / Exit Media Mode Button
                             RippleButton {
                                 implicitWidth: 42
@@ -417,7 +465,9 @@ Item { // Fullscreen MediaMode instance
                             Rectangle {
                                 anchors.fill: parent
                                 radius: Appearance.rounding.verylarge
-                                color: ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+                                color: videoActive
+                                    ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.25)
+                                    : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
 
                                 MediaModeCoverArt {
                                     anchors.fill: parent
@@ -440,7 +490,9 @@ Item { // Fullscreen MediaMode instance
                                 id: lyricsContainer
                                 anchors.fill: parent
                                 radius: Appearance.rounding.verylarge
-                                color: ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+                                color: videoActive
+                                    ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.25)
+                                    : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
 
                                 ColumnLayout {
                                     anchors.fill: parent

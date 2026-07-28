@@ -1055,6 +1055,13 @@ Singleton {
                     property JsonObject syllable: JsonObject {
                         property int textHighlightStyle: 0 // 0: vertical, 1: horizontal (not perfect bc its not synced in a word level, but a cool animation to have)
                     }
+                    property JsonObject musicVideo: JsonObject {
+                        property bool enable: true
+                        property int maxResolution: 1080
+                        property bool dimBackground: true
+                        property int dimOpacity: 60   // percent (0-100)
+                        property string searchSuffix: "official music video"
+                    }
                 }
             }
 
@@ -1498,6 +1505,7 @@ Singleton {
                 property bool showOnlyOnFocusedMonitor: false
                 property bool monochromeIcons: false
                 property bool dimInactiveIcons: false
+                property real iconSpacing: 2
                 property bool enableShapeMask: false
                 property string shapeMask: "Circle"
                 property real height: 60
@@ -1735,6 +1743,7 @@ Singleton {
 
             property JsonObject regionSelector: JsonObject {
                 property bool showOnlyOnFocusedMonitor: false
+                property bool enableOverlay: false
                 property JsonObject targetRegions: JsonObject {
                     property bool windows: true
                     property bool layers: true
