@@ -437,6 +437,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: Config.options.bar.styles.workspaces === "dock"
         title: Translation.tr("Dock Workspace Style")
         icon: "dock"
 

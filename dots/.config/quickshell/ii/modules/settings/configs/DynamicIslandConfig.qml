@@ -12,7 +12,7 @@ ContentPage {
 
     NoticeBox {
         Layout.fillWidth: true
-        Layout.bottomMargin: 8
+        Layout.bottomMargin: 2
         isFirst: true
         materialIcon: "warning"
         text: Translation.tr("The search only works with dynamic island in connect mode.")
@@ -40,6 +40,23 @@ ContentPage {
 
     }
 
+    NoticeBox {
+        Layout.fillWidth: true
+        Layout.bottomMargin: 8
+        isLast: Config.options.sidebar.sidebarStyle === "default"
+        visible: Config.options.sidebar.sidebarStyle === "default"
+        materialIcon: "block"
+        text: Translation.tr("The Floating Dynamic Island requires Connect shell mode. Switch to Connect mode to use this feature.")
+
+        ShortcutBox {
+            targetPageId: "bar"
+            targetSectionTitle: Translation.tr("Shell mode")
+            materialIcon: "arrow_forward"
+            text: Translation.tr("Go to Shell mode settings")
+            linkText: Translation.tr("Go there")
+        }
+    }
+
     // ── General ───────────────────────────────────────────────────────────
     ContentSection {
         icon: "water_drop"
@@ -49,6 +66,7 @@ ContentPage {
             buttonIcon: "water_drop"
             text: Translation.tr("Floating Dynamic Island")
             checked: Config.options.bar.floatingNotch.enable
+            enabled: Config.options.sidebar.sidebarStyle !== "default"
             onCheckedChanged: {
                 Config.options.bar.floatingNotch.enable = checked;
             }

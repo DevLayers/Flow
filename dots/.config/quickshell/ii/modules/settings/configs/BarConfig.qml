@@ -51,21 +51,43 @@ Item {
                 Layout.fillWidth: true
 
                 ConfigSelectionArray {
+                    id: shellStyleSelector
                     currentValue: Config.options.sidebar.sidebarStyle
                     onSelected: (newValue) => {
                         Config.options.sidebar.sidebarStyle = newValue;
                     }
-                    options: [{
-                        "displayName": Translation.tr("Default"),
-                        "icon": "view_sidebar",
-                        "value": "default"
-                    }, {
-                        "displayName": Translation.tr("Connect"),
-                        "icon": "phone_android",
-                        "value": "connect"
-                    }]
+                    options: {
+                        var opts = [{
+                            "displayName": Translation.tr("Default"),
+                            "icon": "view_sidebar",
+                            "value": "default"
+                        }, {
+                            "displayName": Translation.tr("Connect"),
+                            "icon": "phone_android",
+                            "value": "connect"
+                        }];
+                        if (Config.options.bar.floatingNotch.enable && Config.options.sidebar.sidebarStyle === "connect") {
+                            opts[0].enabled = false;
+                        }
+                        return opts;
+                    }
                 }
 
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: Config.options.bar.floatingNotch.enable && Config.options.sidebar.sidebarStyle === "connect"
+                materialIcon: "water_drop"
+                text: Translation.tr("Default shell mode is not available while the Floating Dynamic Island is active. Disable it first to switch back.")
+
+                ShortcutBox {
+                    targetPageId: "dynamicIsland"
+                    targetSectionTitle: Translation.tr("Floating Dynamic Island")
+                    materialIcon: "arrow_forward"
+                    text: Translation.tr("Go to Dynamic Island settings")
+                    linkText: Translation.tr("Go there")
+                }
             }
 
             NoticeBox {
@@ -140,28 +162,43 @@ Item {
                 title: Translation.tr("Corner style")
                 icon: "rounded_corner"
 
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.barBackgroundStyle === 3 && (Config.options.bar.cornerStyle === 2 || Config.options.bar.cornerStyle === 3)
+                    materialIcon: "grid_view"
+                    text: Translation.tr("Rect and Dynamic Island corner styles are incompatible with Islands background. Only Hug and Float are available while Islands is active.")
+                }
+
                 ConfigSelectionArray {
+                    id: cornerStyleSelector
                     currentValue: Config.options.bar.cornerStyle
                     onSelected: (newValue) => {
                         Config.options.bar.cornerStyle = newValue;
                     }
-                    options: [{
-                        "displayName": Translation.tr("Hug"),
-                        "icon": "line_curve",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Float"),
-                        "icon": "page_header",
-                        "value": 1
-                    }, {
-                        "displayName": Translation.tr("Rect"),
-                        "icon": "toolbar",
-                        "value": 2
-                    }, {
-                        "displayName": Translation.tr("Dynamic Island"),
-                        "icon": "water_drop",
-                        "value": 3
-                    }]
+                    options: {
+                        var opts = [{
+                            "displayName": Translation.tr("Hug"),
+                            "icon": "line_curve",
+                            "value": 0
+                        }, {
+                            "displayName": Translation.tr("Float"),
+                            "icon": "page_header",
+                            "value": 1
+                        }, {
+                            "displayName": Translation.tr("Rect"),
+                            "icon": "toolbar",
+                            "value": 2
+                        }, {
+                            "displayName": Translation.tr("Dynamic Island"),
+                            "icon": "water_drop",
+                            "value": 3
+                        }];
+                        if (Config.options.bar.barBackgroundStyle === 3) {
+                            opts[2].enabled = false;
+                            opts[3].enabled = false;
+                        }
+                        return opts;
+                    }
                 }
 
             }
@@ -244,6 +281,9 @@ Item {
                     currentValue: Config.options.bar.barBackgroundStyle
                     onSelected: (newValue) => {
                         Config.options.bar.barBackgroundStyle = newValue;
+                        if (newValue === 3 && (Config.options.bar.cornerStyle === 2 || Config.options.bar.cornerStyle === 3)) {
+                            Config.options.bar.cornerStyle = 0;
+                        }
                     }
                     options: [{
                         "displayName": Translation.tr("Visible"),
