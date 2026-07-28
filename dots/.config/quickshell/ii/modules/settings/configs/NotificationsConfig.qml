@@ -38,6 +38,15 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "fullscreen"
+            text: Translation.tr("Do not disturb when focused app is fullscreen")
+            checked: Config.options.notifications.autoDndFullscreen
+            onCheckedChanged: {
+                Config.options.notifications.autoDndFullscreen = checked;
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "desktop_windows"
             text: Translation.tr("Force specific monitor")
             checked: Config.options.notifications.monitor.enable

@@ -7,6 +7,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Notifications
+import Quickshell.Wayland
+import Quickshell.Hyprland
 
 /**
  * Provides extra features not in Quickshell.Services.Notifications:
@@ -81,11 +83,39 @@ Singleton {
     }
 
     property bool silent: false
+    readonly property bool focusedWindowFullscreen: {
+        if (!Config?.options?.notifications?.autoDndFullscreen) return false;
+
+        // 1. Direct ToplevelManager check
+        if (ToplevelManager.activeToplevel?.wayland?.fullscreen) return true;
+
+        // 2. Active workspace on focused monitor via Hyprland service
+        const focusedWsToplevels = Hyprland.focusedMonitor?.activeWorkspace?.toplevels?.values ?? [];
+        if (focusedWsToplevels.some(t => t.wayland?.fullscreen)) return true;
+
+        // 3. Active window address in HyprlandData
+        const activeAddress = ToplevelManager.activeToplevel?.HyprlandToplevel?.address;
+        if (activeAddress) {
+            const win = HyprlandData.windowByAddress[`0x${activeAddress}`];
+            if (win && (win.fullscreen || (win.fullscreenMode !== undefined && win.fullscreenMode > 0))) return true;
+        }
+
+        // 4. Any window on current workspace marked fullscreen in HyprlandData
+        const activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? HyprlandData.activeWorkspace?.id;
+        if (activeWsId !== undefined && HyprlandData.windowList) {
+            const fsWin = HyprlandData.windowList.find(w => w.workspace?.id === activeWsId && (w.fullscreen || (w.fullscreenMode !== undefined && w.fullscreenMode > 0)));
+            if (fsWin) return true;
+        }
+
+        return false;
+    }
+    readonly property bool autoSilent: (Config?.options.notifications.autoDndFullscreen ?? false) && focusedWindowFullscreen
+    readonly property bool effectiveSilent: silent || autoSilent
     property int unread: 0
     property var filePath: Directories.notificationsPath
     property list<Notif> list: []
     property var popupList: list.filter((notif) => notif.popup);
-    property bool popupInhibited: (GlobalStates?.sidebarRightOpen ?? false) || silent
+    property bool popupInhibited: (GlobalStates?.sidebarRightOpen ?? false) || effectiveSilent
     property var latestTimeForApp: ({})
     // See Config.qml for the rationale on these guards.
     property real initTimestamp: Date.now()
@@ -255,7 +285,7 @@ Singleton {
     // Follows the fdo notification spec: apps can suppress the sound or request
     // a specific one via hints. Do-not-disturb (silent) mutes everything.
     function playNotificationSound(notification) {
-        if (root.silent) return;
+        if (root.effectiveSilent) return;
         const hints = notification.hints ?? {};
         if (hints["suppress-sound"]) return;
         if (root.soundPolicyFor(notification.appName) === "mute") return;
