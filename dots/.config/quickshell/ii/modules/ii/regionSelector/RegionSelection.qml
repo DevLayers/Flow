@@ -387,6 +387,15 @@ PanelWindow {
             } else {
                 Quickshell.execDetached(["bash", "-c", "wl-copy < '" + esc(tempPath) + "' && rm '" + esc(tempPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot copied' 'Copied to clipboard'"]);
             }
+            // Trigger screenshot overlay
+            if (Config.options.regionSelector.enableOverlay ?? true) {
+                GlobalStates.screenshotOverlayImagePath = tempPath;
+                GlobalStates.screenshotOverlayRegionX = 0;
+                GlobalStates.screenshotOverlayRegionY = 0;
+                GlobalStates.screenshotOverlayRegionW = 0;
+                GlobalStates.screenshotOverlayRegionH = 0;
+                GlobalStates.screenshotOverlayOpen = true;
+            }
             root.dismiss();
         });
     }
@@ -702,6 +711,15 @@ PanelWindow {
         if (root.action === RegionSelection.SnipAction.AskAI) {
             Ai.handleClipboardAndAttach();
             GlobalStates.policiesPanelOpen = true;
+        }
+        // Trigger screenshot overlay
+        if (Config.options.regionSelector.enableOverlay ?? true) {
+            GlobalStates.screenshotOverlayImagePath = root.screenshotPath;
+            GlobalStates.screenshotOverlayRegionX = root.regionX * root.monitorScale;
+            GlobalStates.screenshotOverlayRegionY = root.regionY * root.monitorScale;
+            GlobalStates.screenshotOverlayRegionW = root.regionWidth * root.monitorScale;
+            GlobalStates.screenshotOverlayRegionH = root.regionHeight * root.monitorScale;
+            GlobalStates.screenshotOverlayOpen = true;
         }
         root.dismiss();
     }

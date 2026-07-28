@@ -34,6 +34,7 @@ import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
 import qs.modules.ii.topLayer
 import qs.modules.ii.alarmRingingPopup
+import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
 
 Scope {
@@ -164,6 +165,9 @@ Scope {
     }
     PanelLoader {
         component: AlarmRingingPopup {}
+    }
+    PanelLoader {
+        component: ScreenshotOverlay {}
     }
     PanelLoader {
         extraCondition: GlobalStates.connectModeActive

@@ -83,6 +83,12 @@ Singleton {
     property bool videoEditorPopupOpen: false
     property bool videoEditorOpen: false
     property string videoEditorPath: ""
+    property bool screenshotOverlayOpen: false
+    property string screenshotOverlayImagePath: ""
+    property real screenshotOverlayRegionX: 0
+    property real screenshotOverlayRegionY: 0
+    property real screenshotOverlayRegionW: 0
+    property real screenshotOverlayRegionH: 0
     property bool settingsOpen: false
     property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""
