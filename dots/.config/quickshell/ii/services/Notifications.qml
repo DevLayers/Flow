@@ -20,10 +20,15 @@ Singleton {
         id: wrapper
         required property int notificationId // Could just be `id` but it conflicts with the default prop in QtObject
         property Notification notification
-        property list<var> actions: notification?.actions.map((action) => ({
-            "identifier": action.identifier,
-            "text": action.text,
-        })) ?? []
+        property list<var> customActions: []
+        property string _qsFilePath: ""
+        property list<var> actions: {
+            var base = notification ? notification.actions.map(function(action) {
+                return { "identifier": action.identifier, "text": action.text };
+            }) : [];
+            if (customActions.length > 0) return base.concat(customActions);
+            return base;
+        }
         property bool popup: false
         property bool isTransient: notification?.hints.transient ?? false
         property string appIcon: notification?.appIcon ?? ""
@@ -318,6 +323,8 @@ Singleton {
                 "time": Date.now(),
             });
 
+            root._handleShellNotification(newNotifObject);
+
             // Batch notifications to avoid rapid list updates
             root._pendingNotifications.push(newNotifObject);
             batchNotificationTimer.restart();
@@ -341,6 +348,60 @@ Singleton {
 
     function markAllRead() {
         root.unread = 0;
+    }
+
+    // Inject QML-handled action buttons for shell-internal notifications (screenshots, recordings).
+    // Actions prefixed with "__qs_" are handled directly in QML via Quickshell.execDetached
+    // instead of action.invoke(), since the original sender (notify-send) has already exited.
+    function _handleShellNotification(notifObj) {
+        var appName = notifObj.appName || "";
+        var appIcon = notifObj.appIcon || "";
+        var body = notifObj.body || "";
+
+        // notify-send -i camera-photo → appIcon === "camera-photo"
+        var isScreenshot = appIcon === "camera-photo";
+        // notify-send -a 'Recorder' → appName === "Recorder"
+        var isRecording = appName === "Recorder";
+
+        if (!isScreenshot && !isRecording) return;
+
+        // Parse file path from body: "Saved to: /path" or "Saved to /path"
+        var match = body.match(/(?:Saved to:?|Copied to)\s*(.+)/i);
+        if (!match) return;
+        var filePath = match[1].trim();
+        if (!filePath || filePath.charAt(0) !== "/") return;
+
+        var actions = [];
+        if (isScreenshot) {
+            actions.push(
+                { "identifier": "__qs_open_file", "text": Translation.tr("Open") },
+                { "identifier": "__qs_open_folder", "text": Translation.tr("Folder") },
+                { "identifier": "__qs_delete_file", "text": Translation.tr("Delete") }
+            );
+        } else if (isRecording) {
+            actions.push(
+                { "identifier": "__qs_open_file", "text": Translation.tr("Open") },
+                { "identifier": "__qs_open_folder", "text": Translation.tr("Folder") }
+            );
+        }
+
+        notifObj.customActions = actions;
+        notifObj._qsFilePath = filePath;
+    }
+
+    // Execute a QML-handled notification action (identified by "__qs_" prefix).
+    function executeShellAction(notifObj, identifier) {
+        var filePath = notifObj._qsFilePath || "";
+        if (!filePath) return;
+
+        if (identifier === "__qs_open_file") {
+            Quickshell.execDetached(["bash", "-c", 'xdg-open "$1"', "_", filePath]);
+        } else if (identifier === "__qs_open_folder") {
+            var dirPath = filePath.replace(/\/[^\/]*$/, "");
+            Quickshell.execDetached(["bash", "-c", 'xdg-open "$1"', "_", dirPath]);
+        } else if (identifier === "__qs_delete_file") {
+            Quickshell.execDetached(["bash", "-c", 'rm -f "$1"', "_", filePath]);
+        }
     }
 
     function discardNotification(id) {
