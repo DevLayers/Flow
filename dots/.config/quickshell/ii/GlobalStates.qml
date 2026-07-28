@@ -17,6 +17,8 @@ Singleton {
     property int mediaModeCount: 0
     readonly property bool mediaModeActive: mediaModeCount > 0
     property var mediaModeMonitors: []
+    property int mediaModeCloseAllTrigger: 0
+    property int widgetReStackTrigger: 0
 
     function setMediaModeActiveForScreen(screenName, active) {
         if (!screenName) return;

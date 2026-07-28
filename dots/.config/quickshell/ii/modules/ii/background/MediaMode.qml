@@ -375,12 +375,24 @@ Item { // Fullscreen MediaMode instance
                                 }
 
                                 onClicked: {
-                                    if (typeof mediaModeLoader !== "undefined") {
+                                    if (!Config.options.background.mediaMode.togglePerMonitor) {
+                                        // Global mode: trigger closes ALL loaders on all monitors.
+                                        // Set counts to 0 since all instances are closing.
+                                        LyricsService.mediaModeOpenCount = 0;
+                                        GlobalStates.mediaModeCloseAllTrigger++;
+                                        // NOTE: the trigger above destroys this component synchronously
+                                        // (via Connections → loader.active=false → Loader destroys MediaMode).
+                                        // Nothing after this point executes.
+                                    } else if (typeof mediaModeLoader !== "undefined") {
+                                        // Per-monitor mode: close only this instance.
+                                        LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
                                         mediaModeLoader.active = false;
+                                        // Balance count: onDestruction handles -1, this handles the other -1.
+                                        GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
                                     } else {
+                                        LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
                                         GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
                                     }
-                                    LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
                                 }
 
                                 StyledToolTip {

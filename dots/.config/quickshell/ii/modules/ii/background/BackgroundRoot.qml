@@ -307,9 +307,26 @@ PanelWindow {
     }
 
     onMediaModeOpenChanged: {
-        if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
-            bgRoot.applyCurrentWallpaper();
+        if (!mediaModeOpen) {
             LyricsService.shellColorChanged = false;
+            // Only restore colors if they were changed during media mode.
+            // Use --noswitch to regenerate palette from current wallpaper
+            // without re-setting it at the compositor level (avoids visual glitch
+            // of wallpaper being re-applied on top of widgets).
+            // Run only on the focused monitor to avoid duplicate script launches.
+            if (Config.options.appearance.palette.type.startsWith("scheme")
+                    && LyricsService.mediaModeOpenCount <= 0
+                    && bgRoot.isMonitorFocused) {
+                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--noswitch", "--mode", Appearance.m3colors.darkmode ? "dark" : "light"]);
+            }
+
+            // Force widgets window to re-stack after our layer transition from
+            // WlrLayer.Overlay → WlrLayer.Bottom. Without this, the compositor
+            // re-stacks us at the top of the Bottom layer, covering the widgets
+            // PanelWindow with the wallpaper image.
+            Qt.callLater(function() {
+                GlobalStates.widgetReStackTrigger++;
+            });
         }
     }
 
@@ -376,6 +393,22 @@ PanelWindow {
                 mediaModeLoader.active = !mediaModeLoader.active;
                 GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount + (mediaModeLoader.active ? 1 : -1));
                 LyricsService.mediaModeOpenCount += mediaModeLoader.active ? 1 : -1;
+            }
+        }
+
+        property int _lastCloseAllTrigger: 0
+
+        Connections {
+            target: GlobalStates
+            function onMediaModeCloseAllTriggerChanged() {
+                if (GlobalStates.mediaModeCloseAllTrigger > bgRoot._lastCloseAllTrigger && mediaModeLoader.active) {
+                    bgRoot._lastCloseAllTrigger = GlobalStates.mediaModeCloseAllTrigger;
+                    mediaModeLoader.active = false;
+                    // Compensate for the missing toggle-handler decrement.
+                    // Each monitor got toggle(+1) + onCompleted(+1) = +2 on open.
+                    // onDestruction handles -1, this handles the other -1.
+                    GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
+                }
             }
         }
 
