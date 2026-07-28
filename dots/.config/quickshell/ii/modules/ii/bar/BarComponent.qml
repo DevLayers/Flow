@@ -27,6 +27,7 @@ import qs.modules.ii.bar.widgets.utilButtons
 import qs.modules.ii.bar.widgets.policies
 import qs.modules.ii.bar.widgets.timer
 import qs.modules.ii.bar.widgets.indicators
+import qs.modules.ii.bar.widgets.dockToPanel
 
 import qs.modules.ii.verticalBar as Vertical
 
@@ -471,6 +472,8 @@ Item {
             return phoneScrcpyIndicatorComp;
         case "screen_share_indicator":
             return screenshareIndicatorComp;
+        case "dock_to_panel":
+            return dockToPanelComp;
         default:
             return null;
         }
@@ -669,6 +672,12 @@ Item {
     Component {
         id: powerComp
         PowerButton {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: dockToPanelComp
+        DockToPanel {
             vertical: rootItem.vertical
         }
     }
