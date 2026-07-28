@@ -335,7 +335,7 @@ Item {
         Rectangle {
             id: maskRect
             anchors.fill: parent
-            radius: Appearance.rounding.windowRounding
+            radius: Appearance.rounding.windowRounding + 12
             visible: false
         }
 
@@ -577,7 +577,7 @@ Item {
         }
 
         Loader {
-            active: root.isVertical
+            active: false
             anchors.fill: parent
             sourceComponent: Item {
                 anchors.fill: parent

@@ -23,6 +23,7 @@ DockButton {
 
     property int buttonSize: Appearance.sizes.dockButtonSize
     property int dotMargin: Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2
+    property int dotMarginV: Math.round((Config.options?.dock.height ?? 60) * 0.12) - 2
 
     readonly property bool isVertical: dockContent?.isVertical ?? false
 
@@ -95,7 +96,7 @@ DockButton {
     }
 
     width: buttonSize + dotMargin * 2
-    height: buttonSize + dotMargin * 2
+    height: buttonSize + dotMarginV * 2
     opacity: 1.0
     z: 0
     scale: _pressed ? 0.88 : 1.0

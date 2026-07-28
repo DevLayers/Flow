@@ -132,7 +132,7 @@ Item {
         id: bgRect
         anchors.fill: parent
         anchors.margins: root.dotMargin
-        radius: Appearance.rounding.normal
+        radius: Appearance.rounding.windowRounding + 12
         clip: true
 
         // Ensure children like the weather icon are properly clipped by the radius
