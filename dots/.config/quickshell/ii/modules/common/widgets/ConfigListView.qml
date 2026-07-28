@@ -66,6 +66,12 @@ Rectangle {
             root.updated(currentList);
             return;
         }
+        // Islands background style does not support centered widgets — they
+        // must follow the island layout, not their own positioning.
+        if (Config.options.bar.barBackgroundStyle === 3) {
+            return;
+        }
+
         for (let i = 0; i < currentList.length; i++) {
             currentList[i].centered = (i === idx);
         }
