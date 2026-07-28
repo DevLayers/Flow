@@ -11,6 +11,9 @@ import Quickshell.Hyprland
 Scope {
     id: root
 
+    readonly property bool notifIsLeft: (Config.options.notifications.position ?? "top_right").endsWith("left")
+    readonly property bool notifIsRight: (Config.options.notifications.position ?? "top_right").endsWith("right")
+
     LazyLoader {
         id: popupLoader
         active: GlobalStates.videoEditorPopupOpen
@@ -36,15 +39,15 @@ Scope {
             anchors {
                 top: !Config.options.bar.vertical && !Config.options.bar.bottom
                 bottom: !Config.options.bar.vertical && Config.options.bar.bottom
-                left: Config.options.bar.vertical && !Config.options.bar.bottom
-                right: (!Config.options.bar.vertical) || (Config.options.bar.vertical && Config.options.bar.bottom)
+                left: Config.options.bar.vertical ? (Config.options.bar.bottom ? false : true) : root.notifIsRight
+                right: Config.options.bar.vertical ? (Config.options.bar.bottom ? true : false) : root.notifIsLeft
             }
 
             margins {
                 top: Config.options.bar.vertical ? 0 : Appearance.sizes.barHeight
                 bottom: Config.options.bar.vertical ? 0 : Appearance.sizes.barHeight
-                left: Config.options.bar.vertical ? Appearance.sizes.verticalBarWidth : 0
-                right: Config.options.bar.vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.hyprlandGapsOut + 4
+                left: Config.options.bar.vertical ? Appearance.sizes.verticalBarWidth : (root.notifIsRight ? Appearance.sizes.hyprlandGapsOut + 4 : 0)
+                right: Config.options.bar.vertical ? Appearance.sizes.verticalBarWidth : (root.notifIsLeft ? Appearance.sizes.hyprlandGapsOut + 4 : 0)
             }
 
             implicitWidth: popupContent.implicitWidth
@@ -61,6 +64,20 @@ Scope {
                     GlobalStates.videoEditorPopupOpen = false
                     GlobalStates.videoEditorOpen = true
                 }
+            }
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onDashboardPanelOpenChanged() {
+            if (GlobalStates.dashboardPanelOpen) {
+                GlobalStates.videoEditorPopupOpen = false;
+            }
+        }
+        function onPoliciesPanelOpenChanged() {
+            if (GlobalStates.policiesPanelOpen) {
+                GlobalStates.videoEditorPopupOpen = false;
             }
         }
     }
