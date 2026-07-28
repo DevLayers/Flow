@@ -292,7 +292,7 @@ Singleton {
         if (Config.ready) {
             var a = root.ignoreAlpha;
             var script = "";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell.*' }, blur = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
@@ -314,7 +314,7 @@ Singleton {
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
             var a = root.ignoreAlpha;
             var bs = "";
-            bs += "hl.layer_rule({ match = { namespace = 'quickshell.*' }, blur = true, ignore_alpha = " + a + " }) ";
+            bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
             bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
             bs += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
             bs += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";

@@ -86,7 +86,7 @@ AbstractBackgroundWidget {
     property bool downloaded: false
     property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
 
-    property list<real> visualizerPoints: []
+    property list<real> visualizerPoints: Config.options.background.widgets.media.visualizer.enable ? CavaService.visualizerPoints : []
 
     // 'Switch button' visiblity on hover
     property bool hovering: false
@@ -130,22 +130,7 @@ AbstractBackgroundWidget {
         }
     }
 
-    Process {
-        id: cavaProc
-        running: Config.options.background.widgets.media.visualizer.enable
-        onRunningChanged: {
-            if (!cavaProc.running) {
-                root.visualizerPoints = [];
-            }
-        }
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
-        stdout: SplitParser {
-            onRead: data => {
-                let points = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                root.visualizerPoints = points;
-            }
-        }
-    }
+
 
     ColorQuantizer {
         id: colorQuantizer

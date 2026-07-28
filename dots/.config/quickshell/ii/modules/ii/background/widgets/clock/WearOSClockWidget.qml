@@ -90,7 +90,9 @@ AbstractBackgroundWidget {
         opacity: root.cfgShowBezel ? 1.0 : 0.0
 
         Behavior on opacity {
-            NumberAnimation { duration: 300 }
+            NumberAnimation {
+                duration: 300
+            }
         }
 
         // Inner Screen Container - margins reduced to 2% to move contents closer to the border
@@ -154,29 +156,61 @@ AbstractBackgroundWidget {
 
                         var r_inner = width * 0.39;
                         var innerNumbers = [
-                            { val: "05", angle: -Math.PI/2 + (Math.PI/6) },
-                            { val: "10", angle: -Math.PI/2 + (Math.PI/3) },
-                            { val: "20", angle: -Math.PI/2 + (2*Math.PI/3) },
-                            { val: "25", angle: -Math.PI/2 + (5*Math.PI/6) },
-                            { val: "30", angle: -Math.PI/2 + Math.PI },
-                            { val: "35", angle: -Math.PI/2 + (7*Math.PI/6) },
-                            { val: "40", angle: -Math.PI/2 + (4*Math.PI/3) },
-                            { val: "45", angle: -Math.PI/2 + (3*Math.PI/2) },
-                            { val: "50", angle: -Math.PI/2 + (5*Math.PI/3) },
-                            { val: "55", angle: -Math.PI/2 + (11*Math.PI/6) }
+                            {
+                                val: "05",
+                                angle: -Math.PI / 2 + (Math.PI / 6)
+                            },
+                            {
+                                val: "10",
+                                angle: -Math.PI / 2 + (Math.PI / 3)
+                            },
+                            {
+                                val: "20",
+                                angle: -Math.PI / 2 + (2 * Math.PI / 3)
+                            },
+                            {
+                                val: "25",
+                                angle: -Math.PI / 2 + (5 * Math.PI / 6)
+                            },
+                            {
+                                val: "30",
+                                angle: -Math.PI / 2 + Math.PI
+                            },
+                            {
+                                val: "35",
+                                angle: -Math.PI / 2 + (7 * Math.PI / 6)
+                            },
+                            {
+                                val: "40",
+                                angle: -Math.PI / 2 + (4 * Math.PI / 3)
+                            },
+                            {
+                                val: "45",
+                                angle: -Math.PI / 2 + (3 * Math.PI / 2)
+                            },
+                            {
+                                val: "50",
+                                angle: -Math.PI / 2 + (5 * Math.PI / 3)
+                            },
+                            {
+                                val: "55",
+                                angle: -Math.PI / 2 + (11 * Math.PI / 6)
+                            }
                         ];
 
-                        innerNumbers.forEach(function(item) {
+                        innerNumbers.forEach(function (item) {
                             var tx = cx + Math.cos(item.angle) * r_inner;
                             var ty = cy + Math.sin(item.angle) * r_inner;
 
-                            var rot = item.angle + Math.PI/2;
+                            var rot = item.angle + Math.PI / 2;
                             // Normalize rot to [-PI, PI]
-                            while (rot > Math.PI) rot -= 2 * Math.PI;
-                            while (rot < -Math.PI) rot += 2 * Math.PI;
+                            while (rot > Math.PI)
+                                rot -= 2 * Math.PI;
+                            while (rot < -Math.PI)
+                                rot += 2 * Math.PI;
 
                             // Flip 180 degrees if text is upside down (facing down)
-                            if (rot > Math.PI/2 || rot < -Math.PI/2) {
+                            if (rot > Math.PI / 2 || rot < -Math.PI / 2) {
                                 rot += Math.PI;
                             }
 
@@ -216,8 +250,12 @@ AbstractBackgroundWidget {
                 // Update canvas on style/color updates
                 Connections {
                     target: root
-                    function onActiveTextColorChanged() { dialCanvas.requestPaint(); }
-                    function onActiveSubtextColorChanged() { dialCanvas.requestPaint(); }
+                    function onActiveTextColorChanged() {
+                        dialCanvas.requestPaint();
+                    }
+                    function onActiveSubtextColorChanged() {
+                        dialCanvas.requestPaint();
+                    }
                 }
             }
 
@@ -352,9 +390,18 @@ AbstractBackgroundWidget {
                 height: batteryComplication.height * 1.85
                 z: 1.5
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Appearance.m3colors.m3shadow }
-                    GradientStop { position: 0.5; color: Appearance.m3colors.m3shadow }
-                    GradientStop { position: 1.0; color: "transparent" }
+                    GradientStop {
+                        position: 0.0
+                        color: Appearance.m3colors.m3shadow
+                    }
+                    GradientStop {
+                        position: 0.5
+                        color: Appearance.m3colors.m3shadow
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: "transparent"
+                    }
                 }
             }
 
@@ -381,8 +428,6 @@ AbstractBackgroundWidget {
                     anchors.centerIn: parent
                 }
             }
-
-
 
             // Complication 3: Hour Sub-dial (7:30 position) - no border circle
             Rectangle {
@@ -476,9 +521,18 @@ AbstractBackgroundWidget {
                 height: bedtimeIconContainer.height * 1.8
                 z: 1.5
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Appearance.m3colors.m3shadow }
-                    GradientStop { position: 0.5; color: Appearance.m3colors.m3shadow }
-                    GradientStop { position: 1.0; color: "transparent" }
+                    GradientStop {
+                        position: 0.0
+                        color: Appearance.m3colors.m3shadow
+                    }
+                    GradientStop {
+                        position: 0.5
+                        color: Appearance.m3colors.m3shadow
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: "transparent"
+                    }
                 }
             }
 
@@ -685,10 +739,22 @@ AbstractBackgroundWidget {
                 end: Qt.point(width * 0.96, height * 0.60)
                 cached: true
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.3; color: ColorUtils.applyAlpha("#FFFFFF", 0.42) }
-                    GradientStop { position: 0.7; color: ColorUtils.applyAlpha("#FFFFFF", 0.42) }
-                    GradientStop { position: 1.0; color: "transparent" }
+                    GradientStop {
+                        position: 0.0
+                        color: "transparent"
+                    }
+                    GradientStop {
+                        position: 0.3
+                        color: ColorUtils.applyAlpha("#FFFFFF", 0.42)
+                    }
+                    GradientStop {
+                        position: 0.7
+                        color: ColorUtils.applyAlpha("#FFFFFF", 0.42)
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: "transparent"
+                    }
                 }
                 layer.enabled: true
                 layer.effect: OpacityMask {
@@ -741,10 +807,22 @@ AbstractBackgroundWidget {
                 end: Qt.point(width * 0.04, height * 0.40)
                 cached: true
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.3; color: ColorUtils.applyAlpha("#FFFFFF", 0.28) }
-                    GradientStop { position: 0.7; color: ColorUtils.applyAlpha("#FFFFFF", 0.28) }
-                    GradientStop { position: 1.0; color: "transparent" }
+                    GradientStop {
+                        position: 0.0
+                        color: "transparent"
+                    }
+                    GradientStop {
+                        position: 0.3
+                        color: ColorUtils.applyAlpha("#FFFFFF", 0.28)
+                    }
+                    GradientStop {
+                        position: 0.7
+                        color: ColorUtils.applyAlpha("#FFFFFF", 0.28)
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: "transparent"
+                    }
                 }
                 layer.enabled: true
                 layer.effect: OpacityMask {

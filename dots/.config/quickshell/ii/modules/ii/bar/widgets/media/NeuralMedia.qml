@@ -154,7 +154,7 @@ Item {
     }
 
     // Real Cava Visualizer integration
-    property var visualizerPoints: []
+    property var visualizerPoints: CavaService.visualizerPoints
 
     readonly property real bar0Val: visualizerPoints.length > 5 ? visualizerPoints[3] / 1000.0 : 0
     readonly property real bar1Val: visualizerPoints.length > 11 ? visualizerPoints[9] / 1000.0 : 0
@@ -184,18 +184,6 @@ Item {
         else if (index === 2) val = bar2Val;
         else if (index === 3) val = bar3Val;
         return Math.min(1.0, Math.max(0.0, val * 2.0));
-    }
-
-    Process {
-        id: cavaProc
-        running: root.playing
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
-        stdout: SplitParser {
-            onRead: data => {
-                let points = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                root.visualizerPoints = points;
-            }
-        }
     }
 
     MouseArea {

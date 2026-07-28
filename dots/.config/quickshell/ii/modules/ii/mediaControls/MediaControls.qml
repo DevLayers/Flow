@@ -24,7 +24,7 @@ Scope {
     readonly property real widgetWidth: Appearance.sizes.mediaControlsWidth
     readonly property real widgetHeight: Appearance.sizes.mediaControlsHeight
     property real popupRounding: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
-    property list<real> visualizerPoints: []
+    property list<real> visualizerPoints: mediaControlsLoader.active ? CavaService.visualizerPoints : []
 
     property bool popupHovered: false
     readonly property bool targetHovered: GlobalStates.mediaWidgetHovered
@@ -111,23 +111,7 @@ Scope {
         return filtered;
     }
 
-    Process {
-        id: cavaProc
-        running: mediaControlsLoader.active
-        onRunningChanged: {
-            if (!cavaProc.running) {
-                root.visualizerPoints = [];
-            }
-        }
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
-        stdout: SplitParser {
-            onRead: data => {
-                // Parse `;`-separated values into the visualizerPoints array
-                let points = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                root.visualizerPoints = points;
-            }
-        }
-    }
+
 
     Loader {
         id: mediaControlsLoader

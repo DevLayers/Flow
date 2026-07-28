@@ -112,7 +112,7 @@ AbstractBackgroundWidget {
                         anchors.fill: parent
                         sourceItem: maskedImage
                         sourceRect: Qt.rect(overlayContainer.x, overlayContainer.y, overlayContainer.width, overlayContainer.height)
-                        live: photoImage.status === Image.Ready
+                        live: false
                         hideSource: false
                         visible: false
                     }

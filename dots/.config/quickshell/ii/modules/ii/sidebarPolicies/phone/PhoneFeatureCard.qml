@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
+import QtQuick.Effects
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
@@ -250,16 +250,16 @@ Item {
             colSymbol: root._foreground
             animateChange: true
 
-            FastBlur {
+            QtObject {
                 id: iconBlur
-                radius: 0
+                property real radius: 0
             }
 
             layer.enabled: iconBlur.radius > 0
-            layer.effect: Component {
-                FastBlur {
-                    radius: iconBlur.radius
-                }
+            layer.effect: MultiEffect {
+                blurEnabled: iconBlur.radius > 0
+                blurMax: 32
+                blur: Math.min(1.0, iconBlur.radius / 32)
             }
 
             transform: Rotation {
@@ -308,16 +308,16 @@ Item {
                 elide: Text.ElideRight
                 maximumLineCount: 1
 
-                FastBlur {
+                QtObject {
                     id: subTitleBlur
-                    radius: 0
+                    property real radius: 0
                 }
 
                 layer.enabled: subTitleBlur.radius > 0
-                layer.effect: Component {
-                    FastBlur {
-                        radius: subTitleBlur.radius
-                    }
+                layer.effect: MultiEffect {
+                    blurEnabled: subTitleBlur.radius > 0
+                    blurMax: 32
+                    blur: Math.min(1.0, subTitleBlur.radius / 32)
                 }
 
                 transform: Translate {

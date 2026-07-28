@@ -120,7 +120,7 @@ PanelWindow {
         onTriggered: bgRoot.deferredFullscreen = bgRoot.isFullscreen
     }
     onIsFullscreenChanged: fullscreenDeferTimer.restart()
-    visible: true
+    visible: GlobalStates.screenLocked || !bgRoot.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen)
 
     // Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)

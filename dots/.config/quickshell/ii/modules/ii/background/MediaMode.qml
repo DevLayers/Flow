@@ -45,7 +45,16 @@ Item { // Fullscreen MediaMode instance
     // Real Cava & Procedural Dynamic Visualizer Points
     property list<var> visualizerPoints: []
     property real animPhase: 0.0
-    property bool cavaActive: false
+    readonly property bool cavaActive: CavaService.visualizerPoints.length > 0
+
+    Connections {
+        target: CavaService
+        function onVisualizerPointsChanged() {
+            if (root.cavaActive) {
+                root.visualizerPoints = CavaService.visualizerPoints;
+            }
+        }
+    }
 
     Timer {
         id: proceduralVisualizerTimer
@@ -58,28 +67,13 @@ Item { // Fullscreen MediaMode instance
             const isPlaying = root.player?.isPlaying ?? false;
             for (let i = 0; i < 16; i++) {
                 if (isPlaying) {
-                    let base = 350 + 120 * Math.sin(root.animPhase + i * 0.28) + 60 * Math.cos(root.animPhase * 0.5 + i * 0.18);
-                    pts.push(Math.max(100, Math.min(750, base)));
+                     let base = 350 + 120 * Math.sin(root.animPhase + i * 0.28) + 60 * Math.cos(root.animPhase * 0.5 + i * 0.18);
+                     pts.push(Math.max(100, Math.min(750, base)));
                 } else {
-                    pts.push(40);
+                     pts.push(40);
                 }
             }
             root.visualizerPoints = pts;
-        }
-    }
-
-    Process {
-        id: cavaProc
-        running: root.visualizerMode > 0
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
-        stdout: SplitParser {
-            onRead: data => {
-                let pts = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                if (pts.length > 0) {
-                    root.cavaActive = true;
-                    root.visualizerPoints = pts;
-                }
-            }
         }
     }
 

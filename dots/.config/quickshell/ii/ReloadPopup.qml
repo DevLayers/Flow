@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 
@@ -39,8 +39,8 @@ Scope {
 			anchors.top: true
 			margins.top: 0
 
-			implicitWidth: rect.width + shadow.radius * 2
-			implicitHeight: rect.height + shadow.radius * 2
+			implicitWidth: rect.width + 12
+			implicitHeight: rect.height + 12
 
 			WlrLayershell.namespace: "quickshell:reloadPopup"
 
@@ -145,16 +145,16 @@ Scope {
 				Component.onCompleted: anim.start()
 			}
 
-			DropShadow {
+			MultiEffect {
 				id: shadow
-                anchors.fill: rect
-                horizontalOffset: 0
-                verticalOffset: 2
-                radius: 6
-                samples: radius * 2 + 1 // Ideally should be 2 * radius + 1, see qt docs
-                color: "#44000000"
-                source: rect
-            }
+				source: rect
+				anchors.fill: rect
+				shadowEnabled: true
+				shadowHorizontalOffset: 0
+				shadowVerticalOffset: 2
+				shadowBlur: 0.5
+				shadowColor: "#44000000"
+			}
 		}
 	}
 }

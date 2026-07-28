@@ -8,8 +8,6 @@ import qs.modules.common.functions
 Image {
     asynchronous: !source.toString().startsWith("image://icon/")
     retainWhileLoading: true
-    mipmap: true
-    smooth: true
     visible: opacity > 0
     opacity: (status === Image.Ready) ? 1 : 0
     Behavior on opacity {
@@ -27,7 +25,6 @@ Image {
     }
 
     sourceSize: {
-        if (width === 0 || height === 0) return Qt.size(1, 1);
         const dpr = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
         return Qt.size(width * dpr, height * dpr);
     }
