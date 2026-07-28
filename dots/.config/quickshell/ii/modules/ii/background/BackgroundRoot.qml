@@ -331,9 +331,8 @@ PanelWindow {
     }
 
     Component.onCompleted: {
-        if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
-            bgRoot.applyCurrentWallpaper();
-        }
+        // Do not re-run matugen / switchwall on quickshell reload/startup.
+        // Theme colors and wallpaper are already persisted on disk.
     }
 
     LockRippleEffect {
