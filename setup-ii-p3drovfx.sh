@@ -137,6 +137,7 @@ PROTECTED_PATTERNS=(
     "user/generated/*.json"
     "scripts/hyprland/workspace_compactor"
     "scripts/hyprland/workspace_profile_manager"
+    "scripts/osk/osk_autoshow"
 )
 
 # ── Options ──────────────────────────────────────────────────────────────────
