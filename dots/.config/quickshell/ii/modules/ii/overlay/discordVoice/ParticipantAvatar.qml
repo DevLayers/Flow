@@ -23,6 +23,57 @@ Item {
     property real transitionRotation: 0
     property bool componentReady: false
     property var displayedShape: MaterialShape.Shape.Circle
+
+    // A desaturated version of the theme accent reads as a calm status cue.
+    // Saturation alone isn't enough to tame it though: colPrimary is a light
+    // token by design, so it stays high-luminance (bright) against the dark
+    // overlay even fully desaturated. Pull lightness toward the background
+    // token too so the actual brightness, not just the colorfulness, drops.
+    function mutedAccent(base, bg) {
+        const c = Qt.color(base)
+        const b = Qt.color(bg)
+        const sat = c.hslSaturation * 0.35
+        const light = c.hslLightness * 0.45 + b.hslLightness * 0.55
+        return Qt.hsla(c.hslHue, sat, light, c.a)
+    }
+    readonly property color speakingColor: mutedAccent(Appearance.colors.colPrimary, Appearance.colors.colLayer2)
+    readonly property bool pulseContinuous: Config.options.overlay.discordVoice.speakingPulseContinuous
+
+    // Plain (unbound) property so both the one-shot transition Behavior and
+    // the looping pulse Animation below can drive it without fighting a
+    // binding on ring.scale itself.
+    property real speakingScale: 1
+
+    Behavior on speakingScale {
+        enabled: !speakingPulse.running
+        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutBack }
+    }
+
+    readonly property real speakingRingShrink: 1
+    property real ringShrink: 1
+
+    Behavior on ringShrink {
+        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutBack }
+    }
+
+    onSpeakingChanged: {
+        root.ringShrink = root.speaking ? root.speakingRingShrink : 1
+        if (!root.speaking) {
+            speakingPulse.stop()
+            root.speakingScale = 1
+        } else if (root.pulseContinuous) {
+            speakingPulse.restart()
+        } else {
+            root.speakingScale = 1.03
+        }
+    }
+
+    SequentialAnimation {
+        id: speakingPulse
+        loops: Animation.Infinite
+        NumberAnimation { target: root; property: "speakingScale"; to: 1.035; duration: 900; easing.type: Easing.InOutSine }
+        NumberAnimation { target: root; property: "speakingScale"; to: 1; duration: 900; easing.type: Easing.InOutSine }
+    }
     readonly property var avatarShape: participant?.deaf
         ? MaterialShape.Shape.Boom
         : (participant?.mute
@@ -82,21 +133,20 @@ Item {
         width: ring.width
         height: ring.height
         shape: root.displayedShape
-        color: Appearance.colors.colPrimary
+        color: root.speakingColor
         visible: false
     }
     Glow {
         anchors.fill: glowSource
         source: glowSource
-        color: Appearance.colors.colPrimary
-        radius: 18
+        color: root.speakingColor
+        radius: 12
         samples: 25
-        spread: 0.35
+        spread: 0.25
         transparentBorder: true
-        opacity: root.speaking ? 0.9 : 0
-        scale: root.speaking ? 1.18 : 0.9
+        opacity: root.speaking ? 0.45 : 0
+        scale: root.speakingScale
         Behavior on opacity { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
-        Behavior on scale { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutBack } }
     }
 
     MaterialShape {
@@ -108,8 +158,8 @@ Item {
         width: root.avatarSize
         height: root.avatarSize
         shape: root.displayedShape
-        color: root.speaking ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
-        scale: (root.speaking ? 1.1 : 1) * root.transitionScale
+        color: root.speaking ? root.speakingColor : Appearance.colors.colLayer2
+        scale: root.speakingScale * root.transitionScale * root.ringShrink
         rotation: root.transitionRotation
 
         Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
@@ -117,7 +167,7 @@ Item {
         Image {
             id: avatar
             anchors.fill: parent
-            anchors.margins: root.speaking ? 4 : 2
+            anchors.margins: 2
             source: DiscordVoice.avatarUrl(root.participant, 128)
             fillMode: Image.PreserveAspectCrop
             asynchronous: true

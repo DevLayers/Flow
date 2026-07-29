@@ -1724,6 +1724,7 @@ Singleton {
                     property string layoutMode: "column"
                     property bool blurEnabled: true
                     property bool autoResize: true
+                    property bool speakingPulseContinuous: true
                 }
             }
 

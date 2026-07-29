@@ -263,6 +263,14 @@ ContentPage {
                     Config.options.overlay.discordVoice.blurEnabled = checked;
                 }
             }
+            ConfigSwitch {
+                buttonIcon: "graphic_eq"
+                text: Translation.tr("Keep pulsing while speaking")
+                checked: Config.options.overlay.discordVoice.speakingPulseContinuous
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.speakingPulseContinuous = checked;
+                }
+            }
         }
     }
 }
