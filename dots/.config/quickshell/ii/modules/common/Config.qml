@@ -1745,7 +1745,7 @@ Singleton {
 
             property JsonObject regionSelector: JsonObject {
                 property bool showOnlyOnFocusedMonitor: false
-                property bool enableOverlay: false
+                property bool enableOverlay: true
                 property JsonObject targetRegions: JsonObject {
                     property bool windows: true
                     property bool layers: true

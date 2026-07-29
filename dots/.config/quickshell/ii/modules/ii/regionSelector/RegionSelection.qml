@@ -370,7 +370,7 @@ PanelWindow {
     }
 
     function defaultSaveDir() {
-        return Config.options.screenSnip.savePath !== "" ? Config.options.screenSnip.savePath : (Directories.home + "/Pictures/Screenshots");
+        return (Config.options.screenSnip.savePath !== "" ? Config.options.screenSnip.savePath : (Directories.home + "/Pictures/Screenshots")).toString().replace(/^file:\/\//, "");
     }
     function timestampedName() {
         return "screenshot-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_hh.mm.ss") + ".png";
@@ -380,15 +380,17 @@ PanelWindow {
         ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
         root.grabAnnotated(function (tempPath) {
             var esc = StringUtils.shellSingleQuoteEscape;
+            var overlayEnabled = Config.options.regionSelector.enableOverlay ?? true;
             if (saveToFile) {
                 var saveDir = root.defaultSaveDir();
                 var fullPath = saveDir + "/" + root.timestampedName();
                 Quickshell.execDetached(["bash", "-c", "mkdir -p '" + esc(saveDir) + "' && mv '" + esc(tempPath) + "' '" + esc(fullPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot saved' 'Saved to: " + esc(fullPath) + "'"]);
             } else {
-                Quickshell.execDetached(["bash", "-c", "wl-copy < '" + esc(tempPath) + "' && rm '" + esc(tempPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot copied' 'Copied to clipboard'"]);
+                var cleanCmd = overlayEnabled ? ":" : "rm '" + esc(tempPath) + "'";
+                Quickshell.execDetached(["bash", "-c", "wl-copy < '" + esc(tempPath) + "' && " + cleanCmd + " && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot copied' 'Copied to clipboard'"]);
             }
             // Trigger screenshot overlay
-            if (Config.options.regionSelector.enableOverlay ?? true) {
+            if (overlayEnabled) {
                 GlobalStates.screenshotOverlayImagePath = tempPath;
                 GlobalStates.screenshotOverlayRegionX = 0;
                 GlobalStates.screenshotOverlayRegionY = 0;

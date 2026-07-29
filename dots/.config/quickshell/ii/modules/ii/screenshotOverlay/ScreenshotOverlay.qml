@@ -53,6 +53,10 @@ Scope {
             ScreenshotOverlayContent {
                 id: popupContent
                 onDismissed: {
+                    var path = GlobalStates.screenshotOverlayImagePath;
+                    if (path.startsWith("/tmp/quickshell-snip-")) {
+                        Quickshell.execDetached(["rm", "-f", path]);
+                    }
                     GlobalStates.screenshotOverlayOpen = false
                     GlobalStates.screenshotOverlayImagePath = ""
                 }
