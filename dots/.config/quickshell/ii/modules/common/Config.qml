@@ -1049,6 +1049,7 @@ Singleton {
                     property bool showPlayerSwitcher: true
                     property bool showSeekBar: true
                     property bool showVolumeSlider: true
+                    property int lyricsOffsetMs: 0 // offset in milliseconds for lyrics sync adjustment
                     property JsonObject backgroundAnimation: JsonObject {
                         property bool enable: true
                         property int speedScale: 10 // 1: very slow, 10: default, 20: 2x speed etc.

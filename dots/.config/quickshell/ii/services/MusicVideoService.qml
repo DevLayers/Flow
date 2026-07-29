@@ -39,7 +39,6 @@ Singleton {
     /// True if the last search failed (shows fallback UI).
     readonly property bool searchFailed: _searchFailed
 
-
     // ── Internal state ──────────────────────────────────────────────────────
 
     property string _currentUrl: ""
@@ -64,10 +63,13 @@ Singleton {
     }
 
     onCurrentTrackIdChanged: {
-        if (!root.enabled) return;
-        if (currentTrackId === "" || currentTrackId === "|||") return;
+        if (!root.enabled)
+            return;
+        if (currentTrackId === "" || currentTrackId === "|||")
+            return;
         // Avoid re-searching the same track
-        if (currentTrackId === root._lastQuery) return;
+        if (currentTrackId === root._lastQuery)
+            return;
         root.searchAndPlay();
     }
 
@@ -79,12 +81,16 @@ Singleton {
     Connections {
         target: MprisController
         function onActiveTrackChanged() {
-            if (!root.enabled) return;
+            if (!root.enabled)
+                return;
             const track = MprisController.activeTrack;
-            if (!track) return;
+            if (!track)
+                return;
             const newId = (track.artist || "") + "|||" + (track.title || "");
-            if (newId === "" || newId === "|||") return;
-            if (newId === root._lastQuery) return;
+            if (newId === "" || newId === "|||")
+                return;
+            if (newId === root._lastQuery)
+                return;
             root.searchAndPlay();
         }
     }
@@ -97,9 +103,7 @@ Singleton {
             if (!GlobalStates.mediaModeActive) {
                 // Media mode closed entirely — kill video
                 root.stopVideo();
-            } else if (root.enabled && root.currentTrackId !== ""
-                       && root.currentTrackId !== root._lastQuery
-                       && !root.videoPlaying) {
+            } else if (root.enabled && root.currentTrackId !== "" && root.currentTrackId !== root._lastQuery && !root.videoPlaying) {
                 // Media mode opened with a new track — search
                 root.searchAndPlay();
             }
@@ -112,7 +116,8 @@ Singleton {
     readonly property bool _playerIsPlaying: root._activePlayerRef?.isPlaying ?? true
 
     on_PlayerIsPlayingChanged: {
-        if (!root.videoPlaying || !root._ipcSocket) return;
+        if (!root.videoPlaying || !root._ipcSocket)
+            return;
         if (root._playerIsPlaying) {
             root._resumeMpv();
         } else {
@@ -120,16 +125,18 @@ Singleton {
         }
     }
 
-
     // ── Core: search + play ─────────────────────────────────────────────────
 
     function searchAndPlay() {
-        if (!root.enabled) return;
-        if (!GlobalStates.mediaModeActive) return;
+        if (!root.enabled)
+            return;
+        if (!GlobalStates.mediaModeActive)
+            return;
 
         const artist = root.activePlayer?.trackArtist ?? "";
         const title = root.activePlayer?.trackTitle ?? "";
-        if (!title) return;
+        if (!title)
+            return;
 
         // Build search query
         const suffix = Config.options.background.mediaMode.musicVideo.searchSuffix ?? "official music video";
@@ -146,10 +153,7 @@ Singleton {
 
         // Search yt-dlp asynchronously — use --get-id for speed (no URL resolution)
         // mpvpaper will handle format selection via --ytdl-format
-        searchProc.command = ["bash", "-c",
-            "yt-dlp ytsearch1:" + _shellEscape(query) +
-            " --get-id --no-playlist --socket-timeout 5" +
-            " --no-warnings 2>/dev/null"];
+        searchProc.command = ["bash", "-c", "yt-dlp ytsearch1:" + _shellEscape(query) + " --get-id --no-playlist --socket-timeout 5" + " --no-warnings 2>/dev/null"];
         searchProc.running = true;
     }
 
@@ -174,16 +178,18 @@ Singleton {
             Quickshell.execDetached(["rm", "-f", root._ipcSocket]);
             root._ipcSocket = "";
         }
-        // Restore compositor blur that was disabled when video started
-        _restoreCompositorBlur();
     }
 
     // Used when user toggles the feature ON mid-session
     function tryPlayCurrent() {
-        if (!root.enabled) return;
-        if (!GlobalStates.mediaModeActive) return;
-        if (root.videoPlaying) return;
-        if (!root.currentTrackId || root.currentTrackId === "|||") return;
+        if (!root.enabled)
+            return;
+        if (!GlobalStates.mediaModeActive)
+            return;
+        if (root.videoPlaying)
+            return;
+        if (!root.currentTrackId || root.currentTrackId === "|||")
+            return;
 
         // If we already have a cached URL for this track, reuse it
         if (root.currentTrackId === root._lastQuery && root._cachedUrl !== "") {
@@ -195,7 +201,6 @@ Singleton {
         root.searchAndPlay();
     }
 
-
     // ── Process: yt-dlp search ──────────────────────────────────────────────
 
     Process {
@@ -203,9 +208,10 @@ Singleton {
         running: false
 
         stdout: SplitParser {
-            onRead: function(data) {
+            onRead: function (data) {
                 // Guard: ignore stale results from a previous track's search
-                if (root._searchingForTrack !== root.currentTrackId) return;
+                if (root._searchingForTrack !== root.currentTrackId)
+                    return;
                 const videoId = String(data).trim();
                 // Accept any non-empty video ID (11 chars for standard YT IDs)
                 if (videoId.length >= 10) {
@@ -217,7 +223,7 @@ Singleton {
             }
         }
 
-        onExited: function(exitCode, exitStatus) {
+        onExited: function (exitCode, exitStatus) {
             if (exitCode !== 0 || root._currentUrl === "") {
                 root._searchFailed = true;
                 console.warn("[MusicVideo] yt-dlp search failed for:", root._lastQuery);
@@ -225,14 +231,15 @@ Singleton {
         }
     }
 
-
     // ── Process: mpvpaper ───────────────────────────────────────────────────
 
     function _launchMpvpaper(url) {
         // Guard: user may have toggled the feature off while yt-dlp was searching
-        if (!root.enabled) return;
+        if (!root.enabled)
+            return;
         // Guard: track may have changed while yt-dlp was searching
-        if (root._searchingForTrack !== root.currentTrackId) return;
+        if (root._searchingForTrack !== root.currentTrackId)
+            return;
 
         const monitorName = _getActiveMonitorName();
         if (!monitorName) {
@@ -241,61 +248,60 @@ Singleton {
             return;
         }
 
-        // Get current music position for sync (microseconds → seconds)
-        const posUs = MprisController.activePlayer?.position ?? 0;
-        const startSec = Math.floor(posUs / 1000000);
-
         // Unique IPC socket for pause/resume/seek control
         const socketPath = "/tmp/ii-musicvideo.sock";
 
-        // Build mpvpaper command — use --ytdl-format for quality (resolved by mpv's yt-dlp)
+        // Build mpvpaper command — high quality format & bitrate selection
         const maxRes = Config.options.background.mediaMode.musicVideo.maxResolution ?? 1080;
-        const ytdlFormat = "bestvideo[height<=" + maxRes + "]+bestaudio/best[height<=" + maxRes + "]";
-        const mpvOpts = [
-            "--aid=no",
-            "--no-border",
-            "--loop=inf",
-            "--no-terminal",
-            "--start=" + startSec,
-            "--input-ipc-server=" + socketPath,
-            "--ytdl-format=" + ytdlFormat
-        ];
+        const ytdlFormat = "bestvideo[height<=" + maxRes + "][vcodec!=?none]+bestaudio/best[height<=" + maxRes + "]/best";
+        
+        // Options passed inside mpvpaper's -o string to mpv:
+        const innerMpvOpts = [
+            "aid=no",
+            "no-border",
+            "loop=inf",
+            "no-terminal",
+            "input-ipc-server=" + socketPath,
+            "ytdl-format=" + ytdlFormat
+        ].join(" ");
 
-        mpvpaperProc.command = [
-            "mpvpaper",
-            "-l", "background",
-            monitorName,
-            url,
-            "-o", mpvOpts.join(" ")
-        ];
+        mpvpaperProc.command = ["mpvpaper", "-l", "background", "-o", innerMpvOpts, monitorName, url];
 
         mpvpaperProc.running = true;
         root._ipcSocket = socketPath;
 
-        // Start sync timer: first fire at 5s (waits for mpv's yt-dlp YouTube URL resolution),
-        // subsequent fires every 3s (handles user seeks and drift).
-        root._syncInitial = true;
-        syncTimer.interval = 5000;
+        // Launch async sync script (waits for mpv file-loaded event and seeks accurately)
+        const scriptPath = Quickshell.scriptPath("scripts/music_video/sync.sh");
+        Quickshell.execDetached([scriptPath, socketPath]);
+
+        // Periodic sync timer: checks drift between mpv and player position
+        syncTimer.interval = 8000;
         syncTimer.restart();
 
         // Apply pause state immediately (in case music was paused when search finished)
         if (!(MprisController.activePlayer?.isPlaying ?? true)) {
             _pauseMpv();
         }
-
-        // Disable Hyprland compositor blur
-        _disableCompositorBlur();
     }
 
-    // ── Playback sync helpers ─────────────────────────────────────────────────
+    // ── Track position seeking listener (when user seeks track) ────────────
+    readonly property real _playerPositionSec: Math.floor((root.activePlayer?.position ?? 0) / 1000000)
 
-    property string _ipcSocket: ""
+    on_PlayerPositionSecChanged: {
+        if (!root.videoPlaying || !root._ipcSocket)
+            return;
+        // Ignore zero position ticks if player is settling
+        if (root._playerPositionSec < 0)
+            return;
+        // Seek video immediately when user seeks in track
+        root._sendMpvCommand('{"command":["seek","' + root._playerPositionSec + '","absolute"]}');
+    }
 
     function _sendMpvCommand(jsonCmd) {
-        if (!root._ipcSocket) return;
+        if (!root._ipcSocket)
+            return;
         const escaped = jsonCmd.replace(/'/g, "'\\''");
-        Quickshell.execDetached(["bash", "-c",
-            "echo '" + escaped + "' | socat - UNIX-CONNECT:" + root._ipcSocket + " 2>/dev/null"]);
+        Quickshell.execDetached(["bash", "-c", "echo '" + escaped + "' | socat - UNIX-CONNECT:" + root._ipcSocket + " 2>/dev/null"]);
     }
 
     function _pauseMpv() {
@@ -306,47 +312,50 @@ Singleton {
         _sendMpvCommand('{"command":["set_property","pause",false]}');
     }
 
-    // ── Delayed IPC seek + periodic sync ────────────────────────────────────
-    // First trigger waits 5s for mpv's internal yt-dlp to resolve YouTube URLs.
-    // Subsequent triggers at 3s intervals handle user seeks and drift correction.
+    // ── Periodic drift check sync ──────────────────────────────────────────
+    // Every 8s, query mpv's time-pos via socat/IPC, calculate drift against player position,
+    // and seek mpv if drift > 3 seconds.
 
-    Timer {
-        id: syncTimer
-        interval: 5000  // long initial delay to wait for YouTube URL resolution
-        repeat: true
+    Process {
+        id: driftCheckProc
         running: false
-        onTriggered: {
-            // After first fire, switch to shorter periodic interval
-            if (root._syncInitial) {
-                root._syncInitial = false;
-                syncTimer.interval = 3000;
-            }
-            if (!root._ipcSocket || !root.videoPlaying) {
-                syncTimer.stop();
-                return;
-            }
-            const posUs = MprisController.activePlayer?.position ?? 0;
-            const currentSec = Math.floor(posUs / 1000000);
-            if (currentSec > 0) {
-                root._sendMpvCommand('{"command":["seek","' + currentSec + '","absolute"]}');
+        stdout: SplitParser {
+            onRead: function (data) {
+                try {
+                    const res = JSON.parse(String(data).trim());
+                    if (res && typeof res.data === "number") {
+                        const mpvPos = res.data;
+                        const posUs = MprisController.activePlayer?.position ?? 0;
+                        const playerPos = Math.floor(posUs / 1000000);
+                        const drift = Math.abs(mpvPos - playerPos);
+
+                        if (drift > 3 && playerPos >= 0) {
+                            root._sendMpvCommand('{"command":["seek","' + playerPos + '","absolute"]}');
+                        }
+                    }
+                } catch (e) {}
             }
         }
     }
 
-    function _disableCompositorBlur() {
-        // Set blur size to 0 to effectively disable compositor blur.
-        // Using decoration:blur:enabled=0 doesn't affect layer shell blur rules.
-        // We save the current size so we can restore it when video stops.
-        root._savedBlurSize = Config.options.appearance.blurSize ?? 8;
-        Quickshell.execDetached(["hyprctl", "eval",
-            "hl.config({ decoration = { blur = { size = 0 } } })"]);
-    }
+    Timer {
+        id: syncTimer
+        interval: 8000
+        repeat: true
+        running: false
+        onTriggered: {
+            if (!root._ipcSocket || !root.videoPlaying) {
+                syncTimer.stop();
+                return;
+            }
+            if (!(MprisController.activePlayer?.isPlaying ?? false))
+                return;
 
-    function _restoreCompositorBlur() {
-        if (root._savedBlurSize > 0) {
-            Quickshell.execDetached(["hyprctl", "eval",
-                "hl.config({ decoration = { blur = { size = " + root._savedBlurSize + " } } })"]);
-            root._savedBlurSize = 0;
+            // Query time-pos from mpv IPC
+            const cmd = '{"command":["get_property","time-pos"]}';
+            const escaped = cmd.replace(/'/g, "'\\''");
+            driftCheckProc.command = ["bash", "-c", "echo '" + escaped + "' | socat - UNIX-CONNECT:" + root._ipcSocket + " 2>/dev/null"];
+            driftCheckProc.running = true;
         }
     }
 
@@ -372,7 +381,7 @@ Singleton {
         id: mpvpaperProc
         running: false
 
-        onExited: function(exitCode, exitStatus) {
+        onExited: function (exitCode, exitStatus) {
             root._currentUrl = "";
             if (exitCode !== 0 && !root._searchFailed) {
                 console.warn("[MusicVideo] mpvpaper exited with code:", exitCode);
@@ -380,7 +389,6 @@ Singleton {
             }
         }
     }
-
 
     // ── Cleanup ─────────────────────────────────────────────────────────────
 
