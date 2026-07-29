@@ -71,7 +71,6 @@ Scope {
         component: Dock {}
     }
     PanelLoader {
-        extraCondition: GlobalStates.screenLocked
         component: Lock {}
     }
     PanelLoader {
