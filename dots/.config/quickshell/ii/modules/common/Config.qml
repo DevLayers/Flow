@@ -1695,6 +1695,18 @@ Singleton {
             property JsonObject osk: JsonObject {
                 property string layout: "qwerty_full"
                 property bool pinnedOnStartup: false
+
+                // Raises the keyboard when a text field is focused by finger or pen.
+                // Requires the osk_autoshow helper (see scripts/osk/README.md).
+                property JsonObject autoShow: JsonObject {
+                    property bool enable: false
+                    property bool allowTouch: true
+                    property bool allowPen: true
+                    // How long after a touch a text field may claim focus and still count as touch-driven.
+                    property int touchWindowMs: 1200
+                    property bool hideOnPhysicalKey: true
+                    property bool hideOnTouchOutside: true
+                }
             }
 
             property JsonObject overlay: JsonObject {

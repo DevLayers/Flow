@@ -132,6 +132,80 @@ Item {
 
         }
 
+        ContentSection {
+            title: Translation.tr("On-screen Keyboard")
+            icon: "keyboard"
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                ConfigSwitch {
+                    buttonIcon: "touch_app"
+                    text: Translation.tr("Show automatically on touch")
+                    checked: Config.options.osk.autoShow.enable
+                    onCheckedChanged: {
+                        Config.options.osk.autoShow.enable = checked;
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "pan_tool"
+                    text: Translation.tr("Trigger with finger")
+                    enabled: Config.options.osk.autoShow.enable
+                    checked: Config.options.osk.autoShow.allowTouch
+                    onCheckedChanged: {
+                        Config.options.osk.autoShow.allowTouch = checked;
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "stylus"
+                    text: Translation.tr("Trigger with pen")
+                    enabled: Config.options.osk.autoShow.enable
+                    checked: Config.options.osk.autoShow.allowPen
+                    onCheckedChanged: {
+                        Config.options.osk.autoShow.allowPen = checked;
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "keyboard_hide"
+                    text: Translation.tr("Hide when typing on a real keyboard")
+                    enabled: Config.options.osk.autoShow.enable
+                    checked: Config.options.osk.autoShow.hideOnPhysicalKey
+                    onCheckedChanged: {
+                        Config.options.osk.autoShow.hideOnPhysicalKey = checked;
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "gesture"
+                    text: Translation.tr("Hide when tapping outside")
+                    enabled: Config.options.osk.autoShow.enable
+                    checked: Config.options.osk.autoShow.hideOnTouchOutside
+                    onCheckedChanged: {
+                        Config.options.osk.autoShow.hideOnTouchOutside = checked;
+                    }
+                }
+
+                ConfigSpinBox {
+                    icon: "timer"
+                    text: Translation.tr("Touch window (ms)")
+                    enabled: Config.options.osk.autoShow.enable
+                    value: Config.options.osk.autoShow.touchWindowMs
+                    from: 200
+                    to: 5000
+                    stepSize: 100
+                    onValueChanged: {
+                        Config.options.osk.autoShow.touchWindowMs = value;
+                    }
+                }
+
+            }
+
+        }
+
     }
 
     ConfigSubPageHost {
