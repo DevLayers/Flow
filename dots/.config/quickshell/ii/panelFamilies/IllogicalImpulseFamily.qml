@@ -71,13 +71,14 @@ Scope {
         component: Dock {}
     }
     PanelLoader {
+        extraCondition: GlobalStates.screenLocked
         component: Lock {}
     }
     PanelLoader {
         component: MediaControls {}
     }
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable && GlobalStates.bluetoothConnectionPopupOpen
         component: BluetoothConnectionPopup {}
     }
     PanelLoader {
@@ -85,7 +86,7 @@ Scope {
         component: KeyboardLayoutTransitionPopup {}
     }
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable && GlobalStates.localSendPopupOpen
         component: LocalSendPopup {}
     }
     PanelLoader {
@@ -155,18 +156,22 @@ Scope {
         component: WrappedFrame {}
     }
     PanelLoader {
+        extraCondition: GlobalStates.videoEditorPopupOpen
         component: VideoEditorPopup {}
     }
     PanelLoader {
+        extraCondition: GlobalStates.videoEditorOpen
         component: VideoEditor {}
     }
     PanelLoader {
         component: ScratchpadOverlay {}
     }
     PanelLoader {
+        extraCondition: AlarmService.ringingAlarmIndex !== -1 && Config.options.time.alarms.useFullscreenPopup
         component: AlarmRingingPopup {}
     }
     PanelLoader {
+        extraCondition: GlobalStates.screenshotOverlayOpen
         component: ScreenshotOverlay {}
     }
     PanelLoader {

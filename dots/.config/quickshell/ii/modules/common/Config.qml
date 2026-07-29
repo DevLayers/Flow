@@ -336,6 +336,7 @@ Singleton {
             }
 
             property JsonObject phone: JsonObject {
+                property bool kdeconnectEnabled: true
                 property bool showPeripheralCards: true
                 property JsonObject scrcpy: JsonObject {
                     property bool stayAwake: false  // bare scrcpy default — don't add overhead

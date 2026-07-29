@@ -46,6 +46,7 @@ Singleton {
     // && v4l2loopbackLoaded). The granular flags are below in the dependency
     // section.
     property bool running: false
+    onRunningChanged: GlobalStates.phoneCameraRunning = running
     property bool connecting: false
     property string videoDevice: ""
     property string activeIp: ""

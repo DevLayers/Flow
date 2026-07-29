@@ -15,6 +15,7 @@ Item {
     required property var scopeRoot
     property int sidebarPadding: 12
     anchors.fill: parent
+    property var visitedTabs: ({})
 
     // Toggles from Config
     property bool aiChatEnabled: Config.options.policies.ai !== 0
@@ -114,6 +115,9 @@ Item {
     Connections {
         target: GlobalStates
         function onSidebarLeftOpenChanged() {
+            if (!GlobalStates.sidebarLeftOpen) {
+                root.visitedTabs = {};
+            }
             if (GlobalStates.sidebarLeftOpen) {
                 if ((Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25) {
                     toolbarContainer.opacity = 1
@@ -264,6 +268,14 @@ Item {
                         root._prevTabIndex = currentIndex;
                     });
                     
+                    if (currentIndex >= 0) {
+                        var visited = root.visitedTabs;
+                        if (!visited[currentIndex]) {
+                            visited[currentIndex] = true;
+                            root.visitedTabs = visited;
+                        }
+                    }
+
                     if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.triggerContentEntrance === "function") {
                         swipeView.currentItem.item.triggerContentEntrance();
                     }
@@ -276,6 +288,9 @@ Item {
                     if (count > 0 && Persistent.states.sidebar.policies.tab >= 0 && Persistent.states.sidebar.policies.tab < count) {
                         currentIndex = Persistent.states.sidebar.policies.tab;
                     }
+                    var visited = root.visitedTabs;
+                    visited[currentIndex] = true;
+                    root.visitedTabs = visited;
                 }
 
                 implicitWidth: Math.max.apply(null, contentChildren.map(child => child.implicitWidth || 0))
@@ -290,7 +305,8 @@ Item {
                         required property var modelData
                         required property int index
 
-                        active: SwipeView.isCurrentItem || SwipeView.isNextItem || SwipeView.isPreviousItem
+                        active: (GlobalStates.sidebarLeftOpen && (SwipeView.isCurrentItem || !!root.visitedTabs[index]))
+                                || (modelData.icon === "smartphone" && (GlobalStates.phoneMicRunning || GlobalStates.phoneCameraRunning))
                         sourceComponent: modelData.component
 
                         transform: Translate {
