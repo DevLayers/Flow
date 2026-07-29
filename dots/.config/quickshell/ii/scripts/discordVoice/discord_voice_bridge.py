@@ -47,12 +47,12 @@ class Bridge:
         self.authorization_failed_paths: set[str] = set()
         self.authorization_tasks: dict[str, asyncio.Task[None]] = {}
         cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-        self.token_path = cache / "end4-pC" / "discord-voice-token.json"
+        self.token_path = cache / "quickshell-ii" / "discord-voice-token.json"
         # The companion socket is deliberately confined to XDG_RUNTIME_DIR,
         # which is user-owned and mode 0700. There is no shared-directory
         # fallback.
         runtime = os.environ.get("XDG_RUNTIME_DIR", "")
-        self.vencord_socket_path = Path(runtime) / "end4-discord-voice-vencord.sock" if runtime else None
+        self.vencord_socket_path = Path(runtime) / "ii-discord-voice-vencord.sock" if runtime else None
         self.vencord_server: asyncio.Server | None = None
         self.vencord_writer: asyncio.StreamWriter | None = None
         self.vencord_socket_inode: int | None = None
@@ -313,13 +313,13 @@ class Bridge:
         else:
             emit("error", message=(
                 "The connected Discord client does not support voice authorization. "
-                "Vesktop/Vencord users must install and enable the end4 Discord Voice companion."))
+                "Vesktop/Vencord users must install and enable the II Discord Voice companion."))
 
     @staticmethod
     def exchange(code: str) -> str:
         request = urllib.request.Request(TOKEN_URL,
             data=json.dumps({"code": code}).encode(),
-            headers={"Content-Type": "application/json", "User-Agent": "end4-pC/DiscordVoice"},
+            headers={"Content-Type": "application/json", "User-Agent": "quickshell-ii/DiscordVoice"},
             method="POST")
         with urllib.request.urlopen(request, timeout=10) as response:
             return json.loads(response.read().decode())["access_token"]

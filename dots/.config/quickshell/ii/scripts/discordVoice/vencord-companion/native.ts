@@ -1,5 +1,5 @@
 /*
- * end4-pC Discord Voice companion for Vencord
+ * Quickshell/II Discord Voice companion for Vencord
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -7,8 +7,9 @@ import type { IpcMainInvokeEvent } from "electron";
 import { createConnection, Socket } from "net";
 import { join } from "path";
 
-const runtime = process.env.XDG_RUNTIME_DIR || "";
-const socketPath = runtime ? join(runtime, "end4-discord-voice-vencord.sock") : "";
+const uid = typeof process.getuid === "function" ? process.getuid() : 1000;
+const runtime = process.env.XDG_RUNTIME_DIR || `/run/user/${uid}`;
+const socketPath = join(runtime, "ii-discord-voice-vencord.sock");
 
 let socket: Socket | undefined;
 let connecting = false;
@@ -33,11 +34,13 @@ function connect() {
     // A dropped connection can leave a partial line buffered. Carrying it into
     // the next session would corrupt that session's first command.
     input = "";
+    console.log("[iiDiscordVoice] Connecting to socket:", socketPath);
     const candidate = createConnection(socketPath);
     socket = candidate;
     candidate.setEncoding("utf8");
     candidate.on("connect", () => {
         connecting = false;
+        console.log("[iiDiscordVoice] Connected to Quickshell socket!");
         if (latestState) candidate.write(latestState);
     });
     candidate.on("data", chunk => {
@@ -49,7 +52,8 @@ function connect() {
             if (line) deliver(line);
         }
     });
-    candidate.on("error", () => {
+    candidate.on("error", (err) => {
+        console.error("[iiDiscordVoice] Socket error:", err);
         connecting = false;
         candidate.destroy();
     });

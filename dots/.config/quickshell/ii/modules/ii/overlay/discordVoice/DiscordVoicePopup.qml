@@ -8,7 +8,7 @@ import qs.modules.common.widgets
 
 StyledPopup {
     id: root
-    contentPadding: Appearance.spacing.space200
+    contentPadding: 16
 
     function beginAuthorization() {
         root.pinnedOpen = false;
@@ -24,7 +24,7 @@ StyledPopup {
     ColumnLayout {
         id: panel
         implicitWidth: 384
-        spacing: Appearance.spacing.space200
+        spacing: 16
         transformOrigin: Item.Top
 
         ParallelAnimation {
@@ -35,7 +35,7 @@ StyledPopup {
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: Appearance.spacing.space100
+            spacing: 8
             DiscordGlyph {
                 shape: MaterialShape.Shape.Cookie7Sided
                 implicitSize: 44
@@ -75,7 +75,7 @@ StyledPopup {
         Flow {
             visible: DiscordVoice.participantCount > 0
             Layout.fillWidth: true
-            spacing: Appearance.spacing.space150
+            spacing: 12
             Repeater {
                 model: DiscordVoice.participantModel
                 ParticipantAvatar { avatarSize: 52; showName: true; maxNameWidth: 64 }
@@ -90,7 +90,7 @@ StyledPopup {
             color: Appearance.colors.colLayer2
             Column {
                 anchors.centerIn: parent
-                spacing: Appearance.spacing.space25
+                spacing: 2
                 StyledText {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: DiscordVoice.status === "auth_required" ? "Discord authorization required" : "Join a Discord voice channel"
@@ -108,8 +108,8 @@ StyledPopup {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.topMargin: Appearance.spacing.space50
-            spacing: Appearance.spacing.space150
+            Layout.topMargin: 4
+            spacing: 12
             Item { visible: DiscordVoice.inVoice; Layout.fillWidth: true }
             RippleButton {
                 visible: DiscordVoice.status === "auth_required" || DiscordVoice.status === "authorizing"
@@ -145,6 +145,7 @@ StyledPopup {
                 colBackgroundHover: Appearance.colors.colLayer1Hover
                 onClicked: DiscordVoice.setMuted(!DiscordVoice.muted)
                 contentItem: MaterialShapeWrappedMaterialSymbol {
+                        anchors.centerIn: parent
                         text: DiscordVoice.muted ? "mic_off" : "mic"
                         shape: DiscordVoice.muted ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Cookie4Sided
                         implicitSize: 56
@@ -164,6 +165,7 @@ StyledPopup {
                 colBackgroundHover: Appearance.colors.colLayer1Hover
                 onClicked: DiscordVoice.setDeafened(!DiscordVoice.deafened)
                 contentItem: MaterialShapeWrappedMaterialSymbol {
+                        anchors.centerIn: parent
                         text: DiscordVoice.deafened ? "headset_off" : "headphones"
                         shape: DiscordVoice.deafened ? MaterialShape.Shape.Boom : MaterialShape.Shape.Clover4Leaf
                         implicitSize: 56

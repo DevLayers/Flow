@@ -212,8 +212,9 @@ ContentPage {
                     currentValue: Config.options.overlay.discordVoice.layoutMode
                     onSelected: newValue => { Config.options.overlay.discordVoice.layoutMode = newValue; }
                     options: [
-                        { displayName: Translation.tr("Row"),    icon: "view_week", value: "row" },
-                        { displayName: Translation.tr("Column"), icon: "view_agenda", value: "column" }
+                        { displayName: Translation.tr("Row"),    icon: "view_week",   value: "row" },
+                        { displayName: Translation.tr("Column"), icon: "view_agenda", value: "column" },
+                        { displayName: Translation.tr("Grid"),   icon: "grid_view",   value: "grid" }
                     ]
                 }
             }

@@ -23,8 +23,6 @@ Item {
     property real transitionRotation: 0
     property bool componentReady: false
     property var displayedShape: MaterialShape.Shape.Circle
-    // Speaking is signalled by scale + glow, not by morphing the outline, so the
-    // avatar shape reflects only the persistent mute/deaf state.
     readonly property var avatarShape: participant?.deaf
         ? MaterialShape.Shape.Boom
         : (participant?.mute
@@ -32,13 +30,12 @@ Item {
             : MaterialShape.Shape.Circle)
 
     implicitWidth: root.horizontalLayout
-        ? Math.max(176, root.avatarSize + root.maxNameWidth + Appearance.spacing.space100)
+        ? Math.max(176, root.avatarSize + root.maxNameWidth + 16)
         : (root.showName
-            ? Math.max(root.avatarSize, root.maxNameWidth
-                + (root.backgroundMode === "name" ? Appearance.spacing.space200 : 0))
+            ? Math.max(root.avatarSize, root.maxNameWidth + 16)
             : root.avatarSize)
-    implicitHeight: root.horizontalLayout ? root.avatarSize
-        : root.avatarSize + (root.showName ? nameText.implicitHeight + Appearance.spacing.space25 : 0)
+    implicitHeight: root.horizontalLayout ? root.avatarSize + 12
+        : root.avatarSize + (root.showName ? nameText.implicitHeight + 16 : 12)
 
     function transitionToCurrentShape() {
         ParticipantVisualState.remember(root.participant?.id, root.avatarShape)
@@ -72,21 +69,13 @@ Item {
 
     Rectangle {
         visible: root.backgroundMode === "card"
-        x: Math.min(ring.x, nameText.x) - Appearance.spacing.space50
-        y: Math.min(ring.y, nameText.y) - Appearance.spacing.space50
-        width: Math.max(ring.x + ring.width, nameText.x + nameText.width)
-            - Math.min(ring.x, nameText.x) + Appearance.spacing.space100
-        height: Math.max(ring.y + ring.height, nameText.y + nameText.height)
-            - Math.min(ring.y, nameText.y) + Appearance.spacing.space100
+        anchors.fill: parent
         radius: Appearance.rounding.large
         color: ColorUtils.transparentize(Appearance.colors.colLayer2, 1 - root.backgroundOpacity)
         border.width: Appearance.borderWidth.standard
         border.color: Appearance.colors.colLayer0Border
     }
 
-    // Speaking glow: a soft primary-coloured halo bloomed from the avatar
-    // outline. Declared before the ring so it renders behind it, and driven by
-    // opacity + scale so entering/leaving the speaking state fades and swells.
     MaterialShape {
         id: glowSource
         anchors.centerIn: ring
@@ -113,9 +102,9 @@ Item {
     MaterialShape {
         id: ring
         x: root.horizontalLayout
-            ? (root.nameOnLeft ? root.width - width : 0)
+            ? (root.nameOnLeft ? root.width - width - 6 : 6)
             : Math.round((root.width - width) / 2)
-        y: 0
+        y: root.horizontalLayout ? Math.round((root.height - height) / 2) : 8
         width: root.avatarSize
         height: root.avatarSize
         shape: root.displayedShape
@@ -128,8 +117,7 @@ Item {
         Image {
             id: avatar
             anchors.fill: parent
-            anchors.margins: root.speaking
-                ? Appearance.spacing.space50 : Appearance.spacing.space25
+            anchors.margins: root.speaking ? 4 : 2
             source: DiscordVoice.avatarUrl(root.participant, 128)
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
@@ -165,7 +153,7 @@ Item {
             color: Appearance.colors.colErrorContainer
             text: root.participant?.deaf ? "headset_off" : "mic_off"
             iconSize: 12
-            padding: Appearance.spacing.space25
+            padding: 2
             colSymbol: Appearance.colors.colOnErrorContainer
         }
     }
@@ -176,15 +164,15 @@ Item {
         visible: root.showName
         x: root.horizontalLayout
             ? (root.nameOnLeft
-                ? ring.x - Appearance.spacing.space100 - width
-                : ring.x + root.avatarSize + Appearance.spacing.space100)
+                ? ring.x - 8 - width
+                : ring.x + root.avatarSize + 8)
             : Math.round((root.width - width) / 2)
         y: root.horizontalLayout
             ? Math.round((root.avatarSize - height) / 2)
-            : root.avatarSize + Appearance.spacing.space25
+            : ring.y + root.avatarSize + 4
         width: root.horizontalLayout
             ? Math.min(root.maxNameWidth, implicitWidth)
-            : root.maxNameWidth
+            : Math.min(root.width - 8, root.maxNameWidth)
         text: root.participant?.nick || root.participant?.username || "Unknown"
         elide: Text.ElideRight
         horizontalAlignment: root.horizontalLayout
@@ -198,11 +186,13 @@ Item {
     Rectangle {
         visible: root.showName && root.backgroundMode === "name"
         z: 1
-        x: nameText.x - Appearance.spacing.space100
-        y: nameText.y - Appearance.spacing.space50
-        width: nameText.width + Appearance.spacing.space200
-        height: nameText.height + Appearance.spacing.space100
-        radius: Appearance.rounding.full
-        color: ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, 1 - root.backgroundOpacity)
+        x: nameText.x - 8
+        y: nameText.y - 3
+        width: nameText.width + 16
+        height: nameText.height + 6
+        radius: Appearance.rounding.verysmall
+        color: ColorUtils.transparentize(Appearance.colors.colLayer2, 1 - root.backgroundOpacity)
+        border.width: Appearance.borderWidth.standard
+        border.color: Appearance.colors.colLayer0Border
     }
 }

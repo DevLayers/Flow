@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import qs.modules.common
-import "../../common/plugins/bundled/discordVoice" as DiscordPackage
+import "./discordVoice" as DiscordPackage
 
 Singleton {
     id: root

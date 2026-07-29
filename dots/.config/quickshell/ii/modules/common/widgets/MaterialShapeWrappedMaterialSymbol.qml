@@ -25,8 +25,7 @@ MaterialShape {
         id: symbol
         anchors.centerIn: parent
         color: root.colSymbol
-        width: root.iconSize
-        height: root.iconSize
+        iconSize: root.iconSize
         rotation: 360 - root.rotation
     }
 }

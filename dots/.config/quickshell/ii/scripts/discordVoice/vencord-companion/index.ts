@@ -1,5 +1,5 @@
 /*
- * end4-pC Discord Voice companion for Vencord
+ * Quickshell/II Discord Voice companion for Vencord
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -7,7 +7,7 @@ import definePlugin, { PluginNative } from "@utils/types";
 import { findByPropsLazy } from "@webpack";
 import { ChannelRTCStore, ChannelStore, GuildMemberStore, SelectedChannelStore, UserStore, VoiceStateStore } from "@webpack/common";
 
-const Native = VencordNative.pluginHelpers.End4DiscordVoice as PluginNative<typeof import("./native")>;
+const Native = VencordNative.pluginHelpers.iiDiscordVoice as PluginNative<typeof import("./native")>;
 const AudioActions = findByPropsLazy("toggleSelfMute", "toggleSelfDeaf");
 
 let timer: ReturnType<typeof setInterval> | undefined;
@@ -102,8 +102,8 @@ async function publish() {
 }
 
 export default definePlugin({
-    name: "End4DiscordVoice",
-    description: "Shares Vesktop voice state with the end4-pC Quickshell plugin",
+    name: "iiDiscordVoice",
+    description: "Shares Vesktop voice state with Quickshell/II",
     authors: [{ name: "xephy", id: 0n }],
     enabledByDefault: true,
 
