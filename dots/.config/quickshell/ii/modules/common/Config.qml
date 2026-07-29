@@ -1309,12 +1309,12 @@ Singleton {
                     property int activeIndicatorOpacity: 100 // 0-100
                     property bool dynamicWorkspaces: false
                     property bool useMaterialShapeForActiveIndicator: false
-                     property bool useRandomShapeForActiveIndicator: true
-                     property string activeIndicatorShape: "Pentagon"
-                     property bool dockShowActiveIndicator: true
-                     property bool dockShowWindowDots: true
-                     property bool dockHoverEffect: true
-                     property bool dockShowAppIcons: true
+                    property bool useRandomShapeForActiveIndicator: true
+                    property string activeIndicatorShape: "Pentagon"
+                    property bool dockShowActiveIndicator: true
+                    property bool dockShowWindowDots: true
+                    property bool dockHoverEffect: true
+                    property bool dockShowAppIcons: true
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false

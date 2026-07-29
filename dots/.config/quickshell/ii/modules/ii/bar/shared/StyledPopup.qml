@@ -335,6 +335,7 @@ LazyLoader {
 
             StyledRectangularShadow {
                 target: popupBackground
+                visible: !Config.options.appearance.transparency.popups
             }
 
             Rectangle {
@@ -515,7 +516,7 @@ LazyLoader {
                     }
                 }
 
-                border.width: 1
+                border.width: Config.options.appearance.transparency.popups ? 0 : 1
                 border.color: Appearance.colors.colLayer0Border
             }
         }

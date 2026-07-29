@@ -155,7 +155,10 @@ Item { // Fullscreen MediaMode instance
                 color: ColorUtils.applyAlpha(Appearance.colors.colLayer0, videoActive ? 0.0 : 1.0)
 
                 Behavior on color {
-                    ColorAnimation { duration: 800; easing.type: Easing.InOutQuad }
+                    ColorAnimation {
+                        duration: 800
+                        easing.type: Easing.InOutQuad
+                    }
                 }
 
                 // Feature 6: Crossfade / Dissolve curtain on track change when video is active
@@ -177,9 +180,23 @@ Item { // Fullscreen MediaMode instance
 
                     SequentialAnimation {
                         id: crossfadeAnim
-                        NumberAnimation { target: videoCrossfadeOverlay; property: "opacity"; to: 0.85; duration: 250; easing.type: Easing.OutQuad }
-                        PauseAnimation { duration: 150 }
-                        NumberAnimation { target: videoCrossfadeOverlay; property: "opacity"; to: 0.0; duration: 400; easing.type: Easing.InQuad }
+                        NumberAnimation {
+                            target: videoCrossfadeOverlay
+                            property: "opacity"
+                            to: 0.85
+                            duration: 250
+                            easing.type: Easing.OutQuad
+                        }
+                        PauseAnimation {
+                            duration: 150
+                        }
+                        NumberAnimation {
+                            target: videoCrossfadeOverlay
+                            property: "opacity"
+                            to: 0.0
+                            duration: 400
+                            easing.type: Easing.InQuad
+                        }
                     }
                 }
 
@@ -201,7 +218,10 @@ Item { // Fullscreen MediaMode instance
                     animationEnabled: Config.options.background.mediaMode.backgroundAnimation.enable && !videoActive
 
                     Behavior on opacity {
-                        NumberAnimation { duration: 800; easing.type: Easing.InOutQuad }
+                        NumberAnimation {
+                            duration: 800
+                            easing.type: Easing.InOutQuad
+                        }
                     }
 
                     workspaceNorm: {
