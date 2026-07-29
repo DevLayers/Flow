@@ -1564,7 +1564,7 @@ Singleton {
 
             property JsonObject userProfile: JsonObject {
                 property string imageStyle: "initial" // "initial", "expressive", "custom"
-                property string imagePath: Directories.home + "/.config/quickshell/ii/assets/profile.png"
+                property string imagePath: Directories.userProfileImagePath
                 property string customName: ""
                 property string customGreeting: ""
                 property string customBio: ""
@@ -1936,7 +1936,7 @@ Singleton {
             property JsonObject sidebar: JsonObject {
                 property JsonObject dashboardHeader: JsonObject {
                     property string profileImageType: "custom" // "custom", "distro", "none"
-                    property string profileImagePath: Directories.home + "/.config/quickshell/ii/assets/profile.png"
+                    property string profileImagePath: Directories.userProfileImagePath
                     property string textMode: "username" // "username", "uptime", "none", "custom"
                     property string customText: ""
                 }
