@@ -29,6 +29,15 @@ ContentPage {
             }
         }
 
+        ConfigSwitch {
+            buttonIcon: "sync"
+            text: Translation.tr("Enable KDE Connect Integration")
+            checked: Config.options.phone.kdeconnectEnabled
+            onCheckedChanged: {
+                Config.options.phone.kdeconnectEnabled = checked;
+            }
+        }
+
         ContentSubsectionLabel { text: Translation.tr("Connection Settings") }
 
         ConfigSwitch {

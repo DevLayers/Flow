@@ -9,11 +9,11 @@ import qs.modules.common.widgets
 QuickToggleModel {
     name: Translation.tr("Notifications")
     statusText: toggled ? Translation.tr("Show") : Translation.tr("Silent")
-    toggled: !Notifications.silent
+    toggled: !Notifications.effectiveSilent
     icon: toggled ? "notifications_active" : "notifications_paused"
 
     mainAction: () => {
-        Notifications.silent = !Notifications.silent;
+        Notifications.silent = !Notifications.effectiveSilent;
     }
 
     tooltipText: Translation.tr("Show notifications")

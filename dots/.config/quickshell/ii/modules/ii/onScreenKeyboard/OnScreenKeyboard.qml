@@ -14,6 +14,10 @@ Scope { // Scope
     id: root
     property bool pinned: Config.options?.osk.pinnedOnStartup ?? false
 
+    // Referencing the singleton from outside the Loader keeps it alive from startup:
+    // the helper has to be listening before the keyboard has ever been shown.
+    readonly property bool autoShowEnabled: OskAutoShow.enabled
+
     component OskControlButton: GroupButton { // Pin button
         baseWidth: 40
         baseHeight: 40
@@ -55,6 +59,21 @@ Scope { // Scope
 
             mask: Region {
                 item: oskBackground
+            }
+
+            // Normalized so OskAutoShow can test touches against it without knowing
+            // which output the touchscreen is mapped to.
+            Binding {
+                target: OskAutoShow
+                property: "keyboardBounds"
+                when: oskRoot.visible && oskRoot.screen
+                value: Qt.rect(oskBackground.x / oskRoot.screen.width, (oskRoot.screen.height - oskRoot.implicitHeight + oskBackground.y) / oskRoot.screen.height, oskBackground.width / oskRoot.screen.width, oskBackground.height / oskRoot.screen.height)
+            }
+
+            Binding {
+                target: OskAutoShow
+                property: "keyboardPinned"
+                value: root.pinned
             }
 
             // Make it usable with other panels

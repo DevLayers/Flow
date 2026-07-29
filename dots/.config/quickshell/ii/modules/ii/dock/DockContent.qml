@@ -24,11 +24,13 @@ Item {
     readonly property real dockPadding: 0
     readonly property bool isVertical: dock.isVertical
     readonly property real dotMargin: (Config.options?.dock.height ?? 60) * 0.2 - 2
+    readonly property real dotMarginV: (Config.options?.dock.height ?? 60) * 0.12 - 2
     readonly property real sepThickness: Math.max(3, Math.round(Appearance.sizes.dockButtonSize * 0.06))
     readonly property real buttonSlotSize: Appearance.sizes.dockButtonSize + dotMargin * 2
+    readonly property real buttonSlotHeight: Appearance.sizes.dockButtonSize + dotMarginV * 2
 
     readonly property real visualWidth: isVertical ? buttonSlotSize : unifiedRow.width
-    readonly property real visualHeight: isVertical ? unifiedColumn.height : buttonSlotSize
+    readonly property real visualHeight: isVertical ? unifiedColumn.height : buttonSlotHeight
 
     readonly property bool requestDockShow: previewPopupLoader.item?.visible || anyContextMenuOpen
 
@@ -140,7 +142,7 @@ Item {
             _dragTargetIndex = src
             return
         }
-        var spacing = 2
+        var spacing = Config.options.dock.iconSpacing
         var step = delta > 0 ? 1 : -1
         var remaining = Math.abs(delta)
         var current = src
@@ -533,7 +535,7 @@ Item {
         Row {
             id: unifiedRow
             visible: !root.isVertical
-            spacing: 2
+            spacing: Config.options.dock.iconSpacing
             Repeater {
                 id: itemRepeater
                 model: root.flattenedItems
@@ -544,7 +546,7 @@ Item {
         Column {
             id: unifiedColumn
             visible: root.isVertical
-            spacing: 2
+            spacing: Config.options.dock.iconSpacing
             Repeater {
                 id: columnItemRepeater
                 model: root.flattenedItems
@@ -570,7 +572,7 @@ Item {
                     default: return root.buttonSlotSize
                 }
             }
-            readonly property real itemHeight: root.buttonSlotSize
+            readonly property real itemHeight: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
 
             width: root.isVertical ? itemHeight : itemWidth
             height: root.isVertical ? itemWidth : itemHeight
@@ -644,7 +646,7 @@ Item {
                 anchors.leftMargin: delegateWrapper._sepGapCenter
                 anchors.verticalCenter: parent.verticalCenter
                 width: root.sepThickness
-                height: parent.height - root.dotMargin * 2
+                height: parent.height - root.dotMarginV * 2
                 radius: Appearance.rounding.full
                 color: Appearance.colors.colOutlineVariant
             }
@@ -655,7 +657,7 @@ Item {
                 anchors.rightMargin: delegateWrapper._sepGapCenter
                 anchors.verticalCenter: parent.verticalCenter
                 width: root.sepThickness
-                height: parent.height - root.dotMargin * 2
+                height: parent.height - root.dotMarginV * 2
                 radius: Appearance.rounding.full
                 color: Appearance.colors.colOutlineVariant
             }
@@ -712,7 +714,7 @@ Item {
         Item {
             id: actionItemRoot
             width: root.buttonSlotSize
-            height: root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property var _itemData: parent._itemData
             readonly property int _index: parent._index
             DockActionButton {
@@ -753,7 +755,7 @@ Item {
         Item {
             id: appItemRoot
             width: root.buttonSlotSize
-            height: root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property var _itemData: parent._itemData
             readonly property int _index: parent._index
             DockAppButton {
@@ -770,7 +772,7 @@ Item {
         Item {
             id: fileItemRoot
             width: root.buttonSlotSize
-            height: root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property var _itemData: parent._itemData
             readonly property int _index: parent._index
             DockFileButton {
@@ -819,12 +821,12 @@ Item {
         Item {
             id: runningAppsRoot
             width: runningAppsRow.implicitWidth + root.dotMargin * 2
-            height: root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property var _itemData: parent._itemData
             readonly property int _index: parent._index
             Row {
                 id: runningAppsRow
-                spacing: 2
+                spacing: Config.options.dock.iconSpacing
                 anchors.centerIn: parent
                 Repeater {
                     model: runningAppsRoot._itemData.apps ?? []

@@ -13,8 +13,9 @@ AbstractBackgroundWidget {
 
     configEntryName: "clock_flex"
 
-    implicitWidth: 240
-    implicitHeight: 240
+    readonly property real contentScale: (Config.options.background.widgets.clock_flex.widgetSize ?? 100) / 100.0
+    implicitWidth: 240 * contentScale
+    implicitHeight: 240 * contentScale
 
     // Time extraction
     readonly property string hour: DateTime.time.split(":")[0].padStart(2, "0")
@@ -26,7 +27,8 @@ AbstractBackgroundWidget {
     readonly property string d3: minute.charAt(1)
 
     // Colors from WidgetColorScheme (Diagonal pattern)
-    readonly property color colorDiagonalA: WidgetColorScheme.textColorOnBg
+    readonly property bool useAltColors: Config.options.background.widgets.clock_flex.useAltColors ?? false
+    readonly property color colorDiagonalA: useAltColors ? WidgetColorScheme.cardBgColor : WidgetColorScheme.textColorOnBg
     readonly property color colorDiagonalB: WidgetColorScheme.accentColor
 
     // Stroke thickness around upper elements (die-cut margin)

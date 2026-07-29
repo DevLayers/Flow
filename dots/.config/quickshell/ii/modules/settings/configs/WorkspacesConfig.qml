@@ -436,4 +436,54 @@ ContentPage {
 
     }
 
+    ContentSection {
+        visible: Config.options.bar.styles.workspaces === "dock"
+        title: Translation.tr("Dock Workspace Style")
+        icon: "dock"
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            ConfigSwitch {
+                buttonIcon: "radio_button_checked"
+                text: Translation.tr("Show active workspace indicator")
+                checked: Config.options.bar.workspaces.dockShowActiveIndicator
+                onCheckedChanged: {
+                    Config.options.bar.workspaces.dockShowActiveIndicator = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "more_horiz"
+                text: Translation.tr("Show window count dots")
+                checked: Config.options.bar.workspaces.dockShowWindowDots
+                onCheckedChanged: {
+                    Config.options.bar.workspaces.dockShowWindowDots = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "touch_app"
+                text: Translation.tr("Hover animations")
+                checked: Config.options.bar.workspaces.dockHoverEffect
+                onCheckedChanged: {
+                    Config.options.bar.workspaces.dockHoverEffect = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "apps"
+                text: Translation.tr("Show app icons")
+                checked: Config.options.bar.workspaces.dockShowAppIcons
+                onCheckedChanged: {
+                    Config.options.bar.workspaces.dockShowAppIcons = checked;
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Show the first window's icon inside each workspace button")
+                }
+            }
+        }
+    }
 }

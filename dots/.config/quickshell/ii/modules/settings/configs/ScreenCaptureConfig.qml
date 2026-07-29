@@ -155,6 +155,20 @@ ContentPage {
 
         }
 
+        ConfigSwitch {
+            buttonIcon: "photo_library"
+            text: Translation.tr("Show screenshot preview overlay")
+            checked: Config.options.regionSelector.enableOverlay
+            onCheckedChanged: {
+                Config.options.regionSelector.enableOverlay = checked;
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Shows a Pixel-style preview overlay at the bottom-left after taking a screenshot, with quick actions to save, edit, or delete.")
+            }
+
+        }
+
         ContentSubsectionLabel {
             text: Translation.tr("Screenshot path")
         }

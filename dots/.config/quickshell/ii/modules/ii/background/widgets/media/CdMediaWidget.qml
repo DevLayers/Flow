@@ -10,6 +10,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.common.models
 import qs.modules.ii.background.widgets
 
 AbstractBackgroundWidget {
@@ -17,13 +18,35 @@ AbstractBackgroundWidget {
 
     configEntryName: "media_cd"
 
-    implicitWidth: 240
-    implicitHeight: 240
+    readonly property real contentScale: (Config.options.background.widgets.media_cd.widgetSize ?? 100) / 100.0
+    implicitWidth: 240 * contentScale
+    implicitHeight: 240 * contentScale
 
-    readonly property color cardBgColor: WidgetColorScheme.cardBgColor
-    readonly property color textColorOnBg: WidgetColorScheme.textColorOnBg
-    readonly property color subtextColorOnBg: WidgetColorScheme.subtextColorOnBg
-    readonly property color accentColor: WidgetColorScheme.accentColor
+    readonly property color cardBgColor: useDynamicColors ? blendedColors.colPrimaryContainer : WidgetColorScheme.cardBgColor
+    readonly property color textColorOnBg: useDynamicColors ? blendedColors.colOnPrimaryContainer : WidgetColorScheme.textColorOnBg
+    readonly property color subtextColorOnBg: useDynamicColors ? ColorUtils.transparentize(blendedColors.colOnPrimaryContainer, 0.6) : WidgetColorScheme.subtextColorOnBg
+    readonly property color accentColor: useDynamicColors ? blendedColors.colPrimary : WidgetColorScheme.accentColor
+
+    // ── Dynamic album colors (same pattern as MediaWidget) ──
+    readonly property bool useDynamicColors: (Config.options.background.widgets.media_cd.dynamicAlbumColors ?? false) && root.effectiveArtSource !== ""
+
+    ColorQuantizer {
+        id: colorQuantizer
+        source: root.resolvedArtPath
+        depth: 0
+        rescaleSize: 1
+    }
+
+    readonly property color artDominantColor: {
+        if (!root.useDynamicColors) return Appearance.colors.colPrimary;
+        let raw = colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary;
+        let mixed = ColorUtils.mix(raw, Appearance.colors.colPrimaryContainer, 0.8);
+        return mixed || Appearance.m3colors.m3secondaryContainer;
+    }
+
+    property QtObject blendedColors: AdaptedMaterialScheme {
+        color: root.artDominantColor
+    }
 
     readonly property MprisPlayer player: MprisController.activePlayer
     readonly property bool isPlaying: MprisController.isPlaying
@@ -91,7 +114,7 @@ AbstractBackgroundWidget {
     StyledRectangularShadow {
         id: bgShadow
         target: bgRect
-        visible: Config.options.background.widgets.enableShadows ?? true
+        visible: Config.options.background.widgets.media_cd.enableShadows ?? true
     }
 
     // Main Card background
@@ -102,7 +125,7 @@ AbstractBackgroundWidget {
         radius: Appearance.rounding.windowRounding
         clip: true
 
-        layer.enabled: Config.options.background.widgets.enableInnerShadow ?? true
+        layer.enabled: Config.options.background.widgets.media_cd.enableInnerShadow ?? true
         layer.effect: InnerShadow {
             color: Qt.rgba(0, 0, 0, 0.15)
             radius: 8.0

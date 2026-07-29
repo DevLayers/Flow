@@ -165,7 +165,7 @@ Rectangle {
         MaterialShapeWrappedMaterialSymbol {
             id: icon
             Layout.fillWidth: false
-            Layout.alignment: Qt.AlignTop
+            Layout.alignment: Qt.AlignVCenter
             text: "info"
             shape: MaterialShape.Shape.Slanted
             iconSize: 22

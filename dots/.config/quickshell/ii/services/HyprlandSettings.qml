@@ -22,11 +22,7 @@ Singleton {
             console.error("[HyprlandSettings] Unsafe characters rejected:", animName, style)
             return
         }
-        // Apply immediately via hyprctl keyword (takes effect right away, unlike hyprset which only edits a file)
-        Quickshell.execDetached(["hyprctl", "keyword", "animation", animName + ",1,7,menu_decel," + style]);
-        // Write to the persistent config through hyprset.sh. Calling the helper
-        // directly keeps this independent of whether the vynx symlink exists.
-        Quickshell.execDetached(["bash", Directories.home.replace("file://", "") + "/.local/share/ii-p3drovfx/sdata/cli/lib/hyprset.sh", "anim", animName, String(style)])
+        Quickshell.execDetached(["hyprctl", "eval", "hl.animation({ leaf = '" + animName + "', enabled = true, speed = 7, bezier = 'menu_decel', style = '" + style + "' })"]);
     }
 
     function setLayout(layout) {

@@ -893,6 +893,12 @@ ContentPage {
                 label: Translation.tr("Media Downloader")
                 sectionHighlight: Translation.tr("Download")
             }
+
+            RelatedChip {
+                pageId: "clipboard"
+                label: Translation.tr("Clipboard")
+                sectionHighlight: Translation.tr("General")
+            }
         }
     }
 }

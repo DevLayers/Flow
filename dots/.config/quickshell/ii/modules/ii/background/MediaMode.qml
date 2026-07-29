@@ -45,7 +45,16 @@ Item { // Fullscreen MediaMode instance
     // Real Cava & Procedural Dynamic Visualizer Points
     property list<var> visualizerPoints: []
     property real animPhase: 0.0
-    property bool cavaActive: false
+    readonly property bool cavaActive: CavaService.visualizerPoints.length > 0
+
+    Connections {
+        target: CavaService
+        function onVisualizerPointsChanged() {
+            if (root.cavaActive) {
+                root.visualizerPoints = CavaService.visualizerPoints;
+            }
+        }
+    }
 
     Timer {
         id: proceduralVisualizerTimer
@@ -58,28 +67,13 @@ Item { // Fullscreen MediaMode instance
             const isPlaying = root.player?.isPlaying ?? false;
             for (let i = 0; i < 16; i++) {
                 if (isPlaying) {
-                    let base = 350 + 120 * Math.sin(root.animPhase + i * 0.28) + 60 * Math.cos(root.animPhase * 0.5 + i * 0.18);
-                    pts.push(Math.max(100, Math.min(750, base)));
+                     let base = 350 + 120 * Math.sin(root.animPhase + i * 0.28) + 60 * Math.cos(root.animPhase * 0.5 + i * 0.18);
+                     pts.push(Math.max(100, Math.min(750, base)));
                 } else {
-                    pts.push(40);
+                     pts.push(40);
                 }
             }
             root.visualizerPoints = pts;
-        }
-    }
-
-    Process {
-        id: cavaProc
-        running: root.visualizerMode > 0
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
-        stdout: SplitParser {
-            onRead: data => {
-                let pts = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                if (pts.length > 0) {
-                    root.cavaActive = true;
-                    root.visualizerPoints = pts;
-                }
-            }
         }
     }
 
@@ -145,20 +139,26 @@ Item { // Fullscreen MediaMode instance
         sourceComponent: Item {
             anchors.fill: parent
 
+            // Music video mode state
+            readonly property bool videoActive: Config.options.background.mediaMode.musicVideo.enable && MusicVideoService.videoPlaying
+            readonly property bool videoSearching: Config.options.background.mediaMode.musicVideo.enable && MusicVideoService.searchFailed === false && !MusicVideoService.videoPlaying && MusicVideoService.lastSearchQuery !== ""
+
             // Fullscreen Background Base
             Rectangle {
                 id: background
                 anchors.fill: parent
-                color: ColorUtils.applyAlpha(Appearance.colors.colLayer0, 1)
+                color: videoActive
+                    ? ColorUtils.applyAlpha(Appearance.colors.colLayer0, (Config.options.background.mediaMode.musicVideo.dimOpacity ?? 60) / 100)
+                    : ColorUtils.applyAlpha(Appearance.colors.colLayer0, 1)
 
-                // Blurred Album Art Parallax Background
+                // Blurred Album Art Parallax Background (hidden when video is playing)
                 FloatingArtBackground {
                     anchors.fill: parent
-                    opacity: Config.options.background.mediaMode.backgroundOpacity / 100
+                    opacity: videoActive ? 0 : (Config.options.background.mediaMode.backgroundOpacity / 100)
                     animationSpeedScale: Config.options.background.mediaMode.backgroundAnimation.speedScale / 10
                     artFilePath: root.displayedArtFilePath
-                    overlayColor: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.25)
-                    animationEnabled: Config.options.background.mediaMode.backgroundAnimation.enable
+                    overlayColor: ColorUtils.transparentize(Appearance.colors.colLayer0, videoActive ? 1.0 : 0.25)
+                    animationEnabled: Config.options.background.mediaMode.backgroundAnimation.enable && !videoActive
 
                     workspaceNorm: {
                         const chunkSize = Config?.options.bar.workspaces.shown ?? 10;
@@ -173,7 +173,7 @@ Item { // Fullscreen MediaMode instance
                 // Ambient Audio Wave Visualizer Layer
                 Item {
                     anchors.fill: parent
-                    visible: root.visualizerMode === 1
+                    visible: root.visualizerMode === 1 && !videoActive
 
                     WaveVisualizer {
                         anchors.fill: parent
@@ -189,7 +189,7 @@ Item { // Fullscreen MediaMode instance
                     anchors.horizontalCenter: parent.horizontalCenter
                     height: 120
                     spacing: 12
-                    visible: root.visualizerMode === 2
+                    visible: root.visualizerMode === 2 && !videoActive
 
                     Repeater {
                         model: root.visualizerPoints.length > 0 ? root.visualizerPoints.length : 16
@@ -215,7 +215,7 @@ Item { // Fullscreen MediaMode instance
                     anchors.centerIn: parent
                     width: Math.min(parent.width, parent.height) * 0.7
                     height: width
-                    visible: root.visualizerMode === 3
+                    visible: root.visualizerMode === 3 && !videoActive
 
                     RadialWaveVisualizer {
                         anchors.fill: parent
@@ -358,6 +358,48 @@ Item { // Fullscreen MediaMode instance
                                 }
                             }
 
+                            // Music Video Background Toggle
+                            RippleButton {
+                                implicitWidth: 42
+                                implicitHeight: 42
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Config.options.background.mediaMode.musicVideo.enable
+                                    ? root.dynamicAccentColor
+                                    : ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
+                                colBackgroundHover: Config.options.background.mediaMode.musicVideo.enable
+                                    ? ColorUtils.mix(root.dynamicAccentColor, Appearance.colors.colLayer1Hover, 0.85)
+                                    : Appearance.colors.colLayer2Hover
+                                colBackgroundActive: Config.options.background.mediaMode.musicVideo.enable
+                                    ? ColorUtils.mix(root.dynamicAccentColor, Appearance.colors.colLayer1Active, 0.7)
+                                    : Appearance.colors.colLayer2Active
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    iconSize: 20
+                                    color: Config.options.background.mediaMode.musicVideo.enable
+                                        ? Appearance.colors.colOnPrimary
+                                        : Appearance.colors.colSubtext
+                                    text: videoActive ? "play_circle"
+                                        : (videoSearching ? "hourglass_top" : "music_video")
+                                }
+
+                                onClicked: {
+                                    Config.options.background.mediaMode.musicVideo.enable =
+                                        !Config.options.background.mediaMode.musicVideo.enable;
+                                    if (Config.options.background.mediaMode.musicVideo.enable) {
+                                        MusicVideoService.tryPlayCurrent();
+                                    } else {
+                                        MusicVideoService.stopVideo();
+                                    }
+                                }
+
+                                StyledToolTip {
+                                    text: Config.options.background.mediaMode.musicVideo.enable
+                                        ? Translation.tr("Music Video Background: ON (click to disable)")
+                                        : Translation.tr("Music Video Background: OFF (click to enable)")
+                                }
+                            }
+
                             // Close / Exit Media Mode Button
                             RippleButton {
                                 implicitWidth: 42
@@ -375,12 +417,24 @@ Item { // Fullscreen MediaMode instance
                                 }
 
                                 onClicked: {
-                                    if (typeof mediaModeLoader !== "undefined") {
+                                    if (!Config.options.background.mediaMode.togglePerMonitor) {
+                                        // Global mode: trigger closes ALL loaders on all monitors.
+                                        // Set counts to 0 since all instances are closing.
+                                        LyricsService.mediaModeOpenCount = 0;
+                                        GlobalStates.mediaModeCloseAllTrigger++;
+                                        // NOTE: the trigger above destroys this component synchronously
+                                        // (via Connections → loader.active=false → Loader destroys MediaMode).
+                                        // Nothing after this point executes.
+                                    } else if (typeof mediaModeLoader !== "undefined") {
+                                        // Per-monitor mode: close only this instance.
+                                        LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
                                         mediaModeLoader.active = false;
+                                        // Balance count: onDestruction handles -1, this handles the other -1.
+                                        GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
                                     } else {
+                                        LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
                                         GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
                                     }
-                                    LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
                                 }
 
                                 StyledToolTip {
@@ -405,7 +459,9 @@ Item { // Fullscreen MediaMode instance
                             Rectangle {
                                 anchors.fill: parent
                                 radius: Appearance.rounding.verylarge
-                                color: ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+                                color: videoActive
+                                    ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.25)
+                                    : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
 
                                 MediaModeCoverArt {
                                     anchors.fill: parent
@@ -428,7 +484,9 @@ Item { // Fullscreen MediaMode instance
                                 id: lyricsContainer
                                 anchors.fill: parent
                                 radius: Appearance.rounding.verylarge
-                                color: ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+                                color: videoActive
+                                    ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.25)
+                                    : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
 
                                 ColumnLayout {
                                     anchors.fill: parent

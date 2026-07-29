@@ -14,9 +14,13 @@ Singleton {
     property alias sidebarRightOpen: root.dashboardPanelOpen // Until all sidebars naming is fixed
 
     property bool barOpen: true
+    property bool phoneCameraRunning: false
+    property bool phoneMicRunning: false
     property int mediaModeCount: 0
     readonly property bool mediaModeActive: mediaModeCount > 0
     property var mediaModeMonitors: []
+    property int mediaModeCloseAllTrigger: 0
+    property int widgetReStackTrigger: 0
 
     function setMediaModeActiveForScreen(screenName, active) {
         if (!screenName) return;
@@ -81,6 +85,12 @@ Singleton {
     property bool videoEditorPopupOpen: false
     property bool videoEditorOpen: false
     property string videoEditorPath: ""
+    property bool screenshotOverlayOpen: false
+    property string screenshotOverlayImagePath: ""
+    property real screenshotOverlayRegionX: 0
+    property real screenshotOverlayRegionY: 0
+    property real screenshotOverlayRegionW: 0
+    property real screenshotOverlayRegionH: 0
     property bool settingsOpen: false
     property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""

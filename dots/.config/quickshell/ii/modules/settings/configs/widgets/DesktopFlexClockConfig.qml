@@ -66,6 +66,31 @@ ContentPage {
             visible: Config.isWidgetActive("clock_flex")
 
             ContentSubsectionLabel {
+                text: Translation.tr("Size & Colors")
+            }
+
+            ConfigSlider {
+                buttonIcon: "aspect_ratio"
+                text: Translation.tr("Widget Size")
+                value: Config.options.background.widgets.clock_flex.widgetSize ?? 100
+                from: 50
+                to: 200
+                stepSize: 10
+                onValueChanged: {
+                    Config.options.background.widgets.clock_flex.widgetSize = value;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "palette"
+                text: Translation.tr("Use card background colors")
+                checked: Config.options.background.widgets.clock_flex.useAltColors ?? false
+                onCheckedChanged: {
+                    Config.options.background.widgets.clock_flex.useAltColors = checked;
+                }
+            }
+
+            ContentSubsectionLabel {
                 text: Translation.tr("Visual Options")
             }
 

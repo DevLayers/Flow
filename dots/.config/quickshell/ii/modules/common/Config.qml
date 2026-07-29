@@ -336,6 +336,7 @@ Singleton {
             }
 
             property JsonObject phone: JsonObject {
+                property bool kdeconnectEnabled: true
                 property bool showPeripheralCards: true
                 property JsonObject scrcpy: JsonObject {
                     property bool stayAwake: false  // bare scrcpy default — don't add overhead
@@ -434,8 +435,8 @@ Singleton {
                     property string main: "Google Sans Flex" // xmpl: right sidebar, settings, system monitor, default clock, expressive weather
                     property string numbers: "Google Sans Flex" // xmpl: styled slider, config
                     property string title: "Google Sans Flex" // settings list item, popup titles
-                    property string iconNerd: "JetBrains Mono NF"
-                    property string monospace: "JetBrains Mono NF" // clipboard metadata
+                    property string iconNerd: "JetBrainsMono Nerd Font"
+                    property string monospace: "JetBrainsMono Nerd Font" // clipboard metadata
                     property string reading: "Readex Pro" // cookie clock quote
                     property string expressive: "Space Grotesk" // desktop widgets font, overview workspace number, user profile config
                     property bool roundnessFull: false
@@ -520,55 +521,79 @@ Singleton {
                 property bool blurGradientExperiment: false
                 property JsonObject widgets: JsonObject {
                     property string colorScheme: "default"
-                    property JsonObject clock: JsonObject {
-                        property bool enable: true
+                    property JsonObject clock_cookie: JsonObject {
+                        property bool enable: false
                         property bool disableAnimationOnLock: false
-                        property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
+                        property string placementStrategy: "free"
                         property real x: 1518.98
                         property real y: 168.8
-                        property string style: "cookie"        // Options: "cookie", "digital", "nagasaki", "dial"
-                        property string styleLocked: "cookie"  // Options: "cookie", "digital", "nagasaki", "dial"
-                        property JsonObject cookie: JsonObject {
-                            property bool aiStyling: false
-                            property string aiStylingModel: "gemini" // Options "gemini", "openrouter"
-                            property int sides: 14
-                            property string backgroundStyle: "cookie"     // Options: "cookie", "sine", "shape"
-                            property string backgroundShape: "Arch"  // Options: MaterialShape.Shape enum values as string
-                            property string dialNumberStyle: "full"   // Options: "dots" , "numbers", "full", "shapes", "none"
-                            property string hourHandStyle: "fill"     // Options: "classic", "fill", "hollow", "hide"
-                            property string minuteHandStyle: "medium" // Options "classic", "thin", "medium", "bold", "hide"
-                            property string secondHandStyle: "dot"    // Options: "dot", "line", "classic", "hide"
-                            property string dateStyle: "bubble"       // Options: "border", "rect", "bubble" , "hide"
-                            property bool timeIndicators: true
-                            property bool hourMarks: false
-                            property bool dateInClock: true
-                            property bool constantlyRotate: false
+                        property bool aiStyling: false
+                        property string aiStylingModel: "gemini"
+                        property int sides: 14
+                        property string backgroundStyle: "cookie"
+                        property string backgroundShape: "Arch"
+                        property string dialNumberStyle: "full"
+                        property string hourHandStyle: "fill"
+                        property string minuteHandStyle: "medium"
+                        property string secondHandStyle: "dot"
+                        property string dateStyle: "bubble"
+                        property bool timeIndicators: true
+                        property bool hourMarks: false
+                        property bool dateInClock: true
+                        property bool constantlyRotate: false
+                        property bool quoteEnable: false
+                        property string quoteText: ""
+                    }
+                    property JsonObject clock_flex: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool useAltColors: false
+                    }
+                    property JsonObject clock_digital: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool adaptiveAlignment: true
+                        property bool showDate: true
+                        property bool animateChange: true
+                        property bool vertical: false
+                        property bool colorful: false
+                        property bool showColon: true
+                        property JsonObject font: JsonObject {
+                            property real weight: 350
+                            property real width: 100
+                            property real size: 90
+                            property real roundness: 0
                         }
-                        property JsonObject digital: JsonObject {
-                            property bool adaptiveAlignment: true
-                            property bool showDate: true
-                            property bool animateChange: true
-                            property bool vertical: false
-                            property bool colorful: false
-                            property bool showColon: true
-                            property JsonObject font: JsonObject {
-                                property real weight: 350
-                                property real width: 100
-                                property real size: 90
-                                property real roundness: 0
-                            }
-                        }
-                        property JsonObject dial: JsonObject {
-                            property bool showTicks: true
-                            property bool showMinuteHand: true
-                            property bool enableShadows: true
-                            property bool enableInnerShadow: false
-                            property bool expressiveColors: false
-                        }
-                        property JsonObject quote: JsonObject {
-                            property bool enable: false
-                            property string text: ""
-                        }
+                        property bool quoteEnable: false
+                        property string quoteText: ""
+                    }
+                    property JsonObject clock_nagasaki: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool monochrome: false
+                    }
+                    property JsonObject clock_dial: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool showTicks: true
+                        property bool showMinuteHand: true
+                        property bool enableShadows: false
+                        property bool enableInnerShadow: false
+                        property string hourHandStyle: "fill"
+                        property string minuteHandStyle: "medium"
+                        property bool showSecondHand: false
+                        property string secondHandStyle: "dot"
+                        property bool showNumberRing: false
+                        property bool expressiveColors: false
                     }
                     property JsonObject nagasaki_text: JsonObject {
                         property bool enable: false
@@ -576,6 +601,14 @@ Singleton {
                         property real x: 200
                         property real y: 200
                         property int size: 200
+                    }
+                    property JsonObject clock_hori: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool useAltColors: false
                     }
                     property JsonObject media: JsonObject {
                         property bool enable: true
@@ -588,6 +621,11 @@ Singleton {
                         property bool showPreviousToggle: true
                         property bool tintArtCover: false
                         property string backgroundShape: "Cookie12Sided"  // Options: MaterialShape.Shape enum values as string
+                        property bool rotateAlbumArt: true
+                        property bool showTimeInfo: true
+                        property bool showArtist: true
+                        property bool showProgressSlider: true
+                        property bool dynamicAlbumColors: false
                         property JsonObject glow: JsonObject {
                             property bool enable: true
                             property real brightness: 10
@@ -606,6 +644,12 @@ Singleton {
                         property real y: 612.92
                         property bool useAlbumColors: true
                         property bool enableGlassReflection: true
+                        property bool enableShadows: false
+                        property bool showPrevButton: true
+                        property bool showNextButton: true
+                        property bool showDevicePill: true
+                        property string progressShape: "Cookie9Sided"
+                        property int widgetSize: 100
                     }
                     property JsonObject wearos_clock: JsonObject {
                         property bool enable: false
@@ -614,6 +658,20 @@ Singleton {
                         property real y: 100
                         property bool useAlbumColors: true
                         property bool enableGlassReflection: true
+                        property bool showDistroLogo: true
+                        property bool showSunsetComplication: true
+                        property bool showDigitalTimePill: true
+                        property bool showBatteryPill: true
+                        property bool showHourSubDial: true
+                        property bool showBedtimeIcon: true
+                        property bool showKdeConnect: true
+                        property bool showDateComplication: true
+                        property bool showMinuteHand: true
+                        property bool showOuterNumbers: true
+                        property bool showInnerNumbers: true
+                        property bool showBezelRing: true
+                        property bool enableShadows: false
+                        property int widgetSize: 100
                     }
                     property JsonObject weather: JsonObject {
                         property bool enable: false
@@ -888,14 +946,21 @@ Singleton {
                         property string placementStrategy: "free"
                         property real x: 200
                         property real y: 200
-                        property bool expressiveColors: false
+                        property bool dynamicAlbumColors: false
+                        property bool enableShadows: false
+                        property bool enableInnerShadow: false
+                        property int widgetSize: 100
                     }
                     property JsonObject compact_media: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
                         property real x: 200
                         property real y: 200
-                        property bool expressiveColors: false
+                        property bool dynamicAlbumColors: false
+                        property string backgroundShape: "Rectangle"
+                        property bool enableShadows: false
+                        property bool enableInnerShadow: false
+                        property int widgetSize: 100
                     }
                     property bool enableInnerShadow: false
                     property bool enableShadows: false
@@ -990,6 +1055,13 @@ Singleton {
                     }
                     property JsonObject syllable: JsonObject {
                         property int textHighlightStyle: 0 // 0: vertical, 1: horizontal (not perfect bc its not synced in a word level, but a cool animation to have)
+                    }
+                    property JsonObject musicVideo: JsonObject {
+                        property bool enable: true
+                        property int maxResolution: 1080
+                        property bool dimBackground: true
+                        property int dimOpacity: 60   // percent (0-100)
+                        property string searchSuffix: "official music video"
                     }
                 }
             }
@@ -1236,8 +1308,12 @@ Singleton {
                     property int activeIndicatorOpacity: 100 // 0-100
                     property bool dynamicWorkspaces: false
                     property bool useMaterialShapeForActiveIndicator: false
-                    property bool useRandomShapeForActiveIndicator: true
-                    property string activeIndicatorShape: "Pentagon"
+                     property bool useRandomShapeForActiveIndicator: true
+                     property string activeIndicatorShape: "Pentagon"
+                     property bool dockShowActiveIndicator: true
+                     property bool dockShowWindowDots: true
+                     property bool dockHoverEffect: true
+                     property bool dockShowAppIcons: true
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false
@@ -1430,6 +1506,7 @@ Singleton {
                 property bool showOnlyOnFocusedMonitor: false
                 property bool monochromeIcons: false
                 property bool dimInactiveIcons: false
+                property real iconSpacing: 2
                 property bool enableShapeMask: false
                 property string shapeMask: "Circle"
                 property real height: 60
@@ -1594,6 +1671,7 @@ Singleton {
                 property int timeout: 7000
                 property string position: "top_right"
                 property int zoomPercent: 100 // 50-200, step 10
+                property bool autoDndFullscreen: false
                 property JsonObject monitor: JsonObject {
                     property bool enable: false
                     property string name: "" // Name of the monitor to show notifications on, like "eDP-1". Find out with 'hyprctl monitors' command
@@ -1617,13 +1695,25 @@ Singleton {
             property JsonObject osk: JsonObject {
                 property string layout: "qwerty_full"
                 property bool pinnedOnStartup: false
+
+                // Raises the keyboard when a text field is focused by finger or pen.
+                // Requires the osk_autoshow helper (see scripts/osk/README.md).
+                property JsonObject autoShow: JsonObject {
+                    property bool enable: false
+                    property bool allowTouch: true
+                    property bool allowPen: true
+                    // How long after a touch a text field may claim focus and still count as touch-driven.
+                    property int touchWindowMs: 1200
+                    property bool hideOnPhysicalKey: true
+                    property bool hideOnTouchOutside: true
+                }
             }
 
             property JsonObject overlay: JsonObject {
                 property bool openingZoomAnimation: true
                 property bool darkenScreen: true
                 property real clickthroughOpacity: 0.8
-                property list<string> buttons: ["crosshair", "recorder", "media", "volumeMixer", "resources"]
+                property list<string> buttons: ["crosshair", "recorder", "media", "volumeMixer", "resources", "discordVoice"]
                 property JsonObject floatingImage: JsonObject {
                     property string imageSource: "https://media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif"
                     property real scale: 0.5
@@ -1637,6 +1727,16 @@ Singleton {
                     property bool useGradientMask: true
                     property bool showSlider: true
                     property int lyricSize: Appearance.font.pixelSize.larger
+                }
+                property JsonObject discordVoice: JsonObject {
+                    property int maxAvatars: 8
+                    property int avatarSize: 52
+                    property string participantBackground: "name"
+                    property real participantBackgroundOpacity: 0.72
+                    property string layoutMode: "column"
+                    property bool blurEnabled: true
+                    property bool autoResize: true
+                    property bool speakingPulseContinuous: true
                 }
             }
 
@@ -1667,6 +1767,7 @@ Singleton {
 
             property JsonObject regionSelector: JsonObject {
                 property bool showOnlyOnFocusedMonitor: false
+                property bool enableOverlay: true
                 property JsonObject targetRegions: JsonObject {
                     property bool windows: true
                     property bool layers: true
@@ -1909,6 +2010,10 @@ Singleton {
                                 {
                                     "size": 1,
                                     "type": "soundcoreAnc"
+                                },
+                                {
+                                    "size": 1,
+                                    "type": "autoDnd"
                                 }
                             ]]
                     }

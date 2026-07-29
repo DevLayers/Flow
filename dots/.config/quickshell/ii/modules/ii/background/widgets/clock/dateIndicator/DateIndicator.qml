@@ -13,7 +13,7 @@ Item {
     // Rotating date
     FadeLoader {
         anchors.fill: parent
-        shown: Config.options.background.widgets.clock.cookie.dateStyle === "border"
+        shown: Config.options.background.widgets.clock_cookie.dateStyle === "border"
         sourceComponent: RotatingDate {
             color: root.color
         }

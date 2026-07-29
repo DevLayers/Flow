@@ -97,7 +97,7 @@ Item {
 
     readonly property int elementHeight: Math.max(20, Math.min(42, root.height - 10))
     readonly property int barWidth: Math.max(4, Math.min(8, root.elementHeight / 5))
-    property var visualizerPoints: []
+    property var visualizerPoints: CavaService.visualizerPoints
 
     readonly property real bar0Val: visualizerPoints.length > 5 ? visualizerPoints[3] / 1000.0 : 0
     readonly property real bar1Val: visualizerPoints.length > 11 ? visualizerPoints[9] / 1000.0 : 0
@@ -308,17 +308,7 @@ Item {
         }
     }
 
-    Process {
-        id: cavaProc
-        running: root.isPlaying
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
-        stdout: SplitParser {
-            onRead: data => {
-                let points = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                root.visualizerPoints = points;
-            }
-        }
-    }
+
 
     Component.onCompleted: {
         root.displayTitle = root.title;
@@ -335,7 +325,7 @@ Item {
         Rectangle {
             id: maskRect
             anchors.fill: parent
-            radius: Appearance.rounding.windowRounding
+            radius: Appearance.rounding.windowRounding + 12
             visible: false
         }
 
@@ -577,7 +567,7 @@ Item {
         }
 
         Loader {
-            active: root.isVertical
+            active: false
             anchors.fill: parent
             sourceComponent: Item {
                 anchors.fill: parent

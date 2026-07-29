@@ -6,7 +6,7 @@ StyledText {
     property real iconSize: Appearance?.font.pixelSize.small ?? 16
     property real fill: 0
     property real truncatedFill: fill.toFixed(1) // Reduce memory consumption spikes from constant font remapping
-    
+
     renderType: Text.NativeRendering
     antialiasing: true
     smooth: true
@@ -17,11 +17,11 @@ StyledText {
         family: Appearance?.font.family.iconMaterial ?? "Material Symbols Rounded"
         pixelSize: iconSize
         weight: Font.Normal
-        variableAxes: ({ 
-            "FILL": parseFloat(root.truncatedFill),
-            "wght": 400,
-            "opsz": Math.max(20, Math.min(48, iconSize))
-        })
+        variableAxes: ({
+                "FILL": parseFloat(root.truncatedFill),
+                "wght": 400,
+                "opsz": Math.max(20, Math.min(48, iconSize))
+            })
     }
 
     Behavior on fill {

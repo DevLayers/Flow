@@ -66,24 +66,51 @@ ContentPage {
             visible: Config.isWidgetActive("media_cd")
 
             ContentSubsectionLabel {
+                text: Translation.tr("Size")
+            }
+
+            ConfigSlider {
+                buttonIcon: "aspect_ratio"
+                text: Translation.tr("Widget Size")
+                value: Config.options.background.widgets.media_cd.widgetSize ?? 100
+                from: 50
+                to: 200
+                stepSize: 10
+                onValueChanged: {
+                    Config.options.background.widgets.media_cd.widgetSize = value;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "palette"
+                text: Translation.tr("Dynamic album colors")
+                checked: Config.options.background.widgets.media_cd.dynamicAlbumColors ?? false
+                onCheckedChanged: {
+                    Config.options.background.widgets.media_cd.dynamicAlbumColors = checked;
+                }
+            }
+
+            Item { Layout.preferredHeight: 4 }
+
+            ContentSubsectionLabel {
                 text: Translation.tr("Visual Options")
             }
 
             ConfigSwitch {
                 buttonIcon: "wb_sunny"
                 text: Translation.tr("Enable Shadows")
-                checked: Config.options.background.widgets.enableShadows ?? true
+                checked: Config.options.background.widgets.media_cd.enableShadows ?? true
                 onCheckedChanged: {
-                    Config.options.background.widgets.enableShadows = checked;
+                    Config.options.background.widgets.media_cd.enableShadows = checked;
                 }
             }
 
             ConfigSwitch {
                 buttonIcon: "blur_on"
                 text: Translation.tr("Enable Inner Shadows")
-                checked: Config.options.background.widgets.enableInnerShadow ?? true
+                checked: Config.options.background.widgets.media_cd.enableInnerShadow ?? true
                 onCheckedChanged: {
-                    Config.options.background.widgets.enableInnerShadow = checked;
+                    Config.options.background.widgets.media_cd.enableInnerShadow = checked;
                 }
             }
         }

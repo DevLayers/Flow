@@ -105,7 +105,7 @@ AbstractBackgroundWidget {
                         anchors.fill: parent
                         sourceItem: maskedImage
                         sourceRect: Qt.rect(tempBadgeContainer.x, tempBadgeContainer.y, tempBadgeContainer.width, tempBadgeContainer.height)
-                        live: photoImage.status === Image.Ready
+                        live: false
                         hideSource: false
                         visible: false
                     }

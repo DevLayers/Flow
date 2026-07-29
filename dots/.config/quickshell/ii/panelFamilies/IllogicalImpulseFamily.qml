@@ -34,6 +34,7 @@ import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
 import qs.modules.ii.topLayer
 import qs.modules.ii.alarmRingingPopup
+import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
 
 Scope {
@@ -76,7 +77,7 @@ Scope {
         component: MediaControls {}
     }
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable && GlobalStates.bluetoothConnectionPopupOpen
         component: BluetoothConnectionPopup {}
     }
     PanelLoader {
@@ -84,7 +85,7 @@ Scope {
         component: KeyboardLayoutTransitionPopup {}
     }
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable && GlobalStates.localSendPopupOpen
         component: LocalSendPopup {}
     }
     PanelLoader {
@@ -154,16 +155,23 @@ Scope {
         component: WrappedFrame {}
     }
     PanelLoader {
+        extraCondition: GlobalStates.videoEditorPopupOpen
         component: VideoEditorPopup {}
     }
     PanelLoader {
+        extraCondition: GlobalStates.videoEditorOpen
         component: VideoEditor {}
     }
     PanelLoader {
         component: ScratchpadOverlay {}
     }
     PanelLoader {
+        extraCondition: AlarmService.ringingAlarmIndex !== -1 && Config.options.time.alarms.useFullscreenPopup
         component: AlarmRingingPopup {}
+    }
+    PanelLoader {
+        extraCondition: GlobalStates.screenshotOverlayOpen
+        component: ScreenshotOverlay {}
     }
     PanelLoader {
         extraCondition: GlobalStates.connectModeActive

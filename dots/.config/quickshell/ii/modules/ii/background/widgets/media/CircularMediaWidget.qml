@@ -5,7 +5,6 @@ import Quickshell.Services.Mpris
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 import QtQuick.Shapes as Shapes
 import qs
 import qs.services
@@ -22,9 +21,15 @@ AbstractBackgroundWidget {
 
     visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
 
-    // Default size is 240x240 for 1:1 widgets as per AGENTS.md guidelines
-    implicitWidth: 240
-    implicitHeight: 240
+    // Default size is 240x240 base scaled by widgetSize
+    readonly property real contentScale: (Config.options.background.widgets.circular_media.widgetSize ?? 100) / 100.0
+    implicitWidth: 240 * contentScale
+    implicitHeight: 240 * contentScale
+
+    // ── Config visibility toggles ──
+    readonly property bool cfgShowPrevBtn: Config.ready ? (Config.options.background.widgets.circular_media.showPrevButton ?? true) : true
+    readonly property bool cfgShowNextBtn: Config.ready ? (Config.options.background.widgets.circular_media.showNextButton ?? true) : true
+    readonly property bool cfgShowDevicePill: Config.ready ? (Config.options.background.widgets.circular_media.showDevicePill ?? true) : true
 
     readonly property bool useAlbumColors: Config.ready ? (Config.options.background.widgets.circular_media.useAlbumColors ?? true) : true
     readonly property MprisPlayer player: MprisController.activePlayer
@@ -77,20 +82,15 @@ AbstractBackgroundWidget {
     ColorQuantizer {
         id: colorQuantizer
         source: root.artSource
-        depth: 2 // Extract 4 colors so we get a better color representation
+        depth: 0
         rescaleSize: 1
     }
 
-    readonly property color rawExtractedColor: colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary
-
-    // Elevate saturation and adjust lightness of the extracted color to get a highly vibrant palette
-    property color artDominantColor: {
-        if (!root.useDynamicColors)
-            return Appearance.colors.colPrimary;
-        let h = rawExtractedColor.hslHue;
-        let s = Math.max(0.45, rawExtractedColor.hslSaturation);
-        let l = Math.max(0.58, Math.min(0.65, rawExtractedColor.hslLightness));
-        return Qt.hsla(h, s, l, 1.0);
+    readonly property color artDominantColor: {
+        if (!root.useDynamicColors) return Appearance.colors.colPrimary;
+        let raw = colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary;
+        let mixed = ColorUtils.mix(raw, Appearance.colors.colPrimaryContainer, 0.8);
+        return mixed || Appearance.m3colors.m3secondaryContainer;
     }
 
     property QtObject blendedColors: AdaptedMaterialScheme {
@@ -129,7 +129,7 @@ AbstractBackgroundWidget {
     // Outer bezel shadow support
     StyledDropShadow {
         target: bezelRing
-        visible: Config.options.background.widgets.enableShadows ?? true
+        visible: Config.options.background.widgets.circular_media.enableShadows ?? true
     }
 
     // Outer Bezel Ring (Moldura) using opaque solid colBackgroundSurfaceContainer base
@@ -147,30 +147,8 @@ AbstractBackgroundWidget {
             radius: width / 2
             color: Appearance.m3colors.m3shadow
 
-            // Opaque Background Artwork + Gradient Container (with circular masking)
-            Item {
-                id: artBackgroundContainer
-                anchors.fill: parent
-                z: 0
-
-                // GPU: only allocate FBO when container is actually visible
-                layer.enabled: artBackgroundContainer.visible
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: artBackgroundContainer.width
-                        height: artBackgroundContainer.height
-                        radius: artBackgroundContainer.width / 2
-                    }
-                }
-
-                // Opaque base behind album art
-                Rectangle {
-                    anchors.fill: parent
-                    color: Appearance.m3colors.m3shadow
-                }
-
-                // Album Art with a light blur
-                    Image {
+                // Album Art with a light GPU blur + circular mask
+                Image {
                     id: albumArtImage
                     anchors.fill: parent
                     source: root.artSource
@@ -178,40 +156,41 @@ AbstractBackgroundWidget {
                     visible: root.artSource !== ""
                     asynchronous: true
 
-                    // GPU: only allocate FBO when image has art to display
                     layer.enabled: albumArtImage.visible
-                    layer.effect: FastBlur {
-                        radius: 4 // light blur
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blurMax: 32
+                        blur: 0.12 // light blur (4px equiv)
+                        maskEnabled: true
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 1
+                        maskSource: Rectangle {
+                            width: albumArtImage.width
+                            height: albumArtImage.height
+                            radius: albumArtImage.width / 2
+                        }
                     }
                 }
 
                 // Radial Gradient: smooth/wide fade region, starts closer to the center
-                RadialGradient {
+                Shapes.Shape {
                     id: radialGrad
                     anchors.fill: parent
-                    horizontalRadius: width / 2
-                    verticalRadius: height / 2
-                    gradient: Gradient {
-                        GradientStop {
-                            position: 0.0
-                            color: "transparent"
+                    Shapes.ShapePath {
+                        strokeColor: "transparent"
+                        fillGradient: Shapes.RadialGradient {
+                            centerX: radialGrad.width / 2
+                            centerY: radialGrad.height / 2
+                            centerRadius: radialGrad.width / 2
+                            focalX: centerX
+                            focalY: centerY
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 0.25; color: "transparent" }
+                            GradientStop { position: 0.62; color: ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.4) }
+                            GradientStop { position: 0.75; color: ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.2) }
+                            GradientStop { position: 1.0; color: Appearance.m3colors.m3shadow }
                         }
-                        GradientStop {
-                            position: 0.25
-                            color: "transparent"
-                        }
-                        GradientStop {
-                            position: 0.62
-                            color: ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.4)
-                        }
-                        GradientStop {
-                            position: 0.75
-                            color: ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.2)
-                        }
-                        GradientStop {
-                            position: 1.0
-                            color: Appearance.m3colors.m3shadow
-                        }
+                        PathRectangle { x: 0; y: 0; width: radialGrad.width; height: radialGrad.height }
                     }
                 }
             }
@@ -309,6 +288,7 @@ AbstractBackgroundWidget {
                         // Previous Button (Perfect Circle matching watch design guidelines)
                         RippleButton {
                             id: prevButton
+                            visible: root.cfgShowPrevBtn
                             width: root.width * 0.20
                             height: width // perfect circle
                             anchors.verticalCenter: parent.verticalCenter
@@ -341,7 +321,7 @@ AbstractBackgroundWidget {
                             MaterialShape {
                                 id: progressBgOutline
                                 anchors.fill: parent
-                                shapeString: "Cookie9Sided"
+                                shapeString: Config.options.background.widgets.circular_media.progressShape ?? "Cookie9Sided"
                                 color: "transparent"
                                 borderColor: ColorUtils.mix("#000000", root.activeAccentColor, 0.70)
                                 borderWidth: 0.055
@@ -350,41 +330,38 @@ AbstractBackgroundWidget {
                             MaterialShape {
                                 id: progressActiveOutline
                                 anchors.fill: parent
-                                shapeString: "Cookie9Sided"
+                                shapeString: Config.options.background.widgets.circular_media.progressShape ?? "Cookie9Sided"
                                 color: "transparent"
                                 borderColor: root.activeAccentColor
                                 borderWidth: 0.055
                                 visible: false
                             }
 
-                            ConicalGradient {
+                            Shapes.Shape {
                                 id: conicalMask
                                 anchors.fill: progressActiveOutline
-                                angle: -90
                                 visible: false
-                                gradient: Gradient {
-                                    GradientStop {
-                                        position: 0.0
-                                        color: "white"
+                                Shapes.ShapePath {
+                                    strokeColor: "transparent"
+                                    fillGradient: Shapes.ConicalGradient {
+                                        centerX: progressActiveOutline.width / 2
+                                        centerY: progressActiveOutline.height / 2
+                                        angle: -90
+                                        GradientStop { position: 0.0; color: "white" }
+                                        GradientStop { position: root.progressValue; color: "white" }
+                                        GradientStop { position: root.progressValue + 0.0001; color: "transparent" }
+                                        GradientStop { position: 1.0; color: "transparent" }
                                     }
-                                    GradientStop {
-                                        position: root.progressValue
-                                        color: "white"
-                                    }
-                                    GradientStop {
-                                        position: root.progressValue + 0.0001
-                                        color: "transparent"
-                                    }
-                                    GradientStop {
-                                        position: 1.0
-                                        color: "transparent"
-                                    }
+                                    PathRectangle { x: 0; y: 0; width: progressActiveOutline.width; height: progressActiveOutline.height }
                                 }
                             }
 
-                            OpacityMask {
+                            MultiEffect {
                                 anchors.fill: progressActiveOutline
                                 source: progressActiveOutline
+                                maskEnabled: true
+                                maskThresholdMin: 0.5
+                                maskSpreadAtMin: 1
                                 maskSource: conicalMask
                             }
 
@@ -398,13 +375,15 @@ AbstractBackgroundWidget {
                                 colBackgroundHover: ColorUtils.mix(root.activeAccentColor, root.activeAccentColor, 0.9)
                                 colRipple: ColorUtils.mix(root.activeAccentContainer, root.activeAccentColor, 0.8)
 
-                                // GPU: only allocate FBO when button is visible
                                 layer.enabled: playPauseButton.visible
-                                layer.effect: OpacityMask {
+                                layer.effect: MultiEffect {
+                                    maskEnabled: true
+                                    maskThresholdMin: 0.5
+                                    maskSpreadAtMin: 1
                                     maskSource: MaterialShape {
                                         width: playPauseButton.width
                                         height: playPauseButton.height
-                                        shapeString: "Cookie9Sided"
+                                        shapeString: Config.options.background.widgets.circular_media.progressShape ?? "Cookie9Sided"
                                     }
                                 }
 
@@ -427,6 +406,7 @@ AbstractBackgroundWidget {
                         // Next Button (Perfect Circle matching watch design guidelines)
                         RippleButton {
                             id: nextButton
+                            visible: root.cfgShowNextBtn
                             width: root.width * 0.20
                             height: width // perfect circle
                             anchors.verticalCenter: parent.verticalCenter
@@ -457,6 +437,7 @@ AbstractBackgroundWidget {
 
                 // Audio Output Device Pill Shape (Centered at the Bottom)
                 RowLayout {
+                    visible: root.cfgShowDevicePill
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredHeight: root.width * 0.13
 
@@ -531,143 +512,115 @@ AbstractBackgroundWidget {
             enabled: false // Transparent to mouse events
             visible: Config.options.background.widgets.circular_media.enableGlassReflection ?? true
 
-            // GPU: release FBO when glass reflection is disabled
-            layer.enabled: glassReflectionOverlay.visible
-            layer.effect: OpacityMask {
-                maskSource: Item {
-                    width: glassReflectionOverlay.width
-                    height: glassReflectionOverlay.height
-
-                    Rectangle {
-                        id: outerMaskBase
-                        anchors.fill: parent
-                        radius: width / 2
-                        visible: false
-                    }
-
-                    FastBlur {
-                        anchors.fill: parent
-                        source: outerMaskBase
-                        radius: 3 // soft feather on the bezel mask boundary
-                    }
-                }
+            Rectangle {
+                id: outerGlassMask
+                width: glassReflectionOverlay.width
+                height: glassReflectionOverlay.height
+                radius: width / 2
+                visible: false
             }
 
-            // Top-Right Crescent Reflection (14:00 / 70 degrees)
-            Item {
-                id: topReflectionContainer
+            // GPU: release FBO when glass reflection is disabled
+            layer.enabled: glassReflectionOverlay.visible
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1
+                maskSource: outerGlassMask
+            }
+
+        // Top-Right Crescent Reflection (14:00 / 70 degrees)
+        Item {
+            id: topReflectionContainer
+            anchors.fill: parent
+
+            Shapes.Shape {
+                id: topCrescentShape
                 anchors.fill: parent
-                // GPU: cascade parent visibility to avoid FBO allocation when reflection disabled
                 layer.enabled: glassReflectionOverlay.visible
-                layer.effect: FastBlur {
-                    radius: 28 // increased blur/dispersion for a softer, broader premium glass glow
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: 32
+                    blur: 0.8
                 }
 
-                // Crescent Mask Shape
-                Shapes.Shape {
-                    id: topMaskShape
-                    anchors.fill: parent
-                    visible: false
-
-                    Shapes.ShapePath {
-                        strokeColor: "transparent"
-                        fillColor: "white"
-                        startX: parent.width * 0.40
-                        startY: parent.height * 0.04
-                        PathArc {
-                            x: topMaskShape.width * 0.96
-                            y: topMaskShape.height * 0.60
-                            radiusX: topMaskShape.width * 0.48
-                            radiusY: topMaskShape.height * 0.48
-                            useLargeArc: false
-                        }
-                        PathArc {
-                            x: topMaskShape.width * 0.40
-                            y: topMaskShape.height * 0.04
-                            radiusX: topMaskShape.width * 0.35
-                            radiusY: topMaskShape.height * 0.35
-                            useLargeArc: false
-                            direction: PathArc.Counterclockwise
-                        }
-                    }
-                }
-
-                LinearGradient {
-                    anchors.fill: parent
-                    start: Qt.point(width * 0.40, height * 0.04)
-                    end: Qt.point(width * 0.96, height * 0.60)
-                    cached: true
-                    gradient: Gradient {
+                Shapes.ShapePath {
+                    strokeColor: "transparent"
+                    fillGradient: Shapes.LinearGradient {
+                        x1: topReflectionContainer.width * 0.40; y1: topReflectionContainer.height * 0.04
+                        x2: topReflectionContainer.width * 0.96; y2: topReflectionContainer.height * 0.60
                         GradientStop { position: 0.0; color: "transparent" }
                         GradientStop { position: 0.3; color: ColorUtils.applyAlpha("#FFFFFF", 0.42) }
                         GradientStop { position: 0.7; color: ColorUtils.applyAlpha("#FFFFFF", 0.42) }
                         GradientStop { position: 1.0; color: "transparent" }
                     }
-                    // GPU: cascade parent visibility to avoid FBO allocation when reflection disabled
-                    layer.enabled: glassReflectionOverlay.visible
-                    layer.effect: OpacityMask {
-                        maskSource: topMaskShape
+
+                    startX: topReflectionContainer.width * 0.40
+                    startY: topReflectionContainer.height * 0.04
+                    PathArc {
+                        x: topReflectionContainer.width * 0.96
+                        y: topReflectionContainer.height * 0.60
+                        radiusX: topReflectionContainer.width * 0.48
+                        radiusY: topReflectionContainer.height * 0.48
+                        useLargeArc: false
+                    }
+                    PathArc {
+                        x: topReflectionContainer.width * 0.40
+                        y: topReflectionContainer.height * 0.04
+                        radiusX: topReflectionContainer.width * 0.35
+                        radiusY: topReflectionContainer.height * 0.35
+                        useLargeArc: false
+                        direction: PathArc.Counterclockwise
                     }
                 }
             }
+        }
 
-            // Bottom-Left Crescent Reflection (250 degrees / 8:00)
-            Item {
-                id: bottomReflectionContainer
+        // Bottom-Left Crescent Reflection (250 degrees / 8:00)
+        Item {
+            id: bottomReflectionContainer
+            anchors.fill: parent
+
+            Shapes.Shape {
+                id: bottomCrescentShape
                 anchors.fill: parent
-                // GPU: cascade parent visibility to avoid FBO allocation when reflection disabled
                 layer.enabled: glassReflectionOverlay.visible
-                layer.effect: FastBlur {
-                    radius: 28 // increased blur/dispersion for a softer, broader premium glass glow
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: 32
+                    blur: 0.8
                 }
 
-                // Crescent Mask Shape
-                Shapes.Shape {
-                    id: bottomMaskShape
-                    anchors.fill: parent
-                    visible: false
-
-                    Shapes.ShapePath {
-                        strokeColor: "transparent"
-                        fillColor: "white"
-                        startX: parent.width * 0.60
-                        startY: parent.height * 0.96
-                        PathArc {
-                            x: bottomMaskShape.width * 0.04
-                            y: bottomMaskShape.height * 0.40
-                            radiusX: bottomMaskShape.width * 0.48
-                            radiusY: bottomMaskShape.height * 0.48
-                            useLargeArc: false
-                        }
-                        PathArc {
-                            x: bottomMaskShape.width * 0.60
-                            y: bottomMaskShape.height * 0.96
-                            radiusX: bottomMaskShape.width * 0.35
-                            radiusY: bottomMaskShape.height * 0.35
-                            useLargeArc: false
-                            direction: PathArc.Counterclockwise
-                        }
-                    }
-                }
-
-                LinearGradient {
-                    anchors.fill: parent
-                    start: Qt.point(width * 0.60, height * 0.96)
-                    end: Qt.point(width * 0.04, height * 0.40)
-                    cached: true
-                    gradient: Gradient {
+                Shapes.ShapePath {
+                    strokeColor: "transparent"
+                    fillGradient: Shapes.LinearGradient {
+                        x1: bottomReflectionContainer.width * 0.60; y1: bottomReflectionContainer.height * 0.96
+                        x2: bottomReflectionContainer.width * 0.04; y2: bottomReflectionContainer.height * 0.40
                         GradientStop { position: 0.0; color: "transparent" }
                         GradientStop { position: 0.3; color: ColorUtils.applyAlpha("#FFFFFF", 0.28) }
                         GradientStop { position: 0.7; color: ColorUtils.applyAlpha("#FFFFFF", 0.28) }
                         GradientStop { position: 1.0; color: "transparent" }
                     }
-                    // GPU: cascade parent visibility to avoid FBO allocation when reflection disabled
-                    layer.enabled: glassReflectionOverlay.visible
-                    layer.effect: OpacityMask {
-                        maskSource: bottomMaskShape
+
+                    startX: bottomReflectionContainer.width * 0.60
+                    startY: bottomReflectionContainer.height * 0.96
+                    PathArc {
+                        x: bottomReflectionContainer.width * 0.04
+                        y: bottomReflectionContainer.height * 0.40
+                        radiusX: bottomReflectionContainer.width * 0.48
+                        radiusY: bottomReflectionContainer.height * 0.48
+                        useLargeArc: false
+                    }
+                    PathArc {
+                        x: bottomReflectionContainer.width * 0.60
+                        y: bottomReflectionContainer.height * 0.96
+                        radiusX: bottomReflectionContainer.width * 0.35
+                        radiusY: bottomReflectionContainer.height * 0.35
+                        useLargeArc: false
+                        direction: PathArc.Counterclockwise
                     }
                 }
             }
         }
+        }
     }
-}
