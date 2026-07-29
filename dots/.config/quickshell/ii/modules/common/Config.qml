@@ -1196,6 +1196,7 @@ Singleton {
                     property bool useFixedSize: true
                     property int customSize: 200
                     property int maxSize: 400
+                    property bool enableVolumeScroll: false
                     property JsonObject artwork: JsonObject {
                         property bool enable: false
                     }
