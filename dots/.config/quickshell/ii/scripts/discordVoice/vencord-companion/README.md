@@ -1,17 +1,33 @@
 # Quickshell/II Discord Voice Vencord companion
 
 Vesktop's built-in arRPC socket supports Rich Presence but not Discord's
-authenticated voice RPC commands. This Vencord user plugin publishes the same
-voice state locally so the Quickshell/II plugin can support Vesktop without
-removing the regular Discord RPC backend.
+authenticated voice RPC commands. Standalone Vencord injected into the official
+Discord client has the same gap. This Vencord user plugin publishes the same
+voice state locally so the Quickshell/II plugin can support these clients
+without removing the regular Discord RPC backend.
 
-Install this directory as `src/userplugins/iiDiscordVoice` in a Vencord source
-checkout, run `pnpm build`, copy the checkout's `package.json` into `dist/`,
-select that `dist` directory under Vesktop Settings → Vencord Location, then
-fully restart Vesktop. **IiDiscordVoice** is enabled by default and remains
-available in Vencord's Plugins page.
+`install.sh` automates all of this for three setups — run it directly, or use
+the "Install Companion" button in the Discord Voice overlay:
 
-For the locally validated build, select:
+- **Vesktop / Equibop**: builds the plugin into a source checkout, then points
+  the client at it via its `vencordLocation`/`equicordDir` settings key.
+- **Official Discord with Vencord** (installed via the standalone Vencord
+  Installer, not Vesktop): there is no equivalent settings key — the injected
+  `patcher.js` hardcodes `~/.config/Vencord/dist` as the load path. The script
+  builds the plugin into a separate checkout and replaces that directory
+  outright, after backing up the existing build to
+  `~/.config/Vencord/dist.bak-<timestamp>`. It also disables Vencord's
+  in-client auto-updater (`autoUpdate`/`autoUpdateNotification` in
+  `~/.config/Vencord/settings/settings.json`), since it would otherwise
+  re-download the official build and silently wipe the custom plugin out. To
+  go back to official builds, restore the backup and re-enable auto-update
+  from Vencord's settings.
+
+Detection is automatic (checked via installed binaries and Electron profile
+markers, not just leftover config directories) but can be forced with
+`QS_DISCORD_CLIENT=vesktop|equibop|vencord ./install.sh` if it guesses wrong.
+
+For the locally validated build, the source checkout lives at:
 `~/.local/share/quickshell-ii/Vencord/dist`.
 
 The companion uses a user-only Unix socket at
