@@ -1,12 +1,16 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
+import QtQuick
 import Quickshell
 import qs.modules.common
+import "./discordVoice" as DiscordPackage
 
 Singleton {
     id: root
 
     signal requestCenter(string identifier)
+
+    readonly property var discordVoiceIcon: Component { DiscordPackage.TaskbarGlyph {} }
 
     readonly property var widgetSymbols: {
         "crosshair": "point_scan",
@@ -16,7 +20,8 @@ Singleton {
         "media": "music_note",
         "resources": "browse_activity",
         "notes": "note_stack",
-        "volumeMixer": "volume_up"
+        "volumeMixer": "volume_up",
+        "discordVoice": "voice_chat"
     }
 
     readonly property list<var> availableWidgets: {
@@ -28,16 +33,19 @@ Singleton {
         for (let i = 0; i < configButtons.length; i++) {
             const id = configButtons[i]
             if (widgetSymbols.hasOwnProperty(id)) {
-                result.push({
+                const entry = {
                     identifier: id,
                     materialSymbol: widgetSymbols[id]
-                })
+                }
+                if (id === "discordVoice") {
+                    entry.iconComponent = root.discordVoiceIcon
+                }
+                result.push(entry)
             }
         }
 
         return result
     }
-
     readonly property bool hasPinnedWidgets: root.pinnedWidgetIdentifiers.length > 0
 
     property list<string> pinnedWidgetIdentifiers: []
