@@ -55,6 +55,10 @@
 # and prints the --local line to re-run, so a stale checkout is never silently
 # redeployed.
 #
+# On Arch, `install` ends by putting the AUR quickshell-git back: the base
+# installer builds its own pinned quickshell and this fork is written against
+# master. That happens before any config lands, and asks first unless -y.
+#
 # Given neither --keep-config nor --reset-config, config.json is kept on
 # updates and branch hops and reset on fork switches, where the schema changes.
 #
@@ -1196,6 +1200,88 @@ local_origin() {
 # Quickshell
 #══════════════════════════════════════════════════════════════════════════════
 
+# ensure_quickshell_git — put the AUR quickshell-git back after a base install.
+#
+# The base installer builds its own illogical-impulse-quickshell-git from a
+# commit pinned months ago and drops quickshell-git on the way. This fork is
+# written against Quickshell master, so the pinned build is normally older
+# than the QML expects and the shell fails to start. Undo that before any
+# config lands, which is why install is the only command that calls this.
+#
+# Arch only: every other distro packages Quickshell its own way, and the
+# pinned PKGBUILD is an Arch-specific problem.
+ensure_quickshell_git() {
+    have pacman || return 0
+    if pacman -Qq quickshell-git >/dev/null 2>&1; then
+        ui_verbose "quickshell-git already installed"
+        return 0
+    fi
+
+    local current
+    current="$(pacman -Qqo /usr/bin/quickshell 2>/dev/null || true)"
+
+    ui_frame_open "Quickshell package"
+    ui_kv "installed" "${current:-none}"
+    ui_kv "wanted" "quickshell-git"
+    ui_frame_close
+    ui_note "This fork follows Quickshell master. The pinned build the base"
+    ui_note "installer ships is older, and the shell will not start on it."
+
+    # yay first because that is what the base installer bootstraps, but paru
+    # takes the same flags and plenty of people have only that one.
+    local helper="" h
+    for h in yay paru; do
+        have "$h" && {
+            helper="$h"
+            break
+        }
+    done
+    [[ -n "$helper" ]] || {
+        ui_warn "No AUR helper found — install quickshell-git with yay or paru yourself."
+        return 0
+    }
+
+    if [[ "$OPT_ASSUME_YES" != true ]]; then
+        local q="Install quickshell-git?"
+        [[ -n "$current" ]] && q="Replace $current with quickshell-git?"
+        ui_confirm "$q" || {
+            ui_note "Left as is. The shell may not start."
+            return 0
+        }
+    fi
+
+    # Swapping the packages orphans every Qt module the meta-package pulled in
+    # as a dependency, and a later `yay -Yc` would then sweep away half of what
+    # the shell needs at runtime. Diff the orphan list around the swap so the
+    # ones it strands can be marked wanted, without having to guess the list.
+    local before after
+    before="$(pacman -Qdtq 2>/dev/null | sort || true)"
+
+    ui_info "Running $helper -S quickshell-git — its own output follows."
+    printf '\n'
+    local -a flags=(-S --needed)
+    [[ "$OPT_ASSUME_YES" == true ]] && flags+=(--noconfirm)
+    local rc=0
+    "$helper" "${flags[@]}" quickshell-git || rc=$?
+    printf '\n'
+    if ((rc != 0)); then
+        ui_warn "quickshell-git install failed (exit $rc) — fix it before starting the shell."
+        return 0
+    fi
+
+    after="$(pacman -Qdtq 2>/dev/null | sort || true)"
+    local -a stranded=()
+    mapfile -t stranded < <(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | grep -v '^$' || true)
+    if ((${#stranded[@]} > 0)); then
+        run_logged sudo pacman -D -q --asexplicit "${stranded[@]}" ||
+            ui_warn "Could not mark ${#stranded[@]} stranded deps explicit."
+        ui_verbose "kept: ${stranded[*]}"
+        ui_ok "Kept" "${#stranded[@]} Qt deps marked explicit"
+    fi
+
+    ui_ok "Quickshell" "$(pacman -Qq quickshell-git 2>/dev/null || printf 'quickshell-git')"
+}
+
 qt_mismatch() {
     have quickshell || return 1
     local msg
@@ -1644,6 +1730,10 @@ cmd_install() {
         CLONE_DIR=""
     fi
 
+    # Before any config files land, so the shell the user ends up looking at
+    # is running the Quickshell this fork was written against.
+    ensure_quickshell_git
+
     OPT_SKIP_BASE_CHECK=true
     apply_config "$url" "$branch" "$fork" "install"
 }
@@ -1898,6 +1988,8 @@ show_help() {
     printf '  %s--local takes a fork checkout or an ii config dir; either way nothing%s\n' "$C_SUB" "$C_RST"
     printf '  %sis cloned. update will not guess the path back: it refuses and prints%s\n' "$C_SUB" "$C_RST"
     printf '  %sthe --local line to re-run.%s\n' "$C_SUB" "$C_RST"
+    printf '  %sOn Arch, install swaps the base installer'"'"'s pinned quickshell for the%s\n' "$C_SUB" "$C_RST"
+    printf '  %sAUR quickshell-git this fork targets, before any config lands.%s\n' "$C_SUB" "$C_RST"
     printf '  %sGiven neither --keep-config nor --reset-config, config.json is kept on%s\n' "$C_SUB" "$C_RST"
     printf '  %supdates and branch hops and reset on fork switches, where the schema%s\n' "$C_SUB" "$C_RST"
     printf '  %schanges.%s\n' "$C_SUB" "$C_RST"
