@@ -227,7 +227,7 @@ ContentPage {
 
         Item {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            implicitHeight: 250
             visible: btImagesSection.getAvailableDevices().length === 0 && btImagesSection.getDeviceImages().length === 0
 
             PagePlaceholder {
