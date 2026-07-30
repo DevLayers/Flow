@@ -29,6 +29,7 @@ Item {
 
     readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
     readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
+    property real blur: scratchpadOpen ? 1 : 0
 
     readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 1
     readonly property int workspacesShown: Config.options.bar.workspaces.shown
@@ -209,243 +210,357 @@ Item {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
-    // ── Container pill (transparent, like DocktoPanel) ────────────────────
-    Rectangle {
-        id: pill
-        anchors.centerIn: parent
-        color: "transparent"
-        radius: Appearance.rounding.full
-
-        implicitWidth:  flow.implicitWidth + (root.vertical ? 0 : 4)
-        implicitHeight: flow.implicitHeight + (root.vertical ? 4 : 0)
-
-        Behavior on implicitWidth {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    Behavior on blur {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
         }
-        Behavior on implicitHeight {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-        }
+    }
 
-        // ── Active workspace indicator ───────────────────────────────────
-        Loader {
-            id: activeIndicatorLoader
-            x: root.indicatorPosX
-            y: root.indicatorPosY
-            width: root.btnSize
-            height: root.btnSize
-            visible: Config.options.bar.workspaces.dockShowActiveIndicator && root.activeIndex >= 0
-            active: Config.options.bar.workspaces.dockShowActiveIndicator && root.activeIndex >= 0
-
-            Behavior on x {
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-            }
-            Behavior on y {
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-            }
-
-            sourceComponent: (Config.options.bar.workspaces.useMaterialShapeForActiveIndicator || Config.options.bar.workspaces.useRandomShapeForActiveIndicator)
-                ? materialShapeComp : rectangleComp
-
-            Component {
-                id: rectangleComp
-                Rectangle {
-                    radius: Appearance.rounding.full
-                    color: Appearance.colors.colPrimary
-                    opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
-                }
-            }
-
-            Component {
-                id: materialShapeComp
-                MaterialShape {
-                    anchors.fill: parent
-                    transformOrigin: Item.Center
-                    shapeString: Config.options.bar.workspaces.useRandomShapeForActiveIndicator
-                        ? root.currentRandomShape
-                        : Config.options.bar.workspaces.activeIndicatorShape
-                    color: Appearance.colors.colPrimary
-                    opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
-                    rotation: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0
-                    Behavior on rotation {
-                        RotationAnimation {
-                            duration: 350
-                            direction: RotationAnimation.Clockwise
-                            easing.type: Easing.OutBack
-                        }
-                    }
-                }
-            }
+    // ── Blur + dim wrapper (dimmed/blurred as a whole when scratchpad is open) ──
+    Item {
+        id: contentContainer
+        anchors.fill: parent
+        z: 0
+        opacity: root.scratchpadOpen ? 0.65 : 1
+        layer.enabled: root.blur > 0
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 32
+            blur: root.blur
         }
 
-        Flow {
-            id: flow
+        // ── Container pill (transparent, like DocktoPanel) ────────────────
+        Rectangle {
+            id: pill
             anchors.centerIn: parent
-            flow:    root.vertical ? Flow.TopToBottom : Flow.LeftToRight
-            spacing: root.btnSpacing
+            color: "transparent"
+            radius: Appearance.rounding.full
 
-            Repeater {
-                id: repeater
-                model: root.visibleWsModel
+            implicitWidth:  flow.implicitWidth + (root.vertical ? 0 : 4)
+            implicitHeight: flow.implicitHeight + (root.vertical ? 4 : 0)
 
-                delegate: Item {
-                    id: wsItem
-                    required property int index
-                    required property var modelData
+            Behavior on implicitWidth {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on implicitHeight {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
 
-                    readonly property int wsId: modelData
-                    readonly property bool isActive: wsId === root.activeWsId
-                    readonly property bool isOccupied: root.workspaceOccupied[wsId] ?? false
-                    readonly property var wsWindows: root.workspaceWindows[wsId] ?? []
-                    readonly property string icon: wsWindows.length > 0 ? wsWindows[0].icon : ""
+            // ── Active workspace indicator ───────────────────────────────
+            Loader {
+                id: activeIndicatorLoader
+                x: root.indicatorPosX
+                y: root.indicatorPosY
+                width: root.btnSize
+                height: root.btnSize
+                visible: Config.options.bar.workspaces.dockShowActiveIndicator && root.activeIndex >= 0
+                active: Config.options.bar.workspaces.dockShowActiveIndicator && root.activeIndex >= 0
 
-                    width:  root.btnSize
-                    height: root.btnSize
+                Behavior on x {
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                }
+                Behavior on y {
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                }
 
-                    // ── Hover effect (scale) ─────────────────────────────
-                    readonly property real baseScale: Config.options.bar.workspaces.dockHoverEffect
-                        ? (wsItem.isActive ? 1.0 : 0.9)
-                        : 1.0
+                sourceComponent: (Config.options.bar.workspaces.useMaterialShapeForActiveIndicator || Config.options.bar.workspaces.useRandomShapeForActiveIndicator)
+                    ? materialShapeComp : rectangleComp
 
-                    scale: wsItem.baseScale * (Config.options.bar.workspaces.dockHoverEffect && wsButton.hovered && !wsItem.isActive ? 1.08 : 1.0)
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 200
-                            easing.type: Easing.OutCubic
+                Component {
+                    id: rectangleComp
+                    Rectangle {
+                        radius: Appearance.rounding.full
+                        color: Appearance.colors.colPrimary
+                        opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
+                    }
+                }
+
+                Component {
+                    id: materialShapeComp
+                    MaterialShape {
+                        anchors.fill: parent
+                        transformOrigin: Item.Center
+                        shapeString: Config.options.bar.workspaces.useRandomShapeForActiveIndicator
+                            ? root.currentRandomShape
+                            : Config.options.bar.workspaces.activeIndicatorShape
+                        color: Appearance.colors.colPrimary
+                        opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
+                        rotation: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0
+                        Behavior on rotation {
+                            RotationAnimation {
+                                duration: 350
+                                direction: RotationAnimation.Clockwise
+                                easing.type: Easing.OutBack
+                            }
                         }
                     }
+                }
+            }
 
-                    // ── Scratchpad dimming ──────────────────────────────
-                    opacity: root.scratchpadOpen && !wsItem.isActive ? 0.35 : 1.0
-                    Behavior on opacity { NumberAnimation { duration: 110 } }
+            Flow {
+                id: flow
+                anchors.centerIn: parent
+                flow:    root.vertical ? Flow.TopToBottom : Flow.LeftToRight
+                spacing: root.btnSpacing
 
-                    RippleButton {
-                        id: wsButton
-                        anchors.fill: parent
-                        buttonRadius: Appearance.rounding.small
-                        hoverEnabled: true
+                Repeater {
+                    id: repeater
+                    model: root.visibleWsModel
 
-                        onClicked: {
-                            Hyprland.dispatch("hl.dsp.focus({ workspace = '" + wsItem.wsId + "' })");
+                    delegate: Item {
+                        id: wsItem
+                        required property int index
+                        required property var modelData
+
+                        readonly property int wsId: modelData
+                        readonly property bool isActive: wsId === root.activeWsId
+                        readonly property bool isOccupied: root.workspaceOccupied[wsId] ?? false
+                        readonly property var wsWindows: root.workspaceWindows[wsId] ?? []
+                        readonly property string icon: wsWindows.length > 0 ? wsWindows[0].icon : ""
+
+                        width:  root.btnSize
+                        height: root.btnSize
+
+                        // ── Hover effect (scale) ─────────────────────────────
+                        readonly property real baseScale: Config.options.bar.workspaces.dockHoverEffect
+                            ? (wsItem.isActive ? 1.0 : 0.9)
+                            : 1.0
+
+                        scale: wsItem.baseScale * (Config.options.bar.workspaces.dockHoverEffect && wsButton.hovered && !wsItem.isActive ? 1.08 : 1.0)
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 200
+                                easing.type: Easing.OutCubic
+                            }
                         }
 
-                        contentItem: Item {
-                            anchors.centerIn: parent
+                        // ── Scratchpad dimming ──────────────────────────────
+                        opacity: root.scratchpadOpen && !wsItem.isActive ? 0.35 : 1.0
+                        Behavior on opacity { NumberAnimation { duration: 110 } }
 
-                            // ── Icon wrapper (for shape mask) ──────────
-                            Item {
-                                id: iconWrapper
+                        RippleButton {
+                            id: wsButton
+                            anchors.fill: parent
+                            buttonRadius: Appearance.rounding.small
+                            hoverEnabled: true
+
+                            onClicked: {
+                                Hyprland.dispatch("hl.dsp.focus({ workspace = '" + wsItem.wsId + "' })");
+                            }
+
+                            contentItem: Item {
                                 anchors.centerIn: parent
-                                width: root.iconSize
-                                height: root.iconSize
 
-                                // ── Workspace icon (first window) ──────
-                                IconImage {
-                                    id: wsIcon
+                                // ── Icon wrapper (for shape mask) ──────────
+                                Item {
+                                    id: iconWrapper
                                     anchors.centerIn: parent
-                                    source: wsItem.icon
-                                    implicitSize: root.iconSize
-                                    visible: wsItem.icon !== ""
-                                        && Config.options.bar.workspaces.dockShowAppIcons
-                                }
+                                    width: root.iconSize
+                                    height: root.iconSize
 
-                                // ── Monochrome tint (DocktoPanel pattern) ──
-                                Loader {
-                                    active: Config.options.bar.workspaces.monochromeIcons
+                                    // ── Workspace icon (first window) ──────
+                                    IconImage {
+                                        id: wsIcon
+                                        anchors.centerIn: parent
+                                        source: wsItem.icon
+                                        implicitSize: root.iconSize
+                                        visible: wsItem.icon !== ""
+                                            && Config.options.bar.workspaces.dockShowAppIcons
+                                    }
+
+                                    // ── Monochrome tint (DocktoPanel pattern) ──
+                                    Loader {
+                                        active: Config.options.bar.workspaces.monochromeIcons
+                                            && wsItem.icon !== ""
+                                            && Config.options.bar.workspaces.dockShowAppIcons
+                                        anchors.fill: wsIcon
+                                        sourceComponent: Item {
+                                            Desaturate {
+                                                id: desat
+                                                visible: false
+                                                anchors.fill: parent
+                                                source: wsIcon
+                                                desaturation: 0.8
+                                            }
+                                            ColorOverlay {
+                                                anchors.fill: desat
+                                                source: desat
+                                                color: ColorUtils.transparentize(
+                                                    Appearance.colors.colPrimary,
+                                                    1.0 - (Config.options.appearance.iconTintPercentage ?? 0.6)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // ── Shape mask for icons ───────────────
+                                    layer.enabled: Config.options.appearance.icons.enableShapeMask
                                         && wsItem.icon !== ""
                                         && Config.options.bar.workspaces.dockShowAppIcons
-                                    anchors.fill: wsIcon
-                                    sourceComponent: Item {
-                                        Desaturate {
-                                            id: desat
-                                            visible: false
+                                    layer.effect: OpacityMask {
+                                        maskSource: MaterialShape {
                                             anchors.fill: parent
-                                            source: wsIcon
-                                            desaturation: 0.8
-                                        }
-                                        ColorOverlay {
-                                            anchors.fill: desat
-                                            source: desat
-                                            color: ColorUtils.transparentize(
-                                                Appearance.colors.colPrimary,
-                                                1.0 - (Config.options.appearance.iconTintPercentage ?? 0.6)
-                                            )
+                                            shapeString: Config.options.appearance.icons.shapeMask
+                                            visible: false
                                         }
                                     }
                                 }
 
-                                // ── Shape mask for icons ───────────────
-                                layer.enabled: Config.options.appearance.icons.enableShapeMask
-                                    && wsItem.icon !== ""
-                                    && Config.options.bar.workspaces.dockShowAppIcons
-                                layer.effect: OpacityMask {
-                                    maskSource: MaterialShape {
-                                        anchors.fill: parent
-                                        shapeString: Config.options.appearance.icons.shapeMask
-                                        visible: false
+                                // ── Fallback dot for empty workspaces ────────
+                                Rectangle {
+                                    anchors.centerIn: parent
+                                    width: (wsItem.icon === "" || !Config.options.bar.workspaces.dockShowAppIcons)
+                                        ? (wsItem.isActive ? 7 : 5)
+                                        : 0
+                                    height: width
+                                    radius: width / 2
+                                    color: wsItem.isActive ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+                                    visible: wsItem.icon === "" || !Config.options.bar.workspaces.dockShowAppIcons
+
+                                    Behavior on width {
+                                        NumberAnimation {
+                                            duration: 200
+                                            easing.type: Easing.OutQuint
+                                        }
+                                    }
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 150
+                                        }
                                     }
                                 }
-                            }
 
-                            // ── Fallback dot for empty workspaces ────────
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: (wsItem.icon === "" || !Config.options.bar.workspaces.dockShowAppIcons)
-                                    ? (wsItem.isActive ? 7 : 5)
-                                    : 0
-                                height: width
-                                radius: width / 2
-                                color: wsItem.isActive ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
-                                visible: wsItem.icon === "" || !Config.options.bar.workspaces.dockShowAppIcons
-
-                                Behavior on width {
-                                    NumberAnimation {
-                                        duration: 200
-                                        easing.type: Easing.OutQuint
+                                // ── Window count dots ─────────────────────────
+                                Flow {
+                                    id: windowDotsFlow
+                                    visible: Config.options.bar.workspaces.dockShowWindowDots
+                                    flow: root.vertical ? Flow.TopToBottom : Flow.LeftToRight
+                                    spacing: 2
+                                    anchors {
+                                        left:   root.vertical ? iconWrapper.right    : undefined
+                                        top:    root.vertical ? undefined            : iconWrapper.bottom
+                                        leftMargin:  root.vertical ? 1  : 0
+                                        topMargin:   root.vertical ? 0  : 1
+                                        horizontalCenter: root.vertical ? undefined : parent.horizontalCenter
+                                        verticalCenter:   root.vertical ? parent.verticalCenter : undefined
                                     }
-                                }
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: 150
-                                    }
-                                }
-                            }
 
-                            // ── Window count dots ─────────────────────────
-                            Flow {
-                                id: windowDotsFlow
-                                visible: Config.options.bar.workspaces.dockShowWindowDots
-                                flow: root.vertical ? Flow.TopToBottom : Flow.LeftToRight
-                                spacing: 2
-                                anchors {
-                                    left:   root.vertical ? iconWrapper.right    : undefined
-                                    top:    root.vertical ? undefined            : iconWrapper.bottom
-                                    leftMargin:  root.vertical ? 1  : 0
-                                    topMargin:   root.vertical ? 0  : 1
-                                    horizontalCenter: root.vertical ? undefined : parent.horizontalCenter
-                                    verticalCenter:   root.vertical ? parent.verticalCenter : undefined
-                                }
+                                    Repeater {
+                                        model: Math.min(wsItem.wsWindows.length, 3)
 
-                                Repeater {
-                                    model: Math.min(wsItem.wsWindows.length, 3)
-
-                                    delegate: Rectangle {
-                                        required property int index
-                                        radius: Appearance.rounding.full
-                                        implicitWidth:  root.vertical
-                                            ? 2
-                                            : wsItem.wsWindows.length <= 3 ? 4 : 2
-                                        implicitHeight: root.vertical
-                                            ? (wsItem.wsWindows.length <= 3 ? 4 : 2)
-                                            : 2
-                                        color: wsItem.isActive
-                                            ? Appearance.colors.colPrimary
-                                            : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
+                                        delegate: Rectangle {
+                                            required property int index
+                                            radius: Appearance.rounding.full
+                                            implicitWidth:  root.vertical
+                                                ? 2
+                                                : wsItem.wsWindows.length <= 3 ? 4 : 2
+                                            implicitHeight: root.vertical
+                                                ? (wsItem.wsWindows.length <= 3 ? 4 : 2)
+                                                : 2
+                                            color: wsItem.isActive
+                                                ? Appearance.colors.colPrimary
+                                                : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+            }
+        } // pill
+
+        // Position helper (invisible, inside blur container)
+        Item {
+            id: positionHelper
+            readonly property Item activeItem: flow.children[0]
+                ? (() => {
+                    let items = flow.children;
+                    for (let i = 0; i < items.length; i++) {
+                        if (items[i] && items[i].isActive) return items[i];
+                    }
+                    return null;
+                })()
+                : null
+
+            x: activeItem ? activeItem.x + flow.x + pill.x : 0
+            y: activeItem ? activeItem.y + flow.y + pill.y : 0
+            width: activeItem ? activeItem.width : root.btnSize
+            height: activeItem ? activeItem.height : root.btnSize
+            visible: false
+        }
+
+    } // contentContainer
+
+    // Active workspace overlay (above blur, same position, kept sharp)
+    Item {
+        id: activeOverlay
+        z: 10
+
+        x: positionHelper.x
+        y: positionHelper.y
+        width: positionHelper.width
+        height: positionHelper.height
+
+        readonly property bool _show: root.scratchpadOpen && positionHelper.activeItem !== null
+        readonly property var _activeWsWindows: root.workspaceWindows[root.activeWsId] ?? []
+        readonly property string _activeIcon: _activeWsWindows.length > 0 ? _activeWsWindows[0].icon : ""
+
+        visible: _show
+        opacity: _show ? 1.0 : 0.0
+        scale: _show ? 1.1 : 1.0
+        transformOrigin: Item.Center
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+        Behavior on scale {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+
+        Item {
+            id: overlayIconWrapper
+            anchors.centerIn: parent
+            width: root.iconSize
+            height: root.iconSize
+
+            IconImage {
+                id: overlayIcon
+                anchors.centerIn: parent
+                source: activeOverlay._activeIcon
+                implicitSize: root.iconSize
+                visible: activeOverlay._activeIcon !== "" && Config.options.bar.workspaces.dockShowAppIcons
+
+                layer.enabled: Config.options.appearance.icons.enableShapeMask
+                layer.effect: OpacityMask {
+                    maskSource: overlayIconMask
+                }
+            }
+
+            MaterialShape {
+                id: overlayIconMask
+                anchors.fill: overlayIcon
+                shapeString: Config.options.appearance.icons.shapeMask
+                visible: false
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: (activeOverlay._activeIcon === "" || !Config.options.bar.workspaces.dockShowAppIcons) ? 7 : 0
+                height: width
+                radius: width / 2
+                color: Appearance.colors.colPrimary
+                visible: activeOverlay._activeIcon === "" || !Config.options.bar.workspaces.dockShowAppIcons
             }
         }
     }
