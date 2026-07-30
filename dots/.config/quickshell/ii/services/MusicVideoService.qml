@@ -30,7 +30,8 @@ Singleton {
     /// True while a video is currently playing (mpvpaper process is running).
     readonly property bool videoPlaying: mpvpaperProc.running
 
-    /// The last video URL that was played (for debugging).
+    /// Unique socket path for mpv IPC control.
+    readonly property string ipcSocket: _ipcSocket
     readonly property string currentVideoUrl: _currentUrl
 
     /// The search query used for the last successful search.
@@ -112,8 +113,7 @@ Singleton {
 
     // ── Playback sync: pause / resume video with music ───────────────────────
 
-    readonly property var _activePlayerRef: MprisController.activePlayer
-    readonly property bool _playerIsPlaying: root._activePlayerRef?.isPlaying ?? true
+    readonly property bool _playerIsPlaying: root.activePlayer ? (root.activePlayer.isPlaying || root.activePlayer.playbackState === MprisPlaybackState.Playing) : true
 
     on_PlayerIsPlayingChanged: {
         if (!root.videoPlaying || !root._ipcSocket)
@@ -138,9 +138,10 @@ Singleton {
         if (!title)
             return;
 
-        // Build search query
+        // Build search query with fallback if first search fails
         const suffix = Config.options.background.mediaMode.musicVideo.searchSuffix ?? "official music video";
-        const query = artist ? (artist + " - " + title + " " + suffix) : (title + " " + suffix);
+        const primaryQuery = artist ? (artist + " - " + title + " " + suffix) : (title + " " + suffix);
+        const fallbackQuery = artist ? (artist + " " + title) : title;
 
         root._lastQuery = root.currentTrackId;
         root._pendingArtist = artist;
@@ -151,9 +152,16 @@ Singleton {
         root.stopVideo();
         root._searchingForTrack = root.currentTrackId;
 
-        // Search yt-dlp asynchronously — use --get-id for speed (no URL resolution)
-        // mpvpaper will handle format selection via --ytdl-format
-        searchProc.command = ["bash", "-c", "yt-dlp ytsearch1:" + _shellEscape(query) + " --get-id --no-playlist --socket-timeout 5" + " --no-warnings 2>/dev/null"];
+        // Search yt-dlp asynchronously — try primary query, if empty fallback to artist + title
+        const searchScript = `
+            ID=$(yt-dlp ytsearch1:${_shellEscape(primaryQuery)} --get-id --no-playlist --socket-timeout 5 --no-warnings 2>/dev/null)
+            if [ -z "$ID" ]; then
+                ID=$(yt-dlp ytsearch1:${_shellEscape(fallbackQuery)} --get-id --no-playlist --socket-timeout 5 --no-warnings 2>/dev/null)
+            fi
+            echo "$ID"
+        `;
+
+        searchProc.command = ["bash", "-c", searchScript];
         searchProc.running = true;
     }
 
@@ -168,9 +176,8 @@ Singleton {
         }
         // Stop sync timer immediately
         syncTimer.stop();
-        // Force-kill any lingering mpvpaper processes to prevent stale videos
-        // from blocking new ones on the same monitor.
-        Quickshell.execDetached(["pkill", "-f", "mpvpaper"]);
+        // Force-kill immediately any mpvpaper processes using SIGKILL so video drops instantly
+        Quickshell.execDetached(["pkill", "-9", "-f", "mpvpaper"]);
         root._currentUrl = "";
         root._searchingForTrack = "";
         // Clean up IPC socket
@@ -254,16 +261,9 @@ Singleton {
         // Build mpvpaper command — high quality format & bitrate selection
         const maxRes = Config.options.background.mediaMode.musicVideo.maxResolution ?? 1080;
         const ytdlFormat = "bestvideo[height<=" + maxRes + "][vcodec!=?none]+bestaudio/best[height<=" + maxRes + "]/best";
-        
+
         // Options passed inside mpvpaper's -o string to mpv:
-        const innerMpvOpts = [
-            "aid=no",
-            "no-border",
-            "loop=inf",
-            "no-terminal",
-            "input-ipc-server=" + socketPath,
-            "ytdl-format=" + ytdlFormat
-        ].join(" ");
+        const innerMpvOpts = ["--config=no", "aid=no", "no-border", "loop=inf", "no-terminal", "input-ipc-server=" + socketPath, "ytdl-format=" + ytdlFormat].join(" ");
 
         mpvpaperProc.command = ["mpvpaper", "-l", "background", "-o", innerMpvOpts, monitorName, url];
 
@@ -279,7 +279,7 @@ Singleton {
         syncTimer.restart();
 
         // Apply pause state immediately (in case music was paused when search finished)
-        if (!(MprisController.activePlayer?.isPlaying ?? true)) {
+        if (!root._playerIsPlaying) {
             _pauseMpv();
         }
     }

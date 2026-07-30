@@ -36,3 +36,4 @@ __pycache__/
 
 # Compiled binary — build it from workspace_profile_manager_src/ instead (see scripts/hyprland/README.md)
 /dots/.config/quickshell/ii/scripts/hyprland/workspace_profile_manager
+/dots/.config/quickshell/ii/.tmp

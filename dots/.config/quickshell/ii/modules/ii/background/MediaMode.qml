@@ -17,6 +17,14 @@ import qs.modules.common.functions
 Item { // Fullscreen MediaMode instance
     id: root
 
+    opacity: 0
+    Behavior on opacity {
+        NumberAnimation {
+            duration: 300
+            easing.type: Easing.OutQuad
+        }
+    }
+
     property MprisPlayer player: MprisController.activePlayer
     property var artUrl: MprisController.artUrl
     property string artDownloadLocation: Directories.coverArt
@@ -27,12 +35,37 @@ Item { // Fullscreen MediaMode instance
 
     readonly property string trackTitle: root.player?.trackTitle || ""
 
+    // Music video mode state
+    readonly property bool videoActive: Config.options.background.mediaMode.musicVideo.enable && MusicVideoService.videoPlaying
+
     // Dynamic Color Palette Logic
     property bool dynamicColorEnabled: Config.options.background.mediaMode.changeShellColor
-    property color extractedColor: colorQuantizer.colors.length > 0 ? colorQuantizer.colors[0] : Appearance.colors.colPrimary
-    property color dynamicAccentColor: dynamicColorEnabled ? ColorUtils.mix(extractedColor, Appearance.colors.colPrimary, 0.5) : Appearance.colors.colPrimary
-    property color dynamicAccentContainer: dynamicColorEnabled ? ColorUtils.mix(extractedColor, Appearance.colors.colPrimaryContainer, 0.6) : Appearance.colors.colPrimaryContainer
-    property color dynamicOnAccentContainer: dynamicColorEnabled ? (extractedColor.hslLightness < 0.6 ? "#ffffff" : "#000000") : Appearance.colors.colOnPrimaryContainer
+    property color albumArtExtractedColor: colorQuantizer.colors.length > 0 ? colorQuantizer.colors[0] : Appearance.colors.colPrimary
+    property color activeExtractedColor: videoActive ? VideoColorSampler.currentExtractedColor : albumArtExtractedColor
+    
+    property color extractedColor: activeExtractedColor
+    Behavior on extractedColor {
+        ColorAnimation {
+            duration: Math.min(400, (Config.options.background.mediaMode.musicVideo.videoSamplingInterval ?? 200) * 0.8)
+            easing.type: Easing.InOutQuad
+        }
+    }
+
+    property color dynamicAccentColor: dynamicColorEnabled ? extractedColor : Appearance.colors.colPrimary
+    property color dynamicAccentContainer: dynamicColorEnabled ? ColorUtils.transparentize(extractedColor, 0.3) : Appearance.colors.colPrimaryContainer
+    property color dynamicOnAccentContainer: dynamicColorEnabled ? ColorUtils.getContrastingTextColor(extractedColor) : Appearance.colors.colOnPrimaryContainer
+
+    Binding {
+        target: VideoColorSampler
+        property: "active"
+        value: videoActive && root.dynamicColorEnabled
+    }
+
+    Binding {
+        target: VideoColorSampler
+        property: "ipcSocket"
+        value: MusicVideoService.ipcSocket
+    }
 
     // Mode state options (Bound to Config.options.background.mediaMode)
     property int visualizerMode: Config.options.background.mediaMode.visualizerMode ?? 1 // 0: Off, 1: Waves, 2: Bars, 3: Radial
@@ -82,11 +115,26 @@ Item { // Fullscreen MediaMode instance
         }
     }
 
+    onVideoActiveChanged: {
+        if (videoActive) {
+            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "unset,quickshell:background"]);
+        } else {
+            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "blur,quickshell:background"]);
+        }
+    }
+
     Component.onCompleted: {
         Persistent.states.background.mediaMode.userScrollOffset = 0;
         GlobalStates.mediaModeCount++;
+        root.opacity = 1.0;
+        if (videoActive) {
+            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "unset,quickshell:background"]);
+        }
     }
-    Component.onDestruction: GlobalStates.mediaModeCount--
+    Component.onDestruction: {
+        GlobalStates.mediaModeCount--;
+        Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "blur,quickshell:background"]);
+    }
 
     onTrackTitleChanged: Persistent.states.background.mediaMode.userScrollOffset = 0
 
@@ -373,14 +421,14 @@ Item { // Fullscreen MediaMode instance
                                 implicitWidth: 42
                                 implicitHeight: 42
                                 buttonRadius: Appearance.rounding.full
-                                colBackground: root.visualizerMode > 0 ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-                                colBackgroundHover: Appearance.colors.colLayer2Hover
-                                colBackgroundActive: Appearance.colors.colLayer2Active
+                                colBackground: root.dynamicAccentContainer
+                                colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     iconSize: 20
-                                    color: root.visualizerMode > 0 ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                                    color: root.dynamicOnAccentContainer
                                     text: {
                                         if (root.visualizerMode === 1)
                                             return "waves";
@@ -407,14 +455,14 @@ Item { // Fullscreen MediaMode instance
                                 implicitWidth: 42
                                 implicitHeight: 42
                                 buttonRadius: Appearance.rounding.full
-                                colBackground: Config.options.background.mediaMode.changeShellColor ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-                                colBackgroundHover: Appearance.colors.colLayer2Hover
-                                colBackgroundActive: Appearance.colors.colLayer2Active
+                                colBackground: root.dynamicAccentContainer
+                                colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     iconSize: 20
-                                    color: Config.options.background.mediaMode.changeShellColor ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                                    color: root.dynamicOnAccentContainer
                                     text: "palette"
                                 }
 
@@ -438,14 +486,14 @@ Item { // Fullscreen MediaMode instance
                                     implicitWidth: 34
                                     implicitHeight: 42
                                     buttonRadius: Appearance.rounding.full
-                                    colBackground: (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) !== 0 ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-                                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                                    colBackgroundActive: Appearance.colors.colLayer2Active
+                                    colBackground: root.dynamicAccentContainer
+                                    colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                    colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
 
                                     MaterialSymbol {
                                         anchors.centerIn: parent
                                         iconSize: 18
-                                        color: (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) !== 0 ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                                        color: root.dynamicOnAccentContainer
                                         text: "more_time"
                                     }
 
@@ -466,14 +514,14 @@ Item { // Fullscreen MediaMode instance
                                     implicitWidth: 28
                                     implicitHeight: 42
                                     buttonRadius: Appearance.rounding.full
-                                    colBackground: Appearance.colors.colLayer2
-                                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                                    colBackgroundActive: Appearance.colors.colLayer2Active
+                                    colBackground: root.dynamicAccentContainer
+                                    colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                    colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
 
                                     MaterialSymbol {
                                         anchors.centerIn: parent
                                         iconSize: 16
-                                        color: Appearance.colors.colOnLayer2
+                                        color: root.dynamicOnAccentContainer
                                         text: "remove"
                                     }
 
@@ -490,14 +538,14 @@ Item { // Fullscreen MediaMode instance
                                     implicitWidth: 28
                                     implicitHeight: 42
                                     buttonRadius: Appearance.rounding.full
-                                    colBackground: Appearance.colors.colLayer2
-                                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                                    colBackgroundActive: Appearance.colors.colLayer2Active
+                                    colBackground: root.dynamicAccentContainer
+                                    colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                    colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
 
                                     MaterialSymbol {
                                         anchors.centerIn: parent
                                         iconSize: 16
-                                        color: Appearance.colors.colOnLayer2
+                                        color: root.dynamicOnAccentContainer
                                         text: "add"
                                     }
 
@@ -516,14 +564,14 @@ Item { // Fullscreen MediaMode instance
                                 implicitWidth: 42
                                 implicitHeight: 42
                                 buttonRadius: Appearance.rounding.full
-                                colBackground: Config.options.background.mediaMode.musicVideo.enable ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-                                colBackgroundHover: Appearance.colors.colLayer2Hover
-                                colBackgroundActive: Appearance.colors.colLayer2Active
+                                colBackground: root.dynamicAccentContainer
+                                colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     iconSize: 20
-                                    color: Config.options.background.mediaMode.musicVideo.enable ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                                    color: root.dynamicOnAccentContainer
                                     text: videoActive ? "play_circle" : (videoSearching ? "hourglass_top" : "music_video")
                                 }
 
@@ -600,7 +648,11 @@ Item { // Fullscreen MediaMode instance
                             Rectangle {
                                 anchors.fill: parent
                                 radius: Appearance.rounding.verylarge
-                                color: videoActive ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.25) : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+                                color: videoActive ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.72) : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+
+                                Behavior on color {
+                                    ColorAnimation { duration: 400; easing.type: Easing.InOutQuad }
+                                }
 
                                 MediaModeCoverArt {
                                     anchors.fill: parent
@@ -623,7 +675,11 @@ Item { // Fullscreen MediaMode instance
                                 id: lyricsContainer
                                 anchors.fill: parent
                                 radius: Appearance.rounding.verylarge
-                                color: videoActive ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.25) : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+                                color: videoActive ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.72) : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+
+                                Behavior on color {
+                                    ColorAnimation { duration: 400; easing.type: Easing.InOutQuad }
+                                }
 
                                 ColumnLayout {
                                     anchors.fill: parent

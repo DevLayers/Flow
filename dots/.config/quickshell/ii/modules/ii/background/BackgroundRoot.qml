@@ -390,6 +390,9 @@ PanelWindow {
                 if (!monitor.focused && Config.options.background.mediaMode.togglePerMonitor)
                     return;
                 mediaModeLoader.active = !mediaModeLoader.active;
+                if (!mediaModeLoader.active) {
+                    MusicVideoService.stopVideo();
+                }
                 GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount + (mediaModeLoader.active ? 1 : -1));
                 LyricsService.mediaModeOpenCount += mediaModeLoader.active ? 1 : -1;
             }
@@ -402,10 +405,8 @@ PanelWindow {
             function onMediaModeCloseAllTriggerChanged() {
                 if (GlobalStates.mediaModeCloseAllTrigger > bgRoot._lastCloseAllTrigger && mediaModeLoader.active) {
                     bgRoot._lastCloseAllTrigger = GlobalStates.mediaModeCloseAllTrigger;
+                    MusicVideoService.stopVideo();
                     mediaModeLoader.active = false;
-                    // Compensate for the missing toggle-handler decrement.
-                    // Each monitor got toggle(+1) + onCompleted(+1) = +2 on open.
-                    // onDestruction handles -1, this handles the other -1.
                     GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
                 }
             }

@@ -35,11 +35,7 @@ ShellRoot {
         DarkModeService.automatic;
         ChangelogService.load();
         SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled
-        // Only spin up KdeConnectService if the Phone tab is enabled in
-        // config. Touching the singleton forces QML to instantiate it and
-        // runs its Component.onCompleted, which starts the DBus monitor,
-        // pgrep polling, and ADB probing. For users who don't use phone
-        // integration this is pure overhead.
+        VideoColorSampler.active; // Touch singleton to initialize
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
         }

@@ -1063,6 +1063,7 @@ Singleton {
                         property bool dimBackground: true
                         property int dimOpacity: 60   // percent (0-100)
                         property string searchSuffix: "official music video"
+                        property int videoSamplingInterval: 200 // ms between color sampling updates (100-5000)
                     }
                 }
             }
