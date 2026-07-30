@@ -36,12 +36,10 @@ AbstractBackgroundWidget {
             anchors.rightMargin: 36
             spacing: 8
 
-            MaterialSymbol {
+            Image {
                 Layout.alignment: Qt.AlignVCenter
-                iconSize: 78
-                text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "partly_cloudy_day"
-                color: Appearance.colors.colPrimary
-                fill: 1.0
+                source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+                sourceSize: Qt.size(78, 78)
             }
 
             Item { Layout.fillWidth: true }

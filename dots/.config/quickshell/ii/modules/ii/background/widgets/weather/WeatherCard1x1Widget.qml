@@ -63,12 +63,10 @@ AbstractBackgroundWidget {
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     spacing: 2
 
-                    MaterialSymbol {
+                    Image {
                         Layout.alignment: Qt.AlignRight
-                        iconSize: 34
-                        text: Icons.getWeatherIcon(root.currentData?.wCode) ?? "partly_cloudy_day"
-                        color: WidgetColorScheme.accentColor
-                        fill: 1.0
+                        source: WeatherIcons.getWeatherIcon(root.currentData?.wCode ?? 113, false)
+                        sourceSize: Qt.size(34, 34)
                     }
 
                     ColumnLayout {
@@ -138,11 +136,9 @@ AbstractBackgroundWidget {
 
                         Item { Layout.fillWidth: true }
 
-                        MaterialSymbol {
-                            iconSize: 20
-                            text: Icons.getWeatherIcon(dayRow.dayFc?.code) ?? "clear_day"
-                            color: Appearance.colors.colPrimary
-                            fill: 1.0
+                        Image {
+                            source: WeatherIcons.getWeatherIcon(dayRow.dayFc?.code ?? 113, false)
+                            sourceSize: Qt.size(20, 20)
                         }
 
                         Item { Layout.fillWidth: true }

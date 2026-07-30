@@ -70,12 +70,10 @@ AbstractBackgroundWidget {
                                 Layout.preferredWidth: 64
                                 Layout.preferredHeight: 64
 
-                                MaterialSymbol {
+                                Image {
                                     anchors.centerIn: parent
-                                    iconSize: 58
-                                    text: Icons.getWeatherIcon(root.currentData?.wCode) ?? "partly_cloudy_day"
-                                    color: WidgetColorScheme.accentColor
-                                    fill: 1.0
+                                    source: WeatherIcons.getWeatherIcon(root.currentData?.wCode ?? 113, false)
+                                    sourceSize: Qt.size(58, 58)
                                 }
                             }
 
@@ -172,12 +170,10 @@ AbstractBackgroundWidget {
 
                             Item { Layout.fillHeight: true }
 
-                            MaterialSymbol {
+                            Image {
                                 Layout.alignment: Qt.AlignHCenter
-                                iconSize: 44
-                                text: Icons.getWeatherIcon(dayPill.dayFc?.code) ?? "rainy"
-                                color: Appearance.colors.colPrimary
-                                fill: 1.0
+                                source: WeatherIcons.getWeatherIcon(dayPill.dayFc?.code ?? 113, false)
+                                sourceSize: Qt.size(44, 44)
                             }
 
                             Item { Layout.fillHeight: true }

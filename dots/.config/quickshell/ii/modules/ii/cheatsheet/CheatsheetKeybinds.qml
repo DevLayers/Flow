@@ -107,30 +107,30 @@ Item {
     ]
 
     property var macSymbolMap: ({
-            "Ctrl": "",
-            "Alt": "",
-            "Shift": "",
-            "Space": "",
+            "Ctrl": "󰘴",
+            "Alt": "󰘵",
+            "Shift": "󰘶",
+            "Space": "󱁐",
             "Tab": "↹",
             "Equal": "󰇼",
-            "Minus": "",
-            "Print": "",
+            "Minus": "",
+            "Print": "",
             "BackSpace": "󰭜",
-            "Delete": "",
-            "Return": "",
+            "Delete": "⌦",
+            "Return": "󰌑",
             "Period": ".",
             "Escape": "⎋"
         })
     property var functionSymbolMap: ({
-            "F1": "",
-            "F2": "",
-            "F3": "",
-            "F4": "",
-            "F5": "",
-            "F6": "",
-            "F7": "",
-            "F8": "",
-            "F9": "",
+            "F1": "󱊫",
+            "F2": "󱊬",
+            "F3": "󱊭",
+            "F4": "󱊮",
+            "F5": "󱊯",
+            "F6": "󱊰",
+            "F7": "󱊱",
+            "F8": "󱊲",
+            "F9": "󱊳",
             "F10": "󱊴",
             "F11": "󱊵",
             "F12": "󱊶"
@@ -139,7 +139,7 @@ Item {
             "mouse_up": "󱕐",
             "mouse_down": "󱕑",
             "mouse:272": "L󰍽",
-            "mouse:273": "R",
+            "mouse:273": "R󰍽",
             "Scroll ↑/↓": "󱕒",
             "Page_↑/↓": "⇞/⇟"
         })
@@ -162,7 +162,9 @@ Item {
             "Return": "Enter"
         }, !!_super ? {
             "SUPER": _super,
-            "Super": _super
+            "Super": _super,
+						"SUPER_L": `L${_super}`,
+						"SUPER_R": `R${_super}`,
         } : {}, _mac ? macSymbolMap : {}, _fn ? functionSymbolMap : {}, _mouse ? mouseSymbolMap : {});
     }
 

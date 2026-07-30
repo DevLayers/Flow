@@ -38,6 +38,16 @@ Item {
         return w.category === "Utility";
     })
 
+    // Accordion collapse state per category. Default: Clocks expanded, all others collapsed.
+    // When collapsed, widget preview Loaders are not active → no GPU/memory cost.
+    property bool clockExpanded: true
+    property bool mediaExpanded: false
+    property bool weatherExpanded: false
+    property bool dateExpanded: false
+    property bool photoExpanded: false
+    property bool bluetoothExpanded: false
+    property bool utilityExpanded: false
+
     property var _previewQueue: []
     property bool _previewStaggerActive: false
 
@@ -179,13 +189,21 @@ Item {
                 title: Translation.tr("Clocks")
                 icon: "schedule"
                 Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.clockExpanded
+                onExpandedChanged: widgetsConfigRoot.clockExpanded = expanded
 
-                Flow {
+                // GPU: Loader prevents Flow+Repeater+cards from being created when collapsed
+                Loader {
                     Layout.fillWidth: true
-                    spacing: 12
-                    Repeater {
-                        model: widgetsConfigRoot.clockWidgets
-                        delegate: widgetCardComponent
+                    active: widgetsConfigRoot.clockExpanded
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.clockWidgets
+                            delegate: widgetCardComponent
+                        }
                     }
                 }
             }
@@ -194,13 +212,20 @@ Item {
                 title: Translation.tr("Media Players")
                 icon: "play_circle"
                 Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.mediaExpanded
+                onExpandedChanged: widgetsConfigRoot.mediaExpanded = expanded
 
-                Flow {
+                Loader {
                     Layout.fillWidth: true
-                    spacing: 12
-                    Repeater {
-                        model: widgetsConfigRoot.mediaWidgets
-                        delegate: widgetCardComponent
+                    active: widgetsConfigRoot.mediaExpanded
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.mediaWidgets
+                            delegate: widgetCardComponent
+                        }
                     }
                 }
             }
@@ -209,13 +234,20 @@ Item {
                 title: Translation.tr("Weather")
                 icon: "cloud"
                 Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.weatherExpanded
+                onExpandedChanged: widgetsConfigRoot.weatherExpanded = expanded
 
-                Flow {
+                Loader {
                     Layout.fillWidth: true
-                    spacing: 12
-                    Repeater {
-                        model: widgetsConfigRoot.weatherWidgets
-                        delegate: widgetCardComponent
+                    active: widgetsConfigRoot.weatherExpanded
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.weatherWidgets
+                            delegate: widgetCardComponent
+                        }
                     }
                 }
             }
@@ -224,13 +256,20 @@ Item {
                 title: Translation.tr("Date & Calendar")
                 icon: "calendar_today"
                 Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.dateExpanded
+                onExpandedChanged: widgetsConfigRoot.dateExpanded = expanded
 
-                Flow {
+                Loader {
                     Layout.fillWidth: true
-                    spacing: 12
-                    Repeater {
-                        model: widgetsConfigRoot.dateWidgets
-                        delegate: widgetCardComponent
+                    active: widgetsConfigRoot.dateExpanded
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.dateWidgets
+                            delegate: widgetCardComponent
+                        }
                     }
                 }
             }
@@ -239,13 +278,20 @@ Item {
                 title: Translation.tr("Photo")
                 icon: "image"
                 Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.photoExpanded
+                onExpandedChanged: widgetsConfigRoot.photoExpanded = expanded
 
-                Flow {
+                Loader {
                     Layout.fillWidth: true
-                    spacing: 12
-                    Repeater {
-                        model: widgetsConfigRoot.photoWidgets
-                        delegate: widgetCardComponent
+                    active: widgetsConfigRoot.photoExpanded
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.photoWidgets
+                            delegate: widgetCardComponent
+                        }
                     }
                 }
             }
@@ -254,13 +300,20 @@ Item {
                 title: Translation.tr("Devices & Bluetooth")
                 icon: "earbuds"
                 Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.bluetoothExpanded
+                onExpandedChanged: widgetsConfigRoot.bluetoothExpanded = expanded
 
-                Flow {
+                Loader {
                     Layout.fillWidth: true
-                    spacing: 12
-                    Repeater {
-                        model: widgetsConfigRoot.bluetoothWidgets
-                        delegate: widgetCardComponent
+                    active: widgetsConfigRoot.bluetoothExpanded
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.bluetoothWidgets
+                            delegate: widgetCardComponent
+                        }
                     }
                 }
             }
@@ -269,13 +322,20 @@ Item {
                 title: Translation.tr("Utility")
                 icon: "build"
                 Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.utilityExpanded
+                onExpandedChanged: widgetsConfigRoot.utilityExpanded = expanded
 
-                Flow {
+                Loader {
                     Layout.fillWidth: true
-                    spacing: 12
-                    Repeater {
-                        model: widgetsConfigRoot.utilityWidgets
-                        delegate: widgetCardComponent
+                    active: widgetsConfigRoot.utilityExpanded
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.utilityWidgets
+                            delegate: widgetCardComponent
+                        }
                     }
                 }
             }

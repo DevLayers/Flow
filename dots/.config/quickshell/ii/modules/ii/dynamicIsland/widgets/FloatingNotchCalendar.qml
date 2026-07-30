@@ -111,8 +111,6 @@ Item {
             return Qt.formatDateTime(DateTime.clock.date, format);
         }
         readonly property string dayStr: Qt.formatDateTime(DateTime.clock.date, "dddd")
-        readonly property string weatherIcon: Icons.getWeatherIcon(Weather.data.wCode) ?? "cloud"
-
         readonly property real timeFontSize: Math.max(14, Math.min(28, contractedLayout.layoutHeight * 0.44))
         readonly property real dateFontSize: Math.max(10, Math.min(16, contractedLayout.layoutHeight * 0.3))
         readonly property real dayFontSize: Math.max(9, Math.min(13, contractedLayout.layoutHeight * 0.22))
@@ -211,12 +209,10 @@ Item {
                 shapeString: "Cookie9Sided"
                 color: Appearance.colors.colSurfaceContainerHighest
 
-                MaterialSymbol {
+                Image {
                     anchors.centerIn: parent
-                    text: contractedLayout.weatherIcon
-                    iconSize: Math.max(10, (parent ? parent.height : 24) * 0.5)
-                    fill: 1
-                    color: Appearance.colors.colOnSurfaceVariant
+                    source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+                    sourceSize: Qt.size(Math.max(10, (parent ? parent.height : 24) * 0.5), Math.max(10, (parent ? parent.height : 24) * 0.5))
                 }
             }
         }

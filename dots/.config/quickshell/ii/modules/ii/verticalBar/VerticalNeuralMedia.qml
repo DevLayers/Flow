@@ -112,7 +112,7 @@ MouseArea {
         onTriggered: activePlayer.positionChanged()
     }
 
-    property var visualizerPoints: []
+    property var visualizerPoints: CavaService.visualizerPoints
 
     readonly property real bar0Val: visualizerPoints.length > 5 ? visualizerPoints[3] / 1000.0 : 0
     readonly property real bar1Val: visualizerPoints.length > 11 ? visualizerPoints[9] / 1000.0 : 0
@@ -135,18 +135,6 @@ MouseArea {
 
         let norm = Math.min(1.0, Math.max(0.0, val));
         return minW + norm * (maxBarLength - minW);
-    }
-
-    Process {
-        id: cavaProc
-        running: root.playing
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
-        stdout: SplitParser {
-            onRead: data => {
-                let points = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                root.visualizerPoints = points;
-            }
-        }
     }
 
     Rectangle {

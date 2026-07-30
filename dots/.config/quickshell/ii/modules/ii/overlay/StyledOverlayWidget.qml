@@ -25,6 +25,8 @@ AbstractOverlayWidget {
     property bool fancyBorders: true
     property bool showCenterButton: false
     property bool showClickabilityButton: true
+    property Component titleIconComponent: null
+    property real editorBackgroundOpacity: 1
 
     // Defaults n stuff
     required property var modelData
@@ -49,6 +51,7 @@ AbstractOverlayWidget {
     hoverEnabled: true
     property bool resizable: true
     property bool resizing: false
+    property bool dragLocked: false // Set to true by children (e.g. volume sliders) to prevent drag
     property int resizeXDirection: getXResizeDirection(mouseX)
     property int resizeYDirection: getYResizeDirection(mouseY)
     draggable: GlobalStates.overlayOpen
@@ -149,7 +152,8 @@ AbstractOverlayWidget {
     DragHandler {
         id: dragHandler
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-        target: (root.draggable && !root.resizing) ? root : null
+        enabled: root.draggable && !root.resizing && !root.dragLocked
+        target: root
         onActiveChanged: { // Handle drag release
             if (!active) {
                 root.resizing = false;
@@ -199,7 +203,7 @@ AbstractOverlayWidget {
             fill: parent
             margins: root.resizeMargin
         }
-        color: ColorUtils.transparentize(Appearance.colors.colLayer1Base, (root.fancyBorders && GlobalStates.overlayOpen) ? 0 : 1)
+        color: ColorUtils.transparentize(Appearance.colors.colLayer1Base, (root.fancyBorders && GlobalStates.overlayOpen) ? 1 - root.editorBackgroundOpacity : 1)
         radius: root.radius
         border.color: ColorUtils.transparentize(Appearance.colors.colOutlineVariant, GlobalStates.overlayOpen ? 0 : 1)
         border.width: 1
@@ -239,9 +243,18 @@ AbstractOverlayWidget {
                     spacing: 2
 
                     MaterialSymbol {
+                        visible: root.titleIconComponent === null
                         text: root.materialSymbol
                         Layout.leftMargin: 6
                         iconSize: 20
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.rightMargin: 4
+                    }
+                    Loader {
+                        visible: root.titleIconComponent !== null
+                        active: root.titleIconComponent !== null
+                        sourceComponent: root.titleIconComponent
+                        Layout.leftMargin: 6
                         Layout.alignment: Qt.AlignVCenter
                         Layout.rightMargin: 4
                     }

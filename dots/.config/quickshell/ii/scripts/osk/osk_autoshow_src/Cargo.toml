@@ -1,0 +1,14 @@
+[package]
+name = "osk_autoshow"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+evdev = "0.13"
+wayland-client = "0.31"
+wayland-protocols-misc = { version = "0.3", features = ["client"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

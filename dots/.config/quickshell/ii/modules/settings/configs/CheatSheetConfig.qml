@@ -77,6 +77,15 @@ ContentPage {
                     Config.options.cheatsheet.splitButtons = checked;
                 }
             }
+
+            ConfigSwitch {
+                buttonIcon: "filter_alt"
+                text: Translation.tr("Filter unbinds")
+                checked: Config.options.cheatsheet.filterUnbinds
+                onCheckedChanged: {
+                    Config.options.cheatsheet.filterUnbinds = checked;
+                }
+            }
         }
 
         Item { Layout.preferredHeight: 16 }

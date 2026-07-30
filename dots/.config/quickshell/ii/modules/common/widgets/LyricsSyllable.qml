@@ -17,6 +17,7 @@ Item {
     
     property real largeFontSize: Appearance.font.pixelSize.hugeass * 2.0
     property color activeColor: Appearance.colors.colPrimary
+    property color highlightColor: ColorUtils.getContrastingTextColor(activeColor)
 
     Component.onCompleted: {
         LyricsService.initiliazeLyrics()
@@ -102,7 +103,6 @@ Item {
                     }
                 }
 
-                
                 Item {
                     id: scalerItem
                     anchors.fill: parent
@@ -182,7 +182,7 @@ Item {
         NumberAnimation on currentX {
             from: -150
             to: lyricsList.width + 150
-            duration: isCurrent ? LyricsService.getLineDuration(index) * 1300 : 0
+            duration: isCurrent ? Math.min(800, Math.max(400, LyricsService.getLineDuration(index) * 350)) : 0
             running: isCurrent && root.isPlaying
             easing.type: Easing.Linear
         }
@@ -192,7 +192,7 @@ Item {
         
         gradient: Gradient {
             GradientStop { position: 0.0; color: root.activeColor } 
-            GradientStop { position: 0.8; color: "white" } 
+            GradientStop { position: 0.8; color: root.highlightColor } 
             GradientStop { position: 1.0; color: "transparent" } 
         }
     }
@@ -215,8 +215,8 @@ Item {
         end: Qt.point(0, currentY + 100)
 
         gradient: Gradient {
-            GradientStop { position: 0.0; color: root.activeColor }
-            GradientStop { position: 0.5; color: "transparent" }
+            GradientStop { position: 0.0; color: root.highlightColor }
+            GradientStop { position: 0.5; color: ColorUtils.transparentize(root.activeColor, 0.2) }
             GradientStop { position: 1.0; color: "transparent" }
         }
     }

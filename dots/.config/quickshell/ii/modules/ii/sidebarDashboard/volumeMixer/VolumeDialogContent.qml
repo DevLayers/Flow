@@ -526,6 +526,29 @@ StyledFlickable {
                     }
                 }
             }
+
+            Connections {
+                target: mainMouseArea
+                function onPressedChanged() {
+                    if (mainMouseArea.pressed) {
+                        if (devEntry.isSink) {
+                            root.activePlaybackDragIndex = devEntry.index;
+                        } else {
+                            root.activeRecordingDragIndex = devEntry.index;
+                        }
+                    } else {
+                        if (devEntry.isSink) {
+                            if (root.activePlaybackDragIndex === devEntry.index) {
+                                root.activePlaybackDragIndex = -1;
+                            }
+                        } else {
+                            if (root.activeRecordingDragIndex === devEntry.index) {
+                                root.activeRecordingDragIndex = -1;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         function activateDevice() {

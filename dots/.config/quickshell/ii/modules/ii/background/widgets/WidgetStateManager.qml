@@ -111,8 +111,8 @@ QtObject {
         let migrated = [];
         let centerWidget = "none";
 
-        // Clock widget
-        if (Config.options.background.widgets.clock.enable) {
+        // Clock widget (legacy migration from unified "clock" to separate entries)
+        if (Config.options.background.widgets.clock && Config.options.background.widgets.clock.enable) {
             let style = Config.options.background.widgets.clock.style || "cookie";
             let widgetId = "clock_" + style;
             let lockBehavior = (centerWidget === "clock") ? "center" : "hide";
@@ -124,6 +124,64 @@ QtObject {
                 "placementStrategy": Config.options.background.widgets.clock.placementStrategy || "free",
                 "lockBehavior": lockBehavior
             });
+            // Migrate settings to new config paths
+            if (style === "cookie") {
+                let oldCookie = Config.options.background.widgets.clock.cookie;
+                if (oldCookie) {
+                    Config.options.background.widgets.clock_cookie.aiStyling = oldCookie.aiStyling;
+                    Config.options.background.widgets.clock_cookie.aiStylingModel = oldCookie.aiStylingModel;
+                    Config.options.background.widgets.clock_cookie.sides = oldCookie.sides;
+                    Config.options.background.widgets.clock_cookie.backgroundStyle = oldCookie.backgroundStyle;
+                    Config.options.background.widgets.clock_cookie.backgroundShape = oldCookie.backgroundShape;
+                    Config.options.background.widgets.clock_cookie.dialNumberStyle = oldCookie.dialNumberStyle;
+                    Config.options.background.widgets.clock_cookie.hourHandStyle = oldCookie.hourHandStyle;
+                    Config.options.background.widgets.clock_cookie.minuteHandStyle = oldCookie.minuteHandStyle;
+                    Config.options.background.widgets.clock_cookie.secondHandStyle = oldCookie.secondHandStyle;
+                    Config.options.background.widgets.clock_cookie.dateStyle = oldCookie.dateStyle;
+                    Config.options.background.widgets.clock_cookie.timeIndicators = oldCookie.timeIndicators;
+                    Config.options.background.widgets.clock_cookie.hourMarks = oldCookie.hourMarks;
+                    Config.options.background.widgets.clock_cookie.dateInClock = oldCookie.dateInClock;
+                    Config.options.background.widgets.clock_cookie.constantlyRotate = oldCookie.constantlyRotate;
+                }
+                let oldQuote = Config.options.background.widgets.clock.quote;
+                if (oldQuote) {
+                    Config.options.background.widgets.clock_cookie.quoteEnable = oldQuote.enable;
+                    Config.options.background.widgets.clock_cookie.quoteText = oldQuote.text;
+                }
+                Config.options.background.widgets.clock_cookie.disableAnimationOnLock = Config.options.background.widgets.clock.disableAnimationOnLock;
+            } else if (style === "digital") {
+                let oldDigital = Config.options.background.widgets.clock.digital;
+                if (oldDigital) {
+                    Config.options.background.widgets.clock_digital.adaptiveAlignment = oldDigital.adaptiveAlignment;
+                    Config.options.background.widgets.clock_digital.showDate = oldDigital.showDate;
+                    Config.options.background.widgets.clock_digital.animateChange = oldDigital.animateChange;
+                    Config.options.background.widgets.clock_digital.vertical = oldDigital.vertical;
+                    Config.options.background.widgets.clock_digital.colorful = oldDigital.colorful;
+                    Config.options.background.widgets.clock_digital.showColon = oldDigital.showColon;
+                    if (oldDigital.font) {
+                        Config.options.background.widgets.clock_digital.font.weight = oldDigital.font.weight;
+                        Config.options.background.widgets.clock_digital.font.width = oldDigital.font.width;
+                        Config.options.background.widgets.clock_digital.font.size = oldDigital.font.size;
+                        Config.options.background.widgets.clock_digital.font.roundness = oldDigital.font.roundness;
+                    }
+                }
+                let oldQuote = Config.options.background.widgets.clock.quote;
+                if (oldQuote) {
+                    Config.options.background.widgets.clock_digital.quoteEnable = oldQuote.enable;
+                    Config.options.background.widgets.clock_digital.quoteText = oldQuote.text;
+                }
+            } else if (style === "dial") {
+                let oldDial = Config.options.background.widgets.clock.dial;
+                if (oldDial) {
+                    Config.options.background.widgets.clock_dial.showTicks = oldDial.showTicks;
+                    Config.options.background.widgets.clock_dial.showMinuteHand = oldDial.showMinuteHand;
+                    Config.options.background.widgets.clock_dial.enableShadows = oldDial.enableShadows;
+                    Config.options.background.widgets.clock_dial.enableInnerShadow = oldDial.enableInnerShadow;
+                    Config.options.background.widgets.clock_dial.expressiveColors = oldDial.expressiveColors;
+                }
+            }
+            // Disable the old clock entry to prevent re-migration
+            Config.options.background.widgets.clock.enable = false;
         }
 
         // Media widget

@@ -54,7 +54,7 @@ hl.config({
         border_size = 3,
 
         col = {
-            active_border = "rgba(0DB7D455)",
+            active_border = "rgba(f61680FF)",
             inactive_border = "rgba(31313600)"
         },
         resize_on_border = true,
@@ -76,7 +76,7 @@ hl.config({
 
         blur = {
             enabled = true,
-            xray = true,
+            xray = false,
             special = false,
             new_optimizations = true,
             size = 10,
@@ -84,8 +84,8 @@ hl.config({
             brightness = 1,
             noise = 0.05,
             contrast = 0.89,
-            vibrancy = 0.5,
-            vibrancy_darkness = 0.5,
+            vibrancy = 0.2,
+            vibrancy_darkness = 0.2,
             popups = false,
             popups_ignorealpha = 0.6,
             input_methods = true,

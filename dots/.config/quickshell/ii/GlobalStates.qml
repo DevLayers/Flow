@@ -14,12 +14,17 @@ Singleton {
     property alias sidebarRightOpen: root.dashboardPanelOpen // Until all sidebars naming is fixed
 
     property bool barOpen: true
+    property bool phoneCameraRunning: false
+    property bool phoneMicRunning: false
     property int mediaModeCount: 0
     readonly property bool mediaModeActive: mediaModeCount > 0
     property var mediaModeMonitors: []
+    property int mediaModeCloseAllTrigger: 0
+    property int widgetReStackTrigger: 0
 
     function setMediaModeActiveForScreen(screenName, active) {
-        if (!screenName) return;
+        if (!screenName)
+            return;
         var list = mediaModeMonitors.slice();
         var index = list.indexOf(screenName);
         if (active && index === -1) {
@@ -34,7 +39,8 @@ Singleton {
         if (!Config.options.background.mediaMode.togglePerMonitor) {
             return mediaModeActive;
         }
-        if (!screenName) return false;
+        if (!screenName)
+            return false;
         return mediaModeMonitors.includes(screenName);
     }
     property bool alarmRinging: false
@@ -81,6 +87,12 @@ Singleton {
     property bool videoEditorPopupOpen: false
     property bool videoEditorOpen: false
     property string videoEditorPath: ""
+    property bool screenshotOverlayOpen: false
+    property string screenshotOverlayImagePath: ""
+    property real screenshotOverlayRegionX: 0
+    property real screenshotOverlayRegionY: 0
+    property real screenshotOverlayRegionW: 0
+    property real screenshotOverlayRegionH: 0
     property bool settingsOpen: false
     property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""
@@ -89,8 +101,10 @@ Singleton {
     property string activeRightSidebarMonitor: ""
 
     function isScreenAllowedForBar(screen) {
-        if (!screen) return false;
-        if (!Config.ready) return true;
+        if (!screen)
+            return false;
+        if (!Config.ready)
+            return true;
         if (Config.options.bar.onlyShowOnSingleMonitor) {
             return screen.name === Config.options.bar.singleMonitorName;
         }
@@ -102,12 +116,14 @@ Singleton {
     }
 
     readonly property var allowedScreens: {
-        if (!Config.ready) return Quickshell.screens;
+        if (!Config.ready)
+            return Quickshell.screens;
         return Quickshell.screens.filter(screen => root.isScreenAllowedForBar(screen));
     }
 
     readonly property string effectiveLeftMonitor: {
-        if (!Config.ready) return "";
+        if (!Config.ready)
+            return "";
         switch (Config.options.sidebar.position) {
         case "default":
             return activeLeftSidebarMonitor;
@@ -123,7 +139,8 @@ Singleton {
     }
 
     readonly property string effectiveRightMonitor: {
-        if (!Config.ready) return "";
+        if (!Config.ready)
+            return "";
         switch (Config.options.sidebar.position) {
         case "default":
             return activeRightSidebarMonitor;
@@ -159,7 +176,7 @@ Singleton {
 
     property string osdCurrentIndicator: "volume"
     property string osdProtectionMessage: ""
-    signal osdInteraction()
+    signal osdInteraction
     property bool policiesExtended: false
     property bool policiesPinned: false
     property bool policiesDetached: false
@@ -606,11 +623,9 @@ Singleton {
         }
     }
 
-    onAnimatedLeftSidebarWidthChanged: {
-    }
+    onAnimatedLeftSidebarWidthChanged: {}
 
-    onAnimatedRightSidebarWidthChanged: {
-    }
+    onAnimatedRightSidebarWidthChanged: {}
 
     onPoliciesPanelOpenChanged: {
         if (policiesPanelOpen) {

@@ -199,8 +199,6 @@ Scope {
                     height: dockRoot.sizing.backgroundHeight
 
                     color: Appearance.colors.colLayer0
-                    border.width: 1
-                    border.color: Appearance.colors.colLayer0Border
                     radius: Appearance.rounding.windowRounding + 12
 
                     DropArea {

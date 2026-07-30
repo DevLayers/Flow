@@ -59,6 +59,7 @@ Singleton {
     // `available` is a readonly composite defined in the dependency section
     // below (pactlPresent && (scrcpyPresent || droidcamCliPresent)).
     property bool running: false
+    onRunningChanged: GlobalStates.phoneMicRunning = running
     property bool connecting: false
     property bool muted: false
     property bool monitorEnabled: false  // When true, user hears their own mic through speakers

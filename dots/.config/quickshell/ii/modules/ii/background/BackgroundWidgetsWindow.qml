@@ -75,6 +75,30 @@ PanelWindow {
     readonly property bool hasWidgets: widgetStateManager && widgetStateManager.model ? widgetStateManager.model.count > 0 : false
     visible: hasWidgets && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen))
 
+    // Z-ordering fix: when BackgroundRoot transitions from WlrLayer.Overlay back to
+    // WlrLayer.Bottom after media mode closes, the compositor re-stacks it at the top
+    // of the Bottom layer, covering this widgets window with the wallpaper image.
+    // Force a re-map by briefly toggling visibility.
+    property int _lastReStackTrigger: 0
+
+    Connections {
+        target: GlobalStates
+        function onWidgetReStackTriggerChanged() {
+            if (GlobalStates.widgetReStackTrigger > bgWidgetsWindow._lastReStackTrigger) {
+                bgWidgetsWindow._lastReStackTrigger = GlobalStates.widgetReStackTrigger;
+                // Only re-stack if we're supposed to be visible
+                if (bgWidgetsWindow.visible) {
+                    bgWidgetsWindow.visible = false;
+                    Qt.callLater(function() {
+                        bgWidgetsWindow.visible = Qt.binding(function() {
+                            return hasWidgets && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen));
+                        });
+                    });
+                }
+            }
+        }
+    }
+
     // Monitor & Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
     readonly property bool isMonitorFocused: (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : "")

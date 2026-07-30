@@ -12,6 +12,9 @@ import Quickshell.Hyprland
 Scope {
     id: root
 
+    readonly property bool notifIsLeft: (Config.options.notifications.position ?? "top_right").endsWith("left")
+    readonly property bool notifIsRight: (Config.options.notifications.position ?? "top_right").endsWith("right")
+
     // Native Process avoids qs ipc call round-trip from external shell
     Process {
         id: hyprpickerProcess
@@ -79,8 +82,8 @@ Scope {
             anchors {
                 top: Config.options.bar.vertical || (!Config.options.bar.vertical && !Config.options.bar.bottom)
                 bottom: !Config.options.bar.vertical && Config.options.bar.bottom
-                left: Config.options.bar.vertical && !Config.options.bar.bottom
-                right: (!Config.options.bar.vertical) || (Config.options.bar.vertical && Config.options.bar.bottom)
+                left: Config.options.bar.vertical ? (Config.options.bar.bottom ? false : true) : root.notifIsRight
+                right: Config.options.bar.vertical ? (Config.options.bar.bottom ? true : false) : root.notifIsLeft
             }
 
             readonly property int frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
@@ -107,13 +110,19 @@ Scope {
                     if (Config.options.bar.vertical) {
                         return Config.options.bar.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness;
                     }
+                    if (root.notifIsRight) {
+                        return barGaps + 4 + leftFrameThickness;
+                    }
                     return leftFrameThickness;
                 }
                 right: {
                     if (Config.options.bar.vertical) {
                         return Config.options.bar.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness;
                     }
-                    return barGaps + 4 + rightFrameThickness;
+                    if (root.notifIsLeft) {
+                        return barGaps + 4 + rightFrameThickness;
+                    }
+                    return rightFrameThickness;
                 }
             }
 

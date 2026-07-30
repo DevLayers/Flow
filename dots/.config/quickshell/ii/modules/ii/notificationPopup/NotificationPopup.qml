@@ -13,10 +13,10 @@ Scope {
 
     PanelWindow {
         id: root
-        property bool active: (Notifications.popupList.length > 0)
+        property bool active: (Notifications.popupList.length > 0) && !Notifications.effectiveSilent
         property bool keepVisible: false
 
-        visible: keepVisible && !GlobalStates.screenLocked
+        visible: keepVisible && !GlobalStates.screenLocked && !Notifications.effectiveSilent
 
         Component.onCompleted: {
             keepVisible = active;

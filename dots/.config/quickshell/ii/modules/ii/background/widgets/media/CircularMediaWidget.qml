@@ -29,7 +29,7 @@ AbstractBackgroundWidget {
     readonly property bool useAlbumColors: Config.ready ? (Config.options.background.widgets.circular_media.useAlbumColors ?? true) : true
     readonly property MprisPlayer player: MprisController.activePlayer
     readonly property bool playing: player ? player.playbackState === MprisPlaybackState.Playing : false
-    readonly property string artUrl: MprisController.artUrl
+    readonly property string artUrl: player?.trackArtUrl ?? ""
     readonly property string trackTitle: StringUtils.cleanMusicTitle(player?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
 

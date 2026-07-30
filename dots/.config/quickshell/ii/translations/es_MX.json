@@ -18,7 +18,7 @@
   "Illegal increment": "Incremento no permitido",
   "New desktop": "Nuevo escritorio",
   "Adapts the <b>display (physical screen) brightness</b><br><br>Pros: Less expensive, retains colors<br>Cons: Not immediately responsive<br><br><i>Adjusts display brightness after each Hyprland IPC event</i>": "Adapta el <b>brillo del monitor (pantalla física)</b><br><br>Ventajas: Menos costoso, conserva los colores<br>Desventajas: No responde de inmediato<br><br><i>Ajusta el brillo del monitor tras cada evento IPC de Hyprland</i>",
-  "Font family name (e.g., JetBrains Mono NF)": "Nombre de familia de fuente (p. ej., JetBrains Mono NF)",
+  "Font family name (e.g., JetBrainsMono Nerd Font)": "Nombre de familia de fuente (p. ej., JetBrainsMono Nerd Font)",
   "Open": "Abrir",
   "Jump to current month": "Ir al mes actual",
   "Shut down": "Apagar",

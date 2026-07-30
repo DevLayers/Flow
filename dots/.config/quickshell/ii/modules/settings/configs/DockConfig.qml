@@ -209,6 +209,18 @@ ContentPage {
 
         }
 
+        ConfigSlider {
+            Layout.fillWidth: true
+            text: Translation.tr("Icon spacing")
+            value: Config.options.dock.iconSpacing
+            from: -4
+            to: 16
+            stepSize: 1
+            onValueChanged: {
+                Config.options.dock.iconSpacing = value;
+            }
+        }
+
     }
 
     ContentSection {

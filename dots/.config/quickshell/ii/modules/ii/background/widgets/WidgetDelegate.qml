@@ -38,8 +38,7 @@ Item {
     // Static Component Definitions for built-in widgets
     Component {
         id: component_clock_cookie
-        ClockWidget {
-            styleOverride: "cookie"
+        CookieClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth
@@ -51,8 +50,7 @@ Item {
 
     Component {
         id: component_clock_digital
-        ClockWidget {
-            styleOverride: "digital"
+        DigitalClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth
@@ -64,8 +62,7 @@ Item {
 
     Component {
         id: component_clock_nagasaki
-        ClockWidget {
-            styleOverride: "nagasaki"
+        NagasakiClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth
@@ -98,9 +95,19 @@ Item {
     }
 
     Component {
+        id: component_clock_hori
+        HoriClock {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_clock_dial
-        ClockWidget {
-            styleOverride: "dial"
+        DialClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth
@@ -600,6 +607,7 @@ Item {
             "clock_nagasaki": component_clock_nagasaki,
             "nagasaki_text": component_nagasaki_text,
             "clock_flex": component_clock_flex,
+            "clock_hori": component_clock_hori,
             "clock_dial": component_clock_dial,
             "clock_wearos": component_clock_wearos,
             "circular_media": component_circular_media,

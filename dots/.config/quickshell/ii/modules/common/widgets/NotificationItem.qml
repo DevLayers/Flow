@@ -320,7 +320,14 @@ Item { // Notification item area
                                     rightPadding: 15 * root.zoom
                                     buttonRadius: Appearance.rounding.small * root.zoom
                                     onClicked: {
-                                        Notifications.attemptInvokeAction(notificationObject.notificationId, modelData.identifier);
+                                        if (modelData.identifier.startsWith("__qs_")) {
+                                            Notifications.executeShellAction(notificationObject, modelData.identifier);
+                                            root.destroyWithAnimation();
+                                            Notifications.executeShellAction(notificationObject, modelData.identifier);
+                                            root.destroyWithAnimation();
+                                        } else {
+                                            Notifications.attemptInvokeAction(notificationObject.notificationId, modelData.identifier);
+                                        }
                                     }
                                 }
                             }

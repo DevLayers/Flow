@@ -65,7 +65,9 @@ Scope {
         // Top (not Overlay) so OSD, notifications, polkit prompts, etc. still
         // render above the blackout instead of being hidden by it.
         WlrLayershell.layer: WlrLayer.Top
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        // OnDemand (not Exclusive) so only this monitor's input is captured;
+        // Exclusive grabs all input globally, blocking mouse on other monitors.
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         exclusionMode: ExclusionMode.Ignore
         anchors {
             top: true
@@ -74,10 +76,36 @@ Scope {
             right: true
         }
 
-        property bool cursorVisible: false
-        property bool hintVisible: false
+        // Explicit mask constrains input to this window's bounds on this output only.
+        mask: Region {
+            item: windowMaskItem
+        }
+
+        // Start the same way a mouse move leaves things: cursor and hint shown,
+        // both hide timers already counting down.
+        property bool cursorVisible: true
+        property bool hintVisible: true
+
+        // A focus grab held while this window's surface is still mapping keeps
+        // the pointer focused on whatever is underneath, so Qt never learns the
+        // cursor is inside and can never swap it for the blank one - the old
+        // cursor image would sit on the blackout until the user moved the mouse.
+        // Arming the grab a moment after the surface is up lets the pointer
+        // enter land first, then still routes Esc here without a click.
+        HyprlandFocusGrab {
+            id: oledGrab
+            windows: [window]
+            active: false
+        }
+
+        Timer {
+            running: true
+            interval: 100
+            onTriggered: oledGrab.active = true
+        }
 
         Item {
+            id: windowMaskItem
             anchors.fill: parent
             focus: true
 
@@ -119,12 +147,14 @@ Scope {
 
             Timer {
                 id: cursorHideTimer
+                running: true
                 interval: Config.options.oledSaver.cursorHideDelay * 1000
                 onTriggered: window.cursorVisible = false
             }
 
             Timer {
                 id: hintHideTimer
+                running: true
                 interval: (Config.options.oledSaver.cursorHideDelay + Config.options.oledSaver.hintExtraDelay) * 1000
                 onTriggered: window.hintVisible = false
             }

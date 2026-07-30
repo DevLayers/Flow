@@ -120,7 +120,7 @@ PanelWindow {
         onTriggered: bgRoot.deferredFullscreen = bgRoot.isFullscreen
     }
     onIsFullscreenChanged: fullscreenDeferTimer.restart()
-    visible: true
+    visible: GlobalStates.screenLocked || !bgRoot.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen)
 
     // Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
@@ -307,16 +307,32 @@ PanelWindow {
     }
 
     onMediaModeOpenChanged: {
-        if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
-            bgRoot.applyCurrentWallpaper();
+        if (!mediaModeOpen) {
             LyricsService.shellColorChanged = false;
+            // Only restore colors if they were changed during media mode.
+            // Use --noswitch to regenerate palette from current wallpaper
+            // without re-setting it at the compositor level (avoids visual glitch
+            // of wallpaper being re-applied on top of widgets).
+            // Run only on the focused monitor to avoid duplicate script launches.
+            if (Config.options.appearance.palette.type.startsWith("scheme")
+                    && LyricsService.mediaModeOpenCount <= 0
+                    && bgRoot.isMonitorFocused) {
+                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--noswitch", "--mode", Appearance.m3colors.darkmode ? "dark" : "light"]);
+            }
+
+            // Force widgets window to re-stack after our layer transition from
+            // WlrLayer.Overlay → WlrLayer.Bottom. Without this, the compositor
+            // re-stacks us at the top of the Bottom layer, covering the widgets
+            // PanelWindow with the wallpaper image.
+            Qt.callLater(function() {
+                GlobalStates.widgetReStackTrigger++;
+            });
         }
     }
 
     Component.onCompleted: {
-        if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
-            bgRoot.applyCurrentWallpaper();
-        }
+        // Do not re-run matugen / switchwall on quickshell reload/startup.
+        // Theme colors and wallpaper are already persisted on disk.
     }
 
     LockRippleEffect {
@@ -374,8 +390,25 @@ PanelWindow {
                 if (!monitor.focused && Config.options.background.mediaMode.togglePerMonitor)
                     return;
                 mediaModeLoader.active = !mediaModeLoader.active;
+                if (!mediaModeLoader.active) {
+                    MusicVideoService.stopVideo();
+                }
                 GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount + (mediaModeLoader.active ? 1 : -1));
                 LyricsService.mediaModeOpenCount += mediaModeLoader.active ? 1 : -1;
+            }
+        }
+
+        property int _lastCloseAllTrigger: 0
+
+        Connections {
+            target: GlobalStates
+            function onMediaModeCloseAllTriggerChanged() {
+                if (GlobalStates.mediaModeCloseAllTrigger > bgRoot._lastCloseAllTrigger && mediaModeLoader.active) {
+                    bgRoot._lastCloseAllTrigger = GlobalStates.mediaModeCloseAllTrigger;
+                    MusicVideoService.stopVideo();
+                    mediaModeLoader.active = false;
+                    GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
+                }
             }
         }
 
