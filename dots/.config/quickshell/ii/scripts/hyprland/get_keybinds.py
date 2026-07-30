@@ -185,24 +185,28 @@ def parse_lua_binds(path):
 
         i += 1
 
-    # Wrap orphan root keybinds into an implicit section
-    if root.get("keybinds") and len(root["keybinds"]) > 0:
-        implicit = Section([], list(root["keybinds"]), [], "Keybinds")
+    # Wrap orphan root keybinds/unbinds into an implicit section so QML
+    # (which walks .children) can discover them.
+    if (root.get("keybinds") and len(root["keybinds"]) > 0) or \
+       (root.get("unbinds") and len(root["unbinds"]) > 0):
+        implicit = Section(
+            [],
+            list(root.get("keybinds") or []),
+            list(root.get("unbinds") or []),
+            "Keybinds",
+        )
         root["children"].insert(0, implicit)
         root["keybinds"] = []
+        root["unbinds"] = []
 
     # Nest each section's direct keybinds into a synthetic child sub-section
-    # so the QML parseKeymaps function sees child.children with keybind data
+    # so the QML parseKeymaps function sees child.children with keybind data.
+    # Unbinds stay on the section itself — parseUnbinds walks all nodes.
     for section in root["children"]:
         if section.get("keybinds") and len(section["keybinds"]) > 0:
             sub = Section([], list(section["keybinds"]), [], section.get("name", ""))
             section["children"].append(sub)
             section["keybinds"] = []
-        # Also handle unbinds (wrap into child)
-        if section.get("unbinds") and len(section["unbinds"]) > 0:
-            for child in section["children"]:
-                if not child.get("unbinds"):
-                    child["unbinds"] = []
 
     return root
 
@@ -225,13 +229,13 @@ def process_lua_bind(bind_src, current, is_unbind=False):
     if '[hidden]' in comment or '[ignore]' in comment:
         return
 
-    # Remove leading "Shell: ", "Utilities: ", etc. for display
-    # (the QML shows it as the comment text)
-    if not comment:
-        return  # skip binds without descriptions (they're internal)
-
     if is_unbind:
+        # Unbinds don't need descriptions — they only filter the cheatsheet
         current["unbinds"].append(Unbinding(mods, key, comment))
+        return
+
+    # Skip binds without descriptions (they're internal)
+    if not comment:
         return
 
     current["keybinds"].append(KeyBinding(mods, key, '', '', comment))
