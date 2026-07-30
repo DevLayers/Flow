@@ -218,6 +218,15 @@ Item {
                 }
             }
         }
+        onWheel: event => {
+            if (!Config.options.bar.mediaPlayer.enableVolumeScroll)
+                return;
+            if (event.angleDelta.y > 0)
+                MprisController.incrementVolume();
+            else if (event.angleDelta.y < 0)
+                MprisController.decrementVolume();
+            event.accepted = true;
+        }
     }
 
     // ── CONTRACTED LAYOUT (album-art full background, matching FloatingNotchMedia) ──

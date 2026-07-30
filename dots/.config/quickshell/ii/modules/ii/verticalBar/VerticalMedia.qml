@@ -70,6 +70,15 @@ MouseArea {
             }
         }
     }
+    onWheel: event => {
+        if (!Config.options.bar.mediaPlayer.enableVolumeScroll)
+            return;
+        if (event.angleDelta.y > 0)
+            MprisController.incrementVolume();
+        else if (event.angleDelta.y < 0)
+            MprisController.decrementVolume();
+        event.accepted = true;
+    }
 
     ClippedFilledCircularProgress {
         id: mediaCircProg
