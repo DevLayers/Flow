@@ -176,7 +176,7 @@ for i = 1, 10 do
     end)
 end
 
---# #/# bind = SUPER+SHIFT, Scroll ↑/↓,, # Send to workspace left/right
+--#/# bind = SUPER+SHIFT, Scroll ↑/↓,, # Send to workspace left/right
 for i = 1, 4 do
     local key = { "SUPER + SHIFT + mouse_", "SUPER + ALT + mouse_" }
     local keycombos = { key[1] .. "down", key[1] .. "up", key[2] .. "down", key[2] .. "up" }

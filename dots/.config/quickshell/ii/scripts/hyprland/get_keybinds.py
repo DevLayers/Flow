@@ -112,7 +112,7 @@ LUA_BIND_RE = re.compile(r'hl\.bind\s*\(([^)]*)\)\s*', re.DOTALL)
 LUA_FIRST_ARG_RE = re.compile(r'"([^"]+)"')
 LUA_DESC_RE = re.compile(r'description\s*=\s*"([^"]*)"')
 LUA_SECTION_RE = re.compile(r'^--##!\s+(.+)$')
-LUA_COMMENT_BIND_PATTERN = re.compile(r'^--?#/#\s+(bind|unbind)\s*=')
+LUA_COMMENT_BIND_PATTERN = re.compile(r'^--?#/#\s+(bind|unbind)\w*\s*=')
 
 
 def parse_lua_binds(path):
