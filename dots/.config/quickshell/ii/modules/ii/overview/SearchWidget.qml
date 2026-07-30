@@ -256,7 +256,7 @@ Item {
 
     StyledRectangularShadow {
         target: searchWidgetContent
-        visible: !GlobalStates.searchConnectActive
+        visible: !GlobalStates.searchConnectActive && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
         opacity: root.shadowOpacity
         offset: Qt.vector2d(0.0, 0.0)
     }
