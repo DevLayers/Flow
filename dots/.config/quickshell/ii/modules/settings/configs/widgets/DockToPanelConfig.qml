@@ -84,5 +84,21 @@ ContentPage {
                 Config.options.dockToPanel.alignToWorkspace = checked;
             }
         }
+        ConfigSwitch {
+            buttonIcon: "subtitles"
+            text: Translation.tr("Enable app name tooltips")
+            checked: Config.options.dockToPanel.enableTooltip
+            onCheckedChanged: {
+                Config.options.dockToPanel.enableTooltip = checked;
+            }
+        }
+        ConfigSwitch {
+            buttonIcon: "preview"
+            text: Translation.tr("Enable window preview popups")
+            checked: Config.options.dockToPanel.enablePreview
+            onCheckedChanged: {
+                Config.options.dockToPanel.enablePreview = checked;
+            }
+        }
     }
 }

@@ -12,6 +12,8 @@ import Quickshell
 import Quickshell.Widgets
 import Quickshell.Hyprland
 
+import "../../../dock/widgets"
+
 Item {
     id: root
 
@@ -32,6 +34,20 @@ Item {
     readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
     readonly property var scratchpadWin: scratchpadOpen ? HyprlandData.windowList.find(w => w.workspace && w.workspace.id === currentHyprlandMonitorData.specialWorkspace.id) : null
     readonly property string scratchpadAppId: scratchpadWin ? TaskbarApps.normalizeAppId(scratchpadWin.class) : ""
+
+    // Hover, Tooltip and Preview state
+    property Item lastHoveredButton: null
+    property bool buttonHovered: false
+    property bool suppressHover: false
+    readonly property bool anyContextMenuOpen: false
+    readonly property real maxWindowPreviewHeight: 200
+    readonly property real maxWindowPreviewWidth: 300
+    readonly property real windowControlsHeight: 30
+    readonly property bool isVertical: root.vertical
+    readonly property string dockEffectivePosition: {
+        if (vertical) return (Config.options?.bar?.left ?? false) ? "left" : "right";
+        return (Config.options?.bar?.bottom ?? true) ? "bottom" : "top";
+    }
 
     // Helper to find lowest workspace ID for an app
     function _getAppMinWorkspace(appId) {
@@ -280,11 +296,26 @@ Item {
 
                     property string appId:        root._workOrder[index] ?? ""
                     property var    appEntry:     TaskbarApps.apps.find(a => a.appId === appId) ?? null
+                    property var    appToplevel:  appEntry
                     property var    appToplevels: appEntry?.toplevels ?? []
                     property var    deskEntry:    DesktopEntries.heuristicLookup(appId)
+                    property string appTitle:     deskEntry?.name ?? appId
                     property bool   appActive:    appToplevels.find(t => t.activated) !== undefined
                     readonly property bool isScratchpadApp: root.scratchpadOpen && TaskbarApps.normalizeAppId(appId) === root.scratchpadAppId
                     property int    _lastFocused: -1
+
+                    HoverHandler {
+                        id: slotHoverHandler
+                        enabled: !root.dragging
+                        onHoveredChanged: {
+                            if (hovered) {
+                                root.lastHoveredButton = slotItem;
+                                root.buttonHovered = true;
+                            } else if (root.lastHoveredButton === slotItem) {
+                                root.buttonHovered = false;
+                            }
+                        }
+                    }
 
                     // ── Animation properties (with clamping) ──────────────
                     readonly property bool isDragged: root.dragging && index === root.dragSourceIndex
@@ -509,9 +540,24 @@ Item {
                     required property var modelData
 
                     property var activeToplevels: modelData.toplevels ?? []
+                    property var appToplevel: modelData
+                    property string appTitle: DesktopEntries.heuristicLookup(modelData.appId)?.name ?? modelData.appId
                     property bool appIsActive: activeToplevels.find(t => t.activated) !== undefined
                     readonly property bool isScratchpadApp: root.scratchpadOpen && TaskbarApps.normalizeAppId(modelData.appId) === root.scratchpadAppId
                     property int  _lastFocused: -1
+
+                    HoverHandler {
+                        id: activeHoverHandler
+                        enabled: !root.dragging
+                        onHoveredChanged: {
+                            if (hovered) {
+                                root.lastHoveredButton = activeSlot;
+                                root.buttonHovered = true;
+                            } else if (root.lastHoveredButton === activeSlot) {
+                                root.buttonHovered = false;
+                            }
+                        }
+                    }
 
                     width:  root.btnSize
                     height: root.btnSize
@@ -638,6 +684,28 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    // ── Tooltip and Window Preview ───────────────────────────────────────
+    Loader {
+        id: tooltipLoader
+        active: Config.options?.dockToPanel?.enableTooltip ?? true
+        sourceComponent: DockTooltip {
+            parentItem: root.lastHoveredButton
+            text: root.lastHoveredButton?.appTitle ?? ""
+            showTooltip: root.buttonHovered && !root.scratchpadOpen && text !== ""
+            dockPosition: root.dockEffectivePosition === "top" ? "bottom" : (root.dockEffectivePosition === "bottom" ? "top" : (root.dockEffectivePosition === "left" ? "right" : "left"))
+        }
+    }
+
+    Loader {
+        id: previewPopupLoader
+        active: Config.options?.dockToPanel?.enablePreview ?? true
+        sourceComponent: DockPreviewPopup {
+            dockRoot: root
+            dockWindow: root.QsWindow.window
+            appTopLevel: root.lastHoveredButton?.appToplevel
         }
     }
 }
