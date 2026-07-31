@@ -1426,10 +1426,15 @@ start_quickshell() {
         ui_note "Restart skipped (--no-restart)."
         return 0
     }
-    have qs || {
-        ui_warn "qs not on PATH — start Quickshell yourself."
+    local bin=""
+    if have qs; then
+        bin="qs"
+    elif have quickshell; then
+        bin="quickshell"
+    else
+        ui_warn "Neither qs nor quickshell on PATH — start Quickshell yourself."
         return 0
-    }
+    fi
 
     ui_step "Starting"
     if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
@@ -1437,11 +1442,11 @@ start_quickshell() {
         sleep 0.5
     fi
     if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
-        nohup qs -c ii >/dev/null 2>&1 &
-        ui_ok "Started" "qs -c ii"
+        nohup "$bin" -c ii >/dev/null 2>&1 &
+        ui_ok "Started" "$bin -c ii"
     else
-        nohup qs --path "$TARGET_DIR" >/dev/null 2>&1 &
-        ui_ok "Started" "qs --path $(tilde "$TARGET_DIR")"
+        nohup "$bin" --path "$TARGET_DIR" >/dev/null 2>&1 &
+        ui_ok "Started" "$bin --path $(tilde "$TARGET_DIR")"
     fi
     return 0
 }
@@ -1451,10 +1456,10 @@ restart_quickshell() {
         ui_note "Restart skipped (--no-restart)."
         return 0
     }
-    have qs || {
-        ui_warn "qs not on PATH — start Quickshell yourself."
+    if ! have qs && ! have quickshell; then
+        ui_warn "Neither qs nor quickshell on PATH — start Quickshell yourself."
         return 0
-    }
+    fi
 
     stop_quickshell
     start_quickshell
