@@ -27,9 +27,10 @@ Item {
     readonly property bool alignToWorkspace: Config.options?.dockToPanel?.alignToWorkspace ?? false
     readonly property bool enableWorkspaceScroll: Config.options?.dockToPanel?.enableWorkspaceScroll ?? true
 
-    // Scratchpad detection
-    readonly property var scratchpadWin: HyprlandData.windowList.find(w => w.workspace && w.workspace.name && w.workspace.name.startsWith("special"))
-    readonly property bool scratchpadOpen: scratchpadWin !== undefined
+    // Scratchpad detection (matching Workspaces.qml pattern)
+    readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
+    readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
+    readonly property var scratchpadWin: scratchpadOpen ? HyprlandData.windowList.find(w => w.workspace && w.workspace.id === currentHyprlandMonitorData.specialWorkspace.id) : null
     readonly property string scratchpadAppId: scratchpadWin ? TaskbarApps.normalizeAppId(scratchpadWin.class) : ""
 
     property var activeUnpinned: TaskbarApps.apps.filter(a => {
@@ -234,9 +235,9 @@ Item {
             onWheel: event => {
                 let delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x;
                 if (delta > 0)
-                    Hyprland.dispatch("workspace e-1");
+                    Hyprland.dispatch("workspace", "e-1");
                 else if (delta < 0)
-                    Hyprland.dispatch("workspace e+1");
+                    Hyprland.dispatch("workspace", "e+1");
             }
         }
 
@@ -290,8 +291,8 @@ Item {
                     }
 
                     z: isDragged ? 100 : 0
-                    opacity: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.25) : (isDragged ? 0.85 : 1.0)
-                    scale: isDragged ? 1.05 : 1
+                    opacity: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.35) : (isDragged ? 0.85 : 1.0)
+                    scale: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.85) : (isDragged ? 1.05 : 1.0)
 
                     Behavior on opacity {
                         enabled: !root._suppressTranslateAnim
@@ -381,7 +382,7 @@ Item {
                         }
                         middleClickAction: () => { slotItem.deskEntry?.execute() }
                         altAction:         () => { TaskbarApps.togglePin(slotItem.appId) }
-                        backClickAction:   () => { Hyprland.dispatch("togglespecialworkspace scratchpad") }
+                        backClickAction:   () => { Hyprland.dispatch("togglespecialworkspace", "scratchpad") }
 
                         contentItem: Item {
                             anchors.centerIn: parent
@@ -505,7 +506,23 @@ Item {
 
                     width:  root.btnSize
                     height: root.btnSize
-                    opacity: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.25) : 1.0
+                    opacity: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.35) : 1.0
+                    scale: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.85) : 1.0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
 
                     RippleButton {
                         anchors.fill: parent
@@ -525,7 +542,7 @@ Item {
                             TaskbarApps.togglePin(activeSlot.modelData.appId)
                         }
                         backClickAction: () => {
-                            Hyprland.dispatch("togglespecialworkspace scratchpad")
+                            Hyprland.dispatch("togglespecialworkspace", "scratchpad")
                         }
 
                         contentItem: Item {

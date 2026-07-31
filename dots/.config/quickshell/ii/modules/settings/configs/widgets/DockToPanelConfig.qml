@@ -69,7 +69,7 @@ ContentPage {
             }
         }
         ConfigSwitch {
-            icon: "swap_calls"
+            buttonIcon: "swap_calls"
             text: Translation.tr("Enable workspace scrolling")
             checked: Config.options.dockToPanel.enableWorkspaceScroll
             onCheckedChanged: {
@@ -77,7 +77,7 @@ ContentPage {
             }
         }
         ConfigSwitch {
-            icon: "grid_view"
+            buttonIcon: "grid_view"
             text: Translation.tr("Align apps to current workspace")
             checked: Config.options.dockToPanel.alignToWorkspace
             onCheckedChanged: {
