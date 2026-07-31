@@ -1453,6 +1453,8 @@ Singleton {
             property JsonObject dockToPanel: JsonObject {
                 property int iconSize: 25
                 property int buttonSpacing: 2
+                property bool enableWorkspaceScroll: true
+                property bool alignToWorkspace: false
             }
 
             property JsonObject hyprland: JsonObject {

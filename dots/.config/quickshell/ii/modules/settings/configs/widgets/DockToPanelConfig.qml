@@ -68,5 +68,21 @@ ContentPage {
                 Config.options.dockToPanel.buttonSpacing = value;
             }
         }
+        ConfigSwitch {
+            icon: "swap_calls"
+            text: Translation.tr("Enable workspace scrolling")
+            checked: Config.options.dockToPanel.enableWorkspaceScroll
+            onCheckedChanged: {
+                Config.options.dockToPanel.enableWorkspaceScroll = checked;
+            }
+        }
+        ConfigSwitch {
+            icon: "grid_view"
+            text: Translation.tr("Align apps to current workspace")
+            checked: Config.options.dockToPanel.alignToWorkspace
+            onCheckedChanged: {
+                Config.options.dockToPanel.alignToWorkspace = checked;
+            }
+        }
     }
 }
