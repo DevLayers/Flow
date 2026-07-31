@@ -601,123 +601,91 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     target: root
                     function onEntranceTriggerChanged() {
                         if (root.entranceTrigger >= 0 && modelAndProviderLoader.active) {
-                            providerButton1.opacity = 0.0;
-                            providerButton1Transform.x = -35;
-                            providerButton1Transform.y = 0;
-                            
-                            providerButton2.opacity = 0.0;
-                            providerButton2Transform.x = 0;
-                            providerButton2Transform.y = 25;
-                            
-                            providerButton3.opacity = 0.0;
-                            providerButton3Transform.x = 35;
-                            providerButton3Transform.y = 0;
-                            
                             modelSelector.opacity = 0.0;
                             modelSelectorScale.xScale = 0.8;
                             modelSelectorTransform.y = 0;
                             
                             Qt.callLater(function() {
-                                providerButton1Anim.start();
-                                providerButton2Anim.start();
-                                providerButton3Anim.start();
                                 modelSelectorAnim.start();
                             });
                         }
                     }
                 }
 
-                RowLayout {
-                    id: providerSelector
+                Flickable {
+                    id: providerFlickable
                     Layout.fillWidth: true
-                    spacing: 2
+                    implicitHeight: providerSelector.implicitHeight + 4
+                    contentWidth: providerSelector.implicitWidth
+                    boundsBehavior: Flickable.StopAtBounds
+                    flickableDirection: Flickable.HorizontalFlick
+                    clip: true
 
-                    property string currentValue: Persistent.states.ai.provider
+                    RowLayout {
+                        id: providerSelector
+                        height: parent.height
+                        spacing: 4
 
-                    SelectionGroupButton {
-                        id: providerButton1
-                        Layout.fillWidth: true
-                        leftmost: true
-                        rightmost: false
-                        buttonSymbol: "spark-symbolic"
-                        buttonText: "Google"
-                        toggled: providerSelector.currentValue === "google"
-                        onClicked: {
-                            Persistent.states.ai.provider = "google";
-                            Persistent.states.ai.model = Ai.modelsOfProviders["google"][0].value;
-                        }
-                        
-                        opacity: 0.0
-                        transform: Translate {
-                            id: providerButton1Transform
-                            x: -35
-                            y: 0
-                        }
-                        
-                        SequentialAnimation {
-                            id: providerButton1Anim
-                            PauseAnimation { duration: 220 + 0 * 60 }
-                            ParallelAnimation {
-                                NumberAnimation { target: providerButton1; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                                NumberAnimation { target: providerButton1Transform; property: "x"; from: -35; to: 0; duration: 380; easing.type: Easing.OutBack }
+                        property string currentValue: Persistent.states.ai.provider
+
+                        SelectionGroupButton {
+                            id: providerButton1
+                            leftmost: true
+                            rightmost: false
+                            buttonSymbol: "google-gemini-symbolic"
+                            buttonText: "Google"
+                            toggled: providerSelector.currentValue === "google"
+                            onClicked: {
+                                Persistent.states.ai.provider = "google";
+                                Persistent.states.ai.model = Ai.modelsOfProviders["google"][0].value;
                             }
                         }
-                    }
-                    SelectionGroupButton {
-                        id: providerButton2
-                        Layout.fillWidth: true
-                        leftmost: false
-                        rightmost: false
-                        buttonSymbol: "openrouter-symbolic"
-                        buttonText: "OpenRouter"
-                        toggled: providerSelector.currentValue === "openrouter"
-                        onClicked: {
-                            Persistent.states.ai.provider = "openrouter";
-                            Persistent.states.ai.model = Ai.modelsOfProviders["openrouter"][0].value;
-                        }
-                        
-                        opacity: 0.0
-                        transform: Translate {
-                            id: providerButton2Transform
-                            x: 0
-                            y: 25
-                        }
-                        
-                        SequentialAnimation {
-                            id: providerButton2Anim
-                            PauseAnimation { duration: 220 + 1 * 60 }
-                            ParallelAnimation {
-                                NumberAnimation { target: providerButton2; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                                NumberAnimation { target: providerButton2Transform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutBack }
+                        SelectionGroupButton {
+                            id: providerButton2
+                            leftmost: false
+                            rightmost: false
+                            buttonSymbol: "deepseek-symbolic"
+                            buttonText: "DeepSeek"
+                            toggled: providerSelector.currentValue === "deepseek"
+                            onClicked: {
+                                Persistent.states.ai.provider = "deepseek";
+                                Persistent.states.ai.model = Ai.modelsOfProviders["deepseek"][0].value;
                             }
                         }
-                    }
-                    SelectionGroupButton {
-                        id: providerButton3
-                        Layout.fillWidth: true
-                        leftmost: false
-                        rightmost: true
-                        buttonIcon: "more_horiz"
-                        buttonText: Translation.tr("Others")
-                        toggled: providerSelector.currentValue === "others"
-                        onClicked: {
-                            Persistent.states.ai.provider = "others";
-                            Persistent.states.ai.model = Ai.modelsOfProviders["others"][0].value;
+                        SelectionGroupButton {
+                            id: providerButton3
+                            leftmost: false
+                            rightmost: false
+                            buttonIcon: "code"
+                            buttonText: "OpenCode"
+                            toggled: providerSelector.currentValue === "opencode"
+                            onClicked: {
+                                Persistent.states.ai.provider = "opencode";
+                                Persistent.states.ai.model = Ai.modelsOfProviders["opencode"][0].value;
+                            }
                         }
-                        
-                        opacity: 0.0
-                        transform: Translate {
-                            id: providerButton3Transform
-                            x: 35
-                            y: 0
+                        SelectionGroupButton {
+                            id: providerButton4
+                            leftmost: false
+                            rightmost: false
+                            buttonSymbol: "openrouter-symbolic"
+                            buttonText: "OpenRouter"
+                            toggled: providerSelector.currentValue === "openrouter"
+                            onClicked: {
+                                Persistent.states.ai.provider = "openrouter";
+                                Persistent.states.ai.model = Ai.modelsOfProviders["openrouter"][0].value;
+                            }
                         }
-                        
-                        SequentialAnimation {
-                            id: providerButton3Anim
-                            PauseAnimation { duration: 220 + 2 * 60 }
-                            ParallelAnimation {
-                                NumberAnimation { target: providerButton3; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                                NumberAnimation { target: providerButton3Transform; property: "x"; from: 35; to: 0; duration: 380; easing.type: Easing.OutBack }
+                        SelectionGroupButton {
+                            id: providerButton5
+                            leftmost: false
+                            rightmost: true
+                            buttonIcon: "more_horiz"
+                            buttonText: Translation.tr("Others")
+                            toggled: providerSelector.currentValue === "others"
+                            onClicked: {
+                                Persistent.states.ai.provider = "others";
+                                Persistent.states.ai.model = Ai.modelsOfProviders["others"][0].value;
                             }
                         }
                     }
