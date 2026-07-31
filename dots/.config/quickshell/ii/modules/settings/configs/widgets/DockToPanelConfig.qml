@@ -90,6 +90,9 @@ ContentPage {
             checked: Config.options.dockToPanel.enableTooltip
             onCheckedChanged: {
                 Config.options.dockToPanel.enableTooltip = checked;
+                if (checked) {
+                    Config.options.dockToPanel.enablePreview = false;
+                }
             }
         }
         ConfigSwitch {
@@ -98,6 +101,9 @@ ContentPage {
             checked: Config.options.dockToPanel.enablePreview
             onCheckedChanged: {
                 Config.options.dockToPanel.enablePreview = checked;
+                if (checked) {
+                    Config.options.dockToPanel.enableTooltip = false;
+                }
             }
         }
     }

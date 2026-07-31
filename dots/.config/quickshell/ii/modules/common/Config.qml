@@ -1455,8 +1455,8 @@ Singleton {
                 property int buttonSpacing: 2
                 property bool enableWorkspaceScroll: false
                 property bool alignToWorkspace: false
-                property bool enableTooltip: true
-                property bool enablePreview: true
+                property bool enableTooltip: false
+                property bool enablePreview: false
             }
 
             property JsonObject hyprland: JsonObject {

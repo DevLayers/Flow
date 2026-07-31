@@ -11,8 +11,8 @@ import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Widgets
 import Quickshell.Hyprland
-
-import "../../../dock/widgets"
+import Quickshell.Wayland
+import qs.modules.ii.bar.shared
 
 Item {
     id: root
@@ -37,8 +37,10 @@ Item {
 
     // Hover, Tooltip and Preview state
     property Item lastHoveredButton: null
+    property point hoveredButtonCenter: Qt.point(0, 0)
     property bool buttonHovered: false
     property bool suppressHover: false
+    property bool popupIsResizing: false
     readonly property bool anyContextMenuOpen: false
     readonly property real maxWindowPreviewHeight: 200
     readonly property real maxWindowPreviewWidth: 300
@@ -46,7 +48,22 @@ Item {
     readonly property bool isVertical: root.vertical
     readonly property string dockEffectivePosition: {
         if (vertical) return (Config.options?.bar?.left ?? false) ? "left" : "right";
-        return (Config.options?.bar?.bottom ?? true) ? "bottom" : "top";
+        return (Config.options?.bar?.bottom ?? false) ? "bottom" : "top";
+    }
+
+    Timer {
+        id: hoverGraceTimer
+        interval: 250
+        onTriggered: {
+            root.buttonHovered = false;
+        }
+    }
+
+    onLastHoveredButtonChanged: {
+        if (root.lastHoveredButton) {
+            let p = root.lastHoveredButton.mapToItem(null, root.lastHoveredButton.width / 2, root.lastHoveredButton.height / 2);
+            root.hoveredButtonCenter = p;
+        }
     }
 
     // Helper to find lowest workspace ID for an app
@@ -302,20 +319,8 @@ Item {
                     property string appTitle:     deskEntry?.name ?? appId
                     property bool   appActive:    appToplevels.find(t => t.activated) !== undefined
                     readonly property bool isScratchpadApp: root.scratchpadOpen && TaskbarApps.normalizeAppId(appId) === root.scratchpadAppId
+                    readonly property bool hovered: root.lastHoveredButton === slotItem && root.buttonHovered
                     property int    _lastFocused: -1
-
-                    HoverHandler {
-                        id: slotHoverHandler
-                        enabled: !root.dragging
-                        onHoveredChanged: {
-                            if (hovered) {
-                                root.lastHoveredButton = slotItem;
-                                root.buttonHovered = true;
-                            } else if (root.lastHoveredButton === slotItem) {
-                                root.buttonHovered = false;
-                            }
-                        }
-                    }
 
                     // ── Animation properties (with clamping) ──────────────
                     readonly property bool isDragged: root.dragging && index === root.dragSourceIndex
@@ -416,6 +421,17 @@ Item {
                         buttonRadius: Appearance.rounding.small
                         hoverEnabled: true
 
+                        enteredAction: () => {
+                            if (root.suppressHover || root.dragging) return;
+                            hoverGraceTimer.stop();
+                            root.lastHoveredButton = slotItem;
+                            root.buttonHovered = true;
+                        }
+                        exitedAction: () => {
+                            if (root.lastHoveredButton === slotItem)
+                                hoverGraceTimer.restart();
+                        }
+
                         onClicked: {
                             if (root.dragging) return
                             const entry = slotItem.appEntry
@@ -429,7 +445,16 @@ Item {
                         }
                         middleClickAction: () => { slotItem.deskEntry?.execute() }
                         altAction:         () => { TaskbarApps.togglePin(slotItem.appId) }
-                        backClickAction:   () => { Hyprland.dispatch("hl.dsp.workspace.toggle_special('special')") }
+                        backClickAction: () => {
+                            root.buttonHovered = false;
+                            root.lastHoveredButton = null;
+                            Hyprland.dispatch("hl.dsp.workspace.toggle_special('special')");
+                        }
+
+                        StyledToolTip {
+                            text: slotItem.appTitle
+                            extraVisibleCondition: (Config.options?.dockToPanel?.enableTooltip ?? true) && !(Config.options?.dockToPanel?.enablePreview ?? false)
+                        }
 
                         contentItem: Item {
                             anchors.centerIn: parent
@@ -544,20 +569,8 @@ Item {
                     property string appTitle: DesktopEntries.heuristicLookup(modelData.appId)?.name ?? modelData.appId
                     property bool appIsActive: activeToplevels.find(t => t.activated) !== undefined
                     readonly property bool isScratchpadApp: root.scratchpadOpen && TaskbarApps.normalizeAppId(modelData.appId) === root.scratchpadAppId
+                    readonly property bool hovered: root.lastHoveredButton === activeSlot && root.buttonHovered
                     property int  _lastFocused: -1
-
-                    HoverHandler {
-                        id: activeHoverHandler
-                        enabled: !root.dragging
-                        onHoveredChanged: {
-                            if (hovered) {
-                                root.lastHoveredButton = activeSlot;
-                                root.buttonHovered = true;
-                            } else if (root.lastHoveredButton === activeSlot) {
-                                root.buttonHovered = false;
-                            }
-                        }
-                    }
 
                     width:  root.btnSize
                     height: root.btnSize
@@ -584,6 +597,17 @@ Item {
                         buttonRadius: Appearance.rounding.small
                         hoverEnabled: true
 
+                        enteredAction: () => {
+                            if (root.suppressHover || root.dragging) return;
+                            hoverGraceTimer.stop();
+                            root.lastHoveredButton = activeSlot;
+                            root.buttonHovered = true;
+                        }
+                        exitedAction: () => {
+                            if (root.lastHoveredButton === activeSlot)
+                                hoverGraceTimer.restart();
+                        }
+
                         onClicked: {
                             if (activeSlot.modelData.toplevels.length === 0) return
                             const next = (activeSlot._lastFocused + 1) % activeSlot.modelData.toplevels.length
@@ -597,7 +621,14 @@ Item {
                             TaskbarApps.togglePin(activeSlot.modelData.appId)
                         }
                         backClickAction: () => {
-                            Hyprland.dispatch("hl.dsp.workspace.toggle_special('special')")
+                            root.buttonHovered = false;
+                            root.lastHoveredButton = null;
+                            Hyprland.dispatch("hl.dsp.workspace.toggle_special('special')");
+                        }
+
+                        StyledToolTip {
+                            text: activeSlot.appTitle
+                            extraVisibleCondition: (Config.options?.dockToPanel?.enableTooltip ?? true) && !(Config.options?.dockToPanel?.enablePreview ?? false)
                         }
 
                         contentItem: Item {
@@ -687,25 +718,78 @@ Item {
         }
     }
 
-    // ── Tooltip and Window Preview ───────────────────────────────────────
-    Loader {
-        id: tooltipLoader
-        active: Config.options?.dockToPanel?.enableTooltip ?? true
-        sourceComponent: DockTooltip {
-            parentItem: root.lastHoveredButton
-            text: root.lastHoveredButton?.appTitle ?? ""
-            showTooltip: root.buttonHovered && !root.scratchpadOpen && text !== ""
-            dockPosition: root.dockEffectivePosition === "top" ? "bottom" : (root.dockEffectivePosition === "bottom" ? "top" : (root.dockEffectivePosition === "left" ? "right" : "left"))
-        }
-    }
+    // ── Window Preview Popup (Bar Native) ──────────────────────────────
+    StyledPopup {
+        id: previewPopup
+        hoverTarget: root.lastHoveredButton
+        stickyHover: true
+        active: (Config.options?.dockToPanel?.enablePreview ?? true) && !(Config.options?.dockToPanel?.enableTooltip ?? false) && !root.scratchpadOpen && (root.buttonHovered || previewPopup._popupHovered) && (root.lastHoveredButton?.appToplevel?.toplevels?.length ?? 0) > 0
 
-    Loader {
-        id: previewPopupLoader
-        active: Config.options?.dockToPanel?.enablePreview ?? true
-        sourceComponent: DockPreviewPopup {
-            dockRoot: root
-            dockWindow: root.QsWindow.window
-            appTopLevel: root.lastHoveredButton?.appToplevel
+        contentItem: RowLayout {
+            spacing: 8
+            Repeater {
+                model: ScriptModel {
+                    values: (root.lastHoveredButton?.appToplevel?.toplevels ?? []).slice(0, 4)
+                }
+                delegate: RippleButton {
+                    id: winBtn
+                    required property var modelData
+                    implicitWidth: screencopyView.implicitWidth + 12
+                    implicitHeight: screencopyView.implicitHeight + 36
+                    buttonRadius: Appearance.rounding.small
+
+                    onClicked: {
+                        modelData?.activate();
+                        root.buttonHovered = false;
+                    }
+                    middleClickAction: () => modelData?.close()
+
+                    contentItem: ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: winBtn.modelData?.title ?? ""
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                elide: Text.ElideRight
+                                color: Appearance.colors.colOnSurface
+                            }
+                            RippleButton {
+                                implicitWidth: 18
+                                implicitHeight: 18
+                                buttonRadius: Appearance.rounding.full
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "close"
+                                    iconSize: 12
+                                    color: Appearance.colors.colOnSurface
+                                }
+                                onClicked: winBtn.modelData?.close()
+                            }
+                        }
+
+                        ScreencopyView {
+                            id: screencopyView
+                            captureSource: winBtn.modelData
+                            live: true
+                            paintCursor: true
+                            constraintSize: Qt.size(240, 150)
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: Rectangle {
+                                    width: screencopyView.width
+                                    height: screencopyView.height
+                                    radius: Appearance.rounding.small
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
