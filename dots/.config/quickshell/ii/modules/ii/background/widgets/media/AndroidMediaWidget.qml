@@ -101,8 +101,18 @@ AbstractBackgroundWidget {
         color: root.artDominantColor
     }
 
-    readonly property color artTextColor: Appearance.colors.colOnSurface
-    readonly property color artSubtextColor: Appearance.colors.colOnSurfaceVariant
+    // ── Widget color scheme (used when album art colors are off or no media) ──
+    readonly property color cardBgColor: useDynamicColors ? root.blendedColors.colPrimaryContainer : WidgetColorScheme.cardBgColor
+    readonly property color textColorOnBg: useDynamicColors ? root.blendedColors.colOnPrimaryContainer : WidgetColorScheme.textColorOnBg
+    readonly property color subtextColorOnBg: useDynamicColors ? ColorUtils.transparentize(root.blendedColors.colOnPrimaryContainer, 0.35) : WidgetColorScheme.subtextColorOnBg
+    readonly property color accentColor: useDynamicColors ? root.blendedColors.colPrimary : WidgetColorScheme.accentColor
+    readonly property color pillFillColor: useDynamicColors ? root.blendedColors.colPrimaryContainer : WidgetColorScheme.pillFillColor
+    readonly property color pillFillColorHover: useDynamicColors ? root.blendedColors.colPrimaryContainerHover : ColorUtils.mix(WidgetColorScheme.pillFillColor, WidgetColorScheme.accentColor, 0.15)
+    readonly property color pillFillColorActive: useDynamicColors ? root.blendedColors.colPrimaryContainerActive : ColorUtils.mix(WidgetColorScheme.pillFillColor, WidgetColorScheme.accentColor, 0.25)
+    readonly property color onPillFillColor: useDynamicColors ? root.blendedColors.colOnPrimaryContainer : WidgetColorScheme.textColorOnPillFill
+
+    readonly property color artTextColor: root.textColorOnBg
+    readonly property color artSubtextColor: root.subtextColorOnBg
 
     Behavior on artVignetteBlur {
         NumberAnimation {
@@ -200,7 +210,7 @@ AbstractBackgroundWidget {
         Rectangle {
             id: mainBg
             anchors.fill: parent
-            color: Appearance.m3colors.m3secondaryContainer
+            color: root.cardBgColor
             radius: Appearance.rounding.windowRounding + 16
             clip: true
 
@@ -353,7 +363,7 @@ AbstractBackgroundWidget {
                                 anchors.centerIn: parent
                                 text: "music_note"
                                 iconSize: 18
-                                color: Appearance.colors.colOnSurface
+                                color: root.textColorOnBg
                             }
                         }
                     }
@@ -368,9 +378,9 @@ AbstractBackgroundWidget {
                         leftPadding: 12
                         rightPadding: 12
                         Layout.alignment: Qt.AlignTop
-                        colBackground: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                        colBackgroundHover: root.useDynamicColors ? root.blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover
-                        colRipple: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
+                        colBackground: root.pillFillColor
+                        colBackgroundHover: root.pillFillColorHover
+                        colRipple: root.pillFillColorActive
                         buttonRadius: Appearance.rounding.full
 
                         readonly property string activeAudioDeviceName: Audio.sink ? (Audio.sink.description || "") : ""
@@ -396,14 +406,14 @@ AbstractBackgroundWidget {
                             MaterialSymbol {
                                 text: audioPill.audioDeviceIcon
                                 iconSize: 14
-                                color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
+                                color: root.onPillFillColor
                             }
 
                             StyledText {
                                 text: audioPill.activeAudioDeviceName !== "" ? audioPill.activeAudioDeviceName : Translation.tr("Audio")
                                 font.pixelSize: 13
                                 font.bold: true
-                                color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
+                                color: root.onPillFillColor
                                 Layout.maximumWidth: 160
                                 elide: Text.ElideRight
                             }
@@ -547,48 +557,48 @@ AbstractBackgroundWidget {
                             Layout.fillHeight: true
                             spacing: 16
 
-                            MaterialShape {
-                                Layout.preferredWidth: 80
-                                Layout.preferredHeight: 80
-                                Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                                shapeString: "Cookie9Sided"
-                                color: Appearance.colors.colPrimaryContainer
+                                MaterialShape {
+                                    Layout.preferredWidth: 80
+                                    Layout.preferredHeight: 80
+                                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                                    shapeString: "Cookie9Sided"
+                                    color: root.pillFillColor
 
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "graphic_eq"
-                                    iconSize: 42
-                                    color: Appearance.colors.colOnPrimaryContainer
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        text: "graphic_eq"
+                                        iconSize: 42
+                                        color: root.onPillFillColor
+                                    }
                                 }
-                            }
 
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                Layout.alignment: Qt.AlignVCenter
-                                spacing: 4
-
-                                StyledText {
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    font.family: Appearance.font.family.main
-                                    font.pixelSize: 22
-                                    font.weight: Font.Bold
-                                    font.styleName: "Rounded"
-                                    color: Appearance.colors.colOnSurface
-                                    text: Translation.tr("No media playing")
-                                    elide: Text.ElideRight
-                                }
+                                    Layout.alignment: Qt.AlignVCenter
+                                    spacing: 4
 
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    font.family: Appearance.font.family.main
-                                    font.pixelSize: 14
-                                    font.weight: Font.Normal
-                                    color: Appearance.colors.colOnSurfaceVariant
-                                    text: Translation.tr("Play music or video to start")
-                                    elide: Text.ElideRight
-                                    opacity: 0.85
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        font.family: Appearance.font.family.main
+                                        font.pixelSize: 22
+                                        font.weight: Font.Bold
+                                        font.styleName: "Rounded"
+                                        color: root.textColorOnBg
+                                        text: Translation.tr("No media playing")
+                                        elide: Text.ElideRight
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        font.family: Appearance.font.family.main
+                                        font.pixelSize: 14
+                                        font.weight: Font.Normal
+                                        color: root.subtextColorOnBg
+                                        text: Translation.tr("Play music or video to start")
+                                        elide: Text.ElideRight
+                                        opacity: 0.85
+                                    }
                                 }
-                            }
                         }
                     }
 
@@ -598,9 +608,9 @@ AbstractBackgroundWidget {
                         implicitWidth: 64
                         implicitHeight: 64
                         buttonRadius: 22
-                        colBackground: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                        colBackgroundHover: root.useDynamicColors ? root.blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover
-                        colRipple: root.useDynamicColors ? root.blendedColors.colPrimaryContainerActive : Appearance.colors.colPrimaryContainerActive
+                        colBackground: root.pillFillColor
+                        colBackgroundHover: root.pillFillColorHover
+                        colRipple: root.pillFillColorActive
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
                         onClicked: {
@@ -619,7 +629,7 @@ AbstractBackgroundWidget {
                                 anchors.centerIn: parent
                                 text: root.playing ? "pause" : "play_arrow"
                                 iconSize: 36
-                                color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
+                                color: root.onPillFillColor
                                 fill: 1
                             }
                         }
@@ -639,7 +649,7 @@ AbstractBackgroundWidget {
                         buttonRadius: 16
                         colBackground: "transparent"
                         colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
-                        colRipple: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
+                        colRipple: root.pillFillColor
 
                         onClicked: {
                             if (root.player)
@@ -656,9 +666,9 @@ AbstractBackgroundWidget {
                                 fill: 1
                                 color: {
                                     if (!root.player || !root.player.canGoPrevious) {
-                                        return Appearance.colors.colOnSurfaceVariant;
+                                        return root.subtextColorOnBg;
                                     }
-                                    return Appearance.colors.colOnSurface;
+                                    return root.textColorOnBg;
                                 }
                                 opacity: root.player && root.player.canGoPrevious ? 1.0 : 0.4
                             }
@@ -677,9 +687,9 @@ AbstractBackgroundWidget {
                             active: root.player ? (root.player.canSeek ?? false) : false
                             sourceComponent: StyledSlider {
                                 configuration: StyledSlider.Configuration.Wavy
-                                highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
+                                highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
-                                handleColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
+                                handleColor: root.accentColor
                                 value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
                                 onMoved: if (root.player)
                                     root.player.position = value * root.player.length
@@ -696,7 +706,7 @@ AbstractBackgroundWidget {
                             active: root.player ? !(root.player.canSeek ?? false) : false
                             sourceComponent: StyledProgressBar {
                                 wavy: root.player ? root.playing : false
-                                highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
+                                highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
                             }
@@ -710,7 +720,7 @@ AbstractBackgroundWidget {
                         buttonRadius: 16
                         colBackground: "transparent"
                         colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
-                        colRipple: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
+                        colRipple: root.pillFillColor
 
                         onClicked: {
                             if (root.player)
@@ -727,9 +737,9 @@ AbstractBackgroundWidget {
                                 fill: 1
                                 color: {
                                     if (!root.player || !root.player.canGoNext) {
-                                        return Appearance.colors.colOnSurfaceVariant;
+                                        return root.subtextColorOnBg;
                                     }
-                                    return Appearance.colors.colOnSurface;
+                                    return root.textColorOnBg;
                                 }
                                 opacity: root.player && root.player.canGoNext ? 1.0 : 0.4
                             }
