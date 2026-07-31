@@ -126,5 +126,22 @@ ContentPage {
                 Config.options.dockToPanel.macOsMagnificationScale = value / 100.0;
             }
         }
+        NoticeBox {
+            visible: Config.options.bar?.onlyShowOnSingleMonitor ?? false
+            Layout.fillWidth: true
+            text: Translation.tr("Isolate monitors requires 'Show bar only on a single monitor' to be disabled.")
+        }
+        ConfigSwitch {
+            buttonIcon: "desktop_windows"
+            text: Translation.tr("Isolate monitors (show unpinned apps per monitor)")
+            checked: Config.options.dockToPanel.isolateMonitors ?? false
+            enabled: !(Config.options.bar?.onlyShowOnSingleMonitor ?? false)
+            onCheckedChanged: {
+                Config.options.dockToPanel.isolateMonitors = checked;
+                if (checked && Config.options.bar) {
+                    Config.options.bar.onlyShowOnSingleMonitor = false;
+                }
+            }
+        }
     }
 }

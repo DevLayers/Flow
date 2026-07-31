@@ -1750,6 +1750,7 @@ Singleton {
                 property bool enablePreview: false
                 property bool enableMacOsMagnification: false
                 property real macOsMagnificationScale: 1.6
+                property bool isolateMonitors: false
             }
 
             property JsonObject hyprland: JsonObject {

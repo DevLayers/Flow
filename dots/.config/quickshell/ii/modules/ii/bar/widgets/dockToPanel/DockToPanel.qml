@@ -93,6 +93,56 @@ Item {
         }
     }
 
+    readonly property bool isolateMonitors: Config.options?.dockToPanel?.isolateMonitors ?? false
+
+    function _isWinOnMonitor(win, monName, monId) {
+        if (!win) return false;
+        if (win.monitor !== undefined && win.monitor !== null) {
+            if (win.monitor === monId || win.monitor === monName) return true;
+            let monObj = HyprlandData.monitors.find(m => m.id === win.monitor || m.name === win.monitor);
+            if (monObj && (monObj.name === monName || monObj.id === monId)) return true;
+        }
+        if (win.workspace) {
+            if (win.workspace.monitor === monName || win.workspace.monitorID === monId) return true;
+            let wsObj = HyprlandData.workspaces.find(w => w.id === win.workspace.id);
+            if (wsObj && (wsObj.monitor === monName || wsObj.monitorID === monId)) return true;
+        }
+        return false;
+    }
+
+    function _isToplevelOnMonitor(toplevel, monName, monId) {
+        if (!toplevel || !monName) return false;
+        
+        let addr = toplevel.HyprlandToplevel?.address;
+        if (addr) {
+            let hexAddr = addr.startsWith("0x") ? addr : ("0x" + addr);
+            let win = HyprlandData.windowByAddress[hexAddr];
+            if (!win) win = HyprlandData.windowList.find(w => w.address === hexAddr || w.address === addr);
+            if (win) {
+                return root._isWinOnMonitor(win, monName, monId);
+            }
+        }
+
+        if (toplevel.appId) {
+            let normAppId = TaskbarApps.normalizeAppId(toplevel.appId);
+            let matchingWins = HyprlandData.windowList.filter(w => 
+                w.class && TaskbarApps.normalizeAppId(w.class) === normAppId
+            );
+            if (matchingWins.length > 0) {
+                return matchingWins.some(w => root._isWinOnMonitor(w, monName, monId));
+            }
+        }
+
+        if (toplevel.title) {
+            let matchingWins = HyprlandData.windowList.filter(w => w.title && w.title === toplevel.title);
+            if (matchingWins.length > 0) {
+                return matchingWins.some(w => root._isWinOnMonitor(w, monName, monId));
+            }
+        }
+
+        return false;
+    }
+
     // Helper to find lowest workspace ID for an app
     function _getAppMinWorkspace(appId) {
         let entry = TaskbarApps.apps.find(a => a.appId === appId);
@@ -109,6 +159,11 @@ Item {
 
     property var activeUnpinned: {
         let list = TaskbarApps.apps.filter(a => !a.pinned && a.appId !== "SEPARATOR" && a.toplevels.length > 0);
+        if (root.isolateMonitors && root.monitor && root.monitor.name && !(Config.options?.bar?.onlyShowOnSingleMonitor ?? false)) {
+            let monName = root.monitor.name;
+            let monId = root.monitor.id;
+            list = list.filter(a => a.toplevels.some(t => root._isToplevelOnMonitor(t, monName, monId)));
+        }
         if (root.alignToWorkspace) {
             list.sort((a, b) => root._getAppMinWorkspace(a.appId) - root._getAppMinWorkspace(b.appId));
         }
