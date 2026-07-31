@@ -42,6 +42,8 @@
 #       --keep-config         Never reset ~/.config/illogical-impulse/config.json
 #       --reset-config        Always reset it (a backup is kept)
 #       --no-restart          Leave Quickshell alone when finished
+#       --hypr                Install the fork's ~/.config/hypr files
+#       --no-hypr             Never install them, never ask
 #       --rebuild-quickshell  Rebuild Quickshell from source first
 #       --skip-base-check     Do not require illogical-impulse to be present
 #       --ii-subdir <name>    Override ii* auto-detection in the clone
@@ -61,6 +63,12 @@
 #
 # Given neither --keep-config nor --reset-config, config.json is kept on
 # updates and branch hops and reset on fork switches, where the schema changes.
+#
+# apply, install, update and switch offer to overlay the fork's Hyprland config
+# on ~/.config/hypr. Given neither --hypr nor --no-hypr it is a question, and
+# -y answers it "no" rather than "yes": the Settings update button runs
+# unattended and must not rewrite Hyprland underneath you. --hypr is the way to
+# ask for it in a script.
 #
 # Options take --flag=value as well as --flag value, and everything after a
 # bare -- is passed through to hyprset/hyprmerge.
@@ -144,6 +152,20 @@ PROTECTED_PATTERNS=(
     "scripts/osk/osk_autoshow"
 )
 
+# ── The fork's Hyprland config ───────────────────────────────────────────────
+# Everything under dots/.config/hypr is overlaid on ~/.config/hypr except the
+# paths below, matched against the path relative to that directory.
+
+# The base installer owns custom/ and it is where your own edits are meant to
+# live, so the fork never writes there.
+HYPR_EXCLUDE_DIRS=("custom")
+
+# Matugen rewrites both of these on every wallpaper change — see the
+# [templates.hyprland] and [templates.hyprlock] blocks in matugen's config.toml.
+# The repo's copies are a snapshot of whatever wallpaper was set at commit time,
+# so they are seeded when missing and never overwritten afterwards.
+HYPR_SEED_ONLY=("hyprland/colors.lua" "hyprlock/colors.conf")
+
 # ── Options ──────────────────────────────────────────────────────────────────
 COMMAND=""
 OPT_FORK=""
@@ -157,6 +179,7 @@ OPT_KEEP_CONFIG="" # "" = per-command default, true/false = explicit
 OPT_REBUILD_QS=false
 OPT_II_SUBDIR=""
 OPT_RESTART=true
+OPT_HYPR="" # "" = ask (and -y declines), true/false = explicit
 OPT_SKIP_BASE_CHECK=false
 OPT_ASCII=false
 OPT_NO_COLOR=false
@@ -1085,15 +1108,31 @@ carry_protected() {
     printf '%s' "$n"
 }
 
+# prune_backups [prefix] — keeps the newest BACKUPS_TO_KEEP of one family.
+# The families are pruned independently: a run of config replaces must not age
+# out the hypr backup that the same run just took.
 prune_backups() {
     [[ -d "$BACKUP_BASE_DIR" ]] || return 0
-    local old
+    local prefix="${1:-ii_}" old
     while IFS= read -r old; do
         [[ -n "$old" ]] || continue
         rm -rf "$old"
         ui_verbose "pruned backup $(basename "$old")"
-    done < <(find "$BACKUP_BASE_DIR" -maxdepth 1 -type d -name 'ii_*' -printf '%T@ %p\n' 2>/dev/null |
+    done < <(find "$BACKUP_BASE_DIR" -maxdepth 1 -type d -name "$prefix*" -printf '%T@ %p\n' 2>/dev/null |
         sort -rn | tail -n "+$((BACKUPS_TO_KEEP + 1))" | cut -d' ' -f2-)
+}
+
+# next_backup_dir <prefix> — a free, timestamped path under BACKUP_BASE_DIR.
+# Second resolution is not enough for two runs in the same second.
+next_backup_dir() {
+    local base dir n=2
+    base="$BACKUP_BASE_DIR/$1$(date +%Y%m%d-%H%M%S)"
+    dir="$base"
+    while [[ -e "$dir" ]]; do
+        dir="$base-$n"
+        n=$((n + 1))
+    done
+    printf '%s' "$dir"
 }
 
 # swap_in <stage> <fork_id> <branch> — atomically replaces TARGET_DIR
@@ -1105,16 +1144,10 @@ swap_in() {
     if [[ -d "$TARGET_DIR" ]]; then
         if [[ "$OPT_BACKUP" == true ]]; then
             mkdir -p "$BACKUP_BASE_DIR"
-            local base n=2
-            base="$BACKUP_BASE_DIR/ii_$(path_slug "$fork")_$(path_slug "$branch")_$(date +%Y%m%d-%H%M%S)"
-            # Second resolution is not enough for two runs in the same second:
-            # mv onto an existing directory nests the config inside it rather
-            # than replacing it, and the run after that fails outright.
-            DISPLACED_DIR="$base"
-            while [[ -e "$DISPLACED_DIR" ]]; do
-                DISPLACED_DIR="$base-$n"
-                n=$((n + 1))
-            done
+            # A unique name matters more here than elsewhere: mv onto an
+            # existing directory nests the config inside it rather than
+            # replacing it, and the run after that fails outright.
+            DISPLACED_DIR="$(next_backup_dir "ii_$(path_slug "$fork")_$(path_slug "$branch")_")"
             label="backup $G_ARROW $(basename "$DISPLACED_DIR")"
         else
             DISPLACED_DIR="$QS_DIR/.ii-discard-$$"
@@ -1466,6 +1499,120 @@ remove_cli() {
 # The pipeline
 #══════════════════════════════════════════════════════════════════════════════
 
+# install_hypr_config <repo_root>
+#
+# Overlays the fork's dots/.config/hypr onto ~/.config/hypr. An overlay and not
+# a replace: files the repo does not ship — monitors.conf, your own scripts —
+# stay exactly where they are. Anything overwritten is copied to the backup dir
+# first unless --no-backup, and identical files are left alone so a re-run
+# neither writes nor backs anything up.
+install_hypr_config() {
+    local repo_root="${1:-}"
+    local dest="$XDG_CONFIG_HOME/hypr"
+
+    [[ "$OPT_HYPR" == false ]] && return 0
+
+    local src="$repo_root/dots/.config/hypr"
+    if [[ -z "$repo_root" || ! -d "$src" ]]; then
+        # Worth a word only when it was actually asked for. Otherwise the
+        # source simply has no hypr dots to offer — an ii config dir passed to
+        # --local never does — and silence is the right answer.
+        [[ "$OPT_HYPR" == true ]] &&
+            ui_warn "No dots/.config/hypr in the source — nothing to install."
+        return 0
+    fi
+
+    if [[ -z "$OPT_HYPR" ]]; then
+        # -y declines this one instead of accepting it. The Settings update
+        # button runs unattended, and unattended is no time to rewrite the
+        # compositor's config underneath somebody. --hypr is the explicit yes.
+        if [[ "$OPT_ASSUME_YES" == true ]]; then
+            ui_note "Left $(tilde "$dest") alone. Pass --hypr to install it."
+            return 0
+        fi
+        ui_confirm "Also install this fork's Hyprland config into $(tilde "$dest")?" || {
+            ui_note "Left $(tilde "$dest") alone."
+            return 0
+        }
+    fi
+
+    ui_step "Hyprland"
+    local backup_dir="" added=0 replaced=0 seeded=0 kept=0 same=0
+    local f rel excluded seed d
+
+    while IFS= read -r -d '' f; do
+        rel="${f#"$src"/}"
+
+        excluded=false
+        for d in "${HYPR_EXCLUDE_DIRS[@]}"; do
+            [[ "$rel" == "$d/"* ]] && {
+                excluded=true
+                break
+            }
+        done
+        [[ "$excluded" == true ]] && continue
+
+        seed=false
+        for d in "${HYPR_SEED_ONLY[@]}"; do
+            [[ "$rel" == "$d" ]] && {
+                seed=true
+                break
+            }
+        done
+
+        if [[ -e "$dest/$rel" ]]; then
+            if [[ "$seed" == true ]]; then
+                kept=$((kept + 1))
+                ui_verbose "kept generated $rel"
+                continue
+            fi
+            if cmp -s "$f" "$dest/$rel"; then
+                same=$((same + 1))
+                continue
+            fi
+            if [[ "$OPT_BACKUP" == true ]]; then
+                [[ -n "$backup_dir" ]] || {
+                    backup_dir="$(next_backup_dir "hypr_")"
+                    mkdir -p "$backup_dir"
+                }
+                mkdir -p "$backup_dir/$(dirname "$rel")"
+                cp -a "$dest/$rel" "$backup_dir/$rel"
+            fi
+            replaced=$((replaced + 1))
+        elif [[ "$seed" == true ]]; then
+            seeded=$((seeded + 1))
+        else
+            added=$((added + 1))
+        fi
+
+        mkdir -p "$dest/$(dirname "$rel")"
+        cp -a "$f" "$dest/$rel"
+        [[ "$rel" == *.sh ]] && chmod +x "$dest/$rel" 2>/dev/null
+        ui_verbose "wrote $rel"
+    done < <(find "$src" -mindepth 1 -type f -print0 2>/dev/null | sort -z)
+
+    local touched=$((added + replaced + seeded))
+    if ((touched == 0)); then
+        ui_ok "Hyprland" "already current $G_DOT $((same + kept)) files unchanged"
+        return 0
+    fi
+
+    [[ -n "$backup_dir" ]] && prune_backups "hypr_"
+    local detail="$replaced replaced, $added new"
+    ((seeded > 0)) && detail="$detail, $seeded seeded"
+    ((kept > 0)) && detail="$detail, $kept generated kept"
+    ui_ok "Hyprland" "$detail"
+    [[ -n "$backup_dir" ]] && ui_note "Replaced files: $(tilde "$backup_dir")"
+
+    # Sub-files of the config are not watched, so nothing would pick these up
+    # until the next relog. No-op when Hyprland is not the session, which is
+    # exactly the case mid-install on a bare machine.
+    if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
+        hyprctl reload >/dev/null 2>&1 || ui_warn "hyprctl reload failed — relog to apply."
+    fi
+    return 0
+}
+
 # apply_config <url> <branch> <fork_id> <verb>
 apply_config() {
     local url="$1" branch="$2" fork="$3" verb="$4"
@@ -1564,15 +1711,27 @@ apply_config() {
     # the mirror was never refreshed, and the panel kept running the same broken
     # script with no way to heal itself. A clone that reached this point is
     # sound, so its manager is always safe to install.
+    # The hypr dots sit beside the ii config dir rather than inside it, so the
+    # source tree has to survive until they have been read out of it.
+    local repo_root=""
     if [[ -n "$LOCAL_SRC" ]]; then
+        [[ "$LOCAL_KIND" == "repo" ]] && repo_root="$LOCAL_SRC"
         mirror_scripts "$LOCAL_SRC"
     else
+        repo_root="$CLONE_DIR"
         mirror_scripts "$CLONE_DIR"
-        rm -rf "$CLONE_DIR"
-        CLONE_DIR=""
     fi
 
     swap_in "$STAGE_DIR" "$fork" "$branch" || return 1
+
+    # After the swap: a swap that failed leaves ~/.config/hypr untouched too,
+    # so a half-applied pair of configs is not a state you can end up in.
+    install_hypr_config "$repo_root"
+
+    if [[ -z "$LOCAL_SRC" && -n "$CLONE_DIR" ]]; then
+        rm -rf "$CLONE_DIR"
+        CLONE_DIR=""
+    fi
 
     handle_base_config "$verb"
     restart_quickshell
@@ -1974,6 +2133,8 @@ show_help() {
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --keep-config" "$C_RST" "Never reset ~/.config/illogical-impulse/config.json"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --reset-config" "$C_RST" "Always reset it (a backup is kept)"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-restart" "$C_RST" "Leave Quickshell alone when finished"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --hypr" "$C_RST" "Install the fork's ~/.config/hypr files"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-hypr" "$C_RST" "Never install them, never ask"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --rebuild-quickshell" "$C_RST" "Rebuild Quickshell from source first"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --skip-base-check" "$C_RST" "Do not require illogical-impulse to be present"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --ii-subdir <name>" "$C_RST" "Override ii* auto-detection in the clone"
@@ -1993,10 +2154,15 @@ show_help() {
     printf '  %sGiven neither --keep-config nor --reset-config, config.json is kept on%s\n' "$C_SUB" "$C_RST"
     printf '  %supdates and branch hops and reset on fork switches, where the schema%s\n' "$C_SUB" "$C_RST"
     printf '  %schanges.%s\n' "$C_SUB" "$C_RST"
+    printf '  %sapply, install, update and switch offer to overlay the fork'"'"'s Hyprland%s\n' "$C_SUB" "$C_RST"
+    printf '  %sconfig on ~/.config/hypr, leaving custom/ and anything the repo does%s\n' "$C_SUB" "$C_RST"
+    printf '  %snot ship alone. -y answers that question no, not yes; --hypr is the%s\n' "$C_SUB" "$C_RST"
+    printf '  %sexplicit yes and --no-hypr the permanent no.%s\n' "$C_SUB" "$C_RST"
     printf '  %sOptions take --flag=value as well as --flag value, and everything after%s\n' "$C_SUB" "$C_RST"
     printf '  %sa bare -- is passed through to hyprset/hyprmerge.%s\n' "$C_SUB" "$C_RST"
     printf '  %sAliases: --no-confirm/--noconfirm (-y), --preserve-config (--keep-config),%s\n' "$C_SUB" "$C_RST"
-    printf '  %s--force-install (--skip-base-check), --no-colour (--no-color).%s\n' "$C_SUB" "$C_RST"
+    printf '  %s--force-install (--skip-base-check), --no-colour (--no-color),%s\n' "$C_SUB" "$C_RST"
+    printf '  %s--hypr-config (--hypr), --no-hypr-config (--no-hypr).%s\n' "$C_SUB" "$C_RST"
     printf '\n'
 
     ui_rule "Examples"
@@ -2098,6 +2264,14 @@ parse_args() {
                 ;;
             --no-restart)
                 OPT_RESTART=false
+                shift
+                ;;
+            --hypr | --hypr-config)
+                OPT_HYPR=true
+                shift
+                ;;
+            --no-hypr | --no-hypr-config)
+                OPT_HYPR=false
                 shift
                 ;;
             --skip-base-check | --force-install)
