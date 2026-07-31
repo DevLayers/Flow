@@ -1925,7 +1925,7 @@ Singleton {
                 property string positionStyle: "default"
                 property real centerVerticalRatio: 0.38
                 property JsonObject suggestions: JsonObject {
-                    property bool enable: true
+                    property bool enable: false
                     property int maxSuggestionsPerSection: 5
                     property bool showFrecency: true
                     property bool showCommands: false
