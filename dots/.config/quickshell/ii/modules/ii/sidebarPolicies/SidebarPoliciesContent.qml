@@ -293,9 +293,6 @@ Item {
                     root.visitedTabs = visited;
                 }
 
-                implicitWidth: Math.max.apply(null, contentChildren.map(child => child.implicitWidth || 0))
-                implicitHeight: Math.max.apply(null, contentChildren.map(child => child.implicitHeight || 0))
-
                 clip: true
 
                 Repeater {

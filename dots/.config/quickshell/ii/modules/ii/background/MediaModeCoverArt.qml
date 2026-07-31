@@ -112,11 +112,26 @@ Item {
 
                         MouseArea {
                             anchors.fill: parent
-                            acceptedButtons: Qt.MiddleButton
+                            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.displayedArtFilePath = "";
-                                root.updateArt();
+                            onClicked: mouse => {
+                                if (mouse.button === Qt.LeftButton) {
+                                    const availableShapes = [
+                                        "Square", "Circle", "Slanted", "Arch", "Fan", "Arrow", "SemiCircle", 
+                                        "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", 
+                                        "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", 
+                                        "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", 
+                                        "Burst", "SoftBurst", "Boom", "SoftBoom", "Flower", "Puffy", "PuffyDiamond", 
+                                        "Bun", "Heart"
+                                    ];
+                                    const current = Config.options.background.mediaMode.backgroundShape || "Square";
+                                    let idx = availableShapes.indexOf(current);
+                                    let next = availableShapes[(idx + 1) % availableShapes.length];
+                                    Config.options.background.mediaMode.backgroundShape = next;
+                                } else if (mouse.button === Qt.MiddleButton) {
+                                    root.displayedArtFilePath = "";
+                                    root.updateArt();
+                                }
                             }
                         }
                     }
@@ -140,7 +155,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: Appearance.rounding.full
-                    color: ColorUtils.transparentize(coverArt.accentContainerColor, 0.35)
+                    color: Appearance.colors.colLayer2
                 }
 
                 RowLayout {
@@ -151,7 +166,7 @@ Item {
                     MaterialSymbol {
                         iconSize: 14
                         text: "album"
-                        color: coverArt.onAccentContainerColor
+                        color: Appearance.colors.colOnLayer2
                     }
 
                     StyledText {
@@ -159,6 +174,7 @@ Item {
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         font.weight: Font.Medium
                         color: coverArt.onAccentContainerColor
+                        opacity: 0.8
                         elide: Text.ElideRight
                         Layout.maximumWidth: 280
                     }
@@ -172,7 +188,7 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.hugeass * 1.35
                 font.weight: Font.Bold
                 font.family: Appearance.font.family.expressive || Appearance.font.family.title
-                color: Appearance.colors.colOnLayer0
+                color: coverArt.onAccentContainerColor
                 elide: Text.ElideRight
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
@@ -187,7 +203,8 @@ Item {
             StyledText {
                 Layout.fillWidth: true
                 text: root.player?.trackArtist || Translation.tr("Unknown Artist")
-                color: Appearance.colors.colSubtext
+                color: coverArt.onAccentContainerColor
+                opacity: 0.85
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.family: Appearance.font.family.title
                 font.weight: Font.Medium
@@ -232,7 +249,7 @@ Item {
                 configuration: StyledSlider.Configuration.Wavy
                 trackWidth: 14 // Increased thickness for prominent M3 wavy track!
                 highlightColor: coverArt.accentColor
-                trackColor: ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, 0.4)
+                trackColor: ColorUtils.transparentize(coverArt.accentColor, 0.25)
                 handleColor: coverArt.accentColor
                 value: (root.player?.length > 0) ? Math.min(1.0, Math.max(0, positionSlider.currentPosition / root.player.length)) : 0
                 onMoved: {
@@ -251,7 +268,8 @@ Item {
                 StyledText {
                     text: coverArt.formatTime(positionSlider.currentPosition || 0)
                     font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colSubtext
+                    color: coverArt.onAccentContainerColor
+                    opacity: 0.8
                 }
 
                 Item { Layout.fillWidth: true }
@@ -259,7 +277,8 @@ Item {
                 StyledText {
                     text: coverArt.formatTime(root.player?.length || 0)
                     font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colSubtext
+                    color: coverArt.onAccentContainerColor
+                    opacity: 0.8
                 }
             }
         }
@@ -274,14 +293,14 @@ Item {
                 implicitWidth: 44
                 implicitHeight: 44
                 buttonRadius: Appearance.rounding.full
-                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colBackgroundActive: Appearance.colors.colLayer2Active
+                colBackground: (root.player?.shuffle ?? false) ? coverArt.accentColor : ColorUtils.transparentize(coverArt.accentColor, 0.2)
+                colBackgroundHover: ColorUtils.mix(coverArt.accentColor, Appearance.colors.colLayer1Hover, 0.85)
+                colBackgroundActive: ColorUtils.mix(coverArt.accentColor, Appearance.colors.colLayer1Active, 0.7)
 
                 MaterialSymbol {
                     anchors.centerIn: parent
                     iconSize: 20
-                    color: (root.player?.shuffle ?? false) ? coverArt.accentColor : Appearance.colors.colSubtext
+                    color: coverArt.onAccentContainerColor
                     text: "shuffle"
                 }
                 onClicked: {
@@ -294,15 +313,15 @@ Item {
                 implicitWidth: 56
                 implicitHeight: 56
                 buttonRadius: Appearance.rounding.verylarge
-                colBackground: coverArt.accentContainerColor
-                colBackgroundHover: ColorUtils.mix(coverArt.accentContainerColor, Appearance.colors.colLayer1Hover, 0.85)
-                colBackgroundActive: ColorUtils.mix(coverArt.accentContainerColor, Appearance.colors.colLayer1Active, 0.7)
+                colBackground: ColorUtils.transparentize(coverArt.accentColor, 0.25)
+                colBackgroundHover: ColorUtils.mix(coverArt.accentColor, Appearance.colors.colLayer1Hover, 0.85)
+                colBackgroundActive: ColorUtils.mix(coverArt.accentColor, Appearance.colors.colLayer1Active, 0.7)
 
                 MaterialSymbol {
                     anchors.centerIn: parent
                     fill: 1
                     iconSize: 26
-                    color: Appearance.colors.colOnPrimaryContainer
+                    color: coverArt.onAccentContainerColor
                     text: "skip_previous"
                 }
                 onClicked: root.player?.previous()
@@ -321,7 +340,7 @@ Item {
                     anchors.centerIn: parent
                     iconSize: 38
                     fill: 1
-                    color: Appearance.colors.colOnPrimary
+                    color: coverArt.onAccentContainerColor
                     text: root.player?.isPlaying ? "pause" : "play_arrow"
                 }
                 onClicked: root.player?.togglePlaying()
@@ -332,15 +351,15 @@ Item {
                 implicitWidth: 56
                 implicitHeight: 56
                 buttonRadius: Appearance.rounding.verylarge
-                colBackground: coverArt.accentContainerColor
-                colBackgroundHover: ColorUtils.mix(coverArt.accentContainerColor, Appearance.colors.colLayer1Hover, 0.85)
-                colBackgroundActive: ColorUtils.mix(coverArt.accentContainerColor, Appearance.colors.colLayer1Active, 0.7)
+                colBackground: ColorUtils.transparentize(coverArt.accentColor, 0.25)
+                colBackgroundHover: ColorUtils.mix(coverArt.accentColor, Appearance.colors.colLayer1Hover, 0.85)
+                colBackgroundActive: ColorUtils.mix(coverArt.accentColor, Appearance.colors.colLayer1Active, 0.7)
 
                 MaterialSymbol {
                     anchors.centerIn: parent
                     fill: 1
                     iconSize: 26
-                    color: Appearance.colors.colOnPrimaryContainer
+                    color: coverArt.onAccentContainerColor
                     text: "skip_next"
                 }
                 onClicked: root.player?.next()
@@ -351,14 +370,14 @@ Item {
                 implicitWidth: 44
                 implicitHeight: 44
                 buttonRadius: Appearance.rounding.full
-                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colBackgroundActive: Appearance.colors.colLayer2Active
+                colBackground: (root.player?.loopState ?? 0) !== 0 ? coverArt.accentColor : ColorUtils.transparentize(coverArt.accentColor, 0.2)
+                colBackgroundHover: ColorUtils.mix(coverArt.accentColor, Appearance.colors.colLayer1Hover, 0.85)
+                colBackgroundActive: ColorUtils.mix(coverArt.accentColor, Appearance.colors.colLayer1Active, 0.7)
 
                 MaterialSymbol {
                     anchors.centerIn: parent
                     iconSize: 20
-                    color: (root.player?.loopState ?? 0) !== 0 ? coverArt.accentColor : Appearance.colors.colSubtext
+                    color: coverArt.onAccentContainerColor
                     text: (root.player?.loopState === 2) ? "repeat_one" : "repeat"
                 }
                 onClicked: {
@@ -379,7 +398,7 @@ Item {
 
             MaterialSymbol {
                 iconSize: 20
-                color: Appearance.colors.colSubtext
+                color: coverArt.onAccentContainerColor
                 text: {
                     const vol = root.player?.volume ?? 1.0;
                     if (vol <= 0) return "volume_off";
@@ -392,7 +411,7 @@ Item {
                 Layout.fillWidth: true
                 trackWidth: 8
                 highlightColor: coverArt.accentColor
-                trackColor: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
+                trackColor: ColorUtils.transparentize(coverArt.accentColor, 0.25)
                 handleColor: coverArt.accentColor
                 value: root.player?.volume ?? 1.0
                 onMoved: {

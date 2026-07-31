@@ -15,12 +15,12 @@ ContentPage {
     Process {
         id: pickImageProc
 
-        command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"*.png *.jpg *.jpeg\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then cp \"$FILE\" ~/.config/quickshell/ii/assets/profile.png; echo 'success'; fi"]
+        command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"*.png *.jpg *.jpeg\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then mkdir -p ~/.config/illogical-impulse && cp \"$FILE\" ~/.config/illogical-impulse/profile.png; echo 'success'; fi"]
 
         stdout: SplitParser {
             onRead: (data) => {
                 if (data.trim() === "success")
-                    Config.options.userProfile.imagePath = Directories.home + "/.config/quickshell/ii/assets/profile.png?rand=" + Math.random();
+                    Config.options.userProfile.imagePath = Directories.userProfileImagePath + "?rand=" + Math.random();
 
             }
         }

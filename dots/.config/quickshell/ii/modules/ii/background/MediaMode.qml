@@ -17,6 +17,14 @@ import qs.modules.common.functions
 Item { // Fullscreen MediaMode instance
     id: root
 
+    opacity: 0
+    Behavior on opacity {
+        NumberAnimation {
+            duration: 300
+            easing.type: Easing.OutQuad
+        }
+    }
+
     property MprisPlayer player: MprisController.activePlayer
     property var artUrl: MprisController.artUrl
     property string artDownloadLocation: Directories.coverArt
@@ -27,12 +35,37 @@ Item { // Fullscreen MediaMode instance
 
     readonly property string trackTitle: root.player?.trackTitle || ""
 
+    // Music video mode state
+    readonly property bool videoActive: Config.options.background.mediaMode.musicVideo.enable && MusicVideoService.videoPlaying
+
     // Dynamic Color Palette Logic
     property bool dynamicColorEnabled: Config.options.background.mediaMode.changeShellColor
-    property color extractedColor: colorQuantizer.colors.length > 0 ? colorQuantizer.colors[0] : Appearance.colors.colPrimary
+    property color albumArtExtractedColor: colorQuantizer.colors.length > 0 ? colorQuantizer.colors[0] : Appearance.colors.colPrimary
+    property color activeExtractedColor: videoActive ? VideoColorSampler.currentExtractedColor : albumArtExtractedColor
+    
+    property color extractedColor: activeExtractedColor
+    Behavior on extractedColor {
+        ColorAnimation {
+            duration: Math.min(400, (Config.options.background.mediaMode.musicVideo.videoSamplingInterval ?? 200) * 0.8)
+            easing.type: Easing.InOutQuad
+        }
+    }
+
     property color dynamicAccentColor: dynamicColorEnabled ? extractedColor : Appearance.colors.colPrimary
-    property color dynamicAccentContainer: dynamicColorEnabled ? ColorUtils.mix(extractedColor, Appearance.colors.colPrimaryContainer, 0.4) : Appearance.colors.colPrimaryContainer
-    property color dynamicOnAccentContainer: dynamicColorEnabled ? (extractedColor.hslLightness < 0.5 ? "#ffffff" : "#000000") : Appearance.colors.colOnPrimaryContainer
+    property color dynamicAccentContainer: dynamicColorEnabled ? ColorUtils.transparentize(extractedColor, 0.3) : Appearance.colors.colPrimaryContainer
+    property color dynamicOnAccentContainer: dynamicColorEnabled ? ColorUtils.getContrastingTextColor(extractedColor) : Appearance.colors.colOnPrimaryContainer
+
+    Binding {
+        target: VideoColorSampler
+        property: "active"
+        value: videoActive && root.dynamicColorEnabled
+    }
+
+    Binding {
+        target: VideoColorSampler
+        property: "ipcSocket"
+        value: MusicVideoService.ipcSocket
+    }
 
     // Mode state options (Bound to Config.options.background.mediaMode)
     property int visualizerMode: Config.options.background.mediaMode.visualizerMode ?? 1 // 0: Off, 1: Waves, 2: Bars, 3: Radial
@@ -50,8 +83,12 @@ Item { // Fullscreen MediaMode instance
     Connections {
         target: CavaService
         function onVisualizerPointsChanged() {
-            if (root.cavaActive) {
-                root.visualizerPoints = CavaService.visualizerPoints;
+            if (CavaService.visualizerPoints && CavaService.visualizerPoints.length > 0) {
+                let pts = [];
+                for (let i = 0; i < CavaService.visualizerPoints.length; i++) {
+                    pts.push(CavaService.visualizerPoints[i]);
+                }
+                root.visualizerPoints = pts;
             }
         }
     }
@@ -59,7 +96,8 @@ Item { // Fullscreen MediaMode instance
     Timer {
         id: proceduralVisualizerTimer
         interval: 50 // ~20 FPS
-        running: (root.player?.isPlaying ?? false) && root.visualizerMode > 0 && !root.cavaActive
+        running: root.visualizerMode > 0 && !root.cavaActive
+        triggeredOnStart: true
         repeat: true
         onTriggered: {
             root.animPhase += 0.04;
@@ -67,23 +105,38 @@ Item { // Fullscreen MediaMode instance
             const isPlaying = root.player?.isPlaying ?? false;
             for (let i = 0; i < 16; i++) {
                 if (isPlaying) {
-                     let base = 350 + 120 * Math.sin(root.animPhase + i * 0.28) + 60 * Math.cos(root.animPhase * 0.5 + i * 0.18);
-                     pts.push(Math.max(100, Math.min(750, base)));
+                    let base = 350 + 120 * Math.sin(root.animPhase + i * 0.28) + 60 * Math.cos(root.animPhase * 0.5 + i * 0.18);
+                    pts.push(Math.max(100, Math.min(750, base)));
                 } else {
-                     pts.push(40);
+                    pts.push(40);
                 }
             }
             root.visualizerPoints = pts;
         }
     }
 
+    onVideoActiveChanged: {
+        if (videoActive) {
+            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "unset,quickshell:background"]);
+        } else {
+            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "blur,quickshell:background"]);
+        }
+    }
+
     Component.onCompleted: {
         Persistent.states.background.mediaMode.userScrollOffset = 0;
         GlobalStates.mediaModeCount++;
+        root.opacity = 1.0;
+        if (videoActive) {
+            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "unset,quickshell:background"]);
+        }
     }
-    Component.onDestruction: GlobalStates.mediaModeCount--;
+    Component.onDestruction: {
+        GlobalStates.mediaModeCount--;
+        Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "blur,quickshell:background"]);
+    }
 
-    onTrackTitleChanged: Persistent.states.background.mediaMode.userScrollOffset = 0;
+    onTrackTitleChanged: Persistent.states.background.mediaMode.userScrollOffset = 0
 
     function updateArt() {
         if (root.artUrl && root.artUrl.startsWith("file://")) {
@@ -147,18 +200,77 @@ Item { // Fullscreen MediaMode instance
             Rectangle {
                 id: background
                 anchors.fill: parent
-                color: videoActive
-                    ? ColorUtils.applyAlpha(Appearance.colors.colLayer0, (Config.options.background.mediaMode.musicVideo.dimOpacity ?? 60) / 100)
-                    : ColorUtils.applyAlpha(Appearance.colors.colLayer0, 1)
+                color: ColorUtils.applyAlpha(Appearance.colors.colLayer0, videoActive ? 0.0 : 1.0)
 
-                // Blurred Album Art Parallax Background (hidden when video is playing)
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 800
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+
+                // Feature 6: Crossfade / Dissolve curtain on track change when video is active
+                Rectangle {
+                    id: videoCrossfadeOverlay
+                    anchors.fill: parent
+                    color: Appearance.colors.colLayer0
+                    z: 1
+                    opacity: 0.0
+
+                    Connections {
+                        target: MusicVideoService
+                        function onCurrentVideoUrlChanged() {
+                            if (videoActive) {
+                                crossfadeAnim.restart();
+                            }
+                        }
+                    }
+
+                    SequentialAnimation {
+                        id: crossfadeAnim
+                        NumberAnimation {
+                            target: videoCrossfadeOverlay
+                            property: "opacity"
+                            to: 0.85
+                            duration: 250
+                            easing.type: Easing.OutQuad
+                        }
+                        PauseAnimation {
+                            duration: 150
+                        }
+                        NumberAnimation {
+                            target: videoCrossfadeOverlay
+                            property: "opacity"
+                            to: 0.0
+                            duration: 400
+                            easing.type: Easing.InQuad
+                        }
+                    }
+                }
+
+                // Clean Opacity Overlay over the video (provides clear, sharp video with subtle UI contrast)
+                Rectangle {
+                    anchors.fill: parent
+                    color: Qt.rgba(0, 0, 0, 0.15)
+                    visible: videoActive
+                    z: 2
+                }
+
+                // Blurred Album Art Parallax Background (permanece totalmente visível até que o vídeo comece)
                 FloatingArtBackground {
                     anchors.fill: parent
                     opacity: videoActive ? 0 : (Config.options.background.mediaMode.backgroundOpacity / 100)
                     animationSpeedScale: Config.options.background.mediaMode.backgroundAnimation.speedScale / 10
                     artFilePath: root.displayedArtFilePath
-                    overlayColor: ColorUtils.transparentize(Appearance.colors.colLayer0, videoActive ? 1.0 : 0.25)
+                    overlayColor: ColorUtils.transparentize(Appearance.colors.colLayer0, videoActive ? 0.75 : 0.25)
                     animationEnabled: Config.options.background.mediaMode.backgroundAnimation.enable && !videoActive
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 800
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
 
                     workspaceNorm: {
                         const chunkSize = Config?.options.bar.workspaces.shown ?? 10;
@@ -173,7 +285,8 @@ Item { // Fullscreen MediaMode instance
                 // Ambient Audio Wave Visualizer Layer
                 Item {
                     anchors.fill: parent
-                    visible: root.visualizerMode === 1 && !videoActive
+                    visible: root.visualizerMode === 1
+                    z: 3
 
                     WaveVisualizer {
                         anchors.fill: parent
@@ -189,7 +302,8 @@ Item { // Fullscreen MediaMode instance
                     anchors.horizontalCenter: parent.horizontalCenter
                     height: 120
                     spacing: 12
-                    visible: root.visualizerMode === 2 && !videoActive
+                    visible: root.visualizerMode === 2
+                    z: 3
 
                     Repeater {
                         model: root.visualizerPoints.length > 0 ? root.visualizerPoints.length : 16
@@ -215,7 +329,8 @@ Item { // Fullscreen MediaMode instance
                     anchors.centerIn: parent
                     width: Math.min(parent.width, parent.height) * 0.7
                     height: width
-                    visible: root.visualizerMode === 3 && !videoActive
+                    visible: root.visualizerMode === 3
+                    z: 3
 
                     RadialWaveVisualizer {
                         anchors.fill: parent
@@ -293,7 +408,9 @@ Item { // Fullscreen MediaMode instance
                             }
                         }
 
-                        Item { Layout.fillWidth: true }
+                        Item {
+                            Layout.fillWidth: true
+                        }
 
                         // Center/Right: Expressive Quick Action Toolbar
                         RowLayout {
@@ -304,18 +421,21 @@ Item { // Fullscreen MediaMode instance
                                 implicitWidth: 42
                                 implicitHeight: 42
                                 buttonRadius: Appearance.rounding.full
-                                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
-                                colBackgroundHover: Appearance.colors.colLayer2Hover
-                                colBackgroundActive: Appearance.colors.colLayer2Active
+                                colBackground: root.dynamicAccentContainer
+                                colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     iconSize: 20
-                                    color: root.visualizerMode > 0 ? root.dynamicAccentColor : Appearance.colors.colSubtext
+                                    color: root.dynamicOnAccentContainer
                                     text: {
-                                        if (root.visualizerMode === 1) return "waves";
-                                        if (root.visualizerMode === 2) return "bar_chart";
-                                        if (root.visualizerMode === 3) return "blur_circular";
+                                        if (root.visualizerMode === 1)
+                                            return "waves";
+                                        if (root.visualizerMode === 2)
+                                            return "bar_chart";
+                                        if (root.visualizerMode === 3)
+                                            return "blur_circular";
                                         return "equalizer";
                                     }
                                 }
@@ -325,7 +445,7 @@ Item { // Fullscreen MediaMode instance
                                     Config.options.background.mediaMode.visualizerMode = nextMode;
                                 }
 
-                                StyledToolTip {
+                                PopupToolTip {
                                     text: Translation.tr("Visualizer Mode: ") + (root.visualizerMode === 1 ? Translation.tr("Waves") : (root.visualizerMode === 2 ? Translation.tr("Bars") : (root.visualizerMode === 3 ? Translation.tr("Radial") : Translation.tr("Off"))))
                                 }
                             }
@@ -335,14 +455,14 @@ Item { // Fullscreen MediaMode instance
                                 implicitWidth: 42
                                 implicitHeight: 42
                                 buttonRadius: Appearance.rounding.full
-                                colBackground: Config.options.background.mediaMode.changeShellColor ? root.dynamicAccentColor : ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
-                                colBackgroundHover: Config.options.background.mediaMode.changeShellColor ? ColorUtils.mix(root.dynamicAccentColor, Appearance.colors.colLayer1Hover, 0.85) : Appearance.colors.colLayer2Hover
-                                colBackgroundActive: Config.options.background.mediaMode.changeShellColor ? ColorUtils.mix(root.dynamicAccentColor, Appearance.colors.colLayer1Active, 0.7) : Appearance.colors.colLayer2Active
+                                colBackground: root.dynamicAccentContainer
+                                colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     iconSize: 20
-                                    color: Config.options.background.mediaMode.changeShellColor ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                                    color: root.dynamicOnAccentContainer
                                     text: "palette"
                                 }
 
@@ -353,8 +473,89 @@ Item { // Fullscreen MediaMode instance
                                     }
                                 }
 
-                                StyledToolTip {
+                                PopupToolTip {
                                     text: Translation.tr("Dynamic Shell Color: Extract colors from album art")
+                                }
+                            }
+
+                            // Lyrics Sync Offset Adjustment Controls
+                            RowLayout {
+                                spacing: 4
+
+                                RippleButton {
+                                    implicitWidth: 34
+                                    implicitHeight: 42
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: root.dynamicAccentContainer
+                                    colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                    colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        iconSize: 18
+                                        color: root.dynamicOnAccentContainer
+                                        text: "more_time"
+                                    }
+
+                                    onClicked: {
+                                        const offsets = [0, -1000, -500, 500, 1000, 2000];
+                                        const current = Config.options.background.mediaMode.lyricsOffsetMs ?? 0;
+                                        let idx = offsets.indexOf(current);
+                                        let next = offsets[(idx + 1) % offsets.length];
+                                        Config.options.background.mediaMode.lyricsOffsetMs = next;
+                                    }
+
+                                    PopupToolTip {
+                                        text: Translation.tr("Lyrics Sync Offset: ") + ((Config.options.background.mediaMode.lyricsOffsetMs ?? 0) > 0 ? "+" : "") + (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) + "ms (click to cycle)"
+                                    }
+                                }
+
+                                RippleButton {
+                                    implicitWidth: 28
+                                    implicitHeight: 42
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: root.dynamicAccentContainer
+                                    colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                    colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        iconSize: 16
+                                        color: root.dynamicOnAccentContainer
+                                        text: "remove"
+                                    }
+
+                                    onClicked: {
+                                        Config.options.background.mediaMode.lyricsOffsetMs = (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) - 250;
+                                    }
+
+                                    PopupToolTip {
+                                        text: Translation.tr("Nudge Lyrics -250ms (Earlier)")
+                                    }
+                                }
+
+                                RippleButton {
+                                    implicitWidth: 28
+                                    implicitHeight: 42
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: root.dynamicAccentContainer
+                                    colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                    colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        iconSize: 16
+                                        color: root.dynamicOnAccentContainer
+                                        text: "add"
+                                    }
+
+                                    onClicked: {
+                                        Config.options.background.mediaMode.lyricsOffsetMs = (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) + 250;
+                                    }
+
+                                    PopupToolTip {
+                                        text: Translation.tr("Nudge Lyrics +250ms (Later)")
+                                    }
                                 }
                             }
 
@@ -363,29 +564,19 @@ Item { // Fullscreen MediaMode instance
                                 implicitWidth: 42
                                 implicitHeight: 42
                                 buttonRadius: Appearance.rounding.full
-                                colBackground: Config.options.background.mediaMode.musicVideo.enable
-                                    ? root.dynamicAccentColor
-                                    : ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
-                                colBackgroundHover: Config.options.background.mediaMode.musicVideo.enable
-                                    ? ColorUtils.mix(root.dynamicAccentColor, Appearance.colors.colLayer1Hover, 0.85)
-                                    : Appearance.colors.colLayer2Hover
-                                colBackgroundActive: Config.options.background.mediaMode.musicVideo.enable
-                                    ? ColorUtils.mix(root.dynamicAccentColor, Appearance.colors.colLayer1Active, 0.7)
-                                    : Appearance.colors.colLayer2Active
+                                colBackground: root.dynamicAccentContainer
+                                colBackgroundHover: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Hover, 0.85)
+                                colBackgroundActive: ColorUtils.mix(root.dynamicAccentContainer, Appearance.colors.colLayer1Active, 0.7)
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     iconSize: 20
-                                    color: Config.options.background.mediaMode.musicVideo.enable
-                                        ? Appearance.colors.colOnPrimary
-                                        : Appearance.colors.colSubtext
-                                    text: videoActive ? "play_circle"
-                                        : (videoSearching ? "hourglass_top" : "music_video")
+                                    color: root.dynamicOnAccentContainer
+                                    text: videoActive ? "play_circle" : (videoSearching ? "hourglass_top" : "music_video")
                                 }
 
                                 onClicked: {
-                                    Config.options.background.mediaMode.musicVideo.enable =
-                                        !Config.options.background.mediaMode.musicVideo.enable;
+                                    Config.options.background.mediaMode.musicVideo.enable = !Config.options.background.mediaMode.musicVideo.enable;
                                     if (Config.options.background.mediaMode.musicVideo.enable) {
                                         MusicVideoService.tryPlayCurrent();
                                     } else {
@@ -393,10 +584,8 @@ Item { // Fullscreen MediaMode instance
                                     }
                                 }
 
-                                StyledToolTip {
-                                    text: Config.options.background.mediaMode.musicVideo.enable
-                                        ? Translation.tr("Music Video Background: ON (click to disable)")
-                                        : Translation.tr("Music Video Background: OFF (click to enable)")
+                                PopupToolTip {
+                                    text: Config.options.background.mediaMode.musicVideo.enable ? Translation.tr("Music Video Background: ON (click to disable)") : Translation.tr("Music Video Background: OFF (click to enable)")
                                 }
                             }
 
@@ -459,9 +648,11 @@ Item { // Fullscreen MediaMode instance
                             Rectangle {
                                 anchors.fill: parent
                                 radius: Appearance.rounding.verylarge
-                                color: videoActive
-                                    ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.25)
-                                    : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+                                color: videoActive ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.72) : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+
+                                Behavior on color {
+                                    ColorAnimation { duration: 400; easing.type: Easing.InOutQuad }
+                                }
 
                                 MediaModeCoverArt {
                                     anchors.fill: parent
@@ -484,9 +675,11 @@ Item { // Fullscreen MediaMode instance
                                 id: lyricsContainer
                                 anchors.fill: parent
                                 radius: Appearance.rounding.verylarge
-                                color: videoActive
-                                    ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.25)
-                                    : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+                                color: videoActive ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.72) : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.35)
+
+                                Behavior on color {
+                                    ColorAnimation { duration: 400; easing.type: Easing.InOutQuad }
+                                }
 
                                 ColumnLayout {
                                     anchors.fill: parent
@@ -523,12 +716,16 @@ Item { // Fullscreen MediaMode instance
                                                 id: statusText
                                                 anchors.centerIn: parent
                                                 text: {
-                                                    if (lyricsItem.hasSyncedLines) return Translation.tr("Synced LRC");
+                                                    if (lyricsItem.hasSyncedLines)
+                                                        return Translation.tr("Synced LRC");
                                                     if (LyricsService.plainLyrics && LyricsService.plainLyrics.trim().length > 0) {
                                                         const p = Config.options.lyricsService.lyricsProvider;
-                                                        if (p === "ytmusic") return Translation.tr("YouTube Music");
-                                                        if (p === "genius") return Translation.tr("Genius");
-                                                        if (p === "lrclib") return Translation.tr("LRCLib Plain");
+                                                        if (p === "ytmusic")
+                                                            return Translation.tr("YouTube Music");
+                                                        if (p === "genius")
+                                                            return Translation.tr("Genius");
+                                                        if (p === "lrclib")
+                                                            return Translation.tr("LRCLib Plain");
                                                         return Translation.tr("Plain Text");
                                                     }
                                                     return Translation.tr("Searching...");
@@ -539,7 +736,9 @@ Item { // Fullscreen MediaMode instance
                                             }
                                         }
 
-                                        Item { Layout.fillWidth: true }
+                                        Item {
+                                            Layout.fillWidth: true
+                                        }
 
                                         // Provider Selector Buttons
                                         Row {
@@ -547,10 +746,26 @@ Item { // Fullscreen MediaMode instance
 
                                             Repeater {
                                                 model: [
-                                                    { key: "auto",    icon: "auto_awesome", tip: Translation.tr("Auto (LRC → YTMusic → Genius)") },
-                                                    { key: "lrclib",  icon: "timer",        tip: Translation.tr("LRCLib synced/plain") },
-                                                    { key: "ytmusic", icon: "smart_display", tip: Translation.tr("YouTube Music") },
-                                                    { key: "genius",  icon: "music_note",   tip: Translation.tr("Genius (plain)") }
+                                                    {
+                                                        key: "auto",
+                                                        icon: "auto_awesome",
+                                                        tip: Translation.tr("Auto (LRC → YTMusic → Genius)")
+                                                    },
+                                                    {
+                                                        key: "lrclib",
+                                                        icon: "timer",
+                                                        tip: Translation.tr("LRCLib synced/plain")
+                                                    },
+                                                    {
+                                                        key: "ytmusic",
+                                                        icon: "smart_display",
+                                                        tip: Translation.tr("YouTube Music")
+                                                    },
+                                                    {
+                                                        key: "genius",
+                                                        icon: "music_note",
+                                                        tip: Translation.tr("Genius (plain)")
+                                                    }
                                                 ]
 
                                                 delegate: RippleButton {
@@ -560,29 +775,23 @@ Item { // Fullscreen MediaMode instance
                                                     buttonRadius: Appearance.rounding.full
                                                     readonly property bool isActive: Config.options.lyricsService.lyricsProvider === modelData.key
                                                     readonly property string tipText: modelData.tip
-                                                    colBackground: isActive
-                                                        ? ColorUtils.transparentize(root.dynamicAccentColor, 0.25)
-                                                        : ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
-                                                    colBackgroundHover: isActive
-                                                        ? ColorUtils.transparentize(root.dynamicAccentColor, 0.15)
-                                                        : Appearance.colors.colLayer2Hover
+                                                    colBackground: isActive ? ColorUtils.transparentize(root.dynamicAccentColor, 0.25) : ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
+                                                    colBackgroundHover: isActive ? ColorUtils.transparentize(root.dynamicAccentColor, 0.15) : Appearance.colors.colLayer2Hover
                                                     colBackgroundActive: Appearance.colors.colLayer2Active
 
                                                     MaterialSymbol {
                                                         anchors.centerIn: parent
                                                         iconSize: 14
-                                                        color: parent.isActive
-                                                            ? root.dynamicAccentColor
-                                                            : Appearance.colors.colOnLayer2
+                                                        color: parent.isActive ? root.dynamicAccentColor : Appearance.colors.colOnLayer2
                                                         text: modelData.icon
                                                     }
                                                     onClicked: {
                                                         Config.options.lyricsService.lyricsProvider = modelData.key;
                                                         LyricsService.initiliazeLyrics();
                                                     }
-                                                     PopupToolTip {
-                                                         text: parent.tipText
-                                                     }
+                                                    PopupToolTip {
+                                                        text: parent.tipText
+                                                    }
                                                 }
                                             }
                                         }
@@ -603,7 +812,9 @@ Item { // Fullscreen MediaMode instance
                                                 text: "remove"
                                             }
                                             onClicked: root.lyricsScaleMultiplier = Math.max(0.7, root.lyricsScaleMultiplier - 0.15)
-                                            StyledToolTip { text: Translation.tr("Decrease Lyrics Size") }
+                                            StyledToolTip {
+                                                text: Translation.tr("Decrease Lyrics Size")
+                                            }
                                         }
 
                                         RippleButton {
@@ -621,7 +832,9 @@ Item { // Fullscreen MediaMode instance
                                                 text: "add"
                                             }
                                             onClicked: root.lyricsScaleMultiplier = Math.min(1.8, root.lyricsScaleMultiplier + 0.15)
-                                            StyledToolTip { text: Translation.tr("Increase Lyrics Size") }
+                                            StyledToolTip {
+                                                text: Translation.tr("Increase Lyrics Size")
+                                            }
                                         }
 
                                         // Refresh Lyrics Button
@@ -640,7 +853,9 @@ Item { // Fullscreen MediaMode instance
                                                 text: "refresh"
                                             }
                                             onClicked: LyricsService.initiliazeLyrics()
-                                            StyledToolTip { text: Translation.tr("Reload Lyrics") }
+                                            StyledToolTip {
+                                                text: Translation.tr("Reload Lyrics")
+                                            }
                                         }
                                     }
 
@@ -657,7 +872,8 @@ Item { // Fullscreen MediaMode instance
                                         readonly property bool ytmusicEnabled: Config.options.lyricsService.enableYtmusic
 
                                         Component.onCompleted: {
-                                            if (!geniusEnabled && !lrclibEnabled && !ytmusicEnabled) return;
+                                            if (!geniusEnabled && !lrclibEnabled && !ytmusicEnabled)
+                                                return;
                                             LyricsService.initiliazeLyrics();
                                         }
 
@@ -678,6 +894,7 @@ Item { // Fullscreen MediaMode instance
                                                 anchors.fill: parent
                                                 largeFontSize: Appearance.font.pixelSize.hugeass * 1.8 * root.lyricsScaleMultiplier
                                                 activeColor: root.dynamicAccentColor
+                                                highlightColor: root.dynamicOnAccentContainer
                                             }
                                         }
                                     }

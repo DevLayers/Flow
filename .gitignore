@@ -41,3 +41,5 @@ __pycache__/
 
 # Compiled binary — build it from osk_autoshow_src/ instead (see scripts/osk/README.md)
 /dots/.config/quickshell/ii/scripts/osk/osk_autoshow
+
+/dots/.config/quickshell/ii/.tmp

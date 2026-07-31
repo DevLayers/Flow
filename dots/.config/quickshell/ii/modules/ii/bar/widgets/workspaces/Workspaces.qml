@@ -18,16 +18,13 @@ import Qt5Compat.GraphicalEffects
 Item {
     id: root
 
-    Layout.fillHeight: !vertical
-    Layout.fillWidth: vertical
-
     property bool vertical: false
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
     readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
 
     readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
     readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
-    readonly property int scratchpadWindowsCount: HyprlandData.windowList.filter(win => win.workspace && win.workspace.name && win.workspace.name.startsWith("special")).length
+    property real blur: scratchpadOpen ? 1 : 0
 
     readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
     readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
@@ -223,6 +220,26 @@ Item {
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
+    Behavior on blur {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+
+    Item {
+        id: contentContainer
+        anchors.fill: parent
+        z: 0
+        opacity: root.scratchpadOpen ? 0.65 : 1
+        layer.enabled: root.blur > 0
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 32
+            blur: root.blur
+        }
+
     // Active workspace indicator
     Loader {
         id: activeIndicator
@@ -296,7 +313,7 @@ Item {
 
         readonly property real contentLayoutOffset: contentLayout ? (root.vertical ? (root.height - contentLayout.implicitHeight) / 2 : (root.width - contentLayout.implicitWidth) / 2) : 0
 
-        property real indicatorPosition: baseIndicatorPosition + accumulatedPreviousOffsets - currentItemOffset + visualInset + contentLayoutOffset
+        property real indicatorPosition: baseIndicatorPosition + accumulatedPreviousOffsets - currentItemOffset + visualInset
         property real indicatorLength: baseIndicatorLength + currentItemOffset - visualInset * 2
 
         y: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (indicatorPosition + (indicatorLength - individualIconBoxHeight) / 2) : indicatorPosition) : 0
@@ -389,7 +406,7 @@ Item {
 
         readonly property real accumulatedPreviousOffsets: offsetFor(hoverIdx)
 
-        property real indicatorPosition: hoverIdx * root.iconBoxWrapperSize + accumulatedPreviousOffsets + root.iconBoxWrapperSize * 0.05 + (root.activeIndicator?.contentLayoutOffset ?? 0)
+        property real indicatorPosition: hoverIdx * root.iconBoxWrapperSize + accumulatedPreviousOffsets + root.iconBoxWrapperSize * 0.05
         property real indicatorLength: root.iconBoxWrapperSize + currentItemOffset - root.iconBoxWrapperSize * 0.1
 
         y: root.vertical ? indicatorPosition : 0
@@ -522,15 +539,6 @@ Item {
                 implicitHeight: root.vertical ? (wsBg.wsVisible ? itemSize : 0) : root.iconBoxWrapperSize
                 property bool wsVisible: root.isWorkspaceVisible(index)
 
-                opacity: root.scratchpadOpen && index !== root.workspaceIndexInGroup ? 0.35 : 1.0
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Appearance.animation.elementMoveFast.type
-                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                    }
-                }
-
                 Pill {
                     property real stretchAmount: 12 // not using multiplier because it mulitplies multi-windowed workspaces A LOT
 
@@ -621,15 +629,6 @@ Item {
                 implicitHeight: root.vertical ? (Math.max(layout.implicitHeight + 8, root.iconBoxWrapperSize)) : root.iconBoxWrapperSize
 
                 readonly property bool isShowingScratchpad: root.scratchpadOpen && (index === root.workspaceIndexInGroup)
-
-                opacity: root.scratchpadOpen && !isShowingScratchpad ? 0.35 : 1.0
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Appearance.animation.elementMoveFast.type
-                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                    }
-                }
 
                 Behavior on implicitWidth {
                     animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
@@ -748,70 +747,79 @@ Item {
                     }
                 }
 
-                Item {
-                    id: scratchpadIndicator
-                    anchors.centerIn: parent
-                    width: root.individualIconBoxHeight + 2
-                    height: root.individualIconBoxHeight + 2
+            }
+        }
+    }
 
-                    visible: opacity > 0.0
-                    opacity: background.isShowingScratchpad ? 1.0 : 0.0
-                    scale: background.isShowingScratchpad ? 1.0 : 0.7
+        Item {
+            id: scratchpadPositionHelper
+            readonly property real indicatorSize: root.individualIconBoxHeight + 2
+            readonly property Item activeItem: contentLayout.children[root.workspaceIndexInGroup]
 
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
-                    }
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
-                    }
+            x: activeItem ? root.vertical ? contentLayout.x + (contentLayout.width - indicatorSize) / 2 : activeItem.x + contentLayout.x + (activeItem.width - indicatorSize) / 2 : 0
+            y: activeItem ? root.vertical ? activeItem.y + contentLayout.y + (activeItem.height - indicatorSize) / 2 : contentLayout.y + (contentLayout.height - indicatorSize) / 2 : 0
+            width: indicatorSize
+            height: indicatorSize
+            visible: false
+        }
+    }
 
-                    // Background shape (colTertiary)
-                    MaterialShape {
-                        id: shapeContainer
-                        anchors.fill: parent
-                        shapeString: "Flower"
-                        color: Appearance.colors.colTertiary
-                    }
+    Item {
+        id: scratchpadOverlay
+        z: 10
 
-                    // Pulse/glowing window representation dots inside the shape
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 3
-                        z: 2
-                        Repeater {
-                            model: Math.max(1, Math.min(3, root.scratchpadWindowsCount))
-                            delegate: Rectangle {
-                                width: 4
-                                height: 4
-                                radius: 2
-                                color: Appearance.colors.colOnTertiary
-                                opacity: root.scratchpadWindowsCount === 0 ? 0.4 : 1.0
+        x: scratchpadPositionHelper.x
+        y: scratchpadPositionHelper.y
+        width: scratchpadPositionHelper.width
+        height: scratchpadPositionHelper.height
 
-                                SequentialAnimation on opacity {
-                                    loops: Animation.Infinite
-                                    running: root.scratchpadOpen
-                                    NumberAnimation {
-                                        to: 0.3
-                                        duration: 1500
-                                        easing.type: Easing.InOutQuad
-                                    }
-                                    NumberAnimation {
-                                        to: root.scratchpadWindowsCount === 0 ? 0.4 : 1.0
-                                        duration: 1500
-                                        easing.type: Easing.InOutQuad
-                                    }
-                                }
-                            }
-                        }
-                    }
+        readonly property bool _show: root.scratchpadOpen && root.workspaceIndexInGroup >= 0
+
+        visible: _show
+        opacity: _show ? 1.0 : 0.0
+        scale: _show ? 1.0 : 0.7
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+        Behavior on scale {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+
+        MaterialShape {
+            anchors.fill: parent
+            shapeString: "Flower"
+            color: Appearance.colors.colTertiary
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 4
+            height: 4
+            radius: 2
+            color: Appearance.colors.colOnTertiary
+            opacity: 1.0
+
+            SequentialAnimation on opacity {
+                loops: Animation.Infinite
+                running: root.scratchpadOpen
+                NumberAnimation {
+                    to: 0.3
+                    duration: 1500
+                    easing.type: Easing.InOutQuad
+                }
+                NumberAnimation {
+                    to: 1.0
+                    duration: 1500
+                    easing.type: Easing.InOutQuad
                 }
             }
         }

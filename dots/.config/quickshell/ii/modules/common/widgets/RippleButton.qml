@@ -23,6 +23,9 @@ Button {
     property var releaseAction
     property var altAction
     property var middleClickAction
+    property var backClickAction
+    property var enteredAction
+    property var exitedAction
 
     property bool useDynamicRadius: false
 
@@ -228,8 +231,15 @@ Button {
 
     MouseArea {
         anchors.fill: parent
+        hoverEnabled: root.hoverEnabled
         cursorShape: root.pointingHandCursor ? Qt.PointingHandCursor : Qt.ArrowCursor
-        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton | Qt.BackButton | Qt.ExtraButton1
+        onEntered: {
+            if (root.enteredAction) root.enteredAction()
+        }
+        onExited: {
+            if (root.exitedAction) root.exitedAction()
+        }
         onPressed: event => {
             if (event.button === Qt.RightButton) {
                 if (root.altAction)
@@ -239,6 +249,11 @@ Button {
             if (event.button === Qt.MiddleButton) {
                 if (root.middleClickAction)
                     root.middleClickAction();
+                return;
+            }
+            if (event.button === Qt.BackButton || event.button === Qt.ExtraButton1) {
+                if (root.backClickAction)
+                    root.backClickAction(event);
                 return;
             }
             root.down = true;

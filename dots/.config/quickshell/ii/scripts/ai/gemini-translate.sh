@@ -11,7 +11,7 @@ XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 SHELL_CONFIG_DIR="$XDG_CONFIG_HOME/illogical-impulse"
 SHELL_CONFIG_FILE="${SHELL_CONFIG_DIR}/config.json"
 TRANSLATIONS_DIR="${SCRIPT_DIR}/../../translations"
-TRANSLATIONS_TARGET_DIR="${SHELL_CONFIG_DIR}/translations"
+TRANSLATIONS_TARGET_DIR="${TRANSLATIONS_DIR}"
 SOURCE_LOCALE="en_US"
 NOTIFICATION_APP_NAME="Shell"
 TARGET_LOCALE="$1"
@@ -21,45 +21,42 @@ MODEL="${2:-${GEMINI_MODEL:-gemini-2.5-flash}}"
 "${TRANSLATIONS_DIR}/tools/manage-translations.sh" update -l "$SOURCE_LOCALE" --yes
 mkdir -p "$TRANSLATIONS_TARGET_DIR"
 
-# Construct the prompt string
+# Construct instruction
 instruction='You are to translate the user interface of a **desktop shell**. Given a JSON object of key-value pairs, return a JSON with the same structure, with keys unchanged and values translated to '"$TARGET_LOCALE"'. Be as **concise** as possible to save screen space, and make sure terminology is relevant (e.g. "discharging" refers to the battery status).'
-content=$(cat "${TRANSLATIONS_DIR}/en_US.json")
-prompt_json=$(jq -n --arg prompt_text "$instruction" --arg content "$content" '$prompt_text + "\n```\n" + $content + "\n```\n"')
 
-# Prepare request data using jq
-payload=$(jq -n \
-    --arg prompt "$prompt_json" \
+# Prepare request payload file to prevent shell argument limits
+PAYLOAD_FILE=$(mktemp)
+trap 'rm -f "$PAYLOAD_FILE"' EXIT
+
+jq -n \
+    --arg prompt_text "$instruction" \
+    --rawfile content "${TRANSLATIONS_DIR}/en_US.json" \
     --arg temperature "0" \
-    --arg model "$MODEL" \
     '{
         contents: [{
             parts: [
-                {text: $prompt}
+                {text: ($prompt_text + "\n```json\n" + $content + "\n```\n")}
             ]
         }],
         generationConfig: {
             temperature: ($temperature | tonumber),
-            "responseMimeType": "application/json",
+            "responseMimeType": "application/json"
         }
-    }'
-)
-# echo "$payload" | jq
+    }' > "$PAYLOAD_FILE"
 
 # Get API key
 API_KEY=$(secret-tool lookup 'application' 'illogical-impulse' | jq -r '.apiKeys.gemini')
 
 # Notify start
-notify-send "Translation started" "Will take 2 minutes, and you'll be notified when it's done, so feel free to do something else in the meantime." -a "$NOTIFICATION_APP_NAME"
+notify-send "Translation started" "Translating missing keys in batches, you'll be notified when complete." -a "$NOTIFICATION_APP_NAME"
 
-# Make the request
-response=$(curl "https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent" \
--H "x-goog-api-key: $API_KEY" \
--H 'Content-Type: application/json' \
--X POST \
--d "$payload" 2> /dev/null)
-# echo "$response" | jq
+# Perform batch translation for missing keys
+python3 "${SCRIPT_DIR}/gemini-translate-batch.py" \
+    "${TRANSLATIONS_DIR}/en_US.json" \
+    "${TRANSLATIONS_TARGET_DIR}/${TARGET_LOCALE}.json" \
+    "$TARGET_LOCALE" \
+    --model "$MODEL" \
+    --batch-size 300
 
-# Write the result
-echo "$response" | jq -r '.candidates[0].content.parts[0].text' > "${TRANSLATIONS_TARGET_DIR}/${TARGET_LOCALE}.json"
 jq --arg locale "$TARGET_LOCALE" '.language.ui = $locale' "$SHELL_CONFIG_FILE" > "${SHELL_CONFIG_FILE}.tmp" && mv "${SHELL_CONFIG_FILE}.tmp" "$SHELL_CONFIG_FILE"
 notify-send "Translation complete" "Enjoy! In case you wanna refine it, the file is in ${TRANSLATIONS_TARGET_DIR}/${TARGET_LOCALE}.json" -a "$NOTIFICATION_APP_NAME"

@@ -254,6 +254,12 @@ Singleton {
             styleConfigKey: "power",
             styleOptions: defaultStyleOptions,
             pageId: "power"
+        },
+        {
+            id: "dock_to_panel",
+            icon: "apps",
+            title: "Dock to Panel",
+            configPage: "DockToPanelConfig.qml"
         }
     ]
 

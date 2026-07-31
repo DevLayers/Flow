@@ -64,7 +64,9 @@ Item {
     readonly property bool isTranslatorMode: root.searchingText.startsWith(Config.options.search.prefix.translator)
     readonly property bool isMediaDownloaderMode: Config.options.mediaDownloader.enabled && root.searchingText.startsWith(Config.options.search.prefix.mediaDownloader)
     readonly property bool isMaterialSymbolsMode: root.searchingText.startsWith(Config.options.search.prefix.materialSymbols)
-    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
+    readonly property bool isEmojiMode: root.searchingText.startsWith(Config.options.search.prefix.emojis)
+    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode || root.isEmojiMode
+    readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !root.isAnySpecialMode && root.searchingText === ""
     readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
     property bool showResults: searchingText != "" || isAnySpecialMode || alwaysListAppsMode || (searchingText === "" && LauncherSearch.results.length > 0)
     property string overviewPosition: (Config.options.bar?.bottom ? "bottom" : (Config.options.overview?.position ?? ""))
@@ -256,7 +258,7 @@ Item {
 
     StyledRectangularShadow {
         target: searchWidgetContent
-        visible: !GlobalStates.searchConnectActive
+        visible: !GlobalStates.searchConnectActive && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
         opacity: root.shadowOpacity
         offset: Qt.vector2d(0.0, 0.0)
     }
@@ -297,16 +299,20 @@ Item {
         }
         implicitHeight: {
             let bottomMargin = GlobalStates.searchConnectActive ? 16 : 10;
+            if (root.showSuggestionsPanel)
+                return (suggestionsPanelLoader.item ? suggestionsPanelLoader.item.implicitHeight : (Config.options.search.baseHeight ?? 500)) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
+            if (root.isEmojiMode)
+                return (emojiPanelLoader.item ? emojiPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isBluetoothMode)
-                return bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin : 520;
+                return (bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isClipboardMode)
-                return clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin : 560;
+                return (clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isTranslatorMode)
-                return translatorPanelLoader.item ? translatorPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin : 520;
+                return (translatorPanelLoader.item ? translatorPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isMediaDownloaderMode)
-                return mediaDownloaderPanelLoader.item ? mediaDownloaderPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin : 560;
+                return (mediaDownloaderPanelLoader.item ? mediaDownloaderPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isMaterialSymbolsMode)
-                return materialSymbolsPanelLoader.item ? materialSymbolsPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin : 520;
+                return (materialSymbolsPanelLoader.item ? materialSymbolsPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             return gridLayout.implicitHeight;
         }
         radius: Appearance.rounding.windowRounding
@@ -971,18 +977,28 @@ Item {
 
             Loader {
                 id: clipboardPanelLoader
-                // Keep active during fade-out to prevent layout jumps mid-animation
                 active: root.isClipboardMode || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
+                Layout.preferredHeight: item ? item.implicitHeight : 520
+                height: Layout.preferredHeight
                 source: "ClipboardPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
                 opacity: root.isClipboardMode ? 1.0 : 0.0
+                transform: Translate {
+                    y: (1.0 - clipboardPanelLoader.opacity) * 16
+                }
+                layer.enabled: opacity > 0.001 && opacity < 0.999
+                layer.effect: MultiEffect {
+                    blurEnabled: (1.0 - parent.opacity) > 0.001
+                    blurMax: 32.0
+                    blur: (1.0 - parent.opacity) * 0.5
+                }
                 Behavior on opacity {
                     enabled: !root.inNotchMode
                     NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
+                        duration: 220
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -998,18 +1014,28 @@ Item {
 
             Loader {
                 id: bluetoothPanelLoader
-                // Keep active during fade-out to prevent layout jumps mid-animation
                 active: root.isBluetoothMode || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
+                Layout.preferredHeight: item ? item.implicitHeight : 520
+                height: Layout.preferredHeight
                 source: "BluetoothPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
                 opacity: root.isBluetoothMode ? 1.0 : 0.0
+                transform: Translate {
+                    y: (1.0 - bluetoothPanelLoader.opacity) * 16
+                }
+                layer.enabled: opacity > 0.001 && opacity < 0.999
+                layer.effect: MultiEffect {
+                    blurEnabled: (1.0 - parent.opacity) > 0.001
+                    blurMax: 32.0
+                    blur: (1.0 - parent.opacity) * 0.5
+                }
                 Behavior on opacity {
                     enabled: !root.inNotchMode
                     NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
+                        duration: 220
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -1025,18 +1051,28 @@ Item {
 
             Loader {
                 id: translatorPanelLoader
-                // Keep active during fade-out to prevent layout jumps mid-animation
                 active: root.isTranslatorMode || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
+                Layout.preferredHeight: item ? item.implicitHeight : 520
+                height: Layout.preferredHeight
                 source: "TranslatorPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
                 opacity: root.isTranslatorMode ? 1.0 : 0.0
+                transform: Translate {
+                    y: (1.0 - translatorPanelLoader.opacity) * 16
+                }
+                layer.enabled: opacity > 0.001 && opacity < 0.999
+                layer.effect: MultiEffect {
+                    blurEnabled: (1.0 - parent.opacity) > 0.001
+                    blurMax: 32.0
+                    blur: (1.0 - parent.opacity) * 0.5
+                }
                 Behavior on opacity {
                     enabled: !root.inNotchMode
                     NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
+                        duration: 220
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -1063,18 +1099,28 @@ Item {
 
             Loader {
                 id: mediaDownloaderPanelLoader
-                // Keep active during fade-out to prevent layout jumps mid-animation
                 active: root.isMediaDownloaderMode || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
+                Layout.preferredHeight: item ? item.implicitHeight : 520
+                height: Layout.preferredHeight
                 source: "MediaDownloaderPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
                 opacity: root.isMediaDownloaderMode ? 1.0 : 0.0
+                transform: Translate {
+                    y: (1.0 - mediaDownloaderPanelLoader.opacity) * 16
+                }
+                layer.enabled: opacity > 0.001 && opacity < 0.999
+                layer.effect: MultiEffect {
+                    blurEnabled: (1.0 - parent.opacity) > 0.001
+                    blurMax: 32.0
+                    blur: (1.0 - parent.opacity) * 0.5
+                }
                 Behavior on opacity {
                     enabled: !root.inNotchMode
                     NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
+                        duration: 220
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -1094,14 +1140,25 @@ Item {
                 visible: opacity > 0.01
                 Layout.preferredWidth: 380
                 Layout.alignment: Qt.AlignHCenter
+                Layout.preferredHeight: item ? item.implicitHeight : 520
+                height: Layout.preferredHeight
                 source: "MaterialSymbolsPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
                 opacity: root.isMaterialSymbolsMode ? 1.0 : 0.0
+                transform: Translate {
+                    y: (1.0 - materialSymbolsPanelLoader.opacity) * 16
+                }
+                layer.enabled: opacity > 0.001 && opacity < 0.999
+                layer.effect: MultiEffect {
+                    blurEnabled: (1.0 - parent.opacity) > 0.001
+                    blurMax: 32.0
+                    blur: (1.0 - parent.opacity) * 0.5
+                }
                 Behavior on opacity {
                     enabled: !root.inNotchMode
                     NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
+                        duration: 220
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -1112,6 +1169,67 @@ Item {
                     property: "searchQuery"
                     value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.materialSymbols])
                     when: materialSymbolsPanelLoader.status === Loader.Ready
+                }
+            }
+
+            Loader {
+                id: emojiPanelLoader
+                active: root.isEmojiMode || opacity > 0.01
+                visible: opacity > 0.01
+                Layout.fillWidth: true
+                Layout.preferredHeight: item ? item.implicitHeight : 520
+                height: Layout.preferredHeight
+                source: "EmojiPanel.qml"
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
+
+                opacity: root.isEmojiMode ? 1.0 : 0.0
+                transform: Translate {
+                    y: (1.0 - emojiPanelLoader.opacity) * 16
+                }
+                layer.enabled: opacity > 0.001 && opacity < 0.999
+                layer.effect: MultiEffect {
+                    blurEnabled: (1.0 - parent.opacity) > 0.001
+                    blurMax: 32.0
+                    blur: (1.0 - parent.opacity) * 0.5
+                }
+                Behavior on opacity {
+                    enabled: !root.inNotchMode
+                    NumberAnimation {
+                        duration: 220
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+            }
+
+            Loader {
+                id: suggestionsPanelLoader
+                active: root.showSuggestionsPanel || opacity > 0.01
+                visible: opacity > 0.01
+                Layout.fillWidth: true
+                Layout.preferredHeight: item ? item.implicitHeight : (Config.options.search.baseHeight ?? 500)
+                height: Layout.preferredHeight
+                source: "SuggestionsPanel.qml"
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
+
+                opacity: root.showSuggestionsPanel ? 1.0 : 0.0
+                transform: Translate {
+                    y: (1.0 - suggestionsPanelLoader.opacity) * -16
+                }
+                layer.enabled: opacity > 0.001 && opacity < 0.999
+                layer.effect: MultiEffect {
+                    blurEnabled: (1.0 - parent.opacity) > 0.001
+                    blurMax: 32.0
+                    blur: (1.0 - parent.opacity) * 0.5
+                }
+
+                Behavior on opacity {
+                    enabled: !root.inNotchMode
+                    NumberAnimation {
+                        duration: 220
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
                 }
             }
 

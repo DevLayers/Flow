@@ -153,6 +153,7 @@ Rectangle {
     Behavior on bottomRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
 
     color: Appearance.colors.colTertiaryContainer
+    Layout.fillWidth: true
     implicitWidth: mainRowLayout.implicitWidth + mainRowLayout.anchors.margins * 2
     implicitHeight: mainRowLayout.implicitHeight + mainRowLayout.anchors.margins * 2
 

@@ -1049,6 +1049,7 @@ Singleton {
                     property bool showPlayerSwitcher: true
                     property bool showSeekBar: true
                     property bool showVolumeSlider: true
+                    property int lyricsOffsetMs: 0 // offset in milliseconds for lyrics sync adjustment
                     property JsonObject backgroundAnimation: JsonObject {
                         property bool enable: true
                         property int speedScale: 10 // 1: very slow, 10: default, 20: 2x speed etc.
@@ -1062,6 +1063,7 @@ Singleton {
                         property bool dimBackground: true
                         property int dimOpacity: 60   // percent (0-100)
                         property string searchSuffix: "official music video"
+                        property int videoSamplingInterval: 200 // ms between color sampling updates (100-5000)
                     }
                 }
             }
@@ -1196,6 +1198,7 @@ Singleton {
                     property bool useFixedSize: true
                     property int customSize: 200
                     property int maxSize: 400
+                    property bool enableVolumeScroll: false
                     property JsonObject artwork: JsonObject {
                         property bool enable: false
                     }
@@ -1308,12 +1311,12 @@ Singleton {
                     property int activeIndicatorOpacity: 100 // 0-100
                     property bool dynamicWorkspaces: false
                     property bool useMaterialShapeForActiveIndicator: false
-                     property bool useRandomShapeForActiveIndicator: true
-                     property string activeIndicatorShape: "Pentagon"
-                     property bool dockShowActiveIndicator: true
-                     property bool dockShowWindowDots: true
-                     property bool dockHoverEffect: true
-                     property bool dockShowAppIcons: true
+                    property bool useRandomShapeForActiveIndicator: true
+                    property string activeIndicatorShape: "Pentagon"
+                    property bool dockShowActiveIndicator: true
+                    property bool dockShowWindowDots: true
+                    property bool dockHoverEffect: true
+                    property bool dockShowAppIcons: true
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false
@@ -1475,7 +1478,7 @@ Singleton {
                 property bool splitButtons: false
                 property bool useMouseSymbol: false
                 property bool useFnSymbol: false
-                property bool filterUnbinds: false
+                property bool filterUnbinds: true
                 property bool enableGmail: true
                 property bool enableTimetable: true
                 property bool timetableTodayFirst: false
@@ -1528,6 +1531,17 @@ Singleton {
                 property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "trash", "overview"]
             }
 
+            property JsonObject dockToPanel: JsonObject {
+                property int iconSize: 25
+                property int buttonSpacing: 2
+                property bool enableWorkspaceScroll: false
+                property bool alignToWorkspace: false
+                property bool enableTooltip: false
+                property bool enablePreview: false
+                property bool enableMacOsMagnification: false
+                property real macOsMagnificationScale: 1.6
+            }
+
             property JsonObject hyprland: JsonObject {
                 property string defaultHyprlandLayout: "dwindle" // Options: dwindle, monocle, master // It's best to not use scrolling
             }
@@ -1563,7 +1577,7 @@ Singleton {
 
             property JsonObject userProfile: JsonObject {
                 property string imageStyle: "initial" // "initial", "expressive", "custom"
-                property string imagePath: Directories.home + "/.config/quickshell/ii/assets/profile.png"
+                property string imagePath: Directories.userProfileImagePath
                 property string customName: ""
                 property string customGreeting: ""
                 property string customBio: ""
@@ -1907,6 +1921,17 @@ Singleton {
                 property bool showNowPlayingBubble: false
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
                 property int baseWidth: 500
+                property int baseHeight: 500
+                property string positionStyle: "default"
+                property real centerVerticalRatio: 0.38
+                property JsonObject suggestions: JsonObject {
+                    property bool enable: true
+                    property int maxSuggestionsPerSection: 5
+                    property bool showFrecency: true
+                    property bool showCommands: false
+                    property bool showApps: true
+                    property bool showAliases: true
+                }
             }
 
             property JsonObject mediaDownloader: JsonObject {
@@ -1935,7 +1960,7 @@ Singleton {
             property JsonObject sidebar: JsonObject {
                 property JsonObject dashboardHeader: JsonObject {
                     property string profileImageType: "custom" // "custom", "distro", "none"
-                    property string profileImagePath: Directories.home + "/.config/quickshell/ii/assets/profile.png"
+                    property string profileImagePath: Directories.userProfileImagePath
                     property string textMode: "username" // "username", "uptime", "none", "custom"
                     property string customText: ""
                 }
@@ -2061,8 +2086,8 @@ Singleton {
                 property bool alarmFadeIn: false
 
                 property string notificationDefaultPolicy: "play" // "play" | "mute"
-                property var alwaysPlayApps: []
-                property var neverPlayApps: []
+                property list<string> alwaysPlayApps: []
+                property list<string> neverPlayApps: []
                 property JsonObject custom: JsonObject {
                     property string notifications: ""
                     property string volumeChange: ""

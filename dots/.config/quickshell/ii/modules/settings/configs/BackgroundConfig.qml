@@ -523,6 +523,18 @@ ContentPage {
             }
         }
 
+        ConfigSpinBox {
+            icon: "timer"
+            text: Translation.tr("Video color sampling interval (ms)")
+            value: Config.options.background.mediaMode.musicVideo.videoSamplingInterval ?? 200
+            from: 100
+            to: 5000
+            stepSize: 100
+            onValueChanged: {
+                Config.options.background.mediaMode.musicVideo.videoSamplingInterval = value;
+            }
+        }
+
         StyledText {
             Layout.fillWidth: true
             text: Translation.tr("How much to dim the overlay so the video is visible. 0 = fully transparent, 100 = opaque (hides video).")
