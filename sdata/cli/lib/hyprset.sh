@@ -1,17 +1,38 @@
 #!/usr/bin/env bash
+#
+# hyprset — write a single key or animation into the persistent Hyprland config.
+#
+#   hyprset.sh key  <section:field|field> <value>
+#   hyprset.sh anim <name>                <params>
+#
+# Reached as `setup-ii-p3drovfx.sh hyprset ...`, as `ii-p3drovfx hyprset ...`,
+# or run directly by HyprlandSettings.qml. Always executed, never sourced.
 
-set -uo pipefail
+set -euo pipefail
 
-CONFIG_PATH="${HOME}/.local/share/ii-vynx/hyprland.conf"
-TMP_PATH="/tmp/hypr_config_write.tmp"
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 
-die()  { echo "[hyprconf] ERROR: $*" >&2; exit 1; }
-warn() { echo "[hyprconf] WARN:  $*" >&2; }
+# HYPRSET_CONFIG wins; otherwise the current data dir, falling back to the
+# pre-rename location so a half-migrated install still writes somewhere sane.
+CONFIG_PATH="${HYPRSET_CONFIG:-$XDG_DATA_HOME/ii-p3drovfx/hyprland.conf}"
+if [[ ! -f "$CONFIG_PATH" && -f "$XDG_DATA_HOME/ii-vynx/hyprland.conf" ]]; then
+    CONFIG_PATH="$XDG_DATA_HOME/ii-vynx/hyprland.conf"
+fi
 
+die() {
+    echo "[hyprset] ERROR: $*" >&2
+    exit 1
+}
+warn() { echo "[hyprset] WARN:  $*" >&2; }
+
+# Values are interpolated into sed expressions delimited by '|', so those
+# characters plus the shell metacharacters are refused outright.
 check_safe() {
     local val="$1"
-    # Security check for shell injection characters
-    if [[ "$val" =~ [\'\"\\\ \`\$\|\&\;] ]]; then
+    if [[ "$val" == *$'\n'* || "$val" == *$'\r'* ]]; then
+        die "Newline in argument: '$val'"
+    fi
+    if [[ "$val" =~ [\'\"\\\`\$\|\&\;\<\>] ]]; then
         die "Unsafe characters in argument: '$val'"
     fi
 }
@@ -20,7 +41,17 @@ require_file() {
     [[ -f "$CONFIG_PATH" ]] || die "Config not found: $CONFIG_PATH"
 }
 
-# Key mode
+# Write via a temp file alongside the target so the replacement is atomic and
+# never collides with a concurrent run (the old fixed /tmp path did neither).
+write_back() {
+    local content="$1" tmp
+    tmp="$(mktemp "${CONFIG_PATH}.XXXXXX")"
+    printf '%s\n' "$content" >"$tmp"
+    chmod --reference="$CONFIG_PATH" "$tmp" 2>/dev/null || true
+    mv "$tmp" "$CONFIG_PATH"
+}
+
+# ── Key mode ─────────────────────────────────────────────────────────────────
 
 mode_key() {
     local key="$1" value="$2"
@@ -34,72 +65,68 @@ mode_key() {
         section="${section// /}"
         field="${field// /}"
 
-        # If section doesn't exist, create it at the end of the file
         if ! grep -qE "^[[:space:]]*${section}[[:space:]]*\{" "$CONFIG_PATH"; then
             warn "Section '${section}' missing, creating new block..."
-            echo -e "\n${section} {\n    ${field} = ${value}\n}" >> "$CONFIG_PATH"
+            printf '\n%s {\n    %s = %s\n}\n' "$section" "$field" "$value" >>"$CONFIG_PATH"
         else
-            # Update existing key within the section
-            local replaced
-            replaced=$(sed -E "/^[[:space:]]*${section}[[:space:]]*\{/,/^\}/ s|^([[:space:]]*${field}[[:space:]]*=[[:space:]]*).*|\1${value}|" "$CONFIG_PATH")
+            local replaced original
+            original="$(cat "$CONFIG_PATH")"
+            replaced="$(sed -E "/^[[:space:]]*${section}[[:space:]]*\{/,/^\}/ s|^([[:space:]]*${field}[[:space:]]*=[[:space:]]*).*|\1${value}|" "$CONFIG_PATH")"
 
-            if diff -q <(echo "$replaced") "$CONFIG_PATH" > /dev/null 2>&1; then
-                # Key not found in section, append it before the closing brace '}'
+            if [[ "$replaced" == "$original" ]]; then
                 warn "Key '${field}' not found in '${section}', appending..."
-                sed -E "/^[[:space:]]*${section}[[:space:]]*\{/,/^\}/ {
+                replaced="$(sed -E "/^[[:space:]]*${section}[[:space:]]*\{/,/^\}/ {
                     /^\}/ i\\    ${field} = ${value}
-                }" "$CONFIG_PATH" > "$TMP_PATH"
-                mv "$TMP_PATH" "$CONFIG_PATH"
-            else
-                echo "$replaced" > "$TMP_PATH"
-                mv "$TMP_PATH" "$CONFIG_PATH"
+                }" "$CONFIG_PATH")"
             fi
+            write_back "$replaced"
         fi
     else
-        # Handle top-level (global) keys
         if grep -qE "^[[:space:]]*${key}[[:space:]]*=" "$CONFIG_PATH"; then
-            sed -E "s|^([[:space:]]*${key}[[:space:]]*=[[:space:]]*).*|\1${value}|" "$CONFIG_PATH" > "$TMP_PATH"
-            mv "$TMP_PATH" "$CONFIG_PATH"
+            local replaced
+            replaced="$(sed -E "s|^([[:space:]]*${key}[[:space:]]*=[[:space:]]*).*|\1${value}|" "$CONFIG_PATH")"
+            write_back "$replaced"
         else
-            echo "${key} = ${value}" >> "$CONFIG_PATH"
+            printf '%s = %s\n' "$key" "$value" >>"$CONFIG_PATH"
         fi
     fi
 
-    echo "[hyprconf] key: ${key} = ${value}"
+    echo "[hyprset] key: ${key} = ${value}"
 }
 
-# Anim mode
+# ── Anim mode ────────────────────────────────────────────────────────────────
 
 mode_anim() {
-    local anim_name="$1" full_params="$2"
+    local anim_name="$1" params="$2"
     check_safe "$anim_name"
+    check_safe "$params"
     require_file
 
-    # Regex pattern to match existing animation line
-    local pattern="^([[:space:]]*animation[[:space:]]*=[[:space:]]*${anim_name}[[:space:]]*,).*"
+    local head="^([[:space:]]*animation[[:space:]]*=[[:space:]]*${anim_name}[[:space:]]*,[[:space:]]*[^,]+[[:space:]]*,[[:space:]]*[^,]+[[:space:]]*,[[:space:]]*[^,]+)"
 
-    if grep -qE "$pattern" "$CONFIG_PATH"; then
-        # Update existing animation parameters
-        sed -i -E "s|^([[:space:]]*animation[[:space:]]*=[[:space:]]*${anim_name}[[:space:]]*,[^,]+,[^,]+,[^,]+,).*|\1 ${full_params}|" "$CONFIG_PATH"
-    else
-        # Append new animation if it doesn't exist
+    if ! grep -qE "^[[:space:]]*animation[[:space:]]*=[[:space:]]*${anim_name}[[:space:]]*," "$CONFIG_PATH"; then
         warn "Animation '${anim_name}' missing, appending..."
-        printf "\nanimation = %s, %s\n" "$anim_name" "$full_params" >> "$CONFIG_PATH"
+        printf '\nanimation = %s, %s\n' "$anim_name" "$params" >>"$CONFIG_PATH"
+        echo "[hyprset] anim: ${anim_name} appended"
+        return 0
     fi
 
-    echo "[hyprconf] anim: ${anim_name} updated"
+    # Callers pass the trailing style field. Hyprland makes that field optional,
+    # so replace it when present and append it when it is not -- the old pattern
+    # only handled the present case and silently no-opped on the common one.
+    local replaced
+    replaced="$(sed -E "s|${head},.*|\\1, ${params}|; t; s|${head}[[:space:]]*\$|\\1, ${params}|" "$CONFIG_PATH")"
+    write_back "$replaced"
+
+    echo "[hyprset] anim: ${anim_name} = ${params}"
 }
 
-# Entrypoint
+# ── Entrypoint ───────────────────────────────────────────────────────────────
 
-[[ $# -lt 3 ]] && die "Usage: $0 <key|anim> <name> <value>"
+[[ $# -lt 3 ]] && die "Usage: $(basename "$0") <key|anim> <name> <value>"
 
-MODE="$1"
-ARG1="$2"
-ARG2="$3"
-
-case "$MODE" in
-    key)  mode_key  "$ARG1" "$ARG2" ;;
-    anim) mode_anim "$ARG1" "$ARG2" ;;
-    *)    die "Unknown mode '$MODE'" ;;
+case "$1" in
+    key) mode_key "$2" "$3" ;;
+    anim) mode_anim "$2" "$3" ;;
+    *) die "Unknown mode '$1'" ;;
 esac

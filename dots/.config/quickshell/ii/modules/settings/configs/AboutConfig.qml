@@ -26,7 +26,7 @@ ContentPage {
     // ── Custom fork URL input for the Fork Switcher ──
     property string customForkUrl: ""
 
-    readonly property string setupScript: FileUtils.trimFileProtocol(Directories.home + "/.local/share/ii-vynx/setup-ii-vynx.sh")
+    readonly property string setupScript: FileUtils.trimFileProtocol(Directories.home + "/.local/share/ii-p3drovfx/setup-ii-p3drovfx.sh")
 
     component StatusChip: Rectangle {
         id: chipRoot
@@ -122,7 +122,7 @@ command: ["bash", "-c",
         }
     }
 
-    // ── Action process (run setup-ii-vynx.sh, log into the UI) ──
+    // ── Action process (run setup-ii-p3drovfx.sh, log into the UI) ──
     Process {
         id: actionProc
         property string mode: ""
@@ -160,20 +160,22 @@ command: ["bash", "-c",
         actionProc.running = true;
     }
 
-    // ── ANSI → rich text for the log box (setup-ii-vynx.sh colors its stdout for a terminal) ──
+    // ── ANSI → rich text for the log box (the setup script colors its stdout for a terminal) ──
     function colorToHex(c) {
         return "#" + [c.r, c.g, c.b].map(v => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
     }
 
-    // Foreground color per ANSI SGR code, matched to the semantics setup-ii-vynx.sh uses them for.
+    // Foreground color per ANSI SGR code, matched to the semantics the setup script uses them for.
     // Mapped to theme roles (not fixed hex) so it stays legible across light/dark and dynamic accents.
     function ansiFgColor(code) {
         switch (code) {
-            case "31": return colorToHex(Appearance.colors.colError);     // red    — errors
-            case "32": return colorToHex(Appearance.colors.colPrimary);   // green  — success
-            case "33": return colorToHex(Appearance.colors.colTertiary);  // yellow — warnings
-            case "34": return colorToHex(Appearance.colors.colSecondary); // blue   — steps
-            case "36": return colorToHex(Appearance.colors.colSecondary); // cyan   — headers (bolded too)
+            case "31": return colorToHex(Appearance.colors.colError);     // red     — errors
+            case "32": return colorToHex(Appearance.colors.colPrimary);   // green   — success
+            case "33": return colorToHex(Appearance.colors.colTertiary);  // yellow  — warnings
+            case "34": return colorToHex(Appearance.colors.colSecondary); // blue    — steps
+            case "35": return colorToHex(Appearance.colors.colTertiary);  // magenta — accents
+            case "36": return colorToHex(Appearance.colors.colSecondary); // cyan    — headers (bolded too)
+            case "90": return colorToHex(Appearance.colors.colSubtext);   // bright  — detail, box frames
             default: return "";
         }
     }
@@ -188,24 +190,47 @@ command: ["bash", "-c",
     }
 
     function ansiToRich(raw) {
-        const csiPattern = /\x1b\[([0-9;]*)([A-Za-z])/g;
+        // `install` forwards the base installer's output verbatim, so anything
+        // can arrive here. Drop OSC and stray non-CSI escapes before parsing,
+        // otherwise they survive escapeHtml and render as literal garbage.
+        raw = raw.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
+                 .replace(/\x1b[()][@-~]/g, "")
+                 .replace(/\x1b[^\[]/g, "")
+                 .replace(/\x1b$/, "");
+        // Full CSI grammar: private/parameter bytes, intermediates, final byte.
+        const csiPattern = /\x1b\[([0-9;:<=>?]*)([ -\/]*)([@-~])/g;
         let out = "";
         let last = 0;
         let openSpan = false;
         let bold = false;
+        let dim = false;
+        let italic = false;
+        let underline = false;
         let match;
         while ((match = csiPattern.exec(raw)) !== null) {
             out += escapeHtml(raw.substring(last, match.index));
             last = csiPattern.lastIndex;
-            if (match[2] !== "m") continue; // drop non-color CSI sequences (cursor moves, clears, ...)
+            // Drop everything that is not a plain SGR sequence: cursor moves,
+            // clears, and private-parameter forms such as ESC[?25l.
+            if (match[3] !== "m" || match[1].indexOf("?") !== -1) continue;
             const codes = match[1].split(";").filter(c => c !== "");
             if (codes.length === 0) codes.push("0");
             for (const code of codes) {
                 if (code === "0") {
+                    if (underline) { out += "</u>"; underline = false; }
+                    if (italic) { out += "</i>"; italic = false; }
+                    if (dim) { out += "</font>"; dim = false; }
                     if (openSpan) { out += "</font>"; openSpan = false; }
                     if (bold) { out += "</b>"; bold = false; }
                 } else if (code === "1") {
                     if (!bold) { out += "<b>"; bold = true; }
+                } else if (code === "2") {
+                    // Dim has no rich-text equivalent; render it as subtext.
+                    if (!dim) { out += "<font color=\"" + colorToHex(Appearance.colors.colSubtext) + "\">"; dim = true; }
+                } else if (code === "3") {
+                    if (!italic) { out += "<i>"; italic = true; }
+                } else if (code === "4") {
+                    if (!underline) { out += "<u>"; underline = true; }
                 } else {
                     const hex = ansiFgColor(code);
                     if (hex !== "") {
@@ -217,6 +242,9 @@ command: ["bash", "-c",
             }
         }
         out += escapeHtml(raw.substring(last));
+        if (underline) out += "</u>";
+        if (italic) out += "</i>";
+        if (dim) out += "</font>";
         if (openSpan) out += "</font>";
         if (bold) out += "</b>";
         return out;
@@ -406,8 +434,8 @@ command: ["bash", "-c",
                 Flow {
                     Layout.fillWidth: true
                     spacing: 5
-                    RippleButtonWithIcon { materialIcon: "code"; mainText: Translation.tr("GitHub"); onClicked: Qt.openUrlExternally("https://github.com/P3DROVFX/ii-vynx-fork") }
-                    RippleButtonWithIcon { materialIcon: "adjust"; materialIconFill: false; mainText: Translation.tr("Issues"); onClicked: Qt.openUrlExternally("https://github.com/P3DROVFX/ii-vynx-fork/issues") }
+                    RippleButtonWithIcon { materialIcon: "code"; mainText: Translation.tr("GitHub"); onClicked: Qt.openUrlExternally("https://github.com/P3DROVFX/ii-p3drovfx") }
+                    RippleButtonWithIcon { materialIcon: "adjust"; materialIconFill: false; mainText: Translation.tr("Issues"); onClicked: Qt.openUrlExternally("https://github.com/P3DROVFX/ii-p3drovfx/issues") }
                 }
             }
         }
@@ -498,7 +526,7 @@ command: ["bash", "-c",
                     }
                     enabled: !actionProc.running
                     onClicked: {
-                        page.runAction("update", ["--update", "--no-confirm", "--preserve-config"]);
+                        page.runAction("update", ["update", "--yes", "--keep-config"]);
                     }
                 }
 
@@ -595,8 +623,10 @@ command: ["bash", "-c",
                         anchors.margins: 8
                         clip: true
                         contentHeight: logText.implicitHeight
-                        contentWidth: width
-                        flickableDirection: Flickable.VerticalFlick
+                        // The script draws fixed-width boxes, so the log must
+                        // scroll sideways rather than wrap and shred the frames.
+                        contentWidth: logText.implicitWidth
+                        flickableDirection: Flickable.HorizontalAndVerticalFlick
 
                         Connections {
                             target: logFlickable
@@ -607,13 +637,12 @@ command: ["bash", "-c",
 
                         Text {
                             id: logText
-                            width: parent.width
                             textFormat: Text.RichText
                             text: page.ansiToRich(actionProc.logOutput)
                             font.family: Appearance.font.family.monospace
                             font.pixelSize: Appearance.font.pixelSize.small
                             color: Appearance.colors.colOnLayer1
-                            wrapMode: Text.WrapAnywhere
+                            wrapMode: Text.NoWrap
 
                             onTextChanged: Qt.callLater(() => {
                                 if (page.logAutoScroll)
@@ -644,8 +673,8 @@ command: ["bash", "-c",
                 onSelected: newValue => {
                     if (newValue === page.activeBranch) return;
                     page.runAction("branch-" + newValue,
-                        ["--switch", "--branch", newValue, "--fork", page.activeFork,
-                         "--no-confirm", "--preserve-config"]);
+                        ["switch", "--branch", newValue, "--fork", page.activeFork,
+                         "--yes", "--keep-config"]);
                 }
                 options: [
                     {
@@ -712,7 +741,7 @@ command: ["bash", "-c",
                         onClicked: {
                             // Switching forks: NOT preserving config to avoid structural conflict crashes.
                             page.runAction("fork-" + modelData.id,
-                                ["--switch", "--fork", modelData.id, "--no-confirm"]);
+                                ["switch", "--fork", modelData.id, "--yes"]);
                         }
                     }
                 }
@@ -745,7 +774,7 @@ command: ["bash", "-c",
                              && /^https?:\/\/github\.com\//.test(customUrlField.text.trim())
                     onClicked: {
                         page.runAction("fork-custom",
-                            ["--switch", "--fork", page.customForkUrl, "--no-confirm"]);
+                            ["switch", "--fork", page.customForkUrl, "--yes"]);
                     }
                 }
             }
@@ -758,13 +787,14 @@ command: ["bash", "-c",
                 text: Translation.tr("Switching forks replaces your ii folder. You'll lose these visual buttons until you return.\n\n" +
                                      "To return/switch via CLI, run:\n" +
                                      "  vynx fork p3drovfx\n\n" +
-                                     "Or run the setup script using the --switch flag:\n" +
-                                     "  ~/Downloads/ii-vynx/setup-ii-vynx.sh --switch --fork p3drovfx\n\n" +
-                                     "Useful script flags:\n" +
-                                     "  --switch               : Switch fork/branch instantly without reinstalling dependencies.\n" +
+                                     "Or run the setup script directly:\n" +
+                                     "  ~/.local/share/ii-p3drovfx/setup-ii-p3drovfx.sh switch --fork p3drovfx\n\n" +
+                                     "Useful subcommands and flags:\n" +
+                                     "  switch                 : Switch fork/branch instantly without reinstalling dependencies.\n" +
+                                     "  update                 : Refresh the fork and branch you are already on.\n" +
                                      "  --fork <name|url>      : Specify preset (e.g. p3drovfx, end4, vynx) or a custom GitHub URL.\n" +
                                      "  --branch <name>        : Switch branch (e.g. main, dev).\n" +
-                                     "  --preserve-config      : Retain your current configuration settings.")
+                                     "  --keep-config          : Retain your current configuration settings.")
             }
         }
     }
