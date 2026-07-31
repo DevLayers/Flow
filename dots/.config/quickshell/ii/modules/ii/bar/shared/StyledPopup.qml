@@ -45,7 +45,7 @@ LazyLoader {
     property int customMarginRight: 0
     property int customMarginTop: 0
     property int customMarginBottom: 0
-    
+
     // Expose active state to child elements so they can trigger animations,
     // exactly like WeatherPopup does for HourlyForecast.
     readonly property bool opened: _computedActive && !root._isClosing
@@ -192,8 +192,7 @@ LazyLoader {
         HyprlandFocusGrab {
             id: dismissGrab
             windows: [popupWindow]
-            active: root.selfDismiss && (Config.options.bar.tooltips.clickToShow || root.forceClick) && root._computedActive
-                && popupWindow._dismissGrabArmed
+            active: root.selfDismiss && (Config.options.bar.tooltips.clickToShow || root.forceClick) && root._computedActive && popupWindow._dismissGrabArmed
             onCleared: () => {
                 root._clickActive = false;
             }
@@ -206,7 +205,7 @@ LazyLoader {
         onAnimProgressChanged: updateChildrenAnimation()
 
         function updateChildrenAnimation() {
-            // Keep children animation clean and empty since they will animate themselves 
+            // Keep children animation clean and empty since they will animate themselves
             // directly using the root.active property, matching HourlyForecast's pattern.
         }
 
@@ -215,12 +214,14 @@ LazyLoader {
         readonly property real slideOffset: 35
 
         readonly property real slideX: {
-            if (!isBarVertical) return 0;
+            if (!isBarVertical)
+                return 0;
             return isBarBottom ? slideOffset : -slideOffset;
         }
 
         readonly property real slideY: {
-            if (isBarVertical) return 0;
+            if (isBarVertical)
+                return 0;
             return isBarBottom ? slideOffset : -slideOffset;
         }
 
@@ -238,7 +239,9 @@ LazyLoader {
 
         SequentialAnimation {
             id: openAnimSeq
-            PauseAnimation { duration: 50 }
+            PauseAnimation {
+                duration: 50
+            }
             NumberAnimation {
                 target: popupWindow
                 property: "animProgress"
@@ -416,96 +419,98 @@ LazyLoader {
                         root.contentItem.parent = null;
                     }
 
-                Component.onCompleted: {
-                    if (root.contentItem) {
-                        root.contentItem.parent = contentContainer;
-                        root.contentItem.anchors.centerIn = undefined;
-                        root.contentItem.anchors.top = undefined;
-                        root.contentItem.anchors.bottom = undefined;
-                        root.contentItem.anchors.left = undefined;
-                        root.contentItem.anchors.right = undefined;
-                        root.contentItem.anchors.fill = contentContainer;
+                    Component.onCompleted: {
+                        if (root.contentItem) {
+                            root.contentItem.parent = contentContainer;
+                            root.contentItem.anchors.centerIn = undefined;
+                            root.contentItem.anchors.top = undefined;
+                            root.contentItem.anchors.bottom = undefined;
+                            root.contentItem.anchors.left = undefined;
+                            root.contentItem.anchors.right = undefined;
+                            root.contentItem.anchors.fill = contentContainer;
 
-                        function recalculateDelays() {
-                            if (!root || !root.contentItem) return;
-                            
-                            let targetItem = root.contentItem;
-                            if (root.contentItem.children.length === 1) {
-                                let firstChild = root.contentItem.children[0];
-                                let name = firstChild.toString();
-                                if (name.includes("Layout") || firstChild.hasOwnProperty("spacing")) {
-                                    targetItem = firstChild;
-                                }
-                            }
-                            
-                            let visibleChildren = [];
-                            for (let i = 0; i < targetItem.children.length; i++) {
-                                let child = targetItem.children[i];
-                                if (child && child.hasOwnProperty("visible") && child.visible) {
-                                    visibleChildren.push(child);
-                                }
-                            }
-                            
-                            let delays = [];
-                            let total = visibleChildren.length;
-                            for (let i = 0; i < targetItem.children.length; i++) {
-                                let child = targetItem.children[i];
-                                let visIdx = visibleChildren.indexOf(child);
-                                if (visIdx !== -1) {
-                                    delays.push(visIdx / Math.max(1, total));
-                                } else {
-                                    delays.push(0);
-                                }
-                            }
-                            popupWindow.childDelays = delays;
-                            popupWindow.updateChildrenAnimation();
-                        }
+                            function recalculateDelays() {
+                                if (!root || !root.contentItem)
+                                    return;
 
-                        recalculateDelays();
-                        
-                        // Listen to hierarchy changes to connect and recalculate delays properly
-                        function setupConnections() {
-                            if (!root || !root.contentItem) return;
-                            let targetItem = root.contentItem;
-                            if (root.contentItem.children.length === 1) {
-                                let firstChild = root.contentItem.children[0];
-                                let name = firstChild.toString();
-                                if (name.includes("Layout") || firstChild.hasOwnProperty("spacing")) {
-                                    targetItem = firstChild;
+                                let targetItem = root.contentItem;
+                                if (root.contentItem.children.length === 1) {
+                                    let firstChild = root.contentItem.children[0];
+                                    let name = firstChild.toString();
+                                    if (name.includes("Layout") || firstChild.hasOwnProperty("spacing")) {
+                                        targetItem = firstChild;
+                                    }
                                 }
-                            }
-                            
-                            for (let i = 0; i < targetItem.children.length; i++) {
-                                let child = targetItem.children[i];
-                                if (child && child.hasOwnProperty("visibleChanged")) {
-                                    try {
-                                        child.visibleChanged.disconnect(recalculateDelays);
-                                    } catch(e) {}
-                                    child.visibleChanged.connect(recalculateDelays);
+
+                                let visibleChildren = [];
+                                for (let i = 0; i < targetItem.children.length; i++) {
+                                    let child = targetItem.children[i];
+                                    if (child && child.hasOwnProperty("visible") && child.visible) {
+                                        visibleChildren.push(child);
+                                    }
                                 }
+
+                                let delays = [];
+                                let total = visibleChildren.length;
+                                for (let i = 0; i < targetItem.children.length; i++) {
+                                    let child = targetItem.children[i];
+                                    let visIdx = visibleChildren.indexOf(child);
+                                    if (visIdx !== -1) {
+                                        delays.push(visIdx / Math.max(1, total));
+                                    } else {
+                                        delays.push(0);
+                                    }
+                                }
+                                popupWindow.childDelays = delays;
+                                popupWindow.updateChildrenAnimation();
                             }
+
                             recalculateDelays();
-                        }
 
-                        setupConnections();
-                        
-                        if (root.contentItem.hasOwnProperty("childrenChanged")) {
-                            root.contentItem.childrenChanged.connect(setupConnections);
-                        }
-                        
-                        let targetItem = root.contentItem;
-                        if (root.contentItem.children.length === 1) {
-                            let firstChild = root.contentItem.children[0];
-                            let name = firstChild.toString();
-                            if (name.includes("Layout") || firstChild.hasOwnProperty("spacing")) {
-                                targetItem = firstChild;
+                            // Listen to hierarchy changes to connect and recalculate delays properly
+                            function setupConnections() {
+                                if (!root || !root.contentItem)
+                                    return;
+                                let targetItem = root.contentItem;
+                                if (root.contentItem.children.length === 1) {
+                                    let firstChild = root.contentItem.children[0];
+                                    let name = firstChild.toString();
+                                    if (name.includes("Layout") || firstChild.hasOwnProperty("spacing")) {
+                                        targetItem = firstChild;
+                                    }
+                                }
+
+                                for (let i = 0; i < targetItem.children.length; i++) {
+                                    let child = targetItem.children[i];
+                                    if (child && child.hasOwnProperty("visibleChanged")) {
+                                        try {
+                                            child.visibleChanged.disconnect(recalculateDelays);
+                                        } catch (e) {}
+                                        child.visibleChanged.connect(recalculateDelays);
+                                    }
+                                }
+                                recalculateDelays();
                             }
-                        }
-                        if (targetItem !== root.contentItem && targetItem.hasOwnProperty("childrenChanged")) {
-                            targetItem.childrenChanged.connect(setupConnections);
+
+                            setupConnections();
+
+                            if (root.contentItem.hasOwnProperty("childrenChanged")) {
+                                root.contentItem.childrenChanged.connect(setupConnections);
+                            }
+
+                            let targetItem = root.contentItem;
+                            if (root.contentItem.children.length === 1) {
+                                let firstChild = root.contentItem.children[0];
+                                let name = firstChild.toString();
+                                if (name.includes("Layout") || firstChild.hasOwnProperty("spacing")) {
+                                    targetItem = firstChild;
+                                }
+                            }
+                            if (targetItem !== root.contentItem && targetItem.hasOwnProperty("childrenChanged")) {
+                                targetItem.childrenChanged.connect(setupConnections);
+                            }
                         }
                     }
-                }
                 }
 
                 HoverHandler {

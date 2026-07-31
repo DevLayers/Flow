@@ -200,8 +200,8 @@ Singleton {
 		}
 	}
 
-	property bool canChangeVolume: this.activePlayer && this.activePlayer.volumeSupported && this.activePlayer.canControl;
-	readonly property real volumeStep: this.activePlayer.volume < 0.10 ? 0.01 : 0.02
+    property bool canChangeVolume: this.activePlayer && this.activePlayer.volumeSupported && this.activePlayer.canControl;
+    readonly property real volumeStep: this.activePlayer ? (this.activePlayer.volume < 0.10 ? 0.01 : 0.02) : 0.02
 	function incrementVolume() {
 		if (!this.canChangeVolume)
 			return;

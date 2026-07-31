@@ -2086,8 +2086,8 @@ Singleton {
                 property bool alarmFadeIn: false
 
                 property string notificationDefaultPolicy: "play" // "play" | "mute"
-                property var alwaysPlayApps: []
-                property var neverPlayApps: []
+                property list<string> alwaysPlayApps: []
+                property list<string> neverPlayApps: []
                 property JsonObject custom: JsonObject {
                     property string notifications: ""
                     property string volumeChange: ""

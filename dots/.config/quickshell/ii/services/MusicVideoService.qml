@@ -43,6 +43,7 @@ Singleton {
     // ── Internal state ──────────────────────────────────────────────────────
 
     property string _currentUrl: ""
+    property string _ipcSocket: ""
     property string _lastQuery: ""
     property string _cachedUrl: ""       // persists across enable/disable cycles
     property bool _searchFailed: false
