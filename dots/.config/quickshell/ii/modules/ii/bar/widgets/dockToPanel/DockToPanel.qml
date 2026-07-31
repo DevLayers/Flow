@@ -174,18 +174,6 @@ Item {
         ? pill.implicitHeight
         : Appearance.sizes.barHeight
 
-    function swapSlots(from, to) {
-        if (from === to) return
-        if (from < 0 || from >= _workOrder.length) return
-        if (to   < 0 || to   >= _workOrder.length) return
-        let arr = _workOrder.slice()
-        let tmp = arr[from]; arr[from] = arr[to]; arr[to] = tmp
-        _workOrder = arr
-    }
-
-    function commitOrder() {
-        Config.options.dock.pinnedApps = _workOrder.slice()
-    }
 
     Rectangle {
         id: pill
@@ -208,10 +196,18 @@ Item {
                     : Appearance.sizes.barHeight
 
         Behavior on implicitWidth {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
         }
         Behavior on implicitHeight {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
         }
 
         Flow {
@@ -260,11 +256,19 @@ Item {
 
                     Behavior on opacity {
                         enabled: !root._suppressTranslateAnim
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
                     }
                     Behavior on scale {
                         enabled: !root._suppressTranslateAnim
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
                     }
 
                     transform: Translate {
@@ -272,23 +276,25 @@ Item {
                         y: root.vertical ? slotItem.dragTranslate : 0
                         Behavior on x {
                             enabled: !slotItem.isDragged && !root._suppressTranslateAnim
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
                         }
                         Behavior on y {
                             enabled: !slotItem.isDragged && !root._suppressTranslateAnim
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
                         }
                     }
 
                     width:  root.btnSize
                     height: root.btnSize
 
-                    Connections {
-                        target: DesktopEntries
-                        function onApplicationsChanged() {
-                            slotItem.deskEntry = DesktopEntries.heuristicLookup(slotItem.appId)
-                        }
-                    }
 
                     // ── DragHandler ──────────────────────────────────────────
                     DragHandler {
@@ -349,7 +355,7 @@ Item {
                             }
 
                             Loader {
-                                active: Config.options.dock.monochromeIcons
+                                active: Config.options?.dock?.monochromeIcons ?? false
                                 anchors.fill: pinnedIcon
                                 sourceComponent: Item {
                                     Desaturate {
@@ -414,7 +420,7 @@ Item {
             // ── 3. ACTIVE UNPINNED APPS ───────────────────────────────────
             Repeater {
                 id: activeRepeater
-                model: ScriptModel { values: root.activeUnpinned }
+                model: root.activeUnpinned
 
                 delegate: Item {
                     id: activeSlot
@@ -456,7 +462,7 @@ Item {
                             }
 
                             Loader {
-                                active: Config.options.dock.monochromeIcons
+                                active: Config.options?.dock?.monochromeIcons ?? false
                                 anchors.fill: activeIcon
                                 sourceComponent: Item {
                                     Desaturate {
