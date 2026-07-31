@@ -36,8 +36,22 @@ if [[ ! -f "$LOCAL_CONFIG" ]]; then
     touch "$LOCAL_CONFIG"
 fi
 
-# Route every write through the sibling hyprset, with the same target file.
-hyprset() { HYPRSET_CONFIG="$LOCAL_CONFIG" bash "$SCRIPT_DIR/hyprset.sh" "$@"; }
+# Route every write through hyprset (sibling, CLI, or mirrored), with the same target file.
+hyprset() {
+    local cmd=""
+    if [[ -f "$SCRIPT_DIR/hyprset.sh" ]]; then
+        cmd="$SCRIPT_DIR/hyprset.sh"
+    elif command -v ii-p3drovfx >/dev/null 2>&1; then
+        HYPRSET_CONFIG="$LOCAL_CONFIG" ii-p3drovfx hyprset "$@"
+        return $?
+    elif [[ -f "$XDG_DATA_HOME/ii-p3drovfx/sdata/cli/lib/hyprset.sh" ]]; then
+        cmd="$XDG_DATA_HOME/ii-p3drovfx/sdata/cli/lib/hyprset.sh"
+    else
+        echo -e "\e[1;31m[ERROR]\e[0m hyprset script not found" >&2
+        return 1
+    fi
+    HYPRSET_CONFIG="$LOCAL_CONFIG" bash "$cmd" "$@"
+}
 
 log() {
     [[ "$VERBOSE" == "true" ]] && echo -e "\e[1;34m[VERBOSE] [hyprmerge]\e[0m $*"

@@ -1200,7 +1200,7 @@ detect_ii_subdir() {
     }
     local -a found=()
     while IFS= read -r d; do found+=("$d"); done < <(
-        find "$base" -mindepth 1 -maxdepth 1 -type d -name 'ii*' 2>/dev/null | sort
+        find "$base" -mindepth 1 -maxdepth 1 -type d -name 'ii*' ! -name '*.bak*' ! -name '*.tmp*' ! -name '*backup*' 2>/dev/null | sort
     )
     if ((${#found[@]} == 0)); then
         ui_fail "Not a Quickshell rice" "no ii* directory under dots/.config/quickshell"

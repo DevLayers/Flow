@@ -102,7 +102,7 @@ mode_anim() {
     check_safe "$params"
     require_file
 
-    local head="^([[:space:]]*animation[[:space:]]*=[[:space:]]*${anim_name}[[:space:]]*,[^,]+,[^,]+,[^,]+)"
+    local head="^([[:space:]]*animation[[:space:]]*=[[:space:]]*${anim_name}[[:space:]]*,[[:space:]]*[^,]+[[:space:]]*,[[:space:]]*[^,]+[[:space:]]*,[[:space:]]*[^,]+)"
 
     if ! grep -qE "^[[:space:]]*animation[[:space:]]*=[[:space:]]*${anim_name}[[:space:]]*," "$CONFIG_PATH"; then
         warn "Animation '${anim_name}' missing, appending..."
