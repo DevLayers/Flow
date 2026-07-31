@@ -385,16 +385,41 @@ Item {
                                     model: Math.min(slotItem.appEntry?.toplevels?.length ?? 0, 3)
                                     delegate: Rectangle {
                                         required property int index
+                                        readonly property int topCount: slotItem.appEntry?.toplevels?.length ?? 0
+                                        readonly property bool isSingleActive: slotItem.appActive && topCount === 1
+
                                         radius: Appearance.rounding.full
-                                        implicitWidth:  root.vertical
+                                        implicitWidth: root.vertical
                                             ? 2
-                                            : (slotItem.appEntry?.toplevels?.length ?? 0) <= 3 ? 4 : 2
+                                            : (isSingleActive ? 12 : (topCount <= 3 ? 4 : 2))
                                         implicitHeight: root.vertical
-                                            ? ((slotItem.appEntry?.toplevels?.length ?? 0) <= 3 ? 4 : 2)
+                                            ? (isSingleActive ? 12 : (topCount <= 3 ? 4 : 2))
                                             : 2
                                         color: slotItem.appActive
                                             ? Appearance.colors.colPrimary
-                                            : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
+                                            : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.75)
+
+                                        Behavior on implicitWidth {
+                                            NumberAnimation {
+                                                duration: Appearance.animation.elementMoveFast.duration
+                                                easing.type: Appearance.animation.elementMoveFast.type
+                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                            }
+                                        }
+                                        Behavior on implicitHeight {
+                                            NumberAnimation {
+                                                duration: Appearance.animation.elementMoveFast.duration
+                                                easing.type: Appearance.animation.elementMoveFast.type
+                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                            }
+                                        }
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: Appearance.animation.elementMoveFast.duration
+                                                easing.type: Appearance.animation.elementMoveFast.type
+                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -492,16 +517,41 @@ Item {
                                     model: Math.min(activeSlot.modelData.toplevels.length, 3)
                                     delegate: Rectangle {
                                         required property int index
+                                        readonly property int topCount: activeSlot.modelData.toplevels.length
+                                        readonly property bool isSingleActive: activeSlot.appIsActive && topCount === 1
+
                                         radius: Appearance.rounding.full
-                                        implicitWidth:  root.vertical
+                                        implicitWidth: root.vertical
                                             ? 2
-                                            : activeSlot.modelData.toplevels.length <= 3 ? 4 : 2
+                                            : (isSingleActive ? 12 : (topCount <= 3 ? 4 : 2))
                                         implicitHeight: root.vertical
-                                            ? (activeSlot.modelData.toplevels.length <= 3 ? 4 : 2)
+                                            ? (isSingleActive ? 12 : (topCount <= 3 ? 4 : 2))
                                             : 2
                                         color: activeSlot.appIsActive
                                             ? Appearance.colors.colPrimary
-                                            : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
+                                            : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.75)
+
+                                        Behavior on implicitWidth {
+                                            NumberAnimation {
+                                                duration: Appearance.animation.elementMoveFast.duration
+                                                easing.type: Appearance.animation.elementMoveFast.type
+                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                            }
+                                        }
+                                        Behavior on implicitHeight {
+                                            NumberAnimation {
+                                                duration: Appearance.animation.elementMoveFast.duration
+                                                easing.type: Appearance.animation.elementMoveFast.type
+                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                            }
+                                        }
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: Appearance.animation.elementMoveFast.duration
+                                                easing.type: Appearance.animation.elementMoveFast.type
+                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                            }
+                                        }
                                     }
                                 }
                             }
