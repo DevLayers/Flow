@@ -1397,6 +1397,55 @@ build_quickshell() {
     return 0
 }
 
+# Quickshell watches its config tree and hot-reloads the moment anything in it
+# changes. Swapping the tree out from under a live instance therefore makes it
+# reload onto half the new config with the old process' state still loaded —
+# which is how config.json ends up rewritten with defaults. Every path that
+# touches the tree stops the shell first and starts it again afterwards.
+stop_quickshell() {
+    [[ "$OPT_RESTART" == true ]] || return 0
+
+    # `qs` is a symlink to `quickshell`, and the process name follows whichever
+    # one was used to launch it, so both have to be matched. Missing one leaves
+    # a second instance alive writing its own schema over config.json.
+    local killed=false
+    for name in qs quickshell; do
+        pkill -x "$name" 2>/dev/null && killed=true
+    done
+    [[ "$killed" == true ]] || return 0
+
+    # Give the old instance time to run Component.onDestruction, which is what
+    # blocks its final config.json write.
+    sleep 0.5
+    ui_ok "Stopped" "running Quickshell instance"
+    return 0
+}
+
+start_quickshell() {
+    [[ "$OPT_RESTART" == true ]] || {
+        ui_note "Restart skipped (--no-restart)."
+        return 0
+    }
+    have qs || {
+        ui_warn "qs not on PATH — start Quickshell yourself."
+        return 0
+    }
+
+    ui_step "Starting"
+    if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
+        hyprctl reload >>"$LOG_FILE" 2>&1 || ui_warn "hyprctl reload failed."
+        sleep 0.5
+    fi
+    if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
+        nohup qs -c ii >/dev/null 2>&1 &
+        ui_ok "Started" "qs -c ii"
+    else
+        nohup qs --path "$TARGET_DIR" >/dev/null 2>&1 &
+        ui_ok "Started" "qs --path $(tilde "$TARGET_DIR")"
+    fi
+    return 0
+}
+
 restart_quickshell() {
     [[ "$OPT_RESTART" == true ]] || {
         ui_note "Restart skipped (--no-restart)."
@@ -1407,20 +1456,8 @@ restart_quickshell() {
         return 0
     }
 
-    ui_step "Restarting"
-    pkill -x qs 2>/dev/null || true
-    sleep 0.5
-    if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
-        hyprctl reload >>"$LOG_FILE" 2>&1 || ui_warn "hyprctl reload failed."
-        sleep 0.5
-    fi
-    if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
-        nohup qs -c ii >/dev/null 2>&1 &
-        ui_ok "Restarted" "qs -c ii"
-    else
-        nohup qs --path "$TARGET_DIR" >/dev/null 2>&1 &
-        ui_ok "Restarted" "qs --path $(tilde "$TARGET_DIR")"
-    fi
+    stop_quickshell
+    start_quickshell
     return 0
 }
 
@@ -1722,6 +1759,14 @@ apply_config() {
         mirror_scripts "$CLONE_DIR"
     fi
 
+    # Stop before the swap, not after. swap_in moves the live tree aside and
+    # deletes it, and a running Quickshell reacts to that by hot-reloading onto
+    # whatever is at the path by then. Its config singleton reloads mid-swap and
+    # can persist QML defaults over the user's config.json — the reset people
+    # end up fixing by deleting the file. Nothing touches the tree until the
+    # shell is down.
+    stop_quickshell
+
     swap_in "$STAGE_DIR" "$fork" "$branch" || return 1
 
     # After the swap: a swap that failed leaves ~/.config/hypr untouched too,
@@ -1734,7 +1779,7 @@ apply_config() {
     fi
 
     handle_base_config "$verb"
-    restart_quickshell
+    start_quickshell
 
     local summary="$fork/$branch${head:+ @ ${head:0:8}}"
     [[ -n "$LOCAL_SRC" ]] && summary="local $G_ARROW $(tilde "$LOCAL_SRC")"
