@@ -94,11 +94,15 @@ NestableObject {
     }
 
     function logicalWidth(m) {
-        return (m.transform === 1 || m.transform === 3) ? m.height : m.width;
+        const scale = (m && m.scale) ? m.scale : 1;
+        const w = (m.transform === 1 || m.transform === 3) ? m.height : m.width;
+        return Math.round(w / scale);
     }
 
     function logicalHeight(m) {
-        return (m.transform === 1 || m.transform === 3) ? m.width : m.height;
+        const scale = (m && m.scale) ? m.scale : 1;
+        const h = (m.transform === 1 || m.transform === 3) ? m.width : m.height;
+        return Math.round(h / scale);
     }
 
     function applyProfile(name) {
