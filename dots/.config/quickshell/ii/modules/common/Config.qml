@@ -1531,6 +1531,17 @@ Singleton {
                 property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "trash", "overview"]
             }
 
+            property JsonObject dockToPanel: JsonObject {
+                property int iconSize: 25
+                property int buttonSpacing: 2
+                property bool enableWorkspaceScroll: false
+                property bool alignToWorkspace: false
+                property bool enableTooltip: false
+                property bool enablePreview: false
+                property bool enableMacOsMagnification: false
+                property real macOsMagnificationScale: 1.6
+            }
+
             property JsonObject hyprland: JsonObject {
                 property string defaultHyprlandLayout: "dwindle" // Options: dwindle, monocle, master // It's best to not use scrolling
             }
