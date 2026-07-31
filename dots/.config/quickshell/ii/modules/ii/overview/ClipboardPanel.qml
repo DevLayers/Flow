@@ -24,7 +24,7 @@ Item {
     readonly property int detailColumnWidth: panelWidth - listColumnWidth
 
     implicitWidth: panelWidth
-    implicitHeight: Math.min(560, Math.max(320, entryListView.contentHeight + 40))
+    implicitHeight: 520
     property var filteredEntries: {
         const q = root.searchQuery;
         const allEntries = Cliphist.entries;
@@ -404,7 +404,7 @@ Item {
                     Layout.preferredHeight: 32
                     Layout.leftMargin: 12
                     Layout.rightMargin: 12
-                    Layout.topMargin: 6
+                    Layout.topMargin: 2
                     color: "transparent"
 
                     StyledText {

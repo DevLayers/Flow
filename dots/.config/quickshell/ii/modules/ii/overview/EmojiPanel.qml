@@ -17,25 +17,23 @@ Item {
     id: root
     property string searchQuery: ""
 
-    readonly property int panelWidth: 600
+    readonly property int panelWidth: 620
     readonly property int gridColumns: 6
-    readonly property int maxItems: 100
+    readonly property int maxItems: 120
 
     implicitWidth: panelWidth
     implicitHeight: 520
 
-    property int focusedControlIndex: 0
-    property var allIcons: []
-    property var filteredIcons: []
-    property var iconMap: ({})
-    property bool dataLoaded: false
+    property var allEmojis: Emojis.list
+    property var filteredEmojis: []
+    property bool dataLoaded: Emojis.list.length > 0
 
-    property color colItemBg: Appearance.colors.colSurfaceContainerHigh
     property color colItemBgHover: Appearance.colors.colSurfaceContainerHighest
     property color colItemSelected: Appearance.colors.colPrimaryContainer
     property color colText: Appearance.colors.colOnSurface
     property color colSubtext: Appearance.colors.colSubtext
-    property color colTagText: Appearance.colors.colOnSurfaceVariant
+
+    property int focusedControlIndex: 0
 
     readonly property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
     readonly property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
@@ -43,117 +41,29 @@ Item {
 
     readonly property int cellWidth: Math.floor((gridFlickable.width - (root.gridSpacing * (root.gridColumns - 1))) / root.gridColumns)
     readonly property int cellSize: root.cellWidth
-    readonly property int cellHeight: root.cellSize + 32
+    readonly property int cellHeight: root.cellSize
     readonly property int gridSpacing: 8
 
-    function loadData() {
-        symbolsFileView.reload();
-    }
-
-    function filterIcons() {
-        if (!dataLoaded || allIcons.length === 0) {
-            filteredIcons = [];
-            iconMap = ({});
+    function filterEmojis() {
+        if (!dataLoaded || allEmojis.length === 0) {
+            filteredEmojis = [];
             updateSlots();
             return;
         }
 
         const query = root.searchQuery.trim().toLowerCase();
         if (query.length === 0) {
-            filteredIcons = allIcons.slice(0, maxItems);
-
-            const map = {};
-            for (let i = 0; i < filteredIcons.length; i++) {
-                map[filteredIcons[i].n] = filteredIcons[i];
-            }
-            iconMap = map;
+            filteredEmojis = allEmojis.slice(0, maxItems);
             updateSlots();
             return;
         }
 
-        const queryTerms = query.split(/\s+/).filter(t => t.length > 0);
-        const scored = [];
-
-        for (let i = 0; i < allIcons.length; i++) {
-            const icon = allIcons[i];
-            const name = icon.n.toLowerCase();
-            const tags = icon.t;
-            const categories = icon.c;
-
-            let score = 0;
-            let allTermsMatch = true;
-
-            for (let t = 0; t < queryTerms.length; t++) {
-                const term = queryTerms[t];
-                let termMatched = false;
-
-                if (name === term) {
-                    score += 100;
-                    termMatched = true;
-                } else if (name.startsWith(term)) {
-                    score += 50;
-                    termMatched = true;
-                } else if (name.includes(term)) {
-                    score += 25;
-                    termMatched = true;
-                }
-
-                if (!termMatched) {
-                    for (let j = 0; j < tags.length; j++) {
-                        const tag = tags[j].toLowerCase();
-                        if (tag === term) {
-                            score += 30;
-                            termMatched = true;
-                            break;
-                        } else if (tag.startsWith(term)) {
-                            score += 15;
-                            termMatched = true;
-                            break;
-                        } else if (tag.includes(term)) {
-                            score += 8;
-                            termMatched = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!termMatched) {
-                    for (let j = 0; j < categories.length; j++) {
-                        const cat = categories[j].toLowerCase();
-                        if (cat.includes(term)) {
-                            score += 5;
-                            termMatched = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!termMatched) {
-                    allTermsMatch = false;
-                    break;
-                }
-            }
-
-            if (allTermsMatch && score > 0) {
-                score += (icon.p || 0) / 10000;
-                scored.push({ icon: icon, score: score });
-            }
-        }
-
-        scored.sort((a, b) => b.score - a.score);
-        filteredIcons = scored.slice(0, maxItems).map(s => s.icon);
-
-        const map = {};
-        for (let i = 0; i < filteredIcons.length; i++) {
-            map[filteredIcons[i].n] = filteredIcons[i];
-        }
-        iconMap = map;
-
+        filteredEmojis = Emojis.fuzzyQuery(query).slice(0, maxItems);
         updateSlots();
     }
 
     function navigateUp() {
-        if (filteredIcons.length === 0) return;
+        if (filteredEmojis.length === 0) return;
         const cols = root.gridColumns;
         if (focusedControlIndex < 0) {
             focusedControlIndex = 0;
@@ -167,13 +77,13 @@ Item {
     }
 
     function navigateDown() {
-        if (filteredIcons.length === 0) return;
+        if (filteredEmojis.length === 0) return;
         const cols = root.gridColumns;
         if (focusedControlIndex < 0) {
             focusedControlIndex = 0;
         } else {
             const next = focusedControlIndex + cols;
-            if (next < filteredIcons.length) {
+            if (next < filteredEmojis.length) {
                 focusedControlIndex = next;
             }
         }
@@ -181,7 +91,7 @@ Item {
     }
 
     function navigateLeft() {
-        if (filteredIcons.length === 0) return;
+        if (filteredEmojis.length === 0) return;
         if (focusedControlIndex < 0) {
             focusedControlIndex = 0;
         } else if (focusedControlIndex > 0) {
@@ -194,20 +104,20 @@ Item {
     }
 
     function navigateRight() {
-        if (filteredIcons.length === 0) return;
+        if (filteredEmojis.length === 0) return;
         if (focusedControlIndex < 0) {
             focusedControlIndex = 0;
-        } else if (focusedControlIndex < filteredIcons.length - 1) {
+        } else if (focusedControlIndex < filteredEmojis.length - 1) {
             focusedControlIndex++;
         }
         ensureVisible();
     }
 
     function activateSelected() {
-        if (focusedControlIndex >= 0 && focusedControlIndex < filteredIcons.length) {
-            copyIconName(filteredIcons[focusedControlIndex].n);
-        } else if (filteredIcons.length > 0) {
-            copyIconName(filteredIcons[0].n);
+        if (focusedControlIndex >= 0 && focusedControlIndex < filteredEmojis.length) {
+            copyEmoji(filteredEmojis[focusedControlIndex]);
+        } else if (filteredEmojis.length > 0) {
+            copyEmoji(filteredEmojis[0]);
         }
         GlobalStates.overviewOpen = false;
     }
@@ -221,7 +131,7 @@ Item {
         if (focusedControlIndex < 0) return;
         const cols = root.gridColumns;
         const row = Math.floor(focusedControlIndex / cols);
-        const itemTop = row * root.cellHeight;
+        const itemTop = row * (root.cellHeight + root.gridSpacing);
         const itemBottom = itemTop + root.cellSize;
         const viewTop = gridFlickable.contentY;
         const viewBottom = viewTop + gridFlickable.height;
@@ -233,38 +143,17 @@ Item {
         }
     }
 
-    function copyIconName(name) {
-        Quickshell.clipboardText = name;
-        copyFeedbackIcon = name;
-        copyFeedbackTimer.restart();
+    function copyEmoji(fullString) {
+        if (!fullString) return;
+        const parts = fullString.split(" ");
+        const emoji = parts[0];
+        Quickshell.clipboardText = emoji;
     }
 
-    function copyIconSvg(iconData) {
-        if (!iconData) return;
-        const cp = iconData.cp;
-        const hex = cp.toString(16).toUpperCase();
-        const name = iconData.n;
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><text x="480" y="0" font-family="Material Symbols Rounded" font-size="960" text-anchor="middle" dominant-baseline="central" fill="black">&#x${hex};</text></svg>`;
-        Quickshell.clipboardText = svg;
-        copyFeedbackIcon = name;
-        copyFeedbackTimer.restart();
-    }
-
-    function copyFocusedIconSvg() {
-        if (focusedControlIndex >= 0 && focusedControlIndex < filteredIcons.length) {
-            copyIconSvg(filteredIcons[focusedControlIndex]);
-        } else if (filteredIcons.length > 0) {
-            copyIconSvg(filteredIcons[0]);
-        }
-        GlobalStates.overviewOpen = false;
-    }
+    property var emojiMap: ({})
 
     function updateSlots() {
-        const newUids = [];
-        for (let i = 0; i < filteredIcons.length; i++) {
-            newUids.push(filteredIcons[i].n);
-        }
-
+        const newUids = filteredEmojis;
         const slots = [];
         for (let i = 0; i < iconRepeater.count; i++) {
             slots.push(iconRepeater.itemAt(i));
@@ -338,40 +227,25 @@ Item {
         contentContainer.height = Math.max(0, totalHeight);
     }
 
-    property string copyFeedbackIcon: ""
-
     signal requestFocusSearchInput()
 
     onSearchQueryChanged: {
-        root.filterIcons();
+        root.filterEmojis();
         focusedControlIndex = -1;
     }
 
-    Timer {
-        id: copyFeedbackTimer
-        interval: 1500
-        repeat: false
-    }
-
-    FileView {
-        id: symbolsFileView
-        path: Directories.assetsPath + "/data/material_symbols.json"
-        onLoadedChanged: {
-            if (loaded) {
-                try {
-                    const content = text();
-                    allIcons = JSON.parse(content);
-                    dataLoaded = true;
-                    root.filterIcons();
-                } catch (e) {
-                    console.warn("[MaterialSymbolsPanel] Failed to parse data:", e);
-                }
-            }
+    Connections {
+        target: Emojis
+        function onListChanged() {
+            root.allEmojis = Emojis.list;
+            root.dataLoaded = Emojis.list.length > 0;
+            root.filterEmojis();
         }
     }
 
     Component.onCompleted: {
-        root.loadData();
+        Emojis.load();
+        root.filterEmojis();
     }
 
     ColumnLayout {
@@ -382,12 +256,9 @@ Item {
         anchors.topMargin: 0
         spacing: 6
 
-        Rectangle {
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: Appearance.colors.colSurfaceContainerHigh
-            radius: Appearance.rounding.large
-            clip: true
 
             Flickable {
                 id: gridFlickable
@@ -435,76 +306,6 @@ Item {
                     }
                 }
 
-                layer.enabled: root.filteredIcons.length > 0
-                layer.effect: OpacityMask {
-                    maskSource: Item {
-                        id: maskRoot
-                        width: gridFlickable.width
-                        height: gridFlickable.height
-
-                        property color topFadeColor: gridFlickable.atYBeginning ? "white" : "transparent"
-                        property color bottomFadeColor: gridFlickable.atYEnd ? "white" : "transparent"
-
-                        Behavior on topFadeColor {
-                            ColorAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                            }
-                        }
-                        Behavior on bottomFadeColor {
-                            ColorAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                            }
-                        }
-
-                        Column {
-                            anchors.fill: parent
-                            spacing: 0
-
-                            Rectangle {
-                                width: parent.width
-                                height: Math.min(46, parent.height / 2)
-                                color: "transparent"
-                                gradient: Gradient {
-                                    GradientStop {
-                                        position: 0.0
-                                        color: maskRoot.topFadeColor
-                                    }
-                                    GradientStop {
-                                        position: 1.0
-                                        color: "white"
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: Math.max(0, parent.height - Math.min(46, parent.height / 2) - Math.min(56, parent.height / 2))
-                                color: "white"
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: Math.min(56, parent.height / 2)
-                                color: "transparent"
-                                gradient: Gradient {
-                                    GradientStop {
-                                        position: 0.0
-                                        color: "white"
-                                    }
-                                    GradientStop {
-                                        position: 1.0
-                                        color: maskRoot.bottomFadeColor
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
                 Item {
                     id: gridArea
                     width: gridFlickable.width
@@ -526,8 +327,7 @@ Item {
                                 readonly property int slotIndex: index
                                 property string uniqueId: ""
                                 property int currentPosition: -1
-                                property var iconData: root.iconMap[uniqueId] || null
-                                property bool hasData: iconData !== null
+                                property bool hasData: uniqueId !== ""
 
                                 readonly property bool isFocused: {
                                     const fi = root.focusedControlIndex;
@@ -535,7 +335,6 @@ Item {
                                     if (fi < 0 || cp < 0) return false;
                                     return (fi === cp) && hasData;
                                 }
-                                property bool isHovered: false
 
                                 readonly property int targetCol: currentPosition >= 0 ? currentPosition % root.gridColumns : 0
                                 readonly property int targetRow: currentPosition >= 0 ? Math.floor(currentPosition / root.gridColumns) : 0
@@ -584,42 +383,23 @@ Item {
                                     colBackgroundHover: root.colItemBgHover
                                     enabled: delegateItem.hasData
 
-                                    ColumnLayout {
-                                        anchors.fill: parent
-                                        anchors.margins: 4
-                                        spacing: 2
-
-                                        MaterialSymbol {
-                                            text: delegateItem.iconData ? delegateItem.iconData.n : ""
-                                            iconSize: 24
-                                            color: root.colText
-                                            fill: delegateItem.isFocused ? 1.0 : 0.0
-                                            Layout.alignment: Qt.AlignHCenter
-                                            horizontalAlignment: Text.AlignHCenter
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: {
+                                            if (!delegateItem.uniqueId) return "";
+                                            const parts = delegateItem.uniqueId.split(" ");
+                                            return parts[0] || "";
                                         }
-
-                                        StyledText {
-                                            text: delegateItem.iconData ? delegateItem.iconData.n : ""
-                                            color: root.colText
-                                            font.pixelSize: Appearance.font.pixelSize.smallest
-                                            elide: Text.ElideRight
-                                            horizontalAlignment: Text.AlignHCenter
-                                            Layout.fillWidth: true
-                                            maximumLineCount: 1
-                                        }
+                                        font.pixelSize: 26
+                                        font.family: "Noto Color Emoji"
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
                                     }
 
                                     onClicked: {
                                         root.focusedControlIndex = delegateItem.currentPosition;
-                                        root.copyIconName(delegateItem.iconData.n);
+                                        root.copyEmoji(delegateItem.uniqueId);
                                         GlobalStates.overviewOpen = false;
-                                    }
-
-                                    Keys.onPressed: event => {
-                                        if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
-                                            root.copyIconSvg(delegateItem.iconData);
-                                            event.accepted = true;
-                                        }
                                     }
                                 }
                             }
@@ -630,7 +410,7 @@ Item {
 
             Item {
                 anchors.centerIn: parent
-                visible: root.filteredIcons.length === 0 && root.dataLoaded && root.searchQuery.trim().length > 0
+                visible: root.filteredEmojis.length === 0 && root.dataLoaded && root.searchQuery.trim().length > 0
                 implicitWidth: noResultsColumn.implicitWidth
                 implicitHeight: noResultsColumn.implicitHeight
 
@@ -648,7 +428,7 @@ Item {
                     }
 
                     StyledText {
-                        text: Translation.tr("No symbols found")
+                        text: Translation.tr("No emojis found")
                         color: Appearance.colors.colSubtext
                         font.pixelSize: Appearance.font.pixelSize.normal
                         Layout.alignment: Qt.AlignHCenter
@@ -658,7 +438,7 @@ Item {
         }
 
         StyledText {
-            text: Translation.tr("Enter to copy name • Ctrl+S to copy SVG • Search by tag, name or category")
+            text: Translation.tr("Enter to copy emoji • ↑↓←→ to navigate")
             color: Appearance.colors.colSubtext
             font.pixelSize: Appearance.font.pixelSize.smallest
             opacity: 0.6

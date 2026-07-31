@@ -1910,6 +1910,17 @@ Singleton {
                 property bool showNowPlayingBubble: false
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
                 property int baseWidth: 500
+                property int baseHeight: 500
+                property string positionStyle: "default"
+                property real centerVerticalRatio: 0.38
+                property JsonObject suggestions: JsonObject {
+                    property bool enable: true
+                    property int maxSuggestionsPerSection: 5
+                    property bool showFrecency: true
+                    property bool showCommands: false
+                    property bool showApps: true
+                    property bool showAliases: true
+                }
             }
 
             property JsonObject mediaDownloader: JsonObject {

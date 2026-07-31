@@ -325,8 +325,16 @@ Singleton {
         return connectModeActive && Config.options.bar.cornerStyle === 1;
     }
 
+    readonly property bool searchCenterMode: {
+        if (!Config.ready)
+            return false;
+        return Config.options.search.positionStyle === "center";
+    }
+
     readonly property bool searchConnectActive: {
         if (!connectModeActive)
+            return false;
+        if (root.searchCenterMode)
             return false;
         if (Config.options.search.connectStyle !== "connect")
             return false;

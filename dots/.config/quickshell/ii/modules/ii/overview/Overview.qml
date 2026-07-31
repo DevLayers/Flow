@@ -46,7 +46,7 @@ Scope {
                         readonly property bool isBottomBar: !Config.options.bar.vertical && Config.options.bar.bottom
 
                         readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
-                        readonly property string animStyle: Config.options.overview.animationStyle ?? "bounce"
+                        readonly property string animStyle: (GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? "zoom" : (Config.options.overview.animationStyle ?? "bounce")
                         property string searchingText: ""
 
                         WlrLayershell.namespace: "quickshell:overview"
@@ -158,7 +158,7 @@ Scope {
 
                                 // Slide from top/bottom — direction matches top bar / bottom bar
                                 readonly property real slideOffset: (root.isBottomBar ? 1 : -1) * (implicitHeight + root.margin * 2 + Appearance.sizes.elevationMargin + 40)
-                                readonly property real initialYOffset: root.animStyle === "zoom" ? (root.isBottomBar ? 20 : -20) : searchWidgetWrapper.slideOffset
+                                readonly property real initialYOffset: (GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? 0 : (root.animStyle === "zoom" ? (root.isBottomBar ? 20 : -20) : searchWidgetWrapper.slideOffset)
 
                                 // Driven directly — no Behavior, to avoid QML skipping anim while invisible
                                 property real slideY: initialYOffset
@@ -291,7 +291,9 @@ Scope {
                                 }
 
                                 width: implicitWidth
-                                y: root.isBottomBar ? (parent.height - height - (root.margin * 2 + Appearance.sizes.elevationMargin)) : (root.margin * 2 + Appearance.sizes.elevationMargin)
+                                y: GlobalStates.searchCenterMode
+                                    ? (parent.height * Config.options.search.centerVerticalRatio - 29)
+                                    : (root.isBottomBar ? (parent.height - searchWidget.implicitHeight - (root.margin * 2 + Appearance.sizes.elevationMargin)) : (root.margin * 2 + Appearance.sizes.elevationMargin))
                                 anchors.horizontalCenter: parent.horizontalCenter
 
                                 SearchWidget {
@@ -309,7 +311,7 @@ Scope {
                                 anchors.bottom: root.isBottomBar ? searchWidgetWrapper.top : undefined
                                 anchors.top: root.isBottomBar ? undefined : searchWidgetWrapper.bottom
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                active: root.visible && !GlobalStates.searchOnlyMode && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout
+                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout
                                 opacity: searchWidgetWrapper.slideOpacity
 
                                 layer.enabled: true
@@ -333,7 +335,7 @@ Scope {
 
                                 sourceComponent: OverviewWidget {
                                     panelWindow: root
-                                    visible: (root.searchingText == "") && !GlobalStates.searchOnlyMode
+                                    visible: (root.searchingText == "") && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable
                                     monitorIndex: root.monitorIndex
                                 }
                             }
@@ -341,7 +343,7 @@ Scope {
                             Loader { // Scrolling overview
                                 id: scrollingOverviewLoader
                                 anchors.fill: parent
-                                active: root.visible && !GlobalStates.searchOnlyMode && (Config?.options.overview.enable ?? true) && root.isScrollingLayout
+                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout
                                 opacity: searchWidgetWrapper.slideOpacity
 
                                 layer.enabled: true
@@ -366,7 +368,7 @@ Scope {
                                 sourceComponent: ScrollingOverviewWidget {
                                     anchors.fill: parent
                                     panelWindow: root
-                                    visible: (root.searchingText == "") && !GlobalStates.searchOnlyMode
+                                    visible: (root.searchingText == "") && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable
                                     monitorIndex: root.monitorIndex
                                 }
                             }

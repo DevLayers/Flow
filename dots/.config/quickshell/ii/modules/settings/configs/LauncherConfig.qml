@@ -136,6 +136,99 @@ ContentPage {
                 onValueChanged: Config.options.search.baseWidth = value
             }
 
+            ConfigSlider {
+                buttonIcon: "height"
+                text: Translation.tr("Search max height (px)")
+                value: Config.options.search.baseHeight ?? 500
+                from: 300
+                to: 900
+                stepSize: 10
+                usePercentTooltip: false
+                onValueChanged: Config.options.search.baseHeight = value
+            }
+
+            ConfigSwitch {
+                buttonIcon: "center_focus_strong"
+                text: Translation.tr("Center Search on Screen")
+                checked: Config.options.search.positionStyle === "center"
+                onCheckedChanged: {
+                    Config.options.search.positionStyle = checked ? "center" : "default";
+                }
+                StyledToolTip {
+                    text: Translation.tr("Center disables overview and forces zoom animation to prevent bugs")
+                }
+            }
+
+            ConfigSlider {
+                enabled: Config.options.search.positionStyle === "center"
+                buttonIcon: "vertical_align_center"
+                text: Translation.tr("Vertical Center Position (%)")
+                value: Math.round(Config.options.search.centerVerticalRatio * 100)
+                from: 10
+                to: 90
+                stepSize: 1
+                usePercentTooltip: true
+                onValueChanged: Config.options.search.centerVerticalRatio = value / 100
+            }
+
+            NoticeBox {
+                visible: Config.options.search.positionStyle === "center"
+                text: Translation.tr("Note: In Center mode, the Overview workspace previews are disabled and the open animation is fixed to zoom.")
+                materialIcon: "info"
+            }
+
+            ConfigSwitch {
+                buttonIcon: "auto_awesome"
+                text: Translation.tr("Enable Suggestions Panel (Empty query)")
+                checked: Config.options.search.suggestions.enable
+                onCheckedChanged: {
+                    Config.options.search.suggestions.enable = checked;
+                }
+            }
+
+            ConfigSwitch {
+                visible: Config.options.search.suggestions.enable
+                buttonIcon: "trending_up"
+                text: Translation.tr("Show Frecency Suggestions")
+                checked: Config.options.search.suggestions.showFrecency
+                onCheckedChanged: Config.options.search.suggestions.showFrecency = checked
+            }
+
+            ConfigSwitch {
+                visible: Config.options.search.suggestions.enable
+                buttonIcon: "apps"
+                text: Translation.tr("Show Applications Section")
+                checked: Config.options.search.suggestions.showApps
+                onCheckedChanged: Config.options.search.suggestions.showApps = checked
+            }
+
+            ConfigSwitch {
+                visible: Config.options.search.suggestions.enable
+                buttonIcon: "terminal"
+                text: Translation.tr("Show System Commands Section")
+                checked: Config.options.search.suggestions.showCommands
+                onCheckedChanged: Config.options.search.suggestions.showCommands = checked
+            }
+
+            ConfigSwitch {
+                visible: Config.options.search.suggestions.enable
+                buttonIcon: "keyboard_command_key"
+                text: Translation.tr("Show Aliases Section")
+                checked: Config.options.search.suggestions.showAliases
+                onCheckedChanged: Config.options.search.suggestions.showAliases = checked
+            }
+
+            ConfigSpinBox {
+                visible: Config.options.search.suggestions.enable
+                icon: "format_list_numbered"
+                text: Translation.tr("Max suggestions per section")
+                value: Config.options.search.suggestions.maxSuggestionsPerSection
+                from: 2
+                to: 10
+                stepSize: 1
+                onValueChanged: Config.options.search.suggestions.maxSuggestionsPerSection = value
+            }
+
         }
 
     }
