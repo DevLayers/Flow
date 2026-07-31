@@ -33,16 +33,35 @@ Item {
     readonly property var scratchpadWin: scratchpadOpen ? HyprlandData.windowList.find(w => w.workspace && w.workspace.id === currentHyprlandMonitorData.specialWorkspace.id) : null
     readonly property string scratchpadAppId: scratchpadWin ? TaskbarApps.normalizeAppId(scratchpadWin.class) : ""
 
-    property var activeUnpinned: TaskbarApps.apps.filter(a => {
-        if (a.pinned || a.appId === "SEPARATOR" || a.toplevels.length === 0) return false;
-        if (!root.alignToWorkspace) return true;
-        return a.toplevels.some(t => {
+    // Helper to find lowest workspace ID for an app
+    function _getAppMinWorkspace(appId) {
+        let entry = TaskbarApps.apps.find(a => a.appId === appId);
+        if (!entry || !entry.toplevels || entry.toplevels.length === 0) return 999;
+        let minWs = 999;
+        for (let t of entry.toplevels) {
             let win = HyprlandData.windowList.find(w => w.address === t.address || w.title === t.title);
-            return win && win.workspace && win.workspace.id === root.activeWsId;
-        });
-    })
+            if (win && win.workspace && win.workspace.id > 0) {
+                if (win.workspace.id < minWs) minWs = win.workspace.id;
+            }
+        }
+        return minWs;
+    }
+
+    property var activeUnpinned: {
+        let list = TaskbarApps.apps.filter(a => !a.pinned && a.appId !== "SEPARATOR" && a.toplevels.length > 0);
+        if (root.alignToWorkspace) {
+            list.sort((a, b) => root._getAppMinWorkspace(a.appId) - root._getAppMinWorkspace(b.appId));
+        }
+        return list;
+    }
     property bool showSeparator: _workOrder.length > 0 && activeUnpinned.length > 0
-    property var  _workOrder:            pinnedApps.slice()
+    property var  _workOrder: {
+        let list = pinnedApps.slice();
+        if (root.alignToWorkspace) {
+            list.sort((a, b) => root._getAppMinWorkspace(a) - root._getAppMinWorkspace(b));
+        }
+        return list;
+    }
     property bool _dragging:             false
 
     // ── Drag animation state ──────────────────────────────────────────────
@@ -234,10 +253,13 @@ Item {
             acceptedButtons: Qt.NoButton
             onWheel: event => {
                 let delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x;
-                if (delta > 0)
-                    Hyprland.dispatch("workspace", "e-1");
-                else if (delta < 0)
-                    Hyprland.dispatch("workspace", "e+1");
+                if (delta > 0) {
+                    let target = Math.max(1, root.activeWsId - 1);
+                    Hyprland.dispatch("hl.dsp.focus({ workspace = " + target + " })");
+                } else if (delta < 0) {
+                    let target = root.activeWsId + 1;
+                    Hyprland.dispatch("hl.dsp.focus({ workspace = " + target + " })");
+                }
             }
         }
 
@@ -258,14 +280,7 @@ Item {
 
                     property string appId:        root._workOrder[index] ?? ""
                     property var    appEntry:     TaskbarApps.apps.find(a => a.appId === appId) ?? null
-                    property var    appToplevels: {
-                        let list = appEntry?.toplevels ?? [];
-                        if (!root.alignToWorkspace) return list;
-                        return list.filter(t => {
-                            let win = HyprlandData.windowList.find(w => w.address === t.address || w.title === t.title);
-                            return win && win.workspace && win.workspace.id === root.activeWsId;
-                        });
-                    }
+                    property var    appToplevels: appEntry?.toplevels ?? []
                     property var    deskEntry:    DesktopEntries.heuristicLookup(appId)
                     property bool   appActive:    appToplevels.find(t => t.activated) !== undefined
                     readonly property bool isScratchpadApp: root.scratchpadOpen && TaskbarApps.normalizeAppId(appId) === root.scratchpadAppId
@@ -339,6 +354,7 @@ Item {
                     // ── DragHandler ──────────────────────────────────────────
                     DragHandler {
                         id: dragHandler
+                        enabled: !root.alignToWorkspace
                         target: null
                         grabPermissions: PointerHandler.CanTakeOverFromAnything
 
@@ -382,7 +398,7 @@ Item {
                         }
                         middleClickAction: () => { slotItem.deskEntry?.execute() }
                         altAction:         () => { TaskbarApps.togglePin(slotItem.appId) }
-                        backClickAction:   () => { Hyprland.dispatch("togglespecialworkspace", "scratchpad") }
+                        backClickAction:   () => { Hyprland.dispatch("hl.dsp.workspace.toggle_special('special')") }
 
                         contentItem: Item {
                             anchors.centerIn: parent
@@ -492,14 +508,7 @@ Item {
                     id: activeSlot
                     required property var modelData
 
-                    property var activeToplevels: {
-                        let list = modelData.toplevels ?? [];
-                        if (!root.alignToWorkspace) return list;
-                        return list.filter(t => {
-                            let win = HyprlandData.windowList.find(w => w.address === t.address || w.title === t.title);
-                            return win && win.workspace && win.workspace.id === root.activeWsId;
-                        });
-                    }
+                    property var activeToplevels: modelData.toplevels ?? []
                     property bool appIsActive: activeToplevels.find(t => t.activated) !== undefined
                     readonly property bool isScratchpadApp: root.scratchpadOpen && TaskbarApps.normalizeAppId(modelData.appId) === root.scratchpadAppId
                     property int  _lastFocused: -1
@@ -542,7 +551,7 @@ Item {
                             TaskbarApps.togglePin(activeSlot.modelData.appId)
                         }
                         backClickAction: () => {
-                            Hyprland.dispatch("togglespecialworkspace", "scratchpad")
+                            Hyprland.dispatch("hl.dsp.workspace.toggle_special('special')")
                         }
 
                         contentItem: Item {
