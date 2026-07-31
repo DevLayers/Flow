@@ -274,6 +274,205 @@ Singleton {
         Persistent.states.background.lockBehaviorMigrated = true;
     }
 
+    // ── Schema versioning & type-drift repair ─────────────────────────────────
+    // JsonAdapter coerces rather than rejects, and the damaging coercions are
+    // silent: an int landing on a string property becomes "1" and matches no
+    // branch; a string landing on a list property is split into one entry per
+    // character ("left" -> ["l","e","f","t"]); a list of objects landing on
+    // list<string> becomes ["", ""]. The next write persists the wreckage, so
+    // the damage outlives the version that caused it, which is why the only fix
+    // users find is deleting config.json outright.
+    //
+    // Both passes below work on the raw file rather than the adapter, because
+    // by the time the adapter is readable the original values are gone.
+    // Migration runs first so a retyped key can be converted; whatever is still
+    // unrepresentable afterwards is replaced with its schema default.
+    //
+    // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
+    // whenever an existing key changes type or meaning.
+    readonly property int currentConfigVersion: 1
+    // Defaults have to be captured before the file lands, because deserializing
+    // is what destroys them. FileView loads asynchronously, so at component
+    // completion the adapter still holds nothing but the QML defaults.
+    property var defaultOptions: null
+    property bool configRepaired: false
+
+    function snapshotDefaults(source) {
+        if (source === null || typeof source !== "object")
+            return source;
+        if (root.isArrayLike(source)) {
+            let copy = [];
+            for (let i = 0; i < source.length; ++i) {
+                copy.push(root.snapshotDefaults(source[i]));
+            }
+            return copy;
+        }
+        let copy = {};
+        for (const key in source) {
+            if (key === "objectName")
+                continue;
+            const value = source[key];
+            if (typeof value === "function")
+                continue;
+            copy[key] = root.snapshotDefaults(value);
+        }
+        return copy;
+    }
+
+    // A config written before versioning existed has no `configVersion` key, so
+    // those files read back as 0 and every migration runs. A fresh config is
+    // stamped with the current version when defaults are seeded, so it
+    // correctly skips all of them.
+    function migrateRaw(raw) {
+        const from = raw.configVersion ?? 0;
+        if (from >= root.currentConfigVersion)
+            return false;
+
+        // v0 -> v1: sidebar.position went from int to string ("more
+        // understandable config naming", Jan 2026). Old files still hold 0-3,
+        // which JsonAdapter turns into the strings "0".."3" — matching nothing,
+        // so every sidebar position silently behaved as "default".
+        if (from < 1 && raw.sidebar !== undefined && typeof raw.sidebar.position === "number") {
+            const legacyPositions = ["default", "inverted", "left", "right"];
+            const previous = raw.sidebar.position;
+            if (previous >= 0 && previous < legacyPositions.length) {
+                raw.sidebar.position = legacyPositions[previous];
+                console.log(`[Config] Migrated sidebar.position ${previous} -> ${raw.sidebar.position}`);
+            }
+        }
+
+        raw.configVersion = root.currentConfigVersion;
+        console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
+        return true;
+    }
+
+    // list<var>/list<string> are QML sequences: indexable with a numeric length,
+    // but Array.isArray is false for them.
+    function isArrayLike(value) {
+        return typeof value === "object" && value !== null && typeof value.length === "number";
+    }
+
+    // The adapter is the type oracle: whatever a value was coerced into, its
+    // type is by definition the type the schema declares.
+    function typesConflict(rawValue, qmlValue) {
+        if (rawValue === null || rawValue === undefined)
+            return false;
+        // Unknown keys have no counterpart to conflict with. JsonAdapter drops
+        // them on the next write anyway.
+        if (qmlValue === undefined || qmlValue === null)
+            return false;
+
+        const rawIsArray = Array.isArray(rawValue);
+        const qmlIsArray = root.isArrayLike(qmlValue);
+        if (rawIsArray !== qmlIsArray)
+            return true;
+
+        if (rawIsArray) {
+            // Coercion is positional and length-preserving, so mismatched
+            // lengths mean this is not a coerced copy and nothing can be
+            // concluded. Equal lengths let each element be compared in place,
+            // which is what catches [{...}] collapsing into [""].
+            if (rawValue.length !== qmlValue.length)
+                return false;
+            for (let i = 0; i < rawValue.length; ++i) {
+                if (typeof rawValue[i] !== typeof qmlValue[i])
+                    return true;
+            }
+            return false;
+        }
+
+        const rawIsObject = typeof rawValue === "object";
+        const qmlIsObject = typeof qmlValue === "object";
+        if (rawIsObject !== qmlIsObject)
+            return true;
+        if (rawIsObject)
+            return false;
+
+        // Scalars. number<->bool is deliberately allowed: 0/1 for a bool is a
+        // plausible hand-edit and coerces to the right thing.
+        if (typeof rawValue === "string" && typeof qmlValue === "number")
+            return true;
+        if (typeof rawValue === "number" && typeof qmlValue === "string")
+            return true;
+        if (typeof rawValue === "string" && typeof qmlValue === "boolean")
+            return true;
+        return false;
+    }
+
+    function repairTypeConflicts(rawObject, qmlObject, defaultObject, prefix, repaired) {
+        for (const key in rawObject) {
+            const rawValue = rawObject[key];
+            const qmlValue = qmlObject[key];
+            const defaultValue = defaultObject ? defaultObject[key] : undefined;
+            const path = prefix ? `${prefix}.${key}` : key;
+
+            if (root.typesConflict(rawValue, qmlValue)) {
+                // Writing the default back rather than dropping the key means
+                // the adapter picks the right value up from this same write; a
+                // missing key would leave the coerced garbage in place.
+                if (defaultValue === undefined)
+                    continue;
+                console.warn(`[Config] Resetting ${path} to its default: the stored value no longer matches the schema`);
+                rawObject[key] = defaultValue;
+                repaired.push(path);
+                continue;
+            }
+            // Recurse into plain objects only — array elements are free-form.
+            if (rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && qmlValue && typeof qmlValue === "object" && !root.isArrayLike(qmlValue)) {
+                root.repairTypeConflicts(rawValue, qmlValue, defaultValue, path, repaired);
+            }
+        }
+    }
+
+    // Returns true when the file needed rewriting. Repair runs at most once per
+    // session: it is a one-time upgrade step, and capping it removes any chance
+    // of a write/reload loop.
+    function repairConfigFile() {
+        if (root.configRepaired || root.defaultOptions === null)
+            return false;
+
+        let raw;
+        try {
+            raw = JSON.parse(configFileView.text());
+        } catch (e) {
+            // Unparseable file: FileView would not have loaded it, so there is
+            // nothing to repair here.
+            return false;
+        }
+        if (!raw || typeof raw !== "object")
+            return false;
+
+        const migrated = root.migrateRaw(raw);
+        let repaired = [];
+        root.repairTypeConflicts(raw, root.options, root.defaultOptions, "", repaired);
+
+        if (!migrated && repaired.length === 0)
+            return false;
+
+        root.configRepaired = true;
+        // Keep a copy before healing — the reset values are the only record of
+        // what the user had, and a wrong guess here should be recoverable.
+        if (repaired.length > 0)
+            Quickshell.execDetached(["cp", "--", root.filePath, `${root.filePath}.bak`]);
+
+        // Deferred: a setText issued from inside onLoaded is treated as part of
+        // the load still in flight and its save gets dropped.
+        const payload = JSON.stringify(raw, null, 2);
+        Qt.callLater(() => {
+            configFileView.setText(payload);
+            // setText re-deserializes, so the adapter now holds the repaired
+            // values and rounding can be migrated off them.
+            root.migrateRoundingConfig();
+        });
+        return true;
+    }
+
+    // Runs before the async file load completes, so this captures the pure QML
+    // defaults — the only chance to, since deserializing overwrites them.
+    Component.onCompleted: {
+        root.defaultOptions = root.snapshotDefaults(root.options);
+    }
+
     Component.onDestruction: {
         root.blockWrites = true;
     }
@@ -294,6 +493,10 @@ Singleton {
         }
         onLoaded: {
             root.ready = true;
+            // When a repair is queued, rounding is migrated from inside it —
+            // the values in the adapter right now are the coerced ones.
+            if (root.repairConfigFile())
+                return;
             migrateRoundingConfig();
         }
         onLoadFailed: error => {
@@ -305,6 +508,9 @@ Singleton {
                 // Singleton has been alive past the grace window and the file
                 // is still gone — legitimately missing (first-run install or
                 // user manually deleted it). Safe to seed defaults.
+                // Stamp the schema version so a brand-new file is not mistaken
+                // for a pre-versioning one and re-migrated on next start.
+                root.options.configVersion = root.currentConfigVersion;
                 writeAdapter();
                 // Mark ready so subsequent user-triggered writes go through
                 // (fileWriteTimer guards on `root.ready`).
@@ -323,6 +529,10 @@ Singleton {
 
         JsonAdapter {
             id: configOptionsJsonAdapter
+
+            // 0 means "written before schema versioning existed" — see
+            // migrateRaw(). Never default this to currentConfigVersion.
+            property int configVersion: 0
 
             property string panelFamily: "ii" // "ii", "waffle"
 
