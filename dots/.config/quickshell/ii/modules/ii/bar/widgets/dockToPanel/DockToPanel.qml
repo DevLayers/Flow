@@ -390,11 +390,11 @@ Item {
 
                                         radius: Appearance.rounding.full
                                         implicitWidth: root.vertical
-                                            ? 2
-                                            : (isSingleActive ? 12 : (topCount <= 3 ? 4 : 2))
+                                            ? 3
+                                            : (isSingleActive ? 14 : (topCount <= 3 ? 4 : 3))
                                         implicitHeight: root.vertical
-                                            ? (isSingleActive ? 12 : (topCount <= 3 ? 4 : 2))
-                                            : 2
+                                            ? (isSingleActive ? 14 : (topCount <= 3 ? 4 : 3))
+                                            : 3
                                         color: slotItem.appActive
                                             ? Appearance.colors.colPrimary
                                             : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.75)
@@ -522,14 +522,14 @@ Item {
 
                                         radius: Appearance.rounding.full
                                         implicitWidth: root.vertical
-                                            ? 2
-                                            : (isSingleActive ? 12 : (topCount <= 3 ? 4 : 2))
+                                            ? 3
+                                            : (isSingleActive ? 14 : (topCount <= 3 ? 4 : 3))
                                         implicitHeight: root.vertical
-                                            ? (isSingleActive ? 12 : (topCount <= 3 ? 4 : 2))
-                                            : 2
+                                            ? (isSingleActive ? 14 : (topCount <= 3 ? 4 : 3))
+                                            : 3
                                         color: activeSlot.appIsActive
                                             ? Appearance.colors.colPrimary
-                                            : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.75)
+                                            : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.45)
 
                                         Behavior on implicitWidth {
                                             NumberAnimation {
