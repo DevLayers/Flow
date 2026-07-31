@@ -106,5 +106,25 @@ ContentPage {
                 }
             }
         }
+        ConfigSwitch {
+            buttonIcon: "zoom_in"
+            text: Translation.tr("Enable macOS icon magnification")
+            checked: Config.options.dockToPanel.enableMacOsMagnification
+            onCheckedChanged: {
+                Config.options.dockToPanel.enableMacOsMagnification = checked;
+            }
+        }
+        ConfigSpinBox {
+            visible: Config.options.dockToPanel.enableMacOsMagnification ?? false
+            icon: "zoom_in_map"
+            text: Translation.tr("Magnification intensity (%)")
+            value: Math.round((Config.options.dockToPanel.macOsMagnificationScale ?? 1.6) * 100)
+            from: 120
+            to: 220
+            stepSize: 10
+            onValueChanged: {
+                Config.options.dockToPanel.macOsMagnificationScale = value / 100.0;
+            }
+        }
     }
 }

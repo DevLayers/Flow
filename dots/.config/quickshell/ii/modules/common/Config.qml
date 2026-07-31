@@ -1457,6 +1457,8 @@ Singleton {
                 property bool alignToWorkspace: false
                 property bool enableTooltip: false
                 property bool enablePreview: false
+                property bool enableMacOsMagnification: false
+                property real macOsMagnificationScale: 1.6
             }
 
             property JsonObject hyprland: JsonObject {

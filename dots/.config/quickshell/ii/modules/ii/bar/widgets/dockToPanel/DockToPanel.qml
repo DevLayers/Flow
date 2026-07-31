@@ -46,9 +46,35 @@ Item {
     readonly property real maxWindowPreviewWidth: 300
     readonly property real windowControlsHeight: 30
     readonly property bool isVertical: root.vertical
-    readonly property string dockEffectivePosition: {
-        if (vertical) return (Config.options?.bar?.left ?? false) ? "left" : "right";
-        return (Config.options?.bar?.bottom ?? false) ? "bottom" : "top";
+    property Item hoveredSlot: null
+    readonly property bool enableMacOsMagnification: Config.options?.dockToPanel?.enableMacOsMagnification ?? false
+    readonly property int magTransformOrigin: {
+        let pos = root.dockEffectivePosition;
+        if (pos === "top") return Item.Top;
+        if (pos === "bottom") return Item.Bottom;
+        if (pos === "left") return Item.Left;
+        if (pos === "right") return Item.Right;
+        return Item.Center;
+    }
+
+    readonly property real macOsMagnificationScale: Config.options?.dockToPanel?.macOsMagnificationScale ?? 1.6
+
+    function _getSlotMagScale(targetSlot) {
+        if (!enableMacOsMagnification || !buttonHovered || !hoveredSlot) return 1.0;
+        let maxScale = macOsMagnificationScale;
+        if (targetSlot === hoveredSlot) return maxScale;
+        let children = [];
+        for (let i = 0; i < flow.children.length; i++) {
+            let child = flow.children[i];
+            if (child && child.isAppSlot) children.push(child);
+        }
+        let myIdx = children.indexOf(targetSlot);
+        let hvdIdx = children.indexOf(hoveredSlot);
+        if (myIdx < 0 || hvdIdx < 0) return 1.0;
+        let dist = Math.abs(myIdx - hvdIdx);
+        if (dist === 1) return 1.0 + (maxScale - 1.0) * 0.45;
+        if (dist === 2) return 1.0 + (maxScale - 1.0) * 0.10;
+        return 1.0;
     }
 
     Timer {
@@ -56,6 +82,7 @@ Item {
         interval: 250
         onTriggered: {
             root.buttonHovered = false;
+            root.hoveredSlot = null;
         }
     }
 
@@ -341,9 +368,14 @@ Item {
                         return 0
                     }
 
-                    z: isDragged ? 100 : 0
+                    readonly property bool isAppSlot: true
+                    readonly property real magScale: root._getSlotMagScale(slotItem)
+                    readonly property real baseScale: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.85) : (isDragged ? 1.05 : 1.0)
                     opacity: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.35) : (isDragged ? 0.85 : 1.0)
-                    scale: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.85) : (isDragged ? 1.05 : 1.0)
+                    scale: baseScale
+
+                    width:  root.btnSize
+                    height: root.btnSize
 
                     Behavior on opacity {
                         enabled: !root._suppressTranslateAnim
@@ -383,10 +415,6 @@ Item {
                         }
                     }
 
-                    width:  root.btnSize
-                    height: root.btnSize
-
-
                     // ── DragHandler ──────────────────────────────────────────
                     DragHandler {
                         id: dragHandler
@@ -417,13 +445,40 @@ Item {
 
                     // ── Main button ──────────────────────────────────────────
                     RippleButton {
-                        anchors.fill: parent
+                        id: mainBtn
+                        width:  root.vertical ? Math.round(root.btnSize * slotItem.magScale) : parent.width
+                        height: root.vertical ? parent.height : Math.round(root.btnSize * slotItem.magScale)
+                        z: slotItem.isDragged ? 100 : Math.round(slotItem.magScale * 10)
+
+                        anchors.top:    (!root.vertical && root.dockEffectivePosition === "top")    ? parent.top    : undefined
+                        anchors.bottom: (!root.vertical && root.dockEffectivePosition === "bottom") ? parent.bottom : undefined
+                        anchors.left:   (root.vertical  && root.dockEffectivePosition === "left")   ? parent.left   : undefined
+                        anchors.right:  (root.vertical  && root.dockEffectivePosition === "right")  ? parent.right  : undefined
+
                         buttonRadius: Appearance.rounding.small
                         hoverEnabled: true
+                        colBackgroundHover: root.enableMacOsMagnification ? "transparent" : (Appearance?.colors.colLayer1Hover ?? "#E5DFED")
+                        colBackgroundActive: root.enableMacOsMagnification ? "transparent" : (Appearance?.colors.colLayer1Active ?? colBackgroundHover)
+
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
 
                         enteredAction: () => {
                             if (root.suppressHover || root.dragging) return;
                             hoverGraceTimer.stop();
+                            root.hoveredSlot = slotItem;
                             root.lastHoveredButton = slotItem;
                             root.buttonHovered = true;
                         }
@@ -457,14 +512,36 @@ Item {
                         }
 
                         contentItem: Item {
-                            anchors.centerIn: parent
+                            anchors.fill: parent
 
                             IconImage {
                                 id: pinnedIcon
-                                anchors.centerIn: parent
                                 source: Quickshell.iconPath(
                                     AppSearch.guessIcon(slotItem.appId), "image-missing")
-                                implicitSize: root.iconSize
+                                implicitSize: Math.round(root.iconSize * slotItem.magScale)
+
+                                anchors.top: (!root.vertical && root.dockEffectivePosition === "top") ? parent.top : undefined
+                                anchors.bottom: (!root.vertical && root.dockEffectivePosition === "bottom") ? parent.bottom : undefined
+                                anchors.left: (root.vertical && root.dockEffectivePosition === "left") ? parent.left : undefined
+                                anchors.right: (root.vertical && root.dockEffectivePosition === "right") ? parent.right : undefined
+
+                                anchors.topMargin: (!root.vertical && root.dockEffectivePosition === "top") ? Math.round((root.btnSize - root.iconSize) / 2) : 0
+                                anchors.bottomMargin: (!root.vertical && root.dockEffectivePosition === "bottom") ? Math.round((root.btnSize - root.iconSize) / 2) : 0
+                                anchors.leftMargin: (root.vertical && root.dockEffectivePosition === "left") ? Math.round((root.btnSize - root.iconSize) / 2) : 0
+                                anchors.rightMargin: (root.vertical && root.dockEffectivePosition === "right") ? Math.round((root.btnSize - root.iconSize) / 2) : 0
+
+                                anchors.horizontalCenter: root.vertical ? undefined : parent.horizontalCenter
+                                anchors.verticalCenter: !root.vertical ? (
+                                    (root.dockEffectivePosition === "top" || root.dockEffectivePosition === "bottom") ? undefined : parent.verticalCenter
+                                ) : undefined
+
+                                Behavior on implicitSize {
+                                    NumberAnimation {
+                                        duration: Appearance.animation.elementMoveFast.duration
+                                        easing.type: Appearance.animation.elementMoveFast.type
+                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                    }
+                                }
                             }
 
                             Loader {
@@ -572,10 +649,14 @@ Item {
                     readonly property bool hovered: root.lastHoveredButton === activeSlot && root.buttonHovered
                     property int  _lastFocused: -1
 
+                    readonly property bool isAppSlot: true
+                    readonly property real magScale: root._getSlotMagScale(activeSlot)
+                    readonly property real baseScale: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.85) : 1.0
+                    opacity: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.35) : 1.0
+                    scale: baseScale
+
                     width:  root.btnSize
                     height: root.btnSize
-                    opacity: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.35) : 1.0
-                    scale: root.scratchpadOpen ? (isScratchpadApp ? 1.0 : 0.85) : 1.0
 
                     Behavior on opacity {
                         NumberAnimation {
@@ -593,13 +674,40 @@ Item {
                     }
 
                     RippleButton {
-                        anchors.fill: parent
+                        id: activeBtn
+                        width:  root.vertical ? Math.round(root.btnSize * activeSlot.magScale) : parent.width
+                        height: root.vertical ? parent.height : Math.round(root.btnSize * activeSlot.magScale)
+                        z: Math.round(activeSlot.magScale * 10)
+
+                        anchors.top:    (!root.vertical && root.dockEffectivePosition === "top")    ? parent.top    : undefined
+                        anchors.bottom: (!root.vertical && root.dockEffectivePosition === "bottom") ? parent.bottom : undefined
+                        anchors.left:   (root.vertical  && root.dockEffectivePosition === "left")   ? parent.left   : undefined
+                        anchors.right:  (root.vertical  && root.dockEffectivePosition === "right")  ? parent.right  : undefined
+
                         buttonRadius: Appearance.rounding.small
                         hoverEnabled: true
+                        colBackgroundHover: root.enableMacOsMagnification ? "transparent" : (Appearance?.colors.colLayer1Hover ?? "#E5DFED")
+                        colBackgroundActive: root.enableMacOsMagnification ? "transparent" : (Appearance?.colors.colLayer1Active ?? colBackgroundHover)
+
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
 
                         enteredAction: () => {
                             if (root.suppressHover || root.dragging) return;
                             hoverGraceTimer.stop();
+                            root.hoveredSlot = activeSlot;
                             root.lastHoveredButton = activeSlot;
                             root.buttonHovered = true;
                         }
@@ -632,14 +740,36 @@ Item {
                         }
 
                         contentItem: Item {
-                            anchors.centerIn: parent
+                            anchors.fill: parent
 
                             IconImage {
                                 id: activeIcon
-                                anchors.centerIn: parent
                                 source: Quickshell.iconPath(
                                     AppSearch.guessIcon(activeSlot.modelData.appId), "image-missing")
-                                implicitSize: root.iconSize
+                                implicitSize: Math.round(root.iconSize * activeSlot.magScale)
+
+                                anchors.top: (!root.vertical && root.dockEffectivePosition === "top") ? parent.top : undefined
+                                anchors.bottom: (!root.vertical && root.dockEffectivePosition === "bottom") ? parent.bottom : undefined
+                                anchors.left: (root.vertical && root.dockEffectivePosition === "left") ? parent.left : undefined
+                                anchors.right: (root.vertical && root.dockEffectivePosition === "right") ? parent.right : undefined
+
+                                anchors.topMargin: (!root.vertical && root.dockEffectivePosition === "top") ? Math.round((root.btnSize - root.iconSize) / 2) : 0
+                                anchors.bottomMargin: (!root.vertical && root.dockEffectivePosition === "bottom") ? Math.round((root.btnSize - root.iconSize) / 2) : 0
+                                anchors.leftMargin: (root.vertical && root.dockEffectivePosition === "left") ? Math.round((root.btnSize - root.iconSize) / 2) : 0
+                                anchors.rightMargin: (root.vertical && root.dockEffectivePosition === "right") ? Math.round((root.btnSize - root.iconSize) / 2) : 0
+
+                                anchors.horizontalCenter: root.vertical ? undefined : parent.horizontalCenter
+                                anchors.verticalCenter: !root.vertical ? (
+                                    (root.dockEffectivePosition === "top" || root.dockEffectivePosition === "bottom") ? undefined : parent.verticalCenter
+                                ) : undefined
+
+                                Behavior on implicitSize {
+                                    NumberAnimation {
+                                        duration: Appearance.animation.elementMoveFast.duration
+                                        easing.type: Appearance.animation.elementMoveFast.type
+                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                    }
+                                }
                             }
 
                             Loader {
