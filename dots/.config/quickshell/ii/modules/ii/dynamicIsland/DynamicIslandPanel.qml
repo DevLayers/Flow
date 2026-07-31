@@ -32,7 +32,10 @@ Scope {
     }
 
     // State bindings
-    readonly property bool searchActive: GlobalStates.overviewOpen && (win.screen ? win.screen.name === GlobalStates.activeSearchMonitor : false)
+    // centerInBar: DI never handles search — overviewOpen is handled by the default floating search panel
+    readonly property bool searchActive: GlobalStates.overviewOpen
+        && !Config.options.bar.floatingNotch.centerInBar
+        && (win.screen ? win.screen.name === GlobalStates.activeSearchMonitor : false)
     readonly property bool osdActive: GlobalStates.osdVolumeOpen
     readonly property bool notificationActive: Notifications.popupList.length > 0
     readonly property bool recordingActive: (Persistent.states.screenRecord && Persistent.states.screenRecord.active) || false
@@ -230,7 +233,7 @@ Scope {
         target: Battery
         function onChargeStateChanged() {
             console.log("[DI Battery] chargeState changed:", Battery.chargeState, "isCharging:", Battery.isCharging, "available:", Battery.available, "isPluggedIn:", Battery.isPluggedIn, "local charging:", root._batteryCharging);
-            if (Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBattery) {
+            if ((Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableBattery) {
                 if (Battery.isCharging || Battery.isPluggedIn) {
                     root.batteryNotifActive = true;
                     batteryNotifTimer.interval = 5000;
@@ -320,7 +323,7 @@ Scope {
             if (cleanTop !== "" && cleanTop !== root.lastClipboardItem) {
                 root.lastClipboardItem = cleanTop;
                 console.log("[DynamicIsland] Cliphist clipboard updated! Top item: ", cleanTop);
-                if (Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableClipboard) {
+                if ((Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableClipboard) {
                     root.clipboardNotifActive = true;
                     clipboardNotifTimer.restart();
                 }
@@ -332,7 +335,7 @@ Scope {
     Connections {
         target: HyprlandXkb
         function onCurrentLayoutNameChanged() {
-            if (Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableKeyboard && root.prevLayout !== "" && root.prevLayout !== HyprlandXkb.currentLayoutName && HyprlandXkb.layoutCodes.length > 1) {
+            if ((Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableKeyboard && root.prevLayout !== "" && root.prevLayout !== HyprlandXkb.currentLayoutName && HyprlandXkb.layoutCodes.length > 1) {
                 root.keyboardNotifActive = true;
                 keyboardTimer.restart();
             }
@@ -348,7 +351,7 @@ Scope {
 
     // Workspaces transition notification status
     onActiveWsIdChanged: {
-        if (prevWsId !== -1 && activeWsId !== -1 && prevWsId !== activeWsId && Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableWorkspaces) {
+        if (prevWsId !== -1 && activeWsId !== -1 && prevWsId !== activeWsId && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableWorkspaces) {
             root.workspaceNotifActive = true;
             workspaceTimer.restart();
         }
@@ -413,13 +416,14 @@ Scope {
             };
         }
         if (type === "workspaces") {
+            let wsW = workspaceWidgetRef ? Math.max(workspaceWidgetRef.implicitWidth, workspaceWidgetRef.implicitWidth) : (Config.options.bar.workspaces.shown * 32 + 40);
             return {
                 type: "workspaces",
                 source: "widgets/FloatingNotchWorkspaces.qml",
                 contractedH: Config.options.bar.floatingNotch.heightWorkspaces,
                 expandedH: 140,
-                contractedW: workspaceWidgetRef ? workspaceWidgetRef.implicitWidth : (Config.options.bar.workspaces.shown * 26 + 20),
-                expandedW: workspaceWidgetRef ? workspaceWidgetRef.implicitWidth : ((Config.options.bar.workspaces.shown * 26 * 1.15) + 20)
+                contractedW: workspaceWidgetRef ? workspaceWidgetRef.implicitWidth : wsW,
+                expandedW: workspaceWidgetRef ? (workspaceWidgetRef.implicitWidth * 1.15) : (wsW * 1.15)
             };
         }
         if (type === "keyboard") {
@@ -1098,7 +1102,8 @@ Scope {
             y: {
                 if (idleHidden)
                     return -targetH - 10;
-                if (root.hasTopBar)
+                // centerInBar: float at absolute top (y=0), overlapping bar center
+                if (root.hasTopBar && !Config.options.bar.floatingNotch.centerInBar)
                     return Appearance.sizes.barHeight;
                 if (root.usingWrappedFrame)
                     return Config.options.appearance.wrappedFrameThickness;

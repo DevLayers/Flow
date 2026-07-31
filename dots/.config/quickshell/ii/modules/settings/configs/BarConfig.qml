@@ -50,6 +50,14 @@ Item {
                 icon: "style"
                 Layout.fillWidth: true
 
+                // Locked to Default when centerInBar active
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.centerInBar
+                    materialIcon: "lock"
+                    text: Translation.tr("Shell mode is locked to Default while 'Dynamic Island in bar center' is active. The search runs independently of the Dynamic Island in this mode.")
+                }
+
                 ConfigSelectionArray {
                     id: shellStyleSelector
                     currentValue: Config.options.sidebar.sidebarStyle
@@ -57,6 +65,7 @@ Item {
                         Config.options.sidebar.sidebarStyle = newValue;
                     }
                     options: {
+                        const centerLocked = Config.options.bar.floatingNotch.centerInBar;
                         var opts = [
                             {
                                 "displayName": Translation.tr("Default"),
@@ -66,7 +75,8 @@ Item {
                             {
                                 "displayName": Translation.tr("Connect"),
                                 "icon": "phone_android",
-                                "value": "connect"
+                                "value": "connect",
+                                "enabled": !centerLocked
                             }
                         ];
                         if (Config.options.bar.floatingNotch.enable && Config.options.sidebar.sidebarStyle === "connect") {
@@ -108,34 +118,48 @@ Item {
                 title: Translation.tr("Bar position")
                 icon: "dock"
 
+                // Locked when centerInBar: must be Top
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.centerInBar
+                    materialIcon: "lock"
+                    text: Translation.tr("Bar position is locked to Top while 'Dynamic Island in bar center' is active. Disable that feature first to change position.")
+                }
+
                 ConfigSelectionArray {
                     currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
                     onSelected: newValue => {
                         Config.options.bar.bottom = (newValue & 1) !== 0;
                         Config.options.bar.vertical = (newValue & 2) !== 0;
                     }
-                    options: [
-                        {
-                            "displayName": Translation.tr("Top"),
-                            "icon": "arrow_upward",
-                            "value": 0
-                        },
-                        {
-                            "displayName": Translation.tr("Left"),
-                            "icon": "arrow_back",
-                            "value": 2
-                        },
-                        {
-                            "displayName": Translation.tr("Bottom"),
-                            "icon": "arrow_downward",
-                            "value": 1
-                        },
-                        {
-                            "displayName": Translation.tr("Right"),
-                            "icon": "arrow_forward",
-                            "value": 3
-                        }
-                    ]
+                    options: {
+                        const locked = Config.options.bar.floatingNotch.centerInBar;
+                        return [
+                            {
+                                "displayName": Translation.tr("Top"),
+                                "icon": "arrow_upward",
+                                "value": 0
+                            },
+                            {
+                                "displayName": Translation.tr("Left"),
+                                "icon": "arrow_back",
+                                "value": 2,
+                                "enabled": !locked
+                            },
+                            {
+                                "displayName": Translation.tr("Bottom"),
+                                "icon": "arrow_downward",
+                                "value": 1,
+                                "enabled": !locked
+                            },
+                            {
+                                "displayName": Translation.tr("Right"),
+                                "icon": "arrow_forward",
+                                "value": 3,
+                                "enabled": !locked
+                            }
+                        ];
+                    }
                 }
             }
 
@@ -289,6 +313,14 @@ Item {
                 icon: "format_paint"
                 tooltip: Translation.tr("Adaptive style makes the bar background transparent when there are no active windows")
 
+                // Locked when centerInBar: only Transparent(0) or Islands(3) allowed
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.centerInBar
+                    materialIcon: "lock"
+                    text: Translation.tr("Bar background is locked to Transparent or Islands while 'Dynamic Island in bar center' is active. Visible and Adaptive options are unavailable.")
+                }
+
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.barBackgroundStyle
                     onSelected: newValue => {
@@ -309,28 +341,33 @@ Item {
                         }
                     }
 
-                    options: [
-                        {
-                            "displayName": Translation.tr("Visible"),
-                            "icon": "visibility",
-                            "value": 1
-                        },
-                        {
-                            "displayName": Translation.tr("Adaptive"),
-                            "icon": "masked_transitions",
-                            "value": 2
-                        },
-                        {
-                            "displayName": Translation.tr("Transparent"),
-                            "icon": "opacity",
-                            "value": 0
-                        },
-                        {
-                            "displayName": Translation.tr("Islands"),
-                            "icon": "grid_view",
-                            "value": 3
-                        }
-                    ]
+                    options: {
+                        const locked = Config.options.bar.floatingNotch.centerInBar;
+                        return [
+                            {
+                                "displayName": Translation.tr("Visible"),
+                                "icon": "visibility",
+                                "value": 1,
+                                "enabled": !locked
+                            },
+                            {
+                                "displayName": Translation.tr("Adaptive"),
+                                "icon": "masked_transitions",
+                                "value": 2,
+                                "enabled": !locked
+                            },
+                            {
+                                "displayName": Translation.tr("Transparent"),
+                                "icon": "opacity",
+                                "value": 0
+                            },
+                            {
+                                "displayName": Translation.tr("Islands"),
+                                "icon": "grid_view",
+                                "value": 3
+                            }
+                        ];
+                    }
                 }
             }
 
@@ -414,38 +451,51 @@ Item {
                 icon: "fullscreen_exit"
                 Layout.fillWidth: true
 
+                // Locked when centerInBar: Wrapped(3)/Edge(4) break the visual
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.centerInBar
+                    materialIcon: "lock"
+                    text: Translation.tr("Wrapped Frame and Edge modes are locked while 'Dynamic Island in bar center' is active. They would render floating above the island, causing visual conflicts.")
+                }
+
                 ConfigSelectionArray {
                     currentValue: Config.options.appearance.fakeScreenRounding
                     onSelected: newValue => {
                         Config.options.appearance.fakeScreenRounding = newValue;
                     }
-                    options: [
-                        {
-                            "displayName": Translation.tr("No"),
-                            "icon": "close",
-                            "value": 0
-                        },
-                        {
-                            "displayName": Translation.tr("Yes"),
-                            "icon": "check",
-                            "value": 1
-                        },
-                        {
-                            "displayName": Translation.tr("When not fullscreen"),
-                            "icon": "fullscreen_exit",
-                            "value": 2
-                        },
-                        {
-                            "displayName": Translation.tr("Wrapped"),
-                            "icon": "capture",
-                            "value": 3
-                        },
-                        {
-                            "displayName": Translation.tr("Edge"),
-                            "icon": "border_bottom",
-                            "value": 4
-                        }
-                    ]
+                    options: {
+                        const locked = Config.options.bar.floatingNotch.centerInBar;
+                        return [
+                            {
+                                "displayName": Translation.tr("No"),
+                                "icon": "close",
+                                "value": 0
+                            },
+                            {
+                                "displayName": Translation.tr("Yes"),
+                                "icon": "check",
+                                "value": 1
+                            },
+                            {
+                                "displayName": Translation.tr("When not fullscreen"),
+                                "icon": "fullscreen_exit",
+                                "value": 2
+                            },
+                            {
+                                "displayName": Translation.tr("Wrapped"),
+                                "icon": "capture",
+                                "value": 3,
+                                "enabled": !locked
+                            },
+                            {
+                                "displayName": Translation.tr("Edge"),
+                                "icon": "border_bottom",
+                                "value": 4,
+                                "enabled": !locked
+                            }
+                        ];
+                    }
                 }
             }
 
@@ -530,9 +580,20 @@ Item {
                     text: Translation.tr("Widget centering is disabled when Islands bar background is active. All center widgets follow the island layout automatically.")
                 }
 
+                // CenterInBar lock: center widgets must be hidden
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.centerInBar
+                    materialIcon: "lock"
+                    text: Translation.tr("Center widgets are locked while 'Dynamic Island in bar center' is active. The Dynamic Island occupies the center of the bar — adding visible widgets here would conflict with it.")
+                }
+
                 ConfigListView {
                     barSection: 1
                     listModel: Config.options.bar.layouts.center
+                    // Disable editing center when centerInBar is active
+                    enabled: !Config.options.bar.floatingNotch.centerInBar
+                    opacity: Config.options.bar.floatingNotch.centerInBar ? 0.4 : 1.0
                     onUpdated: newList => {
                         Config.options.bar.layouts.center = newList;
                     }
@@ -563,8 +624,16 @@ Item {
                 buttonIcon: "visibility_off"
                 text: Translation.tr("Automatically hide")
                 checked: Config.options.bar.autoHide.enable
+                // Locked when centerInBar: DI would lose its anchor if bar auto-hides
+                enabled: !Config.options.bar.floatingNotch.centerInBar
                 onCheckedChanged: {
                     Config.options.bar.autoHide.enable = checked;
+                }
+
+                StyledToolTip {
+                    text: Config.options.bar.floatingNotch.centerInBar
+                        ? Translation.tr("Auto-hide is locked while 'Dynamic Island in bar center' is active.")
+                        : Translation.tr("Automatically hide the bar when not in use")
                 }
             }
 

@@ -21,6 +21,6 @@ Item {
     readonly property int centerIdx: Config.options.bar.barBackgroundStyle === 3 ? -1 : fullModel.findIndex(item => item.centered)
 
     readonly property var leftList: centerIdx === -1 ? root._emptyLayout : fullModel.slice(0, centerIdx)
-    readonly property var centerList: centerIdx === -1 ? fullModel.slice() : [fullModel[centerIdx]]
+    readonly property var centerList: (Config.options.bar.floatingNotch.centerInBar) ? root._emptyLayout : (centerIdx === -1 ? fullModel.slice() : [fullModel[centerIdx]])
     readonly property var rightList: centerIdx === -1 ? root._emptyLayout : fullModel.slice(centerIdx + 1)
 }

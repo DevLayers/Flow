@@ -1370,6 +1370,7 @@ Singleton {
                     property bool disableProgress: false
                     property bool disableBattery: false
                     property bool clickToExpand: false
+                    property bool centerInBar: false // "Dynamic Island in bar center" integration mode
 
                     // Contracted Heights
                     property int heightHome: 36

@@ -28,7 +28,7 @@ ColumnLayout {
     signal contractedHeightEdited(int value)
 
     visible: masterEnabled
-    spacing: 0
+    spacing: 4
 
     ConfigSwitch {
         buttonIcon: root.buttonIcon
