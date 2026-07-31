@@ -313,7 +313,7 @@ MouseArea {
             MaterialBarWidget {
                 primaryComponent: batteryIndicatorComponent
                 secondaryComponent: batteryPercentageComponent
-                secondaryExtraMargin: 4
+                secondaryExtraMargin: 6
                 componentsPadding: 6
 
                 showSecondary: Config.options.bar.battery.showSecondary
@@ -352,7 +352,6 @@ MouseArea {
                                 id: batteryProgress
                                 width: 26
                                 height: 14
-
                                 radius: 4.5
 
                                 value: root.percentage

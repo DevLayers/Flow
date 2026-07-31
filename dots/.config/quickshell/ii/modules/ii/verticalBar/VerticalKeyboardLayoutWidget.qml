@@ -89,6 +89,7 @@ MouseArea {
                 primaryComponent: keyboardIcon
                 secondaryComponent: keyboardLayout
                 primaryIsCircle: true
+                secondaryIsCircleWhenAlone: true
                 
                 showSecondary: Config.options.bar.keyboardLayout.showSecondary
                 secondaryOpposite: Config.options.bar.keyboardLayout.secondaryOpposite
