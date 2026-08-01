@@ -203,6 +203,12 @@ command: ["bash", "-c",
     // restart. KillMode=process matters just as much: at the default,
     // control-group, systemd cleans the unit's cgroup up when the script exits
     // and takes the Quickshell it just started down with it.
+    //
+    // Which is also why the unit is named per run rather than once. The shell
+    // the script leaves behind keeps living in the unit's cgroup, and a unit
+    // whose cgroup is not empty is never released, dead or not — a fixed name
+    // is free exactly once and then refuses every run after it. The stale unit
+    // is collected on its own the moment the next run stops that shell.
     function runAction(modeName, args) {
         Config.blockWrites = true;
         actionProc.logOutput = "";
@@ -219,7 +225,11 @@ command: ["bash", "-c",
             return;
         }
 
-        const cmd = ["systemd-run", "--user", "--collect", "--wait", "--quiet", "--unit=ii-p3drovfx-action", "--property=KillMode=process", "--property=StandardOutput=file:" + page.actionLogPath, "--property=StandardError=inherit",
+        // The wrapper empties the log before systemd-run replaces it, so a run
+        // that never reaches the unit — the name taken, the script missing —
+        // shows its own error instead of the last run's output scrolling under
+        // it. exec keeps systemd-run's exit code as this Process' exit code.
+        const cmd = ["bash", "-c", 'mkdir -p "${1%/*}"; : > "$1"; shift; exec "$@"', "ii-p3drovfx-action", page.actionLogPath, "systemd-run", "--user", "--collect", "--wait", "--quiet", "--unit=ii-p3drovfx-action-" + Date.now(), "--property=KillMode=process", "--property=StandardOutput=file:" + page.actionLogPath, "--property=StandardError=inherit",
             // systemd hands a unit with no TTY TERM=dumb, which the script reads
             // as "strip colour" — the log box parses those SGR codes.
             "--setenv=TERM=xterm-256color", "--setenv=COLORTERM=truecolor"];
