@@ -45,6 +45,9 @@ Scope {
     PanelLoader { component: OnScreenKeyboard {} }
     PanelLoader { component: Overlay {} }
     PanelLoader { component: ScreenTranslator {} }
-    PanelLoader { component: Usage {} }
+    PanelLoader {
+        extraCondition: Config.options.appStats.overlayEnabled
+        component: Usage {}
+    }
     PanelLoader { component: WallpaperSelector {} }
 }

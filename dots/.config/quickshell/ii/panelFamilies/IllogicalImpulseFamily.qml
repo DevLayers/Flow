@@ -69,6 +69,7 @@ Scope {
         component: Cheatsheet {}
     }
     PanelLoader {
+        extraCondition: Config.options.appStats.overlayEnabled
         component: Usage {}
     }
     PanelLoader {

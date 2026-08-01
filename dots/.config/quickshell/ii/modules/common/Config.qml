@@ -754,6 +754,27 @@ Singleton {
                 property string volumeMixer: `~/.config/hypr/hyprland/scripts/launch_first_available.sh "pavucontrol-qt" "pavucontrol"`
             }
 
+            // Per-app usage and energy history. The sampler is a separate process
+            // that reads its flags once at startup, so everything above the display
+            // options relaunches it rather than taking effect in place.
+            property JsonObject appStats: JsonObject {
+                property bool enable: true
+                property int sampleIntervalMs: 10000
+                property int flushIntervalMs: 60000
+                property int retentionDays: 30
+                // "auto" prefers RAPL and falls back to battery drain; "rapl",
+                // "battery" and "none" pin the choice.
+                property string energySource: "auto"
+                // Seconds without input before foreground time stops accruing.
+                // 0 turns the idle monitor off, and time keeps running.
+                property int idleTimeoutSec: 300
+                // Daemons with no window are recorded either way; this only decides
+                // whether they are worth showing next to the apps.
+                property bool trackHeadless: true
+                property bool showHeadless: false
+                property bool overlayEnabled: true
+            }
+
             property list<var> bluetoothDeviceImages: []
 
             property JsonObject background: JsonObject {
