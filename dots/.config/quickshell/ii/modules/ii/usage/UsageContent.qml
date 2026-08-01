@@ -456,6 +456,9 @@ Item {
                             labelStride: root.isSingleDay ? 3 : Math.max(1, Math.ceil(root.dates.length / 10))
                             highlightIndex: root.isSingleDay ? DateTime.clock.date.getHours() : root.dates.length - 1
                             timeScale: root.metric.kind === "duration"
+                            // Millijoules per watt-hour, the figure the axis is
+                            // labelled in.
+                            valueUnit: root.metric.kind === "energy" ? 3600000 : 1
                             formatValue: value => root.formatMetric(value)
                             formatTick: value => root.formatTick(value)
                         }

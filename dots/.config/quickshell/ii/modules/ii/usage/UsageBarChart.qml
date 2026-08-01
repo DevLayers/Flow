@@ -33,6 +33,10 @@ Item {
     /// Durations round up to 5 min, 1 h, 6 h rather than to 1-2-5 x 10ⁿ, which
     /// would label the axis with two thousand seconds.
     property bool timeScale: false
+    /// One unit of whatever the ticks are labelled in, in the values' own terms.
+    /// Millijoules land on round watt-hours only if the step is chosen in
+    /// watt-hours; ignored on a time scale, which has a ladder of its own.
+    property real valueUnit: 1
     property int tickCount: 4
 
     property color barColor: Appearance.colors.colPrimary
@@ -45,18 +49,38 @@ Item {
         return max;
     }
     readonly property bool hasData: root.maxValue > 0
-    readonly property real tickStep: root.hasData ? root.niceStep(root.maxValue / root.tickCount) : 0
-    /// Bars are measured against a rounded-up ceiling rather than against the
-    /// tallest bar, so the top of the axis is a figure worth reading and a given
-    /// bar height means the same thing from one range to the next.
-    readonly property real axisMax: root.tickStep > 0 ? Math.ceil(root.maxValue / root.tickStep) * root.tickStep : 0
-    readonly property var ticks: {
-        const out = [];
-        if (root.tickStep <= 0)
-            return out;
-        for (let value = root.tickStep; value <= root.axisMax + 1e-6; value += root.tickStep) out.push(value);
-        return out;
+    /**
+     * Step, ceiling and tick values, decided in one go.
+     *
+     * Bars are measured against a rounded-up ceiling rather than against the
+     * tallest bar, so the top of the axis is a figure worth reading and a given
+     * bar height means the same thing from one range to the next.
+     *
+     * These have to be one binding and not three. Switching metric changes the
+     * scale and the values, and QML updates the two in separate steps: for one
+     * pass the step belongs to the new scale while the ceiling still belongs to
+     * the old one, and the loop between them runs to tens of thousands of labels
+     * before the next pass settles it back to four.
+     */
+    readonly property var scale: {
+        if (root.maxValue <= 0)
+            return {
+                "step": 0,
+                "max": 0,
+                "ticks": []
+            };
+        const step = root.niceStep(root.maxValue / root.tickCount);
+        const max = Math.ceil(root.maxValue / step) * step;
+        const ticks = [];
+        for (let value = step; value <= max + 1e-6; value += step) ticks.push(value);
+        return {
+            "step": step,
+            "max": max,
+            "ticks": ticks
+        };
     }
+    readonly property real axisMax: root.scale.max
+    readonly property var ticks: root.scale.ticks
 
     /// Bars grow into place the first time the chart appears, then hold still. A
     /// range, metric or selection change replaces every value at once, and
@@ -66,22 +90,26 @@ Item {
 
     implicitHeight: 160
 
-    /// Smallest step at or above `target` that a person would have picked.
+    /// Smallest step at or above `target` that a person would have picked. Never
+    /// below it: a step short of the target is a step the ceiling needs more than
+    /// `tickCount` of, and the axis grows a label per day of the range.
     function niceStep(target) {
-        if (root.timeScale) {
+        if (root.timeScale && target <= 86400) {
             const steps = [1, 5, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400];
             for (const step of steps) {
                 if (step >= target)
                     return step;
             }
-            return steps[steps.length - 1];
         }
-        const magnitude = Math.pow(10, Math.floor(Math.log10(Math.max(target, 1e-9))));
+        // Past a day, and for everything that is not a duration, 1-2-5 x 10ⁿ.
+        const unit = root.timeScale ? 86400 : root.valueUnit;
+        const scaled = target / unit;
+        const magnitude = Math.pow(10, Math.floor(Math.log10(Math.max(scaled, 1e-9))));
         for (const multiple of [1, 2, 5]) {
-            if (magnitude * multiple >= target)
-                return magnitude * multiple;
+            if (magnitude * multiple >= scaled)
+                return unit * magnitude * multiple;
         }
-        return magnitude * 10;
+        return unit * magnitude * 10;
     }
 
     Timer {
