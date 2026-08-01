@@ -49,6 +49,8 @@ Singleton {
     property string shellConfigPath: `${Directories.shellConfig}/${Directories.shellConfigName}`
     property string todoPath: FileUtils.trimFileProtocol(`${Directories.state}/user/todo.json`)
     property string appUsagePath: FileUtils.trimFileProtocol(`${Directories.state}/user/app_usage.json`)
+    // One file per local day, written by the app_stats sampler.
+    property string appStats: FileUtils.trimFileProtocol(`${Directories.state}/user/app_stats`)
     property string commandsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/commands.json`)
     property string notesPath: FileUtils.trimFileProtocol(`${Directories.state}/user/notes.json`)
     property string conflictCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/conflict-killer`)
