@@ -238,6 +238,35 @@ Item {
             }
         }
         Revealer {
+            reveal: Config.options.bar.dashboardButton.showVpn && VpnService.active
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: vpnWrapper
+                vertical: root.vertical
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "key"
+                    iconSize: Appearance.font.pixelSize.larger
+                    color: vpnWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showTailscale && TailscaleService.active
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: tailscaleWrapper
+                vertical: root.vertical
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "hub"
+                    iconSize: Appearance.font.pixelSize.normal
+                    fill: 1
+                    color: tailscaleWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                }
+            }
+        }
+        Revealer {
             reveal: Config.options.bar.dashboardButton.showNotifications && (Notifications.silent || Notifications.unread > 0)
             vertical: root.vertical
             ExpressiveIconWrapper {

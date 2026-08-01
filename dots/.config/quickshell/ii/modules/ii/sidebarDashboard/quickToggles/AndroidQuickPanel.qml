@@ -43,7 +43,14 @@ AbstractQuickPanel {
     readonly property real baseCellHeight: 56
 
     // Toggles config
-    readonly property list<string> availableToggleTypes: ["network", "bluetooth", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "screenRecord", "colorPicker", "videoEditor", "onScreenKeyboard", "mic", "audio", "notifications", "autoDnd", "powerProfile", "musicRecognition", "antiFlashbang", "soundcoreAnc", "systemSounds", "localSend", "mediaWidget", "volumeSlider", "micSlider", "brightnessSlider", "gammaSlider", "keyboardBacklight"]
+    readonly property list<string> availableToggleTypes: ["network", "bluetooth", "vpn", "tailscale", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "screenRecord", "colorPicker", "videoEditor", "onScreenKeyboard", "mic", "audio", "notifications", "autoDnd", "powerProfile", "musicRecognition", "antiFlashbang", "soundcoreAnc", "systemSounds", "localSend", "mediaWidget", "volumeSlider", "micSlider", "brightnessSlider", "gammaSlider", "keyboardBacklight"]
+    function isToggleVisible(toggleType) {
+        if (toggleType === "vpn")
+            return (Config.options?.vpn?.enabled ?? true) && (Config.options?.vpn?.showInQuickToggles ?? true)
+        if (toggleType === "tailscale")
+            return (Config.options?.tailscale?.enabled ?? true) && (Config.options?.tailscale?.showInQuickToggles ?? true)
+        return true
+    }
     readonly property int columns: Config.options.sidebar.quickToggles.android.columns
 
     // Pages data — reads from Config.
@@ -66,7 +73,7 @@ AbstractQuickPanel {
             rawPages = [cfg.pages];
         }
 
-        return rawPages;
+        return rawPages.map(page => (page || []).filter(toggle => toggle && root.isToggleVisible(toggle.type)));
     }
 
     // Current page toggles
@@ -92,7 +99,7 @@ AbstractQuickPanel {
     }
 
     readonly property list<var> unusedToggles: {
-        const types = availableToggleTypes.filter(type => !allUsedTypes.includes(type));
+        const types = availableToggleTypes.filter(type => root.isToggleVisible(type) && !allUsedTypes.includes(type));
         return types.map(type => {
             return {
                 type: type,
@@ -438,6 +445,8 @@ AbstractQuickPanel {
                     onOpenWifiDialog: root.openWifiDialog()
                     onOpenDarkModeDialog: root.openDarkModeDialog()
                     onOpenLocalSendDialog: root.openLocalSendDialog()
+                    onOpenVpnDialog: root.openVpnDialog()
+                    onOpenTailscaleDialog: root.openTailscaleDialog()
                 }
             }
         }
@@ -575,6 +584,8 @@ AbstractQuickPanel {
                                         onOpenWifiDialog: root.openWifiDialog()
                                         onOpenDarkModeDialog: root.openDarkModeDialog()
                                         onOpenLocalSendDialog: root.openLocalSendDialog()
+                                        onOpenVpnDialog: root.openVpnDialog()
+                                        onOpenTailscaleDialog: root.openTailscaleDialog()
                                     }
                                 }
                             }
@@ -663,7 +674,7 @@ AbstractQuickPanel {
                         spacing: 8
                         MaterialSymbol {
                             text: "auto_awesome_motion"
-                            iconSize: Appearance.font.pixelSize.medium
+                            font.pixelSize: Appearance.font.pixelSize.medium ?? Appearance.font.pixelSize.normal
                             color: Appearance.colors.colPrimary
                         }
                         StyledText {
@@ -800,6 +811,16 @@ AbstractQuickPanel {
                         gridColumns: root.columns
                         panel: root
                         gridRef: unusedRows
+
+                        onOpenAudioOutputDialog: root.openAudioOutputDialog()
+                        onOpenAudioInputDialog: root.openAudioInputDialog()
+                        onOpenBluetoothDialog: root.openBluetoothDialog()
+                        onOpenNightLightDialog: root.openNightLightDialog()
+                        onOpenWifiDialog: root.openWifiDialog()
+                        onOpenDarkModeDialog: root.openDarkModeDialog()
+                        onOpenLocalSendDialog: root.openLocalSendDialog()
+                        onOpenVpnDialog: root.openVpnDialog()
+                        onOpenTailscaleDialog: root.openTailscaleDialog()
                     }
                 }
             }

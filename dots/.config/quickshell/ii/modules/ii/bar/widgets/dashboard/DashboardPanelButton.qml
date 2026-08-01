@@ -141,5 +141,19 @@ RippleButton { // Right sidebar button
             iconSize: Appearance.font.pixelSize.larger
             color: rightSidebarButton.colText
         }
+        MaterialSymbol {
+            Layout.leftMargin: indicatorsRowLayout.realSpacing
+            visible: Config.options.bar.dashboardButton.showVpn && VpnService.active
+            text: "key"
+            iconSize: Appearance.font.pixelSize.larger
+            color: rightSidebarButton.colText
+        }
+        MaterialSymbol {
+            Layout.leftMargin: indicatorsRowLayout.realSpacing
+            visible: Config.options.bar.dashboardButton.showTailscale && TailscaleService.active
+            text: "hub"
+            iconSize: Appearance.font.pixelSize.larger
+            color: rightSidebarButton.colText
+        }
     }
 }

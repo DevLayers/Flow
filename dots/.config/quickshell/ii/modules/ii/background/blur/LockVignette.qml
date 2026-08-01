@@ -13,7 +13,7 @@ Item {
 
     Loader {
         id: vignetteLoader
-        active: Config.options.lock.vignette.enable && (GlobalStates.screenLocked || vignetteAnim.running)
+        active: Config.options.lock.vignette.enable && (GlobalStates.screenLocked || (typeof vignetteAnim !== "undefined" && vignetteAnim ? vignetteAnim.running : false))
         anchors.fill: parent
         sourceComponent: Item {
             anchors.fill: parent

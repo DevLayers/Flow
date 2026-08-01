@@ -258,14 +258,17 @@ Scope {
     }
 
     Connections {
-        target: PowerProfiles
+        target: (typeof PowerProfiles !== "undefined") ? PowerProfiles : null
+        ignoreUnknownSignals: true
         function onProfileChanged() {
-            if (Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBattery && root._prevPowerProfile !== PowerProfiles.profile) {
+            if (typeof PowerProfiles !== "undefined" && Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBattery && root._prevPowerProfile !== PowerProfiles.profile) {
                 root.batteryNotifActive = true;
                 batteryNotifTimer.interval = 5000;
                 batteryNotifTimer.restart();
             }
-            root._prevPowerProfile = PowerProfiles.profile;
+            if (typeof PowerProfiles !== "undefined") {
+                root._prevPowerProfile = PowerProfiles.profile;
+            }
         }
     }
 

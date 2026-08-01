@@ -91,6 +91,22 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "vpn_lock"
+            text: Translation.tr("Show VPN status")
+            checked: Config.options.bar.dashboardButton.showVpn
+            onCheckedChanged: Config.options.bar.dashboardButton.showVpn = checked
+            StyledToolTip { text: Translation.tr("Show the VPN icon when a VPN connection is active") }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "hub"
+            text: Translation.tr("Show Tailscale status")
+            checked: Config.options.bar.dashboardButton.showTailscale
+            onCheckedChanged: Config.options.bar.dashboardButton.showTailscale = checked
+            StyledToolTip { text: Translation.tr("Show the Tailscale icon when the mesh is connected") }
+        }
+
+        ConfigSwitch {
             buttonIcon: "notifications"
             text: Translation.tr("Show Notifications")
             checked: Config.options.bar.dashboardButton.showNotifications

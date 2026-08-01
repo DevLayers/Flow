@@ -335,6 +335,7 @@ PanelWindow {
                 target: widgetStateManager
                 property: "draggingActive"
                 value: widgetCanvas.draggingActive
+                when: typeof widgetStateManager !== "undefined" && widgetStateManager && widgetStateManager.hasOwnProperty("draggingActive")
             }
 
             states: State {

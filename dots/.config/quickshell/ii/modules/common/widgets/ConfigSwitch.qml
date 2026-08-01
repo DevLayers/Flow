@@ -15,6 +15,7 @@ RippleButton {
     Layout.fillWidth: true
     implicitHeight: contentLayout.implicitHeight + 20
     font.pixelSize: Appearance.font.pixelSize.small
+    property bool forceUniformRadius: false
     useDynamicRadius: true
 
     onClicked: checked = !checked
@@ -104,8 +105,8 @@ RippleButton {
         return count;
     }
 
-    property bool isFirst: (typeof index !== "undefined") ? (index === 0) : (itemIndex === 0)
-    property bool isLast: (typeof index !== "undefined") ? (index === totalItems - 1) : (itemIndex === totalItems - 1)
+    property bool isFirst: forceUniformRadius ? true : ((typeof index !== "undefined") ? (index === 0) : (itemIndex === 0))
+    property bool isLast: forceUniformRadius ? true : ((typeof index !== "undefined") ? (index === totalItems - 1) : (itemIndex === totalItems - 1))
 
 
 
@@ -178,10 +179,10 @@ RippleButton {
 
     readonly property real rFull: Appearance.rounding.scale === 0 ? 0 : Math.min(height / 2, Appearance.rounding.large)
 
-    topLeftRadius: (isPressed || prevIsPressed) ? rFull : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    topRightRadius: (isPressed || prevIsPressed) ? rFull : (isHorizontalLayout ? (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall))
-    bottomLeftRadius: (isPressed || nextIsPressed) ? rFull : (isHorizontalLayout ? (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall))
-    bottomRightRadius: (isPressed || nextIsPressed) ? rFull : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    topLeftRadius: forceUniformRadius ? rFull : ((isPressed || prevIsPressed) ? rFull : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall))
+    topRightRadius: forceUniformRadius ? rFull : ((isPressed || prevIsPressed) ? rFull : (isHorizontalLayout ? (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)))
+    bottomLeftRadius: forceUniformRadius ? rFull : ((isPressed || nextIsPressed) ? rFull : (isHorizontalLayout ? (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)))
+    bottomRightRadius: forceUniformRadius ? rFull : ((isPressed || nextIsPressed) ? rFull : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall))
 
     Behavior on topLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
     Behavior on topRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }

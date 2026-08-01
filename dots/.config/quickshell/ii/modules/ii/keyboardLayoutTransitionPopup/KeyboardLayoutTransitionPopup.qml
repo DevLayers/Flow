@@ -37,12 +37,12 @@ Scope {
     }
 
     LazyLoader {
-        active: root.isOpen || (popupContent ? popupContent.isExitAnimRunning : false)
+        active: root.isOpen || (typeof popupContent !== "undefined" && popupContent ? popupContent.isExitAnimRunning : false)
 
         component: PanelWindow {
             id: popupWindow
             color: "transparent"
-            visible: Quickshell.screens.length > 0 && (root.isOpen || (popupContent ? popupContent.isExitAnimRunning : false))
+            visible: Quickshell.screens.length > 0 && (root.isOpen || (typeof popupContent !== "undefined" && popupContent ? popupContent.isExitAnimRunning : false))
             screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
 
             WlrLayershell.namespace: "quickshell:keyboardLayoutTransitionPopup"

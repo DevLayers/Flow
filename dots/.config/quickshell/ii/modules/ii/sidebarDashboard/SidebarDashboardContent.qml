@@ -22,6 +22,8 @@ import qs.modules.ii.sidebarDashboard.volumeMixer
 import qs.modules.ii.sidebarDashboard.wifiNetworks
 import qs.modules.ii.sidebarDashboard.darkMode
 import qs.modules.ii.sidebarDashboard.localSend
+import qs.modules.ii.sidebarDashboard.vpn
+import qs.modules.ii.sidebarDashboard.tailscale
 
 Item {
     id: root
@@ -34,7 +36,9 @@ Item {
     property bool showWifiDialog: false
     property bool showDarkModeDialog: false
     property bool showLocalSendDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog
+    property bool showVpnDialog: false
+    property bool showTailscaleDialog: false
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog
     property bool editMode: false
 
     property int entranceTrigger: -1
@@ -68,6 +72,8 @@ Item {
                 root.showAudioInputDialog = false;
                 root.showDarkModeDialog = false;
                 root.showLocalSendDialog = false;
+                root.showVpnDialog = false;
+                root.showTailscaleDialog = false;
             }
         }
     }
@@ -150,7 +156,10 @@ Item {
             LoaderedQuickPanelImplementation {
                 id: classicQuickPanelLoader
                 styleName: "classic"
-                sourceComponent: ClassicQuickPanel {}
+                sourceComponent: ClassicQuickPanel {
+                    onOpenVpnDialog: root.showVpnDialog = true
+                    onOpenTailscaleDialog: root.showTailscaleDialog = true
+                }
             }
 
             LoaderedQuickPanelImplementation {
@@ -158,6 +167,8 @@ Item {
                 styleName: "android"
                 sourceComponent: AndroidQuickPanel {
                     editMode: root.editMode
+                    onOpenVpnDialog: root.showVpnDialog = true
+                    onOpenTailscaleDialog: root.showTailscaleDialog = true
                 }
             }
 
@@ -236,6 +247,16 @@ Item {
     ToggleDialog {
         shownPropertyString: "showLocalSendDialog"
         dialog: LocalSendDialog {}
+    }
+
+    ToggleDialog {
+        shownPropertyString: "showVpnDialog"
+        dialog: VpnDialog {}
+    }
+
+    ToggleDialog {
+        shownPropertyString: "showTailscaleDialog"
+        dialog: TailscaleDialog {}
     }
 
     component ToggleDialog: Loader {
