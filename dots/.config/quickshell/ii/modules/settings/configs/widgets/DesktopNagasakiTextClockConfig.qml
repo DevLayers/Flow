@@ -72,10 +72,10 @@ ContentPage {
             ConfigSlider {
                 buttonIcon: "format_size"
                 text: Translation.tr("Font Size")
-                from: 50
-                to: 600
+                from: 100
+                to: 400
                 stepSize: 10
-                value: Config.options.background.widgets.nagasaki_text.size
+                value: Config.options.background.widgets.nagasaki_text.size ?? 200
                 onValueChanged: {
                     Config.options.background.widgets.nagasaki_text.size = Math.round(value);
                 }

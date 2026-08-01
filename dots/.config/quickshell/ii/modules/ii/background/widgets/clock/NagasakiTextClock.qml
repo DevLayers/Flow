@@ -12,8 +12,9 @@ AbstractBackgroundWidget {
 
     configEntryName: "nagasaki_text"
 
-    implicitWidth: 240
-    implicitHeight: 240
+    readonly property real configSize: Config.options.background.widgets.nagasaki_text.size ?? 200
+    implicitWidth: configSize
+    implicitHeight: configSize
 
     FontLoader {
         id: nagasakiFont
@@ -26,12 +27,13 @@ AbstractBackgroundWidget {
 
     readonly property color textColor: WidgetColorScheme.cardBgColor
 
-    StyledText {
+    Text {
         id: timeLabel
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: root.height * 0.12
         text: root.timeText
         font.family: nagasakiFont.name
-        font.pixelSize: Config.options.background.widgets.nagasaki_text.size
+        font.pixelSize: root.height * 0.8
         color: root.textColor
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter

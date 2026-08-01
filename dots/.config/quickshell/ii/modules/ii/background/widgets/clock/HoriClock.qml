@@ -32,17 +32,17 @@ AbstractBackgroundWidget {
     readonly property color tintBold: WidgetColorScheme.accentColor
 
     // ── Layout geometry (horizontal, 320×200) ──
-    readonly property real tileW:      root.width  * 0.20
+    readonly property real tileW:      root.width  * 0.22
     readonly property real tileH:      root.height * 0.72
     readonly property real glyphSize:  root.height * 0.60
     readonly property real posY:       root.height * 0.14
 
     readonly property real pos0X:      root.width  * 0.00
-    readonly property real pos1X:      root.width  * 0.16
-    readonly property real pos2X:      root.width  * 0.44
-    readonly property real pos3X:      root.width  * 0.58
+    readonly property real pos1X:      root.width  * 0.17
+    readonly property real pos2X:      root.width  * 0.48
+    readonly property real pos3X:      root.width  * 0.65
 
-    readonly property real colonX:     root.width  * 0.40
+    readonly property real colonX:     root.width  * 0.43
     readonly property real colonDotSize: root.height * 0.07
     readonly property real colonGap:   root.height * 0.08
 

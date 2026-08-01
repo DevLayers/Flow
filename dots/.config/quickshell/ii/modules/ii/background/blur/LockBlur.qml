@@ -30,8 +30,8 @@ Item {
         sourceComponent: MultiEffect {
             source: lockBlurRoot.sourceItem
             blurEnabled: true
-            blurMax: 64
-            blur: Math.min(Config.options.lock.blur.radius / 4, 24) / 64
+            blurMax: 96
+            blur: Math.min(1.0, (Config.options.lock.blur.radius ?? 40) / 100)
 
             Rectangle {
                 opacity: 1.0

@@ -140,6 +140,25 @@ Item {
                     }
                 }
 
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    buttonIcon: "desktop_windows"
+                    text: Translation.tr("Show widgets only in one monitor")
+                    checked: Config.options.background.widgets.showOnlyOnSingleMonitor ?? false
+                    onCheckedChanged: {
+                        Config.options.background.widgets.showOnlyOnSingleMonitor = checked;
+                    }
+                }
+
+                MonitorPicker {
+                    Layout.fillWidth: true
+                    visible: Config.options.background.widgets.showOnlyOnSingleMonitor ?? false
+                    currentValue: Config.options.background.widgets.targetMonitor ?? ""
+                    onSelected: newValue => {
+                        Config.options.background.widgets.targetMonitor = newValue;
+                    }
+                }
+
                 ContentSubsection {
                     title: Translation.tr("Widget Color Scheme")
                     icon: "palette"

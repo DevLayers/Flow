@@ -16,7 +16,7 @@ AbstractBackgroundWidget {
     implicitWidth: 240
     implicitHeight: 240
 
-    readonly property color outerCircleColor: WidgetColorScheme.accentColor
+    readonly property color outerCircleColor: WidgetColorScheme.pillBgColor
     readonly property color cookieBgColor: WidgetColorScheme.cardBgColor
     readonly property color textColorOnCookie: WidgetColorScheme.textColorOnBg
 

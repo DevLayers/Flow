@@ -731,6 +731,8 @@ Singleton {
                 property bool blurGradientExperiment: false
                 property JsonObject widgets: JsonObject {
                     property string colorScheme: "default"
+                    property bool showOnlyOnSingleMonitor: false
+                    property string targetMonitor: ""
                     property JsonObject clock_cookie: JsonObject {
                         property bool enable: false
                         property bool disableAnimationOnLock: false
