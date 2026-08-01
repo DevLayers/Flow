@@ -1402,22 +1402,54 @@ build_quickshell() {
 # reload onto half the new config with the old process' state still loaded —
 # which is how config.json ends up rewritten with defaults. Every path that
 # touches the tree stops the shell first and starts it again afterwards.
+# `qs` is a symlink to `quickshell`, and the process name follows whichever one
+# was used to launch it, so both have to be matched. Missing one leaves a second
+# instance alive writing its own schema over config.json.
+quickshell_running() {
+    pgrep -x qs >/dev/null 2>&1 || pgrep -x quickshell >/dev/null 2>&1
+}
+
 stop_quickshell() {
     [[ "$OPT_RESTART" == true ]] || return 0
+    quickshell_running || return 0
 
-    # `qs` is a symlink to `quickshell`, and the process name follows whichever
-    # one was used to launch it, so both have to be matched. Missing one leaves
-    # a second instance alive writing its own schema over config.json.
-    local killed=false
-    for name in qs quickshell; do
-        pkill -x "$name" 2>/dev/null && killed=true
+    # A signalled Quickshell exits without reaping the processes it spawned, so
+    # each restart leaves its long-lived children — the nmcli monitor above all —
+    # running and reparented to init, one more every time. Asking it to quit over
+    # its own IPC socket is the only shutdown that cleans up after itself, and it
+    # gives Component.onDestruction, which blocks the final config.json write,
+    # a proper chance to run.
+    local bin=""
+    have qs && bin="qs"
+    [[ -n "$bin" ]] || { have quickshell && bin="quickshell"; }
+
+    local stopped=false
+    if [[ -n "$bin" ]]; then
+        if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
+            "$bin" kill -c ii >>"$LOG_FILE" 2>&1 && stopped=true
+        else
+            "$bin" kill --path "$TARGET_DIR" >>"$LOG_FILE" 2>&1 && stopped=true
+        fi
+    fi
+
+    # `kill` returns once the request is sent, not once the shell is gone.
+    local waited=0
+    while [[ "$stopped" == true ]] && (( waited < 30 )) && quickshell_running; do
+        sleep 0.1
+        waited=$((waited + 1))
     done
-    [[ "$killed" == true ]] || return 0
 
-    # Give the old instance time to run Component.onDestruction, which is what
-    # blocks its final config.json write.
-    sleep 0.5
-    ui_ok "Stopped" "running Quickshell instance"
+    # Wedged, or too old to answer over IPC: the blunt path, which is the one
+    # that strands children, so it is only taken when it has to be.
+    local killed=false
+    if quickshell_running; then
+        for name in qs quickshell; do
+            pkill -x "$name" 2>/dev/null && killed=true
+        done
+        [[ "$killed" == true ]] && sleep 0.5
+    fi
+
+    [[ "$stopped" == true || "$killed" == true ]] && ui_ok "Stopped" "running Quickshell instance"
     return 0
 }
 

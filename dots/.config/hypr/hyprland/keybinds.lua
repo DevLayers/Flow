@@ -52,7 +52,11 @@ hl.bind("CTRL + SUPER + ALT + T", hl.dsp.global("quickshell:wallpaperSelectorRan
 hl.bind("CTRL + SUPER + SHIFT + D", hl.dsp.global("quickshell:toggleLightDark"),
     { description = "Shell: Toggle light/dark mode" })
 hl.bind("CTRL + SUPER + T", hl.dsp.exec_cmd(qsIsAlive .. " || " .. qsScripts .. "/colors/switchwall.sh"))
-hl.bind("CTRL + SUPER + R", hl.dsp.exec_cmd("killall ydotool qs quickshell; qs -c $qsConfig &"),
+-- `qs kill` is the only shutdown that also takes the shell's child processes
+-- down with it, and it returns once the instance is really gone; killall is
+-- kept for an instance too wedged to answer over IPC.
+hl.bind("CTRL + SUPER + R",
+    hl.dsp.exec_cmd("killall ydotool; qs kill -c $qsConfig || killall qs quickshell 2>/dev/null; qs -c $qsConfig &"),
     { description = "Shell: Restart widgets" })
 hl.bind("CTRL + SUPER + P", hl.dsp.global("quickshell:panelFamilyCycle"), { description = "Shell: Cycle panel family" })
 
