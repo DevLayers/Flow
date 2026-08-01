@@ -401,7 +401,7 @@ Singleton {
         running: false
         command: ["pkill", "-f", "kdeconnect/monitor.py"]
         onExited: (code, status) => {
-            monitorProc.command = ["python3", root._scriptPath]
+            monitorProc.command = ProcUtils.pdeath(["python3", root._scriptPath])
             monitorProc.running = true
         }
     }
