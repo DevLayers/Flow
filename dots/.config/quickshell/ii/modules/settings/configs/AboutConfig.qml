@@ -28,6 +28,11 @@ ContentPage {
 
     readonly property string setupScript: FileUtils.trimFileProtocol(Directories.home + "/.local/share/ii-p3drovfx/setup-ii-p3drovfx.sh")
 
+    // The transient unit writes here instead of to a pipe: a pipe back into this
+    // process dies with it, and the script keeps running long after that.
+    readonly property string actionLogPath: FileUtils.trimFileProtocol(Directories.home + "/.local/state/ii-p3drovfx/ui-action.log")
+    property bool hasSystemdRun: true
+
     component StatusChip: Rectangle {
         id: chipRoot
         property string iconText: ""
@@ -138,6 +143,9 @@ command: ["bash", "-c",
         onExited: code => {
             actionProc.exitCode = code;
             actionProc.finished = true;
+            // The tail is a line behind the unit it follows, so let it drain
+            // before it is stopped, or the last few lines never arrive.
+            logTailStop.restart();
             if (code === 0) {
                 actionProc.logOutput += "✓ Done\n";
                 // Re-read state in case the fork/branch changed.
@@ -148,16 +156,85 @@ command: ["bash", "-c",
         }
     }
 
+    // ── Live log: systemd-run's own stdout is empty, so follow the unit's file ──
+    Process {
+        id: logTailProc
+        // -c +1 rather than -n 0: nothing written between the unit starting and
+        // the tail attaching is missed. -F re-reads across the truncation the
+        // unit does when it opens the file.
+        command: ["tail", "-c", "+1", "-F", page.actionLogPath]
+        stdout: SplitParser {
+            onRead: data => { actionProc.logOutput += data + "\n"; }
+        }
+    }
+
+    Timer {
+        id: logTailStart
+        interval: 400
+        onTriggered: logTailProc.running = true
+    }
+
+    Timer {
+        id: logTailStop
+        interval: 1200
+        onTriggered: logTailProc.running = false
+    }
+
+    // Whether the actions can be handed to systemd. Probed once, because the
+    // fallback below is meaningfully worse and should not be the default.
+    Process {
+        id: systemdRunProbe
+        running: true
+        command: ["bash", "-c", "command -v systemd-run >/dev/null && [ -d /run/systemd/system ]"]
+        onExited: code => page.hasSystemdRun = (code === 0)
+    }
+
     // Helper to run an action.
+    //
+    // apply/update/switch all kill Quickshell partway through — they have to,
+    // since swapping the config tree under a live shell makes it hot-reload onto
+    // a half-written tree and persist QML defaults over config.json. A plain
+    // Process is a child of Quickshell, so it used to be torn down by that same
+    // kill, one line after it: the clone was staged, the shell was stopped, and
+    // the script died on SIGTERM before the swap ever ran. Its own TERM trap then
+    // removed the staging dir, leaving the config untouched and no shell running.
+    // A transient systemd unit lives in its own cgroup, outside this process'
+    // lifetime, so the script survives the kill and reaches the swap and the
+    // restart. KillMode=process matters just as much: at the default,
+    // control-group, systemd cleans the unit's cgroup up when the script exits
+    // and takes the Quickshell it just started down with it.
     function runAction(modeName, args) {
         Config.blockWrites = true;
         actionProc.logOutput = "";
         actionProc.finished = false;
         actionProc.exitCode = -1;
         actionProc.mode = modeName;
-        const cmd = ["bash", page.setupScript, ...args];
+        logTailProc.running = false;
+        logTailStop.stop();
+
+        if (!page.hasSystemdRun) {
+            actionProc.logOutput += "⚠ systemd-run unavailable — Quickshell may not come back on its own.\n";
+            actionProc.command = ["bash", page.setupScript, ...args];
+            actionProc.running = true;
+            return;
+        }
+
+        const cmd = ["systemd-run", "--user", "--collect", "--wait", "--quiet", "--unit=ii-p3drovfx-action", "--property=KillMode=process", "--property=StandardOutput=file:" + page.actionLogPath, "--property=StandardError=inherit",
+            // systemd hands a unit with no TTY TERM=dumb, which the script reads
+            // as "strip colour" — the log box parses those SGR codes.
+            "--setenv=TERM=xterm-256color", "--setenv=COLORTERM=truecolor"];
+        // The user manager's copies of these go stale across a compositor
+        // restart, and the script needs them live to start the shell back up.
+        ["PATH", "WAYLAND_DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE", "XDG_RUNTIME_DIR"].forEach(name => {
+            const value = Quickshell.env(name);
+            if (value)
+                cmd.push("--setenv=" + name + "=" + value);
+        });
+        cmd.push("--", "bash", page.setupScript, ...args);
+
         actionProc.command = cmd;
         actionProc.running = true;
+        logTailStart.restart();
     }
 
     // ── ANSI → rich text for the log box (the setup script colors its stdout for a terminal) ──
