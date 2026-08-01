@@ -28,8 +28,10 @@ import qs.modules.common.functions
 Singleton {
     id: root
 
-    /// Energy attributed to no app — idle draw, kernel threads, backlight, radios.
-    /// Reported alongside the apps rather than spread over them.
+    /// The device rather than any one app. Holds the energy attributed to nothing —
+    /// idle draw, kernel threads, backlight, radios — reported alongside the apps
+    /// rather than spread over them, and screen time counted once however many
+    /// windows were on screen for it.
     readonly property string systemKey: "__system"
     /// Layout of a stored hour tuple. Must match `store.rs`; a file written by a
     /// newer sampler is skipped rather than misread.
@@ -49,7 +51,7 @@ Singleton {
         })
 
     readonly property var opts: Config.options?.appStats ?? null
-    readonly property bool enabled: root.opts?.enabled ?? true
+    readonly property bool enabled: root.opts?.enable ?? true
     readonly property bool trackHeadless: root.opts?.trackHeadless ?? true
     readonly property bool showHeadless: root.opts?.showHeadless ?? false
     readonly property int intervalMs: root.opts?.sampleIntervalMs ?? 10000
@@ -301,8 +303,45 @@ Singleton {
         totals.wh = root.wh(totals.mjFg + totals.mjBg);
     }
 
-    /// One field summed per hour of day (24 entries) across `dates`. `key` null sums
-    /// every app; the unattributed remainder is never included.
+    /// Whether an app key contributes to a series asked for `key`. A null `key` sums
+    /// the apps and leaves out the unattributed remainder; naming `systemKey` asks
+    /// for that row alone, which is how screen time is read without counting two
+    /// windows visible at once twice.
+    function inSeries(appKey, rec, key) {
+        if (key) return appKey === key;
+        if (appKey === root.systemKey) return false;
+        return !rec.headless || root.showHeadless;
+    }
+
+    /**
+     * One field per hour of day (24 entries) for a single date, read off the device
+     * row rather than summed over the apps — two windows on screen at once are two
+     * apps' worth of foreground time but still only one hour of screen time.
+     *
+     * Hours the sampler recorded before it counted device time hold nothing there,
+     * and fall back to the app sum. That overstates any such hour that had two
+     * windows up, but a hole in the middle of the day would be worse. The fallback
+     * is decided per hour and not per day, so one hour of real device time cannot
+     * blank out the rest of the day around it.
+     */
+    function deviceHours(date, fieldName) {
+        const idx = root.field[fieldName];
+        const device = new Array(24).fill(0);
+        const fallback = new Array(24).fill(0);
+        const apps = root.history[date]?.apps;
+        if (!apps) return device;
+
+        for (const appKey in apps) {
+            const rec = apps[appKey];
+            const isSystem = appKey === root.systemKey;
+            if (!isSystem && rec.headless && !root.showHeadless) continue;
+            const target = isSystem ? device : fallback;
+            for (const hour in rec.h) target[parseInt(hour)] += rec.h[hour][idx] ?? 0;
+        }
+        return device.map((value, hour) => value > 0 ? value : fallback[hour]);
+    }
+
+    /// One field summed per hour of day (24 entries) across `dates`.
     function hourlySeries(dates, fieldName, key) {
         const idx = root.field[fieldName];
         const out = new Array(24).fill(0);
@@ -310,17 +349,15 @@ Singleton {
             const apps = root.history[date]?.apps;
             if (!apps) continue;
             for (const appKey in apps) {
-                if (appKey === root.systemKey) continue;
-                if (key && appKey !== key) continue;
                 const rec = apps[appKey];
-                if (rec.headless && !root.showHeadless && !key) continue;
+                if (!root.inSeries(appKey, rec, key)) continue;
                 for (const hour in rec.h) out[parseInt(hour)] += rec.h[hour][idx] ?? 0;
             }
         }
         return out;
     }
 
-    /// One field summed per date, parallel to `dates`. Same exclusions as above.
+    /// One field summed per date, parallel to `dates`. Same selection as above.
     function dailySeries(dates, fieldName, key) {
         const idx = root.field[fieldName];
         return dates.map(date => {
@@ -328,10 +365,8 @@ Singleton {
             if (!apps) return 0;
             let sum = 0;
             for (const appKey in apps) {
-                if (appKey === root.systemKey) continue;
-                if (key && appKey !== key) continue;
                 const rec = apps[appKey];
-                if (rec.headless && !root.showHeadless && !key) continue;
+                if (!root.inSeries(appKey, rec, key)) continue;
                 for (const hour in rec.h) sum += rec.h[hour][idx] ?? 0;
             }
             return sum;

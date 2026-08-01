@@ -75,7 +75,9 @@ Item {
     property int rangeIndex: 0
     property int metricIndex: 0
     property string selectedKey: ""
-    property bool showHeadless: AppStats.showHeadless
+    /// Kept in the config rather than here so the chart, which asks the service
+    /// directly, cannot end up filtering differently from the list.
+    readonly property bool showHeadless: AppStats.showHeadless
 
     readonly property var metric: root.metrics[root.metricIndex]
     readonly property bool isSingleDay: root.ranges[root.rangeIndex].days === 1
@@ -123,10 +125,22 @@ Item {
         return root.metric.kind === "energy" ? Format.energyFromMj(value) : Format.duration(value);
     }
 
-    /// The chart series for the current range, metric and selection.
-    readonly property var chartValues: {
-        AppStats.history;
-        const key = root.selectedKey.length > 0 ? root.selectedKey : null;
+    /// Compact enough for the vertical axis, where each tick has a gutter a few
+    /// characters wide.
+    function formatTick(value) {
+        return root.metric.kind === "energy" ? Format.energyFromMj(value) : Format.durationShort(value);
+    }
+
+    /// Whose series the chart draws. With no app picked, screen time is asked of
+    /// the device row instead of summed over the apps: two windows on screen at
+    /// once are two apps' worth of foreground time but still only one hour of it.
+    readonly property string chartKey: {
+        if (root.selectedKey.length > 0)
+            return root.selectedKey;
+        return root.metric.key === "fg" ? AppStats.systemKey : "";
+    }
+
+    function seriesFor(key) {
         const length = root.isSingleDay ? 24 : root.dates.length;
         const out = new Array(length).fill(0);
         for (const field of root.metric.fields) {
@@ -135,6 +149,29 @@ Item {
                 out[i] += series[i] ?? 0;
         }
         return out;
+    }
+
+    /// One value per bucket for the device as a whole. Built from hours rather than
+    /// from a day total, because that is the resolution its fallback works at.
+    function deviceSeries(field) {
+        const perDay = root.dates.map(date => AppStats.deviceHours(date, field));
+        if (root.isSingleDay)
+            return perDay[0] ?? new Array(24).fill(0);
+        return perDay.map(hours => hours.reduce((sum, value) => sum + value, 0));
+    }
+
+    /// The chart series for the current range, metric and selection.
+    readonly property var chartValues: {
+        AppStats.history;
+        if (root.chartKey === AppStats.systemKey)
+            return root.deviceSeries("fg");
+        return root.seriesFor(root.chartKey.length > 0 ? root.chartKey : null);
+    }
+
+    /// Screen time for the whole range, counted once rather than once per window.
+    readonly property real deviceScreenTime: {
+        AppStats.history;
+        return root.dates.reduce((total, date) => total + AppStats.deviceHours(date, "fg").reduce((sum, value) => sum + value, 0), 0);
     }
 
     readonly property var chartLabels: {
@@ -263,22 +300,41 @@ Item {
                 Layout.fillHeight: true
                 spacing: 12
 
+                // One card for whatever is being looked at, rather than a second one
+                // that appears underneath when an app is picked: the figures for the
+                // selection belong where the figures for everything were.
                 Card {
                     Layout.fillWidth: true
-                    implicitHeight: summaryLayout.implicitHeight + 32
+                    implicitHeight: summaryFlow.implicitHeight + 32
 
-                    RowLayout {
-                        id: summaryLayout
+                    Flow {
+                        id: summaryFlow
                         anchors {
-                            fill: parent
+                            left: parent.left
+                            right: parent.right
+                            top: parent.top
                             margins: 16
                         }
-                        spacing: 24
+                        spacing: 22
 
                         StatChip {
                             icon: "schedule"
-                            label: root.selectedKey.length > 0 ? Translation.tr("Screen time") : Translation.tr("Total screen time")
-                            value: Format.duration(root.selectedRecord ? root.selectedRecord.fg : root.summary.totals.fg)
+                            label: root.selectedKey.length > 0 ? Translation.tr("Screen time") : Translation.tr("Device screen time")
+                            value: Format.duration(root.selectedRecord ? root.selectedRecord.fg : root.deviceScreenTime)
+                        }
+
+                        StatChip {
+                            visible: root.selectedRecord !== null
+                            icon: "visibility_off"
+                            label: Translation.tr("Background")
+                            value: Format.duration(root.selectedRecord?.bg ?? 0)
+                        }
+
+                        StatChip {
+                            visible: root.selectedRecord !== null
+                            icon: "point_scan"
+                            label: Translation.tr("Focused")
+                            value: Format.duration(root.selectedRecord?.focus ?? 0)
                         }
 
                         StatChip {
@@ -291,20 +347,51 @@ Item {
                         }
 
                         StatChip {
+                            visible: root.selectedRecord !== null
+                            icon: "memory"
+                            label: Translation.tr("CPU time")
+                            value: Format.duration(root.selectedRecord?.cpu ?? 0)
+                        }
+
+                        StatChip {
+                            visible: root.selectedRecord !== null
+                            icon: "stadia_controller"
+                            label: Translation.tr("GPU time")
+                            value: Format.duration(root.selectedRecord?.gpu ?? 0)
+                        }
+
+                        StatChip {
+                            visible: root.selectedRecord !== null
+                            icon: "memory_alt"
+                            label: Translation.tr("Memory avg")
+                            value: Format.memory(root.selectedRecord?.ramAvg ?? 0)
+                        }
+
+                        StatChip {
+                            visible: root.selectedRecord !== null
+                            icon: "vertical_align_top"
+                            label: Translation.tr("Memory peak")
+                            value: Format.memory(root.selectedRecord?.ramPeak ?? 0)
+                        }
+
+                        StatChip {
                             icon: "rocket_launch"
                             label: Translation.tr("Launches")
                             value: Format.count(root.selectedRecord ? root.selectedRecord.launches : root.summary.totals.launches)
                         }
 
-                        Item {
-                            Layout.fillWidth: true
+                        StatChip {
+                            visible: root.selectedRecord !== null
+                            icon: "repeat"
+                            label: Translation.tr("Sessions")
+                            value: Format.count(root.selectedRecord?.sessions ?? 0)
                         }
 
                         // Per-app watt-hours are modelled from CPU, GPU and memory
                         // shares, so the share that belongs to no app is the honest
                         // measure of how much weight they carry. Kept on screen.
                         StatChip {
-                            visible: root.summary.system.mjFg + root.summary.system.mjBg > 0
+                            visible: root.selectedRecord === null && root.summary.system.mjFg + root.summary.system.mjBg > 0
                             icon: "help"
                             label: Translation.tr("Unattributed")
                             value: {
@@ -335,7 +422,12 @@ Item {
                             StyledText {
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
-                                text: root.selectedKey.length > 0 ? `${root.metric.name} · ${AppStats.displayName(root.selectedKey)}` : `${root.metric.name} · ${Translation.tr("all apps")}`
+                                text: {
+                                    if (root.selectedKey.length > 0)
+                                        return `${root.metric.name} · ${AppStats.displayName(root.selectedKey)}`;
+                                    const scope = root.chartKey === AppStats.systemKey ? Translation.tr("device") : Translation.tr("all apps");
+                                    return `${root.metric.name} · ${scope}`;
+                                }
                                 font.pixelSize: Appearance.font.pixelSize.normal
                                 color: Appearance.colors.colOnLayer1
                             }
@@ -363,64 +455,13 @@ Item {
                             tooltipLabels: root.isSingleDay ? root.chartLabels : root.dates
                             labelStride: root.isSingleDay ? 3 : Math.max(1, Math.ceil(root.dates.length / 10))
                             highlightIndex: root.isSingleDay ? DateTime.clock.date.getHours() : root.dates.length - 1
+                            timeScale: root.metric.kind === "duration"
                             formatValue: value => root.formatMetric(value)
+                            formatTick: value => root.formatTick(value)
                         }
                     }
                 }
 
-                Card {
-                    Layout.fillWidth: true
-                    implicitHeight: detailLayout.implicitHeight + 32
-                    visible: root.selectedRecord !== null
-
-                    RowLayout {
-                        id: detailLayout
-                        anchors {
-                            fill: parent
-                            margins: 16
-                        }
-                        spacing: 24
-
-                        StatChip {
-                            label: Translation.tr("Background")
-                            value: Format.duration(root.selectedRecord?.bg ?? 0)
-                        }
-
-                        StatChip {
-                            label: Translation.tr("Focused")
-                            value: Format.duration(root.selectedRecord?.focus ?? 0)
-                        }
-
-                        StatChip {
-                            label: Translation.tr("CPU time")
-                            value: Format.duration(root.selectedRecord?.cpu ?? 0)
-                        }
-
-                        StatChip {
-                            label: Translation.tr("GPU time")
-                            value: Format.duration(root.selectedRecord?.gpu ?? 0)
-                        }
-
-                        StatChip {
-                            label: Translation.tr("Memory avg")
-                            value: Format.memory(root.selectedRecord?.ramAvg ?? 0)
-                        }
-
-                        StatChip {
-                            label: Translation.tr("Memory peak")
-                            value: Format.memory(root.selectedRecord?.ramPeak ?? 0)
-                        }
-
-                        StatChip {
-                            label: Translation.tr("Sessions")
-                            value: Format.count(root.selectedRecord?.sessions ?? 0)
-                        }
-
-                        Item {
-                            Layout.fillWidth: true
-                        }
-                    }
-                }
             }
 
             Card {
@@ -455,7 +496,7 @@ Item {
                             implicitHeight: 32
                             buttonRadius: Appearance.rounding.full
                             toggled: root.showHeadless
-                            onClicked: root.showHeadless = !root.showHeadless
+                            onClicked: Config.options.appStats.showHeadless = !root.showHeadless
 
                             contentItem: MaterialSymbol {
                                 anchors.centerIn: parent

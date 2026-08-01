@@ -21,6 +21,8 @@ Scope {
     id: root
 
     property bool activeState: false
+    property int rangeIndex: 0
+    property int metricIndex: 0
 
     Connections {
         target: GlobalStates
@@ -291,6 +293,14 @@ Scope {
                             Layout.fillHeight: true
                             Layout.preferredWidth: Math.min(1500, Math.max(900, calculatedWidth))
                             Layout.preferredHeight: Math.min(700, Math.max(460, calculatedHeight))
+
+                            // The surface is destroyed on close, so what is being
+                            // looked at is remembered out here instead — reopening
+                            // to a reset view loses the thread of the question.
+                            rangeIndex: root.rangeIndex
+                            metricIndex: root.metricIndex
+                            onRangeIndexChanged: root.rangeIndex = usageContent.rangeIndex
+                            onMetricIndexChanged: root.metricIndex = usageContent.metricIndex
                         }
                     }
                 }

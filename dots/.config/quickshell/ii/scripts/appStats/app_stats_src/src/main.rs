@@ -32,9 +32,11 @@ use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::time::Duration;
 
-/// Energy attributed to no app: idle package draw, kernel threads, display and
-/// radios. Reported as its own row rather than normalised away — the size of this
-/// residual is the honest measure of how far to trust the rest.
+/// The device itself rather than any one app. Carries two things no application
+/// row can: the energy attributed to nothing — idle package draw, kernel threads,
+/// display and radios, reported as its own row rather than normalised away, since
+/// the size of that residual is the honest measure of how far to trust the rest —
+/// and, in `fg_ms`, screen time counted once no matter how many windows were up.
 const SYSTEM_KEY: &str = "__system";
 
 
@@ -243,6 +245,7 @@ impl Tracker {
             let dt = (end - t) as u64;
             let apps = &mut self.apps;
             let store = &mut self.store;
+            let mut any_fg = false;
 
             for (key, app) in apps.iter_mut() {
                 if !app.alive && !app.visible {
@@ -250,6 +253,7 @@ impl Tracker {
                 }
                 let b = store.bucket(t, key, &app.exe, app.headless);
                 if effective_fg(app, blocked) {
+                    any_fg = true;
                     b.fg_ms += dt;
                     app.d_fg_ms += dt;
                     if app.focused {
@@ -259,6 +263,14 @@ impl Tracker {
                     b.bg_ms += dt;
                     app.d_bg_ms += dt;
                 }
+            }
+
+            // Device screen time: the span during which *something* was on screen,
+            // kept on the system row. Adding up the apps' own foreground time counts
+            // every moment two windows were visible at once twice over, which is how
+            // an hour bucket ends up claiming to hold more than an hour.
+            if any_fg {
+                store.bucket(t, SYSTEM_KEY, SYSTEM_KEY, true).fg_ms += dt;
             }
             t = end;
         }
