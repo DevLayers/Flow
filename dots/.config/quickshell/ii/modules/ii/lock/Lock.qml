@@ -13,6 +13,7 @@ LockScreen {
 
     // Monitor name -> workspace id to restore on unlock (set when locking)
     property var savedWorkspaces: ({})
+    property string unlockFocusedMonitor: ""
 
     Timer {
         id: restoreTimer
@@ -31,6 +32,10 @@ LockScreen {
                         hasCmds = true
                     }
                 }
+            }
+            if (root.unlockFocusedMonitor !== "") {
+                batch += ` ; dispatch hl.dsp.focus {monitor="${root.unlockFocusedMonitor}"}`
+                hasCmds = true
             }
             batch += " ; keyword animation workspaces,1"
             if (hasCmds) {
@@ -56,6 +61,7 @@ LockScreen {
                 }
                 GlobalStates.workspaceRestoreInProgress = false;
                 // Lock: save workspace per monitor and move all to temp workspace in one batch
+                var activeMon = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
                 var next = {}
                 var batch = "keyword animation workspaces,0"
                 var hasCmds = false
@@ -74,12 +80,16 @@ LockScreen {
                         hasCmds = true
                     }
                 }
+                if (activeMon !== "") {
+                    batch += ` ; dispatch hl.dsp.focus {monitor="${activeMon}"}`
+                }
                 batch += " ; keyword animation workspaces,1"
                 root.savedWorkspaces = next
                 if (hasCmds) {
                     Quickshell.execDetached(["hyprctl", "--batch", batch])
                 }
             } else {
+                root.unlockFocusedMonitor = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
                 if (Config.options && Config.options.background && Config.options.background.useSeparateLockscreenWallpaper) {
                     Quickshell.execDetached(["bash", Directories.swapLockscreenColorsScriptPath, "unlock"]);
                 }
