@@ -34,6 +34,7 @@ import qs.modules.ii.localSendPopup
 import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
 import qs.modules.ii.topLayer
+import qs.modules.ii.usage
 import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
@@ -66,6 +67,9 @@ Scope {
     }
     PanelLoader {
         component: Cheatsheet {}
+    }
+    PanelLoader {
+        component: Usage {}
     }
     PanelLoader {
         extraCondition: Config.options.dock.enable

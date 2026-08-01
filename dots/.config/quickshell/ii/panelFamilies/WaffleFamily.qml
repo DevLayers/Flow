@@ -22,6 +22,7 @@ import qs.modules.ii.oledSaver
 import qs.modules.ii.onScreenKeyboard
 import qs.modules.ii.overlay
 import qs.modules.ii.screenTranslator
+import qs.modules.ii.usage
 import qs.modules.ii.wallpaperSelector
 
 Scope {
@@ -44,5 +45,6 @@ Scope {
     PanelLoader { component: OnScreenKeyboard {} }
     PanelLoader { component: Overlay {} }
     PanelLoader { component: ScreenTranslator {} }
+    PanelLoader { component: Usage {} }
     PanelLoader { component: WallpaperSelector {} }
 }
