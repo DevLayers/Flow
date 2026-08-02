@@ -12,9 +12,9 @@ hl.env("XDG_DATA_DIRS",
     "/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share:$XDG_DATA_DIRS")
 
 -- Cursor theme
-hl.env("XCURSOR_THEME", "Vimix-cursors")
+hl.env("XCURSOR_THEME", "Bibata-Modern-Classic")
 hl.env("XCURSOR_SIZE", "24")
-hl.env("HYPRCURSOR_THEME", "Vimix-cursors")
+hl.env("HYPRCURSOR_THEME", "Bibata-Modern-Classic")
 hl.env("HYPRCURSOR_SIZE", "24")
 
 -- Themes
