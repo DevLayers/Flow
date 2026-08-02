@@ -786,6 +786,14 @@ Singleton {
                         property bool quoteEnable: false
                         property string quoteText: ""
                     }
+                    property JsonObject clock_expressive_card: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+
                     property JsonObject clock_flex: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
@@ -820,6 +828,15 @@ Singleton {
                         property real x: 200
                         property real y: 200
                         property bool monochrome: false
+                    }
+                    property JsonObject clock_word: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int size: 240
+                        property string backgroundStyle: "shape"
+                        property string backgroundShape: "Circle"
                     }
                     property JsonObject clock_dial: JsonObject {
                         property bool enable: false
@@ -914,6 +931,91 @@ Singleton {
                         property bool showBezelRing: true
                         property bool enableShadows: false
                         property int widgetSize: 100
+                    }
+                    property JsonObject concentric_clock: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string dialStyle: "concentric"
+                        property string frameStyle: "none"
+                        property bool boldFont: false
+                        property bool use24h: true
+                        property bool showHourText: true
+                        property string hourHandStyle: "hide"
+                        property string minuteHandStyle: "hide"
+                        property string secondHandStyle: "hide"
+                        property bool showHourMarks: false
+                        property string minuteStyle: "pill_horizontal"
+                        property bool showArc24h: false
+                        property bool showHourSubDial: false
+                        property bool showSunsetDial: false
+                        property string bottomSubDialContent: "weather_temp"
+                        property bool showMinuteDot: false
+                        property bool quoteEnable: false
+                        property string quoteText: ""
+                        property int minutePillLeftMargin: 67
+                        property int subdialMarginOffset: 5
+                        property int dialMarginOffset: 3
+                        property int hourPixelSize: 30
+                        property int hourFontWeight: 600
+                        property int hourFontWidth: 85
+                        property int hourFontRound: 100
+                        property bool useBlackBg: false
+                        property bool enableGlassReflection: false
+                        property bool enableShadows: false
+                    }
+                    property JsonObject month_clock: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property bool showMonthRing: true
+                        property bool showDayRing: true
+                        property bool showWeekRing: true
+                        property bool showMonthPill: true
+                        property bool showDayPill: true
+                        property bool showWeekPill: true
+                        property bool showTickMarks: true
+                        property bool boldFont: true
+                        property bool useBlackBg: true
+                        property bool enableGlassReflection: false
+                        property string hourHandStyle: "fill"
+                        property string minuteHandStyle: "medium"
+                        property string secondHandStyle: "line"
+                    }
+                    property JsonObject scallop_dot_clock: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property bool boldFont: true
+                        property bool useBlackBg: false
+                        property bool enableGlassReflection: false
+                        property bool showHourHand: true
+                        property bool showMinuteBubble: true
+                        property bool showDots: true
+                    }
+                    property JsonObject at_a_glance: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widthCells: 3
+                        property list<string> servicePriority: ["media", "calendar", "sports", "fallback"]
+                        property bool enableMedia: true
+                        property bool enableCalendar: true
+                        property bool enableSports: true
+                        property bool enableWeather: true
+                        property int calendarWindowMinutes: 60
+                        property int sportsWindowHours: 12
+                        property bool showLocation: true
+                        property bool showServiceLabel: false
+                        property bool showSeparators: true
+                        property bool animateContent: true
                     }
                     property JsonObject weather: JsonObject {
                         property bool enable: false
@@ -1203,6 +1305,16 @@ Singleton {
                         property bool enableShadows: false
                         property bool enableInnerShadow: false
                         property int widgetSize: 100
+                    }
+                    property JsonObject water_reminder: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                        property int dailyGoal: 8
+                        property int intervalHours: 2
+                        property string reminderText: "Time to hydrate! 💧"
                     }
                     property bool enableInnerShadow: false
                     property bool enableShadows: false

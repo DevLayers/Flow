@@ -66,6 +66,15 @@ Singleton {
             "configPage": "widgets/DesktopNagasakiTextClockConfig.qml"
         },
         {
+            "widgetId": "clock_word",
+            "name": Translation.tr("Word Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/WordClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A 1x1 textual clock with the hour and minute written in words."),
+            "configPage": "widgets/DesktopWordClockConfig.qml"
+        },
+        {
             "widgetId": "clock_dial",
             "name": Translation.tr("Dial Clock"),
             "category": "Clock",
@@ -83,6 +92,44 @@ Singleton {
             "description": Translation.tr("A circular analog clock widget styled like a Wear OS watch face."),
             "configPage": "widgets/DesktopWearOSClockWidgetConfig.qml"
         },
+        {
+            "widgetId": "concentric_clock",
+            "name": Translation.tr("Concentric Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/ConcentricClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A Pixel Watch-inspired concentric dial clock with modular complications and interactive customization."),
+            "configPage": "widgets/DesktopConcentricClockConfig.qml"
+        },
+        {
+            "widgetId": "month_clock",
+            "name": Translation.tr("Month Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/MonthClockWidget.qml"),
+            "icon": "calendar_month",
+            "description": Translation.tr("A three-ring calendar dial showing months, days, and weekdays with pill indicators for today."),
+            "configPage": "widgets/DesktopMonthClockConfig.qml"
+        },
+        {
+            "widgetId": "scallop_dot_clock",
+            "name": Translation.tr("Scallop Dot Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/ScallopDotClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("An organic Material You scallop clock face with discrete 5-minute apex minute bubbles and hour indicators."),
+            "configPage": "widgets/DesktopScallopDotClockConfig.qml"
+        },
+        {
+            "widgetId": "clock_expressive_card",
+            "name": Translation.tr("Expressive Card Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/ExpressiveCardClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A 1x1 clock with big time, month/day, temp & weather icon and expressive background."),
+            "configPage": "widgets/DesktopClockWidgetConfig.qml"
+        },
+
+
         {
             "widgetId": "circular_media",
             "name": Translation.tr("Circular Media (Watch)"),
@@ -469,7 +516,25 @@ Singleton {
             "icon": "format_quote",
             "description": Translation.tr("1x1 widget displaying a customizable quote with decorative quote marks."),
             "configPage": "widgets/DesktopQuoteConfig.qml"
-        }
+        },
+        {
+            "widgetId": "water_reminder",
+            "name": Translation.tr("Water Reminder"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/WaterReminderWidget.qml"),
+            "icon": "water_drop",
+            "description": Translation.tr("1x1 hydration tracker widget with a progress track, daily goal, and periodic water reminders."),
+            "configPage": "widgets/DesktopWaterReminderConfig.qml"
+        },
+        {
+            "widgetId": "at_a_glance",
+            "name": Translation.tr("At a Glance"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/AtAGlanceWidget.qml"),
+            "icon": "dashboard",
+            "description": Translation.tr("Android-inspired context widget combining media, calendar, sports, and current weather."),
+            "configPage": "widgets/DesktopAtAGlanceConfig.qml"
+        },
     ]
 
     // Extension widgets from WidgetExtensionManager

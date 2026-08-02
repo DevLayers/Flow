@@ -36,6 +36,7 @@ ShellRoot {
         ChangelogService.load();
         SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled
         VideoColorSampler.active; // Touch singleton to initialize
+        WaterReminderService.enabled; // Touch singleton: drives water reminder notifications
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
         }

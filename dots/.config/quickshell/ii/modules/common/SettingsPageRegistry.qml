@@ -99,7 +99,7 @@ Singleton {
         "name": "Desktop Widgets",
         "icon": "widgets",
         "component": "modules/settings/configs/WidgetsConfig.qml",
-        "subPages": ["widgets/DesktopClockWidgetConfig.qml", "widgets/DesktopWeatherWidgetConfig.qml", "widgets/DesktopMediaWidgetConfig.qml"],
+        "subPages": ["widgets/DesktopClockWidgetConfig.qml", "widgets/DesktopWeatherWidgetConfig.qml", "widgets/DesktopMediaWidgetConfig.qml", "widgets/DesktopAtAGlanceConfig.qml"],
         "aliases": []
     }, {
         "id": "dynamicIsland",

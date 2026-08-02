@@ -33,9 +33,7 @@ Scope {
 
     // State bindings
     // centerInBar: DI never handles search — overviewOpen is handled by the default floating search panel
-    readonly property bool searchActive: GlobalStates.overviewOpen
-        && !Config.options.bar.floatingNotch.centerInBar
-        && (win.screen ? win.screen.name === GlobalStates.activeSearchMonitor : false)
+    readonly property bool searchActive: GlobalStates.overviewOpen && !Config.options.bar.floatingNotch.centerInBar && (win.screen ? win.screen.name === GlobalStates.activeSearchMonitor : false)
     readonly property bool osdActive: GlobalStates.osdVolumeOpen
     readonly property bool notificationActive: Notifications.popupList.length > 0
     readonly property bool recordingActive: (Persistent.states.screenRecord && Persistent.states.screenRecord.active) || false
