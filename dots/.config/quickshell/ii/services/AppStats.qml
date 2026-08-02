@@ -394,10 +394,17 @@ Singleton {
     /// Icon theme name for an app key, or "" when nothing matches — headless daemons
     /// and the system row have no desktop entry, and the caller should fall back to
     /// a material symbol rather than showing a broken image.
+    ///
+    /// The desktop entry is asked first, so an app resolves its icon through the same
+    /// lookup that gave it its name. The heuristic guess alone disagrees with that
+    /// lookup often enough to matter: it finds no icon for `brave-browser` while the
+    /// entry it takes its name from sits right there.
     function iconFor(key) {
         if (key === root.systemKey) return "";
+        const entryIcon = root.entryFor(key)?.icon;
+        if (entryIcon) return entryIcon;
         const icon = AppSearch.guessIcon(key);
-        return icon === "application-x-executable" ? "" : icon;
+        return (icon === "application-x-executable" || icon === "image-missing") ? "" : icon;
     }
 
     SystemClock {

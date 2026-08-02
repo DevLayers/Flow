@@ -186,11 +186,16 @@ Scope {
                         onTriggered: usageBackground.animateIn = true
                     }
 
+                    // Escape belongs to the window; everything else is the content's
+                    // to claim, so range, metric and the app list stay reachable
+                    // without leaving the keyboard the overlay was opened from.
                     Keys.onPressed: event => {
-                        if (event.key !== Qt.Key_Escape)
+                        if (event.key === Qt.Key_Escape) {
+                            usageRoot.hide();
+                            event.accepted = true;
                             return;
-                        usageRoot.hide();
-                        event.accepted = true;
+                        }
+                        event.accepted = usageContent.handleKey(event.key);
                     }
 
                     RippleButton {

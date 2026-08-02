@@ -23,6 +23,10 @@ Item {
     property int highlightIndex: -1
     /// Only every `labelStride`-th label is drawn, so a 30-day axis stays readable.
     property int labelStride: 1
+    /// Counts the stride back from the last bucket instead of forward from the first.
+    /// A day range ends on today and a reader looks there first; an hour range starts
+    /// at midnight and reads better labelled from it.
+    property bool labelAnchorEnd: false
     /// Turns a bucket value into the tooltip figure.
     property var formatValue: (value) => {
         return `${value}`;
@@ -239,6 +243,15 @@ Item {
                                 Behavior on color {
                                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                                 }
+
+                                // A child of the bar and not of the bucket: the bucket
+                                // is as tall as the plot, so a tooltip above it lands
+                                // at the top of the chart however short the bar under
+                                // the pointer is.
+                                StyledToolTip {
+                                    extraVisibleCondition: barArea.containsMouse && bucket.value > 0
+                                    text: `${root.tooltipLabels[bucket.index]} · ${root.formatValue(bucket.value)}`
+                                }
                             }
 
                             MouseArea {
@@ -246,11 +259,6 @@ Item {
 
                                 anchors.fill: parent
                                 hoverEnabled: true
-                            }
-
-                            StyledToolTip {
-                                extraVisibleCondition: barArea.containsMouse && bucket.value > 0
-                                text: `${root.tooltipLabels[bucket.index]} · ${root.formatValue(bucket.value)}`
                             }
                         }
                     }
@@ -292,7 +300,10 @@ Item {
 
                             anchors.centerIn: parent
                             elide: Text.ElideNone
-                            text: slot.index % root.labelStride === 0 ? root.labels[slot.index] : ""
+                            text: {
+                                const offset = root.labelAnchorEnd ? root.labels.length - 1 - slot.index : slot.index;
+                                return offset % root.labelStride === 0 ? root.labels[slot.index] : "";
+                            }
                             font.pixelSize: Appearance.font.pixelSize.smallest
                             color: slot.index === root.highlightIndex ? Appearance.colors.colTertiary : Appearance.colors.colSubtext
                         }

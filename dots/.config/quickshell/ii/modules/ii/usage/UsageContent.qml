@@ -104,6 +104,17 @@ Item {
     }
     readonly property real rankedMax: root.ranked.length > 0 ? root.metricValue(root.ranked[0]) : 0
 
+    /// The selected metric over everything in scope. Screen time is the device's
+    /// own figure rather than the sum of the list, for the same reason the chart
+    /// draws it that way: two windows on screen are one hour of screen time.
+    readonly property real metricTotal: {
+        if (root.selectedRecord)
+            return root.metricValue(root.selectedRecord);
+        if (root.metric.key === "fg")
+            return root.deviceScreenTime;
+        return root.ranked.reduce((total, rec) => total + root.metricValue(rec), 0);
+    }
+
     readonly property var selectedRecord: {
         for (const rec of root.ranked) {
             if (rec.key === root.selectedKey)
@@ -165,7 +176,18 @@ Item {
         AppStats.history;
         if (root.chartKey === AppStats.systemKey)
             return root.deviceSeries("fg");
-        return root.seriesFor(root.chartKey.length > 0 ? root.chartKey : null);
+        if (root.selectedKey.length > 0)
+            return root.seriesFor(root.selectedKey);
+
+        const values = root.seriesFor(null);
+        if (root.metric.key !== "energy")
+            return values;
+
+        // The share that belongs to no app is still energy the machine spent, and
+        // the list beside the chart already carries it as a row. Leaving it out of
+        // the chart alone would put three totals for one metric on one screen.
+        const system = root.seriesFor(AppStats.systemKey);
+        return values.map((value, index) => value + (system[index] ?? 0));
     }
 
     /// Screen time for the whole range, counted once rather than once per window.
@@ -174,17 +196,82 @@ Item {
         return root.dates.reduce((total, date) => total + AppStats.deviceHours(date, "fg").reduce((sum, value) => sum + value, 0), 0);
     }
 
+    /// Every `dayStride`-th label is drawn, counted back from today.
+    readonly property int dayStride: Math.max(1, Math.ceil(root.dates.length / 10))
+
     readonly property var chartLabels: {
         if (root.isSingleDay)
             return Array.from({
                 "length": 24
             }, (unused, hour) => Format.hourLabel(hour));
-        return root.dates.map(date => Format.dayLabel(date));
+
+        // Spelled out at both drawn ends of the axis and wherever a month turns
+        // over, so the range says where in the year it sits. The left end is the
+        // first label the stride actually reaches, not date zero, which a 30-day
+        // range skips.
+        const first = (root.dates.length - 1) % root.dayStride;
+        return root.dates.map((date, index) => Format.dayLabel(date, index === first || index === root.dates.length - 1 || date.slice(-2) === "01"));
     }
 
     function refresh() {
         AppStats.ensureDates(root.dates);
         AppStats.refresh();
+    }
+
+    /// Moves the selection `delta` rows through the list, selecting the first row
+    /// from nothing and falling off the top back to nothing.
+    function moveSelection(delta) {
+        if (root.ranked.length === 0)
+            return;
+
+        let index = -1;
+        for (let i = 0; i < root.ranked.length; i++) {
+            if (root.ranked[i].key === root.selectedKey) {
+                index = i;
+                break;
+            }
+        }
+        const next = index + delta;
+        if (next < 0) {
+            root.selectedKey = "";
+            return;
+        }
+        const clamped = Math.min(next, root.ranked.length - 1);
+        root.selectedKey = root.ranked[clamped].key;
+        appList.positionViewAtIndex(clamped, ListView.Contain);
+    }
+
+    /// Handles a key press forwarded by the window. Returns whether it was ours.
+    ///
+    /// Tab cycles the metric rather than one digit per tab: on an AZERTY keyboard
+    /// the number row needs Shift, so digits alone would leave half the panel
+    /// unreachable. They still work where they are unshifted.
+    function handleKey(key) {
+        if (key >= Qt.Key_1 && key < Qt.Key_1 + root.metrics.length) {
+            root.metricIndex = key - Qt.Key_1;
+            return true;
+        }
+        switch (key) {
+        case Qt.Key_Tab:
+            root.metricIndex = (root.metricIndex + 1) % root.metrics.length;
+            return true;
+        case Qt.Key_Backtab:
+            root.metricIndex = (root.metricIndex + root.metrics.length - 1) % root.metrics.length;
+            return true;
+        case Qt.Key_Left:
+            root.rangeIndex = Math.max(0, root.rangeIndex - 1);
+            return true;
+        case Qt.Key_Right:
+            root.rangeIndex = Math.min(root.ranges.length - 1, root.rangeIndex + 1);
+            return true;
+        case Qt.Key_Up:
+            root.moveSelection(-1);
+            return true;
+        case Qt.Key_Down:
+            root.moveSelection(1);
+            return true;
+        }
+        return false;
     }
 
     onDatesChanged: AppStats.ensureDates(root.dates)
@@ -208,7 +295,12 @@ Item {
         required property string label
         required property string value
         property string icon: ""
+        property bool shown: true
+        /// The metric this chip would repeat. The card leads with whichever metric
+        /// is selected, so the chip that would say the same figure twice steps aside.
+        property string metricKey: ""
 
+        visible: chip.shown && chip.metricKey !== root.metric.key
         spacing: 2
 
         RowLayout {
@@ -261,6 +353,37 @@ Item {
                         rightmost: index === root.ranges.length - 1
                         onClicked: root.rangeIndex = index
                     }
+                }
+            }
+
+            // Up here with the range and the metric because it is one of them: it
+            // decides what the whole panel counts, not just which rows the list
+            // shows. Left in the list header it silently moved the totals.
+            RippleButton {
+                implicitHeight: 30
+                buttonRadius: Appearance.rounding.full
+                horizontalPadding: 12
+                toggled: root.showHeadless
+                onClicked: Config.options.appStats.showHeadless = !root.showHeadless
+
+                contentItem: RowLayout {
+                    spacing: 6
+
+                    MaterialSymbol {
+                        text: "terminal"
+                        iconSize: 16
+                        color: root.showHeadless ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
+                    }
+
+                    StyledText {
+                        text: Translation.tr("Services")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: root.showHeadless ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
+                    }
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Count background services in the list and the totals")
                 }
             }
 
@@ -317,58 +440,78 @@ Item {
                         }
                         spacing: 22
 
+                        // The card leads with the metric the tabs are set to, so the
+                        // figure the question was asked about is the first one
+                        // answered. Whichever chip below repeats it drops out.
                         StatChip {
+                            icon: root.metric.icon
+                            label: root.selectedRecord === null && root.metric.key === "fg" ? Translation.tr("Device screen time") : root.metric.name
+                            value: root.formatMetric(root.metricTotal)
+                        }
+
+                        StatChip {
+                            metricKey: "fg"
                             icon: "schedule"
                             label: root.selectedKey.length > 0 ? Translation.tr("Screen time") : Translation.tr("Device screen time")
                             value: Format.duration(root.selectedRecord ? root.selectedRecord.fg : root.deviceScreenTime)
                         }
 
                         StatChip {
-                            visible: root.selectedRecord !== null
+                            shown: root.selectedRecord !== null
                             icon: "visibility_off"
                             label: Translation.tr("Background")
                             value: Format.duration(root.selectedRecord?.bg ?? 0)
                         }
 
                         StatChip {
-                            visible: root.selectedRecord !== null
+                            shown: root.selectedRecord !== null
+                            metricKey: "focus"
                             icon: "point_scan"
                             label: Translation.tr("Focused")
                             value: Format.duration(root.selectedRecord?.focus ?? 0)
                         }
 
+                        // Apps plus the share that belongs to none of them, matching
+                        // the chart and the list rather than counting the apps alone.
                         StatChip {
+                            metricKey: "energy"
                             icon: "bolt"
                             label: Translation.tr("Energy")
                             value: {
-                                const rec = root.selectedRecord ?? root.summary.totals;
-                                return Format.energyFromMj(rec.mjFg + rec.mjBg);
+                                if (root.selectedRecord)
+                                    return Format.energyFromMj(root.selectedRecord.mjFg + root.selectedRecord.mjBg);
+
+                                const apps = root.summary.totals;
+                                const system = root.summary.system;
+                                return Format.energyFromMj(apps.mjFg + apps.mjBg + system.mjFg + system.mjBg);
                             }
                         }
 
                         StatChip {
-                            visible: root.selectedRecord !== null
+                            shown: root.selectedRecord !== null
+                            metricKey: "cpu"
                             icon: "memory"
                             label: Translation.tr("CPU time")
                             value: Format.duration(root.selectedRecord?.cpu ?? 0)
                         }
 
                         StatChip {
-                            visible: root.selectedRecord !== null
+                            shown: root.selectedRecord !== null
+                            metricKey: "gpu"
                             icon: "stadia_controller"
                             label: Translation.tr("GPU time")
                             value: Format.duration(root.selectedRecord?.gpu ?? 0)
                         }
 
                         StatChip {
-                            visible: root.selectedRecord !== null
+                            shown: root.selectedRecord !== null
                             icon: "memory_alt"
                             label: Translation.tr("Memory avg")
                             value: Format.memory(root.selectedRecord?.ramAvg ?? 0)
                         }
 
                         StatChip {
-                            visible: root.selectedRecord !== null
+                            shown: root.selectedRecord !== null
                             icon: "vertical_align_top"
                             label: Translation.tr("Memory peak")
                             value: Format.memory(root.selectedRecord?.ramPeak ?? 0)
@@ -381,7 +524,7 @@ Item {
                         }
 
                         StatChip {
-                            visible: root.selectedRecord !== null
+                            shown: root.selectedRecord !== null
                             icon: "repeat"
                             label: Translation.tr("Sessions")
                             value: Format.count(root.selectedRecord?.sessions ?? 0)
@@ -391,7 +534,7 @@ Item {
                         // shares, so the share that belongs to no app is the honest
                         // measure of how much weight they carry. Kept on screen.
                         StatChip {
-                            visible: root.selectedRecord === null && root.summary.system.mjFg + root.summary.system.mjBg > 0
+                            shown: root.selectedRecord === null && root.summary.system.mjFg + root.summary.system.mjBg > 0
                             icon: "help"
                             label: Translation.tr("Unattributed")
                             value: {
@@ -425,7 +568,8 @@ Item {
                                 text: {
                                     if (root.selectedKey.length > 0)
                                         return `${root.metric.name} · ${AppStats.displayName(root.selectedKey)}`;
-                                    const scope = root.chartKey === AppStats.systemKey ? Translation.tr("device") : Translation.tr("all apps");
+                                    const isDevice = root.chartKey === AppStats.systemKey || root.metric.key === "energy";
+                                    const scope = isDevice ? Translation.tr("device") : Translation.tr("all apps");
                                     return `${root.metric.name} · ${scope}`;
                                 }
                                 font.pixelSize: Appearance.font.pixelSize.normal
@@ -453,7 +597,8 @@ Item {
                             values: root.chartValues
                             labels: root.chartLabels
                             tooltipLabels: root.isSingleDay ? root.chartLabels : root.dates
-                            labelStride: root.isSingleDay ? 3 : Math.max(1, Math.ceil(root.dates.length / 10))
+                            labelStride: root.isSingleDay ? 3 : root.dayStride
+                            labelAnchorEnd: !root.isSingleDay
                             highlightIndex: root.isSingleDay ? DateTime.clock.date.getHours() : root.dates.length - 1
                             timeScale: root.metric.kind === "duration"
                             // Millijoules per watt-hour, the figure the axis is
@@ -492,25 +637,6 @@ Item {
                             text: root.ranked.length > 0 ? Translation.tr("%1 apps").arg(root.ranked.length) : Translation.tr("No activity")
                             font.pixelSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colOnLayer1
-                        }
-
-                        RippleButton {
-                            implicitWidth: 32
-                            implicitHeight: 32
-                            buttonRadius: Appearance.rounding.full
-                            toggled: root.showHeadless
-                            onClicked: Config.options.appStats.showHeadless = !root.showHeadless
-
-                            contentItem: MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "terminal"
-                                iconSize: 18
-                                color: root.showHeadless ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
-                            }
-
-                            StyledToolTip {
-                                text: Translation.tr("Show background services")
-                            }
                         }
 
                         RippleButton {

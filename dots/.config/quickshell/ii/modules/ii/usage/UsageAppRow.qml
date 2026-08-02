@@ -25,6 +25,7 @@ Rectangle {
     readonly property string appKey: root.record.key
     readonly property string iconName: AppStats.iconFor(root.appKey)
     readonly property bool isSystem: root.appKey === AppStats.systemKey
+    readonly property bool isHeadless: root.record.headless ?? false
 
     signal clicked()
 
@@ -68,10 +69,16 @@ Rectangle {
             }
 
             // Headless daemons and the system row have no desktop entry to draw from.
+            // A window-bearing app that merely failed to resolve is not a daemon, so
+            // it does not get the terminal glyph that would say it is one.
             MaterialSymbol {
                 anchors.centerIn: parent
                 visible: root.iconName.length === 0
-                text: root.isSystem ? "memory" : "terminal"
+                text: {
+                    if (root.isSystem)
+                        return "memory";
+                    return root.isHeadless ? "terminal" : "apps";
+                }
                 iconSize: 24
                 color: Appearance.colors.colSubtext
             }
