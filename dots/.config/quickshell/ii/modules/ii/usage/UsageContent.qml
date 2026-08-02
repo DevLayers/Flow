@@ -586,37 +586,6 @@ Item {
                 }
             }
 
-            // Up here with the range and the metric because it is one of them: it
-            // decides what the whole panel counts, not just which rows the list
-            // shows. Left in the list header it silently moved the totals.
-            RippleButton {
-                implicitHeight: 30
-                buttonRadius: Appearance.rounding.full
-                horizontalPadding: 12
-                toggled: root.showHeadless
-                onClicked: Config.options.appStats.showHeadless = !root.showHeadless
-
-                contentItem: RowLayout {
-                    spacing: 6
-
-                    MaterialSymbol {
-                        text: "terminal"
-                        iconSize: 16
-                        color: root.showHeadless ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
-                    }
-
-                    StyledText {
-                        text: Translation.tr("Services")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: root.showHeadless ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
-                    }
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Count background services in the list and the totals")
-                }
-            }
-
             Item {
                 Layout.fillWidth: true
             }
@@ -875,6 +844,27 @@ Item {
                             text: root.ranked.length > 0 ? Translation.tr("%1 apps").arg(root.ranked.length) : Translation.tr("No activity")
                             font.pixelSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colOnLayer1
+                        }
+
+                        RippleButton {
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            buttonRadius: Appearance.rounding.full
+                            toggled: root.showHeadless
+                            onClicked: Config.options.appStats.showHeadless = !root.showHeadless
+
+                            contentItem: MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "terminal"
+                                iconSize: 18
+                                color: root.showHeadless ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
+                            }
+
+                            // Worth stating outright: this one is not a list filter,
+                            // it changes what the totals above are counting too.
+                            StyledToolTip {
+                                text: Translation.tr("Count background services in the list and the totals")
+                            }
                         }
 
                         RippleButton {
