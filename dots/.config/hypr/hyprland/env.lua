@@ -7,7 +7,15 @@ hl.env("PATH", home_dir .. "/.local/bin:" .. os.getenv("PATH"))
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
 
 -- Applications
-hl.env("XDG_DATA_DIRS", home_dir .. "/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share:$XDG_DATA_DIRS")
+hl.env("XDG_DATA_DIRS",
+    home_dir ..
+    "/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share:$XDG_DATA_DIRS")
+
+-- Cursor theme
+hl.env("XCURSOR_THEME", "Vimix-cursors")
+hl.env("XCURSOR_SIZE", "24")
+hl.env("HYPRCURSOR_THEME", "Vimix-cursors")
+hl.env("HYPRCURSOR_SIZE", "24")
 
 -- Themes
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
