@@ -761,10 +761,19 @@ Singleton {
                 property bool enable: true
                 property int sampleIntervalMs: 10000
                 property int flushIntervalMs: 60000
-                property int retentionDays: 30
+                // Days of history kept. Under "previousMonth" this is a floor rather
+                // than the window itself: nothing the previous calendar month needs
+                // is dropped, so the window slides between 31 and 62 days and this
+                // month can always be compared with the one before it. "fixed" keeps
+                // exactly this many days.
+                property int retentionDays: 31
+                property string retentionMode: "previousMonth"
                 // "auto" prefers RAPL and falls back to battery drain; "rapl",
                 // "battery" and "none" pin the choice.
                 property string energySource: "auto"
+                // Sample intervals between full /proc sweeps for new GPU clients.
+                // Only a backstop; a new window forces one immediately.
+                property int gpuFullEvery: 30
                 // Seconds without input before foreground time stops accruing.
                 // 0 turns the idle monitor off, and time keeps running.
                 property int idleTimeoutSec: 300
@@ -773,6 +782,26 @@ Singleton {
                 property bool trackHeadless: true
                 property bool showHeadless: false
                 property bool overlayEnabled: true
+
+                // What the overlay opens on. "day", "week" or "month", and a metric
+                // key from the tab row. `rememberLastView` overrides both with
+                // whatever was last looked at.
+                property string defaultGranularity: "day"
+                property string defaultMetric: "fg"
+                property bool rememberLastView: true
+                property string lastGranularity: "day"
+                property string lastMetric: "fg"
+                // Which day a week runs from. Weeks are calendar weeks so that the
+                // one before is always the same seven days, whoever asks.
+                property bool weekStartsMonday: true
+                // Keep the picked app across openings instead of clearing it.
+                property bool keepSelection: false
+                // Off by default: it needs the period before the one on screen
+                // parsed as well, which doubles the files read for a month.
+                property bool showComparison: false
+                // Apps under this many seconds for the chosen metric are left out of
+                // the list. Duration metrics only; energy is never thresholded.
+                property int minDurationSec: 0
             }
 
             property list<var> bluetoothDeviceImages: []

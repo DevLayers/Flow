@@ -21,8 +21,40 @@ Scope {
     id: root
 
     property bool activeState: false
-    property int rangeIndex: 0
-    property int metricIndex: 0
+    // The surface is destroyed on close, so what was being looked at is held out
+    // here. Granularity and metric are keys rather than indexes: the config stores
+    // them by name, and a reordered tab row must not silently change what opens.
+    property string granularity: "day"
+    property string metricKey: "fg"
+    property int periodOffset: 0
+    property string selectedKey: ""
+    // What the next opening starts on, written only by `resolveView`. Kept apart
+    // from the two above because the panel writes those back as it is built, which
+    // would otherwise overwrite the view being asked for before it is applied.
+    property string pendingGranularity: "day"
+    property string pendingMetric: "fg"
+
+    /// Which view a fresh opening starts on. Always the current period — going back
+    /// is deliberate, and reopening days later onto a stale month would read as
+    /// missing data.
+    function resolveView() {
+        const opts = Config.options.appStats;
+        const remembered = opts?.rememberLastView ?? true;
+        root.pendingGranularity = (remembered ? opts?.lastGranularity : opts?.defaultGranularity) ?? "day";
+        root.pendingMetric = (remembered ? opts?.lastMetric : opts?.defaultMetric) ?? "fg";
+        root.granularity = root.pendingGranularity;
+        root.metricKey = root.pendingMetric;
+        root.periodOffset = 0;
+        if (!(opts?.keepSelection ?? false))
+            root.selectedKey = "";
+    }
+
+    function rememberView() {
+        if (!(Config.options.appStats?.rememberLastView ?? true))
+            return;
+        Config.options.appStats.lastGranularity = root.granularity;
+        Config.options.appStats.lastMetric = root.metricKey;
+    }
 
     Connections {
         target: GlobalStates
@@ -45,6 +77,7 @@ Scope {
 
     function requestOpen() {
         closeTimer.stop();
+        root.resolveView();
         root.activeState = true;
         GlobalStates.usageOpen = true;
     }
@@ -299,13 +332,21 @@ Scope {
                             Layout.preferredWidth: Math.min(1500, Math.max(900, calculatedWidth))
                             Layout.preferredHeight: Math.min(700, Math.max(460, calculatedHeight))
 
-                            // The surface is destroyed on close, so what is being
-                            // looked at is remembered out here instead — reopening
-                            // to a reset view loses the thread of the question.
-                            rangeIndex: root.rangeIndex
-                            metricIndex: root.metricIndex
-                            onRangeIndexChanged: root.rangeIndex = usageContent.rangeIndex
-                            onMetricIndexChanged: root.metricIndex = usageContent.metricIndex
+                            initialGranularity: root.pendingGranularity
+                            initialMetric: root.pendingMetric
+                            periodOffset: root.periodOffset
+                            selectedKey: root.selectedKey
+
+                            onPeriodOffsetChanged: root.periodOffset = usageContent.periodOffset
+                            onSelectedKeyChanged: root.selectedKey = usageContent.selectedKey
+                            onGranularityChanged: {
+                                root.granularity = usageContent.granularity;
+                                root.rememberView();
+                            }
+                            onMetricChanged: {
+                                root.metricKey = usageContent.metric.key;
+                                root.rememberView();
+                            }
                         }
                     }
                 }

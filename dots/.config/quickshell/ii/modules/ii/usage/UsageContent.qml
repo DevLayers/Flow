@@ -16,18 +16,21 @@ import "UsageFormat.js" as Format
 Item {
     id: root
 
-    readonly property var ranges: [
+    /// Calendar periods rather than a rolling window. A week is always the same
+    /// seven days and a month the same month however long ago it is asked about,
+    /// which is the only way two of them can be put side by side.
+    readonly property var granularities: [
         {
-            "days": 1,
-            "name": Translation.tr("Today")
+            "key": "day",
+            "name": Translation.tr("Day")
         },
         {
-            "days": 7,
-            "name": Translation.tr("7 days")
+            "key": "week",
+            "name": Translation.tr("Week")
         },
         {
-            "days": 30,
-            "name": Translation.tr("30 days")
+            "key": "month",
+            "name": Translation.tr("Month")
         }
     ]
 
@@ -72,16 +75,42 @@ Item {
         }
     ]
 
-    property int rangeIndex: 0
+    property int granularityIndex: 0
+    /// Periods back from the current one: 0 is today / this week / this month.
+    /// Never positive — there is nothing ahead of now to look at.
+    property int periodOffset: 0
     property int metricIndex: 0
     property string selectedKey: ""
     /// Kept in the config rather than here so the chart, which asks the service
     /// directly, cannot end up filtering differently from the list.
     readonly property bool showHeadless: AppStats.showHeadless
+    /// Apps under this many seconds drop out of the list — not out of the totals,
+    /// which are what the machine actually did.
+    readonly property int minDuration: Config.options.appStats?.minDurationSec ?? 0
+    readonly property bool showComparison: Config.options.appStats?.showComparison ?? false
 
     readonly property var metric: root.metrics[root.metricIndex]
-    readonly property bool isSingleDay: root.ranges[root.rangeIndex].days === 1
-    readonly property var dates: AppStats.recentDates(root.ranges[root.rangeIndex].days)
+    readonly property string granularity: root.granularities[root.granularityIndex].key
+    readonly property bool isSingleDay: root.granularity === "day"
+    readonly property var dates: AppStats.periodDates(root.granularity, root.periodOffset)
+    readonly property bool canGoBack: AppStats.hasEarlierPeriod(root.granularity, root.periodOffset)
+    readonly property bool canGoForward: root.periodOffset < 0
+
+    function stepPeriod(delta) {
+        const next = Math.min(0, root.periodOffset + delta);
+        if (next === root.periodOffset) return;
+        if (next < root.periodOffset && !root.canGoBack) return;
+        root.periodOffset = next;
+    }
+
+    /// Changing granularity keeps you in the present rather than at whatever offset
+    /// the last one was on — three weeks back and three months back are different
+    /// places, and silently jumping between them reads as broken data.
+    function setGranularity(index) {
+        if (root.granularityIndex === index) return;
+        root.granularityIndex = index;
+        root.periodOffset = 0;
+    }
 
     readonly property var summary: {
         // Touching `history` here is what makes every derived figure recompute when
@@ -96,7 +125,10 @@ Item {
     /// unattributed remainder joins the list only for energy, the one metric it
     /// actually holds.
     readonly property var ranked: {
-        const list = root.summary.apps.filter(rec => root.metricValue(rec) > 0);
+        // A threshold in seconds says nothing about watt-hours, so it is applied to
+        // the metrics it can be read in and ignored for the rest.
+        const floor = root.metric.kind === "duration" ? root.minDuration : 0;
+        const list = root.summary.apps.filter(rec => root.metricValue(rec) > floor);
         if (root.metric.key === "energy" && root.metricValue(root.summary.system) > 0)
             list.push(root.summary.system);
         list.sort((a, b) => root.metricValue(b) - root.metricValue(a));
@@ -107,12 +139,27 @@ Item {
     /// The selected metric over everything in scope. Screen time is the device's
     /// own figure rather than the sum of the list, for the same reason the chart
     /// draws it that way: two windows on screen are one hour of screen time.
-    readonly property real metricTotal: {
-        if (root.selectedRecord)
-            return root.metricValue(root.selectedRecord);
+    readonly property real metricTotal: root.totalFor(root.summary, root.dates)
+
+    /// The same figure the summary card leads with, for any period. Taken off the
+    /// summary rather than off `ranked`, so a listing threshold cannot quietly
+    /// shrink the total the threshold was never meant to touch.
+    function totalFor(summary, dates) {
+        if (root.selectedKey.length > 0) {
+            if (root.selectedKey === AppStats.systemKey)
+                return root.metricValue(summary.system);
+            for (const rec of summary.apps) {
+                if (rec.key === root.selectedKey)
+                    return root.metricValue(rec);
+            }
+            return 0;
+        }
         if (root.metric.key === "fg")
-            return root.deviceScreenTime;
-        return root.ranked.reduce((total, rec) => total + root.metricValue(rec), 0);
+            return root.deviceScreenTimeFor(dates);
+        let total = summary.apps.reduce((sum, rec) => sum + root.metricValue(rec), 0);
+        if (root.metric.key === "energy")
+            total += root.metricValue(summary.system);
+        return total;
     }
 
     readonly property var selectedRecord: {
@@ -190,14 +237,70 @@ Item {
         return values.map((value, index) => value + (system[index] ?? 0));
     }
 
-    /// Screen time for the whole range, counted once rather than once per window.
+    /// Screen time for a set of dates, counted once rather than once per window.
+    function deviceScreenTimeFor(dates) {
+        return dates.reduce((total, date) => total + AppStats.deviceHours(date, "fg").reduce((sum, value) => sum + value, 0), 0);
+    }
+
     readonly property real deviceScreenTime: {
         AppStats.history;
-        return root.dates.reduce((total, date) => total + AppStats.deviceHours(date, "fg").reduce((sum, value) => sum + value, 0), 0);
+        return root.deviceScreenTimeFor(root.dates);
+    }
+
+    /// The period before the one on screen, for the comparison line.
+    ///
+    /// Its files are loaded a beat after the current period rather than with it:
+    /// a month view already parses thirty-odd of them on the main thread, and
+    /// doubling that at the moment the overlay opens is felt.
+    readonly property var previousDates: root.showComparison ? AppStats.periodDates(root.granularity, root.periodOffset - 1) : []
+    property bool comparisonReady: false
+
+    readonly property real previousTotal: {
+        AppStats.history;
+        if (!root.comparisonReady || root.previousDates.length === 0)
+            return -1;
+        const summary = AppStats.summarize(root.previousDates, {
+            "headless": root.showHeadless
+        });
+        return root.totalFor(summary, root.previousDates);
+    }
+
+    /// Percent change against the period before, or NaN when there is nothing to
+    /// compare with — a period with no data reads as "-100 %" otherwise, which
+    /// says the machine was idle rather than that it was not yet recording.
+    readonly property real comparisonDelta: {
+        if (root.previousTotal <= 0 || root.metricTotal <= 0)
+            return NaN;
+        return (root.metricTotal - root.previousTotal) / root.previousTotal * 100;
+    }
+
+    Timer {
+        id: comparisonTimer
+        interval: 400
+        onTriggered: {
+            AppStats.ensureDates(root.previousDates);
+            root.comparisonReady = true;
+        }
+    }
+
+    onPreviousDatesChanged: {
+        root.comparisonReady = false;
+        if (root.previousDates.length > 0)
+            comparisonTimer.restart();
     }
 
     /// Every `dayStride`-th label is drawn, counted back from today.
     readonly property int dayStride: Math.max(1, Math.ceil(root.dates.length / 10))
+
+    /// Which bucket is now, or -1 in a period that is already over — a past week
+    /// has no current column, and marking one would date the chart wrong.
+    readonly property int nowIndex: {
+        if (root.dates.length === 0)
+            return -1;
+        if (root.isSingleDay)
+            return root.periodOffset === 0 ? DateTime.clock.date.getHours() : -1;
+        return root.dates[root.dates.length - 1] === AppStats.todayDate ? root.dates.length - 1 : -1;
+    }
 
     readonly property var chartLabels: {
         if (root.isSingleDay)
@@ -259,10 +362,19 @@ Item {
             root.metricIndex = (root.metricIndex + root.metrics.length - 1) % root.metrics.length;
             return true;
         case Qt.Key_Left:
-            root.rangeIndex = Math.max(0, root.rangeIndex - 1);
+            root.stepPeriod(-1);
             return true;
         case Qt.Key_Right:
-            root.rangeIndex = Math.min(root.ranges.length - 1, root.rangeIndex + 1);
+            root.stepPeriod(1);
+            return true;
+        case Qt.Key_PageUp:
+            root.setGranularity(Math.min(root.granularities.length - 1, root.granularityIndex + 1));
+            return true;
+        case Qt.Key_PageDown:
+            root.setGranularity(Math.max(0, root.granularityIndex - 1));
+            return true;
+        case Qt.Key_Home:
+            root.periodOffset = 0;
             return true;
         case Qt.Key_Up:
             root.moveSelection(-1);
@@ -274,14 +386,56 @@ Item {
         return false;
     }
 
+    /// The view to open on, named rather than numbered — see Usage.qml.
+    property string initialGranularity: "day"
+    property string initialMetric: "fg"
+
+    function indexOfKey(list, key, fallback) {
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].key === key)
+                return i;
+        }
+        return fallback;
+    }
+
     onDatesChanged: AppStats.ensureDates(root.dates)
-    Component.onCompleted: root.refresh()
+
+    Component.onCompleted: {
+        root.granularityIndex = root.indexOfKey(root.granularities, root.initialGranularity, 0);
+        root.metricIndex = root.indexOfKey(root.metrics, root.initialMetric, 0);
+        root.refresh();
+    }
 
     // A selection is only meaningful while the app is still in the list; changing
     // metric or range can drop it out entirely.
     onRankedChanged: {
         if (root.selectedKey.length > 0 && !root.selectedRecord)
             root.selectedKey = "";
+    }
+
+    /// One step through the timeline. Dimmed rather than hidden at either end, so
+    /// the control keeps its place and says why it will not move.
+    component StepButton: RippleButton {
+        id: step
+
+        required property string symbol
+        property string tooltip: ""
+
+        implicitWidth: 32
+        implicitHeight: 32
+        buttonRadius: Appearance.rounding.full
+        opacity: step.enabled ? 1 : 0.35
+
+        contentItem: MaterialSymbol {
+            anchors.centerIn: parent
+            text: step.symbol
+            iconSize: 20
+            color: Appearance.colors.colOnLayer0
+        }
+
+        StyledToolTip {
+            text: step.tooltip
+        }
     }
 
     component Card: Rectangle {
@@ -295,6 +449,9 @@ Item {
         required property string label
         required property string value
         property string icon: ""
+        /// A second line under the figure, for context the figure alone lacks.
+        property string caption: ""
+        property string captionIcon: ""
         property bool shown: true
         /// The metric this chip would repeat. The card leads with whichever metric
         /// is selected, so the chip that would say the same figure twice steps aside.
@@ -326,6 +483,26 @@ Item {
             font.weight: Font.DemiBold
             color: Appearance.colors.colOnLayer1
         }
+
+        // Neutral on purpose: more screen time is not worse and less energy is not
+        // better without knowing what the machine was for.
+        RowLayout {
+            visible: chip.caption.length > 0
+            spacing: 3
+
+            MaterialSymbol {
+                visible: chip.captionIcon.length > 0
+                text: chip.captionIcon
+                iconSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colSubtext
+            }
+
+            StyledText {
+                text: chip.caption
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+        }
     }
 
     ColumnLayout {
@@ -341,18 +518,71 @@ Item {
                 padding: 0
 
                 Repeater {
-                    model: root.ranges
+                    model: root.granularities
 
                     delegate: SelectionGroupButton {
                         required property var modelData
                         required property int index
 
                         buttonText: modelData.name
-                        toggled: root.rangeIndex === index
+                        toggled: root.granularityIndex === index
                         leftmost: index === 0
-                        rightmost: index === root.ranges.length - 1
-                        onClicked: root.rangeIndex = index
+                        rightmost: index === root.granularities.length - 1
+                        onClicked: root.setGranularity(index)
                     }
+                }
+            }
+
+            // Which day, week or month is on screen. The arrows stop where the data
+            // does rather than walking into periods retention has already dropped.
+            RowLayout {
+                spacing: 2
+
+                StepButton {
+                    symbol: "chevron_left"
+                    enabled: root.canGoBack
+                    tooltip: Translation.tr("Previous period")
+                    onClicked: root.stepPeriod(-1)
+                }
+
+                ColumnLayout {
+                    Layout.minimumWidth: 150
+                    spacing: 0
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: AppStats.periodLabel(root.granularity, root.periodOffset)
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colOnLayer0
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: AppStats.periodRangeLabel(root.granularity, root.periodOffset)
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
+                    }
+                }
+
+                StepButton {
+                    symbol: "chevron_right"
+                    enabled: root.canGoForward
+                    tooltip: Translation.tr("Next period")
+                    onClicked: root.stepPeriod(1)
+                }
+            }
+
+            RippleButton {
+                visible: root.periodOffset < 0
+                implicitHeight: 30
+                buttonRadius: Appearance.rounding.full
+                horizontalPadding: 12
+                onClicked: root.periodOffset = 0
+
+                contentItem: StyledText {
+                    text: Translation.tr("Now")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colOnLayer1
                 }
             }
 
@@ -447,6 +677,14 @@ Item {
                             icon: root.metric.icon
                             label: root.selectedRecord === null && root.metric.key === "fg" ? Translation.tr("Device screen time") : root.metric.name
                             value: root.formatMetric(root.metricTotal)
+                            captionIcon: isNaN(root.comparisonDelta) ? "" : (root.comparisonDelta >= 0 ? "trending_up" : "trending_down")
+                            caption: {
+                                if (!root.showComparison || isNaN(root.comparisonDelta))
+                                    return "";
+                                const percent = Math.round(Math.abs(root.comparisonDelta));
+                                const previous = AppStats.periodLabel(root.granularity, root.periodOffset - 1);
+                                return Translation.tr("%1 %2 % vs %3").arg(root.comparisonDelta >= 0 ? "+" : "−").arg(percent).arg(previous);
+                            }
                         }
 
                         StatChip {
@@ -599,7 +837,7 @@ Item {
                             tooltipLabels: root.isSingleDay ? root.chartLabels : root.dates
                             labelStride: root.isSingleDay ? 3 : root.dayStride
                             labelAnchorEnd: !root.isSingleDay
-                            highlightIndex: root.isSingleDay ? DateTime.clock.date.getHours() : root.dates.length - 1
+                            highlightIndex: root.nowIndex
                             timeScale: root.metric.kind === "duration"
                             // Millijoules per watt-hour, the figure the axis is
                             // labelled in.

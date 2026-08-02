@@ -118,6 +118,7 @@ checked against it.
 | `services/AppStats.qml` | the singleton that runs the sampler and parses the day files |
 | `modules/ii/usage/` | the overlay: `Usage`, `UsageContent`, `UsageAppRow`, `UsageBarChart`, `UsageFormat.js` |
 | `modules/common/Config.qml` | the `appStats` option group |
+| `modules/settings/configs/UsageStatsConfig.qml` | the settings page, listed in `SettingsPageRegistry` under System |
 | `modules/common/Directories.qml` | `Directories.appStats`, the state dir |
 | `GlobalStates.qml` | `usageOpen` |
 | `panelFamilies/*.qml` | a `PanelLoader` for `Usage`, in both families |
@@ -139,24 +140,40 @@ rewritten every `flushIntervalMs`.
 
 ### Configuration
 
-`Config.options.appStats` in `~/.config/illogical-impulse/config.json`. Everything
-except the last two is passed to the daemon on its command line and is read once at
-startup, so changing them restarts it.
+Settings → System → **App Usage** covers all of it. The same keys live under
+`Config.options.appStats` in `~/.config/illogical-impulse/config.json`.
+
+Everything in the first table is a command-line flag the daemon reads once at
+startup, so changing one relaunches it.
 
 | Key | Default | Effect |
 | --- | --- | --- |
 | `enable` | `true` | run the sampler at all |
 | `sampleIntervalMs` | `10000` | counter poll period |
 | `flushIntervalMs` | `60000` | day-file write period |
-| `retentionDays` | `30` | day files older than this are deleted |
+| `retentionDays` | `31` | days of history kept — a floor rather than the window itself under `previousMonth` |
+| `retentionMode` | `"previousMonth"` | `previousMonth` never drops a day last month needs, so the window slides between 31 and 62 days and the two months can be compared; `fixed` keeps exactly `retentionDays` |
 | `energySource` | `"auto"` | `auto`, `rapl`, `battery` or `none` |
+| `gpuFullEvery` | `30` | samples between full GPU rescans |
 | `idleTimeoutSec` | `300` | seconds without input before foreground time stops; `0` disables the idle monitor |
 | `trackHeadless` | `true` | record processes that own no window |
-| `showHeadless` | `false` | show those processes in the list (toggleable in the overlay) |
+
+The rest are read live by the overlay.
+
+| Key | Default | Effect |
+| --- | --- | --- |
 | `overlayEnabled` | `true` | load the overlay panel |
+| `showHeadless` | `false` | count headless processes in the list and the totals |
+| `defaultGranularity` | `"day"` | `day`, `week` or `month` |
+| `defaultMetric` | `"fg"` | `fg`, `focus`, `energy`, `cpu` or `gpu` |
+| `rememberLastView` | `true` | reopen on the last granularity and metric instead of the two above |
+| `weekStartsMonday` | `true` | which day a calendar week runs from |
+| `keepSelection` | `false` | keep the picked app across openings |
+| `showComparison` | `false` | percent change against the period before. Off by default: it parses that period as well, doubling the files a month view reads |
+| `minDurationSec` | `0` | hide apps under this from the list. Duration metrics only, and never from the totals |
 
 Turning `enable` off stops collection but keeps the history; deleting the state
-directory is what discards it.
+directory, or the button on the settings page, is what discards it.
 
 ## Running it by hand
 
@@ -171,6 +188,7 @@ It is a normal program: run it in a terminal and watch the NDJSON.
 | `--interval-ms` | `10000` | counter poll period (minimum 1000) |
 | `--flush-ms` | `60000` | how often the day file is rewritten |
 | `--retention-days` | `30` | day files older than this are deleted |
+| `--retention-mode` | `fixed` | `fixed`, or `previous-month` to treat the above as a floor and never drop a day the previous calendar month needs |
 | `--state-dir` | `$XDG_STATE_HOME/quickshell/user/app_stats` | where day files go |
 | `--energy` | `auto` | `rapl`, `battery`, `auto` or `off` |
 | `--gpu-full-every` | `30` | intervals between full GPU rescans (a new window forces one) |

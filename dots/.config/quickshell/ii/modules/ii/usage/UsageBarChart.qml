@@ -46,6 +46,8 @@ Item {
     property color barColor: Appearance.colors.colPrimary
     property color emptyColor: Appearance.colors.colLayer2
     property real barSpacing: 3
+    /// Widest a single bar is drawn, however few buckets share the chart.
+    property real maxBarWidth: 56
 
     readonly property real maxValue: {
         let max = 0;
@@ -228,9 +230,14 @@ Item {
                                 }
                                 opacity: bucket.value > 0 ? 1 : 0.6
 
+                                // Capped rather than filling its slot: a week is seven
+                                // buckets across a chart sized for thirty-one, and a
+                                // bar a sixth of the panel wide reads as a block of
+                                // colour rather than as a measurement.
+                                width: Math.min(parent.width, root.maxBarWidth)
+
                                 anchors {
-                                    left: parent.left
-                                    right: parent.right
+                                    horizontalCenter: parent.horizontalCenter
                                     bottom: parent.bottom
                                 }
 

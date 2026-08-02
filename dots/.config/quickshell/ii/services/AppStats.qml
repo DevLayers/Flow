@@ -56,8 +56,11 @@ Singleton {
     readonly property bool showHeadless: root.opts?.showHeadless ?? false
     readonly property int intervalMs: root.opts?.sampleIntervalMs ?? 10000
     readonly property int flushMs: root.opts?.flushIntervalMs ?? 60000
-    readonly property int retentionDays: root.opts?.retentionDays ?? 30
+    readonly property int retentionDays: root.opts?.retentionDays ?? 31
+    readonly property string retentionMode: root.opts?.retentionMode ?? "previousMonth"
     readonly property string energySource: root.opts?.energySource ?? "auto"
+    readonly property int gpuFullEvery: root.opts?.gpuFullEvery ?? 30
+    readonly property bool weekStartsMonday: root.opts?.weekStartsMonday ?? true
     /// Seconds of no input before foreground time is paused. 0 disables the monitor.
     readonly property int idleTimeout: root.opts?.idleTimeoutSec ?? 300
 
@@ -95,6 +98,100 @@ Singleton {
             out.push(root.dateKey(new Date(base.getFullYear(), base.getMonth(), base.getDate() - i)));
         }
         return out;
+    }
+
+    /**
+     * Calendar periods, the unit the overlay navigates in.
+     *
+     * `granularity` is "day", "week" or "month" and `offset` counts backwards from
+     * the current one: 0 is today / this week / this month, -1 the one before it.
+     * Weeks and months are real calendar periods rather than a rolling window, so
+     * that "the previous one" is the same seven days or the same month however long
+     * ago it is asked about — which is what makes two periods comparable at all.
+     */
+    function periodStart(granularity, offset) {
+        const base = clock.date;
+        if (granularity === "week") {
+            const dayOfWeek = base.getDay();
+            const back = root.weekStartsMonday ? (dayOfWeek + 6) % 7 : dayOfWeek;
+            return new Date(base.getFullYear(), base.getMonth(), base.getDate() - back + offset * 7);
+        }
+        if (granularity === "month") return new Date(base.getFullYear(), base.getMonth() + offset, 1);
+        return new Date(base.getFullYear(), base.getMonth(), base.getDate() + offset);
+    }
+
+    function periodLength(granularity, start) {
+        if (granularity === "week") return 7;
+        if (granularity === "month") return new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+        return 1;
+    }
+
+    /// The dates of a period, oldest first. Never runs past today: the month in
+    /// progress ends where the data does rather than trailing empty columns for
+    /// days that have not happened.
+    function periodDates(granularity, offset) {
+        const start = root.periodStart(granularity, offset);
+        const length = root.periodLength(granularity, start);
+        const out = [];
+        for (let i = 0; i < length; i++) {
+            const key = root.dateKey(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+            if (key > root.todayDate) break;
+            out.push(key);
+        }
+        return out;
+    }
+
+    /// Oldest date still on disk, mirroring the daemon's own cutoff so navigation
+    /// stops where the files do instead of walking into a run of empty periods.
+    function oldestDate() {
+        const base = clock.date;
+        const days = Math.max(1, root.retentionDays);
+        const byDays = root.dateKey(new Date(base.getFullYear(), base.getMonth(), base.getDate() - days));
+        if (root.retentionMode !== "previousMonth") return byDays;
+        const firstOfPrevious = root.dateKey(new Date(base.getFullYear(), base.getMonth() - 1, 1));
+        return byDays < firstOfPrevious ? byDays : firstOfPrevious;
+    }
+
+    /// Whether stepping one period further back would land on anything retention
+    /// still holds.
+    function hasEarlierPeriod(granularity, offset) {
+        const dates = root.periodDates(granularity, offset - 1);
+        if (dates.length === 0) return false;
+        return dates[dates.length - 1] >= root.oldestDate();
+    }
+
+    /// "Today", "Last week", "August 2026" — what the period is called. The two
+    /// most recent of each get a name rather than a date, since that is how they
+    /// are asked for; anything older is spelled out.
+    function periodLabel(granularity, offset) {
+        const start = root.periodStart(granularity, offset);
+        if (granularity === "day") {
+            if (offset === 0) return Translation.tr("Today");
+            if (offset === -1) return Translation.tr("Yesterday");
+            return start.toLocaleDateString(Qt.locale(), "ddd d MMM");
+        }
+        if (granularity === "week") {
+            if (offset === 0) return Translation.tr("This week");
+            if (offset === -1) return Translation.tr("Last week");
+            return Translation.tr("Week of %1").arg(start.toLocaleDateString(Qt.locale(), "d MMM"));
+        }
+        return start.toLocaleDateString(Qt.locale(), "MMMM yyyy");
+    }
+
+    /// The dates a period actually covers, for the line under its name. A named
+    /// period says nothing about where it sits, and the current one is shorter than
+    /// it looks — half of today is not in it yet.
+    function periodRangeLabel(granularity, offset) {
+        const dates = root.periodDates(granularity, offset);
+        if (dates.length === 0) return "";
+        const start = root.periodStart(granularity, offset);
+        if (granularity === "day") return start.toLocaleDateString(Qt.locale(), "d MMMM yyyy");
+
+        const last = dates[dates.length - 1].split("-");
+        const end = new Date(parseInt(last[0]), parseInt(last[1]) - 1, parseInt(last[2]));
+        const sameMonth = start.getMonth() === end.getMonth();
+        const from = sameMonth ? `${start.getDate()}` : start.toLocaleDateString(Qt.locale(), "d MMM");
+        return `${from} – ${end.toLocaleDateString(Qt.locale(), "d MMM")}`;
     }
 
     function parseDoc(text) {
@@ -147,6 +244,30 @@ Singleton {
             return;
         }
         todayView.reload();
+    }
+
+    /// Days on disk and the bytes they take, or -1 until asked for. Measured with a
+    /// shell rather than a FolderListModel: the settings page wants a size as well
+    /// as a count, and nothing else in the shell needs either.
+    property int storedDays: -1
+    property real storedBytes: -1
+
+    function measureStorage() {
+        storageProcess.running = false;
+        storageProcess.running = true;
+    }
+
+    /// Delete every day file, keeping whatever the sampler has in memory — the next
+    /// flush writes today's again. Nothing here asks for confirmation; the caller does.
+    function clearHistory() {
+        Quickshell.execDetached(["sh", "-c", `rm -f -- "${root.stateDir}"/*.json`]);
+        root.history = ({});
+        root.loadBatch = [];
+        clearTimer.restart();
+    }
+
+    function openStateDir() {
+        Quickshell.execDetached(["xdg-open", root.stateDir]);
     }
 
     function pushState() {
@@ -452,6 +573,30 @@ Singleton {
         onTriggered: todayView.reload()
     }
 
+    // The unlink is detached, so the count that follows it has to wait for the
+    // filesystem rather than for the call to return.
+    Timer {
+        id: clearTimer
+        interval: 400
+        onTriggered: {
+            todayView.reload();
+            root.measureStorage();
+        }
+    }
+
+    Process {
+        id: storageProcess
+        command: ["sh", "-c", `printf '%s %s' "$(ls -1 "${root.stateDir}"/*.json 2>/dev/null | wc -l)" "$(du -sb "${root.stateDir}" 2>/dev/null | cut -f1)"`]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const parts = text.trim().split(/\s+/);
+                root.storedDays = parseInt(parts[0]) || 0;
+                root.storedBytes = parseInt(parts[1]) || 0;
+            }
+        }
+    }
+
     FileView {
         id: todayView
         path: `${root.stateDir}/${root.todayDate}.json`
@@ -479,7 +624,7 @@ Singleton {
         }
     }
 
-    readonly property string launchKey: [root.intervalMs, root.flushMs, root.retentionDays, root.energySource, root.trackHeadless].join("|")
+    readonly property string launchKey: [root.intervalMs, root.flushMs, root.retentionDays, root.retentionMode, root.energySource, root.gpuFullEvery, root.trackHeadless].join("|")
     onLaunchKeyChanged: root.restart()
 
     Process {
@@ -487,7 +632,7 @@ Singleton {
         running: root.enabled && !root.restarting
         stdinEnabled: true
         command: {
-            const args = [`${Directories.scriptPath}/appStats/app_stats`, "--state-dir", root.stateDir, "--interval-ms", `${root.intervalMs}`, "--flush-ms", `${root.flushMs}`, "--retention-days", `${root.retentionDays}`, "--energy", root.energySource];
+            const args = [`${Directories.scriptPath}/appStats/app_stats`, "--state-dir", root.stateDir, "--interval-ms", `${root.intervalMs}`, "--flush-ms", `${root.flushMs}`, "--retention-days", `${root.retentionDays}`, "--retention-mode", root.retentionMode === "previousMonth" ? "previous-month" : "fixed", "--energy", root.energySource, "--gpu-full-every", `${root.gpuFullEvery}`];
             if (!root.trackHeadless) args.push("--no-headless");
             return args;
         }

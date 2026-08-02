@@ -51,6 +51,8 @@ struct Args {
     interval_ms: u64,
     flush_ms: u64,
     retention_days: i64,
+    /// Whether `retention_days` is exact or a floor under the previous calendar month.
+    retention_mode: store::Retention,
     state_dir: PathBuf,
     energy_source: String,
     track_headless: bool,
@@ -76,6 +78,7 @@ impl Args {
             interval_ms: 10_000,
             flush_ms: 60_000,
             retention_days: 30,
+            retention_mode: store::Retention::Fixed,
             state_dir: default_state_dir(),
             energy_source: "auto".into(),
             track_headless: true,
@@ -102,6 +105,7 @@ impl Args {
                 "--retention-days" => {
                     a.retention_days = value().parse().unwrap_or(a.retention_days)
                 }
+                "--retention-mode" => a.retention_mode = store::Retention::parse(&value()),
                 "--state-dir" => a.state_dir = PathBuf::from(value()),
                 "--energy" => a.energy_source = value(),
                 "--gpu-full-every" => {
@@ -190,7 +194,11 @@ struct Tracker {
 impl Tracker {
     fn new(args: Args) -> Tracker {
         let clk_tck = procs::clk_tck().max(1);
-        let store = store::Store::new(args.state_dir.clone(), args.retention_days);
+        let store = store::Store::new(
+            args.state_dir.clone(),
+            args.retention_days,
+            args.retention_mode,
+        );
         let energy = energy::Reader::new(&args.energy_source);
         let now = store::now_ms();
 
@@ -670,6 +678,7 @@ fn main() {
         "intervalMs": t.args.interval_ms,
         "flushMs": t.args.flush_ms,
         "retentionDays": t.args.retention_days,
+        "retentionMode": if t.args.retention_mode == store::Retention::PreviousMonth { "previous-month" } else { "fixed" },
         "stateDir": t.store.dir().to_string_lossy(),
         "headless": t.args.track_headless,
     }));

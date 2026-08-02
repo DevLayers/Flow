@@ -93,9 +93,30 @@ pub struct AppRec {
     pub hours: BTreeMap<u32, Bucket>,
 }
 
+/// What `retention_days` means.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Retention {
+    /// Keep exactly that many days back from today.
+    Fixed,
+    /// Keep that many days *at least*, and never drop a day the previous calendar
+    /// month still holds — so the month just gone can always be compared against
+    /// the one running. The window slides between roughly 31 and 62 days.
+    PreviousMonth,
+}
+
+impl Retention {
+    pub fn parse(s: &str) -> Retention {
+        match s {
+            "previous-month" | "previousMonth" | "month" => Retention::PreviousMonth,
+            _ => Retention::Fixed,
+        }
+    }
+}
+
 pub struct Store {
     dir: PathBuf,
     retention_days: i64,
+    retention_mode: Retention,
     date: String,
     gmtoff: i64,
     apps: BTreeMap<String, AppRec>,
@@ -116,6 +137,19 @@ pub fn local(epoch_secs: i64) -> (String, u32, i64) {
     (date, tm.tm_hour as u32, tm.tm_gmtoff as i64)
 }
 
+/// First day of the month before the one `date` falls in, as a "YYYY-MM-DD" key.
+/// Takes the string rather than an instant because that is what it is compared
+/// against — ISO dates sort lexicographically, so no calendar arithmetic is needed.
+fn first_of_previous_month(date: &str) -> String {
+    let year: i32 = date[0..4].parse().unwrap_or(1970);
+    let month: u32 = date[5..7].parse().unwrap_or(1);
+    if month <= 1 {
+        format!("{:04}-12-01", year - 1)
+    } else {
+        format!("{:04}-{:02}-01", year, month - 1)
+    }
+}
+
 pub fn now_ms() -> i64 {
     let mut ts: libc::timespec = unsafe { std::mem::zeroed() };
     unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut ts) };
@@ -129,12 +163,13 @@ fn offset_string(gmtoff: i64) -> String {
 }
 
 impl Store {
-    pub fn new(dir: PathBuf, retention_days: i64) -> Store {
+    pub fn new(dir: PathBuf, retention_days: i64, retention_mode: Retention) -> Store {
         let _ = fs::create_dir_all(&dir);
         let (date, _, gmtoff) = local(now_ms() / 1000);
         let mut store = Store {
             dir,
             retention_days,
+            retention_mode,
             date,
             gmtoff,
             apps: BTreeMap::new(),
@@ -271,11 +306,25 @@ impl Store {
         Some(path)
     }
 
-    fn prune(&mut self) {
+    /// Oldest date worth keeping, or None when nothing is ever dropped. Recomputed
+    /// on every prune rather than at startup, so the month-relative window slides
+    /// with the calendar instead of freezing at whatever day the sampler launched.
+    fn cutoff(&self) -> Option<String> {
         if self.retention_days <= 0 {
-            return;
+            return None;
         }
-        let cutoff = local(now_ms() / 1000 - self.retention_days * 86400).0;
+        let by_days = local(now_ms() / 1000 - self.retention_days * 86400).0;
+        if self.retention_mode == Retention::Fixed {
+            return Some(by_days);
+        }
+        let first_of_previous = first_of_previous_month(&local(now_ms() / 1000).0);
+        Some(std::cmp::min(by_days, first_of_previous))
+    }
+
+    fn prune(&mut self) {
+        let Some(cutoff) = self.cutoff() else {
+            return;
+        };
         let Ok(dir) = fs::read_dir(&self.dir) else {
             return;
         };
