@@ -921,10 +921,6 @@ Scope {
         id: keyboardGrab
         windows: [win]
         active: root.searchActive
-        onCleared: () => {
-            if (!active)
-                GlobalStates.overviewOpen = false;
-        }
     }
 
     readonly property real targetH: {
