@@ -23,16 +23,140 @@ The daemon knows only pids, window classes and counters. It resolves no desktop
 entries, icons or themes — that happens in QML, which already has `AppSearch`. That
 split is what keeps it at ~3.5 MB RSS.
 
-## Building
+## Installation
+
+The QML side ships with the config and needs nothing done to it. Two things do not
+ship and have to be put in place by hand: the **binary**, which is built rather than
+tracked, and the **udev rule**, which is outside `$HOME` and needs root. Steps 3 and 4
+are only for a config that predates this feature or was assembled by hand.
+
+### 1. Build the binary
+
+`rust` and `cargo` are the only build requirements. `libc` and `serde_json` are the
+only dependencies, but cargo does fetch them, so the first build needs network.
 
 ```bash
+yay -S --needed rust
 cd ~/.config/quickshell/ii/scripts/appStats/app_stats_src
 cargo build --release
 cp target/release/app_stats ../
 ```
 
-Neither the binary, `target/` nor `Cargo.lock` belongs in the repo — mirror the
-source and this file, and build on the target machine.
+The result is ~530 KB. It must end up at
+`~/.config/quickshell/ii/scripts/appStats/app_stats` and be executable — that exact
+path is what `AppStats.qml` launches, and there is no fallback if it is missing.
+
+Neither the binary, `target/` nor `Cargo.lock` belongs in the repo — they are
+gitignored. Mirror the source and this file, and build on the target machine.
+`setup-ii-p3drovfx.sh` lists `scripts/appStats/app_stats` in `PROTECTED_PATTERNS`, so
+a config update carries the built binary across instead of deleting it. Rebuild after
+any change to `app_stats_src/`; nothing rebuilds it automatically.
+
+### 2. Install the udev rule
+
+Without it every RAPL read fails and energy silently degrades to whole-battery drain,
+which reads zero on AC. Write `/etc/udev/rules.d/99-rapl-readable.rules`:
+
+```udev
+# Expose Intel RAPL energy counters to the wheel group.
+#
+# energy_uj was restricted to root (mode 400) as the mitigation for
+# CVE-2020-8694 (PLATYPUS), a power side-channel attack. Members of wheel can
+# already read these counters via sudo, so widening to wheel grants no
+# capability that group did not already have -- it only removes the need to run
+# the usage-stats sampler as root.
+#
+# Only energy_uj is touched; name and max_energy_range_uj are already 0444.
+# Matches intel-rapl:0 (package), :0:0 (core), :0:1 (uncore/iGPU), :0:2 (dram).
+
+SUBSYSTEM=="powercap", KERNEL=="intel-rapl:*", TEST=="/sys$devpath/energy_uj", \
+  RUN+="/usr/bin/chgrp wheel /sys$devpath/energy_uj", \
+  RUN+="/usr/bin/chmod g+r /sys$devpath/energy_uj"
+```
+
+Apply it to the already-enumerated devices without a reboot, then check that reading
+works **as your own user** — the daemon never uses `sudo`:
+
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=powercap
+stat -c '%A %G %n' /sys/class/powercap/intel-rapl:0/energy_uj   # -r--r----- wheel
+cat /sys/class/powercap/intel-rapl:0/energy_uj                  # a number, no EACCES
+```
+
+You must be in `wheel` (`groups | grep wheel`); adding yourself needs a re-login. On a
+machine with no `intel-rapl` at all — AMD, or a VM — skip this step and set
+`energySource` to `battery`.
+
+### 3. Hyprland keybind and layer rules
+
+Shipped in `dots/.config/hypr/hyprland/`. On a config that already has them, `hyprctl
+reload` is enough. Otherwise add to `keybinds.lua`:
+
+```lua
+hl.bind("SUPER + U", hl.dsp.global("quickshell:usageToggle"), { description = "Shell: Toggle app usage stats" })
+```
+
+and to `rules.lua`, so the overlay blurs and slides like the other panels:
+
+```lua
+hl.layer_rule({ match = { namespace = "quickshell:usage" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:usage" }, ignore_alpha = 0.6})
+hl.layer_rule({ match = { namespace = "quickshell:usage" }, animation = "slide bottom"})
+```
+
+The overlay still opens without these — it is reachable from the IPC call
+`qs ipc call usage toggle` — but it renders unblurred and pops in.
+
+### 4. Shell wiring
+
+All of this is already in the config; it is listed so a hand-assembled tree can be
+checked against it.
+
+| File | What it adds |
+| --- | --- |
+| `services/AppStats.qml` | the singleton that runs the sampler and parses the day files |
+| `modules/ii/usage/` | the overlay: `Usage`, `UsageContent`, `UsageAppRow`, `UsageBarChart`, `UsageFormat.js` |
+| `modules/common/Config.qml` | the `appStats` option group |
+| `modules/common/Directories.qml` | `Directories.appStats`, the state dir |
+| `GlobalStates.qml` | `usageOpen` |
+| `panelFamilies/*.qml` | a `PanelLoader` for `Usage`, in both families |
+| `shell.qml` | touches `AppStats.stateDir` on startup |
+
+That last line is not optional. The singleton is lazy, so without it nothing is
+collected until the overlay is opened for the first time.
+
+### 5. Restart and verify
+
+```bash
+qs kill; qs &                                   # or: touch ~/.config/quickshell/ii/shell.qml
+pgrep -af app_stats                             # one process, with the flags from Config
+ls ~/.local/state/quickshell/user/app_stats/    # YYYY-MM-DD.json within a minute
+```
+
+Then press **Super + U**. An empty first minute is expected: the day file is only
+rewritten every `flushIntervalMs`.
+
+### Configuration
+
+`Config.options.appStats` in `~/.config/illogical-impulse/config.json`. Everything
+except the last two is passed to the daemon on its command line and is read once at
+startup, so changing them restarts it.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `enable` | `true` | run the sampler at all |
+| `sampleIntervalMs` | `10000` | counter poll period |
+| `flushIntervalMs` | `60000` | day-file write period |
+| `retentionDays` | `30` | day files older than this are deleted |
+| `energySource` | `"auto"` | `auto`, `rapl`, `battery` or `none` |
+| `idleTimeoutSec` | `300` | seconds without input before foreground time stops; `0` disables the idle monitor |
+| `trackHeadless` | `true` | record processes that own no window |
+| `showHeadless` | `false` | show those processes in the list (toggleable in the overlay) |
+| `overlayEnabled` | `true` | load the overlay panel |
+
+Turning `enable` off stops collection but keeps the history; deleting the state
+directory is what discards it.
 
 ## Running it by hand
 
@@ -110,14 +234,20 @@ weight the per-app numbers can bear.
 
 ## Requirements
 
-- **`/etc/udev/rules.d/99-rapl-readable.rules`**, which makes `energy_uj` readable by
-  the `wheel` group. Without it every RAPL read fails and the daemon falls back to
-  whole-battery drain split by a fixed ratio — much cruder, and zero while on AC.
-  The daemon never uses `sudo`.
+None of these are checked at startup; each one missing costs a category of data
+rather than stopping the daemon.
+
+- **The udev rule** from installation step 2. Without it every RAPL read fails and the
+  daemon falls back to whole-battery drain split by a fixed ratio — much cruder, and
+  zero while on AC. The daemon never uses `sudo`.
 - A **Hyprland** session: it reads `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/`.
+  On anything else there are no window events, so every process is headless and
+  foreground time is always zero.
 - The **`xe`** or **`i915`** driver for GPU accounting. Without per-client
   `drm-cycles-*` in fdinfo, GPU shares are simply zero and the uncore energy all
   lands in `__system`.
+- **Write access to `$XDG_STATE_HOME`** for the day files. The directory is created if
+  it does not exist.
 
 ## Cost
 
