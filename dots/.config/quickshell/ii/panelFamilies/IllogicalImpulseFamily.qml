@@ -34,6 +34,7 @@ import qs.modules.ii.localSendPopup
 import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
 import qs.modules.ii.topLayer
+import qs.modules.ii.tilingAssistant
 import qs.modules.ii.usage
 import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.screenshotOverlay
@@ -178,6 +179,10 @@ Scope {
     PanelLoader {
         extraCondition: GlobalStates.screenshotOverlayOpen
         component: ScreenshotOverlay {}
+    }
+    PanelLoader {
+        extraCondition: Config.options.tiling.enable
+        component: TilingOverlay {}
     }
     PanelLoader {
         extraCondition: GlobalStates.connectModeActive

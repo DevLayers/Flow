@@ -73,13 +73,55 @@ Singleton {
     readonly property string monitorName: root.monitor?.name ?? ""
     readonly property var usable: root.monitor ? Tiling.usableArea(root.monitor) : null
 
-    readonly property var zones: Tiling.zonesForMonitor(root.options?.monitors, root.monitorName, root.options?.defaultPreset ?? "kde")
-    readonly property var effectiveGaps: Tiling.gapsForMonitor(root.options?.monitors, root.monitorName, root.gaps)
+    readonly property var zones: root.zonesFor(root.monitorName)
+    readonly property var effectiveGaps: root.gapsFor(root.monitorName)
     readonly property var zoneRects: root.usable ? Tiling.zoneRects(root.zones, root.usable, root.effectiveGaps) : []
 
     readonly property int hoveredZone: {
         if (!root.dragging || !root.usable) return -1;
         return Tiling.zoneIndexAt(root.zones, root.usable, root.cursorX, root.cursorY);
+    }
+
+    // The overlay is a move-drag affordance: a resize drag keeps its own
+    // neighbours, so painting zone targets over it would only mislead.
+    readonly property bool overlayVisible: root.enabled && root.dragging && root.dragKind === "move" && (root.options?.showOnDragStart ?? true)
+
+    function monitorByName(name) {
+        const monitors = HyprlandData.monitors ?? [];
+        for (const candidate of monitors) {
+            if (candidate.name === name) return candidate;
+        }
+        return null;
+    }
+
+    function zonesFor(name) {
+        return Tiling.zonesForMonitor(root.options?.monitors, name, root.options?.defaultPreset ?? "kde");
+    }
+
+    function gapsFor(name) {
+        return Tiling.gapsForMonitor(root.options?.monitors, name, root.gaps);
+    }
+
+    // Zones of one monitor as drawable rects, relative to that monitor's own
+    // origin. Every coordinate conversion the overlay needs lives here so the
+    // overlay itself stays presentational.
+    function overlayZonesFor(name) {
+        const monitor = root.monitorByName(name);
+        if (!monitor) return [];
+        const origin = Tiling.monitorLogicalRect(monitor);
+        const zones = root.zonesFor(name);
+        const rects = Tiling.zoneRects(zones, Tiling.usableArea(monitor), root.gapsFor(name));
+        const out = [];
+        for (let i = 0; i < rects.length; i++) {
+            out.push({
+                x: rects[i].x - origin.x,
+                y: rects[i].y - origin.y,
+                width: rects[i].width,
+                height: rects[i].height,
+                label: Tiling.labelFor(zones[i])
+            });
+        }
+        return out;
     }
 
     function zoneLabel(index) {
