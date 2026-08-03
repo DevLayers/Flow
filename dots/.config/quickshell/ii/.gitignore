@@ -4,4 +4,6 @@ AGENTS.md
 .agent
 .backup_custom
 .ii-vynx-synced
-\n# Script de sync local\nscripts/sync_to_vynx.sh
+
+# Script de sync local
+scripts/sync_to_vynx.sh

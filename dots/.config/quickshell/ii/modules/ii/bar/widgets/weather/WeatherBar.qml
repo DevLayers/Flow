@@ -38,11 +38,9 @@ MouseArea {
         columns: root.vertical ? 1 : 2
         rows: root.vertical ? 2 : 1
 
-        MaterialSymbol {
-            fill: 0
-            text: Icons.getWeatherIcon(Weather.data.wCode) ?? "cloud"
-            iconSize: Appearance.font.pixelSize.large
-            color: Appearance.colors.colOnLayer1
+        Image {
+            source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+            sourceSize: Qt.size(Appearance.font.pixelSize.large, Appearance.font.pixelSize.large)
             Layout.alignment: root.vertical ? Qt.AlignHCenter : Qt.AlignVCenter
         }
 

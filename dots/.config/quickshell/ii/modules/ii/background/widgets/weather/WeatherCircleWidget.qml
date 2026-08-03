@@ -16,7 +16,7 @@ AbstractBackgroundWidget {
     implicitWidth: 240
     implicitHeight: 240
 
-    readonly property color outerCircleColor: WidgetColorScheme.accentColor
+    readonly property color outerCircleColor: WidgetColorScheme.pillBgColor
     readonly property color cookieBgColor: WidgetColorScheme.cardBgColor
     readonly property color textColorOnCookie: WidgetColorScheme.textColorOnBg
 
@@ -63,12 +63,10 @@ AbstractBackgroundWidget {
                 anchors.centerIn: parent
                 spacing: -6
 
-                MaterialSymbol {
+                Image {
                     Layout.alignment: Qt.AlignHCenter
-                    iconSize: 96
-                    text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "partly_cloudy_day"
-                    color: WidgetColorScheme.accentColor
-                    fill: 1.0
+                    source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+                    sourceSize: Qt.size(96, 96)
                 }
 
                 RowLayout {

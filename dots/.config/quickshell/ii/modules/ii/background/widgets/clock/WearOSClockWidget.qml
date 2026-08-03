@@ -22,8 +22,23 @@ AbstractBackgroundWidget {
     visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "clock")
 
     // Default size is 240x240 for 1:1 widgets as per AGENTS.md guidelines
-    implicitWidth: 240
-    implicitHeight: 240
+    readonly property real contentScale: (Config.options.background.widgets.wearos_clock.widgetSize ?? 100) / 100.0
+    implicitWidth: 240 * contentScale
+    implicitHeight: 240 * contentScale
+
+    // ── Config-driven visibility toggles (all default to current state = visible) ──
+    readonly property bool cfgShowBezel: Config.ready ? (Config.options.background.widgets.wearos_clock.showBezelRing ?? true) : true
+    readonly property bool cfgShowOuterNums: Config.ready ? (Config.options.background.widgets.wearos_clock.showOuterNumbers ?? true) : true
+    readonly property bool cfgShowInnerNums: Config.ready ? (Config.options.background.widgets.wearos_clock.showInnerNumbers ?? true) : true
+    readonly property bool cfgShowDistroLogo: Config.ready ? (Config.options.background.widgets.wearos_clock.showDistroLogo ?? true) : true
+    readonly property bool cfgShowSunset: Config.ready ? (Config.options.background.widgets.wearos_clock.showSunsetComplication ?? true) : true
+    readonly property bool cfgShowDigitalTime: Config.ready ? (Config.options.background.widgets.wearos_clock.showDigitalTimePill ?? true) : true
+    readonly property bool cfgShowBattery: Config.ready ? (Config.options.background.widgets.wearos_clock.showBatteryPill ?? true) : true
+    readonly property bool cfgShowHourDial: Config.ready ? (Config.options.background.widgets.wearos_clock.showHourSubDial ?? true) : true
+    readonly property bool cfgShowBedtime: Config.ready ? (Config.options.background.widgets.wearos_clock.showBedtimeIcon ?? true) : true
+    readonly property bool cfgShowKdeConnect: Config.ready ? (Config.options.background.widgets.wearos_clock.showKdeConnect ?? true) : true
+    readonly property bool cfgShowDate: Config.ready ? (Config.options.background.widgets.wearos_clock.showDateComplication ?? true) : true
+    readonly property bool cfgShowMinuteHand: Config.ready ? (Config.options.background.widgets.wearos_clock.showMinuteHand ?? true) : true
 
     // Smartwatch dials are always dark, so text and ticks must always be light/white for readability
     readonly property color activeTextColor: "#FFFFFF"
@@ -62,7 +77,7 @@ AbstractBackgroundWidget {
     StyledDropShadow {
         id: outerBezelShadow
         target: bezelRing
-        visible: Config.options.background.widgets.enableShadows ?? true
+        visible: (Config.options.background.widgets.wearos_clock.enableShadows ?? true) && (root.cfgShowBezel)
     }
 
     // Outer Bezel Ring (Moldura) using opaque solid colBackgroundSurfaceContainer base
@@ -72,6 +87,13 @@ AbstractBackgroundWidget {
         radius: width / 2
         color: Appearance.m3colors.m3shadow // Opaque base to prevent transparency leaks
         clip: true
+        opacity: root.cfgShowBezel ? 1.0 : 0.0
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 300
+            }
+        }
 
         // Inner Screen Container - margins reduced to 2% to move contents closer to the border
         Rectangle {
@@ -97,109 +119,150 @@ AbstractBackgroundWidget {
                     var cy = height / 2;
 
                     // Draw outer ticks & numbers (00 to 58)
-                    ctx.save();
-                    ctx.font = "bold " + Math.round(width * 0.034) + "px sans-serif";
-                    ctx.fillStyle = root.activeSubtextColor;
-                    ctx.textAlign = "center";
-                    ctx.textBaseline = "middle";
+                    if (root.cfgShowOuterNums) {
+                        ctx.save();
+                        ctx.font = "bold " + Math.round(width * 0.034) + "px sans-serif";
+                        ctx.fillStyle = root.activeSubtextColor;
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
 
-                    var r_outer = width * 0.49;
-                    var textR = r_outer - 10;
-                    for (var i = 0; i < 30; i++) {
-                        var val = i * 2;
-                        var valStr = val < 10 ? "0" + val : "" + val;
-                        var angle = -Math.PI / 2 + (i * Math.PI / 15);
+                        var r_outer = width * 0.49;
+                        var textR = r_outer - 10;
+                        for (var i = 0; i < 30; i++) {
+                            var val = i * 2;
+                            var valStr = val < 10 ? "0" + val : "" + val;
+                            var angle = -Math.PI / 2 + (i * Math.PI / 15);
 
-                        // Draw outer numbers
-                        ctx.fillText(valStr, cx + Math.cos(angle) * textR, cy + Math.sin(angle) * textR);
+                            // Draw outer numbers
+                            ctx.fillText(valStr, cx + Math.cos(angle) * textR, cy + Math.sin(angle) * textR);
 
-                        // Draw dot between this number and the next
-                        var angle_mid = angle + (Math.PI / 30);
-                        ctx.beginPath();
-                        ctx.arc(cx + Math.cos(angle_mid) * textR, cy + Math.sin(angle_mid) * textR, 1.5, 0, 2 * Math.PI);
-                        ctx.fillStyle = ColorUtils.applyAlpha(root.activeSubtextColor, 0.4);
-                        ctx.fill();
+                            // Draw dot between this number and the next
+                            var angle_mid = angle + (Math.PI / 30);
+                            ctx.beginPath();
+                            ctx.arc(cx + Math.cos(angle_mid) * textR, cy + Math.sin(angle_mid) * textR, 1.5, 0, 2 * Math.PI);
+                            ctx.fillStyle = ColorUtils.applyAlpha(root.activeSubtextColor, 0.4);
+                            ctx.fill();
+                        }
+                        ctx.restore();
                     }
-                    ctx.restore();
 
                     // Draw inner numbers (05, 10, 20... 55)
-                    ctx.save();
-                    ctx.font = "bold " + Math.round(width * 0.052) + "px sans-serif";
-                    ctx.fillStyle = root.activeTextColor;
-                    ctx.textAlign = "center";
-                    ctx.textBaseline = "middle";
-
-                    var r_inner = width * 0.39;
-                    var innerNumbers = [
-                        { val: "05", angle: -Math.PI/2 + (Math.PI/6) },
-                        { val: "10", angle: -Math.PI/2 + (Math.PI/3) },
-                        { val: "20", angle: -Math.PI/2 + (2*Math.PI/3) },
-                        { val: "25", angle: -Math.PI/2 + (5*Math.PI/6) },
-                        { val: "30", angle: -Math.PI/2 + Math.PI },
-                        { val: "35", angle: -Math.PI/2 + (7*Math.PI/6) },
-                        { val: "40", angle: -Math.PI/2 + (4*Math.PI/3) },
-                        { val: "45", angle: -Math.PI/2 + (3*Math.PI/2) },
-                        { val: "50", angle: -Math.PI/2 + (5*Math.PI/3) },
-                        { val: "55", angle: -Math.PI/2 + (11*Math.PI/6) }
-                    ];
-
-                    innerNumbers.forEach(function(item) {
-                        var tx = cx + Math.cos(item.angle) * r_inner;
-                        var ty = cy + Math.sin(item.angle) * r_inner;
-
-                        var rot = item.angle + Math.PI/2;
-                        // Normalize rot to [-PI, PI]
-                        while (rot > Math.PI) rot -= 2 * Math.PI;
-                        while (rot < -Math.PI) rot += 2 * Math.PI;
-
-                        // Flip 180 degrees if text is upside down (facing down)
-                        if (rot > Math.PI/2 || rot < -Math.PI/2) {
-                            rot += Math.PI;
-                        }
-
+                    if (root.cfgShowInnerNums) {
                         ctx.save();
-                        ctx.translate(tx, ty);
-                        ctx.rotate(rot);
-                        ctx.fillText(item.val, 0, 0);
-                        ctx.restore();
-                    });
+                        ctx.font = "bold " + Math.round(width * 0.052) + "px sans-serif";
+                        ctx.fillStyle = root.activeTextColor;
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
 
-                    // Draw inner ticks (4 lines between every 5 minutes/seconds)
-                    ctx.save();
-                    for (var j = 0; j < 12; j++) {
-                        var baseAngle = -Math.PI / 2 + (j * Math.PI / 6);
-                        for (var k = 1; k <= 4; k++) {
-                            var tickAngle = baseAngle + (k * Math.PI / 30);
-                            var isMiddle = (k === 2 || k === 3);
-                            var tickHeight = isMiddle ? 7 : 4;
-                            var tickWidth = isMiddle ? 2.2 : 1.4;
+                        var r_inner = width * 0.39;
+                        var innerNumbers = [
+                            {
+                                val: "05",
+                                angle: -Math.PI / 2 + (Math.PI / 6)
+                            },
+                            {
+                                val: "10",
+                                angle: -Math.PI / 2 + (Math.PI / 3)
+                            },
+                            {
+                                val: "20",
+                                angle: -Math.PI / 2 + (2 * Math.PI / 3)
+                            },
+                            {
+                                val: "25",
+                                angle: -Math.PI / 2 + (5 * Math.PI / 6)
+                            },
+                            {
+                                val: "30",
+                                angle: -Math.PI / 2 + Math.PI
+                            },
+                            {
+                                val: "35",
+                                angle: -Math.PI / 2 + (7 * Math.PI / 6)
+                            },
+                            {
+                                val: "40",
+                                angle: -Math.PI / 2 + (4 * Math.PI / 3)
+                            },
+                            {
+                                val: "45",
+                                angle: -Math.PI / 2 + (3 * Math.PI / 2)
+                            },
+                            {
+                                val: "50",
+                                angle: -Math.PI / 2 + (5 * Math.PI / 3)
+                            },
+                            {
+                                val: "55",
+                                angle: -Math.PI / 2 + (11 * Math.PI / 6)
+                            }
+                        ];
 
-                            ctx.lineWidth = tickWidth;
-                            ctx.strokeStyle = ColorUtils.applyAlpha(root.activeTextColor, isMiddle ? 0.28 : 0.16);
+                        innerNumbers.forEach(function (item) {
+                            var tx = cx + Math.cos(item.angle) * r_inner;
+                            var ty = cy + Math.sin(item.angle) * r_inner;
 
-                            var r_start = r_inner - (tickHeight / 2);
-                            var r_end = r_inner + (tickHeight / 2);
+                            var rot = item.angle + Math.PI / 2;
+                            // Normalize rot to [-PI, PI]
+                            while (rot > Math.PI)
+                                rot -= 2 * Math.PI;
+                            while (rot < -Math.PI)
+                                rot += 2 * Math.PI;
 
-                            ctx.beginPath();
-                            ctx.moveTo(cx + Math.cos(tickAngle) * r_start, cy + Math.sin(tickAngle) * r_start);
-                            ctx.lineTo(cx + Math.cos(tickAngle) * r_end, cy + Math.sin(tickAngle) * r_end);
-                            ctx.stroke();
+                            // Flip 180 degrees if text is upside down (facing down)
+                            if (rot > Math.PI / 2 || rot < -Math.PI / 2) {
+                                rot += Math.PI;
+                            }
+
+                            ctx.save();
+                            ctx.translate(tx, ty);
+                            ctx.rotate(rot);
+                            ctx.fillText(item.val, 0, 0);
+                            ctx.restore();
+                        });
+
+                        // Draw inner ticks (4 lines between every 5 minutes/seconds)
+                        ctx.save();
+                        for (var j = 0; j < 12; j++) {
+                            var baseAngle = -Math.PI / 2 + (j * Math.PI / 6);
+                            for (var k = 1; k <= 4; k++) {
+                                var tickAngle = baseAngle + (k * Math.PI / 30);
+                                var isMiddle = (k === 2 || k === 3);
+                                var tickHeight = isMiddle ? 7 : 4;
+                                var tickWidth = isMiddle ? 2.2 : 1.4;
+
+                                ctx.lineWidth = tickWidth;
+                                ctx.strokeStyle = ColorUtils.applyAlpha(root.activeTextColor, isMiddle ? 0.28 : 0.16);
+
+                                var r_start = r_inner - (tickHeight / 2);
+                                var r_end = r_inner + (tickHeight / 2);
+
+                                ctx.beginPath();
+                                ctx.moveTo(cx + Math.cos(tickAngle) * r_start, cy + Math.sin(tickAngle) * r_start);
+                                ctx.lineTo(cx + Math.cos(tickAngle) * r_end, cy + Math.sin(tickAngle) * r_end);
+                                ctx.stroke();
+                            }
                         }
+                        ctx.restore();
                     }
-                    ctx.restore();
                 }
 
                 // Update canvas on style/color updates
                 Connections {
                     target: root
-                    function onActiveTextColorChanged() { dialCanvas.requestPaint(); }
-                    function onActiveSubtextColorChanged() { dialCanvas.requestPaint(); }
+                    function onActiveTextColorChanged() {
+                        dialCanvas.requestPaint();
+                    }
+                    function onActiveSubtextColorChanged() {
+                        dialCanvas.requestPaint();
+                    }
                 }
             }
 
             // Small distro logo at 12:00 (minute 0 of inner ring)
             CustomIcon {
                 id: distroLogo
+                visible: root.cfgShowDistroLogo
                 width: 14
                 height: 14
                 source: SystemInfo.distroIcon
@@ -213,6 +276,7 @@ AbstractBackgroundWidget {
             // Complication 6: Sunset Gauge Widget (top center, below distro logo, above center pivot, offset right)
             Rectangle {
                 id: sunsetComplication
+                visible: root.cfgShowSunset
                 width: parent.width * 0.18
                 height: width
                 radius: width / 2
@@ -285,6 +349,7 @@ AbstractBackgroundWidget {
             // Complication 1: Digital Time Pill (aligned with 55 of internal ring, slightly below 50)
             Rectangle {
                 id: digitalTimeComplication
+                visible: root.cfgShowDigitalTime
                 width: parent.width * 0.20
                 height: parent.width * 0.10
                 radius: height / 2
@@ -319,20 +384,31 @@ AbstractBackgroundWidget {
             // Backing gradient to fade out the ring/ticks behind/around the battery pill
             RadialGradient {
                 id: batteryFadeGlow
+                visible: root.cfgShowBattery
                 anchors.centerIn: batteryComplication
                 width: batteryComplication.width * 1.25
                 height: batteryComplication.height * 1.85
                 z: 1.5
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Appearance.m3colors.m3shadow }
-                    GradientStop { position: 0.5; color: Appearance.m3colors.m3shadow }
-                    GradientStop { position: 1.0; color: "transparent" }
+                    GradientStop {
+                        position: 0.0
+                        color: Appearance.m3colors.m3shadow
+                    }
+                    GradientStop {
+                        position: 0.5
+                        color: Appearance.m3colors.m3shadow
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: "transparent"
+                    }
                 }
             }
 
             // Complication 2: Battery Pill (3:00 position)
             Rectangle {
                 id: batteryComplication
+                visible: root.cfgShowBattery
                 width: parent.width * 0.14
                 height: parent.width * 0.08
                 radius: height / 2
@@ -353,11 +429,10 @@ AbstractBackgroundWidget {
                 }
             }
 
-
-
             // Complication 3: Hour Sub-dial (7:30 position) - no border circle
             Rectangle {
                 id: hourDialComplication
+                visible: root.cfgShowHourDial
                 width: parent.width * 0.22
                 height: width
                 radius: width / 2
@@ -440,20 +515,31 @@ AbstractBackgroundWidget {
             // Backing gradient to fade out the ring/ticks behind/around the bedtime icon
             RadialGradient {
                 id: bedtimeFadeGlow
+                visible: root.cfgShowBedtime
                 anchors.centerIn: bedtimeIconContainer
                 width: bedtimeIconContainer.width * 1.8
                 height: bedtimeIconContainer.height * 1.8
                 z: 1.5
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Appearance.m3colors.m3shadow }
-                    GradientStop { position: 0.5; color: Appearance.m3colors.m3shadow }
-                    GradientStop { position: 1.0; color: "transparent" }
+                    GradientStop {
+                        position: 0.0
+                        color: Appearance.m3colors.m3shadow
+                    }
+                    GradientStop {
+                        position: 0.5
+                        color: Appearance.m3colors.m3shadow
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: "transparent"
+                    }
                 }
             }
 
             // Complication 4: Bedtime icon (6:00 position) - direct icon aligned with external ring
             Item {
                 id: bedtimeIconContainer
+                visible: root.cfgShowBedtime
                 width: 11
                 height: 11
                 anchors.bottom: parent.bottom
@@ -474,6 +560,7 @@ AbstractBackgroundWidget {
             // Complication 7: KDE Connect Connection Status Widget (above date complication, resized and positioned left)
             Rectangle {
                 id: kdeConnectComplication
+                visible: root.cfgShowKdeConnect
                 width: 38
                 height: 38
                 radius: width / 2
@@ -495,6 +582,7 @@ AbstractBackgroundWidget {
             // Complication 5: Date Small Widget (6:00 position, below center pivot, above inner ring)
             Column {
                 id: smallDateComplication
+                visible: root.cfgShowDate
                 spacing: 2
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.horizontalCenterOffset: 30
@@ -547,6 +635,7 @@ AbstractBackgroundWidget {
 
                 // Minute Hand capsule (Hour hand removed)
                 Item {
+                    visible: root.cfgShowMinuteHand
                     anchors.fill: parent
                     rotation: root.minuteRotation
 
@@ -650,10 +739,22 @@ AbstractBackgroundWidget {
                 end: Qt.point(width * 0.96, height * 0.60)
                 cached: true
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.3; color: ColorUtils.applyAlpha("#FFFFFF", 0.42) }
-                    GradientStop { position: 0.7; color: ColorUtils.applyAlpha("#FFFFFF", 0.42) }
-                    GradientStop { position: 1.0; color: "transparent" }
+                    GradientStop {
+                        position: 0.0
+                        color: "transparent"
+                    }
+                    GradientStop {
+                        position: 0.3
+                        color: ColorUtils.applyAlpha("#FFFFFF", 0.42)
+                    }
+                    GradientStop {
+                        position: 0.7
+                        color: ColorUtils.applyAlpha("#FFFFFF", 0.42)
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: "transparent"
+                    }
                 }
                 layer.enabled: true
                 layer.effect: OpacityMask {
@@ -706,10 +807,22 @@ AbstractBackgroundWidget {
                 end: Qt.point(width * 0.04, height * 0.40)
                 cached: true
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.3; color: ColorUtils.applyAlpha("#FFFFFF", 0.28) }
-                    GradientStop { position: 0.7; color: ColorUtils.applyAlpha("#FFFFFF", 0.28) }
-                    GradientStop { position: 1.0; color: "transparent" }
+                    GradientStop {
+                        position: 0.0
+                        color: "transparent"
+                    }
+                    GradientStop {
+                        position: 0.3
+                        color: ColorUtils.applyAlpha("#FFFFFF", 0.28)
+                    }
+                    GradientStop {
+                        position: 0.7
+                        color: ColorUtils.applyAlpha("#FFFFFF", 0.28)
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: "transparent"
+                    }
                 }
                 layer.enabled: true
                 layer.effect: OpacityMask {

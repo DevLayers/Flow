@@ -17,14 +17,14 @@ Item {
     id: root
     property string searchQuery: ""
 
-    readonly property int panelWidth: 80
-    readonly property int gridColumns: 4
+    readonly property int panelWidth: 600
+    readonly property int gridColumns: 6
     readonly property int maxItems: 100
 
     implicitWidth: panelWidth
     implicitHeight: 520
 
-    property int focusedControlIndex: -1
+    property int focusedControlIndex: 0
     property var allIcons: []
     property var filteredIcons: []
     property var iconMap: ({})
@@ -42,8 +42,8 @@ Item {
     readonly property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
 
     readonly property int cellWidth: Math.floor((gridFlickable.width - (root.gridSpacing * (root.gridColumns - 1))) / root.gridColumns)
-    readonly property int cellSize: root.cellWidth - 4
-    readonly property int cellHeight: root.cellSize + 8
+    readonly property int cellSize: root.cellWidth
+    readonly property int cellHeight: root.cellSize + 32
     readonly property int gridSpacing: 8
 
     function loadData() {
@@ -186,6 +186,9 @@ Item {
             focusedControlIndex = 0;
         } else if (focusedControlIndex > 0) {
             focusedControlIndex--;
+        } else {
+            focusedControlIndex = -1;
+            root.requestFocusSearchInput();
         }
         ensureVisible();
     }
@@ -373,14 +376,18 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 10
+        anchors.leftMargin: 10
+        anchors.rightMargin: 10
+        anchors.bottomMargin: 10
+        anchors.topMargin: 0
         spacing: 6
 
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            color: Appearance.colors.colSurfaceContainerHigh
             radius: Appearance.rounding.large
-            color: Appearance.colors.colSurfaceContainer
+            clip: true
 
             Flickable {
                 id: gridFlickable
@@ -569,29 +576,22 @@ Item {
                                     }
                                 }
 
-                                Rectangle {
-                                    anchors.centerIn: parent
-                                    width: root.cellSize
-                                    height: root.cellSize
-                                    radius: Appearance.rounding.normal
-                                    color: delegateItem.isFocused ? root.colItemSelected :
-                                           (delegateItem.isHovered ? root.colItemBgHover : root.colItemBg)
-
-                                    Behavior on color {
-                                        ColorAnimation {
-                                            duration: Appearance.animation.elementMoveFast.duration
-                                            easing.type: Easing.OutQuad
-                                        }
-                                    }
+                                RippleButton {
+                                    id: iconMouseArea
+                                    anchors.fill: parent
+                                    buttonRadius: Appearance.rounding.normal
+                                    colBackground: delegateItem.isFocused ? root.colItemSelected : "transparent"
+                                    colBackgroundHover: root.colItemBgHover
+                                    enabled: delegateItem.hasData
 
                                     ColumnLayout {
                                         anchors.fill: parent
-                                        anchors.margins: 8
+                                        anchors.margins: 4
                                         spacing: 2
 
                                         MaterialSymbol {
                                             text: delegateItem.iconData ? delegateItem.iconData.n : ""
-                                            iconSize: 28
+                                            iconSize: 24
                                             color: root.colText
                                             fill: delegateItem.isFocused ? 1.0 : 0.0
                                             Layout.alignment: Qt.AlignHCenter
@@ -601,49 +601,24 @@ Item {
                                         StyledText {
                                             text: delegateItem.iconData ? delegateItem.iconData.n : ""
                                             color: root.colText
-                                            font.pixelSize: Appearance.font.pixelSize.smaller
-                                            elide: Text.ElideRight
-                                            horizontalAlignment: Text.AlignHCenter
-                                            Layout.fillWidth: true
-                                            maximumLineCount: 1
-                                        }
-
-                                        StyledText {
-                                            text: {
-                                                if (!delegateItem.iconData) return "";
-                                                const tags = delegateItem.iconData.t;
-                                                if (!tags || tags.length === 0) return "";
-                                                const display = tags.slice(0, 3).join(", ");
-                                                return tags.length > 3 ? display + "..." : display;
-                                            }
-                                            color: root.colTagText
                                             font.pixelSize: Appearance.font.pixelSize.smallest
                                             elide: Text.ElideRight
                                             horizontalAlignment: Text.AlignHCenter
                                             Layout.fillWidth: true
                                             maximumLineCount: 1
-                                            opacity: 0.7
                                         }
                                     }
 
-                                    RippleButton {
-                                        anchors.fill: parent
-                                        buttonRadius: Appearance.rounding.normal
-                                        colBackground: "transparent"
-                                        enabled: delegateItem.hasData
-                                        id: iconMouseArea
+                                    onClicked: {
+                                        root.focusedControlIndex = delegateItem.currentPosition;
+                                        root.copyIconName(delegateItem.iconData.n);
+                                        GlobalStates.overviewOpen = false;
+                                    }
 
-                                        onClicked: {
-                                            root.focusedControlIndex = delegateItem.currentPosition;
-                                            root.copyIconName(delegateItem.iconData.n);
-                                            GlobalStates.overviewOpen = false;
-                                        }
-
-                                        Keys.onPressed: event => {
-                                            if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
-                                                root.copyIconSvg(delegateItem.iconData);
-                                                event.accepted = true;
-                                            }
+                                    Keys.onPressed: event => {
+                                        if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
+                                            root.copyIconSvg(delegateItem.iconData);
+                                            event.accepted = true;
                                         }
                                     }
                                 }

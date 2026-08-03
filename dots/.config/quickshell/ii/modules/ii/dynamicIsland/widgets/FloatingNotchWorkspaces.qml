@@ -23,7 +23,7 @@ Item {
             : loaderBaseWidth
         height: root.isExpanded ? 80 : (root.height > 0 ? root.height : 40)
 
-        readonly property real loaderBaseWidth: root.implicitWidth - 20
+        readonly property real loaderBaseWidth: item ? item.implicitWidth : (Config.options.bar.workspaces.shown * 26)
 
         Behavior on width {
             NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
@@ -52,7 +52,7 @@ Item {
 
     implicitWidth: {
         let baseWidth = loader.item ? loader.item.implicitWidth : (Config.options.bar.workspaces.shown * 26);
-        return (baseWidth * (root.isExpanded ? 1.15 : 1.0)) + 20;
+        return Math.max((baseWidth * (root.isExpanded ? 1.15 : 1.0)) + 40, loader.width + 32);
     }
 
     Component.onCompleted: {

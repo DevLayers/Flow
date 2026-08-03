@@ -200,7 +200,18 @@ Singleton {
 		}
 	}
 
-	property bool canChangeVolume: this.activePlayer && this.activePlayer.volumeSupported && this.activePlayer.canControl;
+    property bool canChangeVolume: this.activePlayer && this.activePlayer.volumeSupported && this.activePlayer.canControl;
+    readonly property real volumeStep: this.activePlayer ? (this.activePlayer.volume < 0.10 ? 0.01 : 0.02) : 0.02
+	function incrementVolume() {
+		if (!this.canChangeVolume)
+			return;
+		this.activePlayer.volume = Math.min(1, (this.activePlayer.volume ?? 1) + this.volumeStep);
+	}
+	function decrementVolume() {
+		if (!this.canChangeVolume)
+			return;
+		this.activePlayer.volume = Math.max(0, (this.activePlayer.volume ?? 1) - this.volumeStep);
+	}
 
 	property bool loopSupported: this.activePlayer && this.activePlayer.loopSupported && this.activePlayer.canControl;
 	property var loopState: this.activePlayer?.loopState ?? MprisLoopState.None;

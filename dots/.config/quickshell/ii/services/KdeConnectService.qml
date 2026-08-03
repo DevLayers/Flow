@@ -243,10 +243,10 @@ Singleton {
         checkPythonDbusProc.running = true
     }
 
-    // Reflects Config.options.policies.phone. When false, the service stays
-    // dormant: no DBus monitor, no pgrep polling, no ADB probing. Bindings
-    // from the UI still resolve without forcing instantiation side effects.
+    // Reflects Config.options.policies.phone and Config.options.phone.kdeconnectEnabled.
+    // When false, the service stays dormant: no DBus monitor, no pgrep polling, no ADB probing.
     readonly property bool _enabled: Config.options.policies.phone !== 0
+        && (Config.options.phone.kdeconnectEnabled === undefined || Config.options.phone.kdeconnectEnabled)
 
     // Stop all background activity when the Phone tab is toggled off at runtime.
     // Restart when toggled back on. This lets users enable/disable Phone
@@ -401,7 +401,7 @@ Singleton {
         running: false
         command: ["pkill", "-f", "kdeconnect/monitor.py"]
         onExited: (code, status) => {
-            monitorProc.command = ["python3", root._scriptPath]
+            monitorProc.command = ProcUtils.pdeath(["python3", root._scriptPath])
             monitorProc.running = true
         }
     }
@@ -595,8 +595,8 @@ Singleton {
         if (id === root.activeDeviceId
             && prev.reachable === true
             && merged.reachable === false) {
-            const anyFeatureRunning = PhoneCameraService.running
-                || PhoneMicService.running
+            const anyFeatureRunning = GlobalStates.phoneCameraRunning
+                || GlobalStates.phoneMicRunning
                 || root.scrcpyRunning
             if (anyFeatureRunning) {
                 root.activeDeviceLostDuringUse(id)

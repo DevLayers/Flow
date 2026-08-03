@@ -10,8 +10,6 @@ RippleButton { // Right sidebar button
     id: rightSidebarButton
 
     Layout.alignment: Qt.AlignBottom | Qt.AlignHCenter
-    Layout.fillWidth: true
-    Layout.fillHeight: true
 
     property real startRadius: Appearance.rounding.full
     property real endRadius: Appearance.rounding.full
@@ -22,7 +20,7 @@ RippleButton { // Right sidebar button
     bottomRightRadius: endRadius
 
     implicitHeight: indicatorsColumnLayout.implicitHeight + 8 * 2
-    implicitWidth: Appearance.sizes.verticalBarWidth
+    implicitWidth: Math.max(indicatorsColumnLayout.implicitWidth, Appearance.font.pixelSize.larger) + 12
 
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
@@ -120,6 +118,20 @@ RippleButton { // Right sidebar button
             Layout.topMargin: indicatorsColumnLayout.realSpacing
             visible: BluetoothStatus.available
             text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
+            iconSize: Appearance.font.pixelSize.larger
+            color: rightSidebarButton.colText
+        }
+        MaterialSymbol {
+            Layout.topMargin: indicatorsColumnLayout.realSpacing
+            visible: Config.options.bar.dashboardButton.showVpn && VpnService.active
+            text: "key"
+            iconSize: Appearance.font.pixelSize.larger
+            color: rightSidebarButton.colText
+        }
+        MaterialSymbol {
+            Layout.topMargin: indicatorsColumnLayout.realSpacing
+            visible: Config.options.bar.dashboardButton.showTailscale && TailscaleService.active
+            text: "hub"
             iconSize: Appearance.font.pixelSize.larger
             color: rightSidebarButton.colText
         }

@@ -288,7 +288,10 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 14
+        anchors.leftMargin: 14
+        anchors.rightMargin: 14
+        anchors.bottomMargin: 14
+        anchors.topMargin: 0
         spacing: 12
 
         // Top Row: Language Selectors & Swap Button

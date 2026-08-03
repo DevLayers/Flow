@@ -277,10 +277,10 @@ Singleton {
         "openrouter": aiModelComponent.createObject(this, {
             "name": `OpenRouter - ${currentModel}`,
             "icon": "openrouter-symbolic",
-            "description": Translation.tr("Online via %1 | %2's model").arg("OpenRouter").arg("Google"),
-            "homepage": `https://openrouter.ai/google/${currentModel}`,
+            "description": Translation.tr("Online via %1 | %2's model").arg("OpenRouter").arg("Google/DeepSeek"),
+            "homepage": `https://openrouter.ai`,
             "endpoint": "https://openrouter.ai/api/v1/chat/completions",
-            "model": `${getModelProvider(Persistent.states.ai.provider, currentModel)}/${currentModel}`,
+            "model": `${getModelProvider(Persistent.states.ai.provider, currentModel) ? getModelProvider(Persistent.states.ai.provider, currentModel) + "/" : ""}${currentModel}`,
             "requires_key": true,
             "key_id": "openrouter",
             "key_get_link": "https://openrouter.ai/settings/keys",
@@ -298,6 +298,32 @@ Singleton {
             "key_get_link": "https://aistudio.google.com/app/apikey",
             "key_get_description": Translation.tr("**Pricing**: free. Data used for training.\n\n**Instructions**: Log into Google account, allow AI Studio to create Google Cloud project or whatever it asks, go back and click Get API key"),
             "api_format": "gemini"
+        }),
+        "deepseek": aiModelComponent.createObject(this, {
+            "name": `DeepSeek - ${currentModel}`,
+            "icon": "spark-symbolic",
+            "description": Translation.tr("Online | DeepSeek Official API\nHigh intelligence AI models for coding and general tasks"),
+            "homepage": "https://platform.deepseek.com",
+            "endpoint": "https://api.deepseek.com/chat/completions",
+            "model": `${currentModel}`,
+            "requires_key": true,
+            "key_id": "deepseek",
+            "key_get_link": "https://platform.deepseek.com/api_keys",
+            "key_get_description": Translation.tr("**Pricing**: Pay-as-you-go.\n\n**Instructions**: Log into DeepSeek Platform, go to API Keys and create a key."),
+            "api_format": "openai"
+        }),
+        "opencode": aiModelComponent.createObject(this, {
+            "name": `OpenCode - ${currentModel}`,
+            "icon": "code-symbolic",
+            "description": Translation.tr("Online | OpenCode Zen API\nPowered by DeepSeek V4 Flash"),
+            "homepage": "https://opencode.ai",
+            "endpoint": "https://api.opencode.ai/v1/chat/completions",
+            "model": `${currentModel}`,
+            "requires_key": true,
+            "key_id": "opencode",
+            "key_get_link": "https://opencode.ai",
+            "key_get_description": Translation.tr("**Pricing**: OpenCode subscription or API key.\n\n**Instructions**: Enter your OpenCode API key."),
+            "api_format": "openai"
         }),
         "others": (root.otherModels && Persistent.states?.ai?.model && root.otherModels[Persistent.states.ai.model]) ? root.otherModels[Persistent.states.ai.model] : (Object.keys(root.otherModels).length > 0 ? root.otherModels[Object.keys(root.otherModels)[0]] : null)
     }
@@ -322,6 +348,11 @@ Singleton {
                 value: "gemini-2.5-flash-lite",
                 modelProvider: "google"
             },
+            {
+                title: "DeepSeek V4 Flash",
+                value: "deepseek-v4-flash",
+                modelProvider: "deepseek"
+            }
         ],
         "google": [
             {
@@ -335,6 +366,22 @@ Singleton {
             {
                 title: "Gemini 3 Flash Preview",
                 value: "gemini-3-flash-preview"
+            }
+        ],
+        "deepseek": [
+            {
+                title: "DeepSeek V4 Flash",
+                value: "deepseek-v4-flash"
+            },
+            {
+                title: "DeepSeek V4 Pro",
+                value: "deepseek-v4-pro"
+            }
+        ],
+        "opencode": [
+            {
+                title: "DeepSeek V4 Flash (Zen)",
+                value: "deepseek-v4-flash"
             }
         ],
         "others": []

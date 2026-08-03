@@ -3,8 +3,6 @@ import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.widgets
 import qs.services
-import qs.modules.common.functions
-import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
@@ -294,12 +292,6 @@ Item {
                 Item {
                     anchors.fill: parent
 
-                    layer.enabled: true
-                    layer.effect: FastBlur {
-                        radius: root.artBlurRadius
-                        cached: false
-                    }
-
                     StyledImage {
                         id: albumArtImage
                         anchors.fill: parent
@@ -313,7 +305,13 @@ Item {
                         Behavior on scale { NumberAnimation { duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
 
                         layer.enabled: true
-                        layer.effect: OpacityMask {
+                        layer.effect: MultiEffect {
+                            blurEnabled: root.artBlurRadius > 0
+                            blurMax: 64
+                            blur: Math.min(1.0, root.artBlurRadius / 64)
+                            maskEnabled: true
+                            maskThresholdMin: 0.5
+                            maskSpreadAtMin: 1
                             maskSource: Rectangle {
                                 width: albumArtImage.width
                                 height: albumArtImage.height

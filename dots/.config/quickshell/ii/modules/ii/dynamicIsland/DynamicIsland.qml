@@ -12,10 +12,10 @@ Scope {
 
     LazyLoader {
         id: islandLoader
-        active: Config.ready && Config.options.bar.floatingNotch.enable
+        active: Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
 
         Component.onCompleted: {
-            console.log("[DynamicIsland] Loader active:", active, "Config.ready:", Config.ready, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable);
+            console.log("[DynamicIsland] Loader active:", active, "Config.ready:", Config.ready, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable, "centerInBar:", Config.options.bar.floatingNotch.centerInBar);
         }
 
         component: DynamicIslandPanel {}

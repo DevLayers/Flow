@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import qs.modules.common.functions
+import qs.services
 
 Singleton {
     id: root
@@ -292,7 +293,7 @@ Singleton {
         if (Config.ready) {
             var a = root.ignoreAlpha;
             var script = "";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell.*' }, blur = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
@@ -304,50 +305,65 @@ Singleton {
         }
     }
 
+    function applyHyprlandRules() {
+        if (!Config.ready) return;
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + root.windowRounding + " } })"]);
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
+        var a = root.ignoreAlpha;
+        var bs = "";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true, ignore_alpha = 0.0 }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1 }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:notificationPopup' }, noanim = true }) ";
+        bs += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
+        Quickshell.execDetached(["hyprctl", "eval", bs]);
+
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (root.borderless ? "0" : root.borderWidth) + " } })"]);
+
+        let colorStr = activeBorderColor.toString();
+        let rgb = "";
+        if (colorStr.startsWith("#")) {
+            let hex = colorStr.substring(1);
+            if (hex.length === 8) {
+                rgb = hex.substring(2);
+            } else {
+                rgb = hex;
+            }
+        }
+
+        if (rgb !== "") {
+            let hyprColor = "rgba(" + rgb + "AA)";
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
+        }
+
+        if (Config.options.appearance.gapsIn !== undefined) {
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + Config.options.appearance.gapsIn + "' } })"]);
+        }
+        if (Config.options.appearance.gapsOut !== undefined) {
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_out = '" + Config.options.appearance.gapsOut + "' } })"]);
+        }
+
+        let wsStyle = (Config.options.background?.parallax?.vertical ?? false) ? "slidevert" : "slide";
+        Quickshell.execDetached(["hyprctl", "eval", "hl.animation({ leaf = 'workspaces', enabled = true, speed = 7, bezier = 'menu_decel', style = '" + wsStyle + "' })"]);
+    }
+
+    Connections {
+        target: HyprlandConfig
+        function onReloaded() {
+            root.applyHyprlandRules();
+        }
+    }
+
     Timer {
         id: startupRoundingTimer
         interval: 1500
         running: Config.ready
         repeat: false
         onTriggered: {
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + root.windowRounding + " } })"]);
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
-            var a = root.ignoreAlpha;
-            var bs = "";
-            bs += "hl.layer_rule({ match = { namespace = 'quickshell.*' }, blur = true, ignore_alpha = " + a + " }) ";
-            bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
-            bs += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
-            bs += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
-            bs += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true, ignore_alpha = 0.0 }) ";
-            bs += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1 }) ";
-            bs += "hl.layer_rule({ match = { namespace = 'quickshell:notificationPopup' }, noanim = true }) ";
-            bs += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
-            Quickshell.execDetached(["hyprctl", "eval", bs]);
-
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (root.borderless ? "0" : root.borderWidth) + " } })"]);
-
-            let colorStr = activeBorderColor.toString();
-            let rgb = "";
-            if (colorStr.startsWith("#")) {
-                let hex = colorStr.substring(1);
-                if (hex.length === 8) {
-                    rgb = hex.substring(2);
-                } else {
-                    rgb = hex;
-                }
-            }
-
-            if (rgb !== "") {
-                let hyprColor = "rgba(" + rgb + "AA)";
-                Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
-            }
-
-            if (Config.options.appearance.gapsIn !== undefined) {
-                Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + Config.options.appearance.gapsIn + "' } })"]);
-            }
-            if (Config.options.appearance.gapsOut !== undefined) {
-                Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_out = '" + Config.options.appearance.gapsOut + "' } })"]);
-            }
+            root.applyHyprlandRules();
         }
     }
 

@@ -39,11 +39,9 @@ MouseArea {
         id: defaultRow
         anchors.centerIn: parent
         visible: !root.vertical && !root.isMaterial
-        MaterialSymbol {
-            fill: 0
-            text: Icons.getWeatherIcon(Weather.data.wCode) ?? "cloud"
-            iconSize: Appearance.font.pixelSize.large
-            color: Appearance.colors.colOnLayer1
+        Image {
+            source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+            sourceSize: Qt.size(Appearance.font.pixelSize.large, Appearance.font.pixelSize.large)
             Layout.alignment: Qt.AlignVCenter
         }
         StyledText {
@@ -59,11 +57,9 @@ MouseArea {
         id: defaultCol
         anchors.centerIn: parent
         visible: root.vertical && !root.isMaterial
-        MaterialSymbol {
-            fill: 0
-            text: Icons.getWeatherIcon(Weather.data.wCode) ?? "cloud"
-            iconSize: Appearance.font.pixelSize.large
-            color: Appearance.colors.colOnLayer1
+        Image {
+            source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+            sourceSize: Qt.size(Appearance.font.pixelSize.large, Appearance.font.pixelSize.large)
             Layout.alignment: Qt.AlignHCenter
         }
         StyledText {
@@ -108,12 +104,10 @@ MouseArea {
             radius: Appearance.rounding.full
             color: Appearance.colors.colPrimary
 
-            MaterialSymbol {
+            Image {
                 anchors.centerIn: parent
-                fill: 0
-                text: Icons.getWeatherIcon(Weather.data.wCode) ?? "cloud"
-                iconSize: Appearance.font.pixelSize.normal
-                color: Appearance.colors.colOnPrimary
+                source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+                sourceSize: Qt.size(Appearance.font.pixelSize.normal, Appearance.font.pixelSize.normal)
             }
         }
     }
@@ -151,12 +145,10 @@ MouseArea {
             radius: Appearance.rounding.full
             color: Appearance.colors.colPrimary
 
-            MaterialSymbol {
+            Image {
                 anchors.centerIn: parent
-                fill: 1
-                text: Icons.getWeatherIcon(Weather.data.wCode) ?? "cloud"
-                iconSize: Appearance.font.pixelSize.normal
-                color: Appearance.colors.colOnPrimary
+                source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+                sourceSize: Qt.size(Appearance.font.pixelSize.normal, Appearance.font.pixelSize.normal)
             }
         }
     }

@@ -69,11 +69,39 @@ PanelWindow {
     }
     onIsFullscreenChanged: fullscreenDeferTimer.restart()
 
-    // Without widgets this window has nothing to draw, and an always-mapped fullscreen
-    // transparent surface still costs the compositor a blend (and possibly a blur) pass
-    // every frame — which scales with resolution. Keep it unmapped until it has content.
+    readonly property bool isTargetMonitor: {
+        const cfg = Config && Config.options && Config.options.background && Config.options.background.widgets;
+        if (!cfg || !cfg.showOnlyOnSingleMonitor)
+            return true;
+        const target = cfg.targetMonitor ?? "";
+        return target === "" || (modelData && modelData.name === target);
+    }
     readonly property bool hasWidgets: widgetStateManager && widgetStateManager.model ? widgetStateManager.model.count > 0 : false
-    visible: hasWidgets && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen))
+    visible: isTargetMonitor && hasWidgets && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen))
+
+    // Z-ordering fix: when BackgroundRoot transitions from WlrLayer.Overlay back to
+    // WlrLayer.Bottom after media mode closes, the compositor re-stacks it at the top
+    // of the Bottom layer, covering this widgets window with the wallpaper image.
+    // Force a re-map by briefly toggling visibility.
+    property int _lastReStackTrigger: 0
+
+    Connections {
+        target: GlobalStates
+        function onWidgetReStackTriggerChanged() {
+            if (GlobalStates.widgetReStackTrigger > bgWidgetsWindow._lastReStackTrigger) {
+                bgWidgetsWindow._lastReStackTrigger = GlobalStates.widgetReStackTrigger;
+                // Only re-stack if we're supposed to be visible
+                if (bgWidgetsWindow.visible) {
+                    bgWidgetsWindow.visible = false;
+                    Qt.callLater(function() {
+                        bgWidgetsWindow.visible = Qt.binding(function() {
+                            return isTargetMonitor && hasWidgets && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen));
+                        });
+                    });
+                }
+            }
+        }
+    }
 
     // Monitor & Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
@@ -307,6 +335,7 @@ PanelWindow {
                 target: widgetStateManager
                 property: "draggingActive"
                 value: widgetCanvas.draggingActive
+                when: typeof widgetStateManager !== "undefined" && widgetStateManager && widgetStateManager.hasOwnProperty("draggingActive")
             }
 
             states: State {

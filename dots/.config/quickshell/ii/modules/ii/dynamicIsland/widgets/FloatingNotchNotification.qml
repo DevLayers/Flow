@@ -283,7 +283,11 @@ Item {
 
                     onClicked: {
                         if (root.latestNotif) {
-                            Notifications.attemptInvokeAction(root.latestNotif.notificationId, modelData.identifier);
+                            if (modelData.identifier.startsWith("__qs_")) {
+                                Notifications.executeShellAction(root.latestNotif, modelData.identifier);
+                            } else {
+                                Notifications.attemptInvokeAction(root.latestNotif.notificationId, modelData.identifier);
+                            }
                         }
                     }
                 }

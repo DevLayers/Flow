@@ -13,4 +13,5 @@ RectangularShadow {
     color: Appearance.colors.colShadow
     cached: true
     opacity: target ? target.opacity : 1.0
+    visible: opacity > 0 && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
 }

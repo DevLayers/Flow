@@ -66,6 +66,22 @@ ContentPage {
             visible: Config.isWidgetActive("nagasaki_text")
 
             ContentSubsectionLabel {
+                text: Translation.tr("Typography")
+            }
+
+            ConfigSlider {
+                buttonIcon: "format_size"
+                text: Translation.tr("Font Size")
+                from: 100
+                to: 400
+                stepSize: 10
+                value: Config.options.background.widgets.nagasaki_text.size ?? 200
+                onValueChanged: {
+                    Config.options.background.widgets.nagasaki_text.size = Math.round(value);
+                }
+            }
+
+            ContentSubsectionLabel {
                 text: Translation.tr("Visual Options")
             }
 

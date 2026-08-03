@@ -52,12 +52,10 @@ AbstractBackgroundWidget {
             visible: Config.options.background.widgets.enableInnerShadow ?? true
         }
 
-        MaterialSymbol {
+        Image {
             anchors.centerIn: parent
-            iconSize: 110
-            text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "cloud"
-            color: root.iconColor
-            fill: 1.0
+            source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+            sourceSize: Qt.size(110, 110)
         }
     }
 }

@@ -86,7 +86,7 @@ AbstractBackgroundWidget {
     property bool downloaded: false
     property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
 
-    property list<real> visualizerPoints: []
+    property list<real> visualizerPoints: Config.options.background.widgets.media.visualizer.enable ? CavaService.visualizerPoints : []
 
     // 'Switch button' visiblity on hover
     property bool hovering: false
@@ -130,22 +130,7 @@ AbstractBackgroundWidget {
         }
     }
 
-    Process {
-        id: cavaProc
-        running: Config.options.background.widgets.media.visualizer.enable
-        onRunningChanged: {
-            if (!cavaProc.running) {
-                root.visualizerPoints = [];
-            }
-        }
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
-        stdout: SplitParser {
-            onRead: data => {
-                let points = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                root.visualizerPoints = points;
-            }
-        }
-    }
+
 
     ColorQuantizer {
         id: colorQuantizer
@@ -160,27 +145,19 @@ AbstractBackgroundWidget {
         implicitWidth: root.widgetSize
         implicitHeight: root.widgetSize
 
-        Image { // using a loader somehow breaks the image
-            id: blurredArt
-            anchors.fill: parent
-            anchors.margins: -80 // Expand bounds for blur padding, removing the "invisible wall" clipping
-            source: root.displayedArtFilePath
-            sourceSize.width: root.widgetSize
-            sourceSize.height: root.widgetSize
-            fillMode: Image.Pad // Center the art without scaling to keep padding transparent
-            cache: false
-            antialiasing: true
-            asynchronous: true
+        RectangularGlow {
+            id: blurredArtGlow
+            anchors.centerIn: parent
+            width: root.widgetSize
+            height: root.widgetSize
+            glowRadius: 28
+            spread: 0.15
+            color: ColorUtils.transparentize(root.artDominantColor, 0.25)
+            cornerRadius: Config.options.background.widgets.media.backgroundShape === "circle" ? root.widgetSize / 2 : Appearance.rounding.verylarge
+            opacity: Config.options.background.widgets.media.glow.enable ? (0.01 * Config.options.background.widgets.media.glow.brightness) : 0
 
-            opacity: Config.options.background.widgets.media.glow.enable ? 1 : 0
             Behavior on opacity {
                 animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
-            }
-
-            layer.enabled: true
-            layer.effect: StyledBlurEffect {
-                source: blurredArt
-                brightness: 0.002 * Config.options.background.widgets.media.glow.brightness
             }
         }
 

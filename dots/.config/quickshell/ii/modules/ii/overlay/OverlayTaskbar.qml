@@ -97,6 +97,7 @@ Rectangle {
                 required property var modelData
                 identifier: modelData.identifier
                 materialSymbol: modelData.materialSymbol
+                iconComponent: modelData.iconComponent ?? null
             }
         }
 
@@ -198,6 +199,7 @@ Rectangle {
     component WidgetButton: RippleButton {
         required property string identifier
         required property string materialSymbol
+        property Component iconComponent: null
 
         implicitWidth: implicitHeight
 
@@ -221,12 +223,25 @@ Rectangle {
             implicitHeight: 32
 
             MaterialSymbol {
+                visible: !parent.parent.iconComponent
                 anchors.centerIn: parent
                 iconSize: 24
                 text: parent.parent.materialSymbol
                 color: parent.parent.toggled ?
                 Appearance.colors.colOnSecondaryContainer :
                 Appearance.colors.colOnSurfaceVariant
+            }
+            Loader {
+                id: brandIcon
+                active: !!parent.parent.iconComponent
+                anchors.centerIn: parent
+                sourceComponent: parent.parent.iconComponent
+            }
+            Binding {
+                target: brandIcon.item
+                property: "toggled"
+                value: brandIcon.parent.parent.toggled
+                when: brandIcon.item !== null
             }
         }
     }

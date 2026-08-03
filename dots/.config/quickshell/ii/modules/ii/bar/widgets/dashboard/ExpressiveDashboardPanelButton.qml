@@ -46,7 +46,7 @@ Item {
         id: pill
         visible: root.isMaterial
         anchors.centerIn: parent
-        anchors.verticalCenterOffset: root.vertical ? 0 : -1
+        anchors.verticalCenterOffset: root.vertical ? 0 : -0
 
         property color pillColor: GlobalStates.sidebarRightOpen 
             ? (mouseArea.containsMouse ? Appearance.colors.colLayer4Hover : "transparent")
@@ -151,7 +151,7 @@ Item {
     Grid {
         id: flow
         anchors.centerIn: parent
-        anchors.verticalCenterOffset: root.vertical ? 0 : -1
+        anchors.verticalCenterOffset: root.vertical ? 0 : 0
         flow: root.vertical ? Grid.TopToBottom : Grid.LeftToRight
         columns: root.vertical ? 1 : Math.max(1, flow.visibleChildren.length)
         spacing: isMaterial ? 6 : 10
@@ -234,6 +234,35 @@ Item {
                     text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
                     iconSize: Appearance.font.pixelSize.larger
                     color: btWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showVpn && VpnService.active
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: vpnWrapper
+                vertical: root.vertical
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "key"
+                    iconSize: Appearance.font.pixelSize.larger
+                    color: vpnWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showTailscale && TailscaleService.active
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: tailscaleWrapper
+                vertical: root.vertical
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "hub"
+                    iconSize: Appearance.font.pixelSize.normal
+                    fill: 1
+                    color: tailscaleWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
                 }
             }
         }

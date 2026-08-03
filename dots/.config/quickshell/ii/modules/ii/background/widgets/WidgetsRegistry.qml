@@ -15,8 +15,7 @@ Singleton {
             "widgetId": "clock_cookie",
             "name": Translation.tr("Cookie Clock"),
             "category": "Clock",
-            "qmlPath": Qt.resolvedUrl("clock/ClockWidget.qml"),
-            "styleOverride": "cookie",
+            "qmlPath": Qt.resolvedUrl("clock/CookieClockWidget.qml"),
             "icon": "schedule",
             "description": Translation.tr("A beautiful analog clock with Material You shapes and customization."),
             "configPage": "widgets/DesktopClockWidgetConfig.qml"
@@ -25,21 +24,19 @@ Singleton {
             "widgetId": "clock_digital",
             "name": Translation.tr("Digital Clock"),
             "category": "Clock",
-            "qmlPath": Qt.resolvedUrl("clock/ClockWidget.qml"),
-            "styleOverride": "digital",
+            "qmlPath": Qt.resolvedUrl("clock/DigitalClockWidget.qml"),
             "icon": "schedule",
             "description": Translation.tr("A modern, resizable digital clock with date and adaptive alignment."),
-            "configPage": "widgets/DesktopClockWidgetConfig.qml"
+            "configPage": "widgets/DesktopDigitalClockConfig.qml"
         },
         {
             "widgetId": "clock_nagasaki",
             "name": Translation.tr("Nagasaki Clock"),
             "category": "Clock",
-            "qmlPath": Qt.resolvedUrl("clock/ClockWidget.qml"),
-            "styleOverride": "nagasaki",
+            "qmlPath": Qt.resolvedUrl("clock/NagasakiClockWidget.qml"),
             "icon": "schedule",
             "description": Translation.tr("A classic Nagasaki styled clock widget."),
-            "configPage": "widgets/DesktopClockWidgetConfig.qml"
+            "configPage": "widgets/DesktopNagasakiClockConfig.qml"
         },
         {
             "widgetId": "clock_flex",
@@ -51,6 +48,15 @@ Singleton {
             "configPage": "widgets/DesktopFlexClockConfig.qml"
         },
         {
+            "widgetId": "clock_hori",
+            "name": Translation.tr("Hori Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/HoriClock.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A 1x1 horizontal interlocking clock with HH:MM layout, colon separator, and Google Sans Flex font."),
+            "configPage": "widgets/DesktopHoriClockConfig.qml"
+        },
+        {
             "widgetId": "nagasaki_text",
             "name": Translation.tr("Nagasaki Text Clock"),
             "category": "Clock",
@@ -60,11 +66,19 @@ Singleton {
             "configPage": "widgets/DesktopNagasakiTextClockConfig.qml"
         },
         {
+            "widgetId": "clock_word",
+            "name": Translation.tr("Word Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/WordClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A 1x1 textual clock with the hour and minute written in words."),
+            "configPage": "widgets/DesktopWordClockConfig.qml"
+        },
+        {
             "widgetId": "clock_dial",
             "name": Translation.tr("Dial Clock"),
             "category": "Clock",
-            "qmlPath": Qt.resolvedUrl("clock/ClockWidget.qml"),
-            "styleOverride": "dial",
+            "qmlPath": Qt.resolvedUrl("clock/DialClockWidget.qml"),
             "icon": "schedule",
             "description": Translation.tr("A beautiful analog clock with tick marks and capsule hands."),
             "configPage": "widgets/DesktopDialClockConfig.qml"
@@ -78,6 +92,44 @@ Singleton {
             "description": Translation.tr("A circular analog clock widget styled like a Wear OS watch face."),
             "configPage": "widgets/DesktopWearOSClockWidgetConfig.qml"
         },
+        {
+            "widgetId": "concentric_clock",
+            "name": Translation.tr("Concentric Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/ConcentricClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A Pixel Watch-inspired concentric dial clock with modular complications and interactive customization."),
+            "configPage": "widgets/DesktopConcentricClockConfig.qml"
+        },
+        {
+            "widgetId": "month_clock",
+            "name": Translation.tr("Month Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/MonthClockWidget.qml"),
+            "icon": "calendar_month",
+            "description": Translation.tr("A three-ring calendar dial showing months, days, and weekdays with pill indicators for today."),
+            "configPage": "widgets/DesktopMonthClockConfig.qml"
+        },
+        {
+            "widgetId": "scallop_dot_clock",
+            "name": Translation.tr("Scallop Dot Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/ScallopDotClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("An organic Material You scallop clock face with discrete 5-minute apex minute bubbles and hour indicators."),
+            "configPage": "widgets/DesktopScallopDotClockConfig.qml"
+        },
+        {
+            "widgetId": "clock_expressive_card",
+            "name": Translation.tr("Expressive Card Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/ExpressiveCardClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A 1x1 clock with big time, month/day, temp & weather icon and expressive background."),
+            "configPage": "widgets/DesktopClockWidgetConfig.qml"
+        },
+
+
         {
             "widgetId": "circular_media",
             "name": Translation.tr("Circular Media (Watch)"),
@@ -103,7 +155,7 @@ Singleton {
             "qmlPath": Qt.resolvedUrl("media/ExpressiveMediaWidget.qml"),
             "icon": "music_note",
             "description": Translation.tr("Expressive and large media player widget with dynamic glow and lyrics."),
-            "configPage": "widgets/DesktopMediaWidgetConfig.qml"
+            "configPage": "widgets/DesktopExpressiveMediaConfig.qml"
         },
         {
             "widgetId": "media_android",
@@ -445,7 +497,7 @@ Singleton {
             "qmlPath": Qt.resolvedUrl("media/CompactMediaWidget.qml"),
             "icon": "graphic_eq",
             "description": Translation.tr("Minimal 2x1 media widget with three colored sections: track title, play/pause, and skip next."),
-            "configPage": "widgets/DesktopMediaWidgetConfig.qml"
+            "configPage": "widgets/DesktopCompactMediaConfig.qml"
         },
         {
             "widgetId": "quick_actions",
@@ -464,7 +516,25 @@ Singleton {
             "icon": "format_quote",
             "description": Translation.tr("1x1 widget displaying a customizable quote with decorative quote marks."),
             "configPage": "widgets/DesktopQuoteConfig.qml"
-        }
+        },
+        {
+            "widgetId": "water_reminder",
+            "name": Translation.tr("Water Reminder"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/WaterReminderWidget.qml"),
+            "icon": "water_drop",
+            "description": Translation.tr("1x1 hydration tracker widget with a progress track, daily goal, and periodic water reminders."),
+            "configPage": "widgets/DesktopWaterReminderConfig.qml"
+        },
+        {
+            "widgetId": "at_a_glance",
+            "name": Translation.tr("At a Glance"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/AtAGlanceWidget.qml"),
+            "icon": "dashboard",
+            "description": Translation.tr("Android-inspired context widget combining media, calendar, sports, and current weather."),
+            "configPage": "widgets/DesktopAtAGlanceConfig.qml"
+        },
     ]
 
     // Extension widgets from WidgetExtensionManager

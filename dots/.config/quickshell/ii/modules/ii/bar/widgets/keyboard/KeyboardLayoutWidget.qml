@@ -86,6 +86,7 @@ MouseArea {
                 primaryComponent: iconComponent
                 secondaryComponent: keyboardLayoutComponent
                 primaryIsCircle: true
+                secondaryIsCircleWhenAlone: true
                 secondaryExtraMargin: 4
                 componentsPadding: 6
 
@@ -133,7 +134,7 @@ MouseArea {
                         TextMetrics {
                             id: metrics
                             font: keyboardText.font
-                            text: root.uppercaseLayout ? "UU UU" : "uu uu"
+                            text: root.uppercaseLayout ? "WW" : "ww"
                         }
                     }
                 }

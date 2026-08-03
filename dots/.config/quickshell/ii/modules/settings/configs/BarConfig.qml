@@ -50,22 +50,56 @@ Item {
                 icon: "style"
                 Layout.fillWidth: true
 
-                ConfigSelectionArray {
-                    currentValue: Config.options.sidebar.sidebarStyle
-                    onSelected: (newValue) => {
-                        Config.options.sidebar.sidebarStyle = newValue;
-                    }
-                    options: [{
-                        "displayName": Translation.tr("Default"),
-                        "icon": "view_sidebar",
-                        "value": "default"
-                    }, {
-                        "displayName": Translation.tr("Connect"),
-                        "icon": "phone_android",
-                        "value": "connect"
-                    }]
+                // Locked to Default when centerInBar active
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.centerInBar
+                    materialIcon: "lock"
+                    text: Translation.tr("Shell mode is locked to Default while 'Dynamic Island in bar center' is active. The search runs independently of the Dynamic Island in this mode.")
                 }
 
+                ConfigSelectionArray {
+                    id: shellStyleSelector
+                    currentValue: Config.options.sidebar.sidebarStyle
+                    onSelected: newValue => {
+                        Config.options.sidebar.sidebarStyle = newValue;
+                    }
+                    options: {
+                        const centerLocked = Config.options.bar.floatingNotch.centerInBar;
+                        var opts = [
+                            {
+                                "displayName": Translation.tr("Default"),
+                                "icon": "view_sidebar",
+                                "value": "default"
+                            },
+                            {
+                                "displayName": Translation.tr("Connect"),
+                                "icon": "phone_android",
+                                "value": "connect",
+                                "enabled": !centerLocked
+                            }
+                        ];
+                        if (Config.options.bar.floatingNotch.enable && Config.options.sidebar.sidebarStyle === "connect") {
+                            opts[0].enabled = false;
+                        }
+                        return opts;
+                    }
+                }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: Config.options.bar.floatingNotch.enable && Config.options.sidebar.sidebarStyle === "connect"
+                materialIcon: "water_drop"
+                text: Translation.tr("Default shell mode is not available while the Floating Dynamic Island is active. Disable it first to switch back.")
+
+                ShortcutBox {
+                    targetPageId: "dynamicIsland"
+                    targetSectionTitle: Translation.tr("Floating Dynamic Island")
+                    materialIcon: "arrow_forward"
+                    text: Translation.tr("Go to Dynamic Island settings")
+                    linkText: Translation.tr("Go there")
+                }
             }
 
             NoticeBox {
@@ -84,31 +118,49 @@ Item {
                 title: Translation.tr("Bar position")
                 icon: "dock"
 
+                // Locked when centerInBar: must be Top
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.centerInBar
+                    materialIcon: "lock"
+                    text: Translation.tr("Bar position is locked to Top while 'Dynamic Island in bar center' is active. Disable that feature first to change position.")
+                }
+
                 ConfigSelectionArray {
                     currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
-                    onSelected: (newValue) => {
+                    onSelected: newValue => {
                         Config.options.bar.bottom = (newValue & 1) !== 0;
                         Config.options.bar.vertical = (newValue & 2) !== 0;
                     }
-                    options: [{
-                        "displayName": Translation.tr("Top"),
-                        "icon": "arrow_upward",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Left"),
-                        "icon": "arrow_back",
-                        "value": 2
-                    }, {
-                        "displayName": Translation.tr("Bottom"),
-                        "icon": "arrow_downward",
-                        "value": 1
-                    }, {
-                        "displayName": Translation.tr("Right"),
-                        "icon": "arrow_forward",
-                        "value": 3
-                    }]
+                    options: {
+                        const locked = Config.options.bar.floatingNotch.centerInBar;
+                        return [
+                            {
+                                "displayName": Translation.tr("Top"),
+                                "icon": "arrow_upward",
+                                "value": 0
+                            },
+                            {
+                                "displayName": Translation.tr("Left"),
+                                "icon": "arrow_back",
+                                "value": 2,
+                                "enabled": !locked
+                            },
+                            {
+                                "displayName": Translation.tr("Bottom"),
+                                "icon": "arrow_downward",
+                                "value": 1,
+                                "enabled": !locked
+                            },
+                            {
+                                "displayName": Translation.tr("Right"),
+                                "icon": "arrow_forward",
+                                "value": 3,
+                                "enabled": !locked
+                            }
+                        ];
+                    }
                 }
-
             }
 
             ConfigSpinBox {
@@ -140,30 +192,49 @@ Item {
                 title: Translation.tr("Corner style")
                 icon: "rounded_corner"
 
-                ConfigSelectionArray {
-                    currentValue: Config.options.bar.cornerStyle
-                    onSelected: (newValue) => {
-                        Config.options.bar.cornerStyle = newValue;
-                    }
-                    options: [{
-                        "displayName": Translation.tr("Hug"),
-                        "icon": "line_curve",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Float"),
-                        "icon": "page_header",
-                        "value": 1
-                    }, {
-                        "displayName": Translation.tr("Rect"),
-                        "icon": "toolbar",
-                        "value": 2
-                    }, {
-                        "displayName": Translation.tr("Dynamic Island"),
-                        "icon": "water_drop",
-                        "value": 3
-                    }]
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.barBackgroundStyle === 3 && (Config.options.bar.cornerStyle === 2 || Config.options.bar.cornerStyle === 3)
+                    materialIcon: "grid_view"
+                    text: Translation.tr("Rect and Dynamic Island corner styles are incompatible with Islands background. Only Hug and Float are available while Islands is active.")
                 }
 
+                ConfigSelectionArray {
+                    id: cornerStyleSelector
+                    currentValue: Config.options.bar.cornerStyle
+                    onSelected: newValue => {
+                        Config.options.bar.cornerStyle = newValue;
+                    }
+                    options: {
+                        var opts = [
+                            {
+                                "displayName": Translation.tr("Hug"),
+                                "icon": "line_curve",
+                                "value": 0
+                            },
+                            {
+                                "displayName": Translation.tr("Float"),
+                                "icon": "page_header",
+                                "value": 1
+                            },
+                            {
+                                "displayName": Translation.tr("Rect"),
+                                "icon": "toolbar",
+                                "value": 2
+                            },
+                            {
+                                "displayName": Translation.tr("Dynamic Island"),
+                                "icon": "water_drop",
+                                "value": 3
+                            }
+                        ];
+                        if (Config.options.bar.barBackgroundStyle === 3) {
+                            opts[2].enabled = false;
+                            opts[3].enabled = false;
+                        }
+                        return opts;
+                    }
+                }
             }
 
             ConfigSwitch {
@@ -200,24 +271,27 @@ Item {
 
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.barGroupStyle
-                    onSelected: (newValue) => {
+                    onSelected: newValue => {
                         Config.options.bar.barGroupStyle = newValue;
                     }
-                    options: [{
-                        "displayName": Translation.tr("Pills"),
-                        "icon": "location_chip",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Island"),
-                        "icon": "shadow",
-                        "value": 1
-                    }, {
-                        "displayName": Translation.tr("Transparent"),
-                        "icon": "opacity",
-                        "value": 2
-                    }]
+                    options: [
+                        {
+                            "displayName": Translation.tr("Pills"),
+                            "icon": "location_chip",
+                            "value": 0
+                        },
+                        {
+                            "displayName": Translation.tr("Island"),
+                            "icon": "shadow",
+                            "value": 1
+                        },
+                        {
+                            "displayName": Translation.tr("Transparent"),
+                            "icon": "opacity",
+                            "value": 2
+                        }
+                    ]
                 }
-
             }
 
             ConfigSwitch {
@@ -232,7 +306,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Use primary container color for pill/island group backgrounds")
                 }
-
             }
 
             ContentSubsection {
@@ -240,30 +313,62 @@ Item {
                 icon: "format_paint"
                 tooltip: Translation.tr("Adaptive style makes the bar background transparent when there are no active windows")
 
-                ConfigSelectionArray {
-                    currentValue: Config.options.bar.barBackgroundStyle
-                    onSelected: (newValue) => {
-                        Config.options.bar.barBackgroundStyle = newValue;
-                    }
-                    options: [{
-                        "displayName": Translation.tr("Visible"),
-                        "icon": "visibility",
-                        "value": 1
-                    }, {
-                        "displayName": Translation.tr("Adaptive"),
-                        "icon": "masked_transitions",
-                        "value": 2
-                    }, {
-                        "displayName": Translation.tr("Transparent"),
-                        "icon": "opacity",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Islands"),
-                        "icon": "grid_view",
-                        "value": 3
-                    }]
+                // Locked when centerInBar: only Transparent(0) or Islands(3) allowed
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.centerInBar
+                    materialIcon: "lock"
+                    text: Translation.tr("Bar background is locked to Transparent or Islands while 'Dynamic Island in bar center' is active. Visible and Adaptive options are unavailable.")
                 }
 
+                ConfigSelectionArray {
+                    currentValue: Config.options.bar.barBackgroundStyle
+                    onSelected: newValue => {
+                        Config.options.bar.barBackgroundStyle = newValue;
+                        if (newValue === 3 && (Config.options.bar.cornerStyle === 2 || Config.options.bar.cornerStyle === 3)) {
+                            Config.options.bar.cornerStyle = 0;
+                        }
+                        if (newValue === 3) {
+                            let centerList = Config.options.bar.layouts.center;
+                            let hasCentered = centerList.some(item => item.centered);
+                            if (hasCentered) {
+                                Config.options.bar.layouts.center = centerList.map(item => ({
+                                            id: item.id,
+                                            centered: false,
+                                            visible: item.visible
+                                        }));
+                            }
+                        }
+                    }
+
+                    options: {
+                        const locked = Config.options.bar.floatingNotch.centerInBar;
+                        return [
+                            {
+                                "displayName": Translation.tr("Visible"),
+                                "icon": "visibility",
+                                "value": 1,
+                                "enabled": !locked
+                            },
+                            {
+                                "displayName": Translation.tr("Adaptive"),
+                                "icon": "masked_transitions",
+                                "value": 2,
+                                "enabled": !locked
+                            },
+                            {
+                                "displayName": Translation.tr("Transparent"),
+                                "icon": "opacity",
+                                "value": 0
+                            },
+                            {
+                                "displayName": Translation.tr("Islands"),
+                                "icon": "grid_view",
+                                "value": 3
+                            }
+                        ];
+                    }
+                }
             }
 
             ConfigSwitch {
@@ -278,7 +383,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Adds a soft blur and dim gradient under the transparent bar")
                 }
-
             }
 
             ConfigSwitch {
@@ -292,7 +396,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Use expressive solid layer colors")
                 }
-
             }
 
             ConfigSwitch {
@@ -306,7 +409,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Shows a soft drop shadow underneath the status bar")
                 }
-
             }
 
             ContentSubsection {
@@ -316,28 +418,32 @@ Item {
 
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.expressiveColorTheme
-                    onSelected: (newValue) => {
+                    onSelected: newValue => {
                         Config.options.bar.expressiveColorTheme = newValue;
                     }
-                    options: [{
-                        "displayName": Translation.tr("Content"),
-                        "icon": "brush",
-                        "value": "content"
-                    }, {
-                        "displayName": Translation.tr("Vibrant"),
-                        "icon": "brush",
-                        "value": "primary"
-                    }, {
-                        "displayName": Translation.tr("Secondary"),
-                        "icon": "brush",
-                        "value": "secondary"
-                    }, {
-                        "displayName": Translation.tr("Surface"),
-                        "icon": "brush",
-                        "value": "surface"
-                    }]
+                    options: [
+                        {
+                            "displayName": Translation.tr("Content"),
+                            "icon": "brush",
+                            "value": "content"
+                        },
+                        {
+                            "displayName": Translation.tr("Vibrant"),
+                            "icon": "brush",
+                            "value": "primary"
+                        },
+                        {
+                            "displayName": Translation.tr("Secondary"),
+                            "icon": "brush",
+                            "value": "secondary"
+                        },
+                        {
+                            "displayName": Translation.tr("Surface"),
+                            "icon": "brush",
+                            "value": "surface"
+                        }
+                    ]
                 }
-
             }
 
             ContentSubsection {
@@ -345,34 +451,52 @@ Item {
                 icon: "fullscreen_exit"
                 Layout.fillWidth: true
 
-                ConfigSelectionArray {
-                    currentValue: Config.options.appearance.fakeScreenRounding
-                    onSelected: (newValue) => {
-                        Config.options.appearance.fakeScreenRounding = newValue;
-                    }
-                    options: [{
-                        "displayName": Translation.tr("No"),
-                        "icon": "close",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Yes"),
-                        "icon": "check",
-                        "value": 1
-                    }, {
-                        "displayName": Translation.tr("When not fullscreen"),
-                        "icon": "fullscreen_exit",
-                        "value": 2
-                    }, {
-                        "displayName": Translation.tr("Wrapped"),
-                        "icon": "capture",
-                        "value": 3
-                    }, {
-                        "displayName": Translation.tr("Edge"),
-                        "icon": "border_bottom",
-                        "value": 4
-                    }]
+                // Locked when centerInBar: Wrapped(3)/Edge(4) break the visual
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.centerInBar
+                    materialIcon: "lock"
+                    text: Translation.tr("Wrapped Frame and Edge modes are locked while 'Dynamic Island in bar center' is active. They would render floating above the island, causing visual conflicts.")
                 }
 
+                ConfigSelectionArray {
+                    currentValue: Config.options.appearance.fakeScreenRounding
+                    onSelected: newValue => {
+                        Config.options.appearance.fakeScreenRounding = newValue;
+                    }
+                    options: {
+                        const locked = Config.options.bar.floatingNotch.centerInBar;
+                        return [
+                            {
+                                "displayName": Translation.tr("No"),
+                                "icon": "close",
+                                "value": 0
+                            },
+                            {
+                                "displayName": Translation.tr("Yes"),
+                                "icon": "check",
+                                "value": 1
+                            },
+                            {
+                                "displayName": Translation.tr("When not fullscreen"),
+                                "icon": "fullscreen_exit",
+                                "value": 2
+                            },
+                            {
+                                "displayName": Translation.tr("Wrapped"),
+                                "icon": "capture",
+                                "value": 3,
+                                "enabled": !locked
+                            },
+                            {
+                                "displayName": Translation.tr("Edge"),
+                                "icon": "border_bottom",
+                                "value": 4,
+                                "enabled": !locked
+                            }
+                        ];
+                    }
+                }
             }
 
             ConfigSpinBox {
@@ -414,7 +538,6 @@ Item {
                     var val = textField.text.trim();
                     if (val !== "" && textField.activeFocus)
                         Config.options.bar.topLeftIcon = val;
-
                 }
 
                 Connections {
@@ -424,9 +547,7 @@ Item {
 
                     target: Config.options.bar
                 }
-
             }
-
         }
 
         // ── Layout ────────────────────────────────────────────────────────
@@ -442,26 +563,41 @@ Item {
                 ConfigListView {
                     barSection: 0
                     listModel: Config.options.bar.layouts.left
-                    onUpdated: (newList) => {
+                    onUpdated: newList => {
                         Config.options.bar.layouts.left = newList;
                     }
                 }
-
             }
 
             ContentSubsection {
                 title: Translation.tr("Center layout widgets")
                 icon: "align_horizontal_center"
                 tooltip: Translation.tr("Center the component with the button")
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.barBackgroundStyle === 3
+                    materialIcon: "grid_view"
+                    text: Translation.tr("Widget centering is disabled when Islands bar background is active. All center widgets follow the island layout automatically.")
+                }
+
+                // CenterInBar lock: center widgets must be hidden
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.centerInBar
+                    materialIcon: "lock"
+                    text: Translation.tr("Center widgets are locked while 'Dynamic Island in bar center' is active. The Dynamic Island occupies the center of the bar — adding visible widgets here would conflict with it.")
+                }
 
                 ConfigListView {
                     barSection: 1
                     listModel: Config.options.bar.layouts.center
-                    onUpdated: (newList) => {
+                    // Disable editing center when centerInBar is active
+                    enabled: !Config.options.bar.floatingNotch.centerInBar
+                    opacity: Config.options.bar.floatingNotch.centerInBar ? 0.4 : 1.0
+                    onUpdated: newList => {
                         Config.options.bar.layouts.center = newList;
                     }
                 }
-
             }
 
             ContentSubsection {
@@ -472,13 +608,11 @@ Item {
                 ConfigListView {
                     barSection: 2
                     listModel: Config.options.bar.layouts.right
-                    onUpdated: (newList) => {
+                    onUpdated: newList => {
                         Config.options.bar.layouts.right = newList;
                     }
                 }
-
             }
-
         }
 
         // ── Behavior ──────────────────────────────────────────────────────
@@ -490,8 +624,16 @@ Item {
                 buttonIcon: "visibility_off"
                 text: Translation.tr("Automatically hide")
                 checked: Config.options.bar.autoHide.enable
+                // Locked when centerInBar: DI would lose its anchor if bar auto-hides
+                enabled: !Config.options.bar.floatingNotch.centerInBar
                 onCheckedChanged: {
                     Config.options.bar.autoHide.enable = checked;
+                }
+
+                StyledToolTip {
+                    text: Config.options.bar.floatingNotch.centerInBar
+                        ? Translation.tr("Auto-hide is locked while 'Dynamic Island in bar center' is active.")
+                        : Translation.tr("Automatically hide the bar when not in use")
                 }
             }
 
@@ -510,7 +652,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Enable or disable scrolling on the bar to change volume")
                 }
-
             }
 
             ConfigSwitch {
@@ -524,7 +665,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Enable or disable scrolling on the bar to change brightness")
                 }
-
             }
 
             ContentSubsectionLabel {
@@ -542,7 +682,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("You will not be able to use the buttons on some popups if you enable this option.")
                 }
-
             }
 
             ConfigSwitch {
@@ -580,7 +719,6 @@ Item {
                     Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup = checked;
                 }
             }
-
         }
 
         // ── Monitors ──────────────────────────────────────────────────────
@@ -596,13 +734,11 @@ Item {
                     Config.options.bar.onlyShowOnSingleMonitor = checked;
                     if (checked && Config.options.bar.singleMonitorName === "" && Quickshell.screens.length > 0)
                         Config.options.bar.singleMonitorName = Quickshell.screens[0].name;
-
                 }
 
                 StyledToolTip {
                     text: Translation.tr("Display the bar on only one chosen monitor instead of all monitors")
                 }
-
             }
 
             ContentSubsection {
@@ -612,13 +748,11 @@ Item {
 
                 MonitorPicker {
                     currentValue: Config.options.bar.singleMonitorName
-                    onSelected: (newValue) => {
+                    onSelected: newValue => {
                         Config.options.bar.singleMonitorName = newValue;
                     }
                 }
-
             }
-
         }
 
         // ── Widgets ───────────────────────────────────────────────────────
@@ -642,7 +776,7 @@ Item {
                 spacing: 4
 
                 Repeater {
-                    model: BarComponentRegistry.allComponents.filter((c) => {
+                    model: BarComponentRegistry.allComponents.filter(c => {
                         return c.configPage || c.pageId;
                     })
 
@@ -659,11 +793,8 @@ Item {
                             page.openWidgetPage(modelData.id);
                         }
                     }
-
                 }
-
             }
-
         }
 
         ContentSection {
@@ -680,9 +811,7 @@ Item {
                     barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/WaffleTweaksConfig.qml");
                 }
             }
-
         }
-
     }
 
     // ── Sub-page overlay (slides in from the right) ───────────────────────
@@ -692,5 +821,4 @@ Item {
         anchors.fill: parent
         z: 10
     }
-
 }

@@ -17,22 +17,39 @@ Item {
     property color colBorder: WidgetColorScheme.textColorOnBg
     property color colTicks: WidgetColorScheme.textColorOnBg
     property color colNumbers: WidgetColorScheme.textColorOnBg
-    property color colHandFill: WidgetColorScheme.accentColor
-    property color colHandBorder: WidgetColorScheme.accentColor
-    property color colMinuteHandFill: WidgetColorScheme.onAccentColor
+    property color colHourHand: WidgetColorScheme.accentColor
+    property color colMinuteHand: WidgetColorScheme.subtextColorOnBg
 
     readonly property list<string> clockNumbers: DateTime.time.split(/[: ]/)
     readonly property int clockHour: parseInt(clockNumbers[0]) % 12
     readonly property int clockMinute: DateTime.clock.minutes
+    property int clockSecond: DateTime.clock.seconds
+
+    Timer {
+        interval: 1000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.clockSecond = new Date().getSeconds()
+    }
 
     implicitWidth: implicitSize
     implicitHeight: implicitSize
+
+    // ── Config-driven toggles ──
+    readonly property bool showTicks: Config.ready ? (Config.options.background.widgets.clock_dial.showTicks ?? true) : true
+    readonly property bool showMinuteHand: Config.ready ? (Config.options.background.widgets.clock_dial.showMinuteHand ?? true) : true
+    readonly property bool showSecondHand: Config.ready ? (Config.options.background.widgets.clock_dial.showSecondHand ?? false) : false
+    readonly property string hourHandStyle: Config.ready ? (Config.options.background.widgets.clock_dial.hourHandStyle ?? "fill") : "fill"
+    readonly property string minuteHandStyle: Config.ready ? (Config.options.background.widgets.clock_dial.minuteHandStyle ?? "medium") : "medium"
+    readonly property string secondHandStyle: Config.ready ? (Config.options.background.widgets.clock_dial.secondHandStyle ?? "dot") : "dot"
+    readonly property bool showNumberRing: Config.ready ? (Config.options.background.widgets.clock_dial.showNumberRing ?? false) : false
 
     // Outer drop shadow support
     StyledDropShadow {
         id: outerShadow
         target: dialBody
-        visible: Config.ready ? (Config.options.background.widgets.clock.dial.enableShadows ?? true) : true
+        visible: Config.ready ? (Config.options.background.widgets.clock_dial.enableShadows ?? true) : true
     }
 
     // Base Dial Plate
@@ -43,12 +60,12 @@ Item {
         radius: width / 2
         clip: true
 
-        // Inner shadow container (only this item has layer enabled for OpacityMask to prevent layout distortion)
+        // Inner shadow container
         Item {
             id: shadowContainer
             anchors.fill: parent
-            z: 0.1 // Just above background
-            layer.enabled: Config.ready ? (Config.options.background.widgets.clock.dial.enableInnerShadow ?? true) : true
+            z: 0.1
+            layer.enabled: Config.ready ? (Config.options.background.widgets.clock_dial.enableInnerShadow ?? true) : true
             layer.smooth: true
             layer.effect: OpacityMask {
                 maskSource: Rectangle {
@@ -59,7 +76,6 @@ Item {
                 }
             }
 
-            // Moldura do Canvas com recorte (furo circular) para projetar a sombra para dentro
             Canvas {
                 id: shadowMaskCanvas
                 x: -80
@@ -95,11 +111,11 @@ Item {
                 color: Qt.rgba(0, 0, 0, 0.35)
                 horizontalOffset: 0
                 verticalOffset: 0
-                visible: Config.ready ? (Config.options.background.widgets.clock.dial.enableInnerShadow ?? true) : true
+                visible: Config.ready ? (Config.options.background.widgets.clock_dial.enableInnerShadow ?? true) : true
             }
         }
 
-        // Outer Thin Ring Accent (inset from boundary by 6px)
+        // Outer Thin Ring Accent
         Rectangle {
             width: parent.width - 12
             height: parent.height - 12
@@ -110,7 +126,7 @@ Item {
             anchors.centerIn: parent
         }
 
-        // Inner Thick Ring Accent (inset from boundary by 12px)
+        // Inner Thick Ring Accent
         Rectangle {
             width: parent.width - 24
             height: parent.height - 24
@@ -126,7 +142,7 @@ Item {
         Canvas {
             id: ticksCanvas
             anchors.fill: parent
-            visible: Config.ready ? (Config.options.background.widgets.clock.dial.showTicks ?? true) : true
+            visible: root.showTicks
             onPaint: {
                 var ctx = getContext("2d");
                 ctx.clearRect(0, 0, width, height);
@@ -135,12 +151,11 @@ Item {
 
                 var cx = width / 2;
                 var cy = height / 2;
-                var r = cx - 12; // Radius inside thin ring
+                var r = cx - 12;
 
                 for (var i = 0; i < 120; i++) {
                     var angle = (i * 3) * Math.PI / 180;
-                    var tickLen = 6; // All ticks uniform length
-
+                    var tickLen = 6;
                     ctx.beginPath();
                     ctx.moveTo(cx + (r - tickLen) * Math.cos(angle), cy + (r - tickLen) * Math.sin(angle));
                     ctx.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
@@ -149,17 +164,20 @@ Item {
             }
         }
 
-        // Numbers 12, 3, 6, 9
+        // Bigger background digits (12, 3, 6, 9) — configurable via showNumberRing
         Text {
             text: "12"
             font.family: Appearance.font.family.main
-            font.pixelSize: parent.width * 0.18
-            font.weight: Font.Black
-            font.styleName: "Rounded"
+            font.pixelSize: parent.width * 0.28
+            font.weight: Font.ExtraBold
+            font.bold: true
+            font.variableAxes: ({ "wght": 1000 })
             color: root.colNumbers
+            opacity: root.showNumberRing ? 0.8 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
             anchors {
                 top: parent.top
-                topMargin: parent.height * 0.11
+                topMargin: parent.height * 0.05
                 horizontalCenter: parent.horizontalCenter
             }
         }
@@ -167,13 +185,16 @@ Item {
         Text {
             text: "6"
             font.family: Appearance.font.family.main
-            font.pixelSize: parent.width * 0.18
-            font.weight: Font.Black
-            font.styleName: "Rounded"
+            font.pixelSize: parent.width * 0.28
+            font.weight: Font.ExtraBold
+            font.bold: true
+            font.variableAxes: ({ "wght": 1000 })
             color: root.colNumbers
+            opacity: root.showNumberRing ? 0.8 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
             anchors {
                 bottom: parent.bottom
-                bottomMargin: parent.height * 0.11
+                bottomMargin: parent.height * 0.05
                 horizontalCenter: parent.horizontalCenter
             }
         }
@@ -181,13 +202,16 @@ Item {
         Text {
             text: "3"
             font.family: Appearance.font.family.main
-            font.pixelSize: parent.width * 0.18
-            font.weight: Font.Black
-            font.styleName: "Rounded"
+            font.pixelSize: parent.width * 0.28
+            font.weight: Font.ExtraBold
+            font.bold: true
+            font.variableAxes: ({ "wght": 1000 })
             color: root.colNumbers
+            opacity: root.showNumberRing ? 0.8 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
             anchors {
                 right: parent.right
-                rightMargin: parent.width * 0.13
+                rightMargin: parent.width * 0.07
                 verticalCenter: parent.verticalCenter
             }
         }
@@ -195,75 +219,60 @@ Item {
         Text {
             text: "9"
             font.family: Appearance.font.family.main
-            font.pixelSize: parent.width * 0.18
-            font.weight: Font.Black
-            font.styleName: "Rounded"
+            font.pixelSize: parent.width * 0.28
+            font.weight: Font.ExtraBold
+            font.bold: true
+            font.variableAxes: ({ "wght": 1000 })
             color: root.colNumbers
+            opacity: root.showNumberRing ? 0.8 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
             anchors {
                 left: parent.left
-                leftMargin: parent.width * 0.13
+                leftMargin: parent.width * 0.07
                 verticalCenter: parent.verticalCenter
             }
         }
 
-        // Hour Hand
-        Rectangle {
-            id: hourHand
-            width: 8
-            height: parent.height * 0.28
-            radius: width / 2
-            color: "transparent"
-            border.color: root.colHandBorder
-            border.width: 1
-            anchors.bottom: parent.verticalCenter
-            anchors.horizontalCenter: parent.horizontalCenter
-            transformOrigin: Item.Bottom
-            rotation: (root.clockHour * 30) + (root.clockMinute * 0.5)
-
-            // Inner filled pill with spacing (gap)
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 1.5
-                radius: height / 2
-                color: root.colHandFill
-            }
-
-            Behavior on rotation {
-                RotationAnimation {
-                    duration: 300
-                    direction: RotationAnimation.Shortest
-                }
+        // ── Hour hand (CookieClock HourHand component) ──
+        FadeLoader {
+            anchors.fill: parent
+            z: (item && item.style === "hollow") ? 0 : 2
+            shown: root.hourHandStyle !== "hide"
+            sourceComponent: HourHand {
+                clockHour: root.clockHour
+                clockMinute: root.clockMinute
+                handLength: 72
+                handWidth: 20
+                style: root.hourHandStyle
+                color: root.colHourHand
             }
         }
 
-        // Minute Hand (configurable via toggle)
-        Rectangle {
-            id: minuteHand
-            width: 8
-            height: parent.height * 0.38
-            radius: width / 2
-            color: "transparent"
-            border.color: root.colHandBorder
-            border.width: 1
-            anchors.bottom: parent.verticalCenter
-            anchors.horizontalCenter: parent.horizontalCenter
-            transformOrigin: Item.Bottom
-            rotation: root.clockMinute * 6
-            visible: Config.ready ? (Config.options.background.widgets.clock.dial.showMinuteHand ?? true) : true
-
-            // Inner filled pill with spacing (gap)
-            Rectangle {
+        // ── Minute hand (CookieClock MinuteHand component) ──
+        FadeLoader {
+            anchors.fill: parent
+            z: 1
+            shown: root.showMinuteHand && root.minuteHandStyle !== "hide"
+            sourceComponent: MinuteHand {
                 anchors.fill: parent
-                anchors.margins: 1.5
-                radius: height / 2
-                color: root.colMinuteHandFill
+                clockMinute: root.clockMinute
+                handLength: 95
+                style: root.minuteHandStyle
+                color: root.colMinuteHand
             }
+        }
 
-            Behavior on rotation {
-                RotationAnimation {
-                    duration: 300
-                    direction: RotationAnimation.Shortest
-                }
+        // ── Second hand (CookieClock SecondHand component) — disabled by default ──
+        FadeLoader {
+            id: secondHandLoader
+            z: (root.secondHandStyle === "line") ? 2 : 3
+            shown: root.showSecondHand && root.secondHandStyle !== "hide"
+            anchors.fill: parent
+            sourceComponent: SecondHand {
+                id: secondHand
+                clockSecond: root.clockSecond
+                style: root.secondHandStyle
+                color: WidgetColorScheme.successColor
             }
         }
     }

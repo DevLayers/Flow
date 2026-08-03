@@ -369,12 +369,13 @@ if [[ -n "$OBS_CMD" ]]; then
              Y=$(echo "$MANUAL_REGION" | cut -d' ' -f1 | cut -d',' -f2)
              
              ffmpeg -i "$LATEST_FILE" -filter:v "crop=$W:$H:$X:$Y" "cropped_$LATEST_FILE" -y && mv "cropped_$LATEST_FILE" "$LATEST_FILE"
-             notify-send "Region Recording Finished" "Saved to $LATEST_FILE" -a 'Recorder' &
+             notify-send "Recording Finished" "Saved to: $PWD/$LATEST_FILE" -a 'Recorder' &
         fi
     fi
 
     LATEST_FILE=$(ls -1t | grep -E '\.(mp4|mkv|flv|mov)$' | head -1)
     if [[ -n "$LATEST_FILE" ]]; then
+        notify-send "Recording Finished" "Saved to: $PWD/$LATEST_FILE" -a 'Recorder' &
         qs -c ii ipc call launchVideoEditor handle "$PWD/$LATEST_FILE"
     fi
 
@@ -433,6 +434,7 @@ else
 
     # Post recording action (launch video editor)
     if [[ -f "$FILENAME" ]]; then
+        notify-send "Recording Finished" "Saved to: $PWD/$FILENAME" -a 'Recorder' &
         qs -c ii ipc call launchVideoEditor handle "$PWD/$FILENAME"
     fi
     updatestate false

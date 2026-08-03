@@ -256,7 +256,10 @@ Item {
     ColumnLayout {
         id: mainColumn
         anchors.fill: parent
-        anchors.margins: 16
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        anchors.bottomMargin: 16
+        anchors.topMargin: 0
         spacing: 12
 
         // ── HERO — URL zone + status badge ───────────────────────────────────

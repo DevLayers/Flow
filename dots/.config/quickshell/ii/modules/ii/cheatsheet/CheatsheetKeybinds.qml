@@ -23,7 +23,12 @@ Item {
     readonly property var rawKeybinds: {
         const defaultKeybinds = HyprlandKeybinds.defaultKeybinds.children ?? [];
         const userKeybinds = HyprlandKeybinds.userKeybinds.children ?? [];
-        const unbinds = Config.options.cheatsheet.filterUnbinds ? parseUnbinds(userKeybinds) : [];
+        const unbinds = Config.options.cheatsheet.filterUnbinds
+            ? [
+                ...(HyprlandKeybinds.userKeybinds.unbinds ?? []),
+                ...parseUnbinds(userKeybinds)
+            ]
+            : [];
         return [...(processKeymaps(defaultKeybinds, unbinds) ?? []), ...(processKeymaps(userKeybinds) ?? [])];
     }
 
@@ -31,22 +36,31 @@ Item {
 
     function flattenSections(tree) {
         const sections = [];
+        const byName = {};
         if (!tree) return sections;
-        for (let i = 0; i < tree.length; i++) {
-            const node = tree[i];
-            if (node.keybinds && node.keybinds.length > 0) {
-                sections.push({
-                    name: node.name || "",
-                    keybinds: node.keybinds
-                });
-            }
-            if (node.children && node.children.length > 0) {
-                const childSections = flattenSections(node.children);
-                for (let j = 0; j < childSections.length; j++) {
-                    sections.push(childSections[j]);
+
+        function walk(nodes) {
+            for (const node of nodes ?? []) {
+                const keybinds = node.keybinds;
+                if (keybinds?.length) {
+                    const name = node.name || "";
+                    const existing = byName[name];
+                    if (existing) {
+                        existing.keybinds.push(...keybinds);
+                    } else {
+                        byName[name] = {
+                            name,
+                            keybinds: [...keybinds],
+                            defaultCount: keybinds.length // customs append after this
+                        };
+                        sections.push(byName[name]);
+                    }
                 }
+                walk(node.children);
             }
         }
+
+        walk(tree);
         return sections;
     }
 
@@ -107,30 +121,30 @@ Item {
     ]
 
     property var macSymbolMap: ({
-            "Ctrl": "",
-            "Alt": "",
-            "Shift": "",
-            "Space": "",
+            "Ctrl": "󰘴",
+            "Alt": "󰘵",
+            "Shift": "󰘶",
+            "Space": "󱁐",
             "Tab": "↹",
             "Equal": "󰇼",
-            "Minus": "",
-            "Print": "",
+            "Minus": "",
+            "Print": "",
             "BackSpace": "󰭜",
-            "Delete": "",
-            "Return": "",
+            "Delete": "⌦",
+            "Return": "󰌑",
             "Period": ".",
             "Escape": "⎋"
         })
     property var functionSymbolMap: ({
-            "F1": "",
-            "F2": "",
-            "F3": "",
-            "F4": "",
-            "F5": "",
-            "F6": "",
-            "F7": "",
-            "F8": "",
-            "F9": "",
+            "F1": "󱊫",
+            "F2": "󱊬",
+            "F3": "󱊭",
+            "F4": "󱊮",
+            "F5": "󱊯",
+            "F6": "󱊰",
+            "F7": "󱊱",
+            "F8": "󱊲",
+            "F9": "󱊳",
             "F10": "󱊴",
             "F11": "󱊵",
             "F12": "󱊶"
@@ -139,7 +153,7 @@ Item {
             "mouse_up": "󱕐",
             "mouse_down": "󱕑",
             "mouse:272": "L󰍽",
-            "mouse:273": "R",
+            "mouse:273": "R󰍽",
             "Scroll ↑/↓": "󱕒",
             "Page_↑/↓": "⇞/⇟"
         })
@@ -162,7 +176,9 @@ Item {
             "Return": "Enter"
         }, !!_super ? {
             "SUPER": _super,
-            "Super": _super
+            "Super": _super,
+						"SUPER_L": `L${_super}`,
+						"SUPER_R": `R${_super}`,
         } : {}, _mac ? macSymbolMap : {}, _fn ? functionSymbolMap : {}, _mouse ? mouseSymbolMap : {});
     }
 

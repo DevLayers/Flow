@@ -112,6 +112,7 @@ LUA_BIND_RE = re.compile(r'hl\.bind\s*\(([^)]*)\)\s*', re.DOTALL)
 LUA_FIRST_ARG_RE = re.compile(r'"([^"]+)"')
 LUA_DESC_RE = re.compile(r'description\s*=\s*"([^"]*)"')
 LUA_SECTION_RE = re.compile(r'^--##!\s+(.+)$')
+LUA_COMMENT_BIND_PATTERN = re.compile(r'^--?#/#\s+(bind|unbind)\w*\s*=')
 
 
 def parse_lua_binds(path):
@@ -169,28 +170,43 @@ def parse_lua_binds(path):
             process_lua_bind(bind_src, current, is_unbind=True)
             continue
 
-        # Skip `--#/#` documentation lines (old conf-format bind documentation, not active)
+        # Cheatsheet-only documentation binds (not registered with Hyprland)
+        # e.g. `--#/# bind = SUPER+SHIFT, ↑/↓/←/→,, # Move workspace to monitor`
+        if re.match(LUA_COMMENT_BIND_PATTERN, stripped):
+            # Strip leading `--` so conf-style parsing sees `#/# bind = ...`
+            lines[i] = stripped[2:].lstrip() if stripped.startswith("--") else stripped
+            keybind = get_keybind_at_line(i, lines)
+            if isinstance(keybind, KeyBinding):
+                current["keybinds"].append(keybind)
+            elif isinstance(keybind, Unbinding):
+                current["unbinds"].append(keybind)
+            i += 1
+            continue
 
         i += 1
 
-    # Wrap orphan root keybinds into an implicit section
-    if root.get("keybinds") and len(root["keybinds"]) > 0:
-        implicit = Section([], list(root["keybinds"]), [], "Keybinds")
+    # Wrap orphan root keybinds/unbinds into an implicit section so QML
+    # (which walks .children) can discover them.
+    if (root.get("keybinds") and len(root["keybinds"]) > 0) or \
+       (root.get("unbinds") and len(root["unbinds"]) > 0):
+        implicit = Section(
+            [],
+            list(root.get("keybinds") or []),
+            list(root.get("unbinds") or []),
+            "Keybinds",
+        )
         root["children"].insert(0, implicit)
         root["keybinds"] = []
+        root["unbinds"] = []
 
     # Nest each section's direct keybinds into a synthetic child sub-section
-    # so the QML parseKeymaps function sees child.children with keybind data
+    # so the QML parseKeymaps function sees child.children with keybind data.
+    # Unbinds stay on the section itself — parseUnbinds walks all nodes.
     for section in root["children"]:
         if section.get("keybinds") and len(section["keybinds"]) > 0:
             sub = Section([], list(section["keybinds"]), [], section.get("name", ""))
             section["children"].append(sub)
             section["keybinds"] = []
-        # Also handle unbinds (wrap into child)
-        if section.get("unbinds") and len(section["unbinds"]) > 0:
-            for child in section["children"]:
-                if not child.get("unbinds"):
-                    child["unbinds"] = []
 
     return root
 
@@ -213,13 +229,13 @@ def process_lua_bind(bind_src, current, is_unbind=False):
     if '[hidden]' in comment or '[ignore]' in comment:
         return
 
-    # Remove leading "Shell: ", "Utilities: ", etc. for display
-    # (the QML shows it as the comment text)
-    if not comment:
-        return  # skip binds without descriptions (they're internal)
-
     if is_unbind:
+        # Unbinds don't need descriptions — they only filter the cheatsheet
         current["unbinds"].append(Unbinding(mods, key, comment))
+        return
+
+    # Skip binds without descriptions (they're internal)
+    if not comment:
         return
 
     current["keybinds"].append(KeyBinding(mods, key, '', '', comment))

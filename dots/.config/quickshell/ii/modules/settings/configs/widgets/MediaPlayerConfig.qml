@@ -96,6 +96,18 @@ ContentPage {
                 Config.options.bar.mediaPlayer.artwork.enable = checked;
             }
         }
+
+        ConfigSwitch {
+            buttonIcon: "volume_up"
+            text: Translation.tr("Scroll to change player volume")
+            checked: Config.options.bar.mediaPlayer.enableVolumeScroll
+            onCheckedChanged: {
+                Config.options.bar.mediaPlayer.enableVolumeScroll = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Scroll on the media widget to adjust the active player's volume")
+            }
+        }
     }
 
     ContentSection {

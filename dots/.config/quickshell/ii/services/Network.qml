@@ -6,6 +6,7 @@ pragma ComponentBehavior: Bound
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.modules.common.functions
 import qs.services.network
 
 /**
@@ -282,7 +283,9 @@ Singleton {
     Process {
         id: subscriber
         running: true
-        command: ["nmcli", "monitor"]
+        // Runs for as long as the shell does, and reports nothing between network
+        // events, so an orphaned one never notices its output is gone.
+        command: ProcUtils.pdeath(["nmcli", "monitor"])
         stdout: SplitParser {
             onRead: root.update()
         }

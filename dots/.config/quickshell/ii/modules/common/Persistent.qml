@@ -242,6 +242,14 @@ Singleton {
                     property real height: 330
                     property int tabIndex: 0
                 }
+                property JsonObject discordVoice: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 80
+                    property real y: 600
+                    property real width: 344
+                    property real height: 200
+                }
             }
 
             property JsonObject phoneMic: JsonObject {
@@ -261,8 +269,8 @@ Singleton {
                     property string main: "Google Sans Flex"
                     property string numbers: "Google Sans Flex"
                     property string title: "Google Sans Flex"
-                    property string iconNerd: "JetBrains Mono NF"
-                    property string monospace: "JetBrains Mono NF"
+                    property string iconNerd: "JetBrainsMono Nerd Font"
+                    property string monospace: "JetBrainsMono Nerd Font"
                     property string reading: "Readex Pro"
                     property string expressive: "Space Grotesk"
                     property bool roundnessFull: false
@@ -283,6 +291,11 @@ Singleton {
                 }
             }
             property list<var> alarms: []
+            property JsonObject water: JsonObject {
+                property int glassesDrunk: 0
+                property string lastDate: ""
+                property real lastNotify: 0
+            }
             property JsonObject media: JsonObject {
             }
 

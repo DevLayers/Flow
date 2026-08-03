@@ -743,12 +743,10 @@ MouseArea {
             colBackgroundHover: Appearance.colors.colSecondaryContainerHover
             colRipple: Appearance.colors.colSecondaryContainerActive
             
-            contentItem: MaterialSymbol {
+            contentItem: Image {
                 anchors.centerIn: parent
-                text: Icons.getWeatherIcon(Weather.data ? Weather.data.wCode : 113) || "device_thermostat"
-                iconSize: 22
-                color: Appearance.colors.colOnSecondaryContainer
-                fill: 1
+                source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+                sourceSize: Qt.size(22, 22)
             }
         }
 

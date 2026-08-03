@@ -26,8 +26,10 @@ __pycache__/
 /dots/.config/quickshell/ii/GEMINI.md.old
 /dots/.config/quickshell/ii/.claude
 /dots/.config/quickshell/ii/.active-branch
+/dots/.config/quickshell/ii/.active-remote
 /dots/.config/quickshell/ii/.active-commit
 /dots/.config/quickshell/ii/.active-fork
+/dots/.config/quickshell/ii/.active-local
 /dots/.config/quickshell/ii/.cortexkit
 /dots/.config/quickshell/ii/user_widgets
 
@@ -36,3 +38,9 @@ __pycache__/
 
 # Compiled binary — build it from workspace_profile_manager_src/ instead (see scripts/hyprland/README.md)
 /dots/.config/quickshell/ii/scripts/hyprland/workspace_profile_manager
+
+# Compiled binary — build it from osk_autoshow_src/ instead (see scripts/osk/README.md)
+/dots/.config/quickshell/ii/scripts/osk/osk_autoshow
+
+/dots/.config/quickshell/ii/.tmp
+/dots/.config/quickshell/ii/.commandcode

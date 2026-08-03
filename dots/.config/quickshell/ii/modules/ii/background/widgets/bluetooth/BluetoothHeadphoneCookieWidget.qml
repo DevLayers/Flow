@@ -26,7 +26,7 @@ AbstractBackgroundWidget {
     readonly property int batteryPercent: Math.round(batteryLevel * 100)
 
     // Palette tokens from WidgetColorScheme
-    readonly property color outerCircleColor: Appearance.colors.colPrimary
+    readonly property color outerCircleColor: WidgetColorScheme.pillBgColor
     readonly property color cardBgColor: WidgetColorScheme.cardBgColor
     readonly property color textColorOnBg: WidgetColorScheme.textColorOnBg
 

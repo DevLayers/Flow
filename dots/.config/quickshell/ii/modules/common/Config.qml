@@ -274,6 +274,205 @@ Singleton {
         Persistent.states.background.lockBehaviorMigrated = true;
     }
 
+    // ── Schema versioning & type-drift repair ─────────────────────────────────
+    // JsonAdapter coerces rather than rejects, and the damaging coercions are
+    // silent: an int landing on a string property becomes "1" and matches no
+    // branch; a string landing on a list property is split into one entry per
+    // character ("left" -> ["l","e","f","t"]); a list of objects landing on
+    // list<string> becomes ["", ""]. The next write persists the wreckage, so
+    // the damage outlives the version that caused it, which is why the only fix
+    // users find is deleting config.json outright.
+    //
+    // Both passes below work on the raw file rather than the adapter, because
+    // by the time the adapter is readable the original values are gone.
+    // Migration runs first so a retyped key can be converted; whatever is still
+    // unrepresentable afterwards is replaced with its schema default.
+    //
+    // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
+    // whenever an existing key changes type or meaning.
+    readonly property int currentConfigVersion: 1
+    // Defaults have to be captured before the file lands, because deserializing
+    // is what destroys them. FileView loads asynchronously, so at component
+    // completion the adapter still holds nothing but the QML defaults.
+    property var defaultOptions: null
+    property bool configRepaired: false
+
+    function snapshotDefaults(source) {
+        if (source === null || typeof source !== "object")
+            return source;
+        if (root.isArrayLike(source)) {
+            let copy = [];
+            for (let i = 0; i < source.length; ++i) {
+                copy.push(root.snapshotDefaults(source[i]));
+            }
+            return copy;
+        }
+        let copy = {};
+        for (const key in source) {
+            if (key === "objectName")
+                continue;
+            const value = source[key];
+            if (typeof value === "function")
+                continue;
+            copy[key] = root.snapshotDefaults(value);
+        }
+        return copy;
+    }
+
+    // A config written before versioning existed has no `configVersion` key, so
+    // those files read back as 0 and every migration runs. A fresh config is
+    // stamped with the current version when defaults are seeded, so it
+    // correctly skips all of them.
+    function migrateRaw(raw) {
+        const from = raw.configVersion ?? 0;
+        if (from >= root.currentConfigVersion)
+            return false;
+
+        // v0 -> v1: sidebar.position went from int to string ("more
+        // understandable config naming", Jan 2026). Old files still hold 0-3,
+        // which JsonAdapter turns into the strings "0".."3" — matching nothing,
+        // so every sidebar position silently behaved as "default".
+        if (from < 1 && raw.sidebar !== undefined && typeof raw.sidebar.position === "number") {
+            const legacyPositions = ["default", "inverted", "left", "right"];
+            const previous = raw.sidebar.position;
+            if (previous >= 0 && previous < legacyPositions.length) {
+                raw.sidebar.position = legacyPositions[previous];
+                console.log(`[Config] Migrated sidebar.position ${previous} -> ${raw.sidebar.position}`);
+            }
+        }
+
+        raw.configVersion = root.currentConfigVersion;
+        console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
+        return true;
+    }
+
+    // list<var>/list<string> are QML sequences: indexable with a numeric length,
+    // but Array.isArray is false for them.
+    function isArrayLike(value) {
+        return typeof value === "object" && value !== null && typeof value.length === "number";
+    }
+
+    // The adapter is the type oracle: whatever a value was coerced into, its
+    // type is by definition the type the schema declares.
+    function typesConflict(rawValue, qmlValue) {
+        if (rawValue === null || rawValue === undefined)
+            return false;
+        // Unknown keys have no counterpart to conflict with. JsonAdapter drops
+        // them on the next write anyway.
+        if (qmlValue === undefined || qmlValue === null)
+            return false;
+
+        const rawIsArray = Array.isArray(rawValue);
+        const qmlIsArray = root.isArrayLike(qmlValue);
+        if (rawIsArray !== qmlIsArray)
+            return true;
+
+        if (rawIsArray) {
+            // Coercion is positional and length-preserving, so mismatched
+            // lengths mean this is not a coerced copy and nothing can be
+            // concluded. Equal lengths let each element be compared in place,
+            // which is what catches [{...}] collapsing into [""].
+            if (rawValue.length !== qmlValue.length)
+                return false;
+            for (let i = 0; i < rawValue.length; ++i) {
+                if (typeof rawValue[i] !== typeof qmlValue[i])
+                    return true;
+            }
+            return false;
+        }
+
+        const rawIsObject = typeof rawValue === "object";
+        const qmlIsObject = typeof qmlValue === "object";
+        if (rawIsObject !== qmlIsObject)
+            return true;
+        if (rawIsObject)
+            return false;
+
+        // Scalars. number<->bool is deliberately allowed: 0/1 for a bool is a
+        // plausible hand-edit and coerces to the right thing.
+        if (typeof rawValue === "string" && typeof qmlValue === "number")
+            return true;
+        if (typeof rawValue === "number" && typeof qmlValue === "string")
+            return true;
+        if (typeof rawValue === "string" && typeof qmlValue === "boolean")
+            return true;
+        return false;
+    }
+
+    function repairTypeConflicts(rawObject, qmlObject, defaultObject, prefix, repaired) {
+        for (const key in rawObject) {
+            const rawValue = rawObject[key];
+            const qmlValue = qmlObject[key];
+            const defaultValue = defaultObject ? defaultObject[key] : undefined;
+            const path = prefix ? `${prefix}.${key}` : key;
+
+            if (root.typesConflict(rawValue, qmlValue)) {
+                // Writing the default back rather than dropping the key means
+                // the adapter picks the right value up from this same write; a
+                // missing key would leave the coerced garbage in place.
+                if (defaultValue === undefined)
+                    continue;
+                console.warn(`[Config] Resetting ${path} to its default: the stored value no longer matches the schema`);
+                rawObject[key] = defaultValue;
+                repaired.push(path);
+                continue;
+            }
+            // Recurse into plain objects only — array elements are free-form.
+            if (rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && qmlValue && typeof qmlValue === "object" && !root.isArrayLike(qmlValue)) {
+                root.repairTypeConflicts(rawValue, qmlValue, defaultValue, path, repaired);
+            }
+        }
+    }
+
+    // Returns true when the file needed rewriting. Repair runs at most once per
+    // session: it is a one-time upgrade step, and capping it removes any chance
+    // of a write/reload loop.
+    function repairConfigFile() {
+        if (root.configRepaired || root.defaultOptions === null)
+            return false;
+
+        let raw;
+        try {
+            raw = JSON.parse(configFileView.text());
+        } catch (e) {
+            // Unparseable file: FileView would not have loaded it, so there is
+            // nothing to repair here.
+            return false;
+        }
+        if (!raw || typeof raw !== "object")
+            return false;
+
+        const migrated = root.migrateRaw(raw);
+        let repaired = [];
+        root.repairTypeConflicts(raw, root.options, root.defaultOptions, "", repaired);
+
+        if (!migrated && repaired.length === 0)
+            return false;
+
+        root.configRepaired = true;
+        // Keep a copy before healing — the reset values are the only record of
+        // what the user had, and a wrong guess here should be recoverable.
+        if (repaired.length > 0)
+            Quickshell.execDetached(["cp", "--", root.filePath, `${root.filePath}.bak`]);
+
+        // Deferred: a setText issued from inside onLoaded is treated as part of
+        // the load still in flight and its save gets dropped.
+        const payload = JSON.stringify(raw, null, 2);
+        Qt.callLater(() => {
+            configFileView.setText(payload);
+            // setText re-deserializes, so the adapter now holds the repaired
+            // values and rounding can be migrated off them.
+            root.migrateRoundingConfig();
+        });
+        return true;
+    }
+
+    // Runs before the async file load completes, so this captures the pure QML
+    // defaults — the only chance to, since deserializing overwrites them.
+    Component.onCompleted: {
+        root.defaultOptions = root.snapshotDefaults(root.options);
+    }
+
     Component.onDestruction: {
         root.blockWrites = true;
     }
@@ -294,6 +493,10 @@ Singleton {
         }
         onLoaded: {
             root.ready = true;
+            // When a repair is queued, rounding is migrated from inside it —
+            // the values in the adapter right now are the coerced ones.
+            if (root.repairConfigFile())
+                return;
             migrateRoundingConfig();
         }
         onLoadFailed: error => {
@@ -305,6 +508,9 @@ Singleton {
                 // Singleton has been alive past the grace window and the file
                 // is still gone — legitimately missing (first-run install or
                 // user manually deleted it). Safe to seed defaults.
+                // Stamp the schema version so a brand-new file is not mistaken
+                // for a pre-versioning one and re-migrated on next start.
+                root.options.configVersion = root.currentConfigVersion;
                 writeAdapter();
                 // Mark ready so subsequent user-triggered writes go through
                 // (fileWriteTimer guards on `root.ready`).
@@ -324,6 +530,10 @@ Singleton {
         JsonAdapter {
             id: configOptionsJsonAdapter
 
+            // 0 means "written before schema versioning existed" — see
+            // migrateRaw(). Never default this to currentConfigVersion.
+            property int configVersion: 0
+
             property string panelFamily: "ii" // "ii", "waffle"
 
             property JsonObject policies: JsonObject {
@@ -336,6 +546,7 @@ Singleton {
             }
 
             property JsonObject phone: JsonObject {
+                property bool kdeconnectEnabled: true
                 property bool showPeripheralCards: true
                 property JsonObject scrcpy: JsonObject {
                     property bool stayAwake: false  // bare scrcpy default — don't add overhead
@@ -387,6 +598,36 @@ Singleton {
                 property bool preferPopupOverNotification: true
             }
 
+            property JsonObject vpn: JsonObject {
+                property bool enabled: false
+                property bool autoConnect: false
+                property string backend: "networkmanager"
+                property string defaultProfile: ""
+                property string defaultProvider: "networkmanager"
+                property string recentProvider: "networkmanager"
+                property string defaultLocation: ""
+                property bool showInQuickToggles: true
+                property bool disconnectOnDisable: false
+                property bool killSwitch: false
+                property bool blockLan: false
+                property bool enableDiagnostics: true
+            }
+
+            property JsonObject tailscale: JsonObject {
+                property bool enabled: false
+                property bool autoConnect: false
+                property bool acceptDns: true
+                property bool shieldsUp: false
+                property bool ssh: false
+                property string exitNode: ""
+                property list<string> advertiseRoutes: []
+                property bool advertiseExitNode: false
+                property bool showPeers: true
+                property bool showInQuickToggles: true
+                property bool stopDaemonWhenDisabled: false
+                property bool enableDiagnostics: true
+            }
+
             property JsonObject ai: JsonObject {
                 property string systemPrompt: "## Style\n- Use casual tone, don't be formal!\n- Always be brief and to the point, unless asked otherwise\n- Don't repeat the user's question\n- Be approachable: Avoid using overly complicated, domain-specific terms and provide analogies when asked to explain a concept\n\n## Context (ignore when irrelevant)\n- You are a helpful and inspiring sidebar assistant on a {DISTRO} Linux system\n- Desktop environment: {DE}\n- Current date & time: {DATETIME}\n- Focused app: {WINDOWCLASS}\n\n## Presentation\n- Use Markdown features in your response: \n  - **Bold** text to **highlight keywords** in your response\n  - **Split long information into small sections** with h2 headers and a relevant emoji at the start of it (for example `## 🐧 Linux`). Bullet points are preferred over long paragraphs, unless you're offering writing support or instructed otherwise by the user.\n- Asked to compare different options? You should firstly use a table to compare the main aspects, then elaborate or include relevant comments from online forums *after* the table. Make sure to provide a final recommendation for the user's use case!\n- Use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX '$$' delimiters. NEVER generate LaTeX code in a latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular documents (resumes, letters, essays, CVs, etc.).\n\nThanks!\n"
                 property string tool: "functions" // search, functions, or none
@@ -434,8 +675,8 @@ Singleton {
                     property string main: "Google Sans Flex" // xmpl: right sidebar, settings, system monitor, default clock, expressive weather
                     property string numbers: "Google Sans Flex" // xmpl: styled slider, config
                     property string title: "Google Sans Flex" // settings list item, popup titles
-                    property string iconNerd: "JetBrains Mono NF"
-                    property string monospace: "JetBrains Mono NF" // clipboard metadata
+                    property string iconNerd: "JetBrainsMono Nerd Font"
+                    property string monospace: "JetBrainsMono Nerd Font" // clipboard metadata
                     property string reading: "Readex Pro" // cookie clock quote
                     property string expressive: "Space Grotesk" // desktop widgets font, overview workspace number, user profile config
                     property bool roundnessFull: false
@@ -520,61 +761,113 @@ Singleton {
                 property bool blurGradientExperiment: false
                 property JsonObject widgets: JsonObject {
                     property string colorScheme: "default"
-                    property JsonObject clock: JsonObject {
-                        property bool enable: true
+                    property bool showOnlyOnSingleMonitor: false
+                    property string targetMonitor: ""
+                    property JsonObject clock_cookie: JsonObject {
+                        property bool enable: false
                         property bool disableAnimationOnLock: false
-                        property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
+                        property string placementStrategy: "free"
                         property real x: 1518.98
                         property real y: 168.8
-                        property string style: "cookie"        // Options: "cookie", "digital", "nagasaki", "dial"
-                        property string styleLocked: "cookie"  // Options: "cookie", "digital", "nagasaki", "dial"
-                        property JsonObject cookie: JsonObject {
-                            property bool aiStyling: false
-                            property string aiStylingModel: "gemini" // Options "gemini", "openrouter"
-                            property int sides: 14
-                            property string backgroundStyle: "cookie"     // Options: "cookie", "sine", "shape"
-                            property string backgroundShape: "Arch"  // Options: MaterialShape.Shape enum values as string
-                            property string dialNumberStyle: "full"   // Options: "dots" , "numbers", "full" , "none"
-                            property string hourHandStyle: "fill"     // Options: "classic", "fill", "hollow", "hide"
-                            property string minuteHandStyle: "medium" // Options "classic", "thin", "medium", "bold", "hide"
-                            property string secondHandStyle: "dot"    // Options: "dot", "line", "classic", "hide"
-                            property string dateStyle: "bubble"       // Options: "border", "rect", "bubble" , "hide"
-                            property bool timeIndicators: true
-                            property bool hourMarks: false
-                            property bool dateInClock: true
-                            property bool constantlyRotate: false
+                        property bool aiStyling: false
+                        property string aiStylingModel: "gemini"
+                        property int sides: 14
+                        property string backgroundStyle: "cookie"
+                        property string backgroundShape: "Arch"
+                        property string dialNumberStyle: "full"
+                        property string hourHandStyle: "fill"
+                        property string minuteHandStyle: "medium"
+                        property string secondHandStyle: "dot"
+                        property string dateStyle: "bubble"
+                        property bool timeIndicators: true
+                        property bool hourMarks: false
+                        property bool dateInClock: true
+                        property bool constantlyRotate: false
+                        property bool quoteEnable: false
+                        property string quoteText: ""
+                    }
+                    property JsonObject clock_expressive_card: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+
+                    property JsonObject clock_flex: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool useAltColors: false
+                    }
+                    property JsonObject clock_digital: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool adaptiveAlignment: true
+                        property bool showDate: true
+                        property bool animateChange: true
+                        property bool vertical: false
+                        property bool colorful: false
+                        property bool showColon: true
+                        property JsonObject font: JsonObject {
+                            property real weight: 350
+                            property real width: 100
+                            property real size: 90
+                            property real roundness: 0
                         }
-                        property JsonObject digital: JsonObject {
-                            property bool adaptiveAlignment: true
-                            property bool showDate: true
-                            property bool animateChange: true
-                            property bool vertical: false
-                            property bool colorful: false
-                            property bool showColon: true
-                            property JsonObject font: JsonObject {
-                                property real weight: 350
-                                property real width: 100
-                                property real size: 90
-                                property real roundness: 0
-                            }
-                        }
-                        property JsonObject dial: JsonObject {
-                            property bool showTicks: true
-                            property bool showMinuteHand: true
-                            property bool enableShadows: true
-                            property bool enableInnerShadow: false
-                            property bool expressiveColors: false
-                        }
-                        property JsonObject quote: JsonObject {
-                            property bool enable: false
-                            property string text: ""
-                        }
+                        property bool quoteEnable: false
+                        property string quoteText: ""
+                    }
+                    property JsonObject clock_nagasaki: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool monochrome: false
+                    }
+                    property JsonObject clock_word: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int size: 240
+                        property string backgroundStyle: "shape"
+                        property string backgroundShape: "Circle"
+                    }
+                    property JsonObject clock_dial: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool showTicks: true
+                        property bool showMinuteHand: true
+                        property bool enableShadows: false
+                        property bool enableInnerShadow: false
+                        property string hourHandStyle: "fill"
+                        property string minuteHandStyle: "medium"
+                        property bool showSecondHand: false
+                        property string secondHandStyle: "dot"
+                        property bool showNumberRing: false
+                        property bool expressiveColors: false
                     }
                     property JsonObject nagasaki_text: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
                         property real x: 200
                         property real y: 200
+                        property int size: 200
+                    }
+                    property JsonObject clock_hori: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool useAltColors: false
                     }
                     property JsonObject media: JsonObject {
                         property bool enable: true
@@ -587,6 +880,11 @@ Singleton {
                         property bool showPreviousToggle: true
                         property bool tintArtCover: false
                         property string backgroundShape: "Cookie12Sided"  // Options: MaterialShape.Shape enum values as string
+                        property bool rotateAlbumArt: true
+                        property bool showTimeInfo: true
+                        property bool showArtist: true
+                        property bool showProgressSlider: true
+                        property bool dynamicAlbumColors: false
                         property JsonObject glow: JsonObject {
                             property bool enable: true
                             property real brightness: 10
@@ -605,6 +903,12 @@ Singleton {
                         property real y: 612.92
                         property bool useAlbumColors: true
                         property bool enableGlassReflection: true
+                        property bool enableShadows: false
+                        property bool showPrevButton: true
+                        property bool showNextButton: true
+                        property bool showDevicePill: true
+                        property string progressShape: "Cookie9Sided"
+                        property int widgetSize: 100
                     }
                     property JsonObject wearos_clock: JsonObject {
                         property bool enable: false
@@ -613,6 +917,105 @@ Singleton {
                         property real y: 100
                         property bool useAlbumColors: true
                         property bool enableGlassReflection: true
+                        property bool showDistroLogo: true
+                        property bool showSunsetComplication: true
+                        property bool showDigitalTimePill: true
+                        property bool showBatteryPill: true
+                        property bool showHourSubDial: true
+                        property bool showBedtimeIcon: true
+                        property bool showKdeConnect: true
+                        property bool showDateComplication: true
+                        property bool showMinuteHand: true
+                        property bool showOuterNumbers: true
+                        property bool showInnerNumbers: true
+                        property bool showBezelRing: true
+                        property bool enableShadows: false
+                        property int widgetSize: 100
+                    }
+                    property JsonObject concentric_clock: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string dialStyle: "concentric"
+                        property string frameStyle: "none"
+                        property bool boldFont: false
+                        property bool use24h: true
+                        property bool showHourText: true
+                        property string hourHandStyle: "hide"
+                        property string minuteHandStyle: "hide"
+                        property string secondHandStyle: "hide"
+                        property bool showHourMarks: false
+                        property string minuteStyle: "pill_horizontal"
+                        property bool showArc24h: false
+                        property bool showHourSubDial: false
+                        property bool showSunsetDial: false
+                        property string bottomSubDialContent: "weather_temp"
+                        property bool showMinuteDot: false
+                        property bool quoteEnable: false
+                        property string quoteText: ""
+                        property int minutePillLeftMargin: 67
+                        property int subdialMarginOffset: 5
+                        property int dialMarginOffset: 3
+                        property int hourPixelSize: 30
+                        property int hourFontWeight: 600
+                        property int hourFontWidth: 85
+                        property int hourFontRound: 100
+                        property bool useBlackBg: false
+                        property bool enableGlassReflection: false
+                        property bool enableShadows: false
+                    }
+                    property JsonObject month_clock: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property bool showMonthRing: true
+                        property bool showDayRing: true
+                        property bool showWeekRing: true
+                        property bool showMonthPill: true
+                        property bool showDayPill: true
+                        property bool showWeekPill: true
+                        property bool showTickMarks: true
+                        property bool boldFont: true
+                        property bool useBlackBg: true
+                        property bool enableGlassReflection: false
+                        property string hourHandStyle: "fill"
+                        property string minuteHandStyle: "medium"
+                        property string secondHandStyle: "line"
+                    }
+                    property JsonObject scallop_dot_clock: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property bool boldFont: true
+                        property bool useBlackBg: false
+                        property bool enableGlassReflection: false
+                        property bool showHourHand: true
+                        property bool showMinuteBubble: true
+                        property bool showDots: true
+                    }
+                    property JsonObject at_a_glance: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widthCells: 3
+                        property list<string> servicePriority: ["media", "calendar", "sports", "fallback"]
+                        property bool enableMedia: true
+                        property bool enableCalendar: true
+                        property bool enableSports: true
+                        property bool enableWeather: true
+                        property int calendarWindowMinutes: 60
+                        property int sportsWindowHours: 12
+                        property bool showLocation: true
+                        property bool showServiceLabel: false
+                        property bool showSeparators: true
+                        property bool animateContent: true
                     }
                     property JsonObject weather: JsonObject {
                         property bool enable: false
@@ -887,14 +1290,31 @@ Singleton {
                         property string placementStrategy: "free"
                         property real x: 200
                         property real y: 200
-                        property bool expressiveColors: false
+                        property bool dynamicAlbumColors: false
+                        property bool enableShadows: false
+                        property bool enableInnerShadow: false
+                        property int widgetSize: 100
                     }
                     property JsonObject compact_media: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
                         property real x: 200
                         property real y: 200
+                        property bool dynamicAlbumColors: false
+                        property string backgroundShape: "Rectangle"
+                        property bool enableShadows: false
+                        property bool enableInnerShadow: false
+                        property int widgetSize: 100
+                    }
+                    property JsonObject water_reminder: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
                         property bool expressiveColors: false
+                        property int dailyGoal: 8
+                        property int intervalHours: 2
+                        property string reminderText: "Time to hydrate! 💧"
                     }
                     property bool enableInnerShadow: false
                     property bool enableShadows: false
@@ -983,12 +1403,21 @@ Singleton {
                     property bool showPlayerSwitcher: true
                     property bool showSeekBar: true
                     property bool showVolumeSlider: true
+                    property int lyricsOffsetMs: 0 // offset in milliseconds for lyrics sync adjustment
                     property JsonObject backgroundAnimation: JsonObject {
                         property bool enable: true
                         property int speedScale: 10 // 1: very slow, 10: default, 20: 2x speed etc.
                     }
                     property JsonObject syllable: JsonObject {
                         property int textHighlightStyle: 0 // 0: vertical, 1: horizontal (not perfect bc its not synced in a word level, but a cool animation to have)
+                    }
+                    property JsonObject musicVideo: JsonObject {
+                        property bool enable: true
+                        property int maxResolution: 1080
+                        property bool dimBackground: true
+                        property int dimOpacity: 60   // percent (0-100)
+                        property string searchSuffix: "official music video"
+                        property int videoSamplingInterval: 200 // ms between color sampling updates (100-5000)
                     }
                 }
             }
@@ -1085,6 +1514,7 @@ Singleton {
                     property bool disableProgress: false
                     property bool disableBattery: false
                     property bool clickToExpand: false
+                    property bool centerInBar: false // "Dynamic Island in bar center" integration mode
 
                     // Contracted Heights
                     property int heightHome: 36
@@ -1123,6 +1553,7 @@ Singleton {
                     property bool useFixedSize: true
                     property int customSize: 200
                     property int maxSize: 400
+                    property bool enableVolumeScroll: false
                     property JsonObject artwork: JsonObject {
                         property bool enable: false
                     }
@@ -1237,6 +1668,10 @@ Singleton {
                     property bool useMaterialShapeForActiveIndicator: false
                     property bool useRandomShapeForActiveIndicator: true
                     property string activeIndicatorShape: "Pentagon"
+                    property bool dockShowActiveIndicator: true
+                    property bool dockShowWindowDots: true
+                    property bool dockHoverEffect: true
+                    property bool dockShowAppIcons: true
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false
@@ -1258,6 +1693,8 @@ Singleton {
                     property bool showMic: true
                     property bool showNetwork: true
                     property bool showBluetooth: true
+                    property bool showVpn: true
+                    property bool showTailscale: true
                     property bool showNotifications: true
                 }
                 property JsonObject layouts: JsonObject {
@@ -1398,7 +1835,7 @@ Singleton {
                 property bool splitButtons: false
                 property bool useMouseSymbol: false
                 property bool useFnSymbol: false
-                property bool filterUnbinds: false
+                property bool filterUnbinds: true
                 property bool enableGmail: true
                 property bool enableTimetable: true
                 property bool timetableTodayFirst: false
@@ -1429,6 +1866,7 @@ Singleton {
                 property bool showOnlyOnFocusedMonitor: false
                 property bool monochromeIcons: false
                 property bool dimInactiveIcons: false
+                property real iconSpacing: 2
                 property bool enableShapeMask: false
                 property string shapeMask: "Circle"
                 property real height: 60
@@ -1448,6 +1886,18 @@ Singleton {
                 property list<string> ignoredAppRegexes: []
                 property list<string> pinnedFiles: []
                 property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "trash", "overview"]
+            }
+
+            property JsonObject dockToPanel: JsonObject {
+                property int iconSize: 25
+                property int buttonSpacing: 2
+                property bool enableWorkspaceScroll: false
+                property bool alignToWorkspace: false
+                property bool enableTooltip: false
+                property bool enablePreview: false
+                property bool enableMacOsMagnification: false
+                property real macOsMagnificationScale: 1.6
+                property bool isolateMonitors: false
             }
 
             property JsonObject hyprland: JsonObject {
@@ -1485,7 +1935,7 @@ Singleton {
 
             property JsonObject userProfile: JsonObject {
                 property string imageStyle: "initial" // "initial", "expressive", "custom"
-                property string imagePath: Directories.home + "/.config/quickshell/ii/assets/profile.png"
+                property string imagePath: Directories.userProfileImagePath
                 property string customName: ""
                 property string customGreeting: ""
                 property string customBio: ""
@@ -1593,6 +2043,7 @@ Singleton {
                 property int timeout: 7000
                 property string position: "top_right"
                 property int zoomPercent: 100 // 50-200, step 10
+                property bool autoDndFullscreen: false
                 property JsonObject monitor: JsonObject {
                     property bool enable: false
                     property string name: "" // Name of the monitor to show notifications on, like "eDP-1". Find out with 'hyprctl monitors' command
@@ -1616,13 +2067,25 @@ Singleton {
             property JsonObject osk: JsonObject {
                 property string layout: "qwerty_full"
                 property bool pinnedOnStartup: false
+
+                // Raises the keyboard when a text field is focused by finger or pen.
+                // Requires the osk_autoshow helper (see scripts/osk/README.md).
+                property JsonObject autoShow: JsonObject {
+                    property bool enable: false
+                    property bool allowTouch: true
+                    property bool allowPen: true
+                    // How long after a touch a text field may claim focus and still count as touch-driven.
+                    property int touchWindowMs: 1200
+                    property bool hideOnPhysicalKey: true
+                    property bool hideOnTouchOutside: true
+                }
             }
 
             property JsonObject overlay: JsonObject {
                 property bool openingZoomAnimation: true
                 property bool darkenScreen: true
                 property real clickthroughOpacity: 0.8
-                property list<string> buttons: ["crosshair", "recorder", "media", "volumeMixer", "resources"]
+                property list<string> buttons: ["crosshair", "recorder", "media", "volumeMixer", "resources", "discordVoice"]
                 property JsonObject floatingImage: JsonObject {
                     property string imageSource: "https://media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif"
                     property real scale: 0.5
@@ -1636,6 +2099,16 @@ Singleton {
                     property bool useGradientMask: true
                     property bool showSlider: true
                     property int lyricSize: Appearance.font.pixelSize.larger
+                }
+                property JsonObject discordVoice: JsonObject {
+                    property int maxAvatars: 8
+                    property int avatarSize: 52
+                    property string participantBackground: "name"
+                    property real participantBackgroundOpacity: 0.72
+                    property string layoutMode: "column"
+                    property bool blurEnabled: true
+                    property bool autoResize: true
+                    property bool speakingPulseContinuous: true
                 }
             }
 
@@ -1666,6 +2139,7 @@ Singleton {
 
             property JsonObject regionSelector: JsonObject {
                 property bool showOnlyOnFocusedMonitor: false
+                property bool enableOverlay: true
                 property JsonObject targetRegions: JsonObject {
                     property bool windows: true
                     property bool layers: true
@@ -1805,6 +2279,17 @@ Singleton {
                 property bool showNowPlayingBubble: false
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
                 property int baseWidth: 500
+                property int baseHeight: 500
+                property string positionStyle: "default"
+                property real centerVerticalRatio: 0.38
+                property JsonObject suggestions: JsonObject {
+                    property bool enable: false
+                    property int maxSuggestionsPerSection: 5
+                    property bool showFrecency: true
+                    property bool showCommands: false
+                    property bool showApps: true
+                    property bool showAliases: true
+                }
             }
 
             property JsonObject mediaDownloader: JsonObject {
@@ -1833,7 +2318,7 @@ Singleton {
             property JsonObject sidebar: JsonObject {
                 property JsonObject dashboardHeader: JsonObject {
                     property string profileImageType: "custom" // "custom", "distro", "none"
-                    property string profileImagePath: Directories.home + "/.config/quickshell/ii/assets/profile.png"
+                    property string profileImagePath: Directories.userProfileImagePath
                     property string textMode: "username" // "username", "uptime", "none", "custom"
                     property string customText: ""
                 }
@@ -1908,6 +2393,10 @@ Singleton {
                                 {
                                     "size": 1,
                                     "type": "soundcoreAnc"
+                                },
+                                {
+                                    "size": 1,
+                                    "type": "autoDnd"
                                 }
                             ]]
                     }
@@ -1955,8 +2444,8 @@ Singleton {
                 property bool alarmFadeIn: false
 
                 property string notificationDefaultPolicy: "play" // "play" | "mute"
-                property var alwaysPlayApps: []
-                property var neverPlayApps: []
+                property list<string> alwaysPlayApps: []
+                property list<string> neverPlayApps: []
                 property JsonObject custom: JsonObject {
                     property string notifications: ""
                     property string volumeChange: ""

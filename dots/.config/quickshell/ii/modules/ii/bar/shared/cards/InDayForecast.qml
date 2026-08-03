@@ -131,11 +131,10 @@ SectionCard {
                             color: Qt.rgba(dayCard.textColor.r, dayCard.textColor.g, dayCard.textColor.b, 0.15)
                             scale: dayCard.iconScale
 
-                            MaterialSymbol {
+                            Image {
                                 anchors.centerIn: parent
-                                text: Icons.getWeatherIcon(modelData.code)
-                                iconSize: Appearance.font.pixelSize.large
-                                color: dayCard.textColor
+                                source: WeatherIcons.getWeatherIcon(modelData.code ?? 113, false)
+                                sourceSize: Qt.size(Appearance.font.pixelSize.large, Appearance.font.pixelSize.large)
                             }
                         }
 

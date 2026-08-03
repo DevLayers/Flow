@@ -9,11 +9,11 @@ ColumnLayout {
     id: clockColumn
     spacing: 4
 
-    readonly property bool colorful: Config.options.background.widgets.clock.digital.colorful
-    readonly property bool showColon: Config.options.background.widgets.clock.digital.showColon
+    readonly property bool colorful: Config.options.background.widgets.clock_digital.colorful
+    readonly property bool showColon: Config.options.background.widgets.clock_digital.showColon
     readonly property bool showSeconds: Config.options.bar.clock.showSeconds
 
-    property bool isVertical: Config.options.background.widgets.clock.digital.vertical
+    property bool isVertical: Config.options.background.widgets.clock_digital.vertical
     property color colText: WidgetColorScheme.textColorOnBg
     property color colTextSecondary: WidgetColorScheme.subtextColorOnBg
     property color colTextTertiary: WidgetColorScheme.accentColor
@@ -29,12 +29,12 @@ ColumnLayout {
             color: clockColumn.colText
             horizontalAlignment: Text.AlignHCenter
             font {
-                pixelSize: Config.options.background.widgets.clock.digital.font.size
-                weight: Config.options.background.widgets.clock.digital.font.weight
+                pixelSize: Config.options.background.widgets.clock_digital.font.size
+                weight: Config.options.background.widgets.clock_digital.font.weight
                 family: Appearance.font.family.numbers
                 variableAxes: ({
-                        "wdth": Config.options.background.widgets.clock.digital.font.width,
-                        "ROND": Config.options.background.widgets.clock.digital.font.roundness
+                        "wdth": Config.options.background.widgets.clock_digital.font.width,
+                        "ROND": Config.options.background.widgets.clock_digital.font.roundness
                     })
             }
         }
@@ -122,7 +122,7 @@ ColumnLayout {
 
     // Date
     ClockText {
-        visible: Config.options.background.widgets.clock.digital.showDate
+        visible: Config.options.background.widgets.clock_digital.showDate
         Layout.topMargin: -20
         Layout.fillWidth: true
         text: DateTime.longDate
@@ -132,9 +132,9 @@ ColumnLayout {
 
     // Quote
     ClockText {
-        visible: Config.options.background.widgets.clock.quote.enable && Config.options.background.widgets.clock.quote.text.length > 0
+        visible: Config.options.background.widgets.clock_digital.quoteEnable && Config.options.background.widgets.clock_digital.quoteText.length > 0
         font.pixelSize: Appearance.font.pixelSize.normal
-        text: Config.options.background.widgets.clock.quote.text
+        text: Config.options.background.widgets.clock_digital.quoteText
         animateChange: false
         color: clockColumn.colTextSecondary
         horizontalAlignment: clockColumn.textHorizontalAlignment

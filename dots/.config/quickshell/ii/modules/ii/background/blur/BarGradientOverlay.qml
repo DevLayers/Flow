@@ -18,7 +18,6 @@ Item {
         && GlobalStates.barOpen
         && !GlobalStates.screenLocked
 
-    // Bar blur gradient — blur na borda da bar, mesma posição do dim
     Item {
         id: barBlurOverlay
         anchors.fill: parent
@@ -118,7 +117,7 @@ Item {
         }
     }
 
-    // Bar gradient overlay — overlay simples sobre o wallpaper na borda da bar
+    // Bar gradient overlay
     Item {
         id: barGradientOverlay
         anchors.fill: parent

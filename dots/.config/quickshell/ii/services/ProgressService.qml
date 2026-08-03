@@ -2,6 +2,7 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 import qs.modules.common
+import qs.modules.common.functions
 import qs
 import QtQuick
 import Quickshell
@@ -45,7 +46,7 @@ Singleton {
     Process {
         id: monitorProc
         running: Config.ready && !Config.options.bar.floatingNotch.disableProgress
-        command: ["python3", Quickshell.shellPath("services/jobview_monitor.py")]
+        command: ProcUtils.pdeath(["python3", Quickshell.shellPath("services/jobview_monitor.py")])
         
         stdout: SplitParser {
             onRead: line => {

@@ -29,6 +29,15 @@ ContentPage {
             }
         }
 
+        ConfigSwitch {
+            buttonIcon: "sync"
+            text: Translation.tr("Enable KDE Connect Integration")
+            checked: Config.options.phone.kdeconnectEnabled
+            onCheckedChanged: {
+                Config.options.phone.kdeconnectEnabled = checked;
+            }
+        }
+
         ContentSubsectionLabel { text: Translation.tr("Connection Settings") }
 
         ConfigSwitch {
@@ -218,7 +227,7 @@ ContentPage {
 
         Item {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            implicitHeight: 250
             visible: btImagesSection.getAvailableDevices().length === 0 && btImagesSection.getDeviceImages().length === 0
 
             PagePlaceholder {

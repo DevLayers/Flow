@@ -23,6 +23,7 @@ RowLayout {
     property bool isTranslatorPanelFocused: false
     property bool isMediaDownloaderPanelFocused: false
     property bool isMaterialSymbolsPanelFocused: false
+    property bool showSuggestionsPanel: false
 
     BarThemes {
         id: barThemes
@@ -61,6 +62,7 @@ RowLayout {
         Translator,
         MediaDownloader,
         MaterialSymbols,
+        Suggestions,
         DefaultSearch
     }
 
@@ -89,6 +91,8 @@ RowLayout {
             return SearchBar.SearchPrefixType.MediaDownloader;
         if (root.searchingText.startsWith(Config.options.search.prefix.materialSymbols))
             return SearchBar.SearchPrefixType.MaterialSymbols;
+        if (root.showSuggestionsPanel && root.searchingText === "")
+            return SearchBar.SearchPrefixType.Suggestions;
         return SearchBar.SearchPrefixType.DefaultSearch;
     }
 
@@ -99,13 +103,11 @@ RowLayout {
         opacity: 1.0
         scale: 1.0
 
-        property int _prefixType: root.searchPrefixType
-        property int _lastPrefixType: root.searchPrefixType
         property string _lastText: ""
         property bool _initialized: false
 
         readonly property real symmetryAngle: {
-            switch (searchIcon._prefixType) {
+            switch (root.searchPrefixType) {
             case SearchBar.SearchPrefixType.Action:
                 return 180;        // Pill
             case SearchBar.SearchPrefixType.App:
@@ -130,6 +132,8 @@ RowLayout {
                 return 40;     // Cookie9Sided
             case SearchBar.SearchPrefixType.MaterialSymbols:
                 return 45;     // SoftBurst
+            case SearchBar.SearchPrefixType.Suggestions:
+                return 45;     // SoftBurst
             default:
                 return 360 / 7;                                   // Cookie7Sided
             }
@@ -137,60 +141,43 @@ RowLayout {
 
         Behavior on rotation {
             NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
+                duration: Appearance.animation.elementMove.duration
                 easing.type: Easing.OutBack
             }
         }
 
         function triggerTransition() {
-            iconFadeOut.stop();
-            iconFadeIn.stop();
-            iconFadeOut.start();
+            if (iconTransitionAnim.running)
+                iconTransitionAnim.stop();
+            iconTransitionAnim.start();
         }
 
         SequentialAnimation {
-            id: iconFadeOut
+            id: iconTransitionAnim
             ParallelAnimation {
                 NumberAnimation {
                     target: searchIcon
-                    property: "opacity"
-                    to: 0
-                    duration: Appearance.animation.elementMoveFast.duration / 2
-                    easing.type: Easing.InQuad
+                    property: "rotation"
+                    from: 0
+                    to: 360
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Easing.OutBack
                 }
-                NumberAnimation {
-                    target: searchIcon
-                    property: "scale"
-                    to: 0.7
-                    duration: Appearance.animation.elementMoveFast.duration / 2
-                    easing.type: Easing.InQuad
-                }
-            }
-            ScriptAction {
-                script: {
-                    searchIcon._prefixType = root.searchPrefixType;
-                    searchIcon.rotation = 0; // Reset rotation so new shape starts correctly oriented
-                    iconFadeIn.start();
-                }
-            }
-        }
-
-        SequentialAnimation {
-            id: iconFadeIn
-            ParallelAnimation {
-                NumberAnimation {
-                    target: searchIcon
-                    property: "opacity"
-                    to: 1.0
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Easing.OutQuad
-                }
-                NumberAnimation {
-                    target: searchIcon
-                    property: "scale"
-                    to: 1.0
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Easing.OutQuad
+                SequentialAnimation {
+                    NumberAnimation {
+                        target: searchIcon
+                        property: "scale"
+                        to: 0.75
+                        duration: Appearance.animation.elementMove.duration / 2
+                        easing.type: Easing.InQuad
+                    }
+                    NumberAnimation {
+                        target: searchIcon
+                        property: "scale"
+                        to: 1.0
+                        duration: Appearance.animation.elementMove.duration / 2
+                        easing.type: Easing.OutBack
+                    }
                 }
             }
         }
@@ -198,9 +185,7 @@ RowLayout {
         Connections {
             target: root
             function onSearchPrefixTypeChanged() {
-                if (root.searchPrefixType !== searchIcon._prefixType) {
-                    searchIcon.triggerTransition();
-                }
+                searchIcon.triggerTransition();
             }
             function onSearchingTextChanged() {
                 if (!searchIcon._initialized) {
@@ -219,7 +204,7 @@ RowLayout {
             }
         }
 
-        shape: switch (searchIcon._prefixType) {
+        shape: switch (root.searchPrefixType) {
         case SearchBar.SearchPrefixType.Action:
             return MaterialShape.Shape.Pill;
         case SearchBar.SearchPrefixType.App:
@@ -244,10 +229,12 @@ RowLayout {
             return MaterialShape.Shape.Cookie9Sided;
         case SearchBar.SearchPrefixType.MaterialSymbols:
             return MaterialShape.Shape.SoftBurst;
+        case SearchBar.SearchPrefixType.Suggestions:
+            return MaterialShape.Shape.SoftBurst;
         default:
             return MaterialShape.Shape.Cookie7Sided;
         }
-        text: switch (searchIcon._prefixType) {
+        text: switch (root.searchPrefixType) {
         case SearchBar.SearchPrefixType.Action:
             return "settings_suggest";
         case SearchBar.SearchPrefixType.App:
@@ -272,6 +259,8 @@ RowLayout {
             return "download";
         case SearchBar.SearchPrefixType.MaterialSymbols:
             return "font_download";
+        case SearchBar.SearchPrefixType.Suggestions:
+            return "explore";
         case SearchBar.SearchPrefixType.DefaultSearch:
             return "search";
         default:
@@ -285,7 +274,7 @@ RowLayout {
         Layout.rightMargin: 0
         Layout.fillWidth: true
         implicitHeight: 40
-        implicitWidth: root.clipboardMode ? root.clipboardWidth : ((root.searchingText === "" && !Config.options.search.alwaysListApps) ? Appearance.sizes.searchWidthCollapsed : Appearance.sizes.searchWidth)
+        implicitWidth: root.clipboardMode ? root.clipboardWidth : ((root.searchingText === "" && !Config.options.search.alwaysListApps && !root.showSuggestionsPanel) ? Appearance.sizes.searchWidthCollapsed : Appearance.sizes.searchWidth)
         focus: GlobalStates.overviewOpen
         font.pixelSize: Appearance.font.pixelSize.small
         placeholderText: Translation.tr("Search, calculate or run")
@@ -344,24 +333,36 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
-                if (root.clipboardMode) {
-                    if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
-                        root.copySvgPressed();
+            const isEmojiOrMaterialSymbols = root.searchPrefixType === SearchBar.SearchPrefixType.Emojis || root.searchPrefixType === SearchBar.SearchPrefixType.MaterialSymbols;
+            if (isEmojiOrMaterialSymbols || root.clipboardMode) {
+                if (event.key === Qt.Key_Left) {
+                    root.navigateLeft();
+                    event.accepted = true;
+                    return;
+                } else if (event.key === Qt.Key_Right) {
+                    root.navigateRight();
+                    event.accepted = true;
+                    return;
+                }
+            }
+            if (root.clipboardMode) {
+                if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
+                    root.copySvgPressed();
+                    event.accepted = true;
+                    return;
+                }
+                const isPanelFocused = root.isTranslatorPanelFocused || root.isMediaDownloaderPanelFocused || root.isMaterialSymbolsPanelFocused;
+                if ((root.searchPrefixType !== SearchBar.SearchPrefixType.Translator && root.searchPrefixType !== SearchBar.SearchPrefixType.MediaDownloader && root.searchPrefixType !== SearchBar.SearchPrefixType.MaterialSymbols) || isPanelFocused) {
+                    if (event.key === Qt.Key_Left) {
+                        root.navigateLeft();
+                        event.accepted = true;
+                        return;
+                    } else if (event.key === Qt.Key_Right) {
+                        root.navigateRight();
                         event.accepted = true;
                         return;
                     }
-                    const isPanelFocused = root.isTranslatorPanelFocused || root.isMediaDownloaderPanelFocused || root.isMaterialSymbolsPanelFocused;
-                    if ((root.searchPrefixType !== SearchBar.SearchPrefixType.Translator && root.searchPrefixType !== SearchBar.SearchPrefixType.MediaDownloader && root.searchPrefixType !== SearchBar.SearchPrefixType.MaterialSymbols) || isPanelFocused) {
-                        if (event.key === Qt.Key_Left) {
-                            root.navigateLeft();
-                            event.accepted = true;
-                            return;
-                        } else if (event.key === Qt.Key_Right) {
-                            root.navigateRight();
-                            event.accepted = true;
-                            return;
-                        }
-                    }
+                }
 
                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     root.activate();

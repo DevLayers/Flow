@@ -37,6 +37,9 @@ Item {
     property var utilityWidgets: (WidgetsRegistry.allWidgets || []).filter(function (w) {
         return w.category === "Utility";
     })
+    property var resourceWidgets: (WidgetsRegistry.allWidgets || []).filter(function (w) {
+        return w.category === "Resources";
+    })
 
     // Accordion collapse state per category. Default: Clocks expanded, all others collapsed.
     // When collapsed, widget preview Loaders are not active → no GPU/memory cost.
@@ -47,6 +50,7 @@ Item {
     property bool photoExpanded: false
     property bool bluetoothExpanded: false
     property bool utilityExpanded: false
+    property bool resourceExpanded: false
 
     property var _previewQueue: []
     property bool _previewStaggerActive: false
@@ -137,6 +141,25 @@ Item {
                     checked: Config.options.background.widgets.lockWidgetPositions ?? false
                     onCheckedChanged: {
                         Config.options.background.widgets.lockWidgetPositions = checked;
+                    }
+                }
+
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    buttonIcon: "desktop_windows"
+                    text: Translation.tr("Show widgets only in one monitor")
+                    checked: Config.options.background.widgets.showOnlyOnSingleMonitor ?? false
+                    onCheckedChanged: {
+                        Config.options.background.widgets.showOnlyOnSingleMonitor = checked;
+                    }
+                }
+
+                MonitorPicker {
+                    Layout.fillWidth: true
+                    visible: Config.options.background.widgets.showOnlyOnSingleMonitor ?? false
+                    currentValue: Config.options.background.widgets.targetMonitor ?? ""
+                    onSelected: newValue => {
+                        Config.options.background.widgets.targetMonitor = newValue;
                     }
                 }
 
@@ -334,6 +357,28 @@ Item {
                         spacing: 12
                         Repeater {
                             model: widgetsConfigRoot.utilityWidgets
+                            delegate: widgetCardComponent
+                        }
+                    }
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Resources")
+                icon: "monitor_heart"
+                Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.resourceExpanded
+                onExpandedChanged: widgetsConfigRoot.resourceExpanded = expanded
+
+                Loader {
+                    Layout.fillWidth: true
+                    active: widgetsConfigRoot.resourceExpanded
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.resourceWidgets
                             delegate: widgetCardComponent
                         }
                     }

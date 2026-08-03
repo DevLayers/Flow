@@ -130,7 +130,7 @@ Singleton {
         title: root.activePlayer?.trackTitle ?? ""
         artist: root.activePlayer?.trackArtist ?? ""
         duration: root.activePlayer?.length ?? 0
-        position: root.activePlayer?.position ?? 0
+        position: Math.max(0, (root.activePlayer?.position ?? 0) + ((Config.options.background.mediaMode.lyricsOffsetMs ?? 0) * 1000))
     }
 
     GeniusLyrics {

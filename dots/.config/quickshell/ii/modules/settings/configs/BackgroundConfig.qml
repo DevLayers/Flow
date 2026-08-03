@@ -479,6 +479,78 @@ ContentPage {
                 Config.options.background.mediaMode.togglePerMonitor = checked;
             }
         }
+
+        // ── Music Video Background ──────────────────────────────────────────────
+
+        ConfigSwitch {
+            buttonIcon: "play_circle"
+            text: Translation.tr("Replace blurred background with music video")
+            checked: Config.options.background.mediaMode.musicVideo.enable ?? false
+            onCheckedChanged: {
+                Config.options.background.mediaMode.musicVideo.enable = checked;
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("Searches YouTube for the official music video and plays it behind the media mode overlay. Requires mpvpaper and yt-dlp.")
+            font.pixelSize: Appearance.font.pixelSize.smallest
+            color: Appearance.colors.colSubtext
+            wrapMode: Text.Wrap
+        }
+
+        ConfigSpinBox {
+            icon: "high_quality"
+            text: Translation.tr("Maximum video resolution (px)")
+            value: Config.options.background.mediaMode.musicVideo.maxResolution ?? 1080
+            from: 360
+            to: 4320
+            stepSize: 360
+            onValueChanged: {
+                Config.options.background.mediaMode.musicVideo.maxResolution = value;
+            }
+        }
+
+        ConfigSpinBox {
+            icon: "opacity"
+            text: Translation.tr("Background dim opacity (%)")
+            value: Config.options.background.mediaMode.musicVideo.dimOpacity ?? 60
+            from: 0
+            to: 100
+            stepSize: 10
+            onValueChanged: {
+                Config.options.background.mediaMode.musicVideo.dimOpacity = value;
+            }
+        }
+
+        ConfigSpinBox {
+            icon: "timer"
+            text: Translation.tr("Video color sampling interval (ms)")
+            value: Config.options.background.mediaMode.musicVideo.videoSamplingInterval ?? 200
+            from: 100
+            to: 5000
+            stepSize: 100
+            onValueChanged: {
+                Config.options.background.mediaMode.musicVideo.videoSamplingInterval = value;
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("How much to dim the overlay so the video is visible. 0 = fully transparent, 100 = opaque (hides video).")
+            font.pixelSize: Appearance.font.pixelSize.smallest
+            color: Appearance.colors.colSubtext
+            wrapMode: Text.Wrap
+        }
+
+        ConfigSwitch {
+            buttonIcon: "visibility"
+            text: Translation.tr("Dim background overlay")
+            checked: Config.options.background.mediaMode.musicVideo.dimBackground ?? true
+            onCheckedChanged: {
+                Config.options.background.mediaMode.musicVideo.dimBackground = checked;
+            }
+        }
     }
 
     ShortcutBox {

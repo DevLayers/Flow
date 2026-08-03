@@ -122,15 +122,13 @@ SectionCard {
                             anchors.topMargin: 8
                             spacing: 2
 
-                            MaterialSymbol {
+                            Image {
                                 id: weatherIcon
                                 Layout.alignment: Qt.AlignHCenter
-                                text: Icons.getWeatherIcon(modelData.code)
-                                iconSize: Appearance.font.pixelSize.large
-                                color: isCurrentHour ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
+                                source: WeatherIcons.getWeatherIcon(modelData.code ?? 113, false)
+                                sourceSize: Qt.size(Appearance.font.pixelSize.large, Appearance.font.pixelSize.large)
                                 opacity: barItem.barOpacity
                                 scale: barItem.barScale
-                                transformOrigin: Item.Center
                             }
 
                             StyledText {
