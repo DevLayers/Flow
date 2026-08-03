@@ -734,10 +734,13 @@ Item {
                             value: Format.count(root.selectedRecord ? root.selectedRecord.launches : root.summary.totals.launches)
                         }
 
+                        // Counted every time the app came into view, which a workspace
+                        // switch does once per window it has open. That is not the same
+                        // as being opened — Launches above is — so it is not called one.
                         StatChip {
                             shown: root.selectedRecord !== null
                             icon: "repeat"
-                            label: Translation.tr("Sessions")
+                            label: Translation.tr("Appearances")
                             value: Format.count(root.selectedRecord?.sessions ?? 0)
                         }
 

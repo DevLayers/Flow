@@ -233,6 +233,10 @@ a month of history and retention is an unlink. Each app maps hours to a fixed tu
 workspace is "foreground", which inflates screen time, so focused time is recorded
 separately and the UI can switch which one it reports without recollecting anything.
 
+`launches` counts an app appearing that had no window at all a moment ago; `sessions`
+counts any of its windows coming into view, so switching to a workspace holding three
+of them adds three. The overlay shows the latter as "Appearances" for that reason.
+
 The `__system` row is the device, not an app. Its `fg` is screen time counted once
 however many windows were up, its `bg` the time the machine was awake with nothing
 on screen, and `mJbg` the energy no app accounts for.
