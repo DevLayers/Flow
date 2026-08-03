@@ -205,6 +205,17 @@ Item {
     }
 
     Component {
+        id: component_triple_ring_clock
+        TripleRingClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_grid_card_clock
         GridCardClockWidget {
             screenWidth: delegateRoot.screenWidth
@@ -458,6 +469,17 @@ Item {
     }
 
     Component {
+        id: component_photo_1x1
+        Photo1x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_photo_weather_2x1
         PhotoWeather2x1Widget {
             screenWidth: delegateRoot.screenWidth
@@ -634,6 +656,17 @@ Item {
     }
 
     Component {
+        id: component_android_search_bar
+        AndroidSearchBarWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_notes_widget
         NotesWidget {
             screenWidth: delegateRoot.screenWidth
@@ -724,6 +757,7 @@ Item {
             "scallop_dot_clock": component_scallop_dot_clock,
             "scallop_number_clock": component_scallop_number_clock,
             "circle_pointer_clock": component_circle_pointer_clock,
+            "triple_ring_clock": component_triple_ring_clock,
             "grid_card_clock": component_grid_card_clock,
             "clock_expressive_card": component_clock_expressive_card,
             "circular_media": component_circular_media,
@@ -749,6 +783,7 @@ Item {
             "calendar_pill": component_calendar_pill,
             "calendar_upcoming_3days": component_calendar_upcoming_3days,
             "photo_default": component_photo_default,
+            "photo_1x1": component_photo_1x1,
             "photo_weather_2x1": component_photo_weather_2x1,
             "photo_pill_2x1": component_photo_pill_2x1,
             "photo_minimal_temp_2x1": component_photo_minimal_temp_2x1,
@@ -765,6 +800,7 @@ Item {
             "email_inbox": component_email_inbox,
             "email_inbox_2x1": component_email_inbox_2x1,
             "ai_chat": component_ai_chat,
+            "android_search_bar": component_android_search_bar,
             "notes_widget": component_notes_widget,
             "notes_widget_2x1": component_notes_widget_2x1,
             "quick_actions": component_quick_actions,

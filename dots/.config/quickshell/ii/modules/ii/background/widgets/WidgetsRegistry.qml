@@ -138,6 +138,15 @@ Singleton {
             "configPage": "widgets/DesktopCirclePointerClockConfig.qml"
         },
         {
+            "widgetId": "triple_ring_clock",
+            "name": Translation.tr("Triple Ring Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/TripleRingClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A concentric disc clock face with three rotating rings for hours, minutes, and seconds, and a fixed 3 o'clock readout pointer arrow."),
+            "configPage": "widgets/DesktopTripleRingClockConfig.qml"
+        },
+        {
             "widgetId": "grid_card_clock",
             "name": Translation.tr("Grid Card Clock"),
             "category": "Clock",
@@ -345,13 +354,22 @@ Singleton {
             "configPage": "widgets/DesktopCalendarUpcoming3DaysConfig.qml"
         },
         {
-            "widgetId": "photo_default",
+            "widgetId": "photo",
             "name": Translation.tr("Photo"),
             "category": "Photo",
             "qmlPath": Qt.resolvedUrl("photo/PhotoWidget.qml"),
             "icon": "image",
             "description": Translation.tr("Display a personal photo on your desktop."),
             "configPage": "widgets/DesktopPhotoWidgetConfig.qml"
+        },
+        {
+            "widgetId": "photo_1x1",
+            "name": Translation.tr("Photo 1x1"),
+            "category": "Photo",
+            "qmlPath": Qt.resolvedUrl("photo/Photo1x1Widget.qml"),
+            "icon": "image",
+            "description": Translation.tr("Compact 1x1 Photo widget masked inside any customizable MaterialShape."),
+            "configPage": "widgets/DesktopPhoto1x1Config.qml"
         },
         {
             "widgetId": "photo_weather_2x1",
@@ -532,6 +550,15 @@ Singleton {
             "icon": "widgets",
             "description": Translation.tr("1x1 quick launch widget with configurable module shortcuts. Bottom buttons are customizable."),
             "configPage": "widgets/DesktopQuickActionsConfig.qml"
+        },
+        {
+            "widgetId": "android_search_bar",
+            "name": Translation.tr("Android Search Bar"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/AndroidSearchBarWidget.qml"),
+            "icon": "search",
+            "description": Translation.tr("0.5x2 Android Pixel search bar with Google logo, inner search pill, and customizable filled action buttons."),
+            "configPage": "widgets/DesktopAndroidSearchBarConfig.qml"
         },
         {
             "widgetId": "quote",

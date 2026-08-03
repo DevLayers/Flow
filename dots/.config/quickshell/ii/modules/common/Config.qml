@@ -1023,6 +1023,36 @@ Singleton {
                         property bool enableGlassReflection: false
                         property bool showDots: true
                     }
+                    property JsonObject triple_ring_clock: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property bool boldFont: true
+                        property bool useBlackBg: false
+                        property bool enableGlassReflection: false
+                    }
+                    property JsonObject photo_1x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string backgroundShape: "Cookie9Sided"
+                        property string imagePath: ""
+                    }
+                    property JsonObject android_search_bar: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string aspectRatio: "0.5x2"
+                        property string action1: "music_rec"
+                        property string action2: "ai_chat"
+                        property string action3: "search"
+                    }
                     property JsonObject grid_card_clock: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
@@ -1035,11 +1065,17 @@ Singleton {
                         property string placementStrategy: "free"
                         property real x: 400
                         property real y: 100
+                        property int widgetSize: 100
                         property int widthCells: 3
-                        property list<string> servicePriority: ["media", "calendar", "sports", "fallback"]
+                        property bool dualColumnMode: false
+                        property list<string> servicePriority: ["media", "calendar", "sports", "todo", "email", "localsend", "kdeconnect", "fallback"]
                         property bool enableMedia: true
                         property bool enableCalendar: true
                         property bool enableSports: true
+                        property bool enableTodo: true
+                        property bool enableEmail: true
+                        property bool enableLocalSend: true
+                        property bool enableKdeConnect: true
                         property bool enableWeather: true
                         property int calendarWindowMinutes: 60
                         property int sportsWindowHours: 12
