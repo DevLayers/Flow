@@ -395,7 +395,15 @@ Singleton {
             const rec = byKey[key];
             rec.ramAvg = rec.hourCount > 0 ? Math.round(rec.ramAvg / rec.hourCount) : 0;
             rec.wh = root.wh(rec.mjFg + rec.mjBg);
-            if (rec.headless && !wantHeadless) continue;
+            if (rec.headless && !wantHeadless) {
+                // Hiding services hides their rows, not the power they drew. Their
+                // energy joins the unattributed remainder so the total stays equal
+                // to what the package meter actually measured, and equal to the sum
+                // of the rows on screen.
+                system.mjFg += rec.mjFg;
+                system.mjBg += rec.mjBg;
+                continue;
+            }
             list.push(rec);
             root.addTotals(totals, rec);
         }
