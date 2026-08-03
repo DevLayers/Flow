@@ -129,14 +129,14 @@ Item {
     // Track animation state via Connections to the animation IDs
     property bool _heightAnimating: false
     property bool _widthAnimating: false
-    
+
     Connections {
         target: heightAnim
         function onRunningChanged() {
             root._heightAnimating = heightAnim.running;
         }
     }
-    
+
     Connections {
         target: widthAnim
         function onRunningChanged() {
@@ -664,64 +664,60 @@ Item {
 
                     // ── Diff-based model update: triggers move/add/remove transitions ──
                     function applyResultDiff(newItems) {
-                        // Build lookup of current keys in order
-                        var oldKeys = [];
-                        for (var i = 0; i < resultModel.count; i++)
-                            oldKeys.push(resultModel.get(i).key);
-
-                        var newKeys = newItems.map(function (x) {
-                            return x.key;
-                        });
-
-                        // 1. Remove items no longer in newKeys
-                        var toRemove = [];
-                        for (var i = 0; i < oldKeys.length; i++) {
-                            if (newKeys.indexOf(oldKeys[i]) === -1)
-                                toRemove.push(oldKeys[i]);
+                        if (newItems.length === 0) {
+                            if (resultModel.count > 0)
+                                resultModel.clear();
+                            return;
                         }
-                        for (var ri = 0; ri < toRemove.length; ri++) {
-                            for (var j = 0; j < resultModel.count; j++) {
-                                if (resultModel.get(j).key === toRemove[ri]) {
-                                    resultModel.remove(j);
-                                    break;
-                                }
+
+                        // Build Map of existing keys for O(1) index lookup
+                        const modelKeyMap = new Map();
+                        for (let i = 0; i < resultModel.count; i++) {
+                            modelKeyMap.set(resultModel.get(i).key, i);
+                        }
+
+                        const newKeys = new Set(newItems.map(x => x.key));
+
+                        // 1. Remove items no longer in newKeys (from end to start to avoid index drift)
+                        for (let i = resultModel.count - 1; i >= 0; i--) {
+                            const key = resultModel.get(i).key;
+                            if (!newKeys.has(key)) {
+                                resultModel.remove(i);
                             }
                         }
 
-                        // 2. Insert new items not yet in model
-                        var currentKeys = [];
-                        for (var i = 0; i < resultModel.count; i++)
-                            currentKeys.push(resultModel.get(i).key);
+                        // Rebuild key index map after removals
+                        modelKeyMap.clear();
+                        for (let i = 0; i < resultModel.count; i++) {
+                            modelKeyMap.set(resultModel.get(i).key, i);
+                        }
 
-                        for (var ni = 0; ni < newItems.length; ni++) {
-                            var item = newItems[ni];
-                            if (currentKeys.indexOf(item.key) === -1) {
-                                var insertAt = Math.min(ni, resultModel.count);
+                        // 2. Insert new items and update order/properties
+                        for (let ni = 0; ni < newItems.length; ni++) {
+                            const item = newItems[ni];
+                            const currentPos = modelKeyMap.has(item.key) ? modelKeyMap.get(item.key) : -1;
+
+                            if (currentPos === -1) {
+                                const insertAt = Math.min(ni, resultModel.count);
                                 resultModel.insert(insertAt, {
                                     key: item.key,
                                     modelRef: item
                                 });
-                                currentKeys.splice(insertAt, 0, item.key);
-                            }
-                        }
-
-                        // 3. Move items into correct order
-                        for (var mi = 0; mi < newKeys.length; mi++) {
-                            var currentPos = -1;
-                            for (var ci = 0; ci < resultModel.count; ci++) {
-                                if (resultModel.get(ci).key === newKeys[mi]) {
-                                    currentPos = ci;
-                                    break;
+                                // Refresh key map indices
+                                modelKeyMap.clear();
+                                for (let i = 0; i < resultModel.count; i++) {
+                                    modelKeyMap.set(resultModel.get(i).key, i);
                                 }
+                            } else {
+                                if (currentPos !== ni && ni < resultModel.count) {
+                                    resultModel.move(currentPos, ni, 1);
+                                    modelKeyMap.clear();
+                                    for (let i = 0; i < resultModel.count; i++) {
+                                        modelKeyMap.set(resultModel.get(i).key, i);
+                                    }
+                                }
+                                resultModel.setProperty(ni, "modelRef", item);
                             }
-                            if (currentPos !== -1 && currentPos !== mi) {
-                                resultModel.move(currentPos, mi, 1);
-                            }
-                        }
-
-                        // 4. Sync model data (update modelRef for any changed item)
-                        for (var si = 0; si < newItems.length && si < resultModel.count; si++) {
-                            resultModel.setProperty(si, "modelRef", newItems[si]);
                         }
                     }
 
@@ -758,16 +754,20 @@ Item {
                             if (!GlobalStates.overviewOpen)
                                 return;
                             root.loadedResultsCount = 50;
+
+                            // When query is emptied, instantly clear model and cancel debounce for instant height shrink
+                            if (root.searchingText === "") {
+                                resultsDebounce.stop();
+                                resultModel.clear();
+                                return;
+                            }
+
                             // Immediately show first 15 results for snappy visual feedback
                             const immediate = root.processResults(LauncherSearch.results);
                             const quickSlice = immediate.length > 15 ? immediate.slice(0, 15) : immediate;
                             appResults.applyResultDiff(quickSlice);
                             root.focusFirstItem();
-                            // When query is empty, skip debounce for instant collapse
-                            if (root.searchingText === "") {
-                                resultsDebounce.stop();
-                                return;
-                            }
+
                             // Schedule full result delivery after debounce
                             if (immediate.length > 15)
                                 resultsDebounce.restart();
@@ -900,14 +900,14 @@ Item {
                     spacing: 8
                     visible: opacity > 0
                     opacity: root.showSkeletons ? 1.0 : 0.0
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    Behavior on opacity {
+                        enabled: !root.inNotchMode
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
                     }
-                }
 
                     Repeater {
                         model: 4

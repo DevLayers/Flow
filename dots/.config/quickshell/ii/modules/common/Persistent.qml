@@ -291,6 +291,11 @@ Singleton {
                 }
             }
             property list<var> alarms: []
+            property JsonObject water: JsonObject {
+                property int glassesDrunk: 0
+                property string lastDate: ""
+                property real lastNotify: 0
+            }
             property JsonObject media: JsonObject {
             }
 

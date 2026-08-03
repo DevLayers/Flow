@@ -8,7 +8,7 @@ import Qt5Compat.GraphicalEffects
 Item {
     id: root
 
-    readonly property string quoteText: Config.options.background.widgets.clock_cookie.quoteText
+    readonly property string quoteText: Config.options.background.widgets.concentric_clock?.quoteText || Config.options.background.widgets.clock_cookie?.quoteText || ""
 
     implicitWidth: quoteBox.implicitWidth
     implicitHeight: quoteBox.implicitHeight
@@ -47,7 +47,7 @@ Item {
             StyledText {
                 id: quoteStyledText
                 horizontalAlignment: Text.AlignLeft
-                text: Config.options.background.widgets.clock_cookie.quoteText
+                text: root.quoteText
                 color: WidgetColorScheme.textColorOnBg
                 font {
                     family: Appearance.font.family.reading

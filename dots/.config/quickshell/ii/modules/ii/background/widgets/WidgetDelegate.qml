@@ -82,6 +82,16 @@ Item {
             wallpaperScale: delegateRoot.wallpaperScale
         }
     }
+    Component {
+        id: component_clock_word
+        WordClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
 
     Component {
         id: component_clock_flex
@@ -131,6 +141,94 @@ Item {
     Component {
         id: component_clock_wearos
         WearOSClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_concentric_clock
+        ConcentricClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_month_clock
+        MonthClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_scallop_dot_clock
+        ScallopDotClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_scallop_number_clock
+        ScallopNumberClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_circle_pointer_clock
+        CirclePointerClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_triple_ring_clock
+        TripleRingClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_grid_card_clock
+        GridCardClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_clock_expressive_card
+        ExpressiveCardClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth
@@ -371,6 +469,17 @@ Item {
     }
 
     Component {
+        id: component_photo_1x1
+        Photo1x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_photo_weather_2x1
         PhotoWeather2x1Widget {
             screenWidth: delegateRoot.screenWidth
@@ -547,6 +656,17 @@ Item {
     }
 
     Component {
+        id: component_android_search_bar
+        AndroidSearchBarWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_notes_widget
         NotesWidget {
             screenWidth: delegateRoot.screenWidth
@@ -601,15 +721,45 @@ Item {
         }
     }
 
+    Component {
+        id: component_water_reminder
+        WaterReminderWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_at_a_glance
+        AtAGlanceWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
     readonly property var widgetComponentMap: ({
             "clock_cookie": component_clock_cookie,
             "clock_digital": component_clock_digital,
-            "clock_nagasaki": component_clock_nagasaki,
             "nagasaki_text": component_nagasaki_text,
+            "clock_word": component_clock_word,
             "clock_flex": component_clock_flex,
             "clock_hori": component_clock_hori,
             "clock_dial": component_clock_dial,
             "clock_wearos": component_clock_wearos,
+            "concentric_clock": component_concentric_clock,
+            "month_clock": component_month_clock,
+            "scallop_dot_clock": component_scallop_dot_clock,
+            "scallop_number_clock": component_scallop_number_clock,
+            "circle_pointer_clock": component_circle_pointer_clock,
+            "triple_ring_clock": component_triple_ring_clock,
+            "grid_card_clock": component_grid_card_clock,
+            "clock_expressive_card": component_clock_expressive_card,
             "circular_media": component_circular_media,
             "media_circular": component_media_circular,
             "media_expressive": component_media_expressive,
@@ -633,6 +783,7 @@ Item {
             "calendar_pill": component_calendar_pill,
             "calendar_upcoming_3days": component_calendar_upcoming_3days,
             "photo_default": component_photo_default,
+            "photo_1x1": component_photo_1x1,
             "photo_weather_2x1": component_photo_weather_2x1,
             "photo_pill_2x1": component_photo_pill_2x1,
             "photo_minimal_temp_2x1": component_photo_minimal_temp_2x1,
@@ -649,10 +800,13 @@ Item {
             "email_inbox": component_email_inbox,
             "email_inbox_2x1": component_email_inbox_2x1,
             "ai_chat": component_ai_chat,
+            "android_search_bar": component_android_search_bar,
             "notes_widget": component_notes_widget,
             "notes_widget_2x1": component_notes_widget_2x1,
             "quick_actions": component_quick_actions,
-            "quote": component_quote
+            "quote": component_quote,
+            "water_reminder": component_water_reminder,
+            "at_a_glance": component_at_a_glance
         })
 
     function getExtUrl(extId) {

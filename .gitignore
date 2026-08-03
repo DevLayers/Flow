@@ -48,3 +48,4 @@ __pycache__/
 /dots/.config/quickshell/ii/scripts/appStats/app_stats_src/Cargo.lock
 
 /dots/.config/quickshell/ii/.tmp
+/dots/.config/quickshell/ii/.commandcode

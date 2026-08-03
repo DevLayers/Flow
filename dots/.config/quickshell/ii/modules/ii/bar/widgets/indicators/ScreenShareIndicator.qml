@@ -30,7 +30,8 @@ MouseArea {
         watchChanges: true
         onFileChanged: this.reload()
         onLoaded: {
-            indicator.activelyScreenSharing = !stateFile.text().trim().toLowerCase().includes("none")
+            let txt = stateFile.text().trim()
+            indicator.activelyScreenSharing = txt.length > 0 && txt.toLowerCase() !== "none" && !txt.toLowerCase().includes("none")
             rootItem.toggleVisible(indicator.activelyScreenSharing)
         }
     }

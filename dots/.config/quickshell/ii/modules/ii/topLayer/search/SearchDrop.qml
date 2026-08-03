@@ -133,10 +133,6 @@ Item {
         id: keyboardGrab
         windows: root.panelWindow ? [root.panelWindow] : []
         active: root.isOpen
-        onCleared: () => {
-            if (!active)
-                GlobalStates.overviewOpen = false;
-        }
     }
 
     // ── Shared animation spec ────────────────────────────────────────────────
