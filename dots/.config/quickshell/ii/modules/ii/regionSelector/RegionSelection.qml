@@ -633,6 +633,9 @@ PanelWindow {
             root.dismiss();
             return;
         }
+        // Load synchronously before mapping so the first painted frame already
+        // has the frozen screen; an async load could flash an empty window.
+        freezeFrame.source = `file://${root.screenshotPath}`;
         root.visible = true;
     }
 
@@ -731,11 +734,20 @@ PanelWindow {
         id: snipProc
     }
 
-    ScreencopyView { // For freezing
+    // Freeze frame. Sourced from the grim capture that TempScreenshotProcess
+    // already wrote while this window was still unmapped, NOT from a live
+    // ScreencopyView: a screencopy issued here would only be taken once the
+    // window renders, which races the compositor's first commit of this very
+    // overlay and, on a cold shell, bakes the dim layer and the cursor guide
+    // into the "frozen" screen.
+    // cache: false because screenshotPath is a constant path reused on every
+    // activation, so a cached pixmap would serve the previous frame.
+    Image {
+        id: freezeFrame
         anchors.fill: parent
-        live: false
-        captureSource: root.screen
-        visible: root.visible
+        fillMode: Image.Stretch
+        cache: false
+        asynchronous: false
 
         focus: root.visible && !root.inlineEditorActive
         Keys.onPressed: event => { // Esc to close
@@ -1021,7 +1033,7 @@ PanelWindow {
         Rectangle {
             anchors.fill: parent
             color: "#00000000"
-            // No darken needed; ScreencopyView still shows the frozen screen
+            // No darken needed; the freeze frame still shows the frozen screen
         }
 
         // Selected region with screenshot
@@ -2031,7 +2043,6 @@ PanelWindow {
                 labelText: Translation.tr("Cancel")
                 onClicked: root.dismiss()
             }
-
 
             Item {
                 id: exportContainer
