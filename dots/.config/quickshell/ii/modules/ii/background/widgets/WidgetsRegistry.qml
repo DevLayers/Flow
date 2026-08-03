@@ -120,6 +120,24 @@ Singleton {
             "configPage": "widgets/DesktopScallopDotClockConfig.qml"
         },
         {
+            "widgetId": "scallop_number_clock",
+            "name": Translation.tr("Scallop Number Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/ScallopNumberClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A Scallop clock face with outer 5-minute step numbers, inner 1-12 hour numbers, and a center date badge."),
+            "configPage": "widgets/DesktopScallopNumberClockConfig.qml"
+        },
+        {
+            "widgetId": "grid_card_clock",
+            "name": Translation.tr("Grid Card Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/GridCardClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A stylized background clock with vertically stretched typography based on Material 3 cards."),
+            "configPage": "widgets/DesktopClockWidgetConfig.qml"
+        },
+        {
             "widgetId": "clock_expressive_card",
             "name": Translation.tr("Expressive Card Clock"),
             "category": "Clock",
@@ -128,8 +146,6 @@ Singleton {
             "description": Translation.tr("A 1x1 clock with big time, month/day, temp & weather icon and expressive background."),
             "configPage": "widgets/DesktopClockWidgetConfig.qml"
         },
-
-
         {
             "widgetId": "circular_media",
             "name": Translation.tr("Circular Media (Watch)"),

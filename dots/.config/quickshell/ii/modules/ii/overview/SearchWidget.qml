@@ -129,14 +129,14 @@ Item {
     // Track animation state via Connections to the animation IDs
     property bool _heightAnimating: false
     property bool _widthAnimating: false
-    
+
     Connections {
         target: heightAnim
         function onRunningChanged() {
             root._heightAnimating = heightAnim.running;
         }
     }
-    
+
     Connections {
         target: widthAnim
         function onRunningChanged() {
@@ -900,14 +900,14 @@ Item {
                     spacing: 8
                     visible: opacity > 0
                     opacity: root.showSkeletons ? 1.0 : 0.0
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    Behavior on opacity {
+                        enabled: !root.inNotchMode
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
                     }
-                }
 
                     Repeater {
                         model: 4

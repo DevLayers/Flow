@@ -183,6 +183,28 @@ Item {
     }
 
     Component {
+        id: component_scallop_number_clock
+        ScallopNumberClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_grid_card_clock
+        GridCardClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_clock_expressive_card
         ExpressiveCardClockWidget {
             screenWidth: delegateRoot.screenWidth
@@ -192,10 +214,6 @@ Item {
             wallpaperScale: delegateRoot.wallpaperScale
         }
     }
-
-
-
-
 
     Component {
         id: component_media_circular
@@ -693,6 +711,8 @@ Item {
             "concentric_clock": component_concentric_clock,
             "month_clock": component_month_clock,
             "scallop_dot_clock": component_scallop_dot_clock,
+            "scallop_number_clock": component_scallop_number_clock,
+            "grid_card_clock": component_grid_card_clock,
             "clock_expressive_card": component_clock_expressive_card,
             "circular_media": component_circular_media,
             "media_circular": component_media_circular,
