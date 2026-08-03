@@ -164,6 +164,9 @@ struct Tracker {
     energy: energy::Reader,
     apps: HashMap<String, AppState>,
     known_classes: HashSet<String>,
+    /// Whether the window layout has been read at least once. Until it has, an
+    /// unfamiliar class is one that was already open, not one that just launched.
+    seen_windows: bool,
     /// Last known window list. Refreshed from Hyprland on every event that can
     /// change it, so polling it again each tick would only cost the compositor two
     /// extra serialisations of the whole client list on its own thread.
@@ -207,6 +210,7 @@ impl Tracker {
             energy,
             apps: HashMap::new(),
             known_classes: HashSet::new(),
+            seen_windows: false,
             clients: Vec::new(),
             locked: false,
             idle: false,
@@ -235,11 +239,31 @@ impl Tracker {
         self.locked || self.idle || self.dpms_off
     }
 
+    /// Longest span the sampler is willing to describe from one end of it.
+    ///
+    /// Ticks arrive every interval and window events more often than that, so
+    /// anything much longer than a few intervals is a stretch of time the sampler
+    /// was not running through: a suspend, a hibernate, or a stall. Nothing about
+    /// it was observed, and the machine was almost certainly not doing the thing it
+    /// was doing when the gap opened.
+    fn max_gap_ms(&self) -> i64 {
+        (self.args.interval_ms as i64 * 3).max(60_000)
+    }
+
     /// Credit the time since the last accrual to whichever counter each app was
     /// earning. Called on every window event as well as every tick, so a switch is
     /// recorded at the instant it happened rather than rounded to a sample.
+    ///
+    /// A gap past `max_gap_ms` is skipped rather than credited. Filling it would
+    /// write an hour of background time into every hour the machine slept through,
+    /// for every process that happened to be alive when it went down — which both
+    /// invents the time and is what makes the day files large.
     fn accrue(&mut self, now_ms: i64) {
         if now_ms <= self.last_accrual_ms {
+            return;
+        }
+        if now_ms - self.last_accrual_ms > self.max_gap_ms() {
+            self.last_accrual_ms = now_ms;
             return;
         }
         let blocked = self.blocked();
@@ -277,8 +301,17 @@ impl Tracker {
             // kept on the system row. Adding up the apps' own foreground time counts
             // every moment two windows were visible at once twice over, which is how
             // an hour bucket ends up claiming to hold more than an hour.
+            //
+            // Its background counterpart is time the machine was up with nothing to
+            // look at. Both are counted here rather than at sample time so they are
+            // split at the hour boundary like everything else; credited per tick they
+            // land wholly in the hour the tick fired in, which is what put an hour
+            // bucket over 3600 s.
+            let b = store.bucket(t, SYSTEM_KEY, SYSTEM_KEY, true);
             if any_fg {
-                store.bucket(t, SYSTEM_KEY, SYSTEM_KEY, true).fg_ms += dt;
+                b.fg_ms += dt;
+            } else {
+                b.bg_ms += dt;
             }
             t = end;
         }
@@ -318,22 +351,27 @@ impl Tracker {
         }
 
         // A class that has no window right now but reappears later is a fresh launch.
+        // Whatever was already up when the sampler started is not one of those: the
+        // first pass only learns the layout, or every window open across a shell
+        // reload would be counted as having been launched again.
         for class in &classes {
-            if self.known_classes.contains(class) {
-                continue;
+            if self.seen_windows && !self.known_classes.contains(class) {
+                let exe = self
+                    .apps
+                    .get(class)
+                    .map(|a| a.exe.clone())
+                    .unwrap_or_default();
+                self.store.bucket(now, class, &exe, false).launches += 1;
             }
-            let exe = self
-                .apps
-                .get(class)
-                .map(|a| a.exe.clone())
-                .unwrap_or_default();
-            self.store.bucket(now, class, &exe, false).launches += 1;
             // A newly launched app is the only common source of new DRM clients, so
             // this is what makes the periodic full sweep a backstop rather than the
             // discovery mechanism.
-            self.gpu_rescan_pending = true;
+            if !self.known_classes.contains(class) {
+                self.gpu_rescan_pending = true;
+            }
         }
         self.known_classes = classes.clone();
+        self.seen_windows = true;
         self.clients = clients.iter().map(|c| (c.pid, c.class.clone())).collect();
 
         for class in &classes {
@@ -375,7 +413,14 @@ impl Tracker {
         // The span this tick accounts for is the whole interval since the previous
         // tick, not since the last accrual — a window event in between advances the
         // accrual clock without consuming any of the counters sampled here.
-        let dt_ms = (now - self.last_tick_ms).max(0) as u64;
+        //
+        // The first tick after a suspend covers hours of wall clock that no counter
+        // ran through. Treating it as a zero-length interval is what keeps a night's
+        // worth of GPU share and one enormous RAPL delta out of whichever apps were
+        // still resident; the counters are still read below, to rebase them.
+        let raw_dt = (now - self.last_tick_ms).max(0);
+        let resumed = raw_dt > self.max_gap_ms();
+        let dt_ms = if resumed { 0 } else { raw_dt as u64 };
         self.last_tick_ms = now;
         self.accrue(now);
 
@@ -485,7 +530,16 @@ impl Tracker {
         self.prev_busy = sweep.busy_ticks;
 
         let total_rss: u64 = agg.values().map(|a| a.rss_pages).sum();
-        let e = self.energy.sample(dt_ms);
+        // Sampled either way: the reader has to see the post-resume counter to have a
+        // baseline for the next interval. Its delta spans the whole sleep, and on
+        // hardware that clears RAPL across S3 it reads as a wrap, so it is dropped
+        // rather than attributed.
+        let sampled = self.energy.sample(dt_ms);
+        let e = if resumed {
+            energy::Delta::default()
+        } else {
+            sampled
+        };
 
         struct Share {
             key: String,
@@ -575,11 +629,11 @@ impl Tracker {
             }
         }
 
+        // The share of the package that belongs to no app. Its time counterpart is
+        // kept by `accrue`, which can split it at the hour boundary.
         let system_uj = e.pkg_uj.saturating_sub(attributed_uj);
         if system_uj > 0 {
-            let b = self.store.bucket(now, SYSTEM_KEY, SYSTEM_KEY, true);
-            b.bg_ms += dt_ms;
-            b.uj_bg += system_uj;
+            self.store.bucket(now, SYSTEM_KEY, SYSTEM_KEY, true).uj_bg += system_uj;
         }
 
         // Apps whose last process exited stop accruing; entries with neither

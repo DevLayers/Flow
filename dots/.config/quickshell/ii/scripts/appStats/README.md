@@ -233,6 +233,15 @@ a month of history and retention is an unlink. Each app maps hours to a fixed tu
 workspace is "foreground", which inflates screen time, so focused time is recorded
 separately and the UI can switch which one it reports without recollecting anything.
 
+The `__system` row is the device, not an app. Its `fg` is screen time counted once
+however many windows were up, its `bg` the time the machine was awake with nothing
+on screen, and `mJbg` the energy no app accounts for.
+
+Time the sampler did not run through — a suspend, a hibernate, a stall — is credited
+to nobody. A gap longer than three sample intervals is skipped rather than filled:
+nothing about it was observed, and spreading it over the hours it spans would invent
+a night of background activity for every process that happened to be resident.
+
 Written directly rather than through `JsonAdapter`, so the numeric tuples cannot be
 silently coerced to another type.
 
