@@ -129,6 +129,15 @@ Singleton {
             "configPage": "widgets/DesktopScallopNumberClockConfig.qml"
         },
         {
+            "widgetId": "circle_pointer_clock",
+            "name": Translation.tr("Circle Pointer Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/CirclePointerClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A concentric circle clock featuring outer minute step numbers, an intermediate circle with a smooth minute pointer tab, and a central two-digit hour circle."),
+            "configPage": "widgets/DesktopCirclePointerClockConfig.qml"
+        },
+        {
             "widgetId": "grid_card_clock",
             "name": Translation.tr("Grid Card Clock"),
             "category": "Clock",

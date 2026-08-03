@@ -1012,6 +1012,17 @@ Singleton {
                         property bool showMinuteBubble: true
                         property bool showDots: true
                     }
+                    property JsonObject circle_pointer_clock: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property bool boldFont: true
+                        property bool useBlackBg: false
+                        property bool enableGlassReflection: false
+                        property bool showDots: true
+                    }
                     property JsonObject grid_card_clock: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
