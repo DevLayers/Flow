@@ -25,118 +25,83 @@ split is what keeps it at ~3.5 MB RSS.
 
 ## Installation
 
-The QML side ships with the config and needs nothing done to it. Two things do not
-ship and have to be put in place by hand: the **binary**, which is built rather than
-tracked, and the **udev rule**, which is outside `$HOME` and needs root. Steps 3 and 4
-are only for a config that predates this feature or was assembled by hand.
-
-### 1. Build the binary
-
-`rust` and `cargo` are the only build requirements. `libc` and `serde_json` are the
-only dependencies, but cargo does fetch them, so the first build needs network.
+The QML side ships with the config. Two things do not: the **binary**, which is built
+rather than tracked, and the **udev rule**, which lives outside `$HOME` and needs root.
+Both are below — paste the block, then press **Super + U**.
 
 ```bash
+# 1. Build the sampler. rust is the only build requirement; the first build fetches
+#    libc and serde_json, so it needs network. Result is ~530 KB.
 yay -S --needed rust
 cd ~/.config/quickshell/ii/scripts/appStats/app_stats_src
 cargo build --release
 cp target/release/app_stats ../
-```
 
-The result is ~530 KB. It must end up at
-`~/.config/quickshell/ii/scripts/appStats/app_stats` and be executable — that exact
-path is what `AppStats.qml` launches, and there is no fallback if it is missing.
-
-Neither the binary, `target/` nor `Cargo.lock` belongs in the repo — they are
-gitignored. Mirror the source and this file, and build on the target machine.
-`setup-ii-p3drovfx.sh` lists `scripts/appStats/app_stats` in `PROTECTED_PATTERNS`, so
-a config update carries the built binary across instead of deleting it. Rebuild after
-any change to `app_stats_src/`; nothing rebuilds it automatically.
-
-### 2. Install the udev rule
-
-Without it every RAPL read fails and energy silently degrades to whole-battery drain,
-which reads zero on AC. Write `/etc/udev/rules.d/99-rapl-readable.rules`:
-
-```udev
-# Expose Intel RAPL energy counters to the wheel group.
-#
-# energy_uj was restricted to root (mode 400) as the mitigation for
-# CVE-2020-8694 (PLATYPUS), a power side-channel attack. Members of wheel can
-# already read these counters via sudo, so widening to wheel grants no
-# capability that group did not already have -- it only removes the need to run
-# the usage-stats sampler as root.
-#
-# Only energy_uj is touched; name and max_energy_range_uj are already 0444.
-# Matches intel-rapl:0 (package), :0:0 (core), :0:1 (uncore/iGPU), :0:2 (dram).
-
+# 2. Let your own user read the RAPL energy counters. Skip on AMD or in a VM —
+#    there is no intel-rapl there — and set energySource to "battery" instead.
+sudo tee /etc/udev/rules.d/99-rapl-readable.rules >/dev/null <<'EOF'
+# energy_uj is root-only as the mitigation for CVE-2020-8694 (PLATYPUS), a power
+# side-channel attack. wheel can already read it through sudo, so widening to wheel
+# grants that group no new capability -- it only removes the need to run the sampler
+# as root. Only energy_uj is touched; the other attributes are already world-readable.
 SUBSYSTEM=="powercap", KERNEL=="intel-rapl:*", TEST=="/sys$devpath/energy_uj", \
   RUN+="/usr/bin/chgrp wheel /sys$devpath/energy_uj", \
   RUN+="/usr/bin/chmod g+r /sys$devpath/energy_uj"
-```
-
-Apply it to the already-enumerated devices without a reboot, then check that reading
-works **as your own user** — the daemon never uses `sudo`:
-
-```bash
+EOF
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=powercap
-stat -c '%A %G %n' /sys/class/powercap/intel-rapl:0/energy_uj   # -r--r----- wheel
-cat /sys/class/powercap/intel-rapl:0/energy_uj                  # a number, no EACCES
+
+# 3. Restart the shell, then check all three.
+qs kill; qs &
+cat /sys/class/powercap/intel-rapl:0/energy_uj   # a number, not "Permission denied"
+pgrep -af app_stats                              # exactly one process
+ls ~/.local/state/quickshell/user/app_stats/     # YYYY-MM-DD.json within a minute
 ```
 
-You must be in `wheel` (`groups | grep wheel`); adding yourself needs a re-login. On a
-machine with no `intel-rapl` at all — AMD, or a VM — skip this step and set
-`energySource` to `battery`.
+An empty first minute is normal — the day file is only written every
+`flushIntervalMs`. If the RAPL read fails, energy silently falls back to whole-battery
+drain, which reads zero on AC.
 
-### 3. Hyprland keybind and layer rules
+A few things that bite:
 
-Shipped in `dots/.config/hypr/hyprland/`. On a config that already has them, `hyprctl
-reload` is enough. Otherwise add to `keybinds.lua`:
+- You must be in `wheel` for step 2 (`groups | grep wheel`); adding yourself needs a
+  re-login.
+- The binary must end up at `scripts/appStats/app_stats` and be executable. That exact
+  path is what `AppStats.qml` launches, with no fallback.
+- Nothing rebuilds it automatically — repeat step 1 after any change to `app_stats_src/`.
+- The binary, `target/` and `Cargo.lock` are gitignored on purpose; mirror the source
+  and build on the target machine. `setup-ii-p3drovfx.sh` protects the built binary so
+  a config update carries it across instead of deleting it.
+
+<details>
+<summary>Hand-assembled configs: what else has to be present</summary>
+
+Both ship with this config, so this is only for a tree assembled by hand or one that
+predates the feature.
+
+The **Super + U** keybind and the layer rules are in `dots/.config/hypr/hyprland/`;
+`hyprctl reload` picks them up. Without them the overlay still opens — `qs ipc call
+usage toggle` — but it renders unblurred and pops in instead of sliding.
 
 ```lua
+-- keybinds.lua
 hl.bind("SUPER + U", hl.dsp.global("quickshell:usageToggle"), { description = "Shell: Toggle app usage stats" })
-```
 
-and to `rules.lua`, so the overlay blurs and slides like the other panels:
-
-```lua
+-- rules.lua
 hl.layer_rule({ match = { namespace = "quickshell:usage" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:usage" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "quickshell:usage" }, animation = "slide bottom"})
 ```
 
-The overlay still opens without these — it is reachable from the IPC call
-`qs ipc call usage toggle` — but it renders unblurred and pops in.
+On the shell side: `services/AppStats.qml`, the `modules/ii/usage/` overlay, the
+`appStats` group in `modules/common/Config.qml`, `UsageStatsConfig.qml` registered in
+`SettingsPageRegistry` under System, `Directories.appStats`, `usageOpen` in
+`GlobalStates.qml`, and a `PanelLoader` for `Usage` in both panel families.
 
-### 4. Shell wiring
+One line is not optional: `shell.qml` touches `AppStats.stateDir` on startup. The
+singleton is lazy, so without it nothing is collected until the overlay is first opened.
 
-All of this is already in the config; it is listed so a hand-assembled tree can be
-checked against it.
-
-| File | What it adds |
-| --- | --- |
-| `services/AppStats.qml` | the singleton that runs the sampler and parses the day files |
-| `modules/ii/usage/` | the overlay: `Usage`, `UsageContent`, `UsageAppRow`, `UsageBarChart`, `UsageFormat.js` |
-| `modules/common/Config.qml` | the `appStats` option group |
-| `modules/settings/configs/UsageStatsConfig.qml` | the settings page, listed in `SettingsPageRegistry` under System |
-| `modules/common/Directories.qml` | `Directories.appStats`, the state dir |
-| `GlobalStates.qml` | `usageOpen` |
-| `panelFamilies/*.qml` | a `PanelLoader` for `Usage`, in both families |
-| `shell.qml` | touches `AppStats.stateDir` on startup |
-
-That last line is not optional. The singleton is lazy, so without it nothing is
-collected until the overlay is opened for the first time.
-
-### 5. Restart and verify
-
-```bash
-qs kill; qs &                                   # or: touch ~/.config/quickshell/ii/shell.qml
-pgrep -af app_stats                             # one process, with the flags from Config
-ls ~/.local/state/quickshell/user/app_stats/    # YYYY-MM-DD.json within a minute
-```
-
-Then press **Super + U**. An empty first minute is expected: the day file is only
-rewritten every `flushIntervalMs`.
+</details>
 
 ### Configuration
 
