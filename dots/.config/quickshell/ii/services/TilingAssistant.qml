@@ -10,7 +10,8 @@ pragma ComponentBehavior: Bound
  * report Hyprland's own drag binds through the global shortcuts below; the
  * script's motion heuristic covers titlebar drags that never touch a keybind.
  *
- * This phase only observes - nothing is drawn and no window is moved yet.
+ * On drop the window is floated and given the zone's exact geometry, and the
+ * geometry it had before is kept so dragging it back out can undo that.
  */
 
 import qs
@@ -46,6 +47,11 @@ Singleton {
     // Hyprland's own gaps, so a tiled window sits exactly where a real one would.
     property int hyprGapsOuter: 5
     property int hyprGapsInner: 4
+    // Hyprland reports and accepts window geometry without the border, so zone
+    // rects have to lose it. Taken from the shell rather than from Hyprland,
+    // because the shell is what pushes the value and Hyprland briefly reports
+    // the config file's own number after a reload.
+    readonly property int hyprBorderSize: Appearance.borderless ? 0 : (Appearance.borderWidth ?? 0)
     readonly property var gaps: {
         const configured = root.options?.gaps ?? null;
         if (configured?.followHyprland ?? true)
@@ -128,6 +134,134 @@ Singleton {
         if (index < 0 || index >= root.zones.length) return "";
         return Tiling.labelFor(root.zones[index]);
     }
+
+    // ------------------------------------------------------------ applying
+
+    // "quickTile" | "preview" | "hybrid"
+    readonly property string mode: root.options?.mode ?? "quickTile"
+
+    // Where each window we tiled came from, keyed by address. Only windows this
+    // service moved are in here, so nothing else can be "restored" out of a
+    // position the user put it in themselves.
+    property var tileRecords: ({})
+
+    // Zone rects as windows rather than as boxes: Hyprland positions and sizes a
+    // window inside its border, so the border comes off every side.
+    function windowRectForZone(name, index) {
+        const monitor = root.monitorByName(name);
+        const zones = root.zonesFor(name);
+        if (!monitor || index < 0 || index >= zones.length) return null;
+        const box = Tiling.zoneRect(zones[index], Tiling.usableArea(monitor), root.gapsFor(name));
+        const rect = Tiling.insetRect(box, root.hyprBorderSize);
+        return (rect.width > 0 && rect.height > 0) ? rect : null;
+    }
+
+    // Whether a geometry sample is already sitting in one of that monitor's
+    // zones. Growing it by the border undoes the inset above, putting it back in
+    // the same space the zone boxes are measured in.
+    function sampleZoneIndex(name, sample) {
+        const monitor = root.monitorByName(name);
+        if (!monitor || !sample) return -1;
+        const rect = Tiling.makeRect(sample.x, sample.y, sample.width, sample.height);
+        const grown = Tiling.insetRect(rect, -root.hyprBorderSize);
+        const usable = Tiling.usableArea(monitor);
+        return Tiling.zoneIndexForRect(root.zonesFor(name), usable, root.gapsFor(name), grown, 4);
+    }
+
+    // Hyprland's float dispatcher is a toggle and takes no target state, so the
+    // current state decides whether to flip it. Callers pass what they know -
+    // the pre-drag sample beats the shared window list, which can be a refresh
+    // behind - and an unknown state is left alone rather than guessed at.
+    function setFloating(address, floating, current) {
+        const known = current ?? HyprlandData.windowByAddress?.[address]?.floating;
+        if (known === undefined || known === floating) return;
+        root.dispatchWindow(address, "float");
+    }
+
+    function dispatchWindow(address, dispatcher, args) {
+        const call = [`window = "address:${address}"`].concat(args ?? []).join(", ");
+        Hyprland.dispatch(`hl.dsp.window.${dispatcher}({${call}})`);
+    }
+
+    function applyZone(address, name, index, before, floating) {
+        const rect = root.windowRectForZone(name, index);
+        if (!rect) return;
+
+        // A window already floating in a zone is one of ours from before a
+        // reload: its geometry says nothing about where it came from, so it goes
+        // unrecorded rather than recorded uselessly. One the layout put there is
+        // a different matter - restoring it means handing it back to the layout.
+        const ours = (before?.floating ?? false) && root.sampleZoneIndex(name, before) >= 0;
+        if (!root.tileRecords[address] && before && !ours) {
+            root.tileRecords[address] = {
+                x: before.x,
+                y: before.y,
+                width: before.width,
+                height: before.height,
+                floating: before.floating ?? false
+            };
+        }
+
+        root.suppressDetection(500);
+        root.setFloating(address, true, floating);
+        // Resizing keeps the centre, so the move has to come second.
+        root.dispatchWindow(address, "resize", [`x = ${rect.width}`, `y = ${rect.height}`]);
+        root.dispatchWindow(address, "move", [`x = ${rect.x}`, `y = ${rect.y}`]);
+    }
+
+    function restoreWindow(address, floating) {
+        const record = root.tileRecords[address];
+        if (!record) return;
+        delete root.tileRecords[address];
+
+        root.suppressDetection(500);
+        if (!record.floating) {
+            // Back into the layout tree, which decides the geometry itself.
+            root.setFloating(address, false, floating);
+            return;
+        }
+        root.setFloating(address, true, floating);
+        root.dispatchWindow(address, "resize", [`x = ${record.width}`, `y = ${record.height}`]);
+        root.dispatchWindow(address, "move", [`x = ${record.x}`, `y = ${record.y}`]);
+    }
+
+    // Closed windows would otherwise pile up in the record map for the lifetime
+    // of the shell.
+    function pruneRecords() {
+        const known = HyprlandData.windowByAddress ?? {};
+        // An empty list means the window data has not arrived, not that every
+        // window closed at once.
+        if (Object.keys(known).length === 0) return;
+        for (const address in root.tileRecords) {
+            if (!known[address]) delete root.tileRecords[address];
+        }
+    }
+
+    function handleDrop(kind, zoneIndex) {
+        if (kind !== "move" || root.mode === "preview") return;
+        const address = root.dragAddress;
+        if (!address) return;
+        const before = root.dragWindowBefore;
+        // Hyprland floats a tiled window for the duration of a drag and puts it
+        // back on release, so the sample from *before* the drag is the one that
+        // describes the window now that the drag is over.
+        const floating = before?.floating;
+
+        // Nothing under the cursor: the window was dragged out of its zone, so
+        // put it back the way it was found.
+        if (zoneIndex < 0) {
+            if (root.options?.restoreOnUntile ?? true) root.restoreWindow(address, floating);
+            return;
+        }
+        // Hybrid leaves windows that live in the layout tree to Hyprland and
+        // only quick-tiles ones that were already floating.
+        if (root.mode === "hybrid" && !(before?.floating ?? false) && !root.tileRecords[address]) return;
+
+        root.applyZone(address, root.monitorName, zoneIndex, before, floating);
+    }
+
+    onDragStarted: root.pruneRecords()
+    onDragEnded: (kind, zoneIndex) => root.handleDrop(kind, zoneIndex)
 
     // Lets a window we move ourselves pass without the heuristic mistaking it
     // for the user dragging it.

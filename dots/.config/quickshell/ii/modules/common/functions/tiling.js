@@ -66,6 +66,15 @@ function rectDistance(r, px, py) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
+// Shrinks a rect on every side. Hyprland reports and accepts window geometry
+// without its border, so the border width has to come off a zone rect before it
+// becomes a window, and go back on before a window is matched to a zone. A
+// negative amount grows the rect, which is that reverse direction.
+function insetRect(r, amount) {
+    if (!r) return makeRect(0, 0, 0, 0);
+    return makeRect(r.x + amount, r.y + amount, Math.max(0, r.width - 2 * amount), Math.max(0, r.height - 2 * amount));
+}
+
 function clamp(v, lo, hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
