@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 
@@ -484,6 +485,30 @@ ContentPage {
                     text: Translation.tr("Show the first window's icon inside each workspace button")
                 }
             }
+        }
+    }
+
+    ContentSection {
+        title: Translation.tr("Workspace Compactor")
+        icon: "compress"
+
+        // The keybind ships with the config but the binary does not — it is built on
+        // the machine it runs on — so the build command is the entire install.
+        HelperCodeBox {
+            Layout.fillWidth: true
+            icon: "terminal"
+            title: Translation.tr("Build it once")
+            text: Translation.tr("Pulls the focused monitor's occupied workspaces down to 1..N with no gaps, keeping windows together and restoring their geometry. Rust is the only requirement.")
+            codeSnippet: `cd ${Directories.scriptPath.replace(FileUtils.trimFileProtocol(Directories.home), "~")}/hyprland/workspace_compactor_src
+cargo build --release
+cp target/release/workspace_compactor ../`
+            snippetWrapMode: Text.Wrap
+        }
+
+        KeyboardShortcutBox {
+            Layout.fillWidth: true
+            text: Translation.tr("Compact workspaces into 1..N")
+            keys: ["Ctrl", "Super", "C"]
         }
     }
 }
