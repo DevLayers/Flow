@@ -700,18 +700,23 @@ ui_die() {
     exit "${3:-1}"
 }
 
-# ui_confirm <question> — honours --yes, refuses to hang on a non-interactive stdin.
+# ui_confirm <question> [default] — honours --yes, refuses to hang on a
+# non-interactive stdin. Pass "yes" as the second argument to make a bare Enter
+# accept; anything else keeps the cautious no-by-default behaviour.
 ui_confirm() {
     [[ "$OPT_ASSUME_YES" == true ]] && return 0
     if [[ ! -t 0 ]]; then
         ui_die "Confirmation required" "stdin is not a terminal — re-run with --yes"
     fi
+    local default_yes=false hint='(y/N)'
+    [[ "${2:-}" == "yes" ]] && { default_yes=true; hint='(Y/n)'; }
     ui_clear_line
-    printf '  %s%-*s%s %s %s(y/N)%s ' \
-        "$C_WARN" "$G_W" "$G_WARN" "$C_RST" "$1" "$C_SUB" "$C_RST"
+    printf '  %s%-*s%s %s %s%s%s ' \
+        "$C_WARN" "$G_W" "$G_WARN" "$C_RST" "$1" "$C_SUB" "$hint" "$C_RST"
     local reply
     read -r reply || reply=""
     printf '\n'
+    [[ -z "$reply" && "$default_yes" == true ]] && return 0
     [[ "$reply" =~ ^[Yy]$ ]]
 }
 
@@ -1605,7 +1610,7 @@ install_hypr_config() {
             ui_note "Left $(tilde "$dest") alone. Pass --hypr to install it."
             return 0
         fi
-        ui_confirm "Also install this fork's Hyprland config into $(tilde "$dest")?" || {
+        ui_confirm "Also install this fork's Hyprland config into $(tilde "$dest")?" yes || {
             ui_note "Left $(tilde "$dest") alone."
             return 0
         }
@@ -1728,7 +1733,7 @@ apply_config() {
     if [[ "$OPT_ASSUME_YES" != true ]]; then
         local with="$fork/$branch"
         [[ -n "$LOCAL_SRC" ]] && with="$(tilde "$LOCAL_SRC")"
-        ui_confirm "Replace $(tilde "$TARGET_DIR") with $with?" || {
+        ui_confirm "Replace $(tilde "$TARGET_DIR") with $with?" yes || {
             ui_note "Cancelled."
             return 0
         }
