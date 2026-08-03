@@ -117,6 +117,11 @@ hl.bind("SUPER + SHIFT + ALT + mouse:273", hl.dsp.exec_cmd(hyprScripts .. "/ai/p
 hl.bind("SUPER + mouse:272", hl.dsp.window.drag(), { mouse = true, description = "Window: Move" })
 hl.bind("SUPER + mouse:274", hl.dsp.window.drag(), { mouse = true })
 hl.bind("SUPER + mouse:273", hl.dsp.window.resize(), { mouse = true, description = "Window: Resize" })
+--# Tiling assistant: report the drag to the shell alongside Hyprland's own move
+--# and resize, so the zone overlay knows a window is being dragged
+hl.bind("SUPER + mouse:272", hl.dsp.global("quickshell:tilingDragMove"))   -- # [hidden]
+hl.bind("SUPER + mouse:274", hl.dsp.global("quickshell:tilingDragMove"))   -- # [hidden]
+hl.bind("SUPER + mouse:273", hl.dsp.global("quickshell:tilingDragResize")) -- # [hidden]
 --#/# bind = SUPER, ←/↑/→/↓,, # Focus in direction
 for i = 1, 6 do
     local arrowkey = { "Left", "Right", "Up", "Down", "BracketLeft", "BracketRight" }
