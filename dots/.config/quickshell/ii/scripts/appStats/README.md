@@ -111,31 +111,31 @@ Settings → System → **App Usage** covers all of it. The same keys live under
 Everything in the first table is a command-line flag the daemon reads once at
 startup, so changing one relaunches it.
 
-| Key | Default | Effect |
-| --- | --- | --- |
-| `enable` | `true` | run the sampler at all |
-| `sampleIntervalMs` | `10000` | counter poll period |
-| `flushIntervalMs` | `60000` | day-file write period |
-| `retentionDays` | `31` | days of history kept — a floor rather than the window itself under `previousMonth` |
-| `retentionMode` | `"previousMonth"` | `previousMonth` never drops a day last month needs, so the window slides between 31 and 62 days and the two months can be compared; `fixed` keeps exactly `retentionDays` |
-| `energySource` | `"auto"` | `auto`, `rapl`, `battery` or `none` |
-| `gpuFullEvery` | `30` | samples between full GPU rescans |
-| `idleTimeoutSec` | `300` | seconds without input before foreground time stops; `0` disables the idle monitor |
-| `trackHeadless` | `true` | record processes that own no window |
+| Key                | Default           | Effect                                                                                                                                                                    |
+| ------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enable`           | `true`            | run the sampler at all                                                                                                                                                    |
+| `sampleIntervalMs` | `10000`           | counter poll period                                                                                                                                                       |
+| `flushIntervalMs`  | `60000`           | day-file write period                                                                                                                                                     |
+| `retentionDays`    | `31`              | days of history kept — a floor rather than the window itself under `previousMonth`                                                                                        |
+| `retentionMode`    | `"previousMonth"` | `previousMonth` never drops a day last month needs, so the window slides between 31 and 62 days and the two months can be compared; `fixed` keeps exactly `retentionDays` |
+| `energySource`     | `"auto"`          | `auto`, `rapl`, `battery` or `none`                                                                                                                                       |
+| `gpuFullEvery`     | `30`              | samples between full GPU rescans                                                                                                                                          |
+| `idleTimeoutSec`   | `300`             | seconds without input before foreground time stops; `0` disables the idle monitor                                                                                         |
+| `trackHeadless`    | `true`            | record processes that own no window                                                                                                                                       |
 
 The rest are read live by the overlay.
 
-| Key | Default | Effect |
-| --- | --- | --- |
-| `overlayEnabled` | `true` | load the overlay panel |
-| `showHeadless` | `false` | count headless processes in the list and the totals |
-| `defaultGranularity` | `"day"` | `day`, `week` or `month` |
-| `defaultMetric` | `"fg"` | `fg`, `focus`, `energy`, `cpu` or `gpu` |
-| `rememberLastView` | `true` | reopen on the last granularity and metric instead of the two above |
-| `weekStartsMonday` | `true` | which day a calendar week runs from |
-| `keepSelection` | `false` | keep the picked app across openings |
-| `showComparison` | `false` | percent change against the period before. Off by default: it parses that period as well, doubling the files a month view reads |
-| `minDurationSec` | `0` | hide apps under this from the list. Duration metrics only, and never from the totals |
+| Key                  | Default | Effect                                                                                                                         |
+| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `overlayEnabled`     | `true`  | load the overlay panel                                                                                                         |
+| `showHeadless`       | `false` | count headless processes in the list and the totals                                                                            |
+| `defaultGranularity` | `"day"` | `day`, `week` or `month`                                                                                                       |
+| `defaultMetric`      | `"fg"`  | `fg`, `focus`, `energy`, `cpu` or `gpu`                                                                                        |
+| `rememberLastView`   | `true`  | reopen on the last granularity and metric instead of the two above                                                             |
+| `weekStartsMonday`   | `true`  | which day a calendar week runs from                                                                                            |
+| `keepSelection`      | `false` | keep the picked app across openings                                                                                            |
+| `showComparison`     | `false` | percent change against the period before. Off by default: it parses that period as well, doubling the files a month view reads |
+| `minDurationSec`     | `0`     | hide apps under this from the list. Duration metrics only, and never from the totals                                           |
 
 Turning `enable` off stops collection but keeps the history; deleting the state
 directory, or the button on the settings page, is what discards it.
@@ -148,17 +148,17 @@ It is a normal program: run it in a terminal and watch the NDJSON.
 ./app_stats --state-dir /tmp/stats --interval-ms 3000
 ```
 
-| Flag | Default | Effect |
-| --- | --- | --- |
-| `--interval-ms` | `10000` | counter poll period (minimum 1000) |
-| `--flush-ms` | `60000` | how often the day file is rewritten |
-| `--retention-days` | `30` | day files older than this are deleted |
-| `--retention-mode` | `fixed` | `fixed`, or `previous-month` to treat the above as a floor and never drop a day the previous calendar month needs |
-| `--state-dir` | `$XDG_STATE_HOME/quickshell/user/app_stats` | where day files go |
-| `--energy` | `auto` | `rapl`, `battery`, `auto` or `off` |
-| `--gpu-full-every` | `30` | intervals between full GPU rescans (a new window forces one) |
-| `--no-headless` | — | skip processes that own no window |
-| `--quiet` | — | write day files, print nothing |
+| Flag               | Default                                     | Effect                                                                                                            |
+| ------------------ | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `--interval-ms`    | `10000`                                     | counter poll period (minimum 1000)                                                                                |
+| `--flush-ms`       | `60000`                                     | how often the day file is rewritten                                                                               |
+| `--retention-days` | `30`                                        | day files older than this are deleted                                                                             |
+| `--retention-mode` | `fixed`                                     | `fixed`, or `previous-month` to treat the above as a floor and never drop a day the previous calendar month needs |
+| `--state-dir`      | `$XDG_STATE_HOME/quickshell/user/app_stats` | where day files go                                                                                                |
+| `--energy`         | `auto`                                      | `rapl`, `battery`, `auto` or `off`                                                                                |
+| `--gpu-full-every` | `30`                                        | intervals between full GPU rescans (a new window forces one)                                                      |
+| `--no-headless`    | —                                           | skip processes that own no window                                                                                 |
+| `--quiet`          | —                                           | write day files, print nothing                                                                                    |
 
 ## Protocol
 
@@ -166,33 +166,33 @@ One JSON object per line, in both directions.
 
 **stdin**
 
-| Line | Meaning |
-| --- | --- |
+| Line                                                    | Meaning                                                                      |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `{"t":"state","locked":true,"idle":false,"dpms":"off"}` | screen state changed; foreground time stops accruing while any of these hold |
-| `{"t":"flush"}` | write the day file now |
-| `{"t":"quit"}` | flush and exit (`SIGTERM` does the same) |
+| `{"t":"flush"}`                                         | write the day file now                                                       |
+| `{"t":"quit"}`                                          | flush and exit (`SIGTERM` does the same)                                     |
 
 **stdout**
 
-| Line | Meaning |
-| --- | --- |
-| `{"t":"ready",…}` | startup: energy source in use, interval, state dir |
-| `{"t":"sample",…}` | one interval's deltas per app, plus the unattributed remainder |
-| `{"t":"flush","file":…}` | a day file was written |
+| Line                     | Meaning                                                        |
+| ------------------------ | -------------------------------------------------------------- |
+| `{"t":"ready",…}`        | startup: energy source in use, interval, state dir             |
+| `{"t":"sample",…}`       | one interval's deltas per app, plus the unattributed remainder |
+| `{"t":"flush","file":…}` | a day file was written                                         |
 
 ## Storage
 
 One sparse file per local day, `YYYY-MM-DD.json`, so today's chart never has to parse
 a month of history and retention is an unlink. Each app maps hours to a fixed tuple:
 
-| idx | field | unit | | idx | field | unit |
-| --- | --- | --- | --- | --- | --- | --- |
-| 0 | `fg` | s | | 6 | `ramPeak` | MiB |
-| 1 | `bg` | s | | 7 | `mJfg` | mJ |
-| 2 | `focus` | s | | 8 | `mJbg` | mJ |
-| 3 | `cpu` | s | | 9 | `launches` | count |
-| 4 | `gpu` | s | | 10 | `sessions` | count |
-| 5 | `ramAvg` | MiB | | | | |
+| idx | field    | unit |     | idx | field      | unit  |
+| --- | -------- | ---- | --- | --- | ---------- | ----- |
+| 0   | `fg`     | s    |     | 6   | `ramPeak`  | MiB   |
+| 1   | `bg`     | s    |     | 7   | `mJfg`     | mJ    |
+| 2   | `focus`  | s    |     | 8   | `mJbg`     | mJ    |
+| 3   | `cpu`    | s    |     | 9   | `launches` | count |
+| 4   | `gpu`    | s    |     | 10  | `sessions` | count |
+| 5   | `ramAvg` | MiB  |     |     |            |       |
 
 `focus` is a subset of `fg`: on a tiling WM every mapped window on the active
 workspace is "foreground", which inflates screen time, so focused time is recorded
