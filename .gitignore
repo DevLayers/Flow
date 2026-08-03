@@ -42,5 +42,10 @@ __pycache__/
 # Compiled binary — build it from osk_autoshow_src/ instead (see scripts/osk/README.md)
 /dots/.config/quickshell/ii/scripts/osk/osk_autoshow
 
+# Compiled binary — build it from app_stats_src/ instead (see scripts/appStats/README.md)
+/dots/.config/quickshell/ii/scripts/appStats/app_stats
+/dots/.config/quickshell/ii/scripts/appStats/app_stats_src/target/
+/dots/.config/quickshell/ii/scripts/appStats/app_stats_src/Cargo.lock
+
 /dots/.config/quickshell/ii/.tmp
 /dots/.config/quickshell/ii/.commandcode

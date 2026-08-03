@@ -150,6 +150,7 @@ PROTECTED_PATTERNS=(
     "scripts/hyprland/workspace_compactor"
     "scripts/hyprland/workspace_profile_manager"
     "scripts/osk/osk_autoshow"
+    "scripts/appStats/app_stats"
 )
 
 # ── The fork's Hyprland config ───────────────────────────────────────────────

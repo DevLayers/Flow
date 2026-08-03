@@ -214,6 +214,13 @@ Singleton {
         "subPages": [],
         "aliases": ["Core Services", "Suspend", "Battery warning", "Automatic suspend"]
     }, {
+        "id": "usageStats",
+        "name": "App Usage",
+        "icon": "bar_chart",
+        "component": "modules/settings/configs/UsageStatsConfig.qml",
+        "subPages": [],
+        "aliases": ["Usage stats", "Screen time", "App usage", "Digital wellbeing", "Energy per app", "RAPL", "History retention"]
+    }, {
         "id": "devicesPhone",
         "name": "Devices & Phone",
         "icon": "smartphone",
@@ -282,7 +289,7 @@ Singleton {
     }, {
         "id": "system",
         "name": "System",
-        "pageIds": ["displays", "soundAlerts", "power", "devicesPhone", "privacy", "about"]
+        "pageIds": ["displays", "soundAlerts", "power", "usageStats", "devicesPhone", "privacy", "about"]
     }]
 
     function pageIndexById(id) {
