@@ -65,6 +65,13 @@ Singleton {
     readonly property int idleTimeout: root.opts?.idleTimeoutSec ?? 300
 
     readonly property string stateDir: Directories.appStats
+    readonly property string binaryPath: `${Directories.scriptPath}/appStats/app_stats`
+    /// The sampler is built rather than shipped, so a fresh config has the QML and no
+    /// daemon. Assumed present until the probe says otherwise — the overlay would
+    /// otherwise flash its install screen on every start.
+    property bool binaryPresent: true
+    /// 1 readable, 0 present but root-only, 2 no intel-rapl on this machine.
+    property int raplState: 1
     /// True once the sampler has announced itself, not merely once it was spawned.
     property bool running: false
     /// Energy source actually in use: "rapl", "battery" or "none".
@@ -268,6 +275,15 @@ Singleton {
 
     function openStateDir() {
         Quickshell.execDetached(["xdg-open", root.stateDir]);
+    }
+
+    /// What the install screen is answering: is there a binary to run, and can this
+    /// user read the energy counters. Both are one-shot filesystem tests, run at
+    /// startup and again whenever the overlay opens, so building the daemon while the
+    /// shell is up is picked up without a reload.
+    function checkInstall() {
+        installProbe.running = false;
+        installProbe.running = true;
     }
 
     function pushState() {
@@ -592,6 +608,23 @@ Singleton {
         }
     }
 
+    Component.onCompleted: root.checkInstall()
+
+    Process {
+        id: installProbe
+        command: ["sh", "-c", `b=0; [ -x "${root.binaryPath}" ] && b=1; r=2; for f in /sys/class/powercap/intel-rapl:*/energy_uj; do [ -e "$f" ] || continue; if head -c1 "$f" >/dev/null 2>&1; then r=1; else r=0; fi; break; done; printf '%s %s' "$b" "$r"`]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const parts = text.trim().split(/\s+/);
+                // The sampler launches off this, so a binary that appeared while the
+                // shell was up — one just built — starts collecting on its own.
+                root.binaryPresent = parts[0] === "1";
+                root.raplState = parseInt(parts[1]);
+            }
+        }
+    }
+
     Process {
         id: storageProcess
         command: ["sh", "-c", `printf '%s %s' "$(ls -1 "${root.stateDir}"/*.json 2>/dev/null | wc -l)" "$(du -sb "${root.stateDir}" 2>/dev/null | cut -f1)"`]
@@ -637,10 +670,10 @@ Singleton {
 
     Process {
         id: sampler
-        running: root.enabled && !root.restarting
+        running: root.enabled && root.binaryPresent && !root.restarting
         stdinEnabled: true
         command: {
-            const args = [`${Directories.scriptPath}/appStats/app_stats`, "--state-dir", root.stateDir, "--interval-ms", `${root.intervalMs}`, "--flush-ms", `${root.flushMs}`, "--retention-days", `${root.retentionDays}`, "--retention-mode", root.retentionMode === "previousMonth" ? "previous-month" : "fixed", "--energy", root.energySource, "--gpu-full-every", `${root.gpuFullEvery}`];
+            const args = [root.binaryPath, "--state-dir", root.stateDir, "--interval-ms", `${root.intervalMs}`, "--flush-ms", `${root.flushMs}`, "--retention-days", `${root.retentionDays}`, "--retention-mode", root.retentionMode === "previousMonth" ? "previous-month" : "fixed", "--energy", root.energySource, "--gpu-full-every", `${root.gpuFullEvery}`];
             if (!root.trackHeadless) args.push("--no-headless");
             return args;
         }

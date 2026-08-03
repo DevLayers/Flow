@@ -77,6 +77,7 @@ Scope {
 
     function requestOpen() {
         closeTimer.stop();
+        AppStats.checkInstall();
         root.resolveView();
         root.activeState = true;
         GlobalStates.usageOpen = true;
@@ -321,12 +322,29 @@ Scope {
                             }
                         }
 
+                        // Nothing was ever collected without the daemon, so the panel
+                        // says how to get one instead of drawing an empty chart.
+                        Loader {
+                            readonly property real calculatedWidth: usageRoot.screen ? usageRoot.screen.width * 0.92 : 1700
+                            readonly property real calculatedHeight: usageRoot.screen ? usageRoot.screen.height * 0.62 : 650
+
+                            active: !AppStats.binaryPresent
+                            visible: active
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.preferredWidth: Math.min(1100, Math.max(760, calculatedWidth))
+                            Layout.preferredHeight: Math.min(700, Math.max(460, calculatedHeight))
+
+                            sourceComponent: UsageSetup {}
+                        }
+
                         UsageContent {
                             id: usageContent
 
                             readonly property real calculatedWidth: usageRoot.screen ? usageRoot.screen.width * 0.92 : 1700
                             readonly property real calculatedHeight: usageRoot.screen ? usageRoot.screen.height * 0.62 : 650
 
+                            visible: AppStats.binaryPresent
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: Math.min(1500, Math.max(900, calculatedWidth))
