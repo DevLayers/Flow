@@ -221,7 +221,11 @@ Item {
     /// The chart series for the current range, metric and selection.
     readonly property var chartValues: {
         AppStats.history;
-        if (root.chartKey === AppStats.systemKey)
+        // The device series is screen time and nothing else — it is the one figure
+        // the system row is read for rather than summed for. Drawing it whenever the
+        // system row is the subject put foreground seconds under a watt-hour axis
+        // when the System row was picked with the energy metric selected.
+        if (root.metric.key === "fg" && root.chartKey === AppStats.systemKey)
             return root.deviceSeries("fg");
         if (root.selectedKey.length > 0)
             return root.seriesFor(root.selectedKey);
