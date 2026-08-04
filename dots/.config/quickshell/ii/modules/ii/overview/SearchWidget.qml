@@ -64,8 +64,7 @@ Item {
     readonly property bool isTranslatorMode: root.searchingText.startsWith(Config.options.search.prefix.translator)
     readonly property bool isMediaDownloaderMode: Config.options.mediaDownloader.enabled && root.searchingText.startsWith(Config.options.search.prefix.mediaDownloader)
     readonly property bool isMaterialSymbolsMode: root.searchingText.startsWith(Config.options.search.prefix.materialSymbols)
-    readonly property bool isEmojiMode: root.searchingText.startsWith(Config.options.search.prefix.emojis)
-    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode || root.isEmojiMode
+    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
     readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !root.isAnySpecialMode && root.searchingText === ""
     readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
     property bool showResults: searchingText != "" || isAnySpecialMode || alwaysListAppsMode || (searchingText === "" && LauncherSearch.results.length > 0)
@@ -301,8 +300,6 @@ Item {
             let bottomMargin = GlobalStates.searchConnectActive ? 16 : 10;
             if (root.showSuggestionsPanel)
                 return (suggestionsPanelLoader.item ? suggestionsPanelLoader.item.implicitHeight : (Config.options.search.baseHeight ?? 500)) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            if (root.isEmojiMode)
-                return (emojiPanelLoader.item ? emojiPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isBluetoothMode)
                 return (bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isClipboardMode)
@@ -1169,36 +1166,6 @@ Item {
                     property: "searchQuery"
                     value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.materialSymbols])
                     when: materialSymbolsPanelLoader.status === Loader.Ready
-                }
-            }
-
-            Loader {
-                id: emojiPanelLoader
-                active: root.isEmojiMode || opacity > 0.01
-                visible: opacity > 0.01
-                Layout.fillWidth: true
-                Layout.preferredHeight: item ? item.implicitHeight : 520
-                height: Layout.preferredHeight
-                source: "EmojiPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
-
-                opacity: root.isEmojiMode ? 1.0 : 0.0
-                transform: Translate {
-                    y: (1.0 - emojiPanelLoader.opacity) * 16
-                }
-                layer.enabled: opacity > 0.001 && opacity < 0.999
-                layer.effect: MultiEffect {
-                    blurEnabled: (1.0 - parent.opacity) > 0.001
-                    blurMax: 32.0
-                    blur: (1.0 - parent.opacity) * 0.5
-                }
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
                 }
             }
 
