@@ -183,6 +183,9 @@ Rectangle {
                 color: heroCardRoot.pillIconColor
             }
             StyledText {
+                renderType: Text.QtRendering
+                antialiasing: true
+                smooth: true
                 text: heroCardRoot.pillText
                 font {
                     weight: Font.Bold
@@ -222,6 +225,9 @@ Rectangle {
                     text: heroCardRoot.parsedTitle.ampm
                     visible: text !== ""
                     font.pixelSize: heroCardRoot.titleSize * 0.45
+                    renderType: Text.QtRendering
+                    antialiasing: true
+                    smooth: true
                     font.family: Appearance.font.family.title
                     font.weight: Font.Black
                     color: heroCardRoot.textColor
@@ -236,6 +242,9 @@ Rectangle {
                     text: heroCardRoot.parsedTitle.main
                     font.pixelSize: heroCardRoot.titleSize
                     font.family: Appearance.font.family.title
+                    renderType: Text.QtRendering
+                    antialiasing: true
+                    smooth: true
                     font.weight: Font.Black
                     color: heroCardRoot.textColor
                     anchors {
@@ -261,6 +270,9 @@ Rectangle {
             StyledText {
                 id: subtitleText
                 text: heroCardRoot.subtitle
+                renderType: Text.QtRendering
+                antialiasing: true
+                smooth: true
                 Layout.fillWidth: true
                 font {
                     pixelSize: heroCardRoot.subtitleSize

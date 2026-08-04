@@ -71,9 +71,11 @@ Rectangle {
         }
     }
 
-    // Clip content to card's rounded borders using OpacityMask
+    // Keep rounded clipping for the oversized clock artwork. Render the mask
+    // layer at 2x so the popup scale does not enlarge a low-resolution card.
     layer.enabled: true
     layer.smooth: true
+    layer.textureSize: Qt.size(Math.max(1, Math.ceil(width * 2)), Math.max(1, Math.ceil(height * 2)))
     layer.effect: OpacityMask {
         maskSource: Rectangle {
             width: root.width
