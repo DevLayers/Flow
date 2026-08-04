@@ -97,6 +97,17 @@ Singleton {
     // neighbours, so painting zone targets over it would only mislead.
     readonly property bool overlayVisible: root.enabled && root.dragging && root.dragKind === "move" && (root.options?.showOnDragStart ?? true)
 
+    // Hyprland announces monitors and workspaces, but not the space a layer
+    // surface reserves. A bar that changed side or height therefore leaves the
+    // cached monitor list describing the old usable area, and zones would be
+    // laid out against a bar that is no longer there. Re-reading the list at the
+    // start of a gesture is one cheap hyprctl call and lands long before a drop;
+    // a quick-tile is over sooner than that, so the press right after a bar
+    // change still uses the previous area and the one after it is correct.
+    function refreshMonitors() {
+        HyprlandData.updateMonitors();
+    }
+
     function monitorByName(name) {
         const monitors = HyprlandData.monitors ?? [];
         for (const candidate of monitors) {
@@ -206,6 +217,19 @@ Singleton {
         Hyprland.dispatch(`hl.dsp.window.${dispatcher}({${call}})`);
     }
 
+    // Position alone does not put a window on another screen. Hyprland draws a
+    // floating window wherever its coordinates say, but it keeps the workspace
+    // it came from, so a window dropped across the gap looks right until that
+    // workspace changes and takes it away. Handing it to the target monitor
+    // first is what makes a cross-monitor drop stick.
+    function moveToMonitor(address, name, currentId) {
+        if (!name) return;
+        const id = (currentId !== undefined && currentId !== null && currentId >= 0) ? currentId : HyprlandData.windowByAddress?.[address]?.monitor;
+        const current = root.monitorById(id)?.name ?? "";
+        if (!current || current === name) return;
+        root.dispatchWindow(address, "move", [`monitor = "${name}"`]);
+    }
+
     function applyZone(address, name, index, before, floating) {
         const rect = root.windowRectForZone(name, index);
         if (!rect) return;
@@ -221,7 +245,8 @@ Singleton {
                 y: before.y,
                 width: before.width,
                 height: before.height,
-                floating: before.floating ?? false
+                floating: before.floating ?? false,
+                monitor: root.monitorById(before.monitor)?.name ?? ""
             };
         }
 
@@ -232,6 +257,7 @@ Singleton {
 
         root.suppressDetection(500);
         root.setFloating(address, true, floating);
+        root.moveToMonitor(address, name, before?.monitor);
         // Resizing keeps the centre, so the move has to come second.
         root.dispatchWindow(address, "resize", [`x = ${rect.width}`, `y = ${rect.height}`]);
         root.dispatchWindow(address, "move", [`x = ${rect.x}`, `y = ${rect.y}`]);
@@ -244,6 +270,9 @@ Singleton {
         delete root.tileRecords[address];
 
         root.suppressDetection(500);
+        // Back to the screen it came from first, or a window tiled across the
+        // gap would be handed back to the layout tree of the wrong monitor.
+        root.moveToMonitor(address, record.monitor);
         if (!record.floating) {
             // Back into the layout tree, which decides the geometry itself.
             root.setFloating(address, false, floating);
@@ -293,7 +322,10 @@ Singleton {
         root.applyZone(address, root.monitorName, zoneIndex, before, floating);
     }
 
-    onDragStarted: root.pruneRecords()
+    onDragStarted: {
+        root.refreshMonitors();
+        root.pruneRecords();
+    }
     onDragEnded: (kind, zoneIndex) => {
         if (kind === "resize") root.handleResize(root.dragAddress, root.dragWindowAfter);
         else root.handleDrop(kind, zoneIndex);
@@ -438,6 +470,7 @@ Singleton {
         if (!root.keyboardEnabled || root.mode === "preview") return;
         const window = root.focusedWindow();
         if (!window) return;
+        root.refreshMonitors();
         const name = root.monitorById(window.monitor)?.name ?? "";
         const zones = root.zonesFor(name);
         if (!name || zones.length === 0) return;

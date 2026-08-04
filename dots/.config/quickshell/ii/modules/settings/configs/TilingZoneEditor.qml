@@ -58,7 +58,10 @@ Item {
         };
     }
 
+    // Tolerates a missing zone: the handle delegates keep their bindings for an
+    // instant after the selected zone is deleted or the list is replaced.
     function pixelRect(zone) {
+        if (!zone) return Qt.rect(0, 0, 0, 0);
         return Qt.rect(zone.x * canvas.width, zone.y * canvas.height, zone.w * canvas.width, zone.h * canvas.height);
     }
 
