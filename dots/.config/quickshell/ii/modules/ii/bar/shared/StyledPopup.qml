@@ -84,7 +84,7 @@ LazyLoader {
 
     property QtObject _timers: QtObject {
         property Timer grace: Timer {
-            interval: 100
+            interval: 100 + Math.max(0, (Config.options && Config.options.bar && Config.options.bar.tooltips && Config.options.bar.tooltips.closeDelay) ? Config.options.bar.tooltips.closeDelay : 0)
             onTriggered: {
                 root._popupHovered = false;
                 root._stickyActive = false;
@@ -95,6 +95,11 @@ LazyLoader {
     function _evaluateStickyState() {
         if (!stickyHover)
             return;
+
+        // Requirement 1: If close animation has started (_isClosing), hover on the popup body MUST NOT re-open it.
+        if (_isClosing && !_targetHovered) {
+            return;
+        }
 
         if (_targetHovered || _popupHovered) {
             _stickyActive = true;
@@ -110,6 +115,9 @@ LazyLoader {
                 root._clickActive = true;
             }
         } else {
+            if (_targetHovered && root._isClosing) {
+                root._isClosing = false;
+            }
             _evaluateStickyState();
         }
     }
