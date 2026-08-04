@@ -158,6 +158,13 @@ Singleton {
         "subPages": [],
         "aliases": ["Hyprland Rules", "Transparency", "Blur", "Gaps", "Borders"]
     }, {
+        "id": "tiling",
+        "name": "Window Tiling",
+        "icon": "view_quilt",
+        "component": "modules/settings/configs/TilingConfig.qml",
+        "subPages": [],
+        "aliases": ["Tiling assistant", "Snap", "Zones", "Quick tile", "Window snapping", "Tiling popup"]
+    }, {
         "id": "displays",
         "name": "Displays",
         "icon": "monitor",
@@ -277,7 +284,7 @@ Singleton {
     }, {
         "id": "desktopWindows",
         "name": "Desktop & Windows",
-        "pageIds": ["wallpaper", "workspaces", "overview", "windows", "lockScreen", "widgets"]
+        "pageIds": ["wallpaper", "workspaces", "overview", "windows", "tiling", "lockScreen", "widgets"]
     }, {
         "id": "tools",
         "name": "Tools",
