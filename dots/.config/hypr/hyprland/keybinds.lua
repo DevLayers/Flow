@@ -136,7 +136,7 @@ for i = 1, 4 do
 end
 --# Tiling assistant: walk the focused window through the tiling zones, leaving
 --# the move-in-direction above to Hyprland's own layout
---#/# bind = SUPER + ALT, ←/↑/→/↓,, # Quick-tile in direction (down to untile)
+--#/# bind = SUPER + ALT, ←/↑/→/↓,, # Quick-tile in direction (again at the edge to untile)
 for i = 1, 4 do
     local arrowkey = { "Left", "Right", "Up", "Down" }
     hl.bind("SUPER + ALT + " .. arrowkey[i], hl.dsp.global("quickshell:tilingTile" .. arrowkey[i]))

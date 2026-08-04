@@ -319,14 +319,17 @@ Singleton {
     }
 
     // Remembered zone first, geometry only as a fallback: see zoneMemory. A
-    // window back in the layout tree is in no zone whatever we remember, and
-    // float state - unlike geometry - does come with an event.
+    // window in the layout tree counts as being in no zone at all, even where
+    // its geometry happens to line up with one - the layout put it there, so a
+    // press towards that side should tile it rather than read as "already here,
+    // take me out". Float state, unlike geometry, does come with an event.
     function currentZone(address, name, sample) {
-        const remembered = root.zoneMemory[address];
-        if (remembered) {
-            if (!(sample?.floating ?? false)) delete root.zoneMemory[address];
-            else if (remembered.monitor === name) return remembered.index;
+        if (!(sample?.floating ?? false)) {
+            delete root.zoneMemory[address];
+            return -1;
         }
+        const remembered = root.zoneMemory[address];
+        if (remembered && remembered.monitor === name) return remembered.index;
         return root.sampleZoneIndex(name, sample);
     }
 
@@ -347,11 +350,11 @@ Singleton {
         const target = (from < 0) ? Tiling.edgeZoneIndex(zones, direction) : Tiling.resolveDirection(zones, from, direction);
         if (target < 0) return;
 
-        // Nowhere further that way. Down is the way back out: once a window is
-        // at the bottom of the layout there is nothing below to want instead.
+        // Nowhere further that way, on any of the four sides: a window already
+        // against the edge it is being pushed towards has nothing else to want
+        // in that direction, so the press means "out of the layout" instead.
         if (target === from) {
-            if (Tiling.normalizeDirection(direction) === "down" && (root.options?.restoreOnUntile ?? true))
-                root.restoreWindow(address, sample.floating);
+            if (root.options?.restoreOnUntile ?? true) root.restoreWindow(address, sample.floating);
             return;
         }
         root.applyZone(address, name, target, sample, sample.floating);
