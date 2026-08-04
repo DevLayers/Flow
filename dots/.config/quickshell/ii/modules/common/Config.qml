@@ -2257,6 +2257,8 @@ Singleton {
             property JsonObject regionSelector: JsonObject {
                 property bool showOnlyOnFocusedMonitor: false
                 property bool enableOverlay: true
+                // Shows a system notification when a screenshot is copied to the clipboard (default off).
+                property bool copyNotification: false
                 property JsonObject targetRegions: JsonObject {
                     property bool windows: true
                     property bool layers: true

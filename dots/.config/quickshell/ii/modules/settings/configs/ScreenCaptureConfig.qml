@@ -169,6 +169,20 @@ ContentPage {
 
         }
 
+        ConfigSwitch {
+            buttonIcon: "notifications"
+            text: Translation.tr("Show copy notifications")
+            checked: Config.options.regionSelector.copyNotification
+            onCheckedChanged: {
+                Config.options.regionSelector.copyNotification = checked;
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Shows a system notification when a screenshot is copied to the clipboard.")
+            }
+
+        }
+
         ContentSubsectionLabel {
             text: Translation.tr("Screenshot path")
         }
