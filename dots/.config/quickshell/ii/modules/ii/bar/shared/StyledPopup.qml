@@ -26,11 +26,13 @@ LazyLoader {
         var maxAllowedHeight = screenHeight - barSpace - Appearance.sizes.elevationMargin * 2 - 40;
         var maxAllowedWidth = (screenWidth > 0 ? screenWidth : 1920) * 0.9;
         
-        var scaledHeight = (root.contentItem.implicitHeight + 20) * baseScale;
-        var scaledWidth = (root.contentItem.implicitWidth + 20) * baseScale;
-        
         var userMultiplier = Config.options?.bar?.tooltips?.popupScaleMultiplier ?? 1.0;
         var scale = baseScale * userMultiplier;
+        // Measure with the actual candidate scale. Using baseScale here made
+        // the size guard ignore the user multiplier and allowed oversized popup
+        // surfaces to exceed the monitor's safe bounds.
+        var scaledHeight = (root.contentItem.implicitHeight + 20) * scale;
+        var scaledWidth = (root.contentItem.implicitWidth + 20) * scale;
         if (scaledHeight > maxAllowedHeight) {
             scale = Math.min(scale, Math.max(0.5, maxAllowedHeight / (root.contentItem.implicitHeight + 20)));
         }
@@ -363,13 +365,9 @@ LazyLoader {
                 y: popupWindow.slideY * (1.0 - popupWindow.animProgress)
             }
 
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                blurEnabled: true
-                blurMax: 128.0
-                blur: (1.0 - popupWindow.animProgress) * 1.0
-            }
-
+            // Keep the popup vector/text content on the scene graph. Do not put
+            // it in an FBO: scaling an FBO pixelates text, Material Symbols,
+            // and thin shapes on monitors with fractional scale.
             StyledRectangularShadow {
                 target: popupBackground
                 visible: !Config.options.appearance.transparency.popups

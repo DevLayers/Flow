@@ -7,7 +7,9 @@ StyledText {
     property real fill: 0
     property real truncatedFill: fill.toFixed(1) // Reduce memory consumption spikes from constant font remapping
 
-    renderType: Text.NativeRendering
+    // Keep glyphs vector-rendered through fractional popup scaling. Native
+    // rendering creates a bitmap at the pre-transform size.
+    renderType: Text.QtRendering
     antialiasing: true
     smooth: true
     horizontalAlignment: Text.AlignHCenter
