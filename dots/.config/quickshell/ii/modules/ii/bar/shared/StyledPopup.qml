@@ -21,13 +21,23 @@ LazyLoader {
     readonly property real layoutScale: {
         if (screenHeight <= 0 || !root.contentItem)
             return 1.0;
+        var baseScale = Math.max(0.75, Math.min(1.5, screenHeight / 1080.0));
         var barSpace = Config.options.bar.vertical ? 0 : Appearance.sizes.barHeight;
         var maxAllowedHeight = screenHeight - barSpace - Appearance.sizes.elevationMargin * 2 - 40;
-        var naturalHeight = root.contentItem.implicitHeight + 20;
-        if (naturalHeight > maxAllowedHeight) {
-            return Math.max(0.6, maxAllowedHeight / naturalHeight);
+        var maxAllowedWidth = (screenWidth > 0 ? screenWidth : 1920) * 0.9;
+        
+        var scaledHeight = (root.contentItem.implicitHeight + 20) * baseScale;
+        var scaledWidth = (root.contentItem.implicitWidth + 20) * baseScale;
+        
+        var userMultiplier = Config.options?.bar?.tooltips?.popupScaleMultiplier ?? 1.0;
+        var scale = baseScale * userMultiplier;
+        if (scaledHeight > maxAllowedHeight) {
+            scale = Math.min(scale, Math.max(0.5, maxAllowedHeight / (root.contentItem.implicitHeight + 20)));
         }
-        return 1.0;
+        if (scaledWidth > maxAllowedWidth) {
+            scale = Math.min(scale, Math.max(0.5, maxAllowedWidth / (root.contentItem.implicitWidth + 20)));
+        }
+        return scale;
     }
     property real popupBackgroundMargin: 0
     property int popupRadius: Appearance.rounding.large

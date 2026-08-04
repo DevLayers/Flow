@@ -693,6 +693,20 @@ Item {
                 }
             }
 
+            ConfigSlider {
+                buttonIcon: "aspect_ratio"
+                text: Translation.tr("Popup scale multiplier")
+                value: Config.options.bar.tooltips.popupScaleMultiplier
+                usePercentTooltip: false
+                tooltipContent: `${(Config.options.bar.tooltips.popupScaleMultiplier ?? 1.0).toFixed(2)}x`
+                from: 0.5
+                to: 2.0
+                stepSize: 0.05
+                onValueChanged: {
+                    Config.options.bar.tooltips.popupScaleMultiplier = Math.round(value * 100) / 100;
+                }
+            }
+
             ConfigSwitch {
                 buttonIcon: "colorize"
                 text: Translation.tr("Enable color picker popup")

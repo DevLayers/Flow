@@ -1900,6 +1900,7 @@ Singleton {
                 property JsonObject tooltips: JsonObject {
                     property bool clickToShow: false
                     property bool compactPopups: false
+                    property real popupScaleMultiplier: 1.0
                     property bool enableColorPickerPopup: true
                     property bool enableBluetoothConnectionPopup: true
                     property bool enableKeyboardLayoutTransitionPopup: true
