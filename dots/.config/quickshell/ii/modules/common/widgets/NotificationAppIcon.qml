@@ -68,7 +68,7 @@ MaterialShape { // App icon
                 fillMode: Image.PreserveAspectCrop
                 cache: true
                 antialiasing: true
-                asynchronous: true
+                asynchronous: !source.toString().startsWith("image://icon/")
             }
             Loader {
                 id: notifImageAppIconLoader
