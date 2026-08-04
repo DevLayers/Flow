@@ -11,7 +11,8 @@ pragma ComponentBehavior: Bound
  * script's motion heuristic covers titlebar drags that never touch a keybind.
  *
  * On drop the window is floated and given the zone's exact geometry, and the
- * geometry it had before is kept so dragging it back out can undo that.
+ * geometry it had before is kept so dragging it back out can undo that. The
+ * same thing happens without the mouse through the quick-tile shortcuts below.
  */
 
 import qs
@@ -145,6 +146,14 @@ Singleton {
     // position the user put it in themselves.
     property var tileRecords: ({})
 
+    // Which zone each window was last put in. Hyprland emits no event when a
+    // floating window is moved or resized, so the shared window list keeps
+    // reporting the previous geometry indefinitely after a quick-tile - it is
+    // only refreshed by events like a float toggle. Remembering the zone is
+    // therefore the only way a second arrow press can resolve from where the
+    // window actually is.
+    property var zoneMemory: ({})
+
     // Zone rects as windows rather than as boxes: Hyprland positions and sizes a
     // window inside its border, so the border comes off every side.
     function windowRectForZone(name, index) {
@@ -202,6 +211,11 @@ Singleton {
             };
         }
 
+        root.zoneMemory[address] = {
+            monitor: name,
+            index: index
+        };
+
         root.suppressDetection(500);
         root.setFloating(address, true, floating);
         // Resizing keeps the centre, so the move has to come second.
@@ -211,6 +225,7 @@ Singleton {
 
     function restoreWindow(address, floating) {
         const record = root.tileRecords[address];
+        delete root.zoneMemory[address];
         if (!record) return;
         delete root.tileRecords[address];
 
@@ -235,6 +250,9 @@ Singleton {
         for (const address in root.tileRecords) {
             if (!known[address]) delete root.tileRecords[address];
         }
+        for (const address in root.zoneMemory) {
+            if (!known[address]) delete root.zoneMemory[address];
+        }
     }
 
     function handleDrop(kind, zoneIndex) {
@@ -250,6 +268,7 @@ Singleton {
         // Nothing under the cursor: the window was dragged out of its zone, so
         // put it back the way it was found.
         if (zoneIndex < 0) {
+            delete root.zoneMemory[address];
             if (root.options?.restoreOnUntile ?? true) root.restoreWindow(address, floating);
             return;
         }
@@ -262,6 +281,81 @@ Singleton {
 
     onDragStarted: root.pruneRecords()
     onDragEnded: (kind, zoneIndex) => root.handleDrop(kind, zoneIndex)
+
+    // ------------------------------------------------------------ keyboard
+
+    readonly property bool keyboardEnabled: root.enabled && (root.options?.keyboardQuickTile ?? true)
+
+    // Hyprland numbers windows by how recently they were focused, so the one at
+    // zero is the focused one. Taking it out of the shared list beats asking
+    // hyprctl for the active window: no extra process, and the geometry that
+    // comes with it is the same snapshot the zone helpers work from.
+    function focusedWindow() {
+        const windows = HyprlandData.windowList ?? [];
+        for (const window of windows) {
+            if (window.focusHistoryID === 0) return window;
+        }
+        return null;
+    }
+
+    function monitorById(id) {
+        const monitors = HyprlandData.monitors ?? [];
+        for (const candidate of monitors) {
+            if (candidate.id === id) return candidate;
+        }
+        return null;
+    }
+
+    // A raw hyprctl client in the shape the zone helpers expect.
+    function windowSample(window) {
+        if (!window) return null;
+        return {
+            x: window.at?.[0] ?? 0,
+            y: window.at?.[1] ?? 0,
+            width: window.size?.[0] ?? 0,
+            height: window.size?.[1] ?? 0,
+            floating: window.floating ?? false
+        };
+    }
+
+    // Remembered zone first, geometry only as a fallback: see zoneMemory. A
+    // window back in the layout tree is in no zone whatever we remember, and
+    // float state - unlike geometry - does come with an event.
+    function currentZone(address, name, sample) {
+        const remembered = root.zoneMemory[address];
+        if (remembered) {
+            if (!(sample?.floating ?? false)) delete root.zoneMemory[address];
+            else if (remembered.monitor === name) return remembered.index;
+        }
+        return root.sampleZoneIndex(name, sample);
+    }
+
+    // Tiles the focused window one zone over. Unlike a drag, this is explicit
+    // enough to act on a window living in the layout tree even in hybrid mode,
+    // which has no preview of its own to fall back on.
+    function quickTile(direction) {
+        if (!root.keyboardEnabled || root.mode === "preview") return;
+        const window = root.focusedWindow();
+        if (!window) return;
+        const name = root.monitorById(window.monitor)?.name ?? "";
+        const zones = root.zonesFor(name);
+        if (!name || zones.length === 0) return;
+
+        const address = window.address;
+        const sample = root.windowSample(window);
+        const from = root.currentZone(address, name, sample);
+        const target = (from < 0) ? Tiling.edgeZoneIndex(zones, direction) : Tiling.resolveDirection(zones, from, direction);
+        if (target < 0) return;
+
+        // Nowhere further that way. Down is the way back out: once a window is
+        // at the bottom of the layout there is nothing below to want instead.
+        if (target === from) {
+            if (Tiling.normalizeDirection(direction) === "down" && (root.options?.restoreOnUntile ?? true))
+                root.restoreWindow(address, sample.floating);
+            return;
+        }
+        root.applyZone(address, name, target, sample, sample.floating);
+    }
 
     // Lets a window we move ourselves pass without the heuristic mistaking it
     // for the user dragging it.
@@ -412,6 +506,25 @@ Singleton {
                     kind: "resize",
                     state: "up"
                 })
+            }
+        }
+    }
+
+    // Quick-tile without the mouse. Bound to SUPER + ALT + arrow, which leaves
+    // SUPER + SHIFT + arrow to Hyprland's own move-in-direction.
+    Loader {
+        active: root.keyboardEnabled
+
+        // Instantiator rather than a Repeater inside an Item: a shortcut is not
+        // an item and has nothing to be laid out in.
+        sourceComponent: Instantiator {
+            model: ["Left", "Right", "Up", "Down"]
+
+            delegate: GlobalShortcut {
+                required property string modelData
+                name: `tilingTile${modelData}`
+                description: `Quick-tiles the focused window ${modelData.toLowerCase()}`
+                onPressed: root.quickTile(modelData.toLowerCase())
             }
         }
     }

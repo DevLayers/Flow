@@ -2596,6 +2596,9 @@ Singleton {
                 // Restore pre-tile geometry and float state when a tiled window
                 // is dragged back out of its zone.
                 property bool restoreOnUntile: true
+                // Super + Alt + arrow moves the focused window zone by zone,
+                // and Super + Alt + Down untiles it once it is at the bottom.
+                property bool keyboardQuickTile: true
 
                 property JsonObject detection: JsonObject {
                     // Companion Hyprland binds on the drag/resize mouse combos.
