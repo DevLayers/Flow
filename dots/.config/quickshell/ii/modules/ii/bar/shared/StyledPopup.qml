@@ -70,7 +70,9 @@ LazyLoader {
     property bool _clickActive: false
     property bool _isClosing: false
 
-    readonly property bool _computedActive: (Config.options.bar.tooltips.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : _targetHovered)
+    readonly property bool _computedActive: (Config.options.bar.tooltips.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced))
+
+    property bool _openDebounced: false
 
     active: _computedActive || _isClosing
 
@@ -83,6 +85,15 @@ LazyLoader {
     }
 
     property QtObject _timers: QtObject {
+        property Timer openDebounce: Timer {
+            interval: 60
+            repeat: false
+            onTriggered: {
+                if (root._targetHovered) {
+                    root._openDebounced = true;
+                }
+            }
+        }
         property Timer grace: Timer {
             interval: 100 + Math.max(0, (Config.options && Config.options.bar && Config.options.bar.tooltips && Config.options.bar.tooltips.closeDelay) ? Config.options.bar.tooltips.closeDelay : 0)
             onTriggered: {
@@ -96,8 +107,8 @@ LazyLoader {
         if (!stickyHover)
             return;
 
-        // Requirement 1: If close animation has started (_isClosing), hover on the popup body MUST NOT re-open it.
-        if (_isClosing && !_targetHovered) {
+        // Requirement 1: If close animation has started (_isClosing), hover on the popup body OR target MUST NOT re-open it until fully closed.
+        if (_isClosing) {
             return;
         }
 
@@ -110,14 +121,18 @@ LazyLoader {
     }
 
     on_TargetHoveredChanged: {
+        if (_targetHovered && !_isClosing) {
+            _timers.openDebounce.restart();
+        } else {
+            _timers.openDebounce.stop();
+            _openDebounced = false;
+        }
+
         if (Config.options.bar.tooltips.clickToShow) {
-            if (_targetHovered && !root._clickActive) {
+            if (_targetHovered && !root._clickActive && !_isClosing) {
                 root._clickActive = true;
             }
         } else {
-            if (_targetHovered && root._isClosing) {
-                root._isClosing = false;
-            }
             _evaluateStickyState();
         }
     }
@@ -126,6 +141,8 @@ LazyLoader {
         if (!active) {
             _popupHovered = false;
             _isClosing = false;
+            _openDebounced = false;
+            _timers.openDebounce.stop();
             _timers.grace.stop();
         }
     }
@@ -308,7 +325,6 @@ LazyLoader {
                 } else if (root._computedActive) {
                     closeAnim.stop();
                     destroyTimer.stop();
-                    popupWindow.animProgress = 0.0;
                     openAnimSeq.start();
                 }
             }
