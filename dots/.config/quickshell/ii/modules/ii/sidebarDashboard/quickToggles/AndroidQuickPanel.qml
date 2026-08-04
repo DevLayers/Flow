@@ -73,7 +73,17 @@ AbstractQuickPanel {
             rawPages = [cfg.pages];
         }
 
-        return rawPages.map(page => (page || []).filter(toggle => toggle && root.isToggleVisible(toggle.type)));
+        return rawPages.map(page => (page || [])
+            .filter(toggle => toggle && root.isToggleVisible(toggle.type))
+            .map(toggle => {
+                var t = Object.assign({}, toggle);
+                var w = t.sizeW ?? t.size ?? 1;
+                t.sizeW = Math.max(1, Math.min(w, root.columns));
+                t.sizeH = Math.max(1, t.sizeH ?? 1);
+                t.size = t.sizeW;
+                return t;
+            })
+        );
     }
 
     // Current page toggles
@@ -108,47 +118,27 @@ AbstractQuickPanel {
         });
     }
     function getGridRowsNeeded(togglesList) {
-        var grid = [];
-        var rowsNeeded = 0;
+        if (!togglesList || togglesList.length === 0)
+            return 0;
+        var cols = Math.max(1, columns);
+        var row = 0;
+        var col = 0;
+        var maxRow = 0;
         for (var i = 0; i < togglesList.length; i++) {
             if (!togglesList[i])
                 continue;
             var t = togglesList[i];
-            var w = t.sizeW ?? t.size ?? 1;
+            var w = Math.min(t.sizeW ?? t.size ?? 1, cols);
             var h = t.sizeH ?? 1;
-            w = Math.min(w, columns); // sanitize
 
-            var startX = -1, startY = -1;
-            for (var y = 0; startX === -1; y++) {
-                for (var x = 0; x <= columns - w; x++) {
-                    var conflict = false;
-                    for (var dy = 0; dy < h; dy++) {
-                        for (var dx = 0; dx < w; dx++) {
-                            if (grid[y + dy] && grid[y + dy][x + dx]) {
-                                conflict = true;
-                                break;
-                            }
-                        }
-                        if (conflict)
-                            break;
-                    }
-                    if (!conflict) {
-                        startX = x;
-                        startY = y;
-                        break;
-                    }
-                }
+            if (col > 0 && col + w > cols) {
+                row++;
+                col = 0;
             }
-            for (var dY = 0; dY < h; dY++) {
-                if (!grid[startY + dY])
-                    grid[startY + dY] = [];
-                for (var dX = 0; dX < w; dX++) {
-                    grid[startY + dY][startX + dX] = true;
-                }
-            }
-            rowsNeeded = Math.max(rowsNeeded, startY + h);
+            col += w;
+            maxRow = Math.max(maxRow, row + h);
         }
-        return rowsNeeded;
+        return maxRow;
     }
 
 
@@ -180,6 +170,7 @@ AbstractQuickPanel {
     }
 
     function resolveLayoutConflicts(pageIndex, gridColumns) {
+        var cols = Math.max(1, gridColumns);
         mutatePages(function (pages) {
             if (pageIndex < 0 || pageIndex >= pages.length)
                 return;
@@ -187,70 +178,15 @@ AbstractQuickPanel {
             if (!page || page.length === 0)
                 return;
 
-            // Sort by current position to maintain order
-            var sorted = [];
             for (var i = 0; i < page.length; i++) {
-                sorted.push({
-                    idx: i,
-                    type: page[i].type,
-                    sizeW: page[i].sizeW ?? page[i].size ?? 1,
-                    sizeH: page[i].sizeH ?? 1
-                });
-            }
-
-            // Simple grid placement simulation
-            var grid = [];
-            var newOrder = [];
-
-            for (var j = 0; j < sorted.length; j++) {
-                var item = sorted[j];
-                var placed = false;
-
-                for (var row = 0; row < 20 && !placed; row++) {
-                    for (var col = 0; col <= gridColumns - item.sizeW && !placed; col++) {
-                        var fits = true;
-
-                        for (var h = 0; h < item.sizeH && fits; h++) {
-                            for (var w = 0; w < item.sizeW && fits; w++) {
-                                var cell = (row + h) * gridColumns + (col + w);
-                                if (grid.indexOf(cell) !== -1) {
-                                    fits = false;
-                                }
-                            }
-                        }
-
-                        if (fits) {
-                            for (var h2 = 0; h2 < item.sizeH; h2++) {
-                                for (var w2 = 0; w2 < item.sizeW; w2++) {
-                                    var cell2 = (row + h2) * gridColumns + (col + w2);
-                                    grid.push(cell2);
-                                }
-                            }
-                            newOrder.push(item);
-                            placed = true;
-                        }
-                    }
-                }
-
-                if (!placed) {
-                    // Fallback: place at next available single cell
-                    newOrder.push({
-                        type: item.type,
-                        sizeW: 1,
-                        sizeH: 1
-                    });
-                }
-            }
-
-            // Rebuild page array
-            page.length = 0;
-            for (var k = 0; k < newOrder.length; k++) {
-                page.push({
-                    type: newOrder[k].type,
-                    sizeW: newOrder[k].sizeW,
-                    sizeH: newOrder[k].sizeH,
-                    size: newOrder[k].sizeW
-                });
+                if (!page[i]) continue;
+                var w = page[i].sizeW ?? page[i].size ?? 1;
+                var h = page[i].sizeH ?? 1;
+                w = Math.max(1, Math.min(w, cols));
+                h = Math.max(1, h);
+                page[i].sizeW = w;
+                page[i].sizeH = h;
+                page[i].size = w;
             }
         });
     }
