@@ -20,12 +20,17 @@ Scope {
             color: "transparent"
             visible: true
             screen: {
-                const focused = Quickshell.Hyprland?.focusedMonitor?.name
-                if (focused) {
-                    const s = Quickshell.screens.find(s => s.name === focused)
-                    if (s) return s
+                const target = GlobalStates.screenshotOverlayMonitor;
+                if (target) {
+                    const captured = Quickshell.screens.find(s => s.name === target);
+                    if (captured) return captured;
                 }
-                return Quickshell.screens[0]
+                const focused = Quickshell.Hyprland?.focusedMonitor?.name;
+                if (focused) {
+                    const s = Quickshell.screens.find(s => s.name === focused);
+                    if (s) return s;
+                }
+                return Quickshell.screens[0];
             }
 
             WlrLayershell.namespace: "quickshell:screenshotOverlay"
@@ -59,6 +64,7 @@ Scope {
                     }
                     GlobalStates.screenshotOverlayOpen = false
                     GlobalStates.screenshotOverlayImagePath = ""
+                    GlobalStates.screenshotOverlayMonitor = ""
                 }
             }
         }

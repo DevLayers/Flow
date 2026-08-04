@@ -90,6 +90,8 @@ Singleton {
     property string videoEditorPath: ""
     property bool screenshotOverlayOpen: false
     property string screenshotOverlayImagePath: ""
+    // Monitor that owns the current screenshot preview overlay.
+    property string screenshotOverlayMonitor: ""
     property real screenshotOverlayRegionX: 0
     property real screenshotOverlayRegionY: 0
     property real screenshotOverlayRegionW: 0

@@ -394,6 +394,7 @@ PanelWindow {
             }
             // Trigger screenshot overlay
             if (overlayEnabled) {
+                GlobalStates.screenshotOverlayMonitor = root.screen?.name ?? ""
                 GlobalStates.screenshotOverlayImagePath = tempPath;
                 GlobalStates.screenshotOverlayRegionX = 0;
                 GlobalStates.screenshotOverlayRegionY = 0;
@@ -722,6 +723,7 @@ PanelWindow {
         }
         // Trigger screenshot overlay
         if (Config.options.regionSelector.enableOverlay ?? true) {
+            GlobalStates.screenshotOverlayMonitor = root.screen?.name ?? ""
             GlobalStates.screenshotOverlayImagePath = root.screenshotPath;
             GlobalStates.screenshotOverlayRegionX = root.regionX * root.monitorScale;
             GlobalStates.screenshotOverlayRegionY = root.regionY * root.monitorScale;
