@@ -1,6 +1,5 @@
 -- put former exec-once commands inside the func and former exec commands outside
-hl.on("hyprland.start", function ()
-
+hl.on("hyprland.start", function()
     -- Bar, wallpaper
     hl.exec_cmd("$HOME/.config/hypr/hyprland/scripts/start_geoclue_agent.sh")
     hl.exec_cmd("qs -c $qsConfig")
@@ -12,13 +11,22 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("dbus-update-activation-environment --all")
     hl.exec_cmd("sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP") -- Some fix idk
 
-    -- Audio
-    hl.exec_cmd("easyeffects --hide-window --service-mode")
+    -- Audio (wait for Quickshell's tray watcher so EasyEffects registers its tray icon successfully)
+    hl.exec_cmd(
+        "until busctl --user status org.kde.StatusNotifierWatcher >/dev/null 2>&1; do sleep 0.2; done; easyeffects --hide-window --service-mode")
 
     -- Clipboard: history
-    --hl.exec_cmd("wl-paste --watch cliphist store")
-    hl.exec_cmd("wl-paste --type text --watch bash -c 'cliphist store && qs -c $qsConfig ipc call cliphistService update'")
-    hl.exec_cmd("wl-paste --type image --watch bash -c 'cliphist store && qs -c $qsConfig ipc call cliphistService update'")
+    -- Kill existing instances
+    hl.exec_cmd("killall wl-paste wl-clip-persist 2>/dev/null")
+    -- Start wl-clip-persist to retain clipboard contents after apps exit (with delay for Wayland display readiness)
+    hl.exec_cmd("sleep 1.5 && wl-clip-persist --clipboard both")
+    -- Start cliphist watchers with quickshell integration
+    hl.exec_cmd(
+        "sleep 1.5 && wl-paste --type text --watch bash -c 'cliphist store && qs -c $qsConfig ipc call cliphistService update'")
+    hl.exec_cmd(
+        "sleep 1.5 && wl-paste --type image --watch bash -c 'cliphist store && qs -c $qsConfig ipc call cliphistService update'")
+    hl.exec_cmd(
+        "sleep 1.5 && wl-paste --type text/uri-list --watch bash -c 'cliphist store && qs -c $qsConfig ipc call cliphistService update'")
 
     -- Cursor
     hl.exec_cmd("hyprctl setcursor Bibata-Modern-Classic 24")
