@@ -606,7 +606,6 @@ Singleton {
                 property string defaultProvider: "networkmanager"
                 property string recentProvider: "networkmanager"
                 property string defaultLocation: ""
-                property bool showInQuickToggles: true
                 property bool disconnectOnDisable: false
                 property bool killSwitch: false
                 property bool blockLan: false
@@ -623,7 +622,6 @@ Singleton {
                 property list<string> advertiseRoutes: []
                 property bool advertiseExitNode: false
                 property bool showPeers: true
-                property bool showInQuickToggles: true
                 property bool stopDaemonWhenDisabled: false
                 property bool enableDiagnostics: true
             }

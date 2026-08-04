@@ -6,15 +6,17 @@ import qs
 import QtQuick
 
 QuickToggleButton {
-    visible: (Config.options?.vpn?.enabled ?? true) && (Config.options?.vpn?.showInQuickToggles ?? true)
+    visible: true
     enabled: (Config.options?.vpn?.enabled ?? true) && VpnService.available
-    toggled: VpnService.displayActive
+    toggled: (Config.options?.vpn?.enabled ?? true) && VpnService.displayActive
     buttonIcon: VpnService.displayActive ? "key" : (VpnService.errorMessage ? "error" : "vpn_key")
     onClicked: {
         if (Config.options?.vpn?.enabled ?? true)
             VpnService.toggleVpn()
     }
     StyledToolTip {
-        text: Translation.tr("VPN: %1 | Right-click for options").arg(VpnService.statusText)
+        text: (Config.options?.vpn?.enabled ?? true)
+            ? Translation.tr("VPN: %1 | Right-click for options").arg(VpnService.statusText)
+            : Translation.tr("VPN is disabled in Privacy settings")
     }
 }

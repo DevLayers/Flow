@@ -8,8 +8,9 @@ QuickToggleModel {
 
     available: (Config.options?.vpn?.enabled ?? true) && VpnService.available
     toggled: (Config.options?.vpn?.enabled ?? true) && VpnService.displayActive
-    statusText: (Config.options?.vpn?.enabled ?? true) ? VpnService.statusText : Translation.tr("Disabled")
-    tooltipText: Translation.tr("VPN Connection: %1 | Right-click to manage profiles").arg(statusText)
+    tooltipText: (Config.options?.vpn?.enabled ?? true)
+        ? Translation.tr("VPN Connection: %1 | Right-click to manage profiles").arg(statusText)
+        : Translation.tr("VPN is disabled in Privacy settings")
     icon: VpnService.displayActive ? "key" : (VpnService.errorMessage ? "error" : "vpn_key")
     hasMenu: true
 

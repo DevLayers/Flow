@@ -6,15 +6,17 @@ import qs
 import QtQuick
 
 QuickToggleButton {
-    visible: (Config.options?.tailscale?.enabled ?? true) && (Config.options?.tailscale?.showInQuickToggles ?? true)
+    visible: true
     enabled: (Config.options?.tailscale?.enabled ?? true) && TailscaleService.available
-    toggled: TailscaleService.active
+    toggled: (Config.options?.tailscale?.enabled ?? true) && TailscaleService.active
     buttonIcon: TailscaleService.active ? "hub" : (TailscaleService.backendState === "NeedsLogin" ? "key" : "vpn_lock")
     onClicked: {
         if (Config.options?.tailscale?.enabled ?? true)
             TailscaleService.toggleTailscale()
     }
     StyledToolTip {
-        text: Translation.tr("Tailscale: %1 | Right-click for options").arg(TailscaleService.statusText)
+        text: (Config.options?.tailscale?.enabled ?? true)
+            ? Translation.tr("Tailscale: %1 | Right-click for options").arg(TailscaleService.statusText)
+            : Translation.tr("Tailscale is disabled in Privacy settings")
     }
 }

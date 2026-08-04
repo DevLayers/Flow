@@ -21,7 +21,6 @@ Singleton {
     property bool loading: false
     property bool enabled: Config.options?.tailscale?.enabled ?? true
     property bool autoConnect: Config.options?.tailscale?.autoConnect ?? false
-    property bool showInQuickToggles: Config.options?.tailscale?.showInQuickToggles ?? true
     property bool stopDaemonWhenDisabled: Config.options?.tailscale?.stopDaemonWhenDisabled ?? true
     property list<var> peers: []
     property list<var> exitNodes: []

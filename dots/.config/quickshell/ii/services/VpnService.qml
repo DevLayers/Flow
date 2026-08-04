@@ -20,7 +20,6 @@ Singleton {
     readonly property bool displayActive: root.operationPending ? root.pendingTargetActive : root.active
     property bool enabled: Config.options?.vpn?.enabled ?? true
     property string recentProvider: Config.options?.vpn?.recentProvider ?? "networkmanager"
-    property bool showInQuickToggles: Config.options?.vpn?.showInQuickToggles ?? true
     property bool autoConnect: Config.options?.vpn?.autoConnect ?? false
     property string defaultProvider: Config.options?.vpn?.defaultProvider ?? Config.options?.vpn?.backend ?? "networkmanager"
     property string defaultLocation: Config.options?.vpn?.defaultLocation ?? ""
