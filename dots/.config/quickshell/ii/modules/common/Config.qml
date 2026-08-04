@@ -2160,7 +2160,7 @@ Singleton {
                 property int timeout: 7000
                 property string position: "top_right"
                 property int zoomPercent: 100 // 50-200, step 10
-                property bool autoDndFullscreen: false
+                property bool autoDndFullscreen: true
                 property JsonObject monitor: JsonObject {
                     property bool enable: false
                     property string name: "" // Name of the monitor to show notifications on, like "eDP-1". Find out with 'hyprctl monitors' command

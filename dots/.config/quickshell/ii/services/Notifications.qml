@@ -84,8 +84,6 @@ Singleton {
 
     property bool silent: false
     readonly property bool focusedWindowFullscreen: {
-        if (!Config?.options?.notifications?.autoDndFullscreen) return false;
-
         // 1. Direct ToplevelManager check
         if (ToplevelManager.activeToplevel?.wayland?.fullscreen) return true;
 
@@ -109,7 +107,7 @@ Singleton {
 
         return false;
     }
-    readonly property bool autoSilent: (Config?.options.notifications.autoDndFullscreen ?? false) && focusedWindowFullscreen
+    readonly property bool autoSilent: (Config?.options.notifications.autoDndFullscreen ?? true) && focusedWindowFullscreen
     readonly property bool effectiveSilent: silent || autoSilent
     property int unread: 0
     property var filePath: Directories.notificationsPath
