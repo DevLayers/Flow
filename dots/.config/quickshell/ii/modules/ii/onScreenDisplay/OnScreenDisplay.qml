@@ -284,7 +284,7 @@ Scope {
 
     Loader {
         id: osdLoader
-        active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !(Config.ready && Config.options.bar.floatingNotch.enable)
+        active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
 
         sourceComponent: PanelWindow {
             id: osdRoot

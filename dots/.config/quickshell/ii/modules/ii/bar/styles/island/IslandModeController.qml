@@ -17,7 +17,7 @@ QtObject {
     }
 
     readonly property bool isOsdOpenHere: {
-        if (!GlobalStates.osdVolumeOpen)
+        if (!GlobalStates.osdVolumeOpen || (Config.ready && Config.options.osd.style === "minimalist"))
             return false;
         const monitor = Hyprland.focusedMonitor;
         const name = monitor ? monitor.name : "";
