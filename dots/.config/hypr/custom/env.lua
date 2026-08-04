@@ -14,4 +14,5 @@ hl.env("HYPRCURSOR_THEME", "Vimix-cursors")
 hl.env("HYPRCURSOR_SIZE", "24")
 
 -- QT Platform Theme
-hl.env("QT_QPA_PLATFORMTHEME", "qt5ct")
+-- hl.env("QT_QPA_PLATFORMTHEME", "qt5ct") -- Must be "kde" for Dolphin and KDE Matugen colors
+
