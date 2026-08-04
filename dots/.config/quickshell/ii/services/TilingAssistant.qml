@@ -13,6 +13,9 @@ pragma ComponentBehavior: Bound
  * On drop the window is floated and given the zone's exact geometry, and the
  * geometry it had before is kept so dragging it back out can undo that. The
  * same thing happens without the mouse through the quick-tile shortcuts below.
+ *
+ * Resizing a tiled window past its zone drags the divider it shares with its
+ * neighbours instead of overlapping them, and they follow.
  */
 
 import qs
@@ -38,6 +41,7 @@ Singleton {
     property string dragAddress: ""
     property var dragWindow: null      // geometry captured when the drag started
     property var dragWindowBefore: null // geometry from just before it started, for restoring later
+    property var dragWindowAfter: null  // geometry as it ended, for co-resize
     property int cursorX: 0
     property int cursorY: 0
 
@@ -101,8 +105,18 @@ Singleton {
         return null;
     }
 
+    // Dividers the user has dragged, per monitor name. Runtime only: a resize
+    // says where this session's windows go, and rewriting the saved layout from
+    // under a mouse drag would be a much bigger promise than the gesture makes.
+    property var zoneOverrides: ({})
+
+    // Editing the layout in settings is the more deliberate statement of the
+    // two, so it drops whatever the dividers were dragged to.
+    readonly property string layoutKey: `${JSON.stringify(Array.from(root.options?.monitors ?? []))}|${root.options?.defaultPreset ?? ""}`
+    onLayoutKeyChanged: root.zoneOverrides = ({})
+
     function zonesFor(name) {
-        return Tiling.zonesForMonitor(root.options?.monitors, name, root.options?.defaultPreset ?? "kde");
+        return root.zoneOverrides[name] ?? Tiling.zonesForMonitor(root.options?.monitors, name, root.options?.defaultPreset ?? "kde");
     }
 
     function gapsFor(name) {
@@ -280,7 +294,91 @@ Singleton {
     }
 
     onDragStarted: root.pruneRecords()
-    onDragEnded: (kind, zoneIndex) => root.handleDrop(kind, zoneIndex)
+    onDragEnded: (kind, zoneIndex) => {
+        if (kind === "resize") root.handleResize(root.dragAddress, root.dragWindowAfter);
+        else root.handleDrop(kind, zoneIndex);
+    }
+
+    // ----------------------------------------------------------- co-resize
+
+    readonly property bool coResizeEnabled: root.enabled && root.mode !== "preview" && (root.options?.coResize?.enable ?? true)
+
+    // Every window the assistant put on this monitor moves with the divider,
+    // not just the one under the mouse - that is what a shared edge means. The
+    // resized one is in here too, so a drag that overshot snaps back onto it.
+    function reapplyZones(name) {
+        const known = HyprlandData.windowByAddress ?? {};
+        const alive = Object.keys(known).length > 0;
+        for (const address in root.zoneMemory) {
+            const zone = root.zoneMemory[address];
+            if (zone.monitor !== name || (alive && !known[address])) continue;
+            root.applyZone(address, name, zone.index, null, true);
+        }
+    }
+
+    // Widening a tiled window past its zone drags the divider it shares with its
+    // neighbours, rather than leaving it overlapping them. Only windows the
+    // assistant tiled take part: one the user sized by hand is in no zone, so
+    // there is no edge to share and nothing else moves.
+    function handleResize(address, sample) {
+        if (!root.coResizeEnabled || !address || !sample) return;
+        const zone = root.zoneMemory[address];
+        const monitor = zone ? root.monitorByName(zone.monitor) : null;
+        if (!monitor) return;
+
+        let zones = root.zonesFor(zone.monitor);
+        if (zone.index < 0 || zone.index >= zones.length) return;
+        const usable = Tiling.usableArea(monitor);
+        const gaps = root.gapsFor(zone.monitor);
+        const before = Tiling.zoneRect(zones[zone.index], usable, gaps);
+        // Undoing the border inset puts the window back in the space the zone
+        // boxes are measured in.
+        const after = Tiling.insetRect(Tiling.makeRect(sample.x, sample.y, sample.width, sample.height), -root.hyprBorderSize);
+
+        // A corner drag moves two edges at once, so every side is considered
+        // rather than just the one that moved furthest.
+        const tolerance = root.options?.coResize?.edgeTolerancePx ?? 8;
+        const sides = [
+            {
+                side: "left",
+                delta: after.x - before.x,
+                pixel: after.x
+            },
+            {
+                side: "right",
+                delta: (after.x + after.width) - (before.x + before.width),
+                pixel: after.x + after.width
+            },
+            {
+                side: "top",
+                delta: after.y - before.y,
+                pixel: after.y
+            },
+            {
+                side: "bottom",
+                delta: (after.y + after.height) - (before.y + before.height),
+                pixel: after.y + after.height
+            }
+        ];
+
+        let moved = false;
+        for (const candidate of sides) {
+            if (Math.abs(candidate.delta) <= tolerance) continue;
+            const fraction = Tiling.edgeFraction(usable, gaps, candidate.side, candidate.pixel);
+            const updated = Tiling.moveEdge(zones, zone.index, candidate.side, fraction);
+            if (!updated) continue;
+            zones = updated;
+            moved = true;
+        }
+        if (!moved) return;
+
+        // A new object rather than a mutated one: the zone bindings only notice
+        // the property being reassigned.
+        const overrides = Object.assign({}, root.zoneOverrides);
+        overrides[zone.monitor] = zones;
+        root.zoneOverrides = overrides;
+        root.reapplyZones(zone.monitor);
+    }
 
     // ------------------------------------------------------------ keyboard
 
@@ -415,6 +513,7 @@ Singleton {
             root.cursorX = event.x;
             root.cursorY = event.y;
             const zone = root.hoveredZone;
+            root.dragWindowAfter = event.window ?? null;
             root.dragging = false;
             root.dragEnded(event.kind, zone);
             root.dragKind = "";

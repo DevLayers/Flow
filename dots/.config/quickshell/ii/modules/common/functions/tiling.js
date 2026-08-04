@@ -404,6 +404,118 @@ function edgeAt(rect, px, py, tolerancePx) {
     return "";
 }
 
+// Inverse of zoneRect for one edge: the fraction a divider sits at, given the
+// pixel a window ends at. The gutter is drawn inside the zone, so the divider
+// itself is half a gutter further out than the window edge.
+function edgeFraction(usable, gaps, side, pixel) {
+    var g = normalizeGaps(gaps);
+    var horizontal = (side === "left" || side === "right");
+    var origin = horizontal ? usable.x : usable.y;
+    var span = horizontal ? usable.width : usable.height;
+    if (!(span > 0)) return NaN;
+    var near = (side === "left" || side === "top");
+    return (pixel + (near ? -g.inner : g.inner) - origin) / span;
+}
+
+// How far an edge may travel before the zone behind it collapses.
+function edgeBounds(zone, side, min) {
+    var z = normalizeZone(zone);
+    switch (side) {
+    case "left":
+        return {
+            lo: 0,
+            hi: z.x + z.w - min
+        };
+    case "right":
+        return {
+            lo: z.x + min,
+            hi: 1
+        };
+    case "top":
+        return {
+            lo: 0,
+            hi: z.y + z.h - min
+        };
+    case "bottom":
+        return {
+            lo: z.y + min,
+            hi: 1
+        };
+    }
+    return {
+        lo: 0,
+        hi: 1
+    };
+}
+
+// The same zone with one edge moved and the opposite one pinned.
+function zoneWithEdge(zone, side, value) {
+    var z = normalizeZone(zone);
+    var out = {
+        x: z.x,
+        y: z.y,
+        w: z.w,
+        h: z.h
+    };
+    switch (side) {
+    case "left":
+        out.x = value;
+        out.w = (z.x + z.w) - value;
+        break;
+    case "right":
+        out.w = value - z.x;
+        break;
+    case "top":
+        out.y = value;
+        out.h = (z.y + z.h) - value;
+        break;
+    case "bottom":
+        out.h = value - z.y;
+        break;
+    }
+    if (z.label) out.label = z.label;
+    return normalizeZone(out);
+}
+
+// Moves a divider to a new fraction, taking every zone attached to it along:
+// zones sharing that edge follow with theirs, zones facing it across the line
+// follow with their opposite edge, so the layout never tears open a hole. The
+// move is clamped so nothing on either side collapses. A line with nothing on
+// the far side is the monitor boundary rather than a divider and does not move
+// at all - that resize is a window growing on its own. Returns a new list, or
+// null when nothing moved.
+function moveEdge(zones, index, side, fraction, minSize) {
+    var min = minSize === undefined ? 0.05 : minSize;
+    var list = zones ? Array.from(zones) : [];
+    var group = edgeGroup(list, index, side);
+    if (isNaN(group.line) || group.trailing.length === 0) return null;
+
+    var facing = OPPOSITE[side];
+    var lo = 0;
+    var hi = 1;
+    var i;
+    var bounds;
+    for (i = 0; i < group.leading.length; i++) {
+        bounds = edgeBounds(list[group.leading[i]], side, min);
+        lo = Math.max(lo, bounds.lo);
+        hi = Math.min(hi, bounds.hi);
+    }
+    for (i = 0; i < group.trailing.length; i++) {
+        bounds = edgeBounds(list[group.trailing[i]], facing, min);
+        lo = Math.max(lo, bounds.lo);
+        hi = Math.min(hi, bounds.hi);
+    }
+    if (lo > hi) return null;
+
+    var target = clamp(fraction, lo, hi);
+    if (isNaN(target) || Math.abs(target - group.line) <= EPS) return null;
+
+    var out = list.slice();
+    for (i = 0; i < group.leading.length; i++) out[group.leading[i]] = zoneWithEdge(list[group.leading[i]], side, target);
+    for (i = 0; i < group.trailing.length; i++) out[group.trailing[i]] = zoneWithEdge(list[group.trailing[i]], facing, target);
+    return out;
+}
+
 // ---------------------------------------------------------------------- presets
 
 // Derived from where the zone sits rather than stored, so hand-drawn zones from

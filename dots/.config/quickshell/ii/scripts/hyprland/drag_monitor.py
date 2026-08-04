@@ -22,7 +22,8 @@ Output is newline-delimited JSON on stdout:
                 "monitor": 0, "workspace": 1},
      "before": {...}}   # same shape, sampled just before the drag began
     {"event": "dragMove", "x": 100, "y": 200}
-    {"event": "dragEnd", "kind": "move", "source": "motion", "x": 100, "y": 200}
+    {"event": "dragEnd", "kind": "move", "source": "motion", "x": 100, "y": 200,
+     "window": {...}}   # geometry the gesture ended with, for co-resize
 
 Input is newline-delimited JSON on stdin:
 
@@ -221,12 +222,19 @@ class Monitor:
         if not self.dragging:
             return
         cursor = self.cursor or (0, 0)
+        # Geometry as the gesture ends, which is what tells the shell which edge
+        # a resize moved. Sampled fresh: the polled one is a frame behind, and a
+        # keybind drag never polls the window at all.
+        window = window_sample(self.ctl)
+        if self.window and (not window or window["address"] != self.window["address"]):
+            window = self.window
         emit({
             "event": "dragEnd",
             "kind": self.kind,
             "source": self.source,
             "x": cursor[0],
             "y": cursor[1],
+            "window": window,
         })
         self.dragging = False
         self.kind = ""
