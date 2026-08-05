@@ -55,6 +55,18 @@ Toolbar {
     IconToolbarButton {
         implicitWidth: height
         colText: Appearance.colors.colOnPrimary
+            visible: !wallpaperSelectorContent.browserMode && !modelData?.fileIsDir
+    onClicked: {
+        wallpaperSelectorContent.moveToTrashFile(modelData);
+    }
+    text: "delete"
+    StyledToolTip {
+        text: Translation.tr("Move to trash")
+    }
+}
+IconToolbarButton {
+    implicitWidth: height
+    colText: Appearance.colors.colOnPrimary
         visible: wallpaperSelectorContent.browserMode
         onClicked: {
             const targetPath = Config.options.wallpapers.paths.download; 
