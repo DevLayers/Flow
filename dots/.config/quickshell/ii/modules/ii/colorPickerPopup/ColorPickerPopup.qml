@@ -14,6 +14,9 @@ Scope {
 
     readonly property bool notifIsLeft: (Config.options.notifications.position ?? "top_right").endsWith("left")
     readonly property bool notifIsRight: (Config.options.notifications.position ?? "top_right").endsWith("right")
+    readonly property bool sidebarOccludesPopup:
+        (root.notifIsLeft && GlobalStates.effectiveLeftOpen)
+        || (root.notifIsRight && GlobalStates.effectiveRightOpen)
 
     // Native Process avoids qs ipc call round-trip from external shell
     Process {
@@ -50,19 +53,6 @@ Scope {
         }
     }
 
-    Connections {
-        target: GlobalStates
-        function onDashboardPanelOpenChanged() {
-            if (GlobalStates.dashboardPanelOpen) {
-                GlobalStates.colorPickerPopupOpen = false;
-            }
-        }
-        function onPoliciesPanelOpenChanged() {
-            if (GlobalStates.policiesPanelOpen) {
-                GlobalStates.colorPickerPopupOpen = false;
-            }
-        }
-    }
 
     LazyLoader {
         id: popupLoader
@@ -71,7 +61,7 @@ Scope {
         component: PanelWindow {
             id: popupWindow
             color: "transparent"
-            visible: Quickshell.screens.length > 0 && true
+            visible: Quickshell.screens.length > 0 && !root.sidebarOccludesPopup
             screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
 
             WlrLayershell.namespace: "quickshell:colorPickerPopup"

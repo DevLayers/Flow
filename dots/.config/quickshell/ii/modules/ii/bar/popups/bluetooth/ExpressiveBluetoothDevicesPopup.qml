@@ -11,6 +11,13 @@ import Quickshell
 StyledPopup {
     id: root
     stickyHover: true
+    readonly property bool notifIsLeft: (Config.options.notifications.position ?? "top_right").endsWith("left")
+    readonly property bool notifIsRight: (Config.options.notifications.position ?? "top_right").endsWith("right")
+    readonly property bool sidebarOccludesPopup:
+        (root.notifIsLeft && GlobalStates.effectiveLeftOpen)
+        || (root.notifIsRight && GlobalStates.effectiveRightOpen)
+
+    active: !sidebarOccludesPopup && (_computedActive || _isClosing)
 
     readonly property bool hasDevices: BluetoothStatus.connectedDevices.length > 0
 

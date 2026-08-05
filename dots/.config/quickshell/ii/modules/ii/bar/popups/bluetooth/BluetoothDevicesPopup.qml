@@ -9,22 +9,12 @@ import QtQuick.Layouts
 StyledPopup {
     id: root
     stickyHover: true
+    readonly property bool sidebarOccludesPopup:
+        (root.notifIsLeft && GlobalStates.effectiveLeftOpen)
+        || (root.notifIsRight && GlobalStates.effectiveRightOpen)
 
-    Connections {
-        target: GlobalStates
-        function onDashboardPanelOpenChanged() {
-            if (GlobalStates.dashboardPanelOpen) {
-                root._stickyActive = false;
-                root._clickActive = false;
-            }
-        }
-        function onPoliciesPanelOpenChanged() {
-            if (GlobalStates.policiesPanelOpen) {
-                root._stickyActive = false;
-                root._clickActive = false;
-            }
-        }
-    }
+    active: !sidebarOccludesPopup && (_computedActive || _isClosing)
+
 
     readonly property bool notifIsLeft: (Config.options.notifications.position ?? "top_right").endsWith("left")
     readonly property bool notifIsRight: (Config.options.notifications.position ?? "top_right").endsWith("right")
