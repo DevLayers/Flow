@@ -137,6 +137,29 @@ MouseArea {
         }
     }
 
+    Process {
+    id: trashProc
+    onExited: (exitCode, exitStatus) => {
+        wallpaperSelectorContent.moreOptionsModelData = null;
+        if (!wallpaperSelectorContent.favMode && !wallpaperSelectorContent.browserMode) {
+            Wallpapers.reloadCurrentDirectory();
+        }
+    }
+}
+
+function moveToTrashFile(modelData) {
+    if (!modelData || modelData.fileIsDir) return;
+    const path = FileUtils.trimFileProtocol(modelData.filePath);
+    const favs = Array.from(Persistent.states.wallpaper.favourites);
+    const idx = favs.indexOf(path);
+    if (idx !== -1) {
+        favs.splice(idx, 1);
+        Persistent.states.wallpaper.favourites = favs;
+    }
+    trashProc.exec(["bash", "-c", `gio trash -- '${StringUtils.shellSingleQuoteEscape(path)}'`]);
+    wallpaperSelectorContent.moreOptionsModelData = null;
+}
+   
     function updateColorCache() {
         console.log("[Wallpapers] Updating color cache for directory", Wallpapers.effectiveDirectory)
         colorCacheProc.running = true
