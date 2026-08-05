@@ -1,0 +1,4 @@
+module qs.modules.ii.tilingAssistant
+
+TilingOverlay 1.0 TilingOverlay.qml
+ZoneIndicator 1.0 ZoneIndicator.qml

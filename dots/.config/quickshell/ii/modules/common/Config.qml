@@ -2583,6 +2583,74 @@ Singleton {
                 property string model: "SoundcoreA3028"
             }
 
+            // Window tiling assistant: zone overlay while a window is dragged,
+            // quick-tile on drop. Zones are stored as fractions of the usable
+            // monitor area, so a layout survives resolution and scale changes.
+            property JsonObject tiling: JsonObject {
+                property bool enable: false
+                // "quickTile": float the window and set exact geometry on drop
+                // "preview": only draw the overlay, never touch the window
+                // "hybrid": quick-tile floating windows, preview-only for
+                //           windows currently in the Hyprland layout tree
+                property string mode: "quickTile"
+                // Off means the overlay only appears for keyboard quick-tile.
+                property bool showOnDragStart: true
+                // Restore pre-tile geometry and float state when a tiled window
+                // is dragged back out of its zone.
+                property bool restoreOnUntile: true
+                // Super + Alt + arrow moves the focused window zone by zone, and
+                // untiles it when it is already against that side of the screen.
+                property bool keyboardQuickTile: true
+
+                property JsonObject detection: JsonObject {
+                    // Companion Hyprland binds on the drag/resize mouse combos.
+                    property bool useKeybinds: true
+                    // Cursor-vs-window motion tracking. Needed for client-side
+                    // titlebar drags and window-border resizes, which fire no bind.
+                    property bool useMotionHeuristic: true
+                    property int idleHz: 30
+                    // Rate the idle polling falls back to while the pointer is
+                    // still. No drag can start without moving it, so watching
+                    // closely then is wasted work.
+                    property int idleFloorHz: 5
+                    property int activeHz: 90
+                    // How closely the window has to follow the cursor to count
+                    // as a move rather than incidental motion.
+                    property int trackingTolerancePx: 2
+                }
+
+                property JsonObject coResize: JsonObject {
+                    property bool enable: true
+                    // How near a shared edge a resize has to land to pull its
+                    // neighbours along.
+                    property int edgeTolerancePx: 8
+                }
+
+                property JsonObject overlay: JsonObject {
+                    property real zoneOpacity: 0.28
+                    property real hoveredOpacity: 0.55
+                    property int cornerRadius: 12
+                    property bool showLabels: true
+                    property int fadeDuration: 150
+                }
+
+                property JsonObject gaps: JsonObject {
+                    // Read gaps_in / gaps_out from Hyprland instead of the
+                    // values below.
+                    property bool followHyprland: true
+                    property int outer: 8
+                    property int inner: 4
+                }
+
+                // Preset id used by any monitor without an entry below.
+                property string defaultPreset: "kde"
+                // Per-monitor layouts. Each entry looks like:
+                //   { name: "DP-1", preset: "custom", gapsOverride: null,
+                //     zones: [{ x, y, w, h, label }] }
+                // where x/y/w/h are 0..1 fractions of the usable area.
+                property list<var> monitors: []
+            }
+
             property JsonObject time: JsonObject {
                 // https://doc.qt.io/qt-6/qtime.html#toString
                 property string format: "hh:mm"

@@ -117,6 +117,11 @@ hl.bind("SUPER + SHIFT + ALT + mouse:273", hl.dsp.exec_cmd(hyprScripts .. "/ai/p
 hl.bind("SUPER + mouse:272", hl.dsp.window.drag(), { mouse = true, description = "Window: Move" })
 hl.bind("SUPER + mouse:274", hl.dsp.window.drag(), { mouse = true })
 hl.bind("SUPER + mouse:273", hl.dsp.window.resize(), { mouse = true, description = "Window: Resize" })
+--# Tiling assistant: report the drag to the shell alongside Hyprland's own move
+--# and resize, so the zone overlay knows a window is being dragged
+hl.bind("SUPER + mouse:272", hl.dsp.global("quickshell:tilingDragMove"))   -- # [hidden]
+hl.bind("SUPER + mouse:274", hl.dsp.global("quickshell:tilingDragMove"))   -- # [hidden]
+hl.bind("SUPER + mouse:273", hl.dsp.global("quickshell:tilingDragResize")) -- # [hidden]
 --#/# bind = SUPER, ←/↑/→/↓,, # Focus in direction
 for i = 1, 6 do
     local arrowkey = { "Left", "Right", "Up", "Down", "BracketLeft", "BracketRight" }
@@ -128,6 +133,13 @@ for i = 1, 4 do
     local arrowkey = { "Left", "Right", "Up", "Down" }
     local focusdir = { "l", "r", "u", "d" }
     hl.bind("SUPER + SHIFT + " .. arrowkey[i], hl.dsp.window.move({ direction = focusdir[i] }))
+end
+--# Tiling assistant: walk the focused window through the tiling zones, leaving
+--# the move-in-direction above to Hyprland's own layout
+--#/# bind = SUPER + ALT, ←/↑/→/↓,, # Quick-tile in direction (again at the edge to untile)
+for i = 1, 4 do
+    local arrowkey = { "Left", "Right", "Up", "Down" }
+    hl.bind("SUPER + ALT + " .. arrowkey[i], hl.dsp.global("quickshell:tilingTile" .. arrowkey[i]))
 end
 
 -- hl.bind("ALT + F4",
