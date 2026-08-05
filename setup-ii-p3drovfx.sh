@@ -1579,6 +1579,32 @@ remove_cli() {
 # The pipeline
 #══════════════════════════════════════════════════════════════════════════════
 
+backup_hyprland_config() {
+    local dest="$XDG_CONFIG_HOME/hypr"
+    [[ -d "$dest" ]] || return 0
+
+    local stamp backup_dir entry
+    stamp="$(date +%Y%m%d_%H%M%S)"
+    backup_dir="$dest/hyprland_backup_$stamp"
+    mkdir -p "$backup_dir" || {
+        ui_warn "Could not create Hyprland backup directory: $(tilde "$backup_dir")"
+        return 1
+    }
+
+    # Keep the backup inside ~/.config/hypr without recursively copying older
+    # backups into the new one.
+    while IFS= read -r -d '' entry; do
+        cp -a "$entry" "$backup_dir/" || {
+            ui_warn "Could not back up Hyprland config entry: $(basename "$entry")"
+            return 1
+        }
+    done < <(find "$dest" -mindepth 1 -maxdepth 1 -print0 2>/dev/null | while IFS= read -r -d '' entry; do
+        [[ "$(basename "$entry")" == hyprland_backup_* ]] || printf '%s\0' "$entry"
+    done)
+
+    ui_note "Hyprland backup: $(tilde "$backup_dir")"
+}
+
 # install_hypr_config <repo_root>
 #
 # Overlays the fork's dots/.config/hypr onto ~/.config/hypr. An overlay and not
@@ -1615,6 +1641,7 @@ install_hypr_config() {
             return 0
         }
     fi
+    backup_hyprland_config || return 1
 
     ui_step "Hyprland"
     local backup_dir="" added=0 replaced=0 seeded=0 kept=0 same=0
