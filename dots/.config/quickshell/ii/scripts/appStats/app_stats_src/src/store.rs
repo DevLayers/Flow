@@ -93,6 +93,72 @@ pub struct AppRec {
     pub hours: BTreeMap<u32, Bucket>,
 }
 
+/// The battery over one hour, kept beside the apps rather than among them: it
+/// belongs to no application, and unlike every other row here it is a level as
+/// well as an amount — a curve needs to know where the hour started and ended,
+/// not only how much moved.
+#[derive(Default, Clone)]
+pub struct BatBucket {
+    /// Tenths of a percent, so the curve is not a staircase of whole percents.
+    pub start_deci: u64,
+    pub end_deci: u64,
+    pub min_deci: u64,
+    pub max_deci: u64,
+    /// Energy out of and into the pack, microwatt-hours.
+    pub out_uwh: u64,
+    pub in_uwh: u64,
+    /// Time on battery, taking charge, and plugged in without charging.
+    pub off_ac_ms: u64,
+    pub charge_ms: u64,
+    pub ac_ms: u64,
+    seen: bool,
+}
+
+impl BatBucket {
+    pub fn observe(&mut self, deci: u64) {
+        if !self.seen {
+            self.start_deci = deci;
+            self.min_deci = deci;
+            self.max_deci = deci;
+            self.seen = true;
+        }
+        self.end_deci = deci;
+        self.min_deci = self.min_deci.min(deci);
+        self.max_deci = self.max_deci.max(deci);
+    }
+
+    fn to_tuple(&self) -> Vec<u64> {
+        vec![
+            self.start_deci,
+            self.end_deci,
+            self.min_deci,
+            self.max_deci,
+            (self.out_uwh + 500) / 1000,
+            (self.in_uwh + 500) / 1000,
+            (self.off_ac_ms + 500) / 1000,
+            (self.charge_ms + 500) / 1000,
+            (self.ac_ms + 500) / 1000,
+        ]
+    }
+
+    fn from_tuple(t: &[u64]) -> BatBucket {
+        let g = |i: usize| t.get(i).copied().unwrap_or(0);
+        BatBucket {
+            start_deci: g(0),
+            end_deci: g(1),
+            min_deci: g(2),
+            max_deci: g(3),
+            out_uwh: g(4) * 1000,
+            in_uwh: g(5) * 1000,
+            off_ac_ms: g(6) * 1000,
+            charge_ms: g(7) * 1000,
+            ac_ms: g(8) * 1000,
+            // An hour on disk was written from samples, so its opening level stands.
+            seen: true,
+        }
+    }
+}
+
 /// What `retention_days` means.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Retention {
@@ -120,6 +186,8 @@ pub struct Store {
     date: String,
     gmtoff: i64,
     apps: BTreeMap<String, AppRec>,
+    bat: BTreeMap<u32, BatBucket>,
+    bat_full_mwh: u64,
     dirty: bool,
 }
 
@@ -173,6 +241,8 @@ impl Store {
             date,
             gmtoff,
             apps: BTreeMap::new(),
+            bat: BTreeMap::new(),
+            bat_full_mwh: 0,
             dirty: false,
         };
         store.load();
@@ -195,6 +265,22 @@ impl Store {
         if json.get("v").and_then(|v| v.as_u64()) != Some(SCHEMA) {
             return;
         }
+
+        // Written by a sampler that knew about batteries, or absent because it did
+        // not. Either is a readable file — the tuple layout is untouched, so the
+        // section is additive and a day without one is simply a day with no curve.
+        if let Some(bat) = json.get("bat") {
+            self.bat_full_mwh = bat.get("full").and_then(|v| v.as_u64()).unwrap_or(0);
+            if let Some(hours) = bat.get("h").and_then(|h| h.as_object()) {
+                for (hour, tuple) in hours {
+                    let Ok(hour) = hour.parse::<u32>() else { continue };
+                    let Some(arr) = tuple.as_array() else { continue };
+                    let vals: Vec<u64> = arr.iter().map(|v| v.as_u64().unwrap_or(0)).collect();
+                    self.bat.insert(hour, BatBucket::from_tuple(&vals));
+                }
+            }
+        }
+
         let Some(apps) = json.get("apps").and_then(|a| a.as_object()) else {
             return;
         };
@@ -227,17 +313,24 @@ impl Store {
         }
     }
 
-    /// Bucket for `epoch_ms`, rolling the day file over first if the date changed.
-    pub fn bucket(&mut self, epoch_ms: i64, key: &str, exe: &str, headless: bool) -> &mut Bucket {
+    /// Hour of `epoch_ms`, rolling the day file over first if the date changed.
+    fn roll(&mut self, epoch_ms: i64) -> u32 {
         let (date, hour, gmtoff) = local(epoch_ms / 1000);
         if date != self.date {
             self.flush();
             self.apps.clear();
+            self.bat.clear();
             self.date = date;
             self.gmtoff = gmtoff;
             self.prune();
         }
         self.dirty = true;
+        hour
+    }
+
+    /// Bucket for `epoch_ms`, rolling the day file over first if the date changed.
+    pub fn bucket(&mut self, epoch_ms: i64, key: &str, exe: &str, headless: bool) -> &mut Bucket {
+        let hour = self.roll(epoch_ms);
 
         let rec = self.apps.entry(key.to_string()).or_insert_with(|| AppRec {
             exe: exe.to_string(),
@@ -250,6 +343,16 @@ impl Store {
             rec.exe = exe.to_string();
         }
         rec.hours.entry(hour).or_default()
+    }
+
+    /// The battery's bucket for `epoch_ms`.
+    pub fn bat_bucket(&mut self, epoch_ms: i64) -> &mut BatBucket {
+        let hour = self.roll(epoch_ms);
+        self.bat.entry(hour).or_default()
+    }
+
+    pub fn set_bat_full(&mut self, mwh: u64) {
+        self.bat_full_mwh = mwh;
     }
 
     /// End of the local hour containing `epoch_ms`, so a span can be split across
@@ -285,10 +388,29 @@ impl Store {
             })
             .collect();
 
+        let mut bat_hours: serde_json::Map<String, serde_json::Value> = self
+            .bat
+            .iter()
+            .map(|(h, b)| (h.to_string(), serde_json::json!(b.to_tuple())))
+            .collect();
+        let mut bat_full = self.bat_full_mwh;
+
         // Merge existing hours on disk so historical hours of the day are never erased or lost
         let path = self.path_for(&self.date);
         if let Ok(raw) = fs::read_to_string(&path) {
             if let Ok(disk_json) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if let Some(disk_bat) = disk_json.get("bat") {
+                    if bat_full == 0 {
+                        bat_full = disk_bat.get("full").and_then(|v| v.as_u64()).unwrap_or(0);
+                    }
+                    if let Some(disk_h) = disk_bat.get("h").and_then(|h| h.as_object()) {
+                        for (hour_str, tuple) in disk_h {
+                            if !bat_hours.contains_key(hour_str) {
+                                bat_hours.insert(hour_str.clone(), tuple.clone());
+                            }
+                        }
+                    }
+                }
                 if let Some(disk_apps) = disk_json.get("apps").and_then(|a| a.as_object()) {
                     for (app_key, disk_rec) in disk_apps {
                         let Some(disk_h) = disk_rec.get("h").and_then(|h| h.as_object()) else { continue };
@@ -317,12 +439,21 @@ impl Store {
             }
         }
 
-        let doc = serde_json::json!({
+        let mut doc = serde_json::json!({
             "v": SCHEMA,
             "date": self.date,
             "tz": offset_string(self.gmtoff),
             "apps": apps_map,
         });
+
+        // Left out entirely on a machine with no battery, so its files stay byte
+        // for byte what a sampler without any of this would have written.
+        if !bat_hours.is_empty() || bat_full > 0 {
+            doc["bat"] = serde_json::json!({
+                "full": bat_full,
+                "h": bat_hours,
+            });
+        }
 
         // Write-then-rename: a reader must never see a half-written day.
         let tmp = path.with_extension("json.tmp");

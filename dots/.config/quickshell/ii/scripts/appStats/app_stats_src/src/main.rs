@@ -18,6 +18,7 @@
 //!   {"t":"sample",...}    per-interval deltas for every tracked app
 //!   {"t":"flush",...}     a day file was written
 
+mod battery;
 mod energy;
 mod gpu;
 mod hypr;
@@ -162,6 +163,7 @@ struct Tracker {
     args: Args,
     store: store::Store,
     energy: energy::Reader,
+    battery: battery::Reader,
     apps: HashMap<String, AppState>,
     known_classes: HashSet<String>,
     /// Whether the window layout has been read at least once. Until it has, an
@@ -175,6 +177,12 @@ struct Tracker {
     locked: bool,
     idle: bool,
     dpms_off: bool,
+
+    /// Mains and charge state as of the last tick. The accrual loop credits time
+    /// against these, so a cable pulled between two ticks moves at most one
+    /// interval of time into the wrong one of the three.
+    bat_on_ac: bool,
+    bat_charging: bool,
 
     last_accrual_ms: i64,
     last_tick_ms: i64,
@@ -203,11 +211,13 @@ impl Tracker {
             args.retention_mode,
         );
         let energy = energy::Reader::new(&args.energy_source);
+        let battery = battery::Reader::new();
         let now = store::now_ms();
 
         Tracker {
             store,
             energy,
+            battery,
             apps: HashMap::new(),
             known_classes: HashSet::new(),
             seen_windows: false,
@@ -215,6 +225,8 @@ impl Tracker {
             locked: false,
             idle: false,
             dpms_off: false,
+            bat_on_ac: false,
+            bat_charging: false,
             last_accrual_ms: now,
             last_tick_ms: now,
             last_flush_ms: now,
@@ -267,6 +279,8 @@ impl Tracker {
             return;
         }
         let blocked = self.blocked();
+        let has_battery = self.battery.present();
+        let (on_ac, charging) = (self.bat_on_ac, self.bat_charging);
         let mut t = self.last_accrual_ms;
         self.last_accrual_ms = now_ms;
 
@@ -312,6 +326,21 @@ impl Tracker {
                 b.fg_ms += dt;
             } else {
                 b.bg_ms += dt;
+            }
+
+            // Time on battery is counted here for the same reason as screen time:
+            // an hour boundary in the middle of a span belongs to both hours, and a
+            // suspend belongs to neither, which the early return above already took
+            // care of.
+            if has_battery {
+                let b = store.bat_bucket(t);
+                if !on_ac {
+                    b.off_ac_ms += dt;
+                } else if charging {
+                    b.charge_ms += dt;
+                } else {
+                    b.ac_ms += dt;
+                }
             }
             t = end;
         }
@@ -423,6 +452,31 @@ impl Tracker {
         let dt_ms = if resumed { 0 } else { raw_dt as u64 };
         self.last_tick_ms = now;
         self.accrue(now);
+
+        // Read after accruing, so the span that just closed was credited against the
+        // state it actually ran under rather than the one this reading introduces.
+        //
+        // Nothing is integrated across a resume, for the same reason the RAPL delta
+        // is dropped there: the pack really did empty overnight, but no hour on
+        // record is the one it emptied in — `dt_ms` is zero and the draw falls out.
+        // The level itself is still taken, so the curve steps down where the machine
+        // slept rather than pretending it did not.
+        if let Some(sample) = self.battery.sample() {
+            self.bat_on_ac = sample.on_ac;
+            self.bat_charging = sample.charging;
+            let full_mwh = self.battery.full_mwh;
+            // Microwatts over milliseconds, into microwatt-hours.
+            let uwh = sample.uw.saturating_mul(dt_ms) / 3_600_000;
+
+            let b = self.store.bat_bucket(now);
+            b.observe(sample.deci_pct);
+            if sample.charging {
+                b.in_uwh += uwh;
+            } else if !sample.on_ac {
+                b.out_uwh += uwh;
+            }
+            self.store.set_bat_full(full_mwh);
+        }
 
         let clients = self.clients.clone();
         let mut client_of_pid: HashMap<u32, usize> = HashMap::new();

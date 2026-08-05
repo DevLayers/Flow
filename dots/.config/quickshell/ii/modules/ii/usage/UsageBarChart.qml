@@ -33,6 +33,13 @@ Item {
     property color emptyColor: Appearance.colors.colLayer2
     property real barSpacing: 2
 
+    /// Top of the axis, for values that sit on a known scale rather than however
+    /// tall the tallest bucket happens to be. 0 leaves it to the data.
+    property real axisCeiling: 0
+    /// Colour of one bar, when the bars mean different things from each other.
+    /// Left null, every bar is `barColor`.
+    property var colorAt: null
+
     readonly property real maxValue: {
         let max = 0;
         if (root.values) {
@@ -59,6 +66,7 @@ Item {
     }
 
     readonly property real axisMax: {
+        if (root.axisCeiling > 0) return root.axisCeiling;
         if (root.maxValue <= 0) return 1;
         const step = root.niceStep(root.maxValue / 2);
         const max = Math.ceil(root.maxValue / step) * step;
@@ -218,7 +226,8 @@ Item {
                                 if (barArea.containsMouse) {
                                     return (bucket.isHighlighted || bucket.isFocused) ? Appearance.colors.colSecondaryHover : Appearance.colors.colPrimaryHover;
                                 }
-                                return (bucket.isHighlighted || bucket.isFocused) ? Appearance.colors.colSecondary : root.barColor;
+                                if (bucket.isHighlighted || bucket.isFocused) return Appearance.colors.colSecondary;
+                                return root.colorAt ? root.colorAt(bucket.index) : root.barColor;
                             }
 
                             readonly property real barOpacity: {

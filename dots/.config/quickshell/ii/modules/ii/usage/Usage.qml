@@ -26,6 +26,9 @@ Scope {
     // them by name, and a reordered tab row must not silently change what opens.
     property string granularity: "day"
     property string metricKey: "fg"
+    /// Which half of the overlay is on screen: "apps" or "battery". The battery
+    /// view exists only on a machine that has one.
+    property string view: "apps"
     property int periodOffset: 0
     property string selectedKey: ""
     // What the next opening starts on, written only by `resolveView`. Kept apart
@@ -33,6 +36,7 @@ Scope {
     // would otherwise overwrite the view being asked for before it is applied.
     property string pendingGranularity: "day"
     property string pendingMetric: "fg"
+    property string pendingView: "apps"
 
     /// Which view a fresh opening starts on. Always the current period — going back
     /// is deliberate, and reopening days later onto a stale month would read as
@@ -42,8 +46,12 @@ Scope {
         const remembered = opts?.rememberLastView ?? true;
         root.pendingGranularity = (remembered ? opts?.lastGranularity : opts?.defaultGranularity) ?? "day";
         root.pendingMetric = (remembered ? opts?.lastMetric : opts?.defaultMetric) ?? "fg";
+        // A remembered battery view on a machine that no longer has one — a dock
+        // pulled, or a config carried to a desktop — would open on nothing.
+        root.pendingView = (Battery.available && remembered ? opts?.lastView : "apps") ?? "apps";
         root.granularity = root.pendingGranularity;
         root.metricKey = root.pendingMetric;
+        root.view = root.pendingView;
         root.periodOffset = 0;
         if (!(opts?.keepSelection ?? false))
             root.selectedKey = "";
@@ -54,6 +62,7 @@ Scope {
             return;
         Config.options.appStats.lastGranularity = root.granularity;
         Config.options.appStats.lastMetric = root.metricKey;
+        Config.options.appStats.lastView = root.view;
     }
 
     Connections {
@@ -229,7 +238,8 @@ Scope {
                             event.accepted = true;
                             return;
                         }
-                        event.accepted = usageContent.handleKey(event.key);
+                        const target = usageBatteryLoader.item ?? usageContent;
+                        event.accepted = target.handleKey(event.key);
                     }
 
                     RippleButton {
@@ -281,32 +291,56 @@ Scope {
                         height: Math.min(implicitHeight, parent.height - parent.padding * 2)
                         spacing: 12
 
-                        RowLayout {
+                        // The tabs name the overlay, so there is no title beside
+                        // them. Anchored rather than laid out: centred on the
+                        // window, not on whatever space the note beside them left.
+                        Item {
                             Layout.fillWidth: true
-                            Layout.rightMargin: 52
-                            spacing: 10
+                            implicitHeight: viewTabs.visible ? viewTabs.implicitHeight : soleTitle.implicitHeight
 
-                            MaterialSymbol {
-                                text: "bar_chart"
-                                iconSize: Appearance.font.pixelSize.huge
-                                color: Appearance.colors.colOnLayer0
+                            // Only on a machine with a pack to draw. A desktop has
+                            // one view, and a lone tab is not a choice.
+                            SecondaryTabBar {
+                                id: viewTabs
+
+                                visible: Battery.available && AppStats.binaryPresent
+                                width: 360
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                currentIndex: root.view === "battery" ? 1 : 0
+
+                                onCurrentIndexChanged: {
+                                    root.view = viewTabs.currentIndex === 1 ? "battery" : "apps";
+                                    root.rememberView();
+                                }
+
+                                Repeater {
+                                    model: [Translation.tr("App usage"), Translation.tr("Battery")]
+
+                                    delegate: SecondaryTabButton {
+                                        required property string modelData
+
+                                        buttonText: modelData
+                                    }
+                                }
                             }
 
+                            // With one view there is nothing to switch, so the name
+                            // is stated instead of dressed up as a choice.
                             StyledText {
+                                id: soleTitle
+
+                                visible: !viewTabs.visible
+                                anchors.centerIn: parent
                                 text: Translation.tr("App usage")
                                 font.pixelSize: Appearance.font.pixelSize.huge
                                 color: Appearance.colors.colOnLayer0
-                            }
-
-                            Item {
-                                Layout.fillWidth: true
                             }
 
                             // The energy source decides whether watt-hours are real
                             // counters or a battery-drain guess, so it is stated
                             // rather than left for the user to infer.
                             StyledText {
-                                visible: AppStats.running
+                                visible: AppStats.running && root.view === "apps"
                                 text: {
                                     switch (AppStats.source) {
                                     case "rapl":
@@ -319,6 +353,12 @@ Scope {
                                 }
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 color: Appearance.colors.colSubtext
+
+                                anchors {
+                                    right: parent.right
+                                    rightMargin: 52
+                                    verticalCenter: parent.verticalCenter
+                                }
                             }
                         }
 
@@ -344,7 +384,7 @@ Scope {
                             readonly property real calculatedWidth: usageRoot.screen ? usageRoot.screen.width * 0.92 : 1700
                             readonly property real calculatedHeight: usageRoot.screen ? usageRoot.screen.height * 0.62 : 650
 
-                            visible: AppStats.binaryPresent
+                            visible: AppStats.binaryPresent && root.view === "apps"
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: Math.min(1500, Math.max(900, calculatedWidth))
@@ -364,6 +404,34 @@ Scope {
                             onMetricChanged: {
                                 root.metricKey = usageContent.metric.key;
                                 root.rememberView();
+                            }
+                        }
+
+                        // Built only once asked for: a machine on AC all week never
+                        // opens it, and it parses the same day files the app view
+                        // has just been through.
+                        Loader {
+                            id: usageBatteryLoader
+
+                            readonly property real calculatedWidth: usageRoot.screen ? usageRoot.screen.width * 0.92 : 1700
+                            readonly property real calculatedHeight: usageRoot.screen ? usageRoot.screen.height * 0.62 : 650
+
+                            active: AppStats.binaryPresent && Battery.available && root.view === "battery"
+                            visible: active
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.preferredWidth: Math.min(1500, Math.max(900, calculatedWidth))
+                            Layout.preferredHeight: Math.min(700, Math.max(460, calculatedHeight))
+
+                            sourceComponent: UsageBattery {
+                                initialGranularity: root.pendingGranularity
+                                periodOffset: root.periodOffset
+
+                                onPeriodOffsetChanged: root.periodOffset = periodOffset
+                                onGranularityChanged: {
+                                    root.granularity = granularity;
+                                    root.rememberView();
+                                }
                             }
                         }
                     }

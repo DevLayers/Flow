@@ -518,6 +518,96 @@ Singleton {
         });
     }
 
+    /**
+     * The battery's own hours for one date: 24 entries, null where nothing was
+     * recorded.
+     *
+     * Kept in a section of its own rather than as another app row, because it is a
+     * level as well as an amount — the day view has to know where each hour opened
+     * and closed, which no tuple of totals can say. A day file written before the
+     * sampler knew about batteries simply has no section, and reads as a day with
+     * no battery history rather than as a day at zero percent.
+     */
+    function batteryHours(date) {
+        const stored = root.history[date]?.bat?.h;
+        const out = new Array(24).fill(null);
+        if (!stored) return out;
+        for (const hour in stored) {
+            const index = parseInt(hour);
+            const t = stored[hour];
+            if (!t || !(index >= 0 && index < 24)) continue;
+            out[index] = {
+                // Tenths of a percent on disk; percent everywhere above this line.
+                start: (t[0] ?? 0) / 10,
+                end: (t[1] ?? 0) / 10,
+                low: (t[2] ?? 0) / 10,
+                high: (t[3] ?? 0) / 10,
+                outMwh: t[4] ?? 0,
+                inMwh: t[5] ?? 0,
+                offAc: t[6] ?? 0,
+                charging: t[7] ?? 0,
+                onAc: t[8] ?? 0
+            };
+        }
+        return out;
+    }
+
+    /// Capacity of a full pack in mWh, as measured on `date`. Zero for a day with
+    /// no battery section.
+    function batteryFull(date) {
+        return root.history[date]?.bat?.full ?? 0;
+    }
+
+    /**
+     * Every recorded battery hour across `dates`, rolled into one figure set.
+     * `opts.hourFrom` / `opts.hourTo` narrow it to part of a single day.
+     *
+     * `hours` is the count of hours that hold anything at all: it is what tells a
+     * period the sampler never watched from one where the machine sat untouched,
+     * and both look identical in the totals.
+     */
+    function batteryRollup(dates, opts) {
+        const from = opts?.hourFrom ?? 0;
+        const to = opts?.hourTo ?? 23;
+        const acc = {
+            outMwh: 0,
+            inMwh: 0,
+            offAc: 0,
+            charging: 0,
+            onAc: 0,
+            low: NaN,
+            high: NaN,
+            first: NaN,
+            last: NaN,
+            hours: 0,
+            fullMwh: 0
+        };
+        for (const date of dates) {
+            const hours = root.batteryHours(date);
+            acc.fullMwh = Math.max(acc.fullMwh, root.batteryFull(date));
+            for (let hour = from; hour <= to; hour++) {
+                const bucket = hours[hour];
+                if (!bucket) continue;
+                acc.outMwh += bucket.outMwh;
+                acc.inMwh += bucket.inMwh;
+                acc.offAc += bucket.offAc;
+                acc.charging += bucket.charging;
+                acc.onAc += bucket.onAc;
+                acc.low = isNaN(acc.low) ? bucket.low : Math.min(acc.low, bucket.low);
+                acc.high = isNaN(acc.high) ? bucket.high : Math.max(acc.high, bucket.high);
+                if (isNaN(acc.first)) acc.first = bucket.start;
+                acc.last = bucket.end;
+                acc.hours++;
+            }
+        }
+        return acc;
+    }
+
+    /// One rollup per date, parallel to `dates`, for the week and month views.
+    function batteryDaily(dates) {
+        return dates.map(date => root.batteryRollup([date]));
+    }
+
     function wh(mj) {
         return mj / 3600000;
     }

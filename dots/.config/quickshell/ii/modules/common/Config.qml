@@ -800,6 +800,9 @@ Singleton {
                 property bool rememberLastView: true
                 property string lastGranularity: "day"
                 property string lastMetric: "fg"
+                // "apps" or "battery". Only ever "battery" on a machine that has
+                // one, and ignored on a machine that does not.
+                property string lastView: "apps"
                 // Which day a week runs from. Weeks are calendar weeks so that the
                 // one before is always the same seven days, whoever asks.
                 property bool weekStartsMonday: true

@@ -1,7 +1,8 @@
 # app_stats
 
 Per-app usage and energy sampler: foreground/background screen time, watt-hours,
-CPU and GPU time, memory, launches and sessions — the data behind the usage overlay.
+CPU and GPU time, memory, launches and sessions — plus the battery's own level and
+charge history where there is one — the data behind the usage overlay.
 
 **Binary:** `~/.config/quickshell/ii/scripts/appStats/app_stats`
 **Source:** `~/.config/quickshell/ii/scripts/appStats/app_stats_src/`
@@ -131,7 +132,8 @@ The rest are read live by the overlay.
 | `showHeadless`       | `false` | count headless processes in the list and the totals                                                                            |
 | `defaultGranularity` | `"day"` | `day`, `week` or `month`                                                                                                       |
 | `defaultMetric`      | `"fg"`  | `fg`, `focus`, `energy`, `cpu` or `gpu`                                                                                        |
-| `rememberLastView`   | `true`  | reopen on the last granularity and metric instead of the two above                                                             |
+| `rememberLastView`   | `true`  | reopen on the last granularity, metric and view instead of the defaults above                                                  |
+| `lastView`           | `"apps"`| which half of the overlay reopens: `apps` or `battery`. Ignored on a machine with no battery                                   |
 | `weekStartsMonday`   | `true`  | which day a calendar week runs from                                                                                            |
 | `keepSelection`      | `false` | keep the picked app across openings                                                                                            |
 | `showComparison`     | `false` | percent change against the period before. Off by default: it parses that period as well, doubling the files a month view reads |
@@ -206,6 +208,29 @@ The `__system` row is the device, not an app. Its `fg` is screen time counted on
 however many windows were up, its `bg` the time the machine was awake with nothing
 on screen, and `mJbg` the energy no app accounts for.
 
+On a machine with a battery the file carries one more section, `bat`, holding the
+pack's full capacity in mWh and its own hour tuple. It sits beside `apps` rather than
+among them because a battery is a level as well as an amount, and no row of totals can
+say where an hour opened and closed. The section is additive: the app tuples are
+unchanged, so a file with it reads on an older shell and a file without it reads here
+as a day with no battery history.
+
+| idx | field   | unit        |     | idx | field      | unit |
+| --- | ------- | ----------- | --- | --- | ---------- | ---- |
+| 0   | `start` | 0.1 %       |     | 5   | `in`       | mWh  |
+| 1   | `end`   | 0.1 %       |     | 6   | `offAc`    | s    |
+| 2   | `low`   | 0.1 %       |     | 7   | `charging` | s    |
+| 3   | `high`  | 0.1 %       |     | 8   | `onAc`     | s    |
+| 4   | `out`   | mWh         |     |     |            |      |
+
+The level is `charge_now / charge_full`, not `capacity`, which the kernel rounds to
+whole percent — a whole percent is an hour the level never appears to move. `out` and `in` are integrated
+from the instantaneous draw rather than differenced from the level, because the firmware
+refreshes `charge_now` every few minutes at best: an hour of real work can pass with the
+reported charge never moving. `offAc` follows the mains line rather than the battery's
+own status, which reads `Discharging` at roughly zero draw whenever a charge limit holds
+the pack below full.
+
 Time the sampler did not run through — a suspend, a hibernate, a stall — is credited
 to nobody. A gap longer than three sample intervals is skipped rather than filled:
 nothing about it was observed, and spreading it over the hours it spans would invent
@@ -244,6 +269,8 @@ rather than stopping the daemon.
   lands in `__system`.
 - **Write access to `$XDG_STATE_HOME`** for the day files. The directory is created if
   it does not exist.
+- A **battery** under `/sys/class/power_supply`, for the `bat` section and the overlay's
+  battery view. A desktop writes neither, and the view does not appear.
 
 ## Cost
 

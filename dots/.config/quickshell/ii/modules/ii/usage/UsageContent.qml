@@ -16,23 +16,9 @@ import "UsageFormat.js" as Format
 Item {
     id: root
 
-    /// Calendar periods rather than a rolling window. A week is always the same
-    /// seven days and a month the same month however long ago it is asked about,
-    /// which is the only way two of them can be put side by side.
-    readonly property var granularities: [
-        {
-            "key": "day",
-            "name": Translation.tr("Day")
-        },
-        {
-            "key": "week",
-            "name": Translation.tr("Week")
-        },
-        {
-            "key": "month",
-            "name": Translation.tr("Month")
-        }
-    ]
+    /// Owned by the period bar, which draws them: the battery view reads the same
+    /// list from its own bar, so there is one definition of what a week is.
+    readonly property var granularities: periodBar.granularities
 
     /// `fields` are summed straight out of a stored hour tuple, so a metric that
     /// spans several of them (energy is foreground plus background) needs no
@@ -466,31 +452,6 @@ Item {
             root.selectedKey = "";
     }
 
-    /// One step through the timeline. Dimmed rather than hidden at either end, so
-    /// the control keeps its place and says why it will not move.
-    component StepButton: RippleButton {
-        id: step
-
-        required property string symbol
-        property string tooltip: ""
-
-        implicitWidth: 32
-        implicitHeight: 32
-        buttonRadius: Appearance.rounding.full
-        opacity: step.enabled ? 1 : 0.35
-
-        contentItem: MaterialSymbol {
-            anchors.centerIn: parent
-            text: step.symbol
-            iconSize: 20
-            color: Appearance.colors.colOnLayer0
-        }
-
-        StyledToolTip {
-            text: step.tooltip
-        }
-    }
-
     component Card: Rectangle {
         color: Appearance.colors.colLayer1
         radius: Appearance.rounding.normal
@@ -566,77 +527,14 @@ Item {
             Layout.fillWidth: true
             spacing: 10
 
-            ButtonGroup {
-                spacing: 4
-                padding: 0
+            UsagePeriodBar {
+                id: periodBar
 
-                Repeater {
-                    model: root.granularities
-
-                    delegate: SelectionGroupButton {
-                        required property var modelData
-                        required property int index
-
-                        buttonText: modelData.name
-                        toggled: root.granularityIndex === index
-                        leftmost: index === 0
-                        rightmost: index === root.granularities.length - 1
-                        onClicked: root.setGranularity(index)
-                    }
-                }
-            }
-
-            // Which day, week or month is on screen. The arrows stop where the data
-            // does rather than walking into periods retention has already dropped.
-            RowLayout {
-                spacing: 2
-
-                StepButton {
-                    symbol: "chevron_left"
-                    enabled: root.canGoBack
-                    tooltip: Translation.tr("Previous period")
-                    onClicked: root.stepPeriod(-1)
-                }
-
-                ColumnLayout {
-                    Layout.minimumWidth: 150
-                    spacing: 0
-
-                    StyledText {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: AppStats.periodLabel(root.granularity, root.periodOffset)
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnLayer0
-                    }
-
-                    StyledText {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: AppStats.periodRangeLabel(root.granularity, root.periodOffset)
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colSubtext
-                    }
-                }
-
-                StepButton {
-                    symbol: "chevron_right"
-                    enabled: root.canGoForward
-                    tooltip: Translation.tr("Next period")
-                    onClicked: root.stepPeriod(1)
-                }
-            }
-
-            RippleButton {
-                visible: root.periodOffset < 0
-                implicitHeight: 30
-                buttonRadius: Appearance.rounding.full
-                horizontalPadding: 12
-                onClicked: root.periodOffset = 0
-
-                contentItem: StyledText {
-                    text: Translation.tr("Now")
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colOnLayer1
-                }
+                granularityIndex: root.granularityIndex
+                periodOffset: root.periodOffset
+                onGranularityPicked: index => root.setGranularity(index)
+                onStepped: delta => root.stepPeriod(delta)
+                onPeriodReset: root.periodOffset = 0
             }
 
             Item {
