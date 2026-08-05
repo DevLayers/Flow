@@ -64,6 +64,12 @@ Singleton {
 
     // Persist options immediately (e.g. kill dialog "Always" in a short-lived process).
     function saveOptionsNow() {
+        // Never let an unrelated forced save (e.g. the kill dialog's
+        // "Always" button) defeat the malformed-config write block — that
+        // block exists specifically to stop the in-memory defaults from
+        // clobbering a broken-but-recoverable file.
+        if (root.configMalformed)
+            return;
         root.blockWrites = false;
         if (!root.ready)
             return;
@@ -296,6 +302,14 @@ Singleton {
     // completion the adapter still holds nothing but the QML defaults.
     property var defaultOptions: null
     property bool configRepaired: false
+    // True while config.json fails to parse as JSON at all. Writes stay
+    // blocked the whole time (see saveOptionsNow() and fileWriteTimer)
+    // because the in-memory adapter holds nothing but QML defaults, and the
+    // broken file on disk is the only remaining source of truth.
+    property bool configMalformed: false
+    // Drives ConfigHealthBanner: "ok" | "malformed" | "recovered" | "migrated" | "repaired" | "reset"
+    property string configHealthState: "ok"
+    property list<string> configHealthKeys: []
 
     function snapshotDefaults(source) {
         if (source === null || typeof source !== "object")
@@ -424,27 +438,98 @@ Singleton {
         }
     }
 
+    // Semantically wrong but syntactically valid values (a typo'd enum
+    // string, a stale value from a renamed option) pass typesConflict()
+    // untouched, since it only compares JS types. Seeded with the keys most
+    // likely to be hand-edited or drift across versions — not exhaustive by
+    // design, see the config-validation-plan memory.
+    readonly property var enumConstraints: ({
+        "panelFamily": ["ii", "waffle"],
+        "sidebar.position": ["default", "inverted", "left", "right"],
+        "sidebar.sidebarStyle": ["default", "connect"],
+        "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
+        "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
+        "lock.notifications.position": ["top_left", "top_right", "bottom_left", "bottom_right"],
+        "lock.notifications.privacy": ["full", "redacted", "countOnly"],
+        "lock.notifications.defaultPolicy": ["show", "hide"],
+        "lock.notifications.filters.criticalOverride": ["full", "none"],
+    })
+
+    function getNestedValue(obj, keys) {
+        let node = obj;
+        for (const key of keys) {
+            if (node === undefined || node === null || typeof node !== "object")
+                return undefined;
+            node = node[key];
+        }
+        return node;
+    }
+
+    function repairEnumViolations(raw, repaired) {
+        for (const path in root.enumConstraints) {
+            const allowed = root.enumConstraints[path];
+            const keys = path.split(".");
+            let node = raw;
+            let parent = null;
+            let lastKey = null;
+            let missing = false;
+            for (const key of keys) {
+                if (node === undefined || node === null || typeof node !== "object") {
+                    missing = true;
+                    break;
+                }
+                parent = node;
+                lastKey = key;
+                node = node[key];
+            }
+            // Key absent from this file (older config, or genuinely unset):
+            // nothing to validate. Only strings are checked — a type conflict
+            // on this same path is already caught by repairTypeConflicts().
+            if (missing || node === undefined || typeof node !== "string" || allowed.includes(node))
+                continue;
+
+            const defaultValue = root.getNestedValue(root.defaultOptions, keys);
+            if (defaultValue === undefined)
+                continue;
+            console.warn(`[Config] Resetting ${path} to its default: "${node}" is not a recognized value`);
+            parent[lastKey] = defaultValue;
+            repaired.push(path);
+        }
+    }
+
     // Returns true when the file needed rewriting. Repair runs at most once per
     // session: it is a one-time upgrade step, and capping it removes any chance
     // of a write/reload loop.
     function repairConfigFile() {
-        if (root.configRepaired || root.defaultOptions === null)
-            return false;
-
+        // Malformed-JSON detection runs on every load, independent of the
+        // configRepaired cap below — that cap only limits the one-time
+        // migration/type-repair pass, and gating parse detection on it too
+        // would mean a corruption introduced *after* the first repair goes
+        // undetected for the rest of the session.
         let raw;
         try {
             raw = JSON.parse(configFileView.text());
         } catch (e) {
-            // Unparseable file: FileView would not have loaded it, so there is
-            // nothing to repair here.
+            // JsonAdapter's own C++ parser swallows this exact same error
+            // with a qmlWarning and treats the load as successful, so
+            // onLoaded still fires — with the adapter holding nothing but
+            // QML defaults. Without handleMalformedConfig() blocking writes
+            // here, the first user-triggered save clobbers the real (broken
+            // but recoverable) file with those defaults.
+            root.handleMalformedConfig(e);
             return false;
         }
+        root.recoverFromMalformedConfig();
+
+        if (root.configRepaired || root.defaultOptions === null)
+            return false;
         if (!raw || typeof raw !== "object")
             return false;
 
         const migrated = root.migrateRaw(raw);
         let repaired = [];
         root.repairTypeConflicts(raw, root.options, root.defaultOptions, "", repaired);
+        root.repairEnumViolations(raw, repaired);
 
         if (!migrated && repaired.length === 0)
             return false;
@@ -464,7 +549,71 @@ Singleton {
             // values and rounding can be migrated off them.
             root.migrateRoundingConfig();
         });
+        root.notifyConfigHealth(migrated ? "migrated" : "repaired", repaired);
         return true;
+    }
+
+    // Called once per malformed load, from the JSON.parse catch above.
+    function handleMalformedConfig(parseError) {
+        if (root.configMalformed)
+            return;
+        root.configMalformed = true;
+        console.warn(`[Config] config.json is not valid JSON (${parseError.message}); preserving it as-is and blocking writes until it's fixed`);
+        // Preserve the broken file exactly as the user left it — it's the
+        // only copy, and hand-editing it back to valid JSON is the intended
+        // recovery path (the existing watchChanges watcher picks the fix up
+        // automatically via fileReloadTimer -> onLoaded -> repairConfigFile()).
+        Quickshell.execDetached(["cp", "--", root.filePath, `${root.filePath}.malformed-${Date.now()}`]);
+        root.blockWrites = true;
+        root.notifyConfigHealth("malformed", []);
+    }
+
+    // Called on every successful parse; no-ops unless a prior load left
+    // configMalformed set, i.e. the user (or watcher-triggered reload) just
+    // fixed the file.
+    function recoverFromMalformedConfig() {
+        if (!root.configMalformed)
+            return;
+        root.configMalformed = false;
+        root.blockWrites = false;
+        console.log("[Config] config.json is valid JSON again; resuming normal writes");
+        root.notifyConfigHealth("recovered", []);
+    }
+
+    // Escape hatch for a user who can't or doesn't want to hand-fix a
+    // malformed config.json — wired to ConfigHealthBanner's reset action.
+    function resetConfigToDefaults() {
+        if (root.defaultOptions === null)
+            return;
+        console.warn("[Config] Resetting config.json to defaults at user request");
+        root.configMalformed = false;
+        root.blockWrites = false;
+        // Object spread ({...obj}) isn't supported by this JS engine
+        // (only array spread is) — use Object.assign instead.
+        const payload = JSON.stringify(Object.assign({}, root.defaultOptions, {
+            configVersion: root.currentConfigVersion
+        }), null, 2);
+        Qt.callLater(() => {
+            configFileView.setText(payload);
+        });
+        root.notifyConfigHealth("reset", []);
+    }
+
+    // Single point where config health changes reach the user: updates the
+    // state ConfigHealthBanner binds to and fires a desktop notification.
+    function notifyConfigHealth(state, keys) {
+        root.configHealthState = state;
+        root.configHealthKeys = keys;
+        const copy = {
+            "malformed": ["Config file is broken", "config.json has invalid JSON syntax. Your settings are safe on disk, but changes won't save until it's fixed."],
+            "recovered": ["Config file fixed", "config.json is valid again — settings will save normally."],
+            "migrated": ["Config updated", "Some settings were migrated to a newer format."],
+            "repaired": ["Config values reset", `${keys.length} setting${keys.length === 1 ? "" : "s"} had an invalid value and ${keys.length === 1 ? "was" : "were"} reset to default.`],
+            "reset": ["Config reset to defaults", "config.json was replaced with default settings."]
+        }[state];
+        if (!copy)
+            return;
+        Quickshell.execDetached(["notify-send", copy[0], copy[1], "-a", "Shell", "-i", "dialog-warning", `--urgency=${state === "malformed" ? "critical" : "normal"}`]);
     }
 
     // Runs before the async file load completes, so this captures the pure QML
@@ -2450,7 +2599,11 @@ Singleton {
 
             property JsonObject sidebar: JsonObject {
                 property JsonObject dashboardHeader: JsonObject {
-                    property string profileImageType: "custom" // "custom", "distro", "none"
+                    // "custom" was never a value SidebarDashboardContent.qml checks for —
+                    // it only branches on "user_profile" | "distro" | "none" (falling through
+                    // to nothing rendered otherwise). The real default renders the profile
+                    // picture/uptime row, so this now matches "user_profile".
+                    property string profileImageType: "user_profile" // "user_profile", "distro", "none"
                     property string profileImagePath: Directories.userProfileImagePath
                     property string textMode: "username" // "username", "uptime", "none", "custom"
                     property string customText: ""
