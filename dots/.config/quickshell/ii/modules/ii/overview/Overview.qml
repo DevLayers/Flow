@@ -101,7 +101,11 @@ Scope {
                             property bool canBeActive: root.monitorIsFocused
                             active: false
                             onCleared: () => {
-                                GlobalStates.overviewOpen = false;
+                                // SearchDrop owns the grab in connect mode. Its
+                                // grab can clear this one without the overview
+                                // actually being dismissed.
+                                if (!GlobalStates.searchConnectActive)
+                                    GlobalStates.overviewOpen = false;
                             }
                         }
 
