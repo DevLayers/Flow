@@ -373,9 +373,13 @@ Singleton {
                 }));
     }
 
+    function appResultKey(app) {
+        return "app:" + (app && app.id ? app.id : "");
+    }
+
     function createAppResultObject(entry) {
         return resultComp.createObject(null, {
-            key: "app:" + entry.id,
+            key: root.appResultKey(entry),
             type: Translation.tr("App"),
             id: entry.id,
             name: entry.name,
@@ -810,7 +814,8 @@ Singleton {
                     const app = DesktopEntries.byId(entry.target);
                     if (app) {
                         return resultComp.createObject(null, {
-                            key: "alias:" + entry.alias,
+                            key: root.appResultKey(app),
+                            id: app.id,
                             name: app.name,
                             iconName: app.icon,
                             iconType: LauncherSearchResult.IconType.System,
@@ -1118,28 +1123,32 @@ Singleton {
                 result.push(webSearchResultObject);
         }
 
-        // Filter out duplicate original apps/folders/commands if an alias is shown
+        // Filter out duplicate original apps/folders/commands if an alias is shown.
         const activeAliases = (Config.options?.search?.aliases ?? []).filter(entry => entry.alias && entry.alias.toLowerCase() === root.query.toLowerCase());
+        const activeAppAliasIds = new Set(activeAliases
+            .filter(alias => alias.type === "app")
+            .map(alias => {
+                const app = DesktopEntries.byId(alias.target);
+                return app ? app.id : alias.target;
+            }));
+
         if (activeAliases.length > 0) {
             result = result.filter(item => {
                 if (!item || !item.key)
                     return false;
                 for (const alias of activeAliases) {
-                    if (alias.type === "app" && item.key === "app:" + alias.target) {
+                    if (alias.type === "app" && item.type !== Translation.tr("App Alias") && item.key.startsWith("app:") && activeAppAliasIds.has(item.key.slice(4)))
                         return false;
-                    }
                     if (alias.type === "folder" && item.key.startsWith("file:")) {
                         const filePath = item.key.slice(5);
                         const targetNormalized = alias.target.startsWith("/") ? alias.target : alias.target.startsWith("~") ? alias.target.replace("~", Directories.home) : Directories.home + "/" + alias.target;
                         const cleanFilePath = filePath.replace(/\/+$/, "");
                         const cleanTarget = targetNormalized.replace(/\/+$/, "");
-                        if (cleanFilePath === cleanTarget) {
+                        if (cleanFilePath === cleanTarget)
                             return false;
-                        }
                     }
-                    if (alias.type === "command" && item.key === "command:" + alias.target) {
+                    if (alias.type === "command" && item.key === "command:" + alias.target)
                         return false;
-                    }
                 }
                 return true;
             });
