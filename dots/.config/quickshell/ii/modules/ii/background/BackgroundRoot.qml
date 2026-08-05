@@ -298,6 +298,22 @@ PanelWindow {
     }
 
     property bool mediaModeOpen: mediaModeLoader.active && MprisController.activePlayer
+
+    function restoreWallpaperColors() {
+        if (Config.options.appearance.palette.type.startsWith("scheme")
+                && !GlobalStates.mediaModeActive
+                && bgRoot.isMonitorFocused) {
+            // Restore only after the global close has completed and all loader
+            // destruction handlers have balanced mediaModeCount.
+            Quickshell.execDetached([
+                Directories.wallpaperSwitchScriptPath,
+                "--noswitch",
+                "--color", "clear",
+                "--mode", Appearance.m3colors.darkmode ? "dark" : "light"
+            ]);
+        }
+    }
+
     function applyCurrentWallpaper() {
         if (useSeparateLightModeWallpaper && !Appearance.m3colors.darkmode && lightModeWallpaperPath !== "") {
             Wallpapers.applyLightModeWallpaper(lightModeWallpaperPath);
@@ -306,20 +322,18 @@ PanelWindow {
         }
     }
 
+    Connections {
+        target: GlobalStates
+        function onMediaModeActiveChanged() {
+            if (!GlobalStates.mediaModeActive) {
+                LyricsService.shellColorChanged = false;
+                bgRoot.restoreWallpaperColors();
+            }
+        }
+    }
+
     onMediaModeOpenChanged: {
         if (!mediaModeOpen) {
-            LyricsService.shellColorChanged = false;
-            // Only restore colors if they were changed during media mode.
-            // Use --noswitch to regenerate palette from current wallpaper
-            // without re-setting it at the compositor level (avoids visual glitch
-            // of wallpaper being re-applied on top of widgets).
-            // Run only on the focused monitor to avoid duplicate script launches.
-            if (Config.options.appearance.palette.type.startsWith("scheme")
-                    && LyricsService.mediaModeOpenCount <= 0
-                    && bgRoot.isMonitorFocused) {
-                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--noswitch", "--mode", Appearance.m3colors.darkmode ? "dark" : "light"]);
-            }
-
             // Force widgets window to re-stack after our layer transition from
             // WlrLayer.Overlay → WlrLayer.Bottom. Without this, the compositor
             // re-stacks us at the top of the Bottom layer, covering the widgets
