@@ -19,6 +19,8 @@ Item {
     required property var labels
     property var tooltipLabels: root.labels
     property int highlightIndex: -1
+    property int focusedIndex: -1
+    signal barClicked(int index)
     property int labelStride: 1
     property bool labelAnchorEnd: false
     property var formatValue: (value) => `${value}`
@@ -207,15 +209,25 @@ Item {
 
                             readonly property real value: root.values[bucket.index] ?? 0
                             readonly property bool isHighlighted: bucket.index === root.highlightIndex
+                            readonly property bool isFocused: root.focusedIndex >= 0 ? bucket.index === root.focusedIndex : false
                             readonly property real valLeft: root.getValLeft(bucket.index)
                             readonly property real valRight: root.getValRight(bucket.index)
 
                             readonly property color currentColor: {
                                 if (bucket.value <= 0) return root.emptyColor;
                                 if (barArea.containsMouse) {
-                                    return bucket.isHighlighted ? Appearance.colors.colSecondaryHover : Appearance.colors.colPrimaryHover;
+                                    return (bucket.isHighlighted || bucket.isFocused) ? Appearance.colors.colSecondaryHover : Appearance.colors.colPrimaryHover;
                                 }
-                                return bucket.isHighlighted ? Appearance.colors.colSecondary : root.barColor;
+                                return (bucket.isHighlighted || bucket.isFocused) ? Appearance.colors.colSecondary : root.barColor;
+                            }
+
+                            readonly property real barOpacity: {
+                                if (bucket.value <= 0) return 0.4;
+                                if (barArea.containsMouse) return 1.0;
+                                if (root.focusedIndex >= 0) {
+                                    return bucket.index === root.focusedIndex ? 1.0 : 0.3;
+                                }
+                                return 1.0;
                             }
 
                             Layout.fillWidth: true
@@ -224,6 +236,11 @@ Item {
                             Canvas {
                                 id: barCanvas
                                 anchors.fill: parent
+                                opacity: bucket.barOpacity
+
+                                Behavior on opacity {
+                                    NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
+                                }
 
                                 readonly property real targetYLeft: bucket.value > 0 ? Math.max(2, parent.height - parent.height * (bucket.valLeft / root.axisMax)) : parent.height - 2
                                 readonly property real targetYRight: bucket.value > 0 ? Math.max(2, parent.height - parent.height * (bucket.valRight / root.axisMax)) : parent.height - 2
@@ -278,6 +295,8 @@ Item {
                                 id: barArea
                                 anchors.fill: parent
                                 hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.barClicked(bucket.index)
                             }
 
                             StyledToolTip {

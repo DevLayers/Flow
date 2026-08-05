@@ -79,6 +79,7 @@ Item {
     /// Periods back from the current one: 0 is today / this week / this month.
     /// Never positive — there is nothing ahead of now to look at.
     property int periodOffset: 0
+    property int focusedBucket: -1
     property int metricIndex: 0
     property string selectedKey: ""
     /// Kept in the config rather than here so the chart, which asks the service
@@ -101,6 +102,7 @@ Item {
         if (next === root.periodOffset) return;
         if (next < root.periodOffset && !root.canGoBack) return;
         root.periodOffset = next;
+        root.focusedBucket = -1;
     }
 
     /// Changing granularity keeps you in the present rather than at whatever offset
@@ -110,15 +112,36 @@ Item {
         if (root.granularityIndex === index) return;
         root.granularityIndex = index;
         root.periodOffset = 0;
+        root.focusedBucket = -1;
+    }
+
+    readonly property var activeDates: {
+        if (root.periodOffset === 0 && root.nowIndex >= 0 && root.nowIndex < root.dates.length) {
+            return root.dates.slice(0, root.nowIndex + 1);
+        }
+        return root.dates;
+    }
+
+    readonly property var targetDates: {
+        if (root.focusedBucket >= 0 && !root.isSingleDay) {
+            const d = root.activeDates[root.focusedBucket];
+            return d ? [d] : root.dates;
+        }
+        return root.dates;
     }
 
     readonly property var summary: {
         // Touching `history` here is what makes every derived figure recompute when
         // a day file lands; `dates` alone does not change when the data does.
         AppStats.history;
-        return AppStats.summarize(root.dates, {
+        const opts = {
             "headless": root.showHeadless
-        });
+        };
+        if (root.focusedBucket >= 0 && root.isSingleDay) {
+            opts.hourFrom = root.focusedBucket;
+            opts.hourTo = root.focusedBucket;
+        }
+        return AppStats.summarize(root.targetDates, opts);
     }
 
     /// Apps carrying a nonzero value for the selected metric, largest first. The
@@ -139,7 +162,7 @@ Item {
     /// The selected metric over everything in scope. Screen time is the device's
     /// own figure rather than the sum of the list, for the same reason the chart
     /// draws it that way: two windows on screen are one hour of screen time.
-    readonly property real metricTotal: root.totalFor(root.summary, root.dates)
+    readonly property real metricTotal: root.totalFor(root.summary, root.targetDates)
 
     /// The same figure the summary card leads with, for any period. Taken off the
     /// summary rather than off `ranked`, so a listing threshold cannot quietly
@@ -817,6 +840,24 @@ Item {
                             }
 
                             RippleButton {
+                                visible: root.focusedBucket >= 0
+                                implicitHeight: 30
+                                buttonRadius: Appearance.rounding.full
+                                horizontalPadding: 12
+                                onClicked: root.focusedBucket = -1
+
+                                contentItem: StyledText {
+                                    text: {
+                                        if (root.focusedBucket < 0) return "";
+                                        const lbl = root.activeChartLabels && root.activeChartLabels[root.focusedBucket] ? root.activeChartLabels[root.focusedBucket] : "";
+                                        return Translation.tr("Clear time filter (%1)").arg(lbl);
+                                    }
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colOnLayer1
+                                }
+                            }
+
+                            RippleButton {
                                 visible: root.selectedKey.length > 0
                                 implicitHeight: 30
                                 buttonRadius: Appearance.rounding.full
@@ -840,12 +881,20 @@ Item {
                             labelStride: root.isSingleDay ? (root.activeChartValues.length <= 6 ? 1 : Math.ceil(root.activeChartValues.length / 6)) : root.dayStride
                             labelAnchorEnd: !root.isSingleDay
                             highlightIndex: root.activeHighlightIndex
+                            focusedIndex: root.focusedBucket
                             timeScale: root.metric.kind === "duration"
                             // Millijoules per watt-hour, the figure the axis is
                             // labelled in.
                             valueUnit: root.metric.kind === "energy" ? 3600000 : 1
                             formatValue: value => root.formatMetric(value)
                             formatTick: value => root.formatTick(value)
+                            onBarClicked: (idx) => {
+                                if (root.focusedBucket === idx) {
+                                    root.focusedBucket = -1;
+                                } else {
+                                    root.focusedBucket = idx;
+                                }
+                            }
                         }
                     }
                 }
