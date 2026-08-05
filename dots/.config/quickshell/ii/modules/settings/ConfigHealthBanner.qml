@@ -35,6 +35,8 @@ Loader {
             return Translation.tr("Some settings were migrated to a newer format.");
         if (state === "repaired")
             return keys.length === 1 ? Translation.tr("A setting had an invalid value and was reset to default: %1").arg(keys[0]) : Translation.tr("%1 settings had an invalid value and were reset to default: %2").arg(keys.length).arg(keys.join(", "));
+        if (state === "unknownKeys")
+            return keys.length === 1 ? Translation.tr("An entry in config.json isn't recognized and will be removed the next time settings are saved: %1").arg(keys[0]) : Translation.tr("%1 entries in config.json aren't recognized and will be removed the next time settings are saved: %2").arg(keys.length).arg(keys.join(", "));
         if (state === "reset")
             return Translation.tr("config.json was reset to defaults.");
         return "";

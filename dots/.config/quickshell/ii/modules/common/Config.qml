@@ -307,7 +307,7 @@ Singleton {
     // because the in-memory adapter holds nothing but QML defaults, and the
     // broken file on disk is the only remaining source of truth.
     property bool configMalformed: false
-    // Drives ConfigHealthBanner: "ok" | "malformed" | "recovered" | "migrated" | "repaired" | "reset"
+    // Drives ConfigHealthBanner: "ok" | "malformed" | "recovered" | "migrated" | "repaired" | "unknownKeys" | "reset"
     property string configHealthState: "ok"
     property list<string> configHealthKeys: []
 
@@ -439,20 +439,49 @@ Singleton {
     }
 
     // Semantically wrong but syntactically valid values (a typo'd enum
-    // string, a stale value from a renamed option) pass typesConflict()
-    // untouched, since it only compares JS types. Seeded with the keys most
-    // likely to be hand-edited or drift across versions — not exhaustive by
-    // design, see the config-validation-plan memory.
+    // string, a stale value from a renamed option, an out-of-range mode
+    // number) pass typesConflict() untouched, since it only compares JS
+    // types. Covers both string and integer enums — plenty of options here
+    // are int-coded modes, and an unlisted number silently falls through
+    // every branch that consumes it. Options with a continuous range rather
+    // than a fixed value set (speedScale, gains, sizes) are deliberately
+    // absent: they need bounds checking, not membership.
     readonly property var enumConstraints: ({
         "panelFamily": ["ii", "waffle"],
-        "sidebar.position": ["default", "inverted", "left", "right"],
-        "sidebar.sidebarStyle": ["default", "connect"],
-        "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
-        "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
+        "policies.ai": [0, 1, 2],
+        "policies.weeb": [0, 1, 2],
+        "policies.wallpapers": [0, 1],
+        "policies.translator": [0, 1, 2],
+        "policies.player": [0, 1],
+        "policies.phone": [0, 1],
+        "phone.webcam.cameraFacing": ["front", "back"],
+        "phone.webcam.resolution": ["640x480", "1280x720", "1920x1080"],
+        "phone.webcam.rotateDegrees": [0, 90, 180, 270],
+        "phone.webcam.connection": ["wifi", "usb"],
+        "appearance.fakeScreenRounding": [0, 1, 2, 3],
+        "appearance.colorEngine": ["vynx", "fork"],
+        "background.widgets.media.placementStrategy": ["free", "leastBusy", "mostBusy"],
+        "background.widgets.weather.placementStrategy": ["free", "leastBusy", "mostBusy"],
+        "background.widgets.date.placementStrategy": ["free", "leastBusy", "mostBusy"],
+        "background.zoomOutStyle": [0, 1],
+        "background.mediaMode.visualizerMode": [0, 1, 2, 3],
+        "background.mediaMode.syllable.textHighlightStyle": [0, 1],
+        "bar.cornerStyle": [0, 1, 2],
+        "bar.barGroupStyle": [0, 1, 2],
+        "bar.barBackgroundStyle": [0, 1, 2],
+        "bar.mediaPlayer.popupStyle": ["default", "expressive", "android"],
+        "userProfile.imageStyle": ["initial", "expressive", "custom"],
+        "lock.centerAlignment": ["vertical", "horizontal"],
         "lock.notifications.position": ["top_left", "top_right", "bottom_left", "bottom_right"],
         "lock.notifications.privacy": ["full", "redacted", "countOnly"],
         "lock.notifications.defaultPolicy": ["show", "hide"],
         "lock.notifications.filters.criticalOverride": ["full", "none"],
+        "sidebar.position": ["default", "inverted", "left", "right"],
+        "sidebar.sidebarStyle": ["default", "connect"],
+        "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
+        "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
+        "sounds.notificationDefaultPolicy": ["play", "mute"],
+        "time.firstDayOfWeek": [0, 1, 2, 3, 4, 5, 6],
     })
 
     function getNestedValue(obj, keys) {
@@ -483,17 +512,50 @@ Singleton {
                 node = node[key];
             }
             // Key absent from this file (older config, or genuinely unset):
-            // nothing to validate. Only strings are checked — a type conflict
-            // on this same path is already caught by repairTypeConflicts().
-            if (missing || node === undefined || typeof node !== "string" || allowed.includes(node))
+            // nothing to validate. Strings and numbers are both checked; a
+            // value of any other type on this same path is a type conflict,
+            // already caught by repairTypeConflicts(). Bools are excluded
+            // deliberately — `true` would otherwise match a `1` entry.
+            const checkable = typeof node === "string" || typeof node === "number";
+            if (missing || !checkable || allowed.includes(node))
                 continue;
 
             const defaultValue = root.getNestedValue(root.defaultOptions, keys);
             if (defaultValue === undefined)
                 continue;
-            console.warn(`[Config] Resetting ${path} to its default: "${node}" is not a recognized value`);
+            console.warn(`[Config] Resetting ${path} to its default: ${JSON.stringify(node)} is not a recognized value`);
             parent[lastKey] = defaultValue;
             repaired.push(path);
+        }
+    }
+
+    // JsonAdapter has no property to bind an unrecognized key to, so it
+    // ignores the key on read and omits it on the next write (serializeRec
+    // builds a fresh object from declared properties only). A typo'd key —
+    // "sidebar.postion" — therefore does nothing, warns about nothing, and
+    // then quietly disappears, which is the single most common "why is my
+    // setting not applying" case. Nothing here deletes anything: the drop is
+    // already the runtime's behaviour. This only finds them so they can be
+    // reported while the file still contains them.
+    function collectUnknownKeys(rawObject, defaultObject, prefix, unknown) {
+        for (const key in rawObject) {
+            const path = prefix ? `${prefix}.${key}` : key;
+            if (!(key in defaultObject)) {
+                unknown.push(path);
+                continue;
+            }
+            const rawValue = rawObject[key];
+            const defaultValue = defaultObject[key];
+            // Descend into plain objects on both sides only. Array entries are
+            // free-form, and an empty default object is indistinguishable from
+            // a free-form map, so neither can be checked against a schema.
+            if (!rawValue || typeof rawValue !== "object" || Array.isArray(rawValue))
+                continue;
+            if (!defaultValue || typeof defaultValue !== "object" || root.isArrayLike(defaultValue))
+                continue;
+            if (Object.keys(defaultValue).length === 0)
+                continue;
+            root.collectUnknownKeys(rawValue, defaultValue, path, unknown);
         }
     }
 
@@ -519,11 +581,22 @@ Singleton {
             root.handleMalformedConfig(e);
             return false;
         }
+        // Parsing is necessary but not sufficient: deserializeAdapter() also
+        // bails on `!json.isObject()`, so a file holding a bare string,
+        // number or array leaves the adapter on pure QML defaults exactly
+        // like a syntax error does — and would otherwise reach
+        // recoverFromMalformedConfig() below, unblocking the very write that
+        // clobbers it. Array.isArray matters here because `typeof []` is
+        // "object" and would sail through the plain type check.
+        if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+            root.handleMalformedConfig({
+                message: `top-level value is ${Array.isArray(raw) ? "an array" : typeof raw}, expected an object`
+            });
+            return false;
+        }
         root.recoverFromMalformedConfig();
 
         if (root.configRepaired || root.defaultOptions === null)
-            return false;
-        if (!raw || typeof raw !== "object")
             return false;
 
         const migrated = root.migrateRaw(raw);
@@ -531,13 +604,28 @@ Singleton {
         root.repairTypeConflicts(raw, root.options, root.defaultOptions, "", repaired);
         root.repairEnumViolations(raw, repaired);
 
-        if (!migrated && repaired.length === 0)
+        let unknown = [];
+        root.collectUnknownKeys(raw, root.defaultOptions, "", unknown);
+        if (unknown.length > 0)
+            console.warn(`[Config] Ignoring ${unknown.length} unrecognized key(s), which the next save will drop: ${unknown.join(", ")}`);
+
+        if (!migrated && repaired.length === 0) {
+            // Unknown keys alone never justify a rewrite — they're dropped by
+            // the next write regardless. Back the file up so the discarded
+            // lines survive somewhere, then just report them.
+            if (unknown.length > 0) {
+                root.configRepaired = true;
+                Quickshell.execDetached(["cp", "--", root.filePath, `${root.filePath}.bak`]);
+                root.notifyConfigHealth("unknownKeys", unknown);
+            }
             return false;
+        }
 
         root.configRepaired = true;
         // Keep a copy before healing — the reset values are the only record of
         // what the user had, and a wrong guess here should be recoverable.
-        if (repaired.length > 0)
+        // Unknown keys ride along: this same write is what erases them.
+        if (repaired.length > 0 || unknown.length > 0)
             Quickshell.execDetached(["cp", "--", root.filePath, `${root.filePath}.bak`]);
 
         // Deferred: a setText issued from inside onLoaded is treated as part of
@@ -609,6 +697,7 @@ Singleton {
             "recovered": ["Config file fixed", "config.json is valid again — settings will save normally."],
             "migrated": ["Config updated", "Some settings were migrated to a newer format."],
             "repaired": ["Config values reset", `${keys.length} setting${keys.length === 1 ? "" : "s"} had an invalid value and ${keys.length === 1 ? "was" : "were"} reset to default.`],
+            "unknownKeys": ["Unrecognized settings", `${keys.length} entr${keys.length === 1 ? "y" : "ies"} in config.json ${keys.length === 1 ? "isn't" : "aren't"} recognized and will be removed on the next save.`],
             "reset": ["Config reset to defaults", "config.json was replaced with default settings."]
         }[state];
         if (!copy)
