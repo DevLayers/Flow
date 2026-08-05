@@ -320,6 +320,32 @@ Item {
         return root.dates.map((date, index) => Format.dayLabel(date, index === first || index === root.dates.length - 1 || date.slice(-2) === "01"));
     }
 
+    readonly property var activeChartValues: {
+        const vals = root.chartValues;
+        if (root.periodOffset === 0 && root.nowIndex >= 0 && root.nowIndex < vals.length) {
+            return vals.slice(0, root.nowIndex + 1);
+        }
+        return vals;
+    }
+
+    readonly property var activeChartLabels: {
+        const lbls = root.chartLabels;
+        if (root.periodOffset === 0 && root.nowIndex >= 0 && root.nowIndex < lbls.length) {
+            return lbls.slice(0, root.nowIndex + 1);
+        }
+        return lbls;
+    }
+
+    readonly property int activeHighlightIndex: {
+        if (root.periodOffset === 0 && root.nowIndex >= 0) {
+            const vals = root.chartValues;
+            if (root.nowIndex < vals.length) {
+                return root.nowIndex;
+            }
+        }
+        return -1;
+    }
+
     function refresh() {
         AppStats.ensureDates(root.dates);
         AppStats.refresh();
@@ -808,12 +834,12 @@ Item {
                         UsageBarChart {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            values: root.chartValues
-                            labels: root.chartLabels
-                            tooltipLabels: root.isSingleDay ? root.chartLabels : root.dates
-                            labelStride: root.isSingleDay ? 3 : root.dayStride
+                            values: root.activeChartValues
+                            labels: root.activeChartLabels
+                            tooltipLabels: root.isSingleDay ? root.activeChartLabels : (root.periodOffset === 0 && root.nowIndex >= 0 ? root.dates.slice(0, root.nowIndex + 1) : root.dates)
+                            labelStride: root.isSingleDay ? (root.activeChartValues.length <= 6 ? 1 : Math.ceil(root.activeChartValues.length / 6)) : root.dayStride
                             labelAnchorEnd: !root.isSingleDay
-                            highlightIndex: root.nowIndex
+                            highlightIndex: root.activeHighlightIndex
                             timeScale: root.metric.kind === "duration"
                             // Millijoules per watt-hour, the figure the axis is
                             // labelled in.
