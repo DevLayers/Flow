@@ -49,7 +49,7 @@ Toolbar {
         }
         text: "wallpaper"
         StyledToolTip {
-            text: Translation.tr("Set as walpaper")
+            text: Translation.tr("Set as wallpaper")
         }
     }
     IconToolbarButton {
