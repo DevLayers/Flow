@@ -548,7 +548,10 @@ Singleton {
             const zone = root.hoveredZone;
             root.dragWindowAfter = event.window ?? null;
             root.dragging = false;
-            root.dragEnded(event.kind, zone);
+            // Releasing the modifier before the button makes Hyprland drop the
+            // gesture and put the window back, which is a cancel and not a drop:
+            // the overlay goes away and nothing is tiled.
+            if (!event.cancelled) root.dragEnded(event.kind, zone);
             root.dragKind = "";
             root.dragSource = "";
             break;

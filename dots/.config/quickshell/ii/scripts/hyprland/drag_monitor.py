@@ -23,6 +23,7 @@ Output is newline-delimited JSON on stdout:
      "before": {...}}   # same shape, sampled just before the drag began
     {"event": "dragMove", "x": 100, "y": 200}
     {"event": "dragEnd", "kind": "move", "source": "motion", "x": 100, "y": 200,
+     "cancelled": false,   # true when Hyprland dropped the gesture, not the user
      "window": {...}}   # geometry the gesture ended with, for co-resize
 
 Input is newline-delimited JSON on stdin:
@@ -178,6 +179,11 @@ class Monitor:
         self.window_time = 0.0
         self.suppress_until = 0.0
         self.last_change = 0.0
+        # Geometry the dragged window had before the gesture, and whether it
+        # has left it since - that is what says a drag Hyprland dropped apart
+        # from one that simply has not moved yet.
+        self.before = None
+        self.left_origin = False
 
     # -- configuration ------------------------------------------------------
 
@@ -203,8 +209,10 @@ class Monitor:
         self.cursor = cursor
         self.window = window
         self.last_change = time.monotonic()
+        self.left_origin = False
         if not before or before.get("address") != window["address"]:
             before = window
+        self.before = before
         emit({
             "event": "dragStart",
             "kind": kind,
@@ -218,7 +226,7 @@ class Monitor:
             "before": before,
         })
 
-    def stop(self):
+    def stop(self, cancelled=False):
         if not self.dragging:
             return
         cursor = self.cursor or (0, 0)
@@ -234,11 +242,17 @@ class Monitor:
             "source": self.source,
             "x": cursor[0],
             "y": cursor[1],
+            # Hyprland puts the window back where it found it when it drops a
+            # gesture, so there is nothing to tile: the shell only has to stop
+            # showing the overlay.
+            "cancelled": cancelled,
             "window": window,
         })
         self.dragging = False
         self.kind = ""
         self.source = ""
+        self.before = None
+        self.left_origin = False
 
     def hint(self, cmd):
         if not self.use_keybinds:
@@ -281,8 +295,12 @@ class Monitor:
         if self.poll_cursor():
             self.last_change = time.monotonic()
             emit({"event": "dragMove", "x": self.cursor[0], "y": self.cursor[1]})
-        if self.source != "motion":
-            return
+        if self.source == "motion":
+            self.poll_motion_drag()
+        else:
+            self.poll_keybind_drag()
+
+    def poll_motion_drag(self):
         window = window_sample(self.ctl)
         if window and window["address"] == self.window["address"]:
             if self.moved(self.window, window):
@@ -290,6 +308,23 @@ class Monitor:
             self.window = window
         if (time.monotonic() - self.last_change) * 1000.0 >= MOTION_END_MS:
             self.stop()
+
+    def poll_keybind_drag(self):
+        """Hyprland ends a gesture the instant its modifier goes up, and it
+        neither fires the bind's release nor lets the modifier's own release
+        bind through while it owns the pointer, so nothing announces it. What
+        does say it is the window: a dropped gesture puts it back exactly where
+        it started, while a held one is still somewhere else."""
+        window = window_sample(self.ctl)
+        if not window or not self.before or window["address"] != self.before["address"]:
+            return
+        self.window = window
+        if not self.left_origin:
+            self.left_origin = self.moved(self.before, window)
+            return
+        if self.moved(self.before, window):
+            return
+        self.stop(cancelled=True)
 
     def moved(self, before, after):
         tol = self.tolerance
