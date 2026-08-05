@@ -265,7 +265,7 @@ impl Store {
             return None;
         }
 
-        let apps: serde_json::Map<String, serde_json::Value> = self
+        let mut apps_map: serde_json::Map<String, serde_json::Value> = self
             .apps
             .iter()
             .map(|(key, rec)| {
@@ -285,15 +285,46 @@ impl Store {
             })
             .collect();
 
+        // Merge existing hours on disk so historical hours of the day are never erased or lost
+        let path = self.path_for(&self.date);
+        if let Ok(raw) = fs::read_to_string(&path) {
+            if let Ok(disk_json) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if let Some(disk_apps) = disk_json.get("apps").and_then(|a| a.as_object()) {
+                    for (app_key, disk_rec) in disk_apps {
+                        let Some(disk_h) = disk_rec.get("h").and_then(|h| h.as_object()) else { continue };
+                        let exe = disk_rec.get("exe").and_then(|v| v.as_str()).unwrap_or("");
+                        let headless = disk_rec.get("headless").and_then(|v| v.as_bool()).unwrap_or(false);
+
+                        let entry = apps_map.entry(app_key.clone()).or_insert_with(|| {
+                            serde_json::json!({
+                                "exe": exe,
+                                "headless": headless,
+                                "h": serde_json::Map::<String, serde_json::Value>::new(),
+                            })
+                        });
+
+                        if let Some(entry_obj) = entry.as_object_mut() {
+                            if let Some(entry_h) = entry_obj.get_mut("h").and_then(|h| h.as_object_mut()) {
+                                for (hour_str, tuple) in disk_h {
+                                    if !entry_h.contains_key(hour_str) {
+                                        entry_h.insert(hour_str.clone(), tuple.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let doc = serde_json::json!({
             "v": SCHEMA,
             "date": self.date,
             "tz": offset_string(self.gmtoff),
-            "apps": apps,
+            "apps": apps_map,
         });
 
         // Write-then-rename: a reader must never see a half-written day.
-        let path = self.path_for(&self.date);
         let tmp = path.with_extension("json.tmp");
         if fs::write(&tmp, doc.to_string()).is_err() {
             return None;

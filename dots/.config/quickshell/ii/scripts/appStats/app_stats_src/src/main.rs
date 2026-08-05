@@ -694,8 +694,45 @@ fn spawn_signal_thread(tx: Sender<Msg>) {
     }
 }
 
+fn ensure_single_instance(state_dir: &PathBuf) -> Option<std::fs::File> {
+    let _ = std::fs::create_dir_all(state_dir);
+    let lock_path = state_dir.join("app_stats.lock");
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .ok()?;
+
+    use std::os::unix::io::AsRawFd;
+    let fd = file.as_raw_fd();
+    let res = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+    if res != 0 {
+        if let Ok(pid_str) = std::fs::read_to_string(&lock_path) {
+            if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                if pid > 0 && pid != (std::process::id() as i32) {
+                    unsafe { libc::kill(pid, libc::SIGTERM); }
+                    std::thread::sleep(Duration::from_millis(300));
+                }
+            }
+        }
+        let res2 = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+        if res2 != 0 {
+            let _ = unsafe { libc::flock(fd, libc::LOCK_EX) };
+        }
+    }
+
+    let _ = unsafe { libc::ftruncate(fd, 0) };
+    use std::io::Write;
+    let mut file_ref = &file;
+    let _ = writeln!(file_ref, "{}", std::process::id());
+    Some(file)
+}
+
 fn main() {
     let args = Args::parse();
+    let _lock_file = ensure_single_instance(&args.state_dir);
     let interval = Duration::from_millis(args.interval_ms);
     let (tx, rx) = channel::<Msg>();
 
