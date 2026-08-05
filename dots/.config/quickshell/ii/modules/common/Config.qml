@@ -2607,6 +2607,10 @@ Singleton {
                     // titlebar drags and window-border resizes, which fire no bind.
                     property bool useMotionHeuristic: true
                     property int idleHz: 30
+                    // Rate the idle polling falls back to while the pointer is
+                    // still. No drag can start without moving it, so watching
+                    // closely then is wasted work.
+                    property int idleFloorHz: 5
                     property int activeHz: 90
                     // How closely the window has to follow the cursor to count
                     // as a move rather than incidental motion.

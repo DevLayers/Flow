@@ -547,6 +547,19 @@ ContentPage {
 
             ConfigSpinBox {
                 enabled: Config.options.tiling.detection.useMotionHeuristic
+                icon: "bedtime"
+                text: Translation.tr("Idle polling rate while the pointer is still (Hz)")
+                value: Config.options.tiling.detection.idleFloorHz
+                from: 1
+                to: 30
+                stepSize: 1
+                onValueChanged: {
+                    Config.options.tiling.detection.idleFloorHz = value;
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.tiling.detection.useMotionHeuristic
                 icon: "bolt"
                 text: Translation.tr("Polling rate during a drag (Hz)")
                 value: Config.options.tiling.detection.activeHz

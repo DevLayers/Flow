@@ -510,6 +510,7 @@ Singleton {
         root.send({
             cmd: "config",
             idleHz: detection?.idleHz ?? 30,
+            idleFloorHz: detection?.idleFloorHz ?? 5,
             activeHz: detection?.activeHz ?? 90,
             tolerance: detection?.trackingTolerancePx ?? 2,
             motion: detection?.useMotionHeuristic ?? true,
@@ -562,7 +563,7 @@ Singleton {
     // rather than being restarted.
     readonly property string detectionKey: {
         const detection = root.options?.detection ?? null;
-        return [detection?.idleHz, detection?.activeHz, detection?.trackingTolerancePx, detection?.useMotionHeuristic, detection?.useKeybinds].join("|");
+        return [detection?.idleHz, detection?.idleFloorHz, detection?.activeHz, detection?.trackingTolerancePx, detection?.useMotionHeuristic, detection?.useKeybinds].join("|");
     }
     onDetectionKeyChanged: root.sendConfig()
 

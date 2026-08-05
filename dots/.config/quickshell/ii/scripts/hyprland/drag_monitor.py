@@ -29,8 +29,8 @@ Output is newline-delimited JSON on stdout:
 Input is newline-delimited JSON on stdin:
 
     {"cmd": "hint", "kind": "move"|"resize", "state": "down"|"up"}
-    {"cmd": "config", "idleHz": 30, "activeHz": 90, "tolerance": 2,
-     "motion": true, "keybinds": true}
+    {"cmd": "config", "idleHz": 30, "idleFloorHz": 5, "activeHz": 90,
+     "tolerance": 2, "motion": true, "keybinds": true}
     {"cmd": "suppress", "ms": 300}   # ignore geometry we changed ourselves
     {"cmd": "quit"}
 
@@ -50,8 +50,10 @@ MOTION_END_MS = 350
 # Never spend longer than this blocked in select(), so stdin stays responsive
 # even when polling is idle.
 MAX_WAIT_S = 0.25
-# How long an idle window sample may go unrefreshed while the pointer is still.
-WINDOW_REFRESH_S = 1.0
+# The pointer is still for most of a session, and no drag can begin without it
+# moving, so polling backs off to a trickle once it has been still this long and
+# returns to full rate on the first sample that shows motion again.
+IDLE_BACKOFF_S = 1.0
 
 
 def emit(obj):
@@ -107,6 +109,30 @@ class Hyprctl:
         except ValueError:
             return None
 
+    def json_batch(self, *commands):
+        """Answer several queries over one connection.
+
+        Hyprland runs a `[[BATCH]]` request's commands in order and concatenates
+        their replies, so they are decoded one after another from the same
+        string. Worth it because the connection, not the query, is the cost.
+        """
+        raw = self.request("[[BATCH]]" + ";".join("j/" + c for c in commands))
+        results = []
+        if raw:
+            decoder = json.JSONDecoder()
+            index = 0
+            for _ in commands:
+                while index < len(raw) and raw[index].isspace():
+                    index += 1
+                try:
+                    value, index = decoder.raw_decode(raw, index)
+                except ValueError:
+                    # Everything after a reply we could not read is at an
+                    # unknown offset, so the rest of the batch is given up on.
+                    break
+                results.append(value)
+        return results + [None] * (len(commands) - len(results))
+
     def cursorpos(self):
         raw = self.request("/cursorpos")
         if not raw:
@@ -118,6 +144,11 @@ class Hyprctl:
             return (int(parts[0]), int(parts[1]))
         except ValueError:
             return None
+
+    def sample(self):
+        """Cursor position and active window, in a single round trip."""
+        cursor, window = self.json_batch("cursorpos", "activewindow")
+        return shape_cursor(cursor), shape_window(window)
 
 
 def first_css_value(css, fallback):
@@ -142,8 +173,16 @@ def read_gaps(ctl):
     }
 
 
-def window_sample(ctl):
-    win = ctl.json("activewindow")
+def shape_cursor(pos):
+    if not isinstance(pos, dict):
+        return None
+    try:
+        return (int(pos["x"]), int(pos["y"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def shape_window(win):
     if not isinstance(win, dict) or not win.get("address"):
         return None
     at = win.get("at") or [0, 0]
@@ -162,10 +201,15 @@ def window_sample(ctl):
     }
 
 
+def window_sample(ctl):
+    return shape_window(ctl.json("activewindow"))
+
+
 class Monitor:
     def __init__(self, ctl):
         self.ctl = ctl
         self.idle_interval = 1.0 / 30.0
+        self.idle_floor_interval = 1.0 / 5.0
         self.active_interval = 1.0 / 90.0
         self.tolerance = 2
         self.use_motion = True
@@ -176,7 +220,7 @@ class Monitor:
         self.source = ""
         self.cursor = None
         self.window = None
-        self.window_time = 0.0
+        self.cursor_moved_at = 0.0
         self.suppress_until = 0.0
         self.last_change = 0.0
         # Geometry the dragged window had before the gesture, and whether it
@@ -189,8 +233,10 @@ class Monitor:
 
     def configure(self, cmd):
         idle_hz = float(cmd.get("idleHz", 30) or 30)
+        floor_hz = float(cmd.get("idleFloorHz", 5) or 5)
         active_hz = float(cmd.get("activeHz", 90) or 90)
         self.idle_interval = 1.0 / max(1.0, min(idle_hz, 240.0))
+        self.idle_floor_interval = 1.0 / max(1.0, min(floor_hz, 240.0))
         self.active_interval = 1.0 / max(1.0, min(active_hz, 240.0))
         self.tolerance = max(0, int(cmd.get("tolerance", 2) or 0))
         self.use_motion = bool(cmd.get("motion", True))
@@ -198,7 +244,15 @@ class Monitor:
 
     @property
     def interval(self):
-        return self.active_interval if self.dragging else self.idle_interval
+        if self.dragging:
+            return self.active_interval
+        if not self.use_motion:
+            # Nothing to watch for between gestures: the window is sampled only
+            # so a drag starting now has a pre-drag geometry to restore to.
+            return self.idle_floor_interval
+        if (time.monotonic() - self.cursor_moved_at) > IDLE_BACKOFF_S:
+            return max(self.idle_interval, self.idle_floor_interval)
+        return self.idle_interval
 
     # -- drag lifecycle -----------------------------------------------------
 
@@ -269,8 +323,7 @@ class Monitor:
             return
         # Sampled before the request below, which already sees the dragged window.
         before = self.window
-        cursor = self.ctl.cursorpos()
-        window = window_sample(self.ctl)
+        cursor, window = self.ctl.sample()
         if cursor is None or window is None or window["fullscreen"]:
             return
         self.start(kind, "keybind", cursor, window, before)
@@ -292,16 +345,18 @@ class Monitor:
         return True
 
     def poll_dragging(self):
-        if self.poll_cursor():
-            self.last_change = time.monotonic()
-            emit({"event": "dragMove", "x": self.cursor[0], "y": self.cursor[1]})
+        cursor, window = self.ctl.sample()
+        if cursor is not None and cursor != self.cursor:
+            self.cursor = cursor
+            self.cursor_moved_at = time.monotonic()
+            self.last_change = self.cursor_moved_at
+            emit({"event": "dragMove", "x": cursor[0], "y": cursor[1]})
         if self.source == "motion":
-            self.poll_motion_drag()
+            self.poll_motion_drag(window)
         else:
-            self.poll_keybind_drag()
+            self.poll_keybind_drag(window)
 
-    def poll_motion_drag(self):
-        window = window_sample(self.ctl)
+    def poll_motion_drag(self, window):
         if window and window["address"] == self.window["address"]:
             if self.moved(self.window, window):
                 self.last_change = time.monotonic()
@@ -309,13 +364,12 @@ class Monitor:
         if (time.monotonic() - self.last_change) * 1000.0 >= MOTION_END_MS:
             self.stop()
 
-    def poll_keybind_drag(self):
+    def poll_keybind_drag(self, window):
         """Hyprland ends a gesture the instant its modifier goes up, and it
         neither fires the bind's release nor lets the modifier's own release
         bind through while it owns the pointer, so nothing announces it. What
         does say it is the window: a dropped gesture puts it back exactly where
         it started, while a held one is still somewhere else."""
-        window = window_sample(self.ctl)
         if not window or not self.before or window["address"] != self.before["address"]:
             return
         self.window = window
@@ -333,26 +387,22 @@ class Monitor:
                 or abs(after["height"] - before["height"]) > tol)
 
     def poll_idle(self):
-        cursor = self.ctl.cursorpos()
+        if not self.use_motion:
+            # Only the pre-drag geometry is of any use here, and it is one query.
+            self.window = window_sample(self.ctl) or self.window
+            return
+
+        cursor, window = self.ctl.sample()
         if cursor is None:
             return
         previous_cursor = self.cursor
-        self.cursor = cursor
-        now = time.monotonic()
-
-        # No drag moves a window without moving the pointer, so a pointer that
-        # has not budged needs no window query. That is what keeps idling cheap,
-        # but the last sample is still refreshed now and then so that a drag
-        # started without moving the mouse first has something recent to restore.
-        stale = (now - self.window_time) > WINDOW_REFRESH_S
-        if previous_cursor is not None and cursor == previous_cursor and not stale:
-            return
-
-        window = window_sample(self.ctl)
         previous_window = self.window
+        self.cursor = cursor
         self.window = window
-        self.window_time = now
-        if not self.use_motion or window is None:
+        now = time.monotonic()
+        if previous_cursor is None or cursor != previous_cursor:
+            self.cursor_moved_at = now
+        if window is None:
             return
         if now < self.suppress_until:
             return
