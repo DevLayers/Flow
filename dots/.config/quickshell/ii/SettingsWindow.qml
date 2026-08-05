@@ -221,6 +221,8 @@ FloatingWindow {
             }
         }
 
+        ConfigHealthBanner {}
+
         RowLayout { // Window content with sidebar and content pane
             Layout.fillWidth: true
             Layout.fillHeight: true

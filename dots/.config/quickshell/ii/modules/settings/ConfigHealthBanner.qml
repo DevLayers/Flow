@@ -1,0 +1,113 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Layouts
+import qs.services
+import qs.modules.common
+import qs.modules.common.widgets
+
+// Surfaces Config's malformed-JSON / migration / repair events inside
+// Settings. Re-shown on every new event even if a previous one was
+// dismissed, so a fresh problem is never silently hidden by an old click.
+Loader {
+    id: root
+    Layout.fillWidth: true
+
+    property bool dismissed: false
+    readonly property bool severe: Config.configHealthState === "malformed"
+    active: Config.configHealthState !== "ok" && !root.dismissed
+    sourceComponent: root.severe ? warningComponent : noticeComponent
+
+    Connections {
+        target: Config
+        function onConfigHealthStateChanged() {
+            root.dismissed = false;
+        }
+    }
+
+    readonly property string bannerText: {
+        const state = Config.configHealthState;
+        const keys = Array.from(Config.configHealthKeys ?? []);
+        if (state === "malformed")
+            return Translation.tr("config.json has invalid JSON syntax. Settings changes won't save until it's fixed — hand-edit the file, or reset it to defaults below.");
+        if (state === "recovered")
+            return Translation.tr("config.json is valid again — settings will save normally.");
+        if (state === "migrated")
+            return Translation.tr("Some settings were migrated to a newer format.");
+        if (state === "repaired")
+            return keys.length === 1 ? Translation.tr("A setting had an invalid value and was reset to default: %1").arg(keys[0]) : Translation.tr("%1 settings had an invalid value and were reset to default: %2").arg(keys.length).arg(keys.join(", "));
+        if (state === "reset")
+            return Translation.tr("config.json was reset to defaults.");
+        return "";
+    }
+
+    Component {
+        id: warningComponent
+        WarningBox {
+            Layout.fillWidth: true
+            materialIcon: "error"
+            text: root.bannerText
+
+            RippleButton {
+                Layout.alignment: Qt.AlignRight
+                Layout.preferredHeight: 32
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colError
+                colBackgroundHover: Appearance.colors.colError
+                contentItem: RowLayout {
+                    spacing: 6
+                    MaterialSymbol {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: "restart_alt"
+                        iconSize: 16
+                        color: Appearance.colors.colOnError
+                    }
+                    StyledText {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: Translation.tr("Reset to defaults")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnError
+                    }
+                }
+                onClicked: Config.resetConfigToDefaults()
+            }
+
+            RippleButton {
+                Layout.alignment: Qt.AlignRight
+                Layout.preferredHeight: 32
+                buttonRadius: Appearance.rounding.full
+                colBackground: "transparent"
+                colBackgroundHover: Appearance.colors.colErrorContainer
+                contentItem: StyledText {
+                    text: Translation.tr("Dismiss")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnErrorContainer
+                }
+                onClicked: root.dismissed = true
+            }
+        }
+    }
+
+    Component {
+        id: noticeComponent
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "info"
+            text: root.bannerText
+
+            RippleButton {
+                Layout.alignment: Qt.AlignRight
+                Layout.preferredHeight: 32
+                buttonRadius: Appearance.rounding.full
+                colBackground: "transparent"
+                colBackgroundHover: Appearance.colors.colTertiaryContainer
+                contentItem: StyledText {
+                    text: Translation.tr("Dismiss")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnTertiaryContainer
+                }
+                onClicked: root.dismissed = true
+            }
+        }
+    }
+}
