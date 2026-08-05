@@ -55,6 +55,65 @@ Singleton {
 
     readonly property string statusText: !root.resolvedAvailable ? Translation.tr("systemd-resolved not running") : !root.available ? Translation.tr("No network") : root.mode === "yes" ? Translation.tr("Strict") : root.mode === "opportunistic" ? Translation.tr("Opportunistic") : Translation.tr("Off")
 
+    // Well-known public resolvers that support DNS-over-TLS
+    readonly property var presets: [
+        {
+            key: "adguard",
+            label: "AdGuard",
+            serverName: "dns.adguard-dns.com",
+            serverAddress: "94.140.14.14",
+            fallbackAddress: "94.140.15.15"
+        },
+        {
+            key: "adguardFamily",
+            label: "AdGuard Family",
+            serverName: "family.adguard-dns.com",
+            serverAddress: "94.140.14.15",
+            fallbackAddress: "94.140.15.16"
+        },
+        {
+            key: "cloudflare",
+            label: "Cloudflare",
+            serverName: "cloudflare-dns.com",
+            serverAddress: "1.1.1.1",
+            fallbackAddress: "1.0.0.1"
+        },
+        {
+            key: "cloudflareSecurity",
+            label: "Cloudflare Security",
+            serverName: "security.cloudflare-dns.com",
+            serverAddress: "1.1.1.2",
+            fallbackAddress: "1.0.0.2"
+        },
+        {
+            key: "quad9",
+            label: "Quad9",
+            serverName: "dns.quad9.net",
+            serverAddress: "9.9.9.9",
+            fallbackAddress: "149.112.112.112"
+        },
+        {
+            key: "mullvad",
+            label: "Mullvad",
+            serverName: "dns.mullvad.net",
+            serverAddress: "194.242.2.2",
+            fallbackAddress: "193.19.108.2"
+        }
+    ]
+
+    readonly property string preset: root.options?.preset ?? "custom"
+    readonly property string presetLabel: root.presets.find(entry => entry.key === root.preset)?.label ?? (root.serverName.length > 0 ? root.serverName : Translation.tr("Custom"))
+
+    function applyPreset(key: string): void {
+        const entry = root.presets.find(candidate => candidate.key === key);
+        if (!entry || !root.options)
+            return;
+        root.options.preset = entry.key;
+        root.options.serverName = entry.serverName;
+        root.options.serverAddress = entry.serverAddress;
+        root.options.fallbackAddress = entry.fallbackAddress;
+    }
+
     signal applyFinished(bool success, string message)
 
     function refresh(): void {

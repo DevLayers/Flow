@@ -43,7 +43,7 @@ AbstractQuickPanel {
     readonly property real baseCellHeight: 56
 
     // Toggles config
-    readonly property list<string> availableToggleTypes: ["network", "bluetooth", "vpn", "tailscale", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "screenRecord", "colorPicker", "videoEditor", "onScreenKeyboard", "mic", "audio", "notifications", "autoDnd", "powerProfile", "musicRecognition", "antiFlashbang", "soundcoreAnc", "systemSounds", "localSend", "mediaWidget", "volumeSlider", "micSlider", "brightnessSlider", "gammaSlider", "keyboardBacklight"]
+    readonly property list<string> availableToggleTypes: ["network", "bluetooth", "vpn", "tailscale", "dnsOverTls", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "screenRecord", "colorPicker", "videoEditor", "onScreenKeyboard", "mic", "audio", "notifications", "autoDnd", "powerProfile", "musicRecognition", "antiFlashbang", "soundcoreAnc", "systemSounds", "localSend", "mediaWidget", "volumeSlider", "micSlider", "brightnessSlider", "gammaSlider", "keyboardBacklight"]
     function isToggleVisible(toggleType) {
         return true
     }
@@ -379,6 +379,7 @@ AbstractQuickPanel {
                     onOpenLocalSendDialog: root.openLocalSendDialog()
                     onOpenVpnDialog: root.openVpnDialog()
                     onOpenTailscaleDialog: root.openTailscaleDialog()
+                    onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                 }
             }
         }
@@ -518,6 +519,7 @@ AbstractQuickPanel {
                                         onOpenLocalSendDialog: root.openLocalSendDialog()
                                         onOpenVpnDialog: root.openVpnDialog()
                                         onOpenTailscaleDialog: root.openTailscaleDialog()
+                                        onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                                     }
                                 }
                             }
@@ -753,6 +755,7 @@ AbstractQuickPanel {
                         onOpenLocalSendDialog: root.openLocalSendDialog()
                         onOpenVpnDialog: root.openVpnDialog()
                         onOpenTailscaleDialog: root.openTailscaleDialog()
+                        onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                     }
                 }
             }

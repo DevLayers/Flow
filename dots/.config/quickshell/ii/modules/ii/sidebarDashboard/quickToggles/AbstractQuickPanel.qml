@@ -16,4 +16,5 @@ Rectangle {
     signal openLocalSendDialog
     signal openVpnDialog
     signal openTailscaleDialog
+    signal openDnsOverTlsDialog
 }
