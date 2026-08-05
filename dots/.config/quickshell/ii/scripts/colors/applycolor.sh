@@ -146,6 +146,11 @@ os.rename(tmp_path, output_path)
 
   for file in /dev/pts/*; do
     if [[ $file =~ ^/dev/pts/[0-9]+$ ]]; then
+      # Only inject into ptys that actually have a shell attached, not daemons
+      # that happen to hold a stray pty as their controlling terminal (e.g. kded6).
+      if ! ps -t "${file#/dev/}" -o comm= 2>/dev/null | grep -qE '^(bash|zsh|fish|sh|dash|tcsh|csh|ksh|nu|xonsh|elvish)$'; then
+        continue
+      fi
       {
       cat "$STATE_DIR"/user/generated/terminal/sequences.txt >"$file"
       } & disown || true
