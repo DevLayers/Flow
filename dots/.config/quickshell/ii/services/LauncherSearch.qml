@@ -411,33 +411,20 @@ Singleton {
         });
     }
 
-    // Manually managed results: updated via _scheduleResultsUpdate() to avoid
-    // synchronous recomputation on every keystroke (was causing stutter).
+    // Results are rebuilt once per event-loop turn. The previous scheduler
+    // computed immediately and then armed a second 16ms recomputation, which
+    // made every normal keystroke do the expensive fuzzy search twice.
     property list<var> results: []
-
-    // Debounce timer: 16ms = 1 frame. Coalesces rapid keystrokes into a single
-    // recomputation at the end of the burst. For the first keystroke of a new
-    // query (or empty query), Qt.callLater in _scheduleResultsUpdate fires
-    // immediately in the next event-loop tick instead of waiting the full 16ms.
-    Timer {
-        id: resultsDebounce
-        interval: 16
-        repeat: false
-        onTriggered: root.results = root._computeResults()
-    }
+    property bool _resultsUpdateQueued: false
 
     function _scheduleResultsUpdate() {
-        if (resultsDebounce.running) {
-            // Already scheduled: just let the existing timer fire
+        if (root._resultsUpdateQueued)
             return;
-        }
-        // First event in a new burst: defer to next tick (0ms latency for the
-        // user), then arm the debounce to catch any follow-up rapid keystrokes.
+
+        root._resultsUpdateQueued = true;
         Qt.callLater(function () {
+            root._resultsUpdateQueued = false;
             root.results = root._computeResults();
-            // Arm debounce to coalesce any keystrokes that arrived while we
-            // were computing (rare but possible at very high WPM).
-            resultsDebounce.restart();
         });
     }
 

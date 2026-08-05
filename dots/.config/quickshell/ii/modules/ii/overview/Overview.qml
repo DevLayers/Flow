@@ -58,6 +58,77 @@ Scope {
                         property int animDurationExit: Math.round(260 * Appearance.animMultiplier)
                         property list<real> animCurveEnter: Appearance.animationCurves.expressiveFastSpatial
                         property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
+                        readonly property bool overviewShouldShow: LauncherSearch.query === ""
+                            && !GlobalStates.searchOnlyMode
+                            && !GlobalStates.searchCenterMode
+                            && !Config.options.search.suggestions.enable
+                            && (Config?.options.overview.enable ?? true)
+                        property real overviewRevealProgress: 1.0
+                        property real overviewFadeProgress: 1.0
+                        property bool _overviewRevealInitialized: false
+
+                        ParallelAnimation {
+                            id: overviewRevealAnim
+                            NumberAnimation {
+                                target: root
+                                property: "overviewRevealProgress"
+                                from: 0.0
+                                to: 1.0
+                                duration: root.animDurationEnter
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: root.animCurveEnter
+                            }
+                            NumberAnimation {
+                                target: root
+                                property: "overviewFadeProgress"
+                                from: 0.0
+                                to: 1.0
+                                duration: root.animDurationEnter
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+
+                        function syncOverviewReveal() {
+                            if (!root._overviewRevealInitialized)
+                                return;
+
+                            const shouldShow = root.overviewShouldShow;
+                            overviewRevealAnim.stop();
+
+                            if (!GlobalStates.overviewOpen) {
+                                root.overviewRevealProgress = shouldShow ? 1.0 : 0.0;
+                                root.overviewFadeProgress = shouldShow ? 1.0 : 0.0;
+                                return;
+                            }
+
+                            if (!shouldShow) {
+                                root.overviewRevealProgress = 0.0;
+                                root.overviewFadeProgress = 0.0;
+                                return;
+                            }
+
+                            // Force a real 0 -> 1 transition. This is intentionally
+                            // explicit instead of relying on a Behavior over a binding.
+                            root.overviewRevealProgress = 0.0;
+                            root.overviewFadeProgress = 0.0;
+                            Qt.callLater(() => {
+                                if (GlobalStates.overviewOpen && LauncherSearch.query === "" && root.overviewShouldShow)
+                                    overviewRevealAnim.start();
+                            });
+                        }
+
+                        Connections {
+                            target: LauncherSearch
+                            function onQueryChanged() {
+                                root.syncOverviewReveal();
+                            }
+                        }
+
+                        Component.onCompleted: {
+                            root.overviewRevealProgress = root.overviewShouldShow && LauncherSearch.query === "" ? 1.0 : 0.0;
+                            root.overviewFadeProgress = root.overviewRevealProgress;
+                            root._overviewRevealInitialized = true;
+                        }
 
                         visible: GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0
 
@@ -316,18 +387,18 @@ Scope {
                                 anchors.top: root.isBottomBar ? undefined : searchWidgetWrapper.bottom
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout
-                                opacity: searchWidgetWrapper.slideOpacity
+                                opacity: root.overviewShouldShow ? searchWidgetWrapper.slideOpacity * root.overviewFadeProgress : 0.0
 
-                                layer.enabled: true
+                                layer.enabled: overviewLoader.opacity < 0.999
                                 layer.effect: MultiEffect {
-                                    blurEnabled: true
+                                    blurEnabled: overviewLoader.opacity < 0.999
                                     blurMax: 64.0
                                     blur: (1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * 1.0
                                 }
 
                                 transform: [
                                     Translate {
-                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY
+                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
                                     },
                                     Scale {
                                         origin.x: overviewLoader.implicitWidth / 2
@@ -339,7 +410,7 @@ Scope {
 
                                 sourceComponent: OverviewWidget {
                                     panelWindow: root
-                                    visible: (root.searchingText == "") && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable
+                                    visible: root.overviewShouldShow && root.overviewFadeProgress > 0.001
                                     monitorIndex: root.monitorIndex
                                 }
                             }
@@ -348,18 +419,18 @@ Scope {
                                 id: scrollingOverviewLoader
                                 anchors.fill: parent
                                 active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout
-                                opacity: searchWidgetWrapper.slideOpacity
+                                opacity: root.overviewShouldShow ? searchWidgetWrapper.slideOpacity * root.overviewFadeProgress : 0.0
 
-                                layer.enabled: true
+                                layer.enabled: scrollingOverviewLoader.opacity < 0.999
                                 layer.effect: MultiEffect {
-                                    blurEnabled: true
+                                    blurEnabled: scrollingOverviewLoader.opacity < 0.999
                                     blurMax: 64.0
                                     blur: (1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * 1.0
                                 }
 
                                 transform: [
                                     Translate {
-                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY
+                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
                                     },
                                     Scale {
                                         origin.x: scrollingOverviewLoader.width / 2
@@ -372,7 +443,7 @@ Scope {
                                 sourceComponent: ScrollingOverviewWidget {
                                     anchors.fill: parent
                                     panelWindow: root
-                                    visible: (root.searchingText == "") && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable
+                                    visible: root.overviewShouldShow && root.overviewFadeProgress > 0.001
                                     monitorIndex: root.monitorIndex
                                 }
                             }
