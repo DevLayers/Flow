@@ -446,6 +446,14 @@ Singleton {
     // every branch that consumes it. Options with a continuous range rather
     // than a fixed value set (speedScale, gains, sizes) are deliberately
     // absent: they need bounds checking, not membership.
+    //
+    // An entry that is *missing* a legal value is worse than no entry at all:
+    // it resets a setting the user deliberately chose. Every list below is
+    // copied from the option set the corresponding ConfigSelectionArray in
+    // modules/settings declares, so adding a mode to the UI means adding it
+    // here too. Anything whose full value set can't be read off one such list
+    // (background widget placementStrategy, which also accepts undocumented
+    // aliases) is left out on purpose.
     readonly property var enumConstraints: ({
         "panelFamily": ["ii", "waffle"],
         "policies.ai": [0, 1, 2],
@@ -458,17 +466,14 @@ Singleton {
         "phone.webcam.resolution": ["640x480", "1280x720", "1920x1080"],
         "phone.webcam.rotateDegrees": [0, 90, 180, 270],
         "phone.webcam.connection": ["wifi", "usb"],
-        "appearance.fakeScreenRounding": [0, 1, 2, 3],
+        "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
         "appearance.colorEngine": ["vynx", "fork"],
-        "background.widgets.media.placementStrategy": ["free", "leastBusy", "mostBusy"],
-        "background.widgets.weather.placementStrategy": ["free", "leastBusy", "mostBusy"],
-        "background.widgets.date.placementStrategy": ["free", "leastBusy", "mostBusy"],
-        "background.zoomOutStyle": [0, 1],
+        "background.zoomOutStyle": [0, 1, 2],
         "background.mediaMode.visualizerMode": [0, 1, 2, 3],
         "background.mediaMode.syllable.textHighlightStyle": [0, 1],
-        "bar.cornerStyle": [0, 1, 2],
+        "bar.cornerStyle": [0, 1, 2, 3],
         "bar.barGroupStyle": [0, 1, 2],
-        "bar.barBackgroundStyle": [0, 1, 2],
+        "bar.barBackgroundStyle": [0, 1, 2, 3],
         "bar.mediaPlayer.popupStyle": ["default", "expressive", "android"],
         "userProfile.imageStyle": ["initial", "expressive", "custom"],
         "lock.centerAlignment": ["vertical", "horizontal"],

@@ -14,7 +14,12 @@ Loader {
 
     property bool dismissed: false
     readonly property bool severe: Config.configHealthState === "malformed"
-    active: Config.configHealthState !== "ok" && !root.dismissed
+    // bannerText guards against a state with no copy rendering as an empty box.
+    active: Config.configHealthState !== "ok" && root.bannerText !== "" && !root.dismissed
+    // An inactive Loader is zero-height but still counts as a ColumnLayout
+    // child, so it reserves a spacing slot above the window content. Hiding it
+    // drops it out of the layout entirely.
+    visible: root.active
     sourceComponent: root.severe ? warningComponent : noticeComponent
 
     Connections {
