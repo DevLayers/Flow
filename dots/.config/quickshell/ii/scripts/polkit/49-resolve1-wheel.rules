@@ -1,0 +1,28 @@
+/* Allow members of the "wheel" group to change per-link DNS settings without
+ * authenticating, so the shell's DNS-over-TLS quick toggle can flip instantly.
+ *
+ * Only the actions needed by that toggle are granted. Every other resolve1
+ * action keeps its default policy (auth_admin_keep).
+ *
+ * Install with:
+ *   sudo install -Dm644 49-resolve1-wheel.rules \
+ *       /etc/polkit-1/rules.d/49-resolve1-wheel.rules
+ *
+ * Remove with:
+ *   sudo rm /etc/polkit-1/rules.d/49-resolve1-wheel.rules
+ *
+ * polkitd picks the file up automatically; no restart is needed.
+ */
+polkit.addRule(function (action, subject) {
+    var allowed = [
+        "org.freedesktop.resolve1.set-dns-servers",
+        "org.freedesktop.resolve1.set-dns-over-tls",
+        "org.freedesktop.resolve1.set-domains",
+        "org.freedesktop.resolve1.flush-caches",
+        "org.freedesktop.resolve1.revert"
+    ];
+
+    if (allowed.indexOf(action.id) !== -1 && subject.isInGroup("wheel") && subject.local && subject.active) {
+        return polkit.Result.YES;
+    }
+});
