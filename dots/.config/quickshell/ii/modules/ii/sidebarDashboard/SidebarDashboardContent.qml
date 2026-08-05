@@ -24,6 +24,7 @@ import qs.modules.ii.sidebarDashboard.darkMode
 import qs.modules.ii.sidebarDashboard.localSend
 import qs.modules.ii.sidebarDashboard.vpn
 import qs.modules.ii.sidebarDashboard.tailscale
+import qs.modules.ii.sidebarDashboard.dnsOverTls
 
 Item {
     id: root
@@ -38,7 +39,8 @@ Item {
     property bool showLocalSendDialog: false
     property bool showVpnDialog: false
     property bool showTailscaleDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog
+    property bool showDnsOverTlsDialog: false
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog
     property bool editMode: false
 
     property int entranceTrigger: -1
@@ -74,6 +76,7 @@ Item {
                 root.showLocalSendDialog = false;
                 root.showVpnDialog = false;
                 root.showTailscaleDialog = false;
+                root.showDnsOverTlsDialog = false;
             }
         }
     }
@@ -169,6 +172,7 @@ Item {
                     editMode: root.editMode
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
+                    onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
                 }
             }
 
@@ -257,6 +261,11 @@ Item {
     ToggleDialog {
         shownPropertyString: "showTailscaleDialog"
         dialog: TailscaleDialog {}
+    }
+
+    ToggleDialog {
+        shownPropertyString: "showDnsOverTlsDialog"
+        dialog: DnsOverTlsDialog {}
     }
 
     component ToggleDialog: Loader {
