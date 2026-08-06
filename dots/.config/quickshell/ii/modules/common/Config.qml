@@ -2234,7 +2234,7 @@ Singleton {
                 property bool enablePeriodicTable: false
                 property bool enableAminoAcids: false
                 // "five" | "seven" | "four" — side chain classification scheme
-                property string aminoAcidScheme: "five"
+                property string aminoAcidScheme: "seven"
                 property bool enableCommands: true
                 property bool commandsTagsSidebar: false
                 property bool enableWorkspaceProfiles: false
