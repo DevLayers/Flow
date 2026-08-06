@@ -33,6 +33,12 @@ Scope {
                 "name": Translation.tr("Elements")
             });
         }
+        if (Config.options.cheatsheet.enableAminoAcids) {
+            list.push({
+                "icon": "biotech",
+                "name": Translation.tr("Amino acids")
+            });
+        }
         if (Config.options.cheatsheet.enableCommands) {
             list.push({
                 "icon": "terminal",
@@ -435,8 +441,8 @@ Scope {
                                     easing.type: Easing.OutCubic
                                 }
 
-                                // Timetable, Email & Workspaces: lazy — load only when first visited
-                                property bool _lazy: modelData.icon === "calendar_month" || modelData.icon === "mail" || modelData.icon === "dashboard"
+                                // Timetable, Email, Workspaces & Amino acids: lazy — load only when first visited
+                                property bool _lazy: modelData.icon === "calendar_month" || modelData.icon === "mail" || modelData.icon === "dashboard" || modelData.icon === "biotech"
                                 property bool _wasSeen: false
                                 active: !_lazy || swipeView.currentIndex === index || _wasSeen
                                 onActiveChanged: if (active)
@@ -457,6 +463,8 @@ Scope {
                                         return "CheatsheetKeybinds.qml";
                                     case "experiment":
                                         return "CheatsheetPeriodicTable.qml";
+                                    case "biotech":
+                                        return "CheatsheetAminoAcids.qml";
                                     case "terminal":
                                         return "commands/CheatsheetCommands.qml";
                                     case "dashboard":
