@@ -609,36 +609,45 @@ function sPyl() {
 // Each amino acid carries its class under all three schemes so the grid can be
 // recoloured by swapping `defaultScheme` (or whatever the caller passes).
 
+// Classes are coloured relative to the active matugen palette, never absolutely:
+// ColorUtils.categoryAccent() adds `hueOffset` to the theme's own hue and takes
+// saturation from it too, so the whole set turns with the wallpaper.
+//
+// Offsets stay inside ±50° of the theme hue — an analogous family, so every
+// class still reads as part of the palette instead of a rainbow that happens to
+// be phase-shifted. That arc is too narrow to separate seven classes on its own,
+// so `shade` climbs a tonal ladder as a second axis and cycles every three
+// entries; neighbours in hue therefore always differ in weight as well.
 const schemes = {
     five: {
         label: "5 classes",
         classes: [
-            { key: "nonpolar", name: "Nonpolar, aliphatic", hue: 40 },
-            { key: "aromatic", name: "Aromatic", hue: 285 },
-            { key: "polar", name: "Polar, uncharged", hue: 150 },
-            { key: "acidic", name: "Acidic (−)", hue: 5 },
-            { key: "basic", name: "Basic (+)", hue: 215 }
+            { key: "nonpolar", name: "Nonpolar, aliphatic", hueOffset: -50, shade: 0 },
+            { key: "aromatic", name: "Aromatic", hueOffset: -25, shade: 1 },
+            { key: "polar", name: "Polar, uncharged", hueOffset: 0, shade: 2 },
+            { key: "acidic", name: "Acidic (−)", hueOffset: 25, shade: 0 },
+            { key: "basic", name: "Basic (+)", hueOffset: 50, shade: 1 }
         ]
     },
     seven: {
         label: "7 classes",
         classes: [
-            { key: "aliphatic", name: "Aliphatic", hue: 5 },
-            { key: "aromatic", name: "Aromatic", hue: 145 },
-            { key: "amidic", name: "Amidic", hue: 35 },
-            { key: "hydroxylic", name: "Hydroxylic", hue: 330 },
-            { key: "chargedPos", name: "Positively charged", hue: 225 },
-            { key: "chargedNeg", name: "Negatively charged", hue: 190 },
-            { key: "sulfur", name: "Sulfur / selenium", hue: 55 }
+            { key: "aliphatic", name: "Aliphatic", hueOffset: -50, shade: 0 },
+            { key: "aromatic", name: "Aromatic", hueOffset: -33, shade: 1 },
+            { key: "amidic", name: "Amidic", hueOffset: -17, shade: 2 },
+            { key: "hydroxylic", name: "Hydroxylic", hueOffset: 0, shade: 0 },
+            { key: "chargedPos", name: "Positively charged", hueOffset: 17, shade: 1 },
+            { key: "chargedNeg", name: "Negatively charged", hueOffset: 33, shade: 2 },
+            { key: "sulfur", name: "Sulfur / selenium", hueOffset: 50, shade: 0 }
         ]
     },
     four: {
         label: "4 classes",
         classes: [
-            { key: "charged", name: "Charged", hue: 225 },
-            { key: "polar", name: "Polar, uncharged", hue: 285 },
-            { key: "hydrophobic", name: "Hydrophobic", hue: 150 },
-            { key: "special", name: "Special cases", hue: 50 }
+            { key: "charged", name: "Charged", hueOffset: -50, shade: 0 },
+            { key: "polar", name: "Polar, uncharged", hueOffset: -17, shade: 1 },
+            { key: "hydrophobic", name: "Hydrophobic", hueOffset: 17, shade: 2 },
+            { key: "special", name: "Special cases", hueOffset: 50, shade: 0 }
         ]
     }
 };

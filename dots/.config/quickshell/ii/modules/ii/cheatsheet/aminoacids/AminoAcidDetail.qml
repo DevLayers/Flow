@@ -26,9 +26,10 @@ Item {
     }
 
     readonly property var klass: root.aa ? AA.classInfo(root.schemeName, AA.classOf(root.aa, root.schemeName)) : null
-    readonly property real hue: root.klass ? root.klass.hue : 0
-    readonly property color tint: ColorUtils.categoryContainer(root.hue, Appearance.m3colors.m3primaryFixed, 0.5)
-    readonly property color onTint: ColorUtils.categoryOnColor(root.tint, root.hue)
+    readonly property real hueOffset: root.klass ? root.klass.hueOffset : 0
+    readonly property real shade: root.klass ? root.klass.shade : 0
+    readonly property color tint: ColorUtils.categoryAccent(root.hueOffset, root.shade, Appearance.m3colors.m3primary)
+    readonly property color onTint: ColorUtils.categoryOnColor(root.tint)
 
     function fmt(v, digits, prefix) {
         if (v === null || v === undefined)
@@ -173,7 +174,7 @@ Item {
                     Layout.minimumHeight: 300
                     Layout.preferredHeight: 300
                     radius: Appearance.rounding.normal
-                    color: ColorUtils.categoryTint(root.hue, Appearance.colors.colLayer2, Appearance.colors.colLayer2, 0.5, 0.07)
+                    color: ColorUtils.mix(root.tint, Appearance.colors.colLayer2, 0.07)
 
                     MoleculeStructure {
                         anchors.fill: parent

@@ -119,7 +119,7 @@ Rectangle {
                             implicitWidth: 8
                             implicitHeight: 8
                             radius: Appearance.rounding.full
-                            color: ColorUtils.categoryContainer(classRow.modelData.hue, Appearance.m3colors.m3primaryFixed, 0.5)
+                            color: ColorUtils.categoryAccent(classRow.modelData.hueOffset, classRow.modelData.shade, Appearance.m3colors.m3primary)
                         }
 
                         StyledText {

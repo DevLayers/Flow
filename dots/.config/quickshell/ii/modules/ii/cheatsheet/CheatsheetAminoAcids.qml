@@ -44,7 +44,8 @@ Item {
                 if (AA.classOf(aa, root.schemeName) === key)
                     out.push({
                         aa: aa,
-                        hue: root.classes[i].hue,
+                        hueOffset: root.classes[i].hueOffset,
+                        shade: root.classes[i].shade,
                         classKey: key
                     });
             }
@@ -108,7 +109,7 @@ Item {
                     id: chip
                     required property var modelData
 
-                    readonly property color tint: ColorUtils.categoryContainer(modelData.hue, Appearance.m3colors.m3primaryFixed, 0.5)
+                    readonly property color tint: ColorUtils.categoryAccent(modelData.hueOffset, modelData.shade, Appearance.m3colors.m3primary)
                     readonly property bool picked: root.classFilter === modelData.key
 
                     implicitWidth: chipRow.implicitWidth + 22
@@ -170,7 +171,8 @@ Item {
                         Layout.preferredWidth: root.cardWidth
                         Layout.preferredHeight: root.cardHeight
                         aa: modelData.aa
-                        hue: modelData.hue
+                        hueOffset: modelData.hueOffset
+                        shade: modelData.shade
                         revealIndex: index
                         selected: root.selected === modelData.aa
                         onClicked: root.selected = modelData.aa

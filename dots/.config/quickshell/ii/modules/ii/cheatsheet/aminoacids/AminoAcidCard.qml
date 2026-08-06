@@ -9,12 +9,13 @@ RippleButton {
     id: root
 
     required property var aa
-    required property real hue
+    required property real hueOffset
+    required property real shade
     property bool selected: false
     property int revealIndex: 0
 
-    readonly property color tint: ColorUtils.categoryContainer(root.hue, Appearance.m3colors.m3primaryFixed, 0.5)
-    readonly property color onTint: ColorUtils.categoryOnColor(root.tint, root.hue)
+    readonly property color tint: ColorUtils.categoryAccent(root.hueOffset, root.shade, Appearance.m3colors.m3primary)
+    readonly property color onTint: ColorUtils.categoryOnColor(root.tint)
 
     implicitWidth: 280
     implicitHeight: 170

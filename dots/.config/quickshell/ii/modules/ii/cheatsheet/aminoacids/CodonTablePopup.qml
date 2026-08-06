@@ -30,11 +30,12 @@ Item {
     readonly property real cellWidth: 190
     readonly property real rowHeaderWidth: 26
 
-    function hueOf(letter) {
+    function accentOf(letter) {
         const aa = AA.lookup(letter);
         if (!aa)
-            return -1;
-        return AA.classInfo(root.schemeName, AA.classOf(aa, root.schemeName)).hue;
+            return Appearance.colors.colSubtext;
+        const info = AA.classInfo(root.schemeName, AA.classOf(aa, root.schemeName));
+        return ColorUtils.categoryAccent(info.hueOffset, info.shade, Appearance.m3colors.m3primary);
     }
 
     // ── One codon of a block ─────────────────────────────────────────────────
@@ -42,12 +43,12 @@ Item {
         id: entry
         required property var cell
 
-        readonly property real hue: root.hueOf(entry.cell.letter)
+        readonly property color accent: root.accentOf(entry.cell.letter)
         readonly property bool highlighted: root.highlightLetter !== "" && entry.cell.letter === root.highlightLetter
 
         implicitHeight: entryRow.implicitHeight + 7
         radius: Appearance.rounding.verysmall
-        color: entry.highlighted ? ColorUtils.transparentize(ColorUtils.categoryContainer(entry.hue, Appearance.m3colors.m3primaryFixed, 0.5), 0.5) : "transparent"
+        color: entry.highlighted ? ColorUtils.transparentize(entry.accent, 0.5) : "transparent"
 
         RowLayout {
             id: entryRow
@@ -72,7 +73,7 @@ Item {
                 implicitHeight: 8
                 radius: Appearance.rounding.full
                 visible: !entry.cell.stop
-                color: ColorUtils.categoryContainer(entry.hue, Appearance.m3colors.m3primaryFixed, 0.5)
+                color: entry.accent
             }
 
             StyledText {
