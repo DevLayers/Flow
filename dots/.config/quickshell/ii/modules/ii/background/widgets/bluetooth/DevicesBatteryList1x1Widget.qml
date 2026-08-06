@@ -34,7 +34,10 @@ AbstractBackgroundWidget {
                 charging: Battery.isCharging || Battery.isPluggedIn,
                 symbol: "laptop",
                 accent: Appearance.colors.colPrimary,
-                onAccent: Appearance.colors.colOnPrimary
+                onAccent: Appearance.colors.colOnPrimary,
+                container: Appearance.colors.colPrimaryContainer,
+                onContainer: Appearance.colors.colOnPrimaryContainer,
+                containerHover: Appearance.colors.colPrimaryContainerHover
             });
         }
 
@@ -46,7 +49,10 @@ AbstractBackgroundWidget {
                 charging: KdeConnectService.activeDevice.isCharging ?? false,
                 symbol: "smartphone",
                 accent: Appearance.colors.colTertiary,
-                onAccent: Appearance.colors.colOnTertiary
+                onAccent: Appearance.colors.colOnTertiary,
+                container: Appearance.colors.colTertiaryContainer,
+                onContainer: Appearance.colors.colOnTertiaryContainer,
+                containerHover: Appearance.colors.colTertiaryContainerHover
             });
         }
 
@@ -64,8 +70,11 @@ AbstractBackgroundWidget {
                 battery: battVal,
                 charging: false,
                 symbol: symbol !== "" ? symbol : "headphones",
-                accent: Appearance.colors.colSecondary,
-                onAccent: Appearance.colors.colOnSecondary
+                accent: Appearance.colors.colSecondaryContainer,
+                onAccent: Appearance.colors.colOnSecondaryContainer,
+                container: ColorUtils.mix(Appearance.colors.colSecondary, Appearance.colors.colSecondaryContainer, 0.5),
+                onContainer: Appearance.colors.colOnSecondary,
+                containerHover: ColorUtils.mix(Appearance.colors.colSecondary, Appearance.colors.colSecondaryContainer, 0.7)
             });
         }
 
@@ -101,15 +110,24 @@ AbstractBackgroundWidget {
                     readonly property bool hasItem: itemData !== null
                     readonly property real fillPct: hasItem ? Math.min(1.0, Math.max(0.0, itemData.battery)) : 0.0
                     readonly property int displayPercent: Math.round(fillPct * 100)
-                    readonly property color activeOnColor: hasItem ? itemData.onAccent : Appearance.colors.colOnSurfaceVariant
+                    readonly property color activeOnColor: hasItem ? itemData.onContainer : Appearance.colors.colOnSurfaceVariant
 
                     // Compact Pill Background Track
                     Rectangle {
                         id: pillTrack
                         anchors.fill: parent
                         radius: height / 2
-                        color: root.pillBgColor
+                        color: hasItem ? (pillHover.hovered ? itemData.containerHover : itemData.container) : root.pillBgColor
                         opacity: hasItem ? 1.0 : 0.30
+
+                        Behavior on color {
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(pillTrack)
+                        }
+
+                        HoverHandler {
+                            id: pillHover
+                            enabled: rowSlot.hasItem
+                        }
 
                         // Horizontal Liquid Fill Level Bar
                         Rectangle {
@@ -138,7 +156,7 @@ AbstractBackgroundWidget {
                                 text: rowSlot.hasItem ? rowSlot.itemData.symbol : "devices"
                                 iconSize: 17
                                 fill: 1
-                                color: Appearance.colors.colOnSurface
+                                color: hasItem ? itemData.onContainer : Appearance.colors.colOnSurfaceVariant
                             }
 
                             StyledText {
@@ -147,7 +165,7 @@ AbstractBackgroundWidget {
                                 text: rowSlot.hasItem ? rowSlot.itemData.name : ""
                                 font.pixelSize: 12
                                 font.weight: Font.Medium
-                                color: Appearance.colors.colOnSurface
+                                color: hasItem ? itemData.onContainer : Appearance.colors.colOnSurfaceVariant
                                 elide: Text.ElideRight
                             }
 
@@ -156,7 +174,7 @@ AbstractBackgroundWidget {
                             Text {
                                 visible: rowSlot.hasItem
                                 text: rowSlot.displayPercent + "%"
-                                color: Appearance.colors.colOnSurface
+                                color: hasItem ? itemData.onContainer : Appearance.colors.colOnSurfaceVariant
                                 font {
                                     pixelSize: 12
                                     weight: Font.Medium

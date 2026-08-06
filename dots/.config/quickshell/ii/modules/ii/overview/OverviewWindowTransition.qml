@@ -39,7 +39,7 @@ Scope {
     readonly property bool featureEnabled:
         Config.options.background.zoomOutEnabled &&
         Config.options.background.windowZoomOnOverview &&
-        Config.options.background.zoomOutStyle === 0
+        Config.options.background.zoomOutStyle !== 2
 
     Variants {
         id: transitionVariants

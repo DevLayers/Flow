@@ -277,8 +277,8 @@ Item {
                         id: wallpaper
                         anchors.fill: parent
 
-                        visible: opacity > 0 && !wallpaperIsVideo
-                        opacity: (wallpaper.status === Image.Ready && !wallpaperIsVideo) ? 1 : 0
+                        visible: opacity > 0
+                        opacity: (wallpaper.status === Image.Ready && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
                         // GPU: cap sourceSize to screen resolution — loading > native res wastes VRAM with no visual gain.
                         // Clamp to max 110% of screen (enough for parallax headroom).
                         sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.min(Math.round(screen.width * preferredWallpaperScale), Math.round(screen.width * 1.1)) : 1920, screen.height > 0 ? Math.min(Math.round(screen.height * preferredWallpaperScale), Math.round(screen.height * 1.1)) : 1080) : Qt.size(-1, -1)
@@ -344,6 +344,7 @@ Item {
                     sourceItem: wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+                    wallpaperIsVideo: wallpaperImageRoot.wallpaperIsVideo
                 }
 
                 LockDesaturate {
@@ -368,6 +369,7 @@ Item {
                 }
 
                 WindowBlur {
+                    id: windowBlur
                     anchors.fill: parent
                     sourceItem: wallpaperVisualContainer
                     hasWindowsInActiveWorkspace: wallpaperImageRoot.hasWindowsInActiveWorkspace

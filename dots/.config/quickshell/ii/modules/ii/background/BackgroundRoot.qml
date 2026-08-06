@@ -226,7 +226,7 @@ PanelWindow {
         const py = videoPanY.toFixed(4);
         const cmdX = '{"command":["set_property","video-pan-x",' + px + ']}';
         const cmdY = '{"command":["set_property","video-pan-y",' + py + ']}';
-        Quickshell.execDetached(["bash", "-c", "echo '" + cmdX + "' | socat - UNIX-CONNECT:" + sock + " >/dev/null 2>&1; echo '" + cmdY + "' | socat - UNIX-CONNECT:" + sock + " >/dev/null 2>&1"]);
+        Quickshell.execDetached(["bash", "-c", "printf '%s\\n%s\\n' '" + cmdX + "' '" + cmdY + "' | socat - UNIX-CONNECT:" + sock + " >/dev/null 2>&1"]);
     }
 
     Behavior on colText {
