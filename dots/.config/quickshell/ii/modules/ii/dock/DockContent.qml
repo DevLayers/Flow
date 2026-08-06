@@ -24,7 +24,7 @@ Item {
     readonly property real dockPadding: 0
     readonly property bool isVertical: dock.isVertical
     readonly property real dotMargin: (Config.options?.dock.height ?? 60) * 0.2 - 2
-    readonly property real dotMarginV: (Config.options?.dock.height ?? 60) * 0.12 - 2
+    readonly property real dotMarginV: dotMargin
     readonly property real sepThickness: Math.max(3, Math.round(Appearance.sizes.dockButtonSize * 0.06))
     readonly property real buttonSlotSize: Appearance.sizes.dockButtonSize + dotMargin * 2
     readonly property real buttonSlotHeight: Appearance.sizes.dockButtonSize + dotMarginV * 2
@@ -40,12 +40,12 @@ Item {
 
     property int _contextMenuOpenCount: 0
     function registerContextMenuOpen() {
-        _contextMenuOpenCount++
-        _contextMenuSafetyTimer.restart()
+        _contextMenuOpenCount++;
+        _contextMenuSafetyTimer.restart();
     }
     function registerContextMenuClose() {
-        _contextMenuOpenCount = Math.max(0, _contextMenuOpenCount - 1)
-        _contextMenuSafetyTimer.restart()
+        _contextMenuOpenCount = Math.max(0, _contextMenuOpenCount - 1);
+        _contextMenuSafetyTimer.restart();
     }
     readonly property bool anyContextMenuOpen: _contextMenuOpenCount > 0
 
@@ -56,17 +56,81 @@ Item {
         interval: 8000
         onTriggered: {
             if (_contextMenuOpenCount > 0) {
-                _contextMenuOpenCount = 0
+                _contextMenuOpenCount = 0;
             }
         }
     }
     property bool popupIsResizing: false
     property Item lastHoveredButton: null
+    property Item hoveredSlot: null
     property bool buttonHovered: false
     property bool suppressHover: false
     property point hoveredButtonCenter: Qt.point(0, 0)
     property string externalDragIcon: ""
     property bool externalDragOver: false
+
+    readonly property bool enableMagnification: Config.options?.dock?.enableMagnification ?? false
+    readonly property real magnificationScale: Config.options?.dock?.magnificationScale ?? 1.5
+
+    function _getSlotMagScale(targetSlot) {
+        if (!enableMagnification || !buttonHovered || !hoveredSlot)
+            return 1.0;
+        let maxScale = magnificationScale;
+
+        let repeater = _getActiveRepeater();
+        if (!repeater)
+            return 1.0;
+
+        let children = [];
+        for (let i = 0; i < repeater.count; i++) {
+            let item = repeater.itemAt(i);
+            if (item)
+                children.push(item);
+        }
+
+        // Find wrapper item for targetSlot and hoveredSlot
+        let findWrapper = slot => {
+            if (!slot)
+                return null;
+            for (let i = 0; i < children.length; i++) {
+                let w = children[i];
+                if (w === slot || w.children.includes(slot))
+                    return w;
+                let loader = w.children ? w.children.find(c => c && c.item !== undefined) : null;
+                if (loader && loader.item && (loader.item === slot || loader.item.children.includes(slot)))
+                    return w;
+            }
+            return null;
+        };
+
+        let targetWrapper = findWrapper(targetSlot);
+        let hoveredWrapper = findWrapper(hoveredSlot);
+
+        if (!targetWrapper || !hoveredWrapper)
+            return 1.0;
+        if (targetWrapper === hoveredWrapper)
+            return maxScale;
+
+        let myIdx = children.indexOf(targetWrapper);
+        let hvdIdx = children.indexOf(hoveredWrapper);
+        if (myIdx < 0 || hvdIdx < 0)
+            return 1.0;
+        let dist = Math.abs(myIdx - hvdIdx);
+        if (dist === 1)
+            return 1.0 + (maxScale - 1.0) * 0.45;
+        if (dist === 2)
+            return 1.0 + (maxScale - 1.0) * 0.10;
+        return 1.0;
+    }
+
+    Timer {
+        id: hoverGraceTimer
+        interval: 250
+        onTriggered: {
+            root.buttonHovered = false;
+            root.hoveredSlot = null;
+        }
+    }
 
     readonly property var activePlayer: MprisController.activePlayer
     readonly property string rawTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || ""
@@ -74,16 +138,34 @@ Item {
     property bool showMusicPlayer: hasRealData
 
     onHasRealDataChanged: {
-        if (hasRealData) { switchHoldTimer.stop(); showMusicPlayer = true }
-        else switchHoldTimer.restart()
+        if (hasRealData) {
+            switchHoldTimer.stop();
+            showMusicPlayer = true;
+        } else
+            switchHoldTimer.restart();
     }
 
-    Timer { id: suppressHoverTimer; interval: 250; onTriggered: root.suppressHover = false }
-    Timer { id: switchHoldTimer; interval: 2000; onTriggered: if (!root.hasRealData) root.showMusicPlayer = false }
+    Timer {
+        id: suppressHoverTimer
+        interval: 250
+        onTriggered: root.suppressHover = false
+    }
+    Timer {
+        id: switchHoldTimer
+        interval: 2000
+        onTriggered: if (!root.hasRealData)
+            root.showMusicPlayer = false
+    }
 
     onLastHoveredButtonChanged: {
-        if (root.lastHoveredButton)
-            hoveredButtonCenter = root.lastHoveredButton.mapToItem(null, root.lastHoveredButton.width / 2, root.lastHoveredButton.height / 2)
+        if (root.lastHoveredButton) {
+            let btn = root.lastHoveredButton;
+            let mScale = root._getSlotMagScale(btn);
+            let scaleOffset = (mScale - 1.0) * (btn.height / 2);
+            let yOff = root.isVertical ? btn.height / 2 : (root.dockPos === "top" ? btn.height + scaleOffset : -scaleOffset);
+            let xOff = !root.isVertical ? btn.width / 2 : (root.dockPos === "left" ? btn.width + scaleOffset : -scaleOffset);
+            hoveredButtonCenter = btn.mapToItem(null, xOff, yOff);
+        }
     }
 
     readonly property bool showPin: Config.options?.dock?.showPinButton ?? true
@@ -104,293 +186,350 @@ Item {
 
     // ── Helper: get the active Repeater instance ─────────────────────────
     function _getActiveRepeater() {
-        return root.isVertical ? columnItemRepeater : itemRepeater
+        return root.isVertical ? columnItemRepeater : itemRepeater;
     }
     function getItemWrapper(index) {
-        var repeater = _getActiveRepeater()
-        return repeater ? repeater.itemAt(index) : null
+        var repeater = _getActiveRepeater();
+        return repeater ? repeater.itemAt(index) : null;
     }
 
     // ── Helper: estimate item width in the current orientation ───────────
     function getItemWidth(index) {
-        var wrapper = getItemWrapper(index)
+        var wrapper = getItemWrapper(index);
         if (wrapper) {
-            return root.isVertical ? wrapper.height : wrapper.width
+            return root.isVertical ? wrapper.height : wrapper.width;
         }
         // Fallback: estimate from model data
-        var entry = flattenedItems[index]
-        if (!entry) return buttonSlotSize
+        var entry = flattenedItems[index];
+        if (!entry)
+            return buttonSlotSize;
         switch (entry.type) {
-            case "media":
-            case "weather":
-                return root.isVertical ? buttonSlotSize : buttonSlotSize * 3
-            default:
-                return buttonSlotSize
+        case "media":
+        case "weather":
+            return root.isVertical ? buttonSlotSize : buttonSlotSize * 3;
+        default:
+            return buttonSlotSize;
         }
     }
 
     // ── Compute drag target by walking through variable-width items ──────
     function recomputeDragTarget() {
         if (!dragging) {
-            _dragTargetIndex = dragSourceIndex
-            return
+            _dragTargetIndex = dragSourceIndex;
+            return;
         }
-        var delta = dragCursorX - dragStartCursorX
-        var src = dragSourceIndex
-        var count = flattenedItems.length
+        var delta = dragCursorX - dragStartCursorX;
+        var src = dragSourceIndex;
+        var count = flattenedItems.length;
         if (count <= 1 || Math.abs(delta) < 5) {
-            _dragTargetIndex = src
-            return
+            _dragTargetIndex = src;
+            return;
         }
-        var spacing = Config.options.dock.iconSpacing
-        var step = delta > 0 ? 1 : -1
-        var remaining = Math.abs(delta)
-        var current = src
+        var spacing = Config.options.dock.iconSpacing;
+        var step = delta > 0 ? 1 : -1;
+        var remaining = Math.abs(delta);
+        var current = src;
         while (remaining > 0) {
-            var next = current + step
-            if (next < 0 || next >= count) break
+            var next = current + step;
+            if (next < 0 || next >= count)
+                break;
             // Distance from current item's center to next item's center
-            var curHalf = (getItemWidth(current) + spacing) / 2
-            var nextHalf = (getItemWidth(next) + spacing) / 2
-            var threshold = curHalf + nextHalf
-            if (remaining < threshold) break
-            remaining -= threshold
-            current = next
+            var curHalf = (getItemWidth(current) + spacing) / 2;
+            var nextHalf = (getItemWidth(next) + spacing) / 2;
+            var threshold = curHalf + nextHalf;
+            if (remaining < threshold)
+                break;
+            remaining -= threshold;
+            current = next;
         }
-        _dragTargetIndex = current
+        _dragTargetIndex = current;
     }
 
     function finishDrag() {
-        _suppressTranslateAnim = true
-        var src = dragSourceIndex
-        var tgt = _dragTargetIndex
+        _suppressTranslateAnim = true;
+        var src = dragSourceIndex;
+        var tgt = _dragTargetIndex;
         if (dragging && src !== tgt) {
-            _reordering = true
+            _reordering = true;
             if (src >= 0 && src < flattenedItems.length && tgt >= 0 && tgt < flattenedItems.length) {
-                var srcEntry = flattenedItems[src]
-                var tgtEntry = flattenedItems[tgt]
-                if (srcEntry && srcEntry.orderKey && tgtEntry && tgtEntry.orderKey
-                    && srcEntry.orderKey !== tgtEntry.orderKey) {
-                    var order = Array.from(Config.options.dock.order)
-                    var orderSrc = order.indexOf(srcEntry.orderKey)
-                    var orderDst = order.indexOf(tgtEntry.orderKey)
+                var srcEntry = flattenedItems[src];
+                var tgtEntry = flattenedItems[tgt];
+                if (srcEntry && srcEntry.orderKey && tgtEntry && tgtEntry.orderKey && srcEntry.orderKey !== tgtEntry.orderKey) {
+                    var order = Array.from(Config.options.dock.order);
+                    var orderSrc = order.indexOf(srcEntry.orderKey);
+                    var orderDst = order.indexOf(tgtEntry.orderKey);
 
                     // Ensure source orderKey exists in the order array
                     // (needed for dynamic runningApp:* keys)
                     if (orderSrc === -1) {
-                        var runningMarker = order.indexOf("runningApps")
+                        var runningMarker = order.indexOf("runningApps");
                         if (runningMarker !== -1) {
-                            order.splice(runningMarker + 1, 0, srcEntry.orderKey)
+                            order.splice(runningMarker + 1, 0, srcEntry.orderKey);
                         } else {
-                            order.push(srcEntry.orderKey)
+                            order.push(srcEntry.orderKey);
                         }
                     }
 
                     // Ensure target orderKey exists too
                     if (orderDst === -1) {
-                        var rm2 = order.indexOf("runningApps")
+                        var rm2 = order.indexOf("runningApps");
                         if (rm2 !== -1) {
-                            order.splice(rm2 + 1, 0, tgtEntry.orderKey)
+                            order.splice(rm2 + 1, 0, tgtEntry.orderKey);
                         } else {
-                            order.push(tgtEntry.orderKey)
+                            order.push(tgtEntry.orderKey);
                         }
                     }
 
                     // Recalculate both after potential inserts
-                    orderSrc = order.indexOf(srcEntry.orderKey)
-                    orderDst = order.indexOf(tgtEntry.orderKey)
+                    orderSrc = order.indexOf(srcEntry.orderKey);
+                    orderDst = order.indexOf(tgtEntry.orderKey);
 
                     // Prevent duplicate: only proceed if both keys are at distinct positions
                     if (orderSrc !== -1 && orderDst !== -1 && orderSrc !== orderDst) {
-                        order.splice(orderSrc, 1)
-                        order.splice(orderDst, 0, srcEntry.orderKey)
-                        Config.options.dock.order = order
+                        order.splice(orderSrc, 1);
+                        order.splice(orderDst, 0, srcEntry.orderKey);
+                        Config.options.dock.order = order;
                     }
                 }
             }
         }
-        dragging = false
-        dragSourceIndex = -1
-        _dragTargetIndex = -1
-        dragCursorX = 0
-        dragStartCursorX = 0
-        buttonHovered = false
-        lastHoveredButton = null
-        suppressHover = true
-        suppressHoverTimer.restart()
-        Qt.callLater(function() {
-            _reordering = false
-            _suppressTranslateAnim = false
-        })
+        dragging = false;
+        dragSourceIndex = -1;
+        _dragTargetIndex = -1;
+        dragCursorX = 0;
+        dragStartCursorX = 0;
+        buttonHovered = false;
+        lastHoveredButton = null;
+        suppressHover = true;
+        suppressHoverTimer.restart();
+        Qt.callLater(function () {
+            _reordering = false;
+            _suppressTranslateAnim = false;
+        });
     }
 
     function cancelDrag() {
-        _suppressTranslateAnim = true
-        dragging = false
-        dragSourceIndex = -1
-        _dragTargetIndex = -1
-        dragCursorX = 0
-        dragStartCursorX = 0
-        Qt.callLater(function() { _suppressTranslateAnim = false })
+        _suppressTranslateAnim = true;
+        dragging = false;
+        dragSourceIndex = -1;
+        _dragTargetIndex = -1;
+        dragCursorX = 0;
+        dragStartCursorX = 0;
+        Qt.callLater(function () {
+            _suppressTranslateAnim = false;
+        });
     }
 
     function startItemDrag(delegateIndex, child, eventX, eventY) {
-        _suppressTranslateAnim = true
-        dragSourceIndex = delegateIndex
-        _dragTargetIndex = delegateIndex
-        var mapped = child.mapToItem(root, eventX, eventY)
-        var mappedCoord = isVertical ? mapped.y : mapped.x
-        dragStartCursorX = mappedCoord
-        dragCursorX = mappedCoord
+        _suppressTranslateAnim = true;
+        dragSourceIndex = delegateIndex;
+        _dragTargetIndex = delegateIndex;
+        var mapped = child.mapToItem(root, eventX, eventY);
+        var mappedCoord = isVertical ? mapped.y : mapped.x;
+        dragStartCursorX = mappedCoord;
+        dragCursorX = mappedCoord;
         // Get the dragged item's actual wrapper for slotWidth
-        var wrapper = getItemWrapper(delegateIndex)
-        slotWidth = (wrapper ? (isVertical ? wrapper.height : wrapper.width) : buttonSlotSize) + 2
-        dragging = true
-        buttonHovered = false
-        if (previewPopupLoader.item) previewPopupLoader.item.show = false
-        Qt.callLater(function() { _suppressTranslateAnim = false })
+        var wrapper = getItemWrapper(delegateIndex);
+        slotWidth = (wrapper ? (isVertical ? wrapper.height : wrapper.width) : buttonSlotSize) + 2;
+        dragging = true;
+        buttonHovered = false;
+        if (previewPopupLoader.item)
+            previewPopupLoader.item.show = false;
+        Qt.callLater(function () {
+            _suppressTranslateAnim = false;
+        });
     }
 
     function moveItemDrag(child, eventX, eventY) {
-        if (!dragging) return
-        var mapped = child.mapToItem(root, eventX, eventY)
-        dragCursorX = isVertical ? mapped.y : mapped.x
-        recomputeDragTarget()
+        if (!dragging)
+            return;
+        var mapped = child.mapToItem(root, eventX, eventY);
+        dragCursorX = isVertical ? mapped.y : mapped.x;
+        recomputeDragTarget();
     }
 
     function endItemDrag() {
-        finishDrag()
+        finishDrag();
     }
 
     function mapDragToRoot(item, x, y) {
-        return item.mapToItem(root, x, y)
+        return item.mapToItem(root, x, y);
     }
 
     // ── Flattened items model ─────────────────────────────────────────────
     readonly property var pinnedAppMap: {
-        var m = {}
-        var allApps = TaskbarApps.apps ?? []
+        var m = {};
+        var allApps = TaskbarApps.apps ?? [];
         for (var i = 0; i < allApps.length; i++) {
-            var a = allApps[i]
-            if (a.pinned) m[a.appId] = a
+            var a = allApps[i];
+            if (a.pinned)
+                m[a.appId] = a;
         }
-        return m
+        return m;
     }
 
     readonly property var runningAppMap: {
-        var m = {}
-        var allApps = TaskbarApps.apps ?? []
+        var m = {};
+        var allApps = TaskbarApps.apps ?? [];
         for (var i = 0; i < allApps.length; i++) {
-            var a = allApps[i]
+            var a = allApps[i];
             if (!a.pinned && a.toplevels && a.toplevels.length > 0)
-                m[a.appId] = a
+                m[a.appId] = a;
         }
-        return m
+        return m;
     }
 
     readonly property var pinnedFileMap: {
-        var m = {}
-        var files = Config.options?.dock?.pinnedFiles ?? []
+        var m = {};
+        var files = Config.options?.dock?.pinnedFiles ?? [];
         for (var i = 0; i < files.length; i++)
-            m[files[i]] = { path: files[i] }
-        return m
+            m[files[i]] = {
+                path: files[i]
+            };
+        return m;
     }
 
     readonly property var flattenedItems: {
-        var result = []
-        var order = Config.options.dock.order ?? []
-        var allApps = TaskbarApps.apps ?? []
-        var allAppIds = []
+        var result = [];
+        var order = Config.options.dock.order ?? [];
+        var allApps = TaskbarApps.apps ?? [];
+        var allAppIds = [];
         for (var i = 0; i < allApps.length; i++)
-            allAppIds.push(allApps[i].appId)
+            allAppIds.push(allApps[i].appId);
 
         // Track seen orderKeys to avoid duplicates
-        var seenOrderKeys = {}
+        var seenOrderKeys = {};
 
         // Pre-scan explicit running apps and apps to avoid them being swallowed by "runningApps" marker
-        var explicitKeys = {}
+        var explicitKeys = {};
         for (var e_i = 0; e_i < order.length; e_i++) {
             if (order[e_i].startsWith("runningApp:") || order[e_i].startsWith("app:")) {
-                explicitKeys[order[e_i]] = true
+                explicitKeys[order[e_i]] = true;
             }
         }
 
         for (var oi = 0; oi < order.length; oi++) {
-            var entry = order[oi]
+            var entry = order[oi];
             if (entry === "pin" && root.showPin) {
-                result.push({ type: "action", actionId: "pin", orderKey: "pin" })
-                seenOrderKeys["pin"] = true
+                result.push({
+                    type: "action",
+                    actionId: "pin",
+                    orderKey: "pin"
+                });
+                seenOrderKeys["pin"] = true;
             } else if (entry === "trash" && root.showTrash) {
-                result.push({ type: "action", actionId: "trash", orderKey: "trash" })
-                seenOrderKeys["trash"] = true
+                result.push({
+                    type: "action",
+                    actionId: "trash",
+                    orderKey: "trash"
+                });
+                seenOrderKeys["trash"] = true;
             } else if (entry === "overview" && root.showOverview) {
-                result.push({ type: "action", actionId: "overview", orderKey: "overview" })
-                seenOrderKeys["overview"] = true
+                result.push({
+                    type: "action",
+                    actionId: "overview",
+                    orderKey: "overview"
+                });
+                seenOrderKeys["overview"] = true;
             } else if (entry === "media" && root.showMedia) {
-                result.push({ type: "media", orderKey: "media" })
-                seenOrderKeys["media"] = true
+                result.push({
+                    type: "media",
+                    orderKey: "media"
+                });
+                seenOrderKeys["media"] = true;
             } else if (entry === "weather" && root.showWeather) {
-                result.push({ type: "weather", orderKey: "weather" })
-                seenOrderKeys["weather"] = true
+                result.push({
+                    type: "weather",
+                    orderKey: "weather"
+                });
+                seenOrderKeys["weather"] = true;
             } else if (entry === "runningApps") {
                 // The legacy runningApps marker is ignored.
                 // Unpinned apps will be handled by the smart append logic at the end,
                 // grouping them correctly after the last explicit app icon.
             } else if (entry.startsWith("runningApp:")) {
                 // Individual running app that was previously reordered
-                var runningAppId = entry.substring(11)
+                var runningAppId = entry.substring(11);
                 if (!seenOrderKeys[entry]) {
-                    var runningAppData = runningAppMap[runningAppId]
+                    var runningAppData = runningAppMap[runningAppId];
                     if (runningAppData) {
-                        result.push({ type: "app", appId: runningAppId, appData: runningAppData, orderKey: entry })
-                        seenOrderKeys[entry] = true
+                        result.push({
+                            type: "app",
+                            appId: runningAppId,
+                            appData: runningAppData,
+                            orderKey: entry
+                        });
+                        seenOrderKeys[entry] = true;
                         // Also mark the app: variant to prevent duplicates
-                        seenOrderKeys["app:" + runningAppId] = true
+                        seenOrderKeys["app:" + runningAppId] = true;
                     }
                     // If app is not running anymore, skip (cleanup)
                 }
             } else if (entry.startsWith("app:")) {
-                var appId = entry.substring(4)
-                var appKey = "app:" + appId
+                var appId = entry.substring(4);
+                var appKey = "app:" + appId;
                 if (!seenOrderKeys[appKey]) {
-                    var appData = pinnedAppMap[appId] || runningAppMap[appId]
+                    var appData = pinnedAppMap[appId] || runningAppMap[appId];
                     if (appData || allAppIds.indexOf(appId) !== -1) {
-                        result.push({ type: "app", appId: appId, appData: appData || { appId: appId, pinned: true, toplevels: [] }, orderKey: appKey })
-                        seenOrderKeys[appKey] = true
+                        result.push({
+                            type: "app",
+                            appId: appId,
+                            appData: appData || {
+                                appId: appId,
+                                pinned: true,
+                                toplevels: []
+                            },
+                            orderKey: appKey
+                        });
+                        seenOrderKeys[appKey] = true;
                         // Also mark the runningApp variant to prevent duplicates
                         // (e.g. when an app goes from pinned→unpinned but stays running)
-                        seenOrderKeys["runningApp:" + appId] = true
+                        seenOrderKeys["runningApp:" + appId] = true;
                     }
                 }
             } else if (entry.startsWith("file:")) {
-                var path = entry.substring(5)
-                var fileKey = "file:" + path
+                var path = entry.substring(5);
+                var fileKey = "file:" + path;
                 if (!seenOrderKeys[fileKey] && pinnedFileMap[path]) {
-                    result.push({ type: "file", path: path, orderKey: fileKey })
-                    seenOrderKeys[fileKey] = true
+                    result.push({
+                        type: "file",
+                        path: path,
+                        orderKey: fileKey
+                    });
+                    seenOrderKeys[fileKey] = true;
                 }
             }
         }
 
         // Append any running apps and pinned apps that weren't in the order at all
-        var remainingApps = []
-        var remainingRas = Object.values(runningAppMap)
+        var remainingApps = [];
+        var remainingRas = Object.values(runningAppMap);
         for (var rj = 0; rj < remainingRas.length; rj++) {
-            var rKey = "runningApp:" + remainingRas[rj].appId
+            var rKey = "runningApp:" + remainingRas[rj].appId;
             if (!seenOrderKeys[rKey]) {
-                remainingApps.push({ type: "app", appId: remainingRas[rj].appId, appData: remainingRas[rj], orderKey: rKey })
-                seenOrderKeys[rKey] = true
-                seenOrderKeys["app:" + remainingRas[rj].appId] = true
+                remainingApps.push({
+                    type: "app",
+                    appId: remainingRas[rj].appId,
+                    appData: remainingRas[rj],
+                    orderKey: rKey
+                });
+                seenOrderKeys[rKey] = true;
+                seenOrderKeys["app:" + remainingRas[rj].appId] = true;
             }
         }
 
-        var remainingPinned = Object.values(pinnedAppMap)
+        var remainingPinned = Object.values(pinnedAppMap);
         for (var pk = 0; pk < remainingPinned.length; pk++) {
-            var pKey = "app:" + remainingPinned[pk].appId
+            var pKey = "app:" + remainingPinned[pk].appId;
             if (!seenOrderKeys[pKey]) {
-                remainingApps.push({ type: "app", appId: remainingPinned[pk].appId, appData: remainingPinned[pk], orderKey: pKey })
-                seenOrderKeys[pKey] = true
-                seenOrderKeys["runningApp:" + remainingPinned[pk].appId] = true
+                remainingApps.push({
+                    type: "app",
+                    appId: remainingPinned[pk].appId,
+                    appData: remainingPinned[pk],
+                    orderKey: pKey
+                });
+                seenOrderKeys[pKey] = true;
+                seenOrderKeys["runningApp:" + remainingPinned[pk].appId] = true;
             }
         }
 
@@ -419,13 +558,17 @@ Item {
         }
 
         // Append pinned files that aren't in the order at all (e.g. newly pinned folders)
-        var remainingFiles = []
-        var pinnedFiles = Object.values(pinnedFileMap)
+        var remainingFiles = [];
+        var pinnedFiles = Object.values(pinnedFileMap);
         for (var fk = 0; fk < pinnedFiles.length; fk++) {
-            var fKey = "file:" + pinnedFiles[fk].path
+            var fKey = "file:" + pinnedFiles[fk].path;
             if (!seenOrderKeys[fKey]) {
-                remainingFiles.push({ type: "file", path: pinnedFiles[fk].path, orderKey: fKey })
-                seenOrderKeys[fKey] = true
+                remainingFiles.push({
+                    type: "file",
+                    path: pinnedFiles[fk].path,
+                    orderKey: fKey
+                });
+                seenOrderKeys[fKey] = true;
             }
         }
 
@@ -454,68 +597,96 @@ Item {
         }
 
         if (Config.options?.dock?.smartGrouping) {
-            var mapped = result.map(function(el, i) {
-                return { index: i, value: el, cat: root.getItemCategory(el) };
+            var mapped = result.map(function (el, i) {
+                return {
+                    index: i,
+                    value: el,
+                    cat: root.getItemCategory(el)
+                };
             });
-            mapped.sort(function(a, b) {
-                if (a.cat !== b.cat) return a.cat - b.cat;
+            mapped.sort(function (a, b) {
+                if (a.cat !== b.cat)
+                    return a.cat - b.cat;
                 return a.index - b.index;
             });
-            result = mapped.map(function(el) { return el.value; });
+            result = mapped.map(function (el) {
+                return el.value;
+            });
         }
 
-        return result
+        return result;
     }
 
     // ── Separator helpers ──────────────────────────────────────────────────
     function isSpecialItem(item) {
-        if (!item) return false
-        var t = item.type
-        return t === "media" || t === "weather" || t === "action"
+        if (!item)
+            return false;
+        var t = item.type;
+        return t === "media" || t === "weather" || t === "action";
     }
 
     function getItemCategory(item) {
-        if (!item) return 99;
+        if (!item)
+            return 99;
         var t = item.type;
-        
-        if (t === "action" && item.actionId === "overview") return 1;
-        if (t === "action" && item.actionId === "pin") return 2;
-        if (t === "weather") return 3;
-        
+
+        if (t === "action" && item.actionId === "overview")
+            return 1;
+        if (t === "action" && item.actionId === "pin")
+            return 2;
+        if (t === "weather")
+            return 3;
+
         var id = "";
-        if (t === "app" && item.appId) id = item.appId.toLowerCase();
-        
-        if (id.match(/(firefox|chrome|chromium|edge|brave|librewolf|vivaldi|opera|waterfox|tor|safari|thorium|zen)/)) return 10;
-        if (t === "file" || id.match(/(dolphin|nautilus|thunar|pcmanfm|nemo|caja|kitty|alacritty|konsole|wezterm|foot|terminal|files)/)) return 20;
-        if (id.match(/(code|vscode|vscodium|idea|intellij|pycharm|webstorm|neovim|nvim|vim|emacs|sublime|notepadqq|kate|kwrite|gedit|geany|zed)/)) return 30;
-        if (id.match(/(discord|vesktop|slack|telegram|whatsapp|signal|teams|element|skype|mattermost)/)) return 40;
-        if (id.match(/(gimp|inkscape|krita|kdenlive|davinci|obs|blender|audacity|lmms|figma)/)) return 50;
-        if (t === "media" || id.match(/(spotify|youtube-music|vlc|mpv|spotify-launcher|amberol|elisa|lollypop|rhythmbox|audacious|cider|mpd)/)) return 60;
-        if (id.match(/(steam|heroic|lutris|epic|minigalaxy|prismlauncher|bottles)/)) return 70;
-        
-        if (t === "action" && item.actionId === "trash") return 100;
-        
-        if (t === "app") return 80;
+        if (t === "app" && item.appId)
+            id = item.appId.toLowerCase();
+
+        if (id.match(/(firefox|chrome|chromium|edge|brave|librewolf|vivaldi|opera|waterfox|tor|safari|thorium|zen)/))
+            return 10;
+        if (t === "file" || id.match(/(dolphin|nautilus|thunar|pcmanfm|nemo|caja|kitty|alacritty|konsole|wezterm|foot|terminal|files)/))
+            return 20;
+        if (id.match(/(code|vscode|vscodium|idea|intellij|pycharm|webstorm|neovim|nvim|vim|emacs|sublime|notepadqq|kate|kwrite|gedit|geany|zed)/))
+            return 30;
+        if (id.match(/(discord|vesktop|slack|telegram|whatsapp|signal|teams|element|skype|mattermost)/))
+            return 40;
+        if (id.match(/(gimp|inkscape|krita|kdenlive|davinci|obs|blender|audacity|lmms|figma)/))
+            return 50;
+        if (t === "media" || id.match(/(spotify|youtube-music|vlc|mpv|spotify-launcher|amberol|elisa|lollypop|rhythmbox|audacious|cider|mpd)/))
+            return 60;
+        if (id.match(/(steam|heroic|lutris|epic|minigalaxy|prismlauncher|bottles)/))
+            return 70;
+
+        if (t === "action" && item.actionId === "trash")
+            return 100;
+
+        if (t === "app")
+            return 80;
         return 90;
     }
 
     function mimeIconFromPath(path) {
-        const p = (path ?? "").toString().toLowerCase()
-        if (/\.(png|jpe?g|webp|gif|svg|bmp|ico)$/.test(p)) return "image"
-        if (/\.(mp3|flac|ogg|wav|aac|m4a)$/.test(p)) return "music_note"
-        if (/\.(mp4|mkv|webm|avi|mov)$/.test(p)) return "movie"
-        if (p.endsWith(".pdf")) return "picture_as_pdf"
-        if (/\.(txt|md|rst|log)$/.test(p)) return "description"
-        if (/\.(zip|tar|gz|zst|rar|7z)$/.test(p)) return "folder_zip"
-        const last = p.split("/").filter(s => s).pop() || ""
-        return last.includes(".") ? "insert_drive_file" : "folder"
+        const p = (path ?? "").toString().toLowerCase();
+        if (/\.(png|jpe?g|webp|gif|svg|bmp|ico)$/.test(p))
+            return "image";
+        if (/\.(mp3|flac|ogg|wav|aac|m4a)$/.test(p))
+            return "music_note";
+        if (/\.(mp4|mkv|webm|avi|mov)$/.test(p))
+            return "movie";
+        if (p.endsWith(".pdf"))
+            return "picture_as_pdf";
+        if (/\.(txt|md|rst|log)$/.test(p))
+            return "description";
+        if (/\.(zip|tar|gz|zst|rar|7z)$/.test(p))
+            return "folder_zip";
+        const last = p.split("/").filter(s => s).pop() || "";
+        return last.includes(".") ? "insert_drive_file" : "folder";
     }
 
     // ── Layout ────────────────────────────────────────────────────────────
     Flickable {
         id: scrollArea
         anchors.fill: parent
-        clip: true
+        clip: false
         contentWidth: root.isVertical ? parent.width : unifiedRow.width
         contentHeight: root.isVertical ? unifiedColumn.height : parent.height
         interactive: root.isVertical ? contentHeight > height : contentWidth > width
@@ -523,12 +694,12 @@ Item {
 
         WheelHandler {
             onWheel: event => {
-                let d = (event.angleDelta.y !== 0) ? event.angleDelta.y : event.angleDelta.x
+                let d = (event.angleDelta.y !== 0) ? event.angleDelta.y : event.angleDelta.x;
                 if (root.isVertical)
-                    scrollArea.contentY = Math.max(0, Math.min(scrollArea.contentHeight - scrollArea.height, scrollArea.contentY - d))
+                    scrollArea.contentY = Math.max(0, Math.min(scrollArea.contentHeight - scrollArea.height, scrollArea.contentY - d));
                 else
-                    scrollArea.contentX = Math.max(0, Math.min(scrollArea.contentWidth - scrollArea.width, scrollArea.contentX - d))
-                event.accepted = true
+                    scrollArea.contentX = Math.max(0, Math.min(scrollArea.contentWidth - scrollArea.width, scrollArea.contentX - d));
+                event.accepted = true;
             }
         }
 
@@ -566,10 +737,14 @@ Item {
             readonly property int delegateIndex: index
             readonly property var itemData: modelData
             readonly property real itemWidth: {
-                if (root.isVertical) return root.buttonSlotSize
+                if (root.isVertical)
+                    return root.buttonSlotSize;
                 switch (itemData.type) {
-                    case "media": case "weather": return root.buttonSlotSize * 3
-                    default: return root.buttonSlotSize
+                case "media":
+                case "weather":
+                    return root.buttonSlotSize * 3;
+                default:
+                    return root.buttonSlotSize;
                 }
             }
             readonly property real itemHeight: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
@@ -580,17 +755,22 @@ Item {
             // Drag translation (adapted from dots-hyprland, variable-width support)
             readonly property bool isDragged: root.dragging && delegateIndex === root.dragSourceIndex
             readonly property real dragTranslate: {
-                if (!root.dragging) return 0
-                if (isDragged) return root.dragCursorX - root.dragStartCursorX
-                var src = root.dragSourceIndex
-                var tgt = root._dragTargetIndex
-                var idx = delegateIndex
-                var sw = root.slotWidth
-                if (src < tgt && idx > src && idx <= tgt) return -sw
-                if (src > tgt && idx >= tgt && idx < src) return sw
-                return 0
+                if (!root.dragging)
+                    return 0;
+                if (isDragged)
+                    return root.dragCursorX - root.dragStartCursorX;
+                var src = root.dragSourceIndex;
+                var tgt = root._dragTargetIndex;
+                var idx = delegateIndex;
+                var sw = root.slotWidth;
+                if (src < tgt && idx > src && idx <= tgt)
+                    return -sw;
+                if (src > tgt && idx >= tgt && idx < src)
+                    return sw;
+                return 0;
             }
-            z: isDragged ? 100 : 0
+            readonly property real itemMagScale: root._getSlotMagScale(delegateWrapper)
+            z: isDragged ? 100 : (itemMagScale > 1.01 ? Math.round(itemMagScale * 50) : 0)
             opacity: isDragged ? 0.85 : 1
             scale: isDragged ? 1.05 : 1
 
@@ -619,19 +799,22 @@ Item {
             // ── Intelligent separators ──────────────────────────────────────
             readonly property bool _sepIsSpecial: root.isSpecialItem(delegateWrapper.itemData)
             readonly property bool _sepNextIsSpecial: {
-                if (delegateIndex >= root.flattenedItems.length - 1) return false
-                return root.isSpecialItem(root.flattenedItems[delegateIndex + 1])
+                if (delegateIndex >= root.flattenedItems.length - 1)
+                    return false;
+                return root.isSpecialItem(root.flattenedItems[delegateIndex + 1]);
             }
             readonly property bool _sepDividersOn: Config.options?.dock?.showDividers ?? true
             readonly property bool _sepShowBefore: {
-                if (!_sepDividersOn || delegateIndex === 0) return false;
+                if (!_sepDividersOn || delegateIndex === 0)
+                    return false;
                 if (Config.options?.dock?.smartGrouping) {
                     return root.getItemCategory(root.flattenedItems[delegateIndex]) !== root.getItemCategory(root.flattenedItems[delegateIndex - 1]);
                 }
                 return _sepIsSpecial && delegateIndex > 0;
             }
             readonly property bool _sepShowAfter: {
-                if (!_sepDividersOn || delegateIndex >= root.flattenedItems.length - 1) return false;
+                if (!_sepDividersOn || delegateIndex >= root.flattenedItems.length - 1)
+                    return false;
                 if (Config.options?.dock?.smartGrouping) {
                     return false; // we only draw before to avoid double lines
                 }
@@ -694,13 +877,20 @@ Item {
 
                 sourceComponent: {
                     switch (itemData.type) {
-                        case "action": return actionItemComponent
-                        case "app": return appItemComponent
-                        case "file": return fileItemComponent
-                        case "media": return mediaItemComponent
-                        case "weather": return weatherItemComponent
-                        case "runningAppsGroup": return runningAppsGroupComponent
-                        default: return null
+                    case "action":
+                        return actionItemComponent;
+                    case "app":
+                        return appItemComponent;
+                    case "file":
+                        return fileItemComponent;
+                    case "media":
+                        return mediaItemComponent;
+                    case "weather":
+                        return weatherItemComponent;
+                    case "runningAppsGroup":
+                        return runningAppsGroupComponent;
+                    default:
+                        return null;
                     }
                 }
             }
@@ -722,10 +912,14 @@ Item {
                 property int _delegateIndex: actionItemRoot._index
                 symbolName: {
                     switch (actionItemRoot._itemData.actionId) {
-                        case "pin": return "keep"
-                        case "trash": return "delete"
-                        case "overview": return "apps"
-                        default: return "drag_indicator"
+                    case "pin":
+                        return "keep";
+                    case "trash":
+                        return "delete";
+                    case "overview":
+                        return "apps";
+                    default:
+                        return "drag_indicator";
                     }
                 }
                 toggledSymbolName: actionItemRoot._itemData.actionId === "pin" ? "bookmark" : ""
@@ -736,13 +930,14 @@ Item {
                 dockContent: root
                 delegateIndex: actionItemRoot._index
                 onClicked: {
-                    if (actionItemRoot._itemData.actionId === "pin") root.togglePinRequested()
-                    else if (actionItemRoot._itemData.actionId === "trash") Quickshell.execDetached(["nautilus", "trash:///"])
-                    else if (actionItemRoot._itemData.actionId === "overview") GlobalStates.overviewOpen = !GlobalStates.overviewOpen
+                    if (actionItemRoot._itemData.actionId === "pin")
+                        root.togglePinRequested();
+                    else if (actionItemRoot._itemData.actionId === "trash")
+                        Quickshell.execDetached(["nautilus", "trash:///"]);
+                    else if (actionItemRoot._itemData.actionId === "overview")
+                        GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
                 }
-                customImageSource: actionItemRoot._itemData.actionId === "trash"
-                    ? ("file://" + Directories.assetsPath + "/icons/" + (Appearance.m3colors.darkmode ? "macos-trash-dark.png" : "macos-trash.png"))
-                    : ""
+                customImageSource: actionItemRoot._itemData.actionId === "trash" ? ("file://" + Directories.assetsPath + "/icons/" + (Appearance.m3colors.darkmode ? "macos-trash-dark.png" : "macos-trash.png")) : ""
                 dragActive: false
                 dragOver: false
                 dragSymbol: ""
@@ -846,41 +1041,42 @@ Item {
                 propagateComposedEvents: true
                 property real pressCoord: 0
                 property bool dragActive: false
-                onPressed: (event) => {
-                    pressCoord = root.isVertical ? event.y : event.x
-                    event.accepted = false
+                onPressed: event => {
+                    pressCoord = root.isVertical ? event.y : event.x;
+                    event.accepted = false;
                 }
-                onPositionChanged: (event) => {
-                    if (!pressed) return
-                    var cur = root.isVertical ? event.y : event.x
-                    var dist = Math.abs(cur - pressCoord)
+                onPositionChanged: event => {
+                    if (!pressed)
+                        return;
+                    var cur = root.isVertical ? event.y : event.x;
+                    var dist = Math.abs(cur - pressCoord);
                     if (!dragActive && dist > 5) {
-                        dragActive = true
-                        root.startItemDrag(parent._index, this, event.x, event.y)
+                        dragActive = true;
+                        root.startItemDrag(parent._index, this, event.x, event.y);
                     }
                     if (dragActive) {
-                        root.moveItemDrag(this, event.x, event.y)
-                        event.accepted = true
+                        root.moveItemDrag(this, event.x, event.y);
+                        event.accepted = true;
                     } else {
-                        event.accepted = false
-                    }
-                }
-                onReleased: (event) => {
-                    if (dragActive) {
-                        dragActive = false
-                        root.endItemDrag()
-                        event.accepted = true
-                    } else {
-                        event.accepted = false
+                        event.accepted = false;
                     }
                 }
-                onCanceled: (event) => {
+                onReleased: event => {
                     if (dragActive) {
-                        dragActive = false
-                        root.cancelDrag()
-                        event.accepted = true
+                        dragActive = false;
+                        root.endItemDrag();
+                        event.accepted = true;
                     } else {
-                        event.accepted = false
+                        event.accepted = false;
+                    }
+                }
+                onCanceled: event => {
+                    if (dragActive) {
+                        dragActive = false;
+                        root.cancelDrag();
+                        event.accepted = true;
+                    } else {
+                        event.accepted = false;
                     }
                 }
             }

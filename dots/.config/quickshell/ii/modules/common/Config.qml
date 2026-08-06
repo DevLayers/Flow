@@ -2258,12 +2258,17 @@ Singleton {
                 property bool monochromeIcons: false
                 property bool dimInactiveIcons: false
                 property real iconSpacing: 2
+                property real dockRadius: -1
+                property real widgetRadius: -1
+                property bool enableMagnification: false
+                property real magnificationScale: 1.5
                 property bool enableShapeMask: false
                 property string shapeMask: "Circle"
                 property real height: 60
                 property real hoverRegionHeight: 2
                 property bool pinnedOnStartup: false
                 property bool enablePreview: true
+                property bool enableAppTooltip: false
                 property bool hoverToReveal: true
                 property bool enableMediaWidget: true
                 property bool enableWeatherWidget: true

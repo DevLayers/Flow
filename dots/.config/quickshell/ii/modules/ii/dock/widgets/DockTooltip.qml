@@ -25,29 +25,35 @@ PopupWindow {
 
     anchor.rect.x: {
         if (!parentItem) return 0
-        let _ = parentItem.x + parentItem.y + parentItem.width + rootToolTipPopup.width
-        const mapped = parentItem.mapToItem(null, 0, 0)
+        let mScale = parentItem.dockContent ? parentItem.dockContent._getSlotMagScale(parentItem) : 1.0
+        let _ = parentItem.x + parentItem.y + parentItem.width + parentItem.scale + rootToolTipPopup.width + mScale
         
         if (dockPosition === "left") {
-            return mapped.x + parentItem.width + tooltipOffset
+            const mappedRight = parentItem.mapToItem(null, parentItem.width, 0)
+            return mappedRight.x + 8
         } else if (dockPosition === "right") {
-            return mapped.x - rootToolTipPopup.width - tooltipOffset
+            const mappedLeft = parentItem.mapToItem(null, 0, 0)
+            return mappedLeft.x - rootToolTipPopup.width - 8
         } else {
-            return mapped.x + (parentItem.width - rootToolTipPopup.width) / 2
+            const mappedCenter = parentItem.mapToItem(null, parentItem.width / 2, 0)
+            return mappedCenter.x - rootToolTipPopup.width / 2
         }
     }
     
     anchor.rect.y: {
         if (!parentItem) return 0
-        let _ = parentItem.x + parentItem.y + parentItem.height + rootToolTipPopup.height
-        const mapped = parentItem.mapToItem(null, 0, 0)
+        let mScale = parentItem.dockContent ? parentItem.dockContent._getSlotMagScale(parentItem) : 1.0
+        let _ = parentItem.x + parentItem.y + parentItem.height + parentItem.scale + rootToolTipPopup.height + mScale
         
         if (dockPosition === "top") {
-            return mapped.y + parentItem.height + tooltipOffset
+            const mappedBottom = parentItem.mapToItem(null, 0, parentItem.height)
+            return mappedBottom.y + 8
         } else if (dockPosition === "bottom") {
-            return mapped.y - rootToolTipPopup.height - tooltipOffset
+            const mappedTop = parentItem.mapToItem(null, 0, 0)
+            return mappedTop.y - rootToolTipPopup.height - 8
         } else {
-            return mapped.y + (parentItem.height - rootToolTipPopup.height) / 2
+            const mappedCenter = parentItem.mapToItem(null, 0, parentItem.height / 2)
+            return mappedCenter.y - rootToolTipPopup.height / 2
         }
     }
 
