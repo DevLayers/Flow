@@ -101,13 +101,19 @@ Scope {
         }
     }
 
+    // Built once on first open and kept alive afterwards: rebuilding the whole
+    // window on every trigger costs a full tree build + first-frame stall.
+    property bool everOpened: false
+    onActiveStateChanged: if (activeState)
+        everOpened = true
+
     Loader {
         id: cheatsheetLoader
-        active: root.activeState
+        active: root.activeState || root.everOpened
 
         sourceComponent: PanelWindow {
             id: cheatsheetRoot
-            visible: cheatsheetLoader.active
+            visible: root.activeState
 
             Connections {
                 target: root
@@ -152,7 +158,13 @@ Scope {
             onVisibleChanged: {
                 if (visible) {
                     initialFocusTimer.restart();
+                    registerGrabTimer.restart();
+                    animInTimer.restart();
+                    return;
                 }
+                registerGrabTimer.stop();
+                GlobalFocusGrab.removeDismissable(cheatsheetRoot);
+                cheatsheetBackground.animateIn = false;
             }
 
             Timer {
@@ -170,6 +182,7 @@ Scope {
 
             Component.onCompleted: {
                 registerGrabTimer.start();
+                animInTimer.start();
             }
             Component.onDestruction: {
                 registerGrabTimer.stop();
@@ -227,10 +240,9 @@ Scope {
                     property bool animateIn: false
 
                     Timer {
-                        id: animDelayTimer
-                        interval: 80
+                        id: animInTimer
+                        interval: 0
                         repeat: false
-                        running: true
                         onTriggered: cheatsheetBackground.animateIn = true
                     }
 
@@ -454,7 +466,9 @@ Scope {
                                     }
                                 }
 
-                                asynchronous: _lazy
+                                // Synchronous on purpose: async incubation paces object
+                                // creation across frames, which on a downclocked CPU
+                                // costs far more waiting than the build itself.
                                 source: {
                                     switch (modelData.icon) {
                                     case "calendar_month":
@@ -473,16 +487,6 @@ Scope {
                                         return "CheatsheetEmail.qml";
                                     default:
                                         return "";
-                                    }
-                                }
-
-                                // Loading indicator for async tabs
-                                Rectangle {
-                                    anchors.fill: parent
-                                    color: "transparent"
-                                    visible: tabDelegate._lazy && tabDelegate.status !== Loader.Ready
-                                    MaterialLoadingIndicator {
-                                        anchors.centerIn: parent
                                     }
                                 }
                             }
