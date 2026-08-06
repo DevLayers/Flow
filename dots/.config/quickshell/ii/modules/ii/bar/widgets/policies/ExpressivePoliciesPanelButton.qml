@@ -6,6 +6,7 @@ import qs.modules.common.widgets
 
 Item {
     id: root
+    readonly property string screenName: QsWindow.window?.screen?.name ?? ""
     property bool vertical: false
     property bool showPing: false
     property bool aiChatEnabled: Config.options.policies.ai !== 0
@@ -79,7 +80,7 @@ Item {
             : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryActive : Appearance.colors.colTertiaryActive)
 
         onPressed: {
-            GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
+            GlobalStates.toggleLeftSidebar(root.screenName);
         }
 
         MaterialShape {
