@@ -82,6 +82,19 @@ ContentPage {
         });
     }
 
+    // The shortcuts below are bound in the Hyprland config, which the shell's
+    // own update never touches - so they can be missing on an otherwise current
+    // install, and nothing else detects a drag, so the feature is simply inert.
+    WarningBox {
+        Layout.fillWidth: true
+        Layout.bottomMargin: 8
+        visible: TilingAssistant.keybindsMissing
+        materialIcon: "keyboard_off"
+        text: Translation.tr("Hyprland has no binding for the tiling assistant, so Super + drag and Super + Alt + arrows do nothing and no zones are ever shown. Re-run the setup script with --hypr to install the Hyprland config.")
+        isFirst: true
+        isLast: true
+    }
+
     KeyboardShortcutBox {
         Layout.fillWidth: true
         Layout.bottomMargin: 8
@@ -510,19 +523,10 @@ ContentPage {
                 }
             }
 
-            ConfigSwitch {
-                buttonIcon: "mouse"
-                text: Translation.tr("Watch the cursor for drags that fire no bind")
-                checked: Config.options.tiling.detection.useMotionHeuristic
-                onCheckedChanged: {
-                    Config.options.tiling.detection.useMotionHeuristic = checked;
-                }
-            }
-
             ConfigSpinBox {
-                enabled: Config.options.tiling.detection.useMotionHeuristic
+                enabled: Config.options.tiling.detection.useKeybinds
                 icon: "straighten"
-                text: Translation.tr("Cursor tracking tolerance (px)")
+                text: Translation.tr("Window tracking tolerance (px)")
                 value: Config.options.tiling.detection.trackingTolerancePx
                 from: 0
                 to: 32
@@ -533,33 +537,20 @@ ContentPage {
             }
 
             ConfigSpinBox {
-                enabled: Config.options.tiling.detection.useMotionHeuristic
+                enabled: Config.options.tiling.detection.useKeybinds
                 icon: "hourglass_empty"
-                text: Translation.tr("Idle polling rate (Hz)")
+                text: Translation.tr("Window sampling rate between drags (Hz)")
                 value: Config.options.tiling.detection.idleHz
-                from: 5
-                to: 120
-                stepSize: 5
+                from: 1
+                to: 30
+                stepSize: 1
                 onValueChanged: {
                     Config.options.tiling.detection.idleHz = value;
                 }
             }
 
             ConfigSpinBox {
-                enabled: Config.options.tiling.detection.useMotionHeuristic
-                icon: "bedtime"
-                text: Translation.tr("Idle polling rate while the pointer is still (Hz)")
-                value: Config.options.tiling.detection.idleFloorHz
-                from: 1
-                to: 30
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.tiling.detection.idleFloorHz = value;
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: Config.options.tiling.detection.useMotionHeuristic
+                enabled: Config.options.tiling.detection.useKeybinds
                 icon: "bolt"
                 text: Translation.tr("Polling rate during a drag (Hz)")
                 value: Config.options.tiling.detection.activeHz
@@ -575,7 +566,7 @@ ContentPage {
         TipBox {
             Layout.fillWidth: true
             materialIcon: "info"
-            text: Translation.tr("Client-side titlebar drags and window border resizes fire no Hyprland bind, so cursor watching is what catches them. Turning it off leaves only Super + drag.")
+            text: Translation.tr("Only Super + drag is detected. Dragging a window by its own titlebar fires no Hyprland bind, and inferring one from the window's motion was dropped: nothing reports the button coming back up, so the guess either broke the layout or never showed the zones at all.")
         }
     }
 

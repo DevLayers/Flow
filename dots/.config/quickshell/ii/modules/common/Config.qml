@@ -296,7 +296,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 1
+    readonly property int currentConfigVersion: 2
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -353,6 +353,23 @@ Singleton {
                 raw.sidebar.position = legacyPositions[previous];
                 console.log(`[Config] Migrated sidebar.position ${previous} -> ${raw.sidebar.position}`);
             }
+        }
+
+        // v1 -> v2: the tiling assistant stopped inferring drags from window
+        // motion (Aug 2026), so tiling.detection.idleHz changed meaning from
+        // "how fast the cursor is tracked" to "how often the active window is
+        // sampled" - the far slower job the old idleFloorHz already described.
+        // Carrying the old 30 over would poll six times harder than anything
+        // now asks for. The two keys that only existed for the heuristic go.
+        if (from < 2 && raw.tiling?.detection !== undefined) {
+            const detection = raw.tiling.detection;
+            if (typeof detection.idleFloorHz === "number")
+                detection.idleHz = detection.idleFloorHz;
+            else if (typeof detection.idleHz === "number")
+                detection.idleHz = Math.min(detection.idleHz, 5);
+            delete detection.idleFloorHz;
+            delete detection.useMotionHeuristic;
+            console.log(`[Config] Migrated tiling.detection to keybind-only drag detection (idleHz ${detection.idleHz})`);
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -2865,18 +2882,17 @@ Singleton {
 
                 property JsonObject detection: JsonObject {
                     // Companion Hyprland binds on the drag/resize mouse combos.
+                    // The only way a drag is detected: client-side titlebar
+                    // drags fire no bind, and inferring them from window motion
+                    // was dropped because nothing reports the button coming up.
                     property bool useKeybinds: true
-                    // Cursor-vs-window motion tracking. Needed for client-side
-                    // titlebar drags and window-border resizes, which fire no bind.
-                    property bool useMotionHeuristic: true
-                    property int idleHz: 30
-                    // Rate the idle polling falls back to while the pointer is
-                    // still. No drag can start without moving it, so watching
-                    // closely then is wasted work.
-                    property int idleFloorHz: 5
+                    // How often the active window is sampled between gestures.
+                    // Only used to keep a pre-drag geometry worth restoring to,
+                    // so there is nothing to gain by doing it often.
+                    property int idleHz: 5
                     property int activeHz: 90
-                    // How closely the window has to follow the cursor to count
-                    // as a move rather than incidental motion.
+                    // How far the window has to move before a drag counts as
+                    // having left the place Hyprland would put it back to.
                     property int trackingTolerancePx: 2
                 }
 

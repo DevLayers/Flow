@@ -6,9 +6,10 @@ pragma ComponentBehavior: Bound
  * appear, and resolves the cursor into a tiling zone on the monitor it is over.
  *
  * The gesture itself is detected by scripts/hyprland/drag_monitor.py, which
- * watches Hyprland far more tightly than a QML timer could. Companion keybinds
- * report Hyprland's own drag binds through the global shortcuts below; the
- * script's motion heuristic covers titlebar drags that never touch a keybind.
+ * watches Hyprland far more tightly than a QML timer could. It knows about a
+ * drag only through the companion keybinds below, which report Hyprland's own
+ * drag binds - so a client-side titlebar drag, which fires no bind, is not a
+ * gesture this reacts to at all. See the script's header for why.
  *
  * On drop the window is floated and given the zone's exact geometry, and the
  * geometry it had before is kept so dragging it back out can undo that. The
@@ -37,7 +38,6 @@ Singleton {
     // Gesture state, mirrored from the detector.
     property bool dragging: false
     property string dragKind: ""       // "move" | "resize"
-    property string dragSource: ""     // "keybind" | "motion"
     property string dragAddress: ""
     property var dragWindow: null      // geometry captured when the drag started
     property var dragWindowBefore: null // geometry from just before it started, for restoring later
@@ -45,7 +45,7 @@ Singleton {
     property int cursorX: 0
     property int cursorY: 0
 
-    signal dragStarted(string kind, string source)
+    signal dragStarted(string kind)
     signal dragMoved(int x, int y)
     signal dragEnded(string kind, int zoneIndex)
 
@@ -70,10 +70,18 @@ Singleton {
         };
     }
 
+    // The shared monitor list comes from `hyprctl monitors all`, so it also
+    // carries outputs that are switched off - a closed laptop lid, a display
+    // unplugged earlier in the session. Those report an origin of 0,0 and a
+    // stale size, which is close enough to a real monitor to win the hit test
+    // below and send a whole drop to a screen that is not there. Everywhere
+    // else in the shell looks monitors up by name or id and never notices.
+    readonly property var liveMonitors: (HyprlandData.monitors ?? []).filter(candidate => candidate && !candidate.disabled)
+
     // The monitor under the cursor, straight from hyprctl so scale, transform
     // and reserved space are all available.
     readonly property var monitor: {
-        const monitors = HyprlandData.monitors ?? [];
+        const monitors = root.liveMonitors;
         for (const candidate of monitors) {
             const rect = Tiling.monitorLogicalRect(candidate);
             if (Tiling.rectContains(rect, root.cursorX, root.cursorY))
@@ -109,8 +117,7 @@ Singleton {
     }
 
     function monitorByName(name) {
-        const monitors = HyprlandData.monitors ?? [];
-        for (const candidate of monitors) {
+        for (const candidate of root.liveMonitors) {
             if (candidate.name === name) return candidate;
         }
         return null;
@@ -255,7 +262,6 @@ Singleton {
             index: index
         };
 
-        root.suppressDetection(500);
         root.setFloating(address, true, floating);
         root.moveToMonitor(address, name, before?.monitor);
         // Resizing keeps the centre, so the move has to come second.
@@ -269,7 +275,6 @@ Singleton {
         if (!record) return;
         delete root.tileRecords[address];
 
-        root.suppressDetection(500);
         // Back to the screen it came from first, or a window tiled across the
         // gap would be handed back to the layout tree of the wrong monitor.
         root.moveToMonitor(address, record.monitor);
@@ -429,8 +434,7 @@ Singleton {
     }
 
     function monitorById(id) {
-        const monitors = HyprlandData.monitors ?? [];
-        for (const candidate of monitors) {
+        for (const candidate of root.liveMonitors) {
             if (candidate.id === id) return candidate;
         }
         return null;
@@ -491,15 +495,6 @@ Singleton {
         root.applyZone(address, name, target, sample, sample.floating);
     }
 
-    // Lets a window we move ourselves pass without the heuristic mistaking it
-    // for the user dragging it.
-    function suppressDetection(milliseconds) {
-        root.send({
-            cmd: "suppress",
-            ms: milliseconds ?? 300
-        });
-    }
-
     function send(message) {
         if (!detector.running) return;
         detector.write(`${JSON.stringify(message)}\n`);
@@ -509,11 +504,9 @@ Singleton {
         const detection = root.options?.detection ?? null;
         root.send({
             cmd: "config",
-            idleHz: detection?.idleHz ?? 30,
-            idleFloorHz: detection?.idleFloorHz ?? 5,
+            idleHz: detection?.idleHz ?? 5,
             activeHz: detection?.activeHz ?? 90,
             tolerance: detection?.trackingTolerancePx ?? 2,
-            motion: detection?.useMotionHeuristic ?? true,
             keybinds: detection?.useKeybinds ?? true
         });
     }
@@ -534,9 +527,8 @@ Singleton {
             root.dragWindow = event.window ?? null;
             root.dragWindowBefore = event.before ?? event.window ?? null;
             root.dragKind = event.kind;
-            root.dragSource = event.source;
             root.dragging = true;
-            root.dragStarted(event.kind, event.source);
+            root.dragStarted(event.kind);
             break;
         case "dragMove":
             root.cursorX = event.x;
@@ -554,7 +546,6 @@ Singleton {
             // the overlay goes away and nothing is tiled.
             if (!event.cancelled) root.dragEnded(event.kind, zone);
             root.dragKind = "";
-            root.dragSource = "";
             break;
         }
     }
@@ -563,15 +554,56 @@ Singleton {
     // rather than being restarted.
     readonly property string detectionKey: {
         const detection = root.options?.detection ?? null;
-        return [detection?.idleHz, detection?.idleFloorHz, detection?.activeHz, detection?.trackingTolerancePx, detection?.useMotionHeuristic, detection?.useKeybinds].join("|");
+        return [detection?.idleHz, detection?.activeHz, detection?.trackingTolerancePx, detection?.useKeybinds].join("|");
     }
-    onDetectionKeyChanged: root.sendConfig()
+    onDetectionKeyChanged: {
+        root.sendConfig();
+        if (root.enabled) root.checkKeybinds();
+    }
 
     onEnabledChanged: {
-        if (root.enabled) return;
+        if (root.enabled) {
+            root.checkKeybinds();
+            return;
+        }
         root.dragging = false;
         root.dragKind = "";
-        root.dragSource = "";
+    }
+
+    // ------------------------------------------------------- keybind check
+
+    // The drag binds are not part of the shell: they live in the Hyprland
+    // config, and the fork's installer only overlays ~/.config/hypr when it is
+    // asked to - the update button inside Settings deliberately never does. So
+    // a perfectly up-to-date shell can have nothing bound to these shortcuts,
+    // and since the binds are now the only thing that detects a drag at all,
+    // the whole feature is silently inert rather than merely degraded.
+    property bool keybindsChecked: false
+    property bool keybindsFound: true
+    readonly property bool keybindsMissing: root.enabled && (root.options?.detection?.useKeybinds ?? true) && root.keybindsChecked && !root.keybindsFound
+
+    function checkKeybinds() {
+        root.keybindsChecked = false;
+        keybindProbe.running = false;
+        keybindProbe.running = true;
+    }
+
+    Process {
+        id: keybindProbe
+
+        // `hyprctl binds` cannot answer this. Under the Lua config every bind
+        // reports a dispatcher of "__lua" with an opaque numeric argument, so
+        // no shortcut name ever appears in it. The config text can be read
+        // instead, which also covers custom/ overrides and the older syntax.
+        // -s so a missing directory is simply "not bound" rather than noise.
+        command: ["grep", "-rqsF", "quickshell:tilingDragMove", `${FileUtils.trimFileProtocol(Directories.config)}/hypr`]
+
+        onExited: (code, status) => {
+            root.keybindsFound = (code === 0);
+            root.keybindsChecked = true;
+            if (root.keybindsMissing)
+                console.log("[TilingAssistant] nothing in ~/.config/hypr binds quickshell:tilingDragMove - Super+drag and Super+Alt+arrow will do nothing until the fork's Hyprland config is installed (setup script, --hypr)");
+        }
     }
 
     Process {
