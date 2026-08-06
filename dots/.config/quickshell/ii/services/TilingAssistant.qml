@@ -629,8 +629,12 @@ Singleton {
         }
 
         // Exiting clears `running` imperatively, which drops the binding above,
-        // so a detector that dies would otherwise stay dead until a reload.
+        // so a detector that dies would otherwise stay dead until a reload. It
+        // also takes with it the only thing that can report the end of a drag,
+        // so the overlay has to be taken down here or it stays up for good.
         onExited: (code, status) => {
+            root.dragging = false;
+            root.dragKind = "";
             if (!root.enabled) return;
             console.log("[TilingAssistant] detector exited with", code, "- restarting");
             detectorRestart.restart();
