@@ -222,7 +222,7 @@ Singleton {
     property bool mediaWidgetHovered: false
     property Timer mediaWidgetHoverTimer: Timer {
         id: mediaWidgetHoverTimer
-        interval: 4000
+        interval: 400
         repeat: false
         onTriggered: {
             root.mediaWidgetHovered = false;
@@ -230,8 +230,12 @@ Singleton {
     }
 
     function setMediaWidgetHovered(hovered) {
-        mediaWidgetHoverTimer.stop();
-        root.mediaWidgetHovered = hovered;
+        if (hovered) {
+            mediaWidgetHoverTimer.stop();
+            root.mediaWidgetHovered = true;
+        } else {
+            mediaWidgetHoverTimer.restart();
+        }
     }
 
     // Color Picker Popup

@@ -212,6 +212,23 @@ PanelWindow {
             return CF.ColorUtils.mix(Appearance.colors.colOnLayer0, Appearance.colors.colPrimary, 0.75);
         return (GlobalStates.screenLocked && shouldBlur) ? Appearance.colors.colOnLayer0 : CF.ColorUtils.colorWithLightness(Appearance.colors.colPrimary, (dominantColorIsDark ? 0.8 : 0.12));
     }
+    // Video Wallpaper Parallax via mpv IPC
+    readonly property real videoPanX: (0.5 - parallax.effectiveValueX) * 0.08
+    readonly property real videoPanY: (0.5 - parallax.effectiveValueY) * 0.08
+
+    onVideoPanXChanged: bgRoot.sendMpvPan()
+    onVideoPanYChanged: bgRoot.sendMpvPan()
+
+    function sendMpvPan() {
+        if (!bgRoot.wallpaperIsVideo || !bgRoot.screen) return;
+        const sock = "/tmp/mpvpaper-" + bgRoot.screen.name + ".sock";
+        const px = videoPanX.toFixed(4);
+        const py = videoPanY.toFixed(4);
+        const cmdX = '{"command":["set_property","video-pan-x",' + px + ']}';
+        const cmdY = '{"command":["set_property","video-pan-y",' + py + ']}';
+        Quickshell.execDetached(["bash", "-c", "echo '" + cmdX + "' | socat - UNIX-CONNECT:" + sock + " >/dev/null 2>&1; echo '" + cmdY + "' | socat - UNIX-CONNECT:" + sock + " >/dev/null 2>&1"]);
+    }
+
     Behavior on colText {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }

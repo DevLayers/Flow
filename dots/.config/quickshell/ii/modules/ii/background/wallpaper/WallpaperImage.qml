@@ -98,7 +98,7 @@ Item {
         imageSource: !wallpaperSafetyTriggered ? wallpaperPath : ""
         animated: Config.options.background.animateWallpaperChanges
         fillMode: Image.PreserveAspectCrop
-        visible: Config.options.background.zoomOutStyle !== 2 && !wallpaperSafetyTriggered
+        visible: Config.options.background.zoomOutStyle !== 2 && !wallpaperSafetyTriggered && !wallpaperIsVideo
         opacity: 1.0
         mipmap: false
         antialiasing: false
@@ -113,8 +113,8 @@ Item {
         // GPU: only instantiate MultiEffect when zoomed-out state is active.
         // Previously always-loaded (active:true) with opacity controlling visibility —
         // the shader + texture stayed resident on GPU even at idle.
-        active: wallpaperImageRoot.wallpaperZoomedOut
-        opacity: wallpaperImageRoot.wallpaperZoomedOut ? 1.0 : 0.0
+        active: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperIsVideo
+        opacity: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperIsVideo ? 1.0 : 0.0
         Behavior on opacity {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(wallpaperImageRoot)
         }

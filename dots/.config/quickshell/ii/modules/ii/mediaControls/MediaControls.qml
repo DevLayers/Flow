@@ -27,28 +27,55 @@ Scope {
     property list<real> visualizerPoints: mediaControlsLoader.active ? CavaService.visualizerPoints : []
     readonly property bool targetHovered: GlobalStates.mediaWidgetHovered
     property bool popupHovered: false
+    property bool stickyActive: false
+    property bool openedViaHover: false
 
     Timer {
-        id: hoverCloseTimer
+        id: hoverGraceTimer
         interval: 100 + Math.max(0, Config.options?.bar?.tooltips?.closeDelay ?? 0)
         repeat: false
         onTriggered: {
-            if (!root.targetHovered && !root.popupHovered && !Config.options.bar.tooltips.clickToShow)
+            if (!GlobalStates.mediaControlsPinned && !root.targetHovered && !root.popupHovered) {
+                root.stickyActive = false;
                 GlobalStates.mediaControlsOpen = false;
+            }
         }
     }
 
     function evaluateHoverState() {
-        if (Config.options.bar.tooltips.clickToShow || GlobalStates.mediaControlsPinned)
+        if (!root.openedViaHover || GlobalStates.mediaControlsPinned)
             return;
-        if (root.targetHovered || root.popupHovered)
-            hoverCloseTimer.stop();
-        else if (GlobalStates.mediaControlsOpen)
-            hoverCloseTimer.restart();
+        if (root.targetHovered || root.popupHovered) {
+            root.stickyActive = true;
+            hoverGraceTimer.stop();
+        } else if (root.stickyActive && !hoverGraceTimer.running) {
+            hoverGraceTimer.start();
+        }
     }
 
     onTargetHoveredChanged: evaluateHoverState()
     onPopupHoveredChanged: evaluateHoverState()
+
+    Connections {
+        target: GlobalStates
+        function onMediaControlsOpenChanged() {
+            if (GlobalStates.mediaControlsOpen) {
+                root.openedViaHover = GlobalStates.mediaWidgetHovered;
+                if (root.openedViaHover) {
+                    root.stickyActive = true;
+                    root.evaluateHoverState();
+                }
+            } else {
+                root.openedViaHover = false;
+                root.stickyActive = false;
+                hoverGraceTimer.stop();
+            }
+        }
+        function onMediaControlsPinnedChanged() {
+            if (!GlobalStates.mediaControlsPinned)
+                root.evaluateHoverState();
+        }
+    }
 
     function filterDuplicatePlayers(players) {
         let filtered = [];
@@ -86,8 +113,9 @@ Scope {
         active: GlobalStates.mediaControlsOpen
         onActiveChanged: {
             if (!mediaControlsLoader.active) {
-                hoverCloseTimer.stop();
+                hoverGraceTimer.stop();
                 root.popupHovered = false;
+                root.stickyActive = false;
             }
             if (!mediaControlsLoader.active && root.realPlayers.length === 0) {
                 GlobalStates.mediaControlsOpen = false;
@@ -193,6 +221,10 @@ Scope {
                 height: playerColumnLayout.implicitHeight * panelWindow.layoutScale
                 scale: 1.0
 
+                HoverHandler {
+                    onHoveredChanged: root.popupHovered = hovered
+                }
+
                 ColumnLayout {
                     id: playerColumnLayout
                     anchors.centerIn: parent
@@ -200,10 +232,6 @@ Scope {
                     height: implicitHeight
                     scale: panelWindow.layoutScale
                     spacing: -Appearance.sizes.elevationMargin // Shadow overlap okay
-
-                    HoverHandler {
-                        onHoveredChanged: root.popupHovered = hovered
-                    }
 
                 Repeater {
                     model: ScriptModel {
