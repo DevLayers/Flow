@@ -33,16 +33,21 @@ Scope {
         }
     }
 
-    // Dismiss popup when sidebar opens (avoids input conflicts)
+    // The popup anchors like the bar popups (right side for horizontal bars,
+    // or the bar's own edge for vertical bars). Dismiss it only when the sidebar
+    // on the SAME side as the popup opens over it — never the opposite-side
+    // sidebar, never the overview (effectiveLeft/RightOpen reflect only real
+    // sidebars per Config.options.sidebar.position).
+    readonly property bool popupOnLeftSide: Config.options.bar.vertical && !Config.options.bar.bottom
+    readonly property bool popupOnRightSide: !Config.options.bar.vertical || Config.options.bar.bottom
+    readonly property bool sidebarOccludesPopup: (popupOnLeftSide && GlobalStates.effectiveLeftOpen)
+            || (popupOnRightSide && GlobalStates.effectiveRightOpen)
+
+    // Dismiss popup when the same-side sidebar opens (avoids input conflicts)
     Connections {
-        target: GlobalStates
-        function onDashboardPanelOpenChanged() {
-            if (GlobalStates.dashboardPanelOpen) {
-                GlobalStates.bluetoothConnectionPopupOpen = false;
-            }
-        }
-        function onPoliciesPanelOpenChanged() {
-            if (GlobalStates.policiesPanelOpen) {
+        target: root
+        function onSidebarOccludesPopupChanged() {
+            if (root.sidebarOccludesPopup) {
                 GlobalStates.bluetoothConnectionPopupOpen = false;
             }
         }
