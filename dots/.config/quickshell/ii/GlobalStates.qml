@@ -230,12 +230,8 @@ Singleton {
     }
 
     function setMediaWidgetHovered(hovered) {
-        if (hovered) {
-            mediaWidgetHoverTimer.stop();
-            root.mediaWidgetHovered = true;
-        } else {
-            mediaWidgetHoverTimer.restart();
-        }
+        mediaWidgetHoverTimer.stop();
+        root.mediaWidgetHovered = hovered;
     }
 
     // Color Picker Popup
