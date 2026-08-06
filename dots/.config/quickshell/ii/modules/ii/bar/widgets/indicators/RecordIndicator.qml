@@ -18,7 +18,7 @@ MouseArea {
     readonly property bool isLoading: (Persistent.states.screenRecord && Persistent.states.screenRecord.loading) || false
     readonly property bool isPaused: (Persistent.states.screenRecord && Persistent.states.screenRecord.paused) || false
     readonly property int elapsedSeconds: (Persistent.states.screenRecord && Persistent.states.screenRecord.seconds) || 0
-
+    Layout.fillHeight: vertical
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
 
