@@ -76,16 +76,29 @@ Item {
     readonly property int gridColumns: 6
     readonly property real gridSpacing: 10
 
-    // Empty slots left over on the final row, filled by the summary card.
+    // The summary card is laid out for two slots and always takes exactly two.
+    // Stretching it across every free slot left it swimming in dead space on a
+    // sparse row, and a final row with nothing to spare dropped it entirely.
+    readonly property int summarySpan: Math.min(2, root.gridColumns)
+
+    // Slots left over on the last row of cards. The summary trails there when it
+    // fits; otherwise GridLayout wraps it onto a row of its own.
     readonly property int trailingSlots: {
         const rem = root.matchCount % root.gridColumns;
         return rem === 0 ? 0 : root.gridColumns - rem;
     }
+    readonly property bool summaryWrapped: root.matchCount > 0 && root.trailingSlots < root.summarySpan
+
+    // Columns the grid actually occupies. Sized off the flickable rather than
+    // off the grid itself, so the grid can shrink to fit without the card width
+    // feeding back into it.
+    readonly property real gridWidth: gridFlickable.width - 12
+    readonly property int usedColumns: Math.min(root.gridColumns, root.summaryWrapped ? root.matchCount : root.matchCount + root.summarySpan)
 
     // Cards are sized explicitly rather than with Layout.fillWidth: the layout
     // then settles in one pass instead of renegotiating widths, and each
     // molecule's geometry is built once.
-    readonly property real cardWidth: Math.floor((cardGrid.width - (root.gridColumns - 1) * root.gridSpacing) / root.gridColumns)
+    readonly property real cardWidth: Math.floor((root.gridWidth - (root.gridColumns - 1) * root.gridSpacing) / root.gridColumns)
     readonly property real cardHeight: Math.max(150, Math.floor((gridFlickable.height - 3 * root.gridSpacing - 4) / 4))
 
     ColumnLayout {
@@ -155,8 +168,12 @@ Item {
 
             GridLayout {
                 id: cardGrid
-                width: gridFlickable.width - 12
-                x: 4
+                // Only as wide as the columns in use — given the full width,
+                // GridLayout would hand the slack to the columns and open gaps
+                // between the cards instead of leaving it at the edge. What is
+                // left over goes to the margins, so a short set sits centred.
+                width: root.usedColumns * root.cardWidth + (root.usedColumns - 1) * root.gridSpacing
+                x: 4 + Math.round((root.gridWidth - width) / 2)
                 columns: root.gridColumns
                 rowSpacing: root.gridSpacing
                 columnSpacing: root.gridSpacing
@@ -179,12 +196,16 @@ Item {
                     }
                 }
 
-                // Fills whatever is left of the final row.
+                // Trails the last card, wrapping to its own row when that one is
+                // full. On a row of its own it claims every column so the centre
+                // alignment has the whole width to work against — otherwise it
+                // would sit hard against the left edge under a full row.
                 AminoAcidSummaryCard {
-                    visible: root.trailingSlots > 0
+                    visible: root.matchCount > 0
                     schemeName: root.schemeName
-                    Layout.columnSpan: Math.max(1, root.trailingSlots)
-                    Layout.preferredWidth: root.cardWidth * Math.max(1, root.trailingSlots) + root.gridSpacing * (Math.max(1, root.trailingSlots) - 1)
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.columnSpan: root.summaryWrapped ? root.usedColumns : root.summarySpan
+                    Layout.preferredWidth: root.cardWidth * root.summarySpan + root.gridSpacing * (root.summarySpan - 1)
                     Layout.preferredHeight: root.cardHeight
                 }
             }
