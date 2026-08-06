@@ -107,9 +107,21 @@ Scope {
     onActiveStateChanged: if (activeState)
         everOpened = true
 
+    // Nothing waits on the cheatsheet at startup, so build it there instead of
+    // in front of the user. Late enough not to compete with the shell coming up.
+    property bool preloadStarted: false
+
+    Timer {
+        id: preloadStartTimer
+        interval: 4000
+        repeat: false
+        running: true
+        onTriggered: root.preloadStarted = true
+    }
+
     Loader {
         id: cheatsheetLoader
-        active: root.activeState || root.everOpened
+        active: root.activeState || root.everOpened || root.preloadStarted
 
         sourceComponent: PanelWindow {
             id: cheatsheetRoot
@@ -144,6 +156,21 @@ Scope {
 
             mask: Region {
                 item: cheatsheetInputMask
+            }
+
+            // Tabs are built lazily, and only the first visit to one is expensive.
+            // Walk them in the background while the window is hidden, so a tab
+            // change is a visibility swap rather than a tree build. Hidden-only
+            // keeps the builds off the frames of a window in use, and stops a
+            // tab that grabs focus on creation from stealing it mid-session.
+            property int preloadIndex: -1
+
+            Timer {
+                id: preloadTimer
+                interval: 250
+                repeat: true
+                running: !cheatsheetRoot.visible && cheatsheetRoot.preloadIndex < root.tabButtonList.length - 1
+                onTriggered: cheatsheetRoot.preloadIndex++
             }
 
             Timer {
@@ -181,6 +208,10 @@ Scope {
             }
 
             Component.onCompleted: {
+                // Built ahead of time while hidden: onVisibleChanged drives the
+                // open from here on.
+                if (!visible)
+                    return;
                 registerGrabTimer.start();
                 animInTimer.start();
             }
@@ -456,7 +487,7 @@ Scope {
                                 // Timetable, Email, Workspaces & Amino acids: lazy — load only when first visited
                                 property bool _lazy: modelData.icon === "calendar_month" || modelData.icon === "mail" || modelData.icon === "dashboard" || modelData.icon === "biotech"
                                 property bool _wasSeen: false
-                                active: !_lazy || swipeView.currentIndex === index || _wasSeen
+                                active: !_lazy || swipeView.currentIndex === index || _wasSeen || index <= cheatsheetRoot.preloadIndex
                                 onActiveChanged: if (active)
                                     _wasSeen = true
 
