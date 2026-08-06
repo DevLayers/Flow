@@ -42,6 +42,40 @@ Item {
             ascent: 0
         })
 
+    // One shared instance, so an unsized pass returns the same object every time.
+    readonly property var _empty: ({
+            lines: [],
+            wedges: [],
+            labels: []
+        })
+
+    // Stand-ins for the transient where a delegate still indexes into geometry
+    // that has already shrunk under it.
+    readonly property var _noLine: ({
+            x1: 0,
+            y1: 0,
+            x2: 0,
+            y2: 0,
+            w: 0,
+            col: "transparent"
+        })
+    readonly property var _noWedge: ({
+            ax: 0,
+            ay: 0,
+            bx: 0,
+            by: 0,
+            nx: 0,
+            ny: 0,
+            half: 0,
+            col: "transparent"
+        })
+    readonly property var _noLabel: ({
+            text: "",
+            cx: 0,
+            cy: 0,
+            col: "transparent"
+        })
+
     readonly property var geometry: root.buildGeometry(root.structure, Math.round(root.width), Math.round(root.height), root.bondLength, fm.height)
 
     // ── Layout ───────────────────────────────────────────────────────────────
@@ -139,13 +173,8 @@ Item {
     }
 
     function buildGeometry(structure, w, h, maxBond, metricsRevision) {
-        const empty = {
-            lines: [],
-            wedges: [],
-            labels: []
-        };
         if (!structure || !structure.atoms || structure.atoms.length === 0 || w <= 0 || h <= 0)
-            return empty;
+            return root._empty;
 
         // Memoise: identical inputs must return the very same object, otherwise
         // the Repeaters below tear down and rebuild every delegate. The molecule
@@ -288,13 +317,22 @@ Item {
                 continue;
             const wpx = root.advance(a.label);
             const cx = a.anchor === "l" ? P[i][0] + wpx / 2 : (a.anchor === "r" ? P[i][0] - wpx / 2 : P[i][0]);
+            const col = a.accent ? root.colAccent : root.colMain;
             labels.push({
                 text: a.label,
                 cx: cx,
                 cy: P[i][1],
-                col: a.accent ? root.colAccent : root.colMain,
-                hBelow: a.h === "below",
-                hAbove: a.h === "above"
+                col: col
+            });
+
+            // Implicit hydrogen: a label in its own right, stacked on the atom's.
+            if (a.h !== "below" && a.h !== "above")
+                continue;
+            labels.push({
+                text: "H",
+                cx: cx,
+                cy: P[i][1] + (a.h === "below" ? fm.height * 0.78 : -fm.height * 0.78),
+                col: col
             });
         }
 
@@ -311,81 +349,75 @@ Item {
 
     // ── Drawing ──────────────────────────────────────────────────────────────
 
+    // The models are counts, not the arrays themselves: handing a Repeater a new
+    // array destroys and recreates every delegate, and the layout settles through
+    // several sizes before it lands, so each card would rebuild several times over.
+
     Repeater {
-        model: root.geometry.lines
+        model: root.geometry.lines.length
 
         delegate: Rectangle {
-            required property var modelData
-            readonly property real len: Math.hypot(modelData.x2 - modelData.x1, modelData.y2 - modelData.y1)
-            x: (modelData.x1 + modelData.x2) / 2 - len / 2
-            y: (modelData.y1 + modelData.y2) / 2 - modelData.w / 2
+            required property int index
+            readonly property var d: root.geometry.lines[index] ?? root._noLine
+            readonly property real len: Math.hypot(d.x2 - d.x1, d.y2 - d.y1)
+            x: (d.x1 + d.x2) / 2 - len / 2
+            y: (d.y1 + d.y2) / 2 - d.w / 2
             width: len
-            height: modelData.w
-            radius: modelData.w / 2
-            color: modelData.col
+            height: d.w
+            radius: d.w / 2
+            color: d.col
             antialiasing: true
             transformOrigin: Item.Center
-            rotation: Math.atan2(modelData.y2 - modelData.y1, modelData.x2 - modelData.x1) * 180 / Math.PI
+            rotation: Math.atan2(d.y2 - d.y1, d.x2 - d.x1) * 180 / Math.PI
         }
     }
 
     Repeater {
-        model: root.geometry.wedges
+        model: root.geometry.wedges.length
 
         // Plain triangles — the default geometry renderer is much cheaper here
         // than CurveRenderer, which would compile shaders per Shape.
         delegate: Shape {
             id: wedge
-            required property var modelData
+            required property int index
+            readonly property var d: root.geometry.wedges[index] ?? root._noWedge
             anchors.fill: parent
 
             ShapePath {
                 strokeWidth: 0
                 strokeColor: "transparent"
-                fillColor: wedge.modelData.col
-                startX: wedge.modelData.ax
-                startY: wedge.modelData.ay
+                fillColor: wedge.d.col
+                startX: wedge.d.ax
+                startY: wedge.d.ay
 
                 PathLine {
-                    x: wedge.modelData.bx + wedge.modelData.nx * wedge.modelData.half
-                    y: wedge.modelData.by + wedge.modelData.ny * wedge.modelData.half
+                    x: wedge.d.bx + wedge.d.nx * wedge.d.half
+                    y: wedge.d.by + wedge.d.ny * wedge.d.half
                 }
                 PathLine {
-                    x: wedge.modelData.bx - wedge.modelData.nx * wedge.modelData.half
-                    y: wedge.modelData.by - wedge.modelData.ny * wedge.modelData.half
+                    x: wedge.d.bx - wedge.d.nx * wedge.d.half
+                    y: wedge.d.by - wedge.d.ny * wedge.d.half
                 }
                 PathLine {
-                    x: wedge.modelData.ax
-                    y: wedge.modelData.ay
+                    x: wedge.d.ax
+                    y: wedge.d.ay
                 }
             }
         }
     }
 
     Repeater {
-        model: root.geometry.labels
+        model: root.geometry.labels.length
 
-        delegate: Item {
-            id: labelGroup
-            required property var modelData
-
-            StyledText {
-                id: labelText
-                x: labelGroup.modelData.cx - width / 2
-                y: labelGroup.modelData.cy - height / 2
-                text: labelGroup.modelData.text
-                color: labelGroup.modelData.col
-                font.pixelSize: root.labelSize
-            }
-
-            StyledText {
-                visible: labelGroup.modelData.hBelow || labelGroup.modelData.hAbove
-                x: labelText.x + (labelText.width - width) / 2
-                y: labelGroup.modelData.hBelow ? labelText.y + labelText.height * 0.78 : labelText.y - labelText.height * 0.78
-                text: "H"
-                color: labelGroup.modelData.col
-                font.pixelSize: root.labelSize
-            }
+        delegate: StyledText {
+            id: labelText
+            required property int index
+            readonly property var d: root.geometry.labels[index] ?? root._noLabel
+            x: d.cx - width / 2
+            y: d.cy - height / 2
+            text: d.text
+            color: d.col
+            font.pixelSize: root.labelSize
         }
     }
 }

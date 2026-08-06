@@ -12,7 +12,6 @@ RippleButton {
     required property real hueOffset
     required property real shade
     property bool selected: false
-    property int revealIndex: 0
 
     readonly property color tint: ColorUtils.categoryAccent(root.hueOffset, root.shade, Appearance.m3colors.m3primary)
     readonly property color onTint: ColorUtils.categoryOnColor(root.tint)
@@ -25,46 +24,7 @@ RippleButton {
     colBackgroundHover: Appearance.colors.colLayer2Hover
     colRipple: Appearance.colors.colLayer2Active
 
-    property bool revealed: false
-    opacity: revealed ? 1.0 : 0.0
-
-    Component.onCompleted: revealTimer.start()
-
-    Timer {
-        id: revealTimer
-        interval: Math.min(root.revealIndex * 12, 260)
-        repeat: false
-        onTriggered: root.revealed = true
-    }
-
-    Behavior on opacity {
-        NumberAnimation {
-            duration: 220
-            easing.type: Easing.OutCubic
-        }
-    }
-
-    transform: Scale {
-        origin.x: root.width / 2
-        origin.y: root.height / 2
-        xScale: root.revealed ? 1.0 : 0.88
-        yScale: root.revealed ? 1.0 : 0.88
-
-        Behavior on xScale {
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.OutBack
-                easing.overshoot: 1.2
-            }
-        }
-        Behavior on yScale {
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.OutBack
-                easing.overshoot: 1.2
-            }
-        }
-    }
+    // No per-card entrance animation: the grid fades in as one group instead.
 
     Rectangle {
         anchors.fill: parent

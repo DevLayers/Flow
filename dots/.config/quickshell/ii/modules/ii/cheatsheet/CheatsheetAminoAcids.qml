@@ -178,6 +178,16 @@ Item {
                 rowSpacing: root.gridSpacing
                 columnSpacing: root.gridSpacing
 
+                // One group fade instead of 22 staggered per-card reveals.
+                opacity: 0
+                Component.onCompleted: opacity = 1
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 180
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
                 Repeater {
                     model: root.ordered
 
@@ -190,7 +200,6 @@ Item {
                         aa: modelData.aa
                         hueOffset: modelData.hueOffset
                         shade: modelData.shade
-                        revealIndex: index
                         selected: root.selected === modelData.aa
                         onClicked: root.selected = modelData.aa
                     }
