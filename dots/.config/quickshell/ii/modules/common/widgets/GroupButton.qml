@@ -50,8 +50,8 @@ Button {
         return Math.abs(indexInParent - p.clickIndex) === 1;
     }
 
-    Layout.fillWidth: (clickIndex - 1 <= indexInParent && indexInParent <= clickIndex + 1)
-    Layout.fillHeight: (clickIndex - 1 <= indexInParent && indexInParent <= clickIndex + 1)
+    Layout.fillWidth: (clickIndex >= 0 && clickIndex - 1 <= indexInParent && indexInParent <= clickIndex + 1)
+    Layout.fillHeight: (clickIndex >= 0 && clickIndex - 1 <= indexInParent && indexInParent <= clickIndex + 1)
     implicitWidth: (root.isPressed && bounce) ? clickedWidth : (isNeighborPressed && bounce ? Math.max(16, baseWidth - 6) : baseWidth)
     implicitHeight: (root.isPressed && bounce) ? clickedHeight : baseHeight
 
