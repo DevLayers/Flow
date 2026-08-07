@@ -40,7 +40,7 @@ Item {
         anchors.fill: parent
         imageSource: root.artFilePath
 
-        layer.enabled: true
+        layer.enabled: (Config.options.background?.mediaMode?.backgroundBlurRadius ?? 0) > 0
         layer.effect: MultiEffect {
             blurEnabled: true
             blurMax: 128

@@ -47,10 +47,12 @@ AbstractWidget {
     }
 
     readonly property var centeredWidgetsList: {
-        backgroundScope.widgetSyncVersion; // dependency to force re-evaluation
-        return getCenteredWidgetsList();
+        if (backgroundScope && backgroundScope.widgetSyncVersion !== undefined) {
+            backgroundScope.widgetSyncVersion; // dependency to force re-evaluation
+        }
+        return getCenteredWidgetsList() ?? [];
     }
-    readonly property int centeredWidgetCount: centeredWidgetsList.length
+    readonly property int centeredWidgetCount: (centeredWidgetsList ?? []).length
     readonly property int centeredWidgetIndex: {
         if (!widgetInstance) return 0;
         for (let i = 0; i < centeredWidgetsList.length; i++) {

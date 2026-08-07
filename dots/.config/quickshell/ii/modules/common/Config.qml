@@ -296,7 +296,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 2
+    readonly property int currentConfigVersion: 3
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -370,6 +370,18 @@ Singleton {
             delete detection.idleFloorHz;
             delete detection.useMotionHeuristic;
             console.log(`[Config] Migrated tiling.detection to keybind-only drag detection (idleHz ${detection.idleHz})`);
+        }
+
+        // v2 -> v3: the dashboard quick toggles changed from one flat list
+        // (`android.toggles`) to pages (`android.pages`). Keep old layouts
+        // editable instead of silently dropping the legacy key on the next save.
+        if (from < 3 && raw.sidebar?.quickToggles?.android !== undefined) {
+            const android = raw.sidebar.quickToggles.android;
+            if (android.pages === undefined && Array.isArray(android.toggles)) {
+                android.pages = [android.toggles];
+                console.log("[Config] Migrated sidebar.quickToggles.android.toggles to pages");
+            }
+            delete android.toggles;
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -472,39 +484,39 @@ Singleton {
     // (background widget placementStrategy, which also accepts undocumented
     // aliases) is left out on purpose.
     readonly property var enumConstraints: ({
-        "panelFamily": ["ii", "waffle"],
-        "policies.ai": [0, 1, 2],
-        "policies.weeb": [0, 1, 2],
-        "policies.wallpapers": [0, 1],
-        "policies.translator": [0, 1, 2],
-        "policies.player": [0, 1],
-        "policies.phone": [0, 1],
-        "phone.webcam.cameraFacing": ["front", "back"],
-        "phone.webcam.resolution": ["640x480", "1280x720", "1920x1080"],
-        "phone.webcam.rotateDegrees": [0, 90, 180, 270],
-        "phone.webcam.connection": ["wifi", "usb"],
-        "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
-        "appearance.colorEngine": ["vynx", "fork"],
-        "background.zoomOutStyle": [0, 1, 2],
-        "background.mediaMode.visualizerMode": [0, 1, 2, 3],
-        "background.mediaMode.syllable.textHighlightStyle": [0, 1],
-        "bar.cornerStyle": [0, 1, 2, 3],
-        "bar.barGroupStyle": [0, 1, 2],
-        "bar.barBackgroundStyle": [0, 1, 2, 3],
-        "bar.mediaPlayer.popupStyle": ["default", "expressive", "android"],
-        "userProfile.imageStyle": ["initial", "expressive", "custom"],
-        "lock.centerAlignment": ["vertical", "horizontal"],
-        "lock.notifications.position": ["top_left", "top_right", "bottom_left", "bottom_right"],
-        "lock.notifications.privacy": ["full", "redacted", "countOnly"],
-        "lock.notifications.defaultPolicy": ["show", "hide"],
-        "lock.notifications.filters.criticalOverride": ["full", "none"],
-        "sidebar.position": ["default", "inverted", "left", "right"],
-        "sidebar.sidebarStyle": ["default", "connect"],
-        "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
-        "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
-        "sounds.notificationDefaultPolicy": ["play", "mute"],
-        "time.firstDayOfWeek": [0, 1, 2, 3, 4, 5, 6],
-    })
+            "panelFamily": ["ii", "waffle"],
+            "policies.ai": [0, 1, 2],
+            "policies.weeb": [0, 1, 2],
+            "policies.wallpapers": [0, 1],
+            "policies.translator": [0, 1, 2],
+            "policies.player": [0, 1],
+            "policies.phone": [0, 1],
+            "phone.webcam.cameraFacing": ["front", "back"],
+            "phone.webcam.resolution": ["640x480", "1280x720", "1920x1080"],
+            "phone.webcam.rotateDegrees": [0, 90, 180, 270],
+            "phone.webcam.connection": ["wifi", "usb"],
+            "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
+            "appearance.colorEngine": ["vynx", "fork"],
+            "background.zoomOutStyle": [0, 1, 2],
+            "background.mediaMode.visualizerMode": [0, 1, 2, 3],
+            "background.mediaMode.syllable.textHighlightStyle": [0, 1],
+            "bar.cornerStyle": [0, 1, 2, 3],
+            "bar.barGroupStyle": [0, 1, 2],
+            "bar.barBackgroundStyle": [0, 1, 2, 3],
+            "bar.mediaPlayer.popupStyle": ["default", "expressive", "android"],
+            "userProfile.imageStyle": ["initial", "expressive", "custom"],
+            "lock.centerAlignment": ["vertical", "horizontal"],
+            "lock.notifications.position": ["top_left", "top_right", "bottom_left", "bottom_right"],
+            "lock.notifications.privacy": ["full", "redacted", "countOnly"],
+            "lock.notifications.defaultPolicy": ["show", "hide"],
+            "lock.notifications.filters.criticalOverride": ["full", "none"],
+            "sidebar.position": ["default", "inverted", "left", "right"],
+            "sidebar.sidebarStyle": ["default", "connect"],
+            "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
+            "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
+            "sounds.notificationDefaultPolicy": ["play", "mute"],
+            "time.firstDayOfWeek": [0, 1, 2, 3, 4, 5, 6]
+        })
 
     function getNestedValue(obj, keys) {
         let node = obj;
@@ -1254,6 +1266,20 @@ Singleton {
                         property bool enableShadows: false
                         property int widgetSize: 100
                     }
+                    property JsonObject wearos_arc_clock: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property bool blackBackground: false
+                        property bool enableGlassReflection: true
+                        property bool enableBackgroundPattern: true
+                        property string leftComplication: "weather"
+                        property string rightComplication: "battery"
+                        property string bottomComplication: "calendar"
+                        property bool enableShadows: false
+                    }
                     property JsonObject concentric_clock: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
@@ -1374,6 +1400,44 @@ Singleton {
                         property string action1: "music_rec"
                         property string action2: "ai_chat"
                         property string action3: "search"
+                    }
+                    property JsonObject resource_cpu_pill: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string aspectRatio: "2x0.5"
+                        property bool showDetails: true
+                    }
+                    property JsonObject resource_ram_pill: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string aspectRatio: "2x0.5"
+                        property bool showDetails: true
+                    }
+                    property JsonObject resource_disk_pill: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string aspectRatio: "2x0.5"
+                        property bool showDetails: true
+                    }
+                    property JsonObject resource_fill_cards: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string orientation: "horizontal"
+                        property bool enableCpu: true
+                        property bool enableRam: true
+                        property bool enableDisk: true
                     }
                     property JsonObject grid_card_clock: JsonObject {
                         property bool enable: false
@@ -1902,6 +1966,7 @@ Singleton {
                     property bool disableAudio: true
                     property bool disableProgress: false
                     property bool disableBattery: false
+                    property bool disableAiStatus: false
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
 
@@ -1922,6 +1987,7 @@ Singleton {
                     property int heightAudio: 36
                     property int heightProgress: 48
                     property int heightBattery: 36
+                    property int heightAiStatus: 36
                 }
 
                 property int barGroupStyle: 1 // 0: Pills | 1: Island (opaque) | 2: Transparent (or maybe line-separated in the future)

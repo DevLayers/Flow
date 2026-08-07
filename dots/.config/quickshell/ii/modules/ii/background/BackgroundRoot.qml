@@ -24,7 +24,7 @@ PanelWindow {
     required property var modelData
     required property var widgetStateManager
 
-    property bool anyWidgetIsDragging: widgetStateManager ? widgetStateManager.draggingActive : false
+    property bool anyWidgetIsDragging: (widgetStateManager?.draggingActive) ?? false
     property real baseWallpaperScale: 1 // Calculated scale from wallpaper size
     property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
     property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
@@ -102,8 +102,12 @@ PanelWindow {
 
     // Hide when fullscreen
     property var workspacesForMonitor: Hyprland.workspaces.values.filter(function(workspace) { return workspace.monitor && workspace.monitor.name == monitor.name; })
-    property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(function(workspace) { return ((workspace.toplevels.values.filter(function(window) { return window.wayland && window.wayland.fullscreen; })[0] != undefined) && workspace.active); })[0]
-    property bool isFullscreen: activeWorkspaceWithFullscreen != undefined
+    readonly property bool isFullscreen: {
+        const wl = HyprlandData.windowList;
+        const monitorData = HyprlandData.monitors.find(m => m.name === (monitor ? monitor.name : ""));
+        const activeWsId = monitorData?.activeWorkspace?.id;
+        return wl.some(w => w.workspace?.id === activeWsId && w.fullscreen === 1);
+    }
     property var activeWorkspace: workspacesForMonitor.filter(function(workspace) { return workspace.active; })[0]
     property bool hasWindowsInActiveWorkspace: {
         if (activeWorkspace == undefined) return false;

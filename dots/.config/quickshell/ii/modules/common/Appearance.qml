@@ -293,7 +293,7 @@ Singleton {
         if (Config.ready) {
             var a = root.ignoreAlpha;
             var script = "";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
@@ -305,13 +305,25 @@ Singleton {
         }
     }
 
+    property bool _isApplyingRules: false
+
+    Timer {
+        id: hyprlandRuleCooldownTimer
+        interval: 3000
+        repeat: false
+        onTriggered: root._isApplyingRules = false
+    }
+
     function applyHyprlandRules() {
-        if (!Config.ready) return;
+        if (!Config.ready || root._isApplyingRules) return;
+        root._isApplyingRules = true;
+        hyprlandRuleCooldownTimer.restart();
+
         Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + root.windowRounding + " } })"]);
         Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
         var a = root.ignoreAlpha;
         var bs = "";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
@@ -353,7 +365,9 @@ Singleton {
     Connections {
         target: HyprlandConfig
         function onReloaded() {
-            root.applyHyprlandRules();
+            if (!root._isApplyingRules) {
+                root.applyHyprlandRules();
+            }
         }
     }
 

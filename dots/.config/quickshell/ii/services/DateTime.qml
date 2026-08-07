@@ -28,7 +28,7 @@ Singleton {
     property string uptime: "0h, 0m"
 
     Timer {
-        interval: 10
+        interval: 10000
         running: true
         repeat: true
         onTriggered: {

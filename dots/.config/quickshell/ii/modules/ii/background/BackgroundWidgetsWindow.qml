@@ -41,12 +41,12 @@ PanelWindow {
     property var workspacesForMonitor: Hyprland.workspaces.values.filter(function (workspace) {
         return workspace.monitor && workspace.monitor.name == monitor.name;
     })
-    property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(function (workspace) {
-        return ((workspace.toplevels.values.filter(function (window) {
-                    return window.wayland && window.wayland.fullscreen;
-                })[0] != undefined) && workspace.active);
-    })[0]
-    property bool isFullscreen: activeWorkspaceWithFullscreen != undefined
+    readonly property bool isFullscreen: {
+        const wl = HyprlandData.windowList;
+        const monitorData = HyprlandData.monitors.find(m => m.name === (monitor ? monitor.name : ""));
+        const activeWsId = monitorData?.activeWorkspace?.id;
+        return wl.some(w => w.workspace?.id === activeWsId && w.fullscreen === 1);
+    }
     property var activeWorkspace: workspacesForMonitor.filter(function (workspace) {
         return workspace.active;
     })[0]
@@ -234,7 +234,7 @@ PanelWindow {
         }
     }
 
-    readonly property bool scratchpadOpen: GlobalStates.scratchpadOpen
+    readonly property bool scratchpadOpen: GlobalStates.scratchpadOpen ?? false
     readonly property bool wallpaperZoomedOut: Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen) && (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name == screen.name : false)
 
     OverviewZoomController {

@@ -64,6 +64,7 @@ Singleton {
     // Charge limit: standard kernel ABI first, then known vendor-specific locations (TLP-style)
     readonly property var chargeLimitCandidates: {
         const paths = [];
+        if (!available) return paths;
         if (batteryNativePath) {
             paths.push({ path: `/sys/class/power_supply/${batteryNativePath}/charge_control_end_threshold`, type: "plain" });
             paths.push({ path: `/sys/devices/platform/smapi/${batteryNativePath}/stop_charge_thresh`, type: "plain" });

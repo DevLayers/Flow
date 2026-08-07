@@ -136,7 +136,7 @@ Singleton {
     // reuses FileView instances that just reload files in-place.
 	Timer {
         id: cpuRamTimer
-		interval: 1
+		interval: Config.options?.resources?.updateInterval ?? 1000
 		running: true
 		repeat: true
 		onTriggered: {

@@ -27,6 +27,7 @@ Singleton {
     readonly property string apiKeyEnvVarName: "API_KEY"
 
     signal responseFinished
+    readonly property bool isGenerating: requester.running
 
     property string systemPrompt: {
         let prompt = Config.options?.ai?.systemPrompt ?? "";

@@ -150,6 +150,17 @@ Item {
     }
 
     Component {
+        id: component_wearos_arc_clock
+        WearOSArcClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_concentric_clock
         ConcentricClockWidget {
             screenWidth: delegateRoot.screenWidth
@@ -743,6 +754,50 @@ Item {
         }
     }
 
+    Component {
+        id: component_resource_cpu_pill
+        CpuPillWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_resource_ram_pill
+        RamPillWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_resource_disk_pill
+        DiskPillWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_resource_fill_cards
+        ResourceFillCardsWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
     readonly property var widgetComponentMap: ({
             "clock_cookie": component_clock_cookie,
             "clock_digital": component_clock_digital,
@@ -752,6 +807,7 @@ Item {
             "clock_hori": component_clock_hori,
             "clock_dial": component_clock_dial,
             "clock_wearos": component_clock_wearos,
+            "wearos_arc_clock": component_wearos_arc_clock,
             "concentric_clock": component_concentric_clock,
             "month_clock": component_month_clock,
             "scallop_dot_clock": component_scallop_dot_clock,
@@ -806,7 +862,11 @@ Item {
             "quick_actions": component_quick_actions,
             "quote": component_quote,
             "water_reminder": component_water_reminder,
-            "at_a_glance": component_at_a_glance
+            "at_a_glance": component_at_a_glance,
+            "resource_cpu_pill": component_resource_cpu_pill,
+            "resource_ram_pill": component_resource_ram_pill,
+            "resource_disk_pill": component_resource_disk_pill,
+            "resource_fill_cards": component_resource_fill_cards
         })
 
     function getExtUrl(extId) {
