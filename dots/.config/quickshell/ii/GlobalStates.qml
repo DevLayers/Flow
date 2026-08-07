@@ -222,7 +222,7 @@ Singleton {
     property bool mediaWidgetHovered: false
     property Timer mediaWidgetHoverTimer: Timer {
         id: mediaWidgetHoverTimer
-        interval: 4000
+        interval: 400
         repeat: false
         onTriggered: {
             root.mediaWidgetHovered = false;

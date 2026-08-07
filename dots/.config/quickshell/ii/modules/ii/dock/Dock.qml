@@ -40,14 +40,26 @@ Scope {
         const contentW = opts.contentVisualWidth + opts.dockPadding * 2
         const contentH = opts.contentVisualHeight + opts.dockPadding * 2
 
+        const magExtra = opts.magExtra || 0
+
+        const bgW = Math.max(1, opts.isVertical ? contentW : Math.min(contentW, maxW - gapsOut * 2))
+        const bgH = Math.max(1, opts.isVertical ? Math.min(contentH, maxH - gapsOut * 2) : contentH)
+
+        const baseDockW = opts.isVertical ? contentW + gapsOut * 2 : Math.min(contentW + gapsOut * 2, maxW)
+        const baseDockH = opts.isVertical ? Math.min(contentH + gapsOut * 2, maxH) : contentH + gapsOut * 2
+
+        const fullDockW = Math.min(baseDockW + magExtra, maxW)
+        const fullDockH = Math.min(baseDockH + magExtra, maxH)
+
         return {
             maxWidth: maxW,
             maxHeight: maxH,
-            dockWidth:     opts.isVertical ? contentW + gapsOut * 2 : Math.min(contentW + gapsOut * 2, maxW),
-            dockHeight:    opts.isVertical ? Math.min(contentH + gapsOut * 2, maxH) : contentH + gapsOut * 2,
-            dockThickness: opts.isVertical ? contentW + gapsOut * 2 : contentH + gapsOut * 2,
-            backgroundWidth:  Math.max(1, opts.isVertical ? contentW : Math.min(contentW, maxW - gapsOut * 2)),
-            backgroundHeight: Math.max(1, opts.isVertical ? Math.min(contentH, maxH - gapsOut * 2) : contentH)
+            dockWidth: fullDockW,
+            dockHeight: fullDockH,
+            dockThickness: opts.isVertical ? fullDockW : fullDockH,
+            unmagnifiedThickness: opts.isVertical ? baseDockW : baseDockH,
+            backgroundWidth: bgW,
+            backgroundHeight: bgH
         }
     }
 
@@ -68,8 +80,13 @@ Scope {
             readonly property bool barIsVertical: Config.options?.bar?.vertical ?? false
             readonly property real barThickness: barActive? (barIsVertical ? (Config.options?.bar?.sizes?.width ?? Appearance.sizes.verticalBarWidth) : (Config.options?.bar?.sizes?.height ?? Appearance.sizes.barHeight)) : 0
 
+            readonly property bool enableMagnification: Config.options?.dock?.enableMagnification ?? false
+            readonly property real magnificationScale: Config.options?.dock?.magnificationScale ?? 1.5
+            readonly property real magExtra: enableMagnification ? Math.ceil((magnificationScale - 1.0) * ((isVertical ? dockContent.buttonSlotSize : dockContent.buttonSlotHeight) || Appearance.sizes.dockButtonSize)) : 0
+
             readonly property bool isVertical: dock.isVertical
-            readonly property real dockThickness: isVertical ? dockRoot.sizing.dockWidth : dockRoot.sizing.dockHeight
+            readonly property real dockThickness: dockRoot.sizing.dockThickness
+            readonly property real unmagnifiedThickness: dockRoot.sizing.unmagnifiedThickness
             readonly property bool anySidebarOpen: GlobalStates.effectiveLeftOpen || GlobalStates.effectiveRightOpen
 
             readonly property bool isSpecialWorkspaceOpen: {
@@ -103,7 +120,8 @@ Scope {
                 availableH: availableH,
                 contentVisualWidth: dockContent.visualWidth,
                 contentVisualHeight: dockContent.visualHeight,
-                dockPadding: dockContent.dockPadding
+                dockPadding: dockContent.dockPadding,
+                magExtra: dockRoot.magExtra
             })
 
             implicitWidth: Math.max(1, dockRoot.sizing.dockWidth)
@@ -116,7 +134,7 @@ Scope {
                 right: dock.dockEffectivePosition !== "left"
             }
 
-            exclusiveZone: (dock.pinned && reveal) ? dockThickness : 0
+            exclusiveZone: (dock.pinned && reveal) ? unmagnifiedThickness : 0
             WlrLayershell.namespace: "quickshell:dock"
             WlrLayershell.layer: WlrLayer.Overlay
             color: "transparent"
@@ -152,8 +170,8 @@ Scope {
                 id: dockMouseArea
                 hoverEnabled: true
 
-                property real hiddenOffset: dockRoot.dockThickness - (Config.options?.dock.hoverRegionHeight ?? 10)
-                property real fullyHiddenOffset: dockRoot.dockThickness + 1
+                property real hiddenOffset: dockRoot.unmagnifiedThickness - (Config.options?.dock.hoverRegionHeight ?? 10)
+                property real fullyHiddenOffset: dockRoot.unmagnifiedThickness + 1
                 property real currentOffset: dockRoot.reveal ? 0 : (Config.options?.dock.hoverToReveal ? hiddenOffset : fullyHiddenOffset)
 
                 width: dock.isVertical ? dockRoot.dockThickness : dockRoot.sizing.dockWidth
@@ -193,13 +211,27 @@ Scope {
 
                 Rectangle {
                     id: dockVisualBackground
-                    anchors.centerIn: parent
 
                     width: dockRoot.sizing.backgroundWidth
                     height: dockRoot.sizing.backgroundHeight
 
                     color: Appearance.colors.colLayer0
-                    radius: Appearance.rounding.windowRounding + 12
+                    radius: (Config.options?.dock?.dockRadius ?? -1) >= 0 ? Config.options.dock.dockRadius : (Appearance.rounding.windowRounding + 12)
+
+                    anchors.horizontalCenter: (!dock.isVertical) ? parent.horizontalCenter : undefined
+                    anchors.verticalCenter: dock.isVertical ? parent.verticalCenter : undefined
+
+                    anchors.bottom: dock.dockEffectivePosition === "bottom" ? parent.bottom : undefined
+                    anchors.bottomMargin: dock.dockEffectivePosition === "bottom" ? Appearance.sizes.hyprlandGapsOut : 0
+
+                    anchors.top: dock.dockEffectivePosition === "top" ? parent.top : undefined
+                    anchors.topMargin: dock.dockEffectivePosition === "top" ? Appearance.sizes.hyprlandGapsOut : 0
+
+                    anchors.left: dock.dockEffectivePosition === "left" ? parent.left : undefined
+                    anchors.leftMargin: dock.dockEffectivePosition === "left" ? Appearance.sizes.hyprlandGapsOut : 0
+
+                    anchors.right: dock.dockEffectivePosition === "right" ? parent.right : undefined
+                    anchors.rightMargin: dock.dockEffectivePosition === "right" ? Appearance.sizes.hyprlandGapsOut : 0
 
                     DropArea {
                         id: fileDropArea

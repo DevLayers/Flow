@@ -56,13 +56,17 @@ PopupWindow {
     visible: show || popupBackground.opacity > 0
     color: "transparent"
 
+    readonly property Item hoveredBtn: dockRoot?.lastHoveredButton ?? null
+    readonly property real hoveredMagScale: (hoveredBtn && dockRoot) ? dockRoot._getSlotMagScale(hoveredBtn) : 1.0
+    readonly property real hoveredScaleExtra: hoveredBtn ? (hoveredMagScale - 1.0) * (isVertical ? hoveredBtn.width : hoveredBtn.height) : 0
+
     anchor {
         window: dockWindow
         adjustment: PopupAdjustment.None
 
         rect {
-            x: dockPos === "left" ? (dockWindow?.width ?? 0) : 0
-            y: dockPos === "bottom" ? 0 : dockPos === "top" ? (dockWindow?.height ?? 0) : 0
+            x: dockPos === "left" ? ((dockWindow?.width ?? 0) - (dockWindow?.magExtra ?? 0) + hoveredScaleExtra) : (dockPos === "right" ? Math.max(0, (dockWindow?.magExtra ?? 0) - hoveredScaleExtra) : 0)
+            y: dockPos === "bottom" ? Math.max(0, (dockWindow?.magExtra ?? 0) - hoveredScaleExtra) : dockPos === "top" ? ((dockWindow?.height ?? 0) - (dockWindow?.magExtra ?? 0) + hoveredScaleExtra) : 0
         }
 
         gravity: {
@@ -107,13 +111,40 @@ PopupWindow {
         y: isVertical ? _clampedY : (dockPos === "top" ? margins : parent.height - implicitHeight - margins)
 
         opacity: previewPopup.show ? 1 : 0
+        scale: previewPopup.show ? 1.0 : 0.90
+        transformOrigin: {
+            if (dockPos === "top") return Item.Top
+            if (dockPos === "left") return Item.Left
+            if (dockPos === "right") return Item.Right
+            return Item.Bottom
+        }
+
         visible: (appTopLevel?.toplevels?.length ?? 0) > 0
         clip: true
         color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
-        radius: Appearance.rounding.normal
+        radius: (Config.options?.dock?.widgetRadius ?? -1) >= 0 ? Config.options.dock.widgetRadius : Appearance.rounding.normal
         implicitHeight: previewRowLayout.implicitHeight + padding * 2
         implicitWidth: previewRowLayout.implicitWidth + padding * 2
 
+        layer.enabled: true
+        layer.effect: FastBlur {
+            radius: previewPopup.show ? 0 : 16
+            Behavior on radius {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+        }
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
         Behavior on implicitWidth {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }

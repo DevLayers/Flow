@@ -1,6 +1,7 @@
 import QtQuick
 import "."
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -8,6 +9,8 @@ import qs.modules.common.widgets
 
 RippleButton { // Right sidebar button
     id: rightSidebarButton
+
+    readonly property string screenName: QsWindow.window?.screen?.name ?? ""
 
     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
@@ -35,7 +38,7 @@ RippleButton { // Right sidebar button
     }
 
     onPressed: {
-        GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
+        GlobalStates.toggleRightSidebar(screenName);
     }
 
     RowLayout {

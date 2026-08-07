@@ -30,10 +30,12 @@ Item {
     readonly property bool hasHiddenLeft: windowStart > 0
     readonly property bool hasHiddenRight: (windowStart + visibleCount) < totalCount
 
+    readonly property real adaptiveExtraOffset: (Config.options.dock.enableShapeMask && !root.isThemedIcon) ? 4 : 0
+
     width: root.isVertical ? baseDotW : (visibleCount * baseDotW + Math.max(0, visibleCount - 1) * dotSpacing)
     height: root.isVertical ? (visibleCount * baseDotH + Math.max(0, visibleCount - 1) * dotSpacing) : baseDotH
-    x: root.isVertical ? (root.dockPos === "left" ? (root.dotMargin - width) / 2 : parent.width - width - (root.dotMargin - width) / 2) : (parent.width - width) / 2
-    y: root.isVertical ? (parent.height - height) / 2 : (root.dockPos === "top" ? (root.dotMargin - height) / 2 : parent.height - height - (root.dotMargin - height) / 2)
+    x: root.isVertical ? (root.dockPos === "left" ? Math.max(1, (root.dotMargin - width) / 2 - adaptiveExtraOffset) : Math.min(parent.width - width - 1, parent.width - width - (root.dotMargin - width) / 2 + adaptiveExtraOffset)) : (parent.width - width) / 2
+    y: root.isVertical ? (parent.height - height) / 2 : (root.dockPos === "top" ? Math.max(1, (root.dotMargin - height) / 2 - adaptiveExtraOffset) : parent.height - height - Math.max(1, (root.dotMarginV - height) / 2) + adaptiveExtraOffset)
 
     Repeater {
         model: indicatorContainer.visibleCount

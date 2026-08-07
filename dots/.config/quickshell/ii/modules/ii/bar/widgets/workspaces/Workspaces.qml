@@ -754,7 +754,7 @@ Item {
         Item {
             id: scratchpadPositionHelper
             readonly property real indicatorSize: root.individualIconBoxHeight + 2
-            readonly property Item activeItem: contentLayout.children[root.workspaceIndexInGroup]
+            readonly property Item activeItem: (contentLayout.children && root.workspaceIndexInGroup >= 0 && root.workspaceIndexInGroup < contentLayout.children.length) ? contentLayout.children[root.workspaceIndexInGroup] : null
 
             x: activeItem ? root.vertical ? contentLayout.x + (contentLayout.width - indicatorSize) / 2 : activeItem.x + contentLayout.x + (activeItem.width - indicatorSize) / 2 : 0
             y: activeItem ? root.vertical ? activeItem.y + contentLayout.y + (activeItem.height - indicatorSize) / 2 : contentLayout.y + (contentLayout.height - indicatorSize) / 2 : 0

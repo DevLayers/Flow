@@ -84,7 +84,12 @@ Scope {
         component: MediaControls {}
     }
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable && GlobalStates.bluetoothConnectionPopupOpen
+        // The Scope must stay loaded so the onDeviceConnected trigger inside
+        // BluetoothConnectionPopup.qml is alive; the inner LazyLoader gates the
+        // actual PanelWindow on GlobalStates.bluetoothConnectionPopupOpen.
+        // (df1e26966 gated this PanelLoader on the same flag, creating a
+        // chicken-and-egg that prevented the popup from ever appearing.)
+        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
         component: BluetoothConnectionPopup {}
     }
     PanelLoader {

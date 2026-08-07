@@ -96,7 +96,7 @@ Item {
 
     Loader {
         active: Config.options.dock.monochromeIcons
-        anchors.fill: parent
+        anchors.fill: iconContentWrapper
         sourceComponent: Item {
             Desaturate {
                 id: monoDesat

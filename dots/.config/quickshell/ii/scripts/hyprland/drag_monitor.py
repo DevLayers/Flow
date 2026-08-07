@@ -50,6 +50,17 @@ import time
 # even when polling is idle.
 MAX_WAIT_S = 0.25
 
+# A gesture Hyprland dropped without telling anyone looks, from here, like a
+# window sitting exactly where it started. So does a drag that has only just
+# begun, and a tiled one Hyprland will not move until it swaps on release, so
+# the two are told apart by how long the window stays put.
+STALE_DRAG_S = 2.0
+
+# Backstop for anything the checks below still miss: no gesture is a minute
+# long, and an overlay that never goes away is worse than one that goes away
+# early.
+MAX_DRAG_S = 60.0
+
 
 def emit(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
@@ -200,6 +211,13 @@ def window_sample(ctl):
     return shape_window(ctl.json("activewindow"))
 
 
+def same_address(one, other):
+    """Event addresses come without the `0x` that the JSON replies carry."""
+    if not one or not other:
+        return False
+    return one.lower().lstrip("0x") == other.lower().lstrip("0x")
+
+
 class Monitor:
     def __init__(self, ctl):
         self.ctl = ctl
@@ -217,6 +235,10 @@ class Monitor:
         # from one that simply has not moved yet.
         self.before = None
         self.left_origin = False
+        # When the gesture began, and since when the window has had nothing to
+        # say about whether it is still held.
+        self.started_at = 0.0
+        self.settled_at = None
 
     # -- configuration ------------------------------------------------------
 
@@ -242,6 +264,8 @@ class Monitor:
         self.cursor = cursor
         self.window = window
         self.left_origin = False
+        self.started_at = time.monotonic()
+        self.settled_at = None
         if not before or before.get("address") != window["address"]:
             before = window
         self.before = before
@@ -281,6 +305,7 @@ class Monitor:
         self.kind = ""
         self.before = None
         self.left_origin = False
+        self.settled_at = None
 
     def hint(self, cmd):
         if not self.use_keybinds:
@@ -316,23 +341,66 @@ class Monitor:
         if cursor is not None and cursor != self.cursor:
             self.cursor = cursor
             emit({"event": "dragMove", "x": cursor[0], "y": cursor[1]})
+        if time.monotonic() - self.started_at > MAX_DRAG_S:
+            self.stop(cancelled=True)
+            return
         self.poll_keybind_drag(window)
 
     def poll_keybind_drag(self, window):
         """Hyprland ends a gesture the instant its modifier goes up, and it
         neither fires the bind's release nor lets the modifier's own release
-        bind through while it owns the pointer, so nothing announces it. What
-        does say it is the window: a dropped gesture puts it back exactly where
-        it started, while a held one is still somewhere else."""
-        if not window or not self.before or window["address"] != self.before["address"]:
+        bind through while it owns the pointer, so nothing announces it. The
+        window is what says so instead: Hyprland holds it focused for as long
+        as it owns the gesture, and puts it back exactly where it started once
+        it drops one."""
+        if not self.before:
+            self.stop(cancelled=True)
+            return
+        if window and window["address"] != self.before["address"]:
+            # Something else is focused, so the gesture is over however it
+            # ended: a click elsewhere, a workspace switch, the window closing.
+            self.stop(cancelled=True)
+            return
+        if not window:
+            # A reply that never arrived says nothing either way.
+            self.mark_settled()
             return
         self.window = window
-        if not self.left_origin:
-            self.left_origin = self.moved(self.before, window)
-            return
         if self.moved(self.before, window):
+            # Away from where it started is the one positive sign the gesture
+            # is still held, since a dropped one is restored.
+            self.left_origin = True
+            self.settled_at = None
             return
-        self.stop(cancelled=True)
+        if self.left_origin:
+            self.stop(cancelled=True)
+            return
+        # It has never moved at all. Hyprland leaves a tiled window alone until
+        # the release swaps it, and a gesture it silently dropped looks exactly
+        # the same, so the only thing left to go on is how long this lasts.
+        self.mark_settled()
+
+    def mark_settled(self):
+        now = time.monotonic()
+        if self.settled_at is None:
+            self.settled_at = now
+        elif now - self.settled_at > STALE_DRAG_S:
+            self.stop(cancelled=True)
+
+    def event(self, name, data):
+        """Hyprland announces the things that can only happen once a gesture is
+        over long before the next poll would notice them."""
+        if not self.dragging:
+            return
+        address = self.before["address"] if self.before else ""
+        # Not `focusedmon`: Hyprland hands the active monitor over as the cursor
+        # crosses, which a drag onto another screen does on its way there.
+        if name in ("workspace", "workspacev2", "fullscreen"):
+            self.stop(cancelled=True)
+        elif name == "closewindow" and same_address(data, address):
+            self.stop(cancelled=True)
+        elif name == "activewindowv2" and data and not same_address(data, address):
+            self.stop(cancelled=True)
 
     def moved(self, before, after):
         tol = self.tolerance
@@ -415,8 +483,11 @@ def main():
                 lines = buffered.split(b"\n")
                 buffered = lines.pop()
                 for raw in lines:
-                    if raw.startswith(b"configreloaded"):
+                    name, _, data = raw.decode(errors="replace").partition(">>")
+                    if name == "configreloaded":
                         emit(read_gaps(ctl))
+                    else:
+                        monitor.event(name, data.split(",")[0].strip())
 
         now = time.monotonic()
         if now >= next_poll:

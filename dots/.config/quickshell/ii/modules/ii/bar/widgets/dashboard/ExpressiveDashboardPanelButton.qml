@@ -10,6 +10,7 @@ import qs.modules.common.functions
 
 Item {
     id: root
+    readonly property string screenName: QsWindow.window?.screen?.name ?? ""
     property bool borderless: Config.options.bar.borderless
     property bool showDate: Config.options.bar.verbose
     property bool vertical: Config.options.bar.vertical
@@ -38,7 +39,7 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onPressed: {
-            GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
+            GlobalStates.toggleRightSidebar(root.screenName);
         }
     }
 

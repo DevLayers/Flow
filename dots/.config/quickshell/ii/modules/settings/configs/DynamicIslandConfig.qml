@@ -159,16 +159,14 @@ ContentPage {
             buttonIcon: "visibility_off"
             text: Translation.tr("Always hide floating island")
             visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
-            enabled: !Config.options.bar.floatingNotch.centerInBar
+            enabled: true
             checked: Config.options.bar.floatingNotch.autoHide
             onCheckedChanged: {
                 Config.options.bar.floatingNotch.autoHide = checked;
             }
 
             StyledToolTip {
-                text: Config.options.bar.floatingNotch.centerInBar
-                    ? Translation.tr("Auto-hide locked — incompatible with 'Dynamic Island in bar center'.")
-                    : Translation.tr("Hides the island at the top of the screen, revealing it on hover")
+                text: Translation.tr("Hides the island until a workspace, media, Bluetooth, notification, or other activity trigger reveals it")
             }
         }
 
@@ -301,6 +299,7 @@ ContentPage {
             }
             heightLabel: Translation.tr("Bluetooth contracted height")
             contractedHeight: Config.options.bar.floatingNotch.heightBluetooth
+            heightTo: 120
             onContractedHeightEdited: (value) => {
                 Config.options.bar.floatingNotch.heightBluetooth = value;
             }
@@ -387,6 +386,22 @@ ContentPage {
             contractedHeight: Config.options.bar.floatingNotch.heightRecording
             onContractedHeightEdited: (value) => {
                 Config.options.bar.floatingNotch.heightRecording = value;
+            }
+        }
+
+        NotchCard {
+            buttonIcon: "auto_awesome"
+            text: Translation.tr("AI Status Notch")
+            tooltip: Translation.tr("Toggle the AI agent status indicator notch")
+            masterEnabled: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+            notchEnabled: !Config.options.bar.floatingNotch.disableAiStatus
+            onNotchToggled: (enabled) => {
+                Config.options.bar.floatingNotch.disableAiStatus = !enabled;
+            }
+            heightLabel: Translation.tr("AI Status contracted height")
+            contractedHeight: Config.options.bar.floatingNotch.heightAiStatus
+            onContractedHeightEdited: (value) => {
+                Config.options.bar.floatingNotch.heightAiStatus = value;
             }
         }
 

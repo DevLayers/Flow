@@ -27,8 +27,25 @@ DockButton {
     property bool _pressed: false
     readonly property bool isDragging: dragActive || fileDropActive
 
-    background.implicitWidth: 0
-    background.implicitHeight: 0
+    readonly property real magScale: dockContent ? dockContent._getSlotMagScale(root) : 1.0
+
+    transformOrigin: {
+        let pos = root.dockContent?.dockPos ?? "bottom";
+        if (pos === "top")
+            return Item.Top;
+        if (pos === "left")
+            return Item.Left;
+        if (pos === "right")
+            return Item.Right;
+        return Item.Bottom;
+    }
+
+    scale: (_pressed ? 0.88 : 1.0) * magScale
+    z: Math.round(magScale * 10)
+
+    Behavior on scale {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
 
     Loader {
         anchors.fill: parent
@@ -44,37 +61,54 @@ DockButton {
             property real pressCoord: 0
             property bool dragActive: false
 
-            onPressed: (event) => {
-                pressCoord = root.dockContent?.isVertical ? event.y : event.x
-                root._pressed = true
+            onEntered: {
+                if (root.dockContent?.suppressHover)
+                    return;
+                root.dockContent.hoveredSlot = root;
+                root.dockContent.lastHoveredButton = root;
+                root.dockContent.buttonHovered = true;
             }
-            onPositionChanged: (event) => {
-                if (!pressed) return
-                var cur = root.dockContent?.isVertical ? event.y : event.x
-                var dist = Math.abs(cur - pressCoord)
+            onExited: {
+                if (root.dockContent?.lastHoveredButton === root) {
+                    root.dockContent.buttonHovered = false;
+                    root.dockContent.hoveredSlot = null;
+                }
+            }
+
+            onPressed: event => {
+                pressCoord = root.dockContent?.isVertical ? event.y : event.x;
+                root._pressed = true;
+            }
+            onPositionChanged: event => {
+                if (!pressed)
+                    return;
+                var cur = root.dockContent?.isVertical ? event.y : event.x;
+                var dist = Math.abs(cur - pressCoord);
                 if (!dragActive && dist > 5 && root.dockContent) {
-                    dragActive = true
-                    root._pressed = false
-                    root.dockContent.startItemDrag(root.delegateIndex, actionDragOverlay, event.x, event.y)
+                    dragActive = true;
+                    root._pressed = false;
+                    root.dockContent.startItemDrag(root.delegateIndex, actionDragOverlay, event.x, event.y);
                 }
                 if (dragActive && root.dockContent) {
-                    root.dockContent.moveItemDrag(actionDragOverlay, event.x, event.y)
+                    root.dockContent.moveItemDrag(actionDragOverlay, event.x, event.y);
                 }
             }
             onReleased: {
-                root._pressed = false
+                root._pressed = false;
                 if (dragActive) {
-                    dragActive = false
-                    if (root.dockContent) root.dockContent.endItemDrag()
+                    dragActive = false;
+                    if (root.dockContent)
+                        root.dockContent.endItemDrag();
                 } else {
-                    root.clicked()
+                    root.clicked();
                 }
             }
             onCanceled: {
-                root._pressed = false
+                root._pressed = false;
                 if (dragActive) {
-                    dragActive = false
-                    if (root.dockContent) root.dockContent.cancelDrag()
+                    dragActive = false;
+                    if (root.dockContent)
+                        root.dockContent.cancelDrag();
                 }
             }
         }
@@ -97,29 +131,17 @@ DockButton {
             rotation: root.dragOver ? 90 : (root.isDragging ? 45 : 0)
             color: {
                 if (root.isDragging) {
-                    return root._pressed ? Appearance.colors.colSecondaryContainerActive :
-                           root.hovered ? Appearance.colors.colSecondaryContainerHover :
-                           Appearance.colors.colSecondaryContainer
+                    return root._pressed ? Appearance.colors.colSecondaryContainerActive : root.hovered ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer;
                 }
                 if (root.toggled) {
-                    return root._pressed ? Appearance.colors.colPrimaryActive :
-                           root.hovered ? Appearance.colors.colPrimaryHover :
-                           Appearance.colors.colPrimary
+                    return root._pressed ? Appearance.colors.colPrimaryActive : root.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary;
                 }
-                return root._pressed ? Appearance.colors.colLayer1Active :
-                       root.hovered ? Appearance.colors.colLayer1Hover :
-                       "transparent"
+                return root._pressed ? Appearance.colors.colLayer1Active : root.hovered ? Appearance.colors.colLayer1Hover : "transparent";
             }
-            text: root.fileDropActive ? root.fileDropIcon
-                : root.dragActive ? root.dragSymbol
-                : root.symbolName
+            text: root.fileDropActive ? root.fileDropIcon : root.dragActive ? root.dragSymbol : root.symbolName
             fill: root.symbolFill
-            iconSize: root.isDragging
-                ? Math.round(root.buttonSize * 0.4)
-                : root.symbolSize
-            colSymbol: root.isDragging
-                ? Appearance.colors.colOnSecondaryContainer
-                : (root.toggled ? root.activeColor : root.inactiveColor)
+            iconSize: root.isDragging ? Math.round(root.buttonSize * 0.4) : root.symbolSize
+            colSymbol: root.isDragging ? Appearance.colors.colOnSecondaryContainer : (root.toggled ? root.activeColor : root.inactiveColor)
         }
 
         // Custom image (for trash icon, etc.)

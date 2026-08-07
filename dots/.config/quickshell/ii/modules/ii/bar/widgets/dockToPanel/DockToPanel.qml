@@ -397,7 +397,7 @@ Item {
                     property var    appEntry:     TaskbarApps.apps.find(a => a.appId === appId) ?? null
                     property var    appToplevel:  appEntry
                     property var    appToplevels: appEntry?.toplevels ?? []
-                    property var    deskEntry:    DesktopEntries.heuristicLookup(appId)
+                    property var    deskEntry:    TaskbarApps.getCachedDesktopEntry(appId)
                     property string appTitle:     deskEntry?.name ?? appId
                     property bool   appActive:    appToplevels.find(t => t.activated) !== undefined
                     readonly property bool isScratchpadApp: root.scratchpadOpen && TaskbarApps.normalizeAppId(appId) === root.scratchpadAppId
@@ -698,7 +698,7 @@ Item {
 
                     property var activeToplevels: modelData.toplevels ?? []
                     property var appToplevel: modelData
-                    property string appTitle: DesktopEntries.heuristicLookup(modelData.appId)?.name ?? modelData.appId
+                    property string appTitle: TaskbarApps.getCachedDesktopEntry(modelData.appId)?.name ?? modelData.appId
                     property bool appIsActive: activeToplevels.find(t => t.activated) !== undefined
                     readonly property bool isScratchpadApp: root.scratchpadOpen && TaskbarApps.normalizeAppId(modelData.appId) === root.scratchpadAppId
                     readonly property bool hovered: root.lastHoveredButton === activeSlot && root.buttonHovered

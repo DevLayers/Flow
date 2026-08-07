@@ -4,6 +4,7 @@ import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
+import "./widgets"
 
 ContentPage {
     id: page
@@ -68,6 +69,22 @@ ContentPage {
             checked: Config.options.dock.enablePreview
             onCheckedChanged: {
                 Config.options.dock.enablePreview = checked;
+                if (checked) {
+                    Config.options.dock.enableAppTooltip = false;
+                }
+            }
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.dock.enable
+            buttonIcon: "subtitles"
+            text: Translation.tr("Enable app name tooltips")
+            checked: Config.options.dock.enableAppTooltip
+            onCheckedChanged: {
+                Config.options.dock.enableAppTooltip = checked;
+                if (checked) {
+                    Config.options.dock.enablePreview = false;
+                }
             }
         }
 
@@ -221,6 +238,52 @@ ContentPage {
             }
         }
 
+        ConfigSlider {
+            Layout.fillWidth: true
+            text: Translation.tr("Dock corner radius") + (Config.options.dock.dockRadius < 0 ? " (" + Translation.tr("Auto") + ")" : "")
+            value: Config.options.dock.dockRadius < 0 ? 0 : Config.options.dock.dockRadius
+            from: 0
+            to: 60
+            stepSize: 1
+            onValueChanged: {
+                Config.options.dock.dockRadius = value === 0 ? -1 : value;
+            }
+        }
+
+        ConfigSlider {
+            Layout.fillWidth: true
+            text: Translation.tr("Widget corner radius") + (Config.options.dock.widgetRadius < 0 ? " (" + Translation.tr("Auto") + ")" : "")
+            value: Config.options.dock.widgetRadius < 0 ? 0 : Config.options.dock.widgetRadius
+            from: 0
+            to: 40
+            stepSize: 1
+            onValueChanged: {
+                Config.options.dock.widgetRadius = value === 0 ? -1 : value;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "zoom_in"
+            text: Translation.tr("Enable macOS icon magnification")
+            checked: Config.options.dock.enableMagnification ?? false
+            onCheckedChanged: {
+                Config.options.dock.enableMagnification = checked;
+            }
+        }
+
+        ConfigSlider {
+            visible: Config.options.dock.enableMagnification ?? false
+            Layout.fillWidth: true
+            text: Translation.tr("Magnification intensity")
+            value: Math.round((Config.options.dock.magnificationScale ?? 1.5) * 100)
+            from: 120
+            to: 220
+            stepSize: 5
+            onValueChanged: {
+                Config.options.dock.magnificationScale = value / 100.0;
+            }
+        }
+
     }
 
     ContentSection {
@@ -345,5 +408,7 @@ ContentPage {
         }
 
     }
+
+    DockPresetsManager {}
 
 }

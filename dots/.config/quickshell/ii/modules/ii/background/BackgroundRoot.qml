@@ -24,7 +24,7 @@ PanelWindow {
     required property var modelData
     required property var widgetStateManager
 
-    property bool anyWidgetIsDragging: widgetStateManager ? widgetStateManager.draggingActive : false
+    property bool anyWidgetIsDragging: (widgetStateManager?.draggingActive) ?? false
     property real baseWallpaperScale: 1 // Calculated scale from wallpaper size
     property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
     property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
@@ -102,8 +102,12 @@ PanelWindow {
 
     // Hide when fullscreen
     property var workspacesForMonitor: Hyprland.workspaces.values.filter(function(workspace) { return workspace.monitor && workspace.monitor.name == monitor.name; })
-    property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(function(workspace) { return ((workspace.toplevels.values.filter(function(window) { return window.wayland && window.wayland.fullscreen; })[0] != undefined) && workspace.active); })[0]
-    property bool isFullscreen: activeWorkspaceWithFullscreen != undefined
+    readonly property bool isFullscreen: {
+        const wl = HyprlandData.windowList;
+        const monitorData = HyprlandData.monitors.find(m => m.name === (monitor ? monitor.name : ""));
+        const activeWsId = monitorData?.activeWorkspace?.id;
+        return wl.some(w => w.workspace?.id === activeWsId && w.fullscreen === 1);
+    }
     property var activeWorkspace: workspacesForMonitor.filter(function(workspace) { return workspace.active; })[0]
     property bool hasWindowsInActiveWorkspace: {
         if (activeWorkspace == undefined) return false;
@@ -212,6 +216,23 @@ PanelWindow {
             return CF.ColorUtils.mix(Appearance.colors.colOnLayer0, Appearance.colors.colPrimary, 0.75);
         return (GlobalStates.screenLocked && shouldBlur) ? Appearance.colors.colOnLayer0 : CF.ColorUtils.colorWithLightness(Appearance.colors.colPrimary, (dominantColorIsDark ? 0.8 : 0.12));
     }
+    // Video Wallpaper Parallax via mpv IPC
+    readonly property real videoPanX: (0.5 - parallax.effectiveValueX) * 0.08
+    readonly property real videoPanY: (0.5 - parallax.effectiveValueY) * 0.08
+
+    onVideoPanXChanged: bgRoot.sendMpvPan()
+    onVideoPanYChanged: bgRoot.sendMpvPan()
+
+    function sendMpvPan() {
+        if (!bgRoot.wallpaperIsVideo || !bgRoot.screen) return;
+        const sock = "/tmp/mpvpaper-" + bgRoot.screen.name + ".sock";
+        const px = videoPanX.toFixed(4);
+        const py = videoPanY.toFixed(4);
+        const cmdX = '{"command":["set_property","video-pan-x",' + px + ']}';
+        const cmdY = '{"command":["set_property","video-pan-y",' + py + ']}';
+        Quickshell.execDetached(["bash", "-c", "printf '%s\\n%s\\n' '" + cmdX + "' '" + cmdY + "' | socat - UNIX-CONNECT:" + sock + " >/dev/null 2>&1"]);
+    }
+
     Behavior on colText {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }

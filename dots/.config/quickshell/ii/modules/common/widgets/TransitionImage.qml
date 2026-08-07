@@ -136,6 +136,7 @@ Item {
         z: 2
         visible: root.animated && root.activeShader !== "" && shaderProgressAnim.running
         
+        property var source: fromSource
         property var fromImage: fromSource
         property var toImage: toSource
         property real progress: root.transitionProgress

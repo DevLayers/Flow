@@ -272,7 +272,7 @@ Singleton {
         root._ipcSocket = socketPath;
 
         // Launch async sync script (waits for mpv file-loaded event and seeks accurately)
-        const scriptPath = Quickshell.scriptPath("scripts/music_video/sync.sh");
+        const scriptPath = Directories.scriptPath + "/music_video/sync.sh";
         Quickshell.execDetached([scriptPath, socketPath]);
 
         // Periodic sync timer: checks drift between mpv and player position

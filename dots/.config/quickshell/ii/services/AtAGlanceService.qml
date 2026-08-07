@@ -106,7 +106,7 @@ Singleton {
     readonly property string localSendTitle: localSendActive ? (LocalSend.sending ? Translation.tr("Sending file...") : Translation.tr("Receiving file...")) : ""
 
     // ── 8. KDE Connect Device ─────────────────────────────────────────────────
-    readonly property bool kdeConnectActive: (options.enableKdeConnect ?? true) && KdeConnectService.available && KdeConnectService.activeDevice !== null && KdeConnectService.activeDevice.isReachable
+    readonly property bool kdeConnectActive: (options.enableKdeConnect ?? true) && KdeConnectService.available && KdeConnectService.activeDevice !== null && ((KdeConnectService.activeDevice.isReachable ?? KdeConnectService.activeDevice.reachable) ?? false)
     readonly property string kdeConnectDeviceName: kdeConnectActive ? KdeConnectService.activeDevice.name : ""
     readonly property int kdeConnectBattery: kdeConnectActive ? (KdeConnectService.activeDevice.batteryCharge ?? -1) : -1
 

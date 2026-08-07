@@ -169,15 +169,8 @@ Scope {
                         HyprlandFocusGrab {
                             id: grab
                             windows: [root]
-                            property bool canBeActive: root.monitorIsFocused
+                            property bool canBeActive: root.monitorIsFocused || GlobalStates.overviewOpen
                             active: false
-                            onCleared: () => {
-                                // SearchDrop owns the grab in connect mode. Its
-                                // grab can clear this one without the overview
-                                // actually being dismissed.
-                                if (!GlobalStates.searchConnectActive)
-                                    GlobalStates.overviewOpen = false;
-                            }
                         }
 
                         Keys.onPressed: event => {
@@ -461,42 +454,50 @@ Scope {
     }
 
     function toggleClipboard() {
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch) {
+        GlobalStates.superReleaseMightTrigger = false;
+        const prefix = Config.options.search.prefix.clipboard;
+        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
             GlobalStates.overviewOpen = false;
             return;
         }
         overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(Config.options.search.prefix.clipboard);
+        overviewScope.setSearchingTextRequested(prefix);
         GlobalStates.overviewOpen = true;
     }
 
     function toggleEmojis() {
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch) {
+        GlobalStates.superReleaseMightTrigger = false;
+        const prefix = Config.options.search.prefix.emojis;
+        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
             GlobalStates.overviewOpen = false;
             return;
         }
         overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(Config.options.search.prefix.emojis);
+        overviewScope.setSearchingTextRequested(prefix);
         GlobalStates.overviewOpen = true;
     }
 
     function toggleBluetooth() {
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch) {
+        GlobalStates.superReleaseMightTrigger = false;
+        const prefix = Config.options.search.prefix.bluetooth;
+        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
             GlobalStates.overviewOpen = false;
             return;
         }
         overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(Config.options.search.prefix.bluetooth);
+        overviewScope.setSearchingTextRequested(prefix);
         GlobalStates.overviewOpen = true;
     }
 
     function toggleMaterialSymbols() {
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch) {
+        GlobalStates.superReleaseMightTrigger = false;
+        const prefix = Config.options.search.prefix.materialSymbols;
+        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
             GlobalStates.overviewOpen = false;
             return;
         }
         overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(Config.options.search.prefix.materialSymbols);
+        overviewScope.setSearchingTextRequested(prefix);
         GlobalStates.overviewOpen = true;
     }
 
@@ -522,15 +523,19 @@ Scope {
             GlobalStates.superReleaseMightTrigger = false;
         }
         function clipboardToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleClipboard();
         }
         function bluetoothToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleBluetooth();
         }
         function materialSymbolsToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleMaterialSymbols();
         }
         function searchOnlyToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
             if (GlobalStates.overviewOpen) {
                 GlobalStates.overviewOpen = false;
             } else {
@@ -618,6 +623,7 @@ Scope {
         description: "Toggle clipboard query on overview widget"
 
         onPressed: {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleClipboard();
         }
     }
@@ -627,6 +633,7 @@ Scope {
         description: "Toggle emoji query on overview widget"
 
         onPressed: {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleEmojis();
         }
     }
@@ -636,6 +643,7 @@ Scope {
         description: "Toggle Material Symbols search on overview widget"
 
         onPressed: {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleMaterialSymbols();
         }
     }

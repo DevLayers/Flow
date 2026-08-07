@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -7,6 +8,7 @@ import qs.modules.common.widgets
 RippleButton {
     id: leftSidebarButton
 
+    readonly property string screenName: QsWindow.window?.screen?.name ?? ""
     property bool showPing: false
 
     property real buttonPadding: 5
@@ -29,7 +31,7 @@ RippleButton {
     toggled: GlobalStates.sidebarLeftOpen
 
     onPressed: {
-        GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
+        GlobalStates.toggleLeftSidebar(screenName);
     }
 
     Connections {

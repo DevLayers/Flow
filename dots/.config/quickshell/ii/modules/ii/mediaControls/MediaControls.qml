@@ -25,35 +25,31 @@ Scope {
     readonly property real widgetHeight: Appearance.sizes.mediaControlsHeight
     property real popupRounding: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
     property list<real> visualizerPoints: mediaControlsLoader.active ? CavaService.visualizerPoints : []
-
-    property bool popupHovered: false
     readonly property bool targetHovered: GlobalStates.mediaWidgetHovered
+    property bool popupHovered: false
     property bool stickyActive: false
     property bool openedViaHover: false
 
-    property QtObject _timers: QtObject {
-        property Timer grace: Timer {
-            id: graceTimer
-            interval: 400 // 400ms grace period to transit from widget to popup
-            repeat: false
-            onTriggered: {
-                if (!GlobalStates.mediaControlsPinned) {
-                    root.stickyActive = false;
-                    GlobalStates.mediaControlsOpen = false;
-                }
+    Timer {
+        id: hoverGraceTimer
+        interval: 100 + Math.max(0, Config.options?.bar?.tooltips?.closeDelay ?? 0)
+        repeat: false
+        onTriggered: {
+            if (!GlobalStates.mediaControlsPinned && !root.targetHovered && !root.popupHovered) {
+                root.stickyActive = false;
+                GlobalStates.mediaControlsOpen = false;
             }
         }
     }
 
     function evaluateHoverState() {
-        if (!openedViaHover || GlobalStates.mediaControlsPinned)
+        if (!root.openedViaHover || GlobalStates.mediaControlsPinned)
             return;
-
-        if (targetHovered || popupHovered) {
-            stickyActive = true;
-            _timers.grace.stop();
-        } else if (stickyActive && !_timers.grace.running) {
-            _timers.grace.start();
+        if (root.targetHovered || root.popupHovered) {
+            root.stickyActive = true;
+            hoverGraceTimer.stop();
+        } else if (root.stickyActive && !hoverGraceTimer.running) {
+            hoverGraceTimer.start();
         }
     }
 
@@ -72,13 +68,12 @@ Scope {
             } else {
                 root.openedViaHover = false;
                 root.stickyActive = false;
-                root._timers.grace.stop();
+                hoverGraceTimer.stop();
             }
         }
         function onMediaControlsPinnedChanged() {
-            if (!GlobalStates.mediaControlsPinned) {
+            if (!GlobalStates.mediaControlsPinned)
                 root.evaluateHoverState();
-            }
         }
     }
 
@@ -117,11 +112,13 @@ Scope {
         id: mediaControlsLoader
         active: GlobalStates.mediaControlsOpen
         onActiveChanged: {
+            if (!mediaControlsLoader.active) {
+                hoverGraceTimer.stop();
+                root.popupHovered = false;
+                root.stickyActive = false;
+            }
             if (!mediaControlsLoader.active && root.realPlayers.length === 0) {
                 GlobalStates.mediaControlsOpen = false;
-            }
-            if (!mediaControlsLoader.active) {
-                GlobalStates.mediaControlsPinned = false;
             }
         }
 
@@ -130,8 +127,8 @@ Scope {
             visible: true
             exclusionMode: ExclusionMode.Ignore
             exclusiveZone: 0
-            implicitWidth: playerColumnLayout.implicitWidth
-            implicitHeight: playerColumnLayout.implicitHeight
+            implicitWidth: playerColumnLayout.implicitWidth * panelWindow.layoutScale
+            implicitHeight: playerColumnLayout.implicitHeight * panelWindow.layoutScale
             color: "transparent"
             WlrLayershell.namespace: "quickshell:mediaControls"
 
@@ -142,6 +139,22 @@ Scope {
                 } else {
                     return Appearance.sizes.barHeight;
                 }
+            }
+            readonly property real layoutScale: {
+                if (!screen || screen.height <= 0)
+                    return 1.0;
+                var baseScale = Math.max(0.75, Math.min(1.5, screen.height / 1080.0));
+                var userMultiplier = Config.options?.bar?.tooltips?.popupScaleMultiplier ?? 1.0;
+                var scale = baseScale * userMultiplier;
+                var safeHeight = screen.height - barThickness - Appearance.sizes.elevationMargin * 2 - 40;
+                var safeWidth = screen.width * 0.9;
+                var contentHeight = playerColumnLayout.implicitHeight + 20;
+                var contentWidth = playerColumnLayout.implicitWidth + 20;
+                if (contentHeight > 0 && contentHeight * scale > safeHeight)
+                    scale = Math.min(scale, Math.max(0.5, safeHeight / contentHeight));
+                if (contentWidth > 0 && contentWidth * scale > safeWidth)
+                    scale = Math.min(scale, Math.max(0.5, safeWidth / contentWidth));
+                return scale;
             }
             anchors {
                 top: true
@@ -185,13 +198,11 @@ Scope {
             }
 
             mask: Region {
-                item: playerColumnLayout
+                item: scaledContent
             }
 
             Component.onCompleted: {
-                if (!GlobalStates.mediaControlsPinned && !root.openedViaHover) {
-                    GlobalFocusGrab.addDismissable(panelWindow);
-                }
+                GlobalFocusGrab.addDismissable(panelWindow);
             }
             Component.onDestruction: {
                 GlobalFocusGrab.removeDismissable(panelWindow);
@@ -199,33 +210,28 @@ Scope {
             Connections {
                 target: GlobalFocusGrab
                 function onDismissed() {
-                    if (!GlobalStates.mediaControlsPinned) {
-                        GlobalStates.mediaControlsOpen = false;
-                    }
-                }
-            }
-            Connections {
-                target: GlobalStates
-                function onMediaControlsPinnedChanged() {
-                    if (GlobalStates.mediaControlsPinned) {
-                        GlobalFocusGrab.removeDismissable(panelWindow);
-                    } else if (!root.openedViaHover) {
-                        GlobalFocusGrab.addDismissable(panelWindow);
-                    }
+                    GlobalStates.mediaControlsOpen = false;
                 }
             }
 
-            ColumnLayout {
-                id: playerColumnLayout
-                anchors.fill: parent
-                spacing: -Appearance.sizes.elevationMargin // Shadow overlap okay
+            Item {
+                id: scaledContent
+                anchors.centerIn: parent
+                width: playerColumnLayout.implicitWidth * panelWindow.layoutScale
+                height: playerColumnLayout.implicitHeight * panelWindow.layoutScale
+                scale: 1.0
 
                 HoverHandler {
-                    id: popupHoverHandler
-                    onHoveredChanged: {
-                        root.popupHovered = hovered;
-                    }
+                    onHoveredChanged: root.popupHovered = hovered
                 }
+
+                ColumnLayout {
+                    id: playerColumnLayout
+                    anchors.centerIn: parent
+                    width: implicitWidth
+                    height: implicitHeight
+                    scale: panelWindow.layoutScale
+                    spacing: -Appearance.sizes.elevationMargin // Shadow overlap okay
 
                 Repeater {
                     model: ScriptModel {
@@ -316,6 +322,7 @@ Scope {
                             }
                         }
                     }
+                }
                 }
             }
         }

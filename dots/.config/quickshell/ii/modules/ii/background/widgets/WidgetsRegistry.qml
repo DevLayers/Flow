@@ -93,6 +93,15 @@ Singleton {
             "configPage": "widgets/DesktopWearOSClockWidgetConfig.qml"
         },
         {
+            "widgetId": "wearos_arc_clock",
+            "name": Translation.tr("WearOS Arc Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/WearOSArcClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A circular 1x1 clock inspired by Wear OS with customizable arc gauges, date-minutes vertical capsule selector, calendar/to-do bottom text, and premium glass reflections."),
+            "configPage": "widgets/DesktopWearOSArcClockConfig.qml"
+        },
+        {
             "widgetId": "concentric_clock",
             "name": Translation.tr("Concentric Clock"),
             "category": "Clock",
@@ -586,6 +595,42 @@ Singleton {
             "icon": "dashboard",
             "description": Translation.tr("Android-inspired context widget combining media, calendar, sports, and current weather."),
             "configPage": "widgets/DesktopAtAGlanceConfig.qml"
+        },
+        {
+            "widgetId": "resource_cpu_pill",
+            "name": Translation.tr("CPU Resource Pill"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/CpuPillWidget.qml"),
+            "icon": "memory",
+            "description": Translation.tr("Capsule pill widget displaying real-time CPU usage percentage, temperature, and progress fill."),
+            "configPage": "widgets/DesktopCpuPillConfig.qml"
+        },
+        {
+            "widgetId": "resource_ram_pill",
+            "name": Translation.tr("RAM Resource Pill"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/RamPillWidget.qml"),
+            "icon": "memory_alt",
+            "description": Translation.tr("Capsule pill widget displaying real-time RAM memory usage, GB stats, and progress fill."),
+            "configPage": "widgets/DesktopRamPillConfig.qml"
+        },
+        {
+            "widgetId": "resource_disk_pill",
+            "name": Translation.tr("Disk Resource Pill"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/DiskPillWidget.qml"),
+            "icon": "hard_drive",
+            "description": Translation.tr("Capsule pill widget displaying real-time Disk storage usage, GB stats, and progress fill."),
+            "configPage": "widgets/DesktopDiskPillConfig.qml"
+        },
+        {
+            "widgetId": "resource_fill_cards",
+            "name": Translation.tr("Resource Fill Cards"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/ResourceFillCardsWidget.qml"),
+            "icon": "donut_large",
+            "description": Translation.tr("Dynamic 1x1 fill cards widget combining CPU Usage, RAM Memory, and Disk Storage. Scales horizontally or vertically per active toggle (1x1, 2x1, or 3x1)."),
+            "configPage": "widgets/DesktopResourceFillCardsConfig.qml"
         },
     ]
 

@@ -39,6 +39,56 @@ Scope {
     readonly property bool recordingActive: (Persistent.states.screenRecord && Persistent.states.screenRecord.active) || false
     readonly property bool pomodoroActive: TimerService.pomodoroRunning
     readonly property bool stopwatchActive: TimerService.stopwatchRunning
+    readonly property bool aiStatusActive: AiStatusService.hasActiveAgents && !(Config.ready && Config.options.bar.floatingNotch.disableAiStatus)
+    readonly property bool continuousActivityActive: recordingActive || pomodoroActive || stopwatchActive || aiStatusActive || ProgressService.hasActiveJobs || LocalSend.currentTransfer !== null || LocalSend.droppedFiles.length > 0 || LocalSend.sending || root._lsServiceChoice !== 0
+    readonly property bool autoHideActive: Config.options.bar.floatingNotch.autoHide
+    property bool activityRevealActive: false
+    property int notificationCount: Notifications.popupList.length
+
+    readonly property int centerBarAnimDurationOpen: Math.round(450 * Appearance.animMultiplier)
+    readonly property int centerBarAnimDurationClose: Math.round(280 * Appearance.animMultiplier)
+    readonly property var centerBarAnimCurve: Appearance.animationCurves.emphasizedDecel
+    readonly property bool centerBarShouldOpen: Config.options.bar.floatingNotch.centerInBar && !idleHidden
+    property real centerBarOpenProgress: centerBarShouldOpen ? 1.0 : 0.0
+    readonly property real centerBarAnimHeight: centerBarOpenProgress * targetH
+
+    Behavior on centerBarOpenProgress {
+        enabled: Config.options.bar.floatingNotch.centerInBar
+        NumberAnimation {
+            duration: root.centerBarShouldOpen ? root.centerBarAnimDurationOpen : root.centerBarAnimDurationClose
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: root.centerBarAnimCurve
+        }
+    }
+
+    onContinuousActivityActiveChanged: {
+        if (continuousActivityActive)
+            revealForActivity(5000);
+        else if (autoHideActive)
+            activityRevealTimer.restart();
+    }
+
+
+    function revealForActivity(duration) {
+        if (!autoHideActive)
+            return;
+        activityRevealActive = true;
+        activityRevealTimer.interval = duration || 3000;
+        activityRevealTimer.restart();
+    }
+
+    function finishActivityReveal() {
+        if (!continuousActivityActive && !hoverActive && !isHoverExpanded && !clickedExpanded && !isDragOverNotch && root._lsServiceChoice === 0)
+            activityRevealActive = false;
+    }
+
+    property Timer activityRevealTimer: Timer {
+        id: activityRevealTimer
+        repeat: false
+        interval: 3000
+        onTriggered: root.finishActivityReveal()
+    }
+
     readonly property bool mediaActive: {
         if (MprisController.activePlayer === null)
             return false;
@@ -75,7 +125,7 @@ Scope {
         console.log("[DI Battery] batteryNotifActive changed to:", batteryNotifActive);
     }
     property bool _prevChargingState: false
-    property var _prevPowerProfile: PowerProfile.Balanced
+    property var _prevPowerProfile: (typeof PowerProfile !== 'undefined' ? PowerProfile.Balanced : 0)
 
     readonly property bool _batteryCharging: Battery.isCharging
     readonly property bool _batteryPluggedIn: Battery.isPluggedIn
@@ -142,7 +192,7 @@ Scope {
         root.previousWidgetType = root.mode;
         root.currentWidgetType = root.mode;
         root._prevChargingState = root._batteryCharging;
-        root._prevPowerProfile = PowerProfiles.profile;
+        root._prevPowerProfile = (typeof PowerProfiles !== 'undefined' && PowerProfiles.profile !== undefined) ? PowerProfiles.profile : 0;
         console.log("[DI Battery] Init - available:", root._batteryAvailable, "charging:", root._batteryCharging, "pluggedIn:", root._batteryPluggedIn, "chargeState:", Battery.chargeState, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable, "disableBattery:", Config.options.bar.floatingNotch.disableBattery);
         if ((root._batteryCharging || root._batteryPluggedIn) && root._batteryAvailable && Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBattery) {
             root.batteryNotifActive = true;
@@ -164,6 +214,7 @@ Scope {
             root.btDeviceName = device.name || device.alias || "Device";
             root.btAction = "connected";
             root.btNotifActive = true;
+            root.revealForActivity(3000);
             GlobalStates.floatingNotchBtDevice = device;
             GlobalStates.floatingNotchBtAction = "connected";
             GlobalStates.floatingNotchBtNotifActive = true;
@@ -174,6 +225,7 @@ Scope {
             root.btDeviceName = device.name || device.alias || "Device";
             root.btAction = "disconnected";
             root.btNotifActive = true;
+            root.revealForActivity(3000);
             GlobalStates.floatingNotchBtDevice = device;
             GlobalStates.floatingNotchBtAction = "disconnected";
             GlobalStates.floatingNotchBtNotifActive = true;
@@ -198,6 +250,25 @@ Scope {
         }
     }
 
+    Connections {
+        target: Notifications
+        function onPopupListChanged() {
+            if (Notifications.popupList.length > root.notificationCount)
+                root.revealForActivity(4000);
+            root.notificationCount = Notifications.popupList.length;
+        }
+    }
+
+    Connections {
+        target: MprisController
+        function onTrackChanged() {
+            root.revealForActivity(5000);
+        }
+        function onIsPlayingChanged() {
+            root.revealForActivity(5000);
+        }
+    }
+
     // Wifi temporary notification status
     property bool wifiNotifActive: false
     property string wifiSsid: ""
@@ -208,6 +279,7 @@ Scope {
             if (Network.wifiStatus === "connected" && Network.networkName !== "") {
                 root.wifiSsid = Network.networkName;
                 root.wifiNotifActive = true;
+                root.revealForActivity(3000);
                 wifiTimer.restart();
             }
         }
@@ -234,10 +306,11 @@ Scope {
             if ((Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableBattery) {
                 if (Battery.isCharging || Battery.isPluggedIn) {
                     root.batteryNotifActive = true;
+                    root.revealForActivity(5000);
                     batteryNotifTimer.interval = 5000;
                     batteryNotifTimer.restart();
                     console.log("[DI Battery] Widget shown temporarily via onChargeStateChanged (state:", Battery.chargeState, ")");
-                } else if (PowerProfiles.profile !== PowerProfile.PowerSaver) {
+                } else if (typeof PowerProfiles !== 'undefined' && typeof PowerProfile !== 'undefined' && PowerProfiles.profile !== PowerProfile.PowerSaver) {
                     batteryNotifTimer.interval = 5000;
                     batteryNotifTimer.restart();
                 }
@@ -326,6 +399,7 @@ Scope {
                 console.log("[DynamicIsland] Cliphist clipboard updated! Top item: ", cleanTop);
                 if ((Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableClipboard) {
                     root.clipboardNotifActive = true;
+                    root.revealForActivity(3000);
                     clipboardNotifTimer.restart();
                 }
             }
@@ -338,6 +412,7 @@ Scope {
         function onCurrentLayoutNameChanged() {
             if ((Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableKeyboard && root.prevLayout !== "" && root.prevLayout !== HyprlandXkb.currentLayoutName && HyprlandXkb.layoutCodes.length > 1) {
                 root.keyboardNotifActive = true;
+                root.revealForActivity(2000);
                 keyboardTimer.restart();
             }
             root.prevLayout = HyprlandXkb.currentLayoutName;
@@ -354,6 +429,7 @@ Scope {
     onActiveWsIdChanged: {
         if (prevWsId !== -1 && activeWsId !== -1 && prevWsId !== activeWsId && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableWorkspaces) {
             root.workspaceNotifActive = true;
+            root.revealForActivity(3000);
             workspaceTimer.restart();
         }
         prevWsId = activeWsId;
@@ -475,6 +551,17 @@ Scope {
                 expandedH: 140,
                 contractedW: 125,
                 expandedW: 240
+            };
+        }
+        if (type === "ai") {
+            let count = (typeof AiStatusService !== "undefined" && AiStatusService.agentCount > 0) ? AiStatusService.agentCount : 1;
+            return {
+                type: "ai",
+                source: "widgets/FloatingNotchAiStatus.qml",
+                contractedH: Config.options.bar.floatingNotch.heightAiStatus ?? 36,
+                expandedH: count > 1 ? Math.min(320, 50 + count * 60) : 140,
+                contractedW: count > 1 ? Math.max(180, 120 + count * 26) : 180,
+                expandedW: 360
             };
         }
         if (type === "media") {
@@ -605,6 +692,8 @@ Scope {
         }
         if (recordingActive && !Config.options.bar.floatingNotch.disableRecording)
             list.push(getWidgetDetails("recording"));
+        if (aiStatusActive && !Config.options.bar.floatingNotch.disableAiStatus)
+            list.push(getWidgetDetails("ai"));
         if (mediaActive && !Config.options.bar.floatingNotch.disableMedia)
             list.push(getWidgetDetails("media"));
 
@@ -673,6 +762,7 @@ Scope {
     onHoverActiveChanged: {
         if (hoverActive) {
             hoverCollapseTimer.stop();
+            activityRevealTimer.stop();
             if (root._lsServiceChoice !== 0)
                 lsReadyCollapseTimer.restart();
             if (!root.clickToExpandEnabled) {
@@ -682,6 +772,8 @@ Scope {
         } else {
             root.isPeeking = false;
             requestCollapse();
+            if (autoHideActive)
+                activityRevealTimer.restart();
         }
     }
 
@@ -876,15 +968,18 @@ Scope {
         if (root.isDragOverNotch)
             return false;
 
-        // Hide if we are idle and the user is not hovering either the top trigger or the container itself
-        if (isIdle) {
-            return !showOnTopHover && !hoverActive;
+        // Auto-hide keeps the island hidden until a trigger reveals it.
+        if (autoHideActive) {
+            return !showOnTopHover && !hoverActive && !activityRevealActive && !continuousActivityActive;
         }
 
-        // Hide if auto-hide is enabled AND user is not hovering either the top trigger or the container itself
-        if (Config.options.bar.floatingNotch.autoHide) {
+        // Without auto-hide, in centerInBar mode the island stays visible in the bar center.
+        if (Config.options.bar.floatingNotch.centerInBar)
+            return false;
+
+        // Without auto-hide, only the idle/home state is hidden.
+        if (isIdle)
             return !showOnTopHover && !hoverActive;
-        }
 
         return false;
     }
@@ -1010,7 +1105,7 @@ Scope {
             id: container
             anchors.horizontalCenter: parent.horizontalCenter
             width: targetW + (2 * notchBackground.topRadius)
-            height: targetH
+            height: Config.options.bar.floatingNotch.centerInBar ? root.centerBarAnimHeight : targetH
 
             DropArea {
                 id: notchDropArea
@@ -1095,11 +1190,9 @@ Scope {
                 }
             }
 
-            // Slide vertically out of screen when idleHidden is true
+            // Center Bar uses the same reveal model as Search/OSD: the notch
+            // grows and shrinks in place, so no bounce can expose a gap.
             y: {
-                if (idleHidden)
-                    return -targetH - 10;
-                // centerInBar: float at absolute top (y=0), overlapping bar center
                 if (root.hasTopBar && !Config.options.bar.floatingNotch.centerInBar)
                     return Appearance.sizes.barHeight;
                 if (root.usingWrappedFrame)
@@ -1107,13 +1200,20 @@ Scope {
                 return 0;
             }
 
-            // Bounce with reduced overshoot when appearing to prevent top gap
-            // Disappearing uses full overshoot (goes off-screen, invisible)
             Behavior on y {
+                enabled: !Config.options.bar.floatingNotch.centerInBar
                 NumberAnimation {
                     duration: 330
-                    easing.type: Easing.OutBack
-                    easing.overshoot: root.idleHidden ? 0.9 : 0.3
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            Behavior on height {
+                enabled: Config.options.bar.floatingNotch.centerInBar
+                NumberAnimation {
+                    duration: root.idleHidden ? root.centerBarAnimDurationClose : root.centerBarAnimDurationOpen
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: root.centerBarAnimCurve
                 }
             }
 
@@ -1124,8 +1224,8 @@ Scope {
                 anchors.fill: parent
                 bodyWidth: parent.width
                 bodyHeight: parent.height
-                topRadius: root._compactConcaveRadius >= 0 ? root._compactConcaveRadius : (((root.isHoverExpanded && root.hasExpandedVersion) || root.mode === "search") ? 32 : 24)
-                bottomRadius: root._compactBottomRadius >= 0 ? root._compactBottomRadius : (root.mode === "search" ? Appearance.windowRounding : ((root.isHoverExpanded && root.hasExpandedVersion) ? 28 : 20))
+                topRadius: root._compactConcaveRadius >= 0 ? root._compactConcaveRadius : (Config.options.bar.floatingNotch.centerInBar ? Math.min(24, container.height * 0.8) : (((root.isHoverExpanded && root.hasExpandedVersion) || root.mode === "search") ? 32 : 24))
+                bottomRadius: root._compactBottomRadius >= 0 ? root._compactBottomRadius : (Config.options.bar.floatingNotch.centerInBar ? Math.min(Appearance.windowRounding, container.height) : (root.mode === "search" ? Appearance.windowRounding : ((root.isHoverExpanded && root.hasExpandedVersion) ? 28 : 20)))
                 fillColor: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
                 disableBehaviors: true
 

@@ -95,7 +95,7 @@ Item {
             }
 
             Loader {
-                active: Persistent.states.screenRecord.active
+                active: Config.options.bar.utilButtons.showScreenRecord && Persistent.states.screenRecord.active
                 visible: active
                 sourceComponent: isMaterial ? pauseM3 : legacyPause
             }
