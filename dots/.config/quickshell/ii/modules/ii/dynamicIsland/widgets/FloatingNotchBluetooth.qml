@@ -34,23 +34,23 @@ Item {
     RowLayout {
         id: contractedLayout
         anchors.fill: parent
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        anchors.topMargin: 12
-        anchors.bottomMargin: 12
-        spacing: 14
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
+        anchors.topMargin: 6
+        anchors.bottomMargin: 6
+        spacing: 10
         visible: !root.isExpanded
 
         Item {
             id: iconContainer
-            Layout.preferredWidth: 64
-            Layout.preferredHeight: 64
+            Layout.preferredWidth: 48
+            Layout.preferredHeight: 48
             Layout.alignment: Qt.AlignVCenter
 
             MaterialCookie {
                 id: cookieShape
                 anchors.centerIn: parent
-                implicitSize: 60
+                implicitSize: 44
                 color: Appearance.colors.colPrimaryContainer
 
                 RotationAnimation on rotation {
