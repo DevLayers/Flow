@@ -33,6 +33,12 @@ Scope {
                 "name": Translation.tr("Elements")
             });
         }
+        if (Config.options.cheatsheet.enableAminoAcids) {
+            list.push({
+                "icon": "biotech",
+                "name": Translation.tr("Amino acids")
+            });
+        }
         if (Config.options.cheatsheet.enableCommands) {
             list.push({
                 "icon": "terminal",
@@ -95,13 +101,31 @@ Scope {
         }
     }
 
+    // Built once on first open and kept alive afterwards: rebuilding the whole
+    // window on every trigger costs a full tree build + first-frame stall.
+    property bool everOpened: false
+    onActiveStateChanged: if (activeState)
+        everOpened = true
+
+    // Nothing waits on the cheatsheet at startup, so build it there instead of
+    // in front of the user. Late enough not to compete with the shell coming up.
+    property bool preloadStarted: false
+
+    Timer {
+        id: preloadStartTimer
+        interval: 4000
+        repeat: false
+        running: true
+        onTriggered: root.preloadStarted = true
+    }
+
     Loader {
         id: cheatsheetLoader
-        active: root.activeState
+        active: root.activeState || root.everOpened || root.preloadStarted
 
         sourceComponent: PanelWindow {
             id: cheatsheetRoot
-            visible: cheatsheetLoader.active
+            visible: root.activeState
 
             Connections {
                 target: root
@@ -134,6 +158,21 @@ Scope {
                 item: cheatsheetInputMask
             }
 
+            // Tabs are built lazily, and only the first visit to one is expensive.
+            // Walk them in the background while the window is hidden, so a tab
+            // change is a visibility swap rather than a tree build. Hidden-only
+            // keeps the builds off the frames of a window in use, and stops a
+            // tab that grabs focus on creation from stealing it mid-session.
+            property int preloadIndex: -1
+
+            Timer {
+                id: preloadTimer
+                interval: 250
+                repeat: true
+                running: !cheatsheetRoot.visible && cheatsheetRoot.preloadIndex < root.tabButtonList.length - 1
+                onTriggered: cheatsheetRoot.preloadIndex++
+            }
+
             Timer {
                 id: registerGrabTimer
                 interval: 150
@@ -146,7 +185,13 @@ Scope {
             onVisibleChanged: {
                 if (visible) {
                     initialFocusTimer.restart();
+                    registerGrabTimer.restart();
+                    animInTimer.restart();
+                    return;
                 }
+                registerGrabTimer.stop();
+                GlobalFocusGrab.removeDismissable(cheatsheetRoot);
+                cheatsheetBackground.animateIn = false;
             }
 
             Timer {
@@ -163,7 +208,12 @@ Scope {
             }
 
             Component.onCompleted: {
+                // Built ahead of time while hidden: onVisibleChanged drives the
+                // open from here on.
+                if (!visible)
+                    return;
                 registerGrabTimer.start();
+                animInTimer.start();
             }
             Component.onDestruction: {
                 registerGrabTimer.stop();
@@ -221,10 +271,9 @@ Scope {
                     property bool animateIn: false
 
                     Timer {
-                        id: animDelayTimer
-                        interval: 80
+                        id: animInTimer
+                        interval: 0
                         repeat: false
-                        running: true
                         onTriggered: cheatsheetBackground.animateIn = true
                     }
 
@@ -435,10 +484,10 @@ Scope {
                                     easing.type: Easing.OutCubic
                                 }
 
-                                // Timetable, Email & Workspaces: lazy — load only when first visited
-                                property bool _lazy: modelData.icon === "calendar_month" || modelData.icon === "mail" || modelData.icon === "dashboard"
+                                // Timetable, Email, Workspaces & Amino acids: lazy — load only when first visited
+                                property bool _lazy: modelData.icon === "calendar_month" || modelData.icon === "mail" || modelData.icon === "dashboard" || modelData.icon === "biotech"
                                 property bool _wasSeen: false
-                                active: !_lazy || swipeView.currentIndex === index || _wasSeen
+                                active: !_lazy || swipeView.currentIndex === index || _wasSeen || index <= cheatsheetRoot.preloadIndex
                                 onActiveChanged: if (active)
                                     _wasSeen = true
 
@@ -448,7 +497,9 @@ Scope {
                                     }
                                 }
 
-                                asynchronous: _lazy
+                                // Synchronous on purpose: async incubation paces object
+                                // creation across frames, which on a downclocked CPU
+                                // costs far more waiting than the build itself.
                                 source: {
                                     switch (modelData.icon) {
                                     case "calendar_month":
@@ -457,6 +508,8 @@ Scope {
                                         return "CheatsheetKeybinds.qml";
                                     case "experiment":
                                         return "CheatsheetPeriodicTable.qml";
+                                    case "biotech":
+                                        return "CheatsheetAminoAcids.qml";
                                     case "terminal":
                                         return "commands/CheatsheetCommands.qml";
                                     case "dashboard":
@@ -465,16 +518,6 @@ Scope {
                                         return "CheatsheetEmail.qml";
                                     default:
                                         return "";
-                                    }
-                                }
-
-                                // Loading indicator for async tabs
-                                Rectangle {
-                                    anchors.fill: parent
-                                    color: "transparent"
-                                    visible: tabDelegate._lazy && tabDelegate.status !== Loader.Ready
-                                    MaterialLoadingIndicator {
-                                        anchors.centerIn: parent
                                     }
                                 }
                             }

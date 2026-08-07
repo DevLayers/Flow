@@ -249,16 +249,55 @@ Singleton {
     }
 
     /**
+     * Builds one member of a set of accent colors that must be told apart at a
+     * glance — legend dots, category stripes, badges.
+     *
+     * Unlike categoryContainer(), the hue is not fixed: it is an offset from the
+     * theme color's own hue, so the whole set turns with the matugen palette.
+     * Offsets are meant to stay inside a narrow arc (roughly ±50°) — spreading
+     * them over the full wheel would leave only one member on the theme hue and
+     * scatter the rest into colors the palette never contains.
+     *
+     * Because that arc alone cannot separate five to seven members, `shade`
+     * carries the rest of the load as a tonal ladder: each step is lighter and
+     * softer than the last, so neighbours in hue still differ at a glance while
+     * every member stays recognisably part of the palette.
+     *
+     * The base saturation follows the theme, clamped to a band that stays
+     * legible whether the wallpaper is vivid or near-greyscale. The base
+     * lightness is the theme's own pulled toward mid-range — M3's tokens sit
+     * near white, where every hue collapses into the same pastel.
+     *
+     * @param {number} hueOffset - Degrees to rotate away from the theme hue.
+     * @param {number} shade - Rung on the tonal ladder (0, 1, 2, ...).
+     * @param {color} themeColor - Theme token supplying hue, saturation and
+     *   lightness (e.g. Appearance.m3colors.m3primary).
+     * @returns {color} The derived accent color.
+     */
+    function categoryAccent(hueOffset, shade, themeColor) {
+        var t = Qt.color(themeColor);
+        var h = ((t.hslHue * 360 + hueOffset) % 360 + 360) % 360 / 360;
+        var s = Math.min(0.9, Math.max(0.5, t.hslSaturation)) - shade * 0.13;
+        var base = 0.5 + (t.hslLightness - 0.5) * 0.3;
+        // Step away from mid-grey, never across it, so every member keeps the
+        // same contrast direction against the shell background.
+        var l = base + (base >= 0.5 ? 1 : -1) * shade * 0.1;
+        return Qt.hsla(h, Math.min(0.95, Math.max(0.3, s)), Math.min(0.86, Math.max(0.22, l)), 1);
+    }
+
+    /**
      * Returns a readable "on" color for a category container, tinted with the
      * same hue and with high contrast against the container's lightness.
      *
-     * @param {color} containerColor - The result of categoryContainer().
-     * @param {number} hueDegrees - The same fixed hue (0-360).
+     * @param {color} containerColor - The result of categoryContainer() or
+     *   categoryAccent().
+     * @param {number} [hueDegrees] - Hue to tint with (0-360). Omit to take the
+     *   container's own hue, which is what accents derived from the theme want.
      * @returns {color} The on-container foreground color.
      */
-    function categoryOnColor(containerColor, hueDegrees) {
+    function categoryOnColor(containerColor, hueDegrees = -1) {
         var c = Qt.color(containerColor);
-        var h = ((hueDegrees % 360) + 360) % 360 / 360;
+        var h = hueDegrees < 0 ? c.hslHue : ((hueDegrees % 360) + 360) % 360 / 360;
         var lightness = c.hslLightness < 0.5 ? 0.92 : 0.14;
         return Qt.hsla(h, 0.35, lightness, 1);
     }

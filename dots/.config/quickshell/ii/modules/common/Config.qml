@@ -504,6 +504,7 @@ Singleton {
             "bar.barGroupStyle": [0, 1, 2],
             "bar.barBackgroundStyle": [0, 1, 2, 3],
             "bar.mediaPlayer.popupStyle": ["default", "expressive", "android"],
+            "cheatsheet.aminoAcidScheme": ["five", "seven", "four"],
             "userProfile.imageStyle": ["initial", "expressive", "custom"],
             "lock.centerAlignment": ["vertical", "horizontal"],
             "lock.notifications.position": ["top_left", "top_right", "bottom_left", "bottom_right"],
@@ -2297,6 +2298,9 @@ Singleton {
                 property bool enableTimetable: true
                 property bool timetableTodayFirst: false
                 property bool enablePeriodicTable: false
+                property bool enableAminoAcids: false
+                // "five" | "seven" | "four" — side chain classification scheme
+                property string aminoAcidScheme: "seven"
                 property bool enableCommands: true
                 property bool commandsTagsSidebar: false
                 property bool enableWorkspaceProfiles: false

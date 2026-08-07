@@ -166,6 +166,15 @@ ContentPage {
             }
 
             ConfigSwitch {
+                buttonIcon: "biotech"
+                text: Translation.tr("Enable Amino acids")
+                checked: Config.options.cheatsheet.enableAminoAcids
+                onCheckedChanged: {
+                    Config.options.cheatsheet.enableAminoAcids = checked;
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "terminal"
                 text: Translation.tr("Enable Commands")
                 checked: Config.options.cheatsheet.enableCommands
@@ -197,6 +206,32 @@ ContentPage {
                 checked: Config.options.cheatsheet.commandsTagsSidebar
                 onCheckedChanged: {
                     Config.options.cheatsheet.commandsTagsSidebar = checked;
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Amino acids: side chain classes")
+                icon: "palette"
+                Layout.fillWidth: true
+                ConfigSelectionArray {
+                    currentValue: Config.options.cheatsheet.aminoAcidScheme
+                    onSelected: newValue => {
+                        Config.options.cheatsheet.aminoAcidScheme = newValue;
+                    }
+                    options: [
+                        {
+                            displayName: Translation.tr("5 classes"),
+                            value: "five"
+                        },
+                        {
+                            displayName: Translation.tr("7 classes"),
+                            value: "seven"
+                        },
+                        {
+                            displayName: Translation.tr("4 classes"),
+                            value: "four"
+                        }
+                    ]
                 }
             }
         }
