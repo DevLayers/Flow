@@ -1224,15 +1224,13 @@ Scope {
                 anchors.fill: parent
                 bodyWidth: parent.width
                 bodyHeight: parent.height
-                topRadius: root._compactConcaveRadius >= 0 ? root._compactConcaveRadius : (Config.options.bar.floatingNotch.centerInBar ? Math.min(24, container.height * 0.8) : (((root.isHoverExpanded && root.hasExpandedVersion) || root.mode === "search") ? 32 : 24))
-                bottomRadius: root._compactBottomRadius >= 0 ? root._compactBottomRadius : (Config.options.bar.floatingNotch.centerInBar ? Math.min(Appearance.windowRounding, container.height) : (root.mode === "search" ? Appearance.windowRounding : ((root.isHoverExpanded && root.hasExpandedVersion) ? 28 : 20)))
+                topRadius: root._compactConcaveRadius >= 0 ? root._compactConcaveRadius : (Config.options.bar.floatingNotch.centerInBar ? Math.min(Appearance.rounding.large, container.height * 0.8) : (((root.isHoverExpanded && root.hasExpandedVersion) || root.mode === "search") ? Appearance.rounding.verylarge : Appearance.rounding.large))
+                bottomRadius: root._compactBottomRadius >= 0 ? root._compactBottomRadius : (Config.options.bar.floatingNotch.centerInBar ? Math.min(Appearance.rounding.windowRounding, container.height) : (root.mode === "search" ? Appearance.rounding.windowRounding : ((root.isHoverExpanded && root.hasExpandedVersion) ? Appearance.rounding.large : Appearance.rounding.windowRounding)))
                 fillColor: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
                 disableBehaviors: true
 
                 layer.enabled: Config.options.bar.floatingNotch.dropShadow && !idleHidden
-                layer.samples: 8
                 layer.smooth: true
-                antialiasing: true
                 layer.effect: MultiEffect {
                     shadowEnabled: true
                     shadowColor: Qt.rgba(0, 0, 0, root.isHoverExpanded ? 0.65 : 0.45)

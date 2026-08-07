@@ -11,30 +11,16 @@ Item {
     property real bottomRadius: 14
     property color fillColor: Appearance.colors.colLayer0
     property bool disableBehaviors: false
-    property real bleedTop: 4
+    property real bleedTop: 0
 
     implicitWidth: bodyWidth
     implicitHeight: bodyHeight
 
     Shape {
+        id: shape
         anchors.fill: parent
         antialiasing: true
-        layer.enabled: true
-        layer.samples: 8
-        preferredRendererType: Shape.GeometryRenderer
-
-        // Top bleed filler to prevent subpixel gaps at the screen edge
-        ShapePath {
-            strokeWidth: 0
-            strokeColor: "transparent"
-            fillColor: root.fillColor
-            
-            startX: 0; startY: -root.bleedTop
-            PathLine { x: root.width; y: -root.bleedTop }
-            PathLine { x: root.width; y: 0 }
-            PathLine { x: 0; y: 0 }
-            PathLine { x: 0; y: -root.bleedTop }
-        }
+        preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
             id: path
@@ -44,33 +30,62 @@ Item {
             joinStyle: ShapePath.RoundJoin
             capStyle: ShapePath.FlatCap
 
-            readonly property real w:  root.width
-            readonly property real h:  root.height
-            readonly property real tr: root.topRadius
-            readonly property real br: root.bottomRadius
+            readonly property real w: root.width
+            readonly property real h: root.height
+            readonly property real tr: Math.max(0, Math.min(root.topRadius, w / 2))
+            readonly property real br: Math.max(0, Math.min(root.bottomRadius, (w - 2 * tr) / 2, h))
 
-            startX: 0; startY: 0
+            startX: 0
+            startY: 0
 
-            PathQuad {
-                x: path.tr; y: path.tr
-                controlX: path.tr; controlY: 0
+            PathCubic {
+                x: path.tr
+                y: path.tr
+                control1X: path.tr * 0.5523
+                control1Y: 0
+                control2X: path.tr
+                control2Y: path.tr * 0.4477
             }
-            PathLine { x: path.tr; y: path.h - path.br }
-            PathQuad {
-                x: path.tr + path.br; y: path.h
-                controlX: path.tr;    controlY: path.h
+            PathLine {
+                x: path.tr
+                y: path.h - path.br
             }
-            PathLine { x: path.w - path.tr - path.br; y: path.h }
-            PathQuad {
-                x: path.w - path.tr;     y: path.h - path.br
-                controlX: path.w - path.tr; controlY: path.h
+            PathCubic {
+                x: path.tr + path.br
+                y: path.h
+                control1X: path.tr
+                control1Y: path.h - path.br * 0.4477
+                control2X: path.tr + path.br * 0.4477
+                control2Y: path.h
             }
-            PathLine { x: path.w - path.tr; y: path.tr }
-            PathQuad {
-                x: path.w; y: 0
-                controlX: path.w - path.tr; controlY: 0
+            PathLine {
+                x: path.w - path.tr - path.br
+                y: path.h
             }
-            PathLine { x: 0; y: 0 }
+            PathCubic {
+                x: path.w - path.tr
+                y: path.h - path.br
+                control1X: path.w - path.tr - path.br * 0.4477
+                control1Y: path.h
+                control2X: path.w - path.tr
+                control2Y: path.h - path.br * 0.4477
+            }
+            PathLine {
+                x: path.w - path.tr
+                y: path.tr
+            }
+            PathCubic {
+                x: path.w
+                y: 0
+                control1X: path.w - path.tr
+                control1Y: path.tr * 0.4477
+                control2X: path.w - path.tr * 0.5523
+                control2Y: 0
+            }
+            PathLine {
+                x: 0
+                y: 0
+            }
         }
     }
 
@@ -80,3 +95,4 @@ Item {
     Behavior on bottomRadius  { enabled: !root.disableBehaviors; NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve } }
     Behavior on fillColor     { enabled: !root.disableBehaviors; ColorAnimation   { duration: Appearance.animation.elementMoveFast.duration; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
 }
+
