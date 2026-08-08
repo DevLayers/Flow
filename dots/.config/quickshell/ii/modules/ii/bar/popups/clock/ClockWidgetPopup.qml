@@ -378,17 +378,52 @@ StyledPopup {
             InfoPill {
                 id: infoPill
                 visible: !root.compact ? LocalSend.currentTransfer == null || LocalSend.droppedFiles.length > 0 : false
+                
+                readonly property bool isTimerActive: TimerService.pomodoroRunning || TimerService.stopwatchRunning || root.stopwatchPaused || (TimerService.stopwatchTime > 0)
+
                 textContent: Loader {
                     anchors.centerIn: parent
                     sourceComponent: TimerService.pomodoroRunning ? pomodoroText : (TimerService.stopwatchTime > 0 ? stopwatchText : timerOffText)
                 }
                 
-                containerColor: TimerService.pomodoroBreak ? Appearance.colors.colTertiaryContainer : (TimerService.pomodoroRunning || TimerService.stopwatchRunning ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest)
+                containerColor: TimerService.pomodoroBreak ? Appearance.colors.colTertiaryContainer : (infoPill.isTimerActive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest)
                 color: containerColor
-                shapeColor: TimerService.pomodoroBreak ? Appearance.colors.colTertiary : (TimerService.pomodoroRunning || TimerService.stopwatchRunning ? Appearance.colors.colPrimary : Appearance.colors.colSecondary)
-                symbolColor: TimerService.pomodoroBreak ? Appearance.colors.colOnTertiary : (TimerService.pomodoroRunning || TimerService.stopwatchRunning ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondary)
-                textColor: TimerService.pomodoroBreak ? Appearance.colors.colOnTertiaryContainer : (TimerService.pomodoroRunning || TimerService.stopwatchRunning ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer)
-                icon: TimerService.pomodoroBreak ? "coffee" : root.stopwatchPaused ? "timer_pause" : TimerService.stopwatchRunning ? "timer_play" : "timer"
+                shapeColor: TimerService.pomodoroBreak ? Appearance.colors.colTertiary : (infoPill.isTimerActive ? Appearance.colors.colPrimary : Appearance.colors.colSecondary)
+                symbolColor: TimerService.pomodoroBreak ? Appearance.colors.colOnTertiary : (infoPill.isTimerActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondary)
+                textColor: TimerService.pomodoroBreak ? Appearance.colors.colOnTertiaryContainer : (infoPill.isTimerActive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer)
+                
+                leftInteractive: true
+                icon: {
+                    if (infoPill.isTimerActive) {
+                        if (TimerService.pomodoroBreak) return "coffee";
+                        if (TimerService.pomodoroRunning || TimerService.stopwatchRunning) return "pause";
+                        return "play_arrow";
+                    } else {
+                        return infoPill.leftHovered ? "play_arrow" : "timer";
+                    }
+                }
+                
+                onLeftClicked: {
+                    if (TimerService.pomodoroRunning) {
+                        TimerService.togglePomodoro();
+                    } else if (TimerService.stopwatchRunning || root.stopwatchPaused || TimerService.stopwatchTime > 0) {
+                        TimerService.toggleStopwatch();
+                    } else {
+                        TimerService.toggleStopwatch();
+                    }
+                }
+
+                showRightShape: infoPill.isTimerActive
+                rightIcon: "stop"
+                rightShapeColor: Appearance.colors.colErrorContainer
+                rightSymbolColor: Appearance.colors.colOnErrorContainer
+                
+                onRightClicked: {
+                    TimerService.stopwatchReset();
+                    if (TimerService.pomodoroRunning) {
+                        TimerService.resetPomodoro();
+                    }
+                }
             }
 
             LocalSendPill {
