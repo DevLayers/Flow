@@ -205,7 +205,7 @@ Singleton {
         "icon": "checklist",
         "component": "modules/settings/configs/TasksAccountsConfig.qml",
         "subPages": [],
-        "aliases": ["Core Services", "TickTick", "Tasks", "Accounts"]
+        "aliases": ["Core Services", "TickTick", "Tasks", "Accounts", "Google Drive", "Backup", "Cloud backup", "rclone"]
     }, {
         "id": "soundAlerts",
         "name": "Sound & Alerts",
