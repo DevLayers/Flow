@@ -236,6 +236,16 @@ Singleton {
     function setDirectory(path) {
         validateDirProc.setDirectoryIfValid(path)
     }
+    function reloadCurrentDirectory() {
+    const current = folderModel.folder
+    const currentPath = FileUtils.trimFileProtocol(current.toString())
+    const parent = FileUtils.parentDirectory(currentPath) || "/"
+    folderModel.lockNextNavigation()
+    folderModel.folder = Qt.resolvedUrl(parent)
+    folderModel.lockNextNavigation()
+    folderModel.folder = current
+    }
+
     function navigateUp() {
         folderModel.navigateUp()
     }
