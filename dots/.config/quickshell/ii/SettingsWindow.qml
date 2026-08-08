@@ -270,7 +270,6 @@ FloatingWindow {
                         }
                         if (_waitingForLoad) {
                             _waitingForLoad = false;
-                            pageLoadWaitTimer.stop();
                             switchAnimIncoming.start();
                         }
                     }
@@ -318,59 +317,26 @@ FloatingWindow {
                                 property: "opacity"
                                 from: 1
                                 to: 0
-                                duration: 150
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
+                                duration: 100
+                                easing.type: Easing.OutQuad
                             }
                             NumberAnimation {
                                 target: pageLoader
                                 property: "scale"
                                 from: 1
-                                to: 0.95
-                                duration: 150
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
-                            }
-                            NumberAnimation {
-                                target: pageLoader
-                                property: "x"
-                                from: 0
-                                to: 120
-                                duration: 150
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
+                                to: 0.97
+                                duration: 100
+                                easing.type: Easing.OutQuad
                             }
                         }
                         onFinished: {
                             pageLoader.source = root.pages[root.currentPage].component;
-                            pageLoader.x = -120;
+                            pageLoader.x = 0;
                             pageLoader._waitingForLoad = true;
-                            pageLoadWaitTimer.start();
-                        }
-                    }
-
-                    Timer {
-                        id: pageLoadWaitTimer
-                        interval: 16
-                        repeat: true
-                        property real _startTime: 0
-                        onTriggered: {
-                            if (!pageLoader._waitingForLoad) {
-                                stop();
-                                return;
-                            }
                             if (pageLoader.status === Loader.Ready) {
                                 pageLoader._waitingForLoad = false;
-                                stop();
-                                switchAnimIncoming.start();
-                            } else if (Date.now() - _startTime > 2000) {
-                                pageLoader._waitingForLoad = false;
-                                stop();
                                 switchAnimIncoming.start();
                             }
-                        }
-                        onRunningChanged: {
-                            if (running) _startTime = Date.now();
                         }
                     }
 
@@ -383,26 +349,16 @@ FloatingWindow {
                                 property: "opacity"
                                 from: 0
                                 to: 1
-                                duration: 400
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                duration: 180
+                                easing.type: Easing.OutCubic
                             }
                             NumberAnimation {
                                 target: pageLoader
                                 property: "scale"
-                                from: 0.95
+                                from: 0.97
                                 to: 1
-                                duration: 400
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                            }
-                            NumberAnimation {
-                                target: pageLoader
-                                property: "x"
-                                to: 0
-                                duration: 400
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                duration: 180
+                                easing.type: Easing.OutCubic
                             }
                         }
                     }
