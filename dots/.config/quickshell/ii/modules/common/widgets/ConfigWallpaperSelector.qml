@@ -37,7 +37,7 @@ Item {
             }
             return wallpaperSelectorRoot.effectivePath !== "" ? wallpaperSelectorRoot.effectivePath : `${Directories.assetsPath}/images/default_wallpaper.png`
         }
-        cache: false
+        cache: true
         layer.enabled: true
         layer.effect: OpacityMask {
             maskSource: Rectangle {

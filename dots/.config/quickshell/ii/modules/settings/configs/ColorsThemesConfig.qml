@@ -938,7 +938,7 @@ ContentPage {
                                     anchors.fill: parent
                                     source: model.preview ? "file://" + model.preview : ""
                                     fillMode: Image.PreserveAspectCrop
-                                    playing: wpeGrid.visible
+                                    playing: wpeGrid.visible && (presetItem.x + presetItem.width >= wpeGrid.contentX && presetItem.x <= wpeGrid.contentX + wpeGrid.width)
                                     layer.enabled: true
                                     layer.effect: OpacityMask {
                                         maskSource: Rectangle {
