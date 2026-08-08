@@ -37,6 +37,7 @@ ShellRoot {
         SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled
         VideoColorSampler.active; // Touch singleton to initialize
         WaterReminderService.enabled; // Touch singleton: drives water reminder notifications
+        GoogleDriveService.configured; // Touch singleton: keeps scheduled backups independent of Settings
         AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
         TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
@@ -154,7 +155,6 @@ ShellRoot {
         onPressed: root.cyclePanelFamily()
     }
 }
-
 
 
 

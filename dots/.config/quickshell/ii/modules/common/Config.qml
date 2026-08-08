@@ -873,14 +873,17 @@ Singleton {
 
             property JsonObject googleDrive: JsonObject {
                 property bool enabled: false
-                property string syncInterval: "1h" // "15m", "30m", "1h", "3h", "6h", "12h", "24h", "manual"
+                property string syncInterval: "3d" // "1h", "4h", "1d", "2d", "3d"
                 property bool syncOnBoot: true
                 property bool syncOnNetworkChange: false
                 property int bandwidthLimitKbps: 0
                 property bool pauseOnMeteredConnection: true
                 property list<string> backupFolders: []
                 property list<string> excludePatterns: ["*.tmp", "*.swp", "*.lock", "node_modules/", ".git/", "__pycache__/"]
-                property string driveBasePath: "ii-backup"
+                // Empty means the per-machine default: <username>_<distro>_backups.
+                // GoogleDriveService also treats the old "ii-backup" default as
+                // automatic so existing installs migrate without rewriting config.
+                property string driveBasePath: ""
                 property bool notifyOnComplete: true
                 property bool notifyOnError: true
                 property int keepVersions: 3
@@ -889,6 +892,10 @@ Singleton {
                 property string lastSyncStatus: ""
                 property int lastSyncFileCount: 0
                 property real lastSyncSizeMb: 0.0
+                // Durable sync events used by the Drive activity charts. Keep
+                // this explicitly typed: nested JsonObject arrays must not use
+                // `var` in Quickshell's JSON adapter.
+                property list<var> syncHistory: []
                 property real totalDriveUsageMb: 0.0
                 property real driveQuotaMb: 0.0
             }

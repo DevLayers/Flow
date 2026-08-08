@@ -201,11 +201,11 @@ Singleton {
         "aliases": ["Core Services", "Gemini", "AI", "System prompt"]
     }, {
         "id": "tasksAccounts",
-        "name": "Tasks & Accounts",
+        "name": "Accounts & Backup",
         "icon": "checklist",
         "component": "modules/settings/configs/TasksAccountsConfig.qml",
-        "subPages": [],
-        "aliases": ["Core Services", "TickTick", "Tasks", "Accounts", "Google Drive", "Backup", "Cloud backup", "rclone"]
+        "subPages": ["widgets/AdvancedDriveConfig.qml"],
+        "aliases": ["Core Services", "Tasks & Accounts", "TickTick", "Tasks", "Accounts", "Google Drive", "Backup", "Cloud backup", "rclone"]
     }, {
         "id": "soundAlerts",
         "name": "Sound & Alerts",
