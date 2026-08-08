@@ -170,8 +170,8 @@ Scope {
                 id: dockMouseArea
                 hoverEnabled: true
 
-                property real hiddenOffset: dockRoot.unmagnifiedThickness - (Config.options?.dock.hoverRegionHeight ?? 10)
-                property real fullyHiddenOffset: dockRoot.unmagnifiedThickness + 1
+                property real hiddenOffset: dockRoot.dockThickness - (Config.options?.dock.hoverRegionHeight ?? 10)
+                property real fullyHiddenOffset: dockRoot.dockThickness + 1
                 property real currentOffset: dockRoot.reveal ? 0 : (Config.options?.dock.hoverToReveal ? hiddenOffset : fullyHiddenOffset)
 
                 width: dock.isVertical ? dockRoot.dockThickness : dockRoot.sizing.dockWidth
