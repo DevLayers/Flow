@@ -488,8 +488,8 @@ ContentPage {
         }
 
         function refreshOpenRgbConfig() {
-            const appearance = JSON.parse(JSON.stringify(Config.options.appearance || {}));
-            openRgbConfig = Object.assign(defaultOpenRgbConfig(), appearance.openrgb || {});
+            const openrgb = Config.options.appearance?.openrgb;
+            openRgbConfig = Object.assign(defaultOpenRgbConfig(), openrgb || {});
             openRgbDevices = openRgbConfig.devices || [];
         }
 
@@ -665,7 +665,9 @@ ContentPage {
             checkEngineProc.installed = (exitCode === 0);
         }
         Component.onCompleted: {
-            exec(["which", "linux-wallpaperengine"]);
+            if (Config.options.background.useWallpaperEngine) {
+                exec(["which", "linux-wallpaperengine"]);
+            }
         }
     }
 
@@ -678,14 +680,27 @@ ContentPage {
             }
         }
         Component.onCompleted: {
-            exec(["python3", Directories.scriptPath + "/colors/list_wpe_wallpapers.py"]);
+            if (Config.options.background.useWallpaperEngine) {
+                exec(["python3", Directories.scriptPath + "/colors/list_wpe_wallpapers.py"]);
+            }
+        }
+    }
+
+    Connections {
+        target: Config.options.background
+        function onUseWallpaperEngineChanged() {
+            if (Config.options.background.useWallpaperEngine) {
+                checkEngineProc.exec(["which", "linux-wallpaperengine"]);
+                runListWpeProc.exec(["python3", Directories.scriptPath + "/colors/list_wpe_wallpapers.py"]);
+            }
         }
     }
 
     FileView {
         id: wpeWallpapersFileView
-        path: "file:///tmp/wpe_installed_wallpapers.json"
+        path: Config.options.background.useWallpaperEngine ? "file:///tmp/wpe_installed_wallpapers.json" : ""
         onLoaded: {
+            if (!Config.options.background.useWallpaperEngine) return;
             try {
                 var raw = wpeWallpapersFileView.text().trim();
                 if (raw === "") return;

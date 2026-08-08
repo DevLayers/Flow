@@ -594,6 +594,7 @@ done"
         python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
         python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
+            --all-previews "$STATE_DIR/user/generated/wallpaper_preview_colors.json" \
             > "$STATE_DIR"/user/generated/material_colors.scss.tmp && \
             mv "$STATE_DIR"/user/generated/material_colors.scss.tmp "$STATE_DIR"/user/generated/material_colors.scss
         deactivate

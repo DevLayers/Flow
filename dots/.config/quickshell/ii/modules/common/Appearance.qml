@@ -247,16 +247,20 @@ Singleton {
         return colors.colPrimary;
     }
 
-    onActiveBorderColorChanged: {
-        if (Config.ready) {
+    Timer {
+        id: hyprctlBorderTimer
+        interval: 100
+        repeat: false
+        onTriggered: {
+            if (!Config.ready) return;
             let colorStr = activeBorderColor.toString();
             let rgb = "";
             if (colorStr.startsWith("#")) {
                 let hex = colorStr.substring(1);
                 if (hex.length === 8) {
-                    rgb = hex.substring(2); // AARRGGBB -> RRGGBB
+                    rgb = hex.substring(2);
                 } else {
-                    rgb = hex; // RRGGBB -> RRGGBB
+                    rgb = hex;
                 }
             }
 
@@ -264,6 +268,12 @@ Singleton {
                 let hyprColor = "rgba(" + rgb + "AA)";
                 Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
             }
+        }
+    }
+
+    onActiveBorderColorChanged: {
+        if (Config.ready) {
+            hyprctlBorderTimer.restart();
         }
     }
 

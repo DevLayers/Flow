@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
@@ -34,7 +35,7 @@ RippleButton {
     readonly property string scriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/generate_colors_material.py`)
 
     readonly property string resolvedScheme: root.colorScheme === "scheme-auto" ? "scheme-tonal-spot" : root.colorScheme
-    property string fullCommand: root.activeWallpaperPath !== "" ? `${root.scriptPath} --path ${root.activeWallpaperPath} --scheme ${root.resolvedScheme} --preview` : ""
+    property string fullCommand: root.activeWallpaperPath !== "" ? `${root.scriptPath} --path ${root.activeWallpaperPath} --scheme ${root.resolvedScheme} --all-previews ${Directories.wallpaperPreviewColorsPath}` : ""
 
     // Primary/secondary/tertiary colors
     property color previewPrimary: "transparent"
@@ -85,65 +86,108 @@ RippleButton {
         }
     }
 
-    property var effectiveCommand: root.customTheme ? root.customThemeCommand : root.builtInTheme ? root.builtInThemeCommand : root.fullCommand
+    FileView {
+        id: previewCacheFileView
+        path: (!root.customTheme && !root.builtInTheme) ? Directories.wallpaperPreviewColorsPath : ""
+        watchChanges: true
+        onLoaded: {
+            root.loadFromCache();
+        }
+    }
 
-    onShouldLoadChanged: {
-        if (shouldLoad && !loaded && root.effectiveCommand !== "") {
+    FileView {
+        id: themeFileView
+        path: root.customTheme ? root.customThemeFilePath : root.builtInTheme ? root.builtInThemeFilePath : ""
+        watchChanges: false
+        onLoaded: {
+            try {
+                const raw = themeFileView.text().trim();
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                root.primaryColor = data.primary || "transparent";
+                root.secondaryColor = data.primary_container || "transparent";
+                root.tertiaryColor = data.secondary || "transparent";
+                root.loaded = true;
+            } catch (e) {
+                console.log("[ColorPreviewButton] Failed to parse theme file:", path);
+            }
+        }
+    }
+
+    function loadFromCache() {
+        if (root.customTheme || root.builtInTheme) return false;
+        try {
+            const raw = previewCacheFileView.text().trim();
+            if (!raw) return false;
+            const cache = JSON.parse(raw);
+            const schemeData = cache[root.colorScheme];
+            if (schemeData && schemeData.primary) {
+                root.primaryColor = schemeData.primary;
+                root.secondaryColor = schemeData.primary_container;
+                root.tertiaryColor = schemeData.secondary;
+                root.loaded = true;
+                return true;
+            }
+        } catch (e) {
+            // Ignore parse error
+        }
+        return false;
+    }
+
+    function requestLoad() {
+        if (root.customTheme || root.builtInTheme) {
+            themeFileView.reload();
+            return;
+        }
+
+        if (root.loadFromCache()) {
+            return;
+        }
+
+        if (root.fullCommand !== "") {
             colorFetchProcess.running = true;
         }
     }
 
+    onShouldLoadChanged: {
+        if (shouldLoad && !loaded) {
+            root.requestLoad();
+        }
+    }
+
     onWallpaperPathChanged: {
-        if (shouldLoad && root.effectiveCommand !== "") {
+        if (shouldLoad && !root.customTheme && !root.builtInTheme) {
             loaded = false;
-            colorFetchProcess.running = true;
+            root.requestLoad();
         }
     }
 
     readonly property string wpeId: (Config.options && Config.options.background) ? Config.options.background.wallpaperEngineId : ""
     onWpeIdChanged: {
-        if (shouldLoad && root.effectiveCommand !== "") {
+        if (shouldLoad && !root.customTheme && !root.builtInTheme) {
             loaded = false;
-            colorFetchProcess.running = true;
+            root.requestLoad();
         }
     }
 
     property bool useWpe: (Config.options && Config.options.background) ? Config.options.background.useWallpaperEngine : false
     onUseWpeChanged: {
-        if (shouldLoad && root.effectiveCommand !== "") {
+        if (shouldLoad && !root.customTheme && !root.builtInTheme) {
             loaded = false;
-            colorFetchProcess.running = true;
+            root.requestLoad();
         }
     }
 
     Process {
         id: colorFetchProcess
         running: false
-        command: ["bash", "-c", root.effectiveCommand]
+        command: ["bash", "-c", root.fullCommand]
 
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    //console.log("[ColorPreviewButton] Command:", root.effectiveCommand)
-                    if (root.customTheme || root.builtInTheme) {
-                        const colors = this.text.trim().split("\n");
-                        root.primaryColor = colors[0] || "transparent";
-                        root.secondaryColor = colors[1] || "transparent";
-                        root.tertiaryColor = colors[2] || "transparent";
-                    } else {
-                        const data = JSON.parse(this.text);
-
-                        root.primaryColor = data.primary || "transparent";
-                        root.secondaryColor = data.primary_container || "transparent";
-                        root.tertiaryColor = data.secondary || "transparent";
-                    }
-
-                    root.loaded = true;
-                    myCanvas.requestPaint();
-                } catch (e) {
-                    console.log("[ColorPreviewButton] Parse error:", this.text);
-                }
-            }
+        onExited: {
+            // After running fallback process, reload cache
+            Qt.callLater(() => {
+                previewCacheFileView.reload();
+            });
         }
     }
 
@@ -164,51 +208,118 @@ RippleButton {
             font.pixelSize: Appearance.font.pixelSize.small
         }
 
-        Canvas {
-            id: myCanvas
+        Item {
+            id: colorCircleContainer
             anchors.centerIn: parent
-            anchors.margins: 8
+            width: root.implicitHeight - 16
+            height: root.implicitHeight - 16
+            visible: root.loaded
 
-            implicitWidth: root.implicitHeight - 16
-            implicitHeight: root.implicitHeight - 16
+            // Sharp mode (Square)
+            Item {
+                anchors.fill: parent
+                visible: root.sharpMode
 
-            antialiasing: true
+                // Top half: primaryColor
+                Rectangle {
+                    anchors {
+                        top: parent.top
+                        left: parent.left
+                        right: parent.right
+                    }
+                    height: parent.height / 2
+                    color: root.primaryColor
+                }
 
-            onPaint: {
-                var ctx = getContext("2d");
-                var centerX = width / 2;
-                var centerY = height / 2;
-                var radius = width / 2;
+                // Bottom-left quadrant: tertiaryColor
+                Rectangle {
+                    anchors {
+                        bottom: parent.bottom
+                        left: parent.left
+                    }
+                    width: parent.width / 2
+                    height: parent.height / 2
+                    color: root.tertiaryColor
+                }
 
-                ctx.reset();
+                // Bottom-right quadrant: secondaryColor
+                Rectangle {
+                    anchors {
+                        bottom: parent.bottom
+                        right: parent.right
+                    }
+                    width: parent.width / 2
+                    height: parent.height / 2
+                    color: root.secondaryColor
+                }
+            }
 
-                if (root.sharpMode) {
-                    ctx.fillStyle = root.primaryColor;
-                    ctx.fillRect(0, 0, width, centerY);
+            // Circle mode (GPU-accelerated Shape with anti-aliased arcs)
+            Shape {
+                id: circleShape
+                anchors.fill: parent
+                visible: !root.sharpMode
+                layer.enabled: true
+                layer.samples: 4
 
-                    ctx.fillStyle = root.secondaryColor;
-                    ctx.fillRect(centerX, centerY, centerX, centerY);
+                // Top half semi-circle (primary)
+                ShapePath {
+                    strokeColor: "transparent"
+                    fillColor: root.primaryColor
+                    startX: circleShape.width / 2
+                    startY: circleShape.height / 2
+                    PathAngleArc {
+                        centerX: circleShape.width / 2
+                        centerY: circleShape.height / 2
+                        radiusX: circleShape.width / 2
+                        radiusY: circleShape.height / 2
+                        startAngle: 180
+                        sweepAngle: 180
+                    }
+                    PathLine {
+                        x: circleShape.width / 2
+                        y: circleShape.height / 2
+                    }
+                }
 
-                    ctx.fillStyle = root.tertiaryColor;
-                    ctx.fillRect(0, centerY, centerX, centerY);
-                } else {
-                    ctx.beginPath();
-                    ctx.fillStyle = root.primaryColor;
-                    ctx.moveTo(centerX, centerY);
-                    ctx.arc(centerX, centerY, radius, Math.PI, 0, false);
-                    ctx.fill();
+                // Bottom-right quarter circle (secondary)
+                ShapePath {
+                    strokeColor: "transparent"
+                    fillColor: root.secondaryColor
+                    startX: circleShape.width / 2
+                    startY: circleShape.height / 2
+                    PathAngleArc {
+                        centerX: circleShape.width / 2
+                        centerY: circleShape.height / 2
+                        radiusX: circleShape.width / 2
+                        radiusY: circleShape.height / 2
+                        startAngle: 0
+                        sweepAngle: 90
+                    }
+                    PathLine {
+                        x: circleShape.width / 2
+                        y: circleShape.height / 2
+                    }
+                }
 
-                    ctx.beginPath();
-                    ctx.fillStyle = root.secondaryColor;
-                    ctx.moveTo(centerX, centerY);
-                    ctx.arc(centerX, centerY, radius, 0, Math.PI / 2, false);
-                    ctx.fill();
-
-                    ctx.beginPath();
-                    ctx.fillStyle = root.tertiaryColor;
-                    ctx.moveTo(centerX, centerY);
-                    ctx.arc(centerX, centerY, radius, Math.PI / 2, Math.PI, false);
-                    ctx.fill();
+                // Bottom-left quarter circle (tertiary)
+                ShapePath {
+                    strokeColor: "transparent"
+                    fillColor: root.tertiaryColor
+                    startX: circleShape.width / 2
+                    startY: circleShape.height / 2
+                    PathAngleArc {
+                        centerX: circleShape.width / 2
+                        centerY: circleShape.height / 2
+                        radiusX: circleShape.width / 2
+                        radiusY: circleShape.height / 2
+                        startAngle: 90
+                        sweepAngle: 90
+                    }
+                    PathLine {
+                        x: circleShape.width / 2
+                        y: circleShape.height / 2
+                    }
                 }
             }
         }

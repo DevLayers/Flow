@@ -115,11 +115,13 @@ Singleton {
     }
 
     function _applyInterpolatedColors(t) {
+        const isEnd = (t >= 1.0);
         for (const key in root._targetColors) {
             const start = root._oldColors[key]
             const end = root._targetColors[key]
             if (start !== undefined && end !== undefined) {
-                Appearance.m3colors[key] = root._interpolateColor(start, end, t)
+                if (start === end && !isEnd) continue;
+                Appearance.m3colors[key] = isEnd ? end : root._interpolateColor(start, end, t)
             } else if (end !== undefined) {
                 Appearance.m3colors[key] = end
             }

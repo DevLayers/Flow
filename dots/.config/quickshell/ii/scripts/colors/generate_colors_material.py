@@ -26,6 +26,7 @@ parser.add_argument('--blend_bg_fg', action='store_true', default=False, help='S
 parser.add_argument('--cache', type=str, default=None, help='file path to store the generated color')
 parser.add_argument('--debug', action='store_true', default=False, help='debug mode')
 parser.add_argument('--preview', action='store_true', help='preview the generated colorscheme and returns three accent colors to be previewed in the UI')
+parser.add_argument('--all-previews', type=str, default=None, help='generate preview colors for all schemes and save to json file')
 args = parser.parse_args()
 
 rgba_to_hex = lambda rgba: "#{:02X}{:02X}{:02X}".format(rgba[0], rgba[1], rgba[2])
@@ -87,6 +88,98 @@ if args.path is not None:
 elif args.color is not None:
     argb = hex_to_argb(args.color)
     hct = Hct.from_int(argb)
+else:
+    import os
+    config_file = os.path.expanduser("~/.config/illogical-impulse/config.json")
+    wall_path = None
+    if os.path.isfile(config_file):
+        try:
+            with open(config_file, 'r') as f:
+                c_data = json.load(f)
+                wall_path = c_data.get("background", {}).get("wallpaperPath")
+        except Exception:
+            pass
+    if wall_path and os.path.isfile(wall_path):
+        try:
+            image = Image.open(wall_path)
+            if image.format == "GIF":
+                image.seek(1)
+            if image.mode in ["L", "P"]:
+                image = image.convert('RGB')
+            wsize, hsize = image.size
+            wsize_new, hsize_new = calculate_optimal_size(wsize, hsize, args.size)
+            if wsize_new < wsize or hsize_new < hsize:
+                image = image.resize((wsize_new, hsize_new), Image.Resampling.BICUBIC)
+            colors = QuantizeCelebi(list(image.getdata()), 128)
+            argb = Score.score(colors)[0]
+            hct = Hct.from_int(argb)
+        except Exception:
+            argb = hex_to_argb("#3b82f6")
+            hct = Hct.from_int(argb)
+    else:
+        argb = hex_to_argb("#3b82f6")
+        hct = Hct.from_int(argb)
+
+if args.all_previews:
+    import os
+    def get_scheme_class(name):
+        if name in ('scheme-auto', 'scheme-tonal-spot'):
+            from materialyoucolor.scheme.scheme_tonal_spot import SchemeTonalSpot as S
+        elif name == 'scheme-fruit-salad':
+            from materialyoucolor.scheme.scheme_fruit_salad import SchemeFruitSalad as S
+        elif name == 'scheme-expressive':
+            from materialyoucolor.scheme.scheme_expressive import SchemeExpressive as S
+        elif name == 'scheme-monochrome':
+            from materialyoucolor.scheme.scheme_monochrome import SchemeMonochrome as S
+        elif name == 'scheme-rainbow':
+            from materialyoucolor.scheme.scheme_rainbow import SchemeRainbow as S
+        elif name == 'scheme-neutral':
+            from materialyoucolor.scheme.scheme_neutral import SchemeNeutral as S
+        elif name in ('scheme-fidelity', 'scheme-intense'):
+            from materialyoucolor.scheme.scheme_fidelity import SchemeFidelity as S
+        elif name == 'scheme-content':
+            from materialyoucolor.scheme.scheme_content import SchemeContent as S
+        elif name == 'scheme-vibrant':
+            from materialyoucolor.scheme.scheme_vibrant import SchemeVibrant as S
+        else:
+            from materialyoucolor.scheme.scheme_tonal_spot import SchemeTonalSpot as S
+        return S
+
+    all_schemes = ['scheme-auto', 'scheme-content', 'scheme-tonal-spot', 'scheme-fidelity', 'scheme-intense', 'scheme-vibrant', 'scheme-fruit-salad', 'scheme-expressive', 'scheme-rainbow', 'scheme-neutral', 'scheme-monochrome']
+    previews = {}
+    for s_name in all_schemes:
+        SClass = get_scheme_class(s_name)
+        s_obj = SClass(hct, darkmode, 0.0)
+        m_colors = {}
+        for c_key in vars(MaterialDynamicColors).keys():
+            c_item = getattr(MaterialDynamicColors, c_key)
+            if hasattr(c_item, "get_hct"):
+                m_colors[c_key] = rgba_to_hex(c_item.get_hct(s_obj).to_rgba())
+
+        if s_name == 'scheme-intense':
+            _intense_accent_tokens = ['primary', 'primaryContainer', 'secondary']
+            _accent_factor = 3.0 if not darkmode else 2.5
+            for token in _intense_accent_tokens:
+                if token in m_colors:
+                    argb_val = hex_to_argb(m_colors[token])
+                    m_colors[token] = argb_to_hex(boost_chroma_tone(argb_val, chroma=_accent_factor))
+
+        previews[s_name] = {
+            "primary": m_colors.get("primary", "transparent"),
+            "primary_container": m_colors.get("primaryContainer", "transparent"),
+            "secondary": m_colors.get("secondary", "transparent")
+        }
+
+    try:
+        out_dir = os.path.dirname(args.all_previews)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        with open(args.all_previews, 'w') as f:
+            json.dump(previews, f, indent=2)
+    except Exception as e:
+        print(f"Error saving all previews: {e}")
+    import sys
+    sys.exit(0)
 
 if args.scheme == 'scheme-fruit-salad':
     from materialyoucolor.scheme.scheme_fruit_salad import SchemeFruitSalad as Scheme
