@@ -570,6 +570,15 @@ Singleton {
             "configPage": "widgets/DesktopAndroidSearchBarConfig.qml"
         },
         {
+            "widgetId": "search_pill",
+            "name": Translation.tr("Search Pill"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/SearchPillWidget.qml"),
+            "icon": "auto_awesome",
+            "description": Translation.tr("Wide search pill with a dynamic sparkle action and three configurable provider buttons."),
+            "configPage": "widgets/DesktopSearchPillConfig.qml"
+        },
+        {
             "widgetId": "quote",
             "name": Translation.tr("Quote"),
             "category": "Utility",

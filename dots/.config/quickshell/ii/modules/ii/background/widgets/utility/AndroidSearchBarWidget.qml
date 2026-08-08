@@ -42,13 +42,13 @@ AbstractBackgroundWidget {
     implicitHeight: 60 * root.contentScale
 
     readonly property var options: Config.options.background.widgets.android_search_bar
-    readonly property string action1Key: options?.action1 ?? "music_rec"
-    readonly property string action2Key: options?.action2 ?? "ai_chat"
-    readonly property string action3Key: options?.action3 ?? "search"
+    readonly property string action1Key: options.action1 ?? "music_rec"
+    readonly property string action2Key: options.action2 ?? "ai_chat"
+    readonly property string action3Key: options.action3 ?? "search"
 
     readonly property color colOuterBg: WidgetColorScheme.cardBgColor
     readonly property color colInnerBg: WidgetColorScheme.innerShapeColor
-    readonly property color colIconText: WidgetColorScheme.textColorOnInnerShape
+    readonly property color colIconText: WidgetColorScheme.textColorOnPillTrack
 
     function getActionDetails(key) {
         if (key === "ai_chat") return { defaultIcon: "neurology", label: Translation.tr("AI Chat") };
@@ -157,12 +157,12 @@ AbstractBackgroundWidget {
                         bottomLeftRadius: Appearance.rounding.full
                         bottomRightRadius:Appearance.rounding.full
                         colBackground:      "transparent"
-                        colBackgroundHover: Qt.rgba(1, 1, 1, 0.12)
-                        colRipple:          Qt.rgba(1, 1, 1, 0.24)
+                        colBackgroundHover: ColorUtils.applyAlpha(root.colIconText, 0.12)
+                        colRipple:          ColorUtils.applyAlpha(root.colIconText, 0.24)
 
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            text: root.options?.icon1 || root.getActionDetails(root.action1Key).defaultIcon
+                            text: root.options.icon1 || root.getActionDetails(root.action1Key).defaultIcon
                             fill: 1
                             iconSize: Math.round(28 * root.contentScale)
                             color: root.colIconText
@@ -180,12 +180,12 @@ AbstractBackgroundWidget {
                         bottomLeftRadius: Appearance.rounding.full
                         bottomRightRadius:Appearance.rounding.full
                         colBackground:      "transparent"
-                        colBackgroundHover: Qt.rgba(1, 1, 1, 0.12)
-                        colRipple:          Qt.rgba(1, 1, 1, 0.24)
+                        colBackgroundHover: ColorUtils.applyAlpha(root.colIconText, 0.12)
+                        colRipple:          ColorUtils.applyAlpha(root.colIconText, 0.24)
 
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            text: root.options?.icon2 || root.getActionDetails(root.action2Key).defaultIcon
+                            text: root.options.icon2 || root.getActionDetails(root.action2Key).defaultIcon
                             fill: 1
                             iconSize: Math.round(28 * root.contentScale)
                             color: root.colIconText
@@ -205,12 +205,12 @@ AbstractBackgroundWidget {
                 bottomLeftRadius: Appearance.rounding.full
                 bottomRightRadius:Appearance.rounding.full
                 colBackground:      root.colInnerBg
-                colBackgroundHover: Qt.rgba(1, 1, 1, 0.15)
-                colRipple:          Qt.rgba(1, 1, 1, 0.30)
+                colBackgroundHover: ColorUtils.applyAlpha(root.colIconText, 0.15)
+                colRipple:          ColorUtils.applyAlpha(root.colIconText, 0.30)
 
                 MaterialSymbol {
                     anchors.centerIn: parent
-                    text: root.options?.icon3 || root.getActionDetails(root.action3Key).defaultIcon
+                    text: root.options.icon3 || root.getActionDetails(root.action3Key).defaultIcon
                     fill: 1
                     iconSize: Math.round(28 * root.contentScale)
                     color: root.colIconText

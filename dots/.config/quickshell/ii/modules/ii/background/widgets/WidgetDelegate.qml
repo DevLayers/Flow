@@ -678,6 +678,17 @@ Item {
     }
 
     Component {
+        id: component_search_pill
+        SearchPillWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_notes_widget
         NotesWidget {
             screenWidth: delegateRoot.screenWidth
@@ -857,6 +868,7 @@ Item {
             "email_inbox_2x1": component_email_inbox_2x1,
             "ai_chat": component_ai_chat,
             "android_search_bar": component_android_search_bar,
+            "search_pill": component_search_pill,
             "notes_widget": component_notes_widget,
             "notes_widget_2x1": component_notes_widget_2x1,
             "quick_actions": component_quick_actions,

@@ -1402,6 +1402,18 @@ Singleton {
                         property string action2: "ai_chat"
                         property string action3: "search"
                     }
+                    property JsonObject search_pill: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string aspectRatio: "0.5x2"
+                        property string action1: "ai_chat"
+                        property string action2: "music_rec"
+                        property string action3: "search"
+                        property string aiLogo: "gemini"
+                    }
                     property JsonObject resource_cpu_pill: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
