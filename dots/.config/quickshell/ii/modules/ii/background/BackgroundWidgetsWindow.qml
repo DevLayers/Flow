@@ -322,10 +322,18 @@ PanelWindow {
                     return yOnWallpaper - extraMove;
                 }
                 Behavior on leftMargin {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    }
                 }
                 Behavior on topMargin {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    }
                 }
             }
             width: parent.width

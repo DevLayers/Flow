@@ -1413,6 +1413,8 @@ Singleton {
                         property string action2: "music_rec"
                         property string action3: "search"
                         property string aiLogo: "gemini"
+                        property string outerLeftIcon: "spark"
+                        property bool useMaterialSymbolForOuterLeftIcon: false
                     }
                     property JsonObject resource_cpu_pill: JsonObject {
                         property bool enable: false

@@ -36,6 +36,13 @@ AbstractBackgroundWidget {
     readonly property string action2Key: options.action2 ?? "music_rec"
     readonly property string action3Key: options.action3 ?? "search"
     readonly property string aiLogo: options.aiLogo ?? "gemini"
+    readonly property string outerLeftIcon: options.outerLeftIcon ?? "spark"
+    readonly property bool useMaterialSymbolForOuterLeftIcon: options.useMaterialSymbolForOuterLeftIcon ?? false
+    readonly property string outerLeftIconSource: {
+        if (root.outerLeftIcon === "distro") return SystemInfo.distroIcon;
+        if (root.outerLeftIcon.endsWith(".svg")) return root.outerLeftIcon;
+        return root.outerLeftIcon + "-symbolic";
+    }
     readonly property list<string> actionKeys: [action1Key, action2Key, action3Key]
 
     readonly property color colOuterBg: WidgetColorScheme.cardBgColor
@@ -168,10 +175,20 @@ AbstractBackgroundWidget {
 
                 CustomIcon {
                     anchors.centerIn: parent
+                    visible: !root.useMaterialSymbolForOuterLeftIcon
                     width: Math.min(parent.height * 0.62, 42 * root.contentScale)
                     height: width
-                    source: "spark-symbolic.svg"
+                    source: root.outerLeftIconSource
                     colorize: true
+                    color: root.colOuterText
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    visible: root.useMaterialSymbolForOuterLeftIcon
+                    text: root.outerLeftIcon
+                    fill: 1
+                    iconSize: Math.round(Math.min(parent.height * 0.62, 42 * root.contentScale))
                     color: root.colOuterText
                 }
 
@@ -205,7 +222,10 @@ AbstractBackgroundWidget {
 
                             delegate: Item {
                                 required property string modelData
+                                readonly property bool isAiAction: modelData === "ai_chat"
                                 readonly property var actionDetails: root.getActionDetails(modelData)
+                                readonly property string resolvedIconAsset: isAiAction ? root.getAiIconAsset() : ""
+                                readonly property string resolvedDefaultIcon: isAiAction ? "neurology" : actionDetails.defaultIcon
 
                                 width: innerCapsule.width / 3
                                 height: innerCapsule.height
@@ -221,18 +241,18 @@ AbstractBackgroundWidget {
 
                                     CustomIcon {
                                         anchors.centerIn: parent
-                                        visible: actionDetails.iconAsset !== ""
+                                        visible: resolvedIconAsset !== ""
                                         width: parent.width * 0.58
                                         height: width
-                                        source: actionDetails.iconAsset || "spark-symbolic.svg"
+                                        source: resolvedIconAsset || "spark-symbolic.svg"
                                         colorize: true
                                         color: root.colIconText
                                     }
 
                                     MaterialSymbol {
                                         anchors.centerIn: parent
-                                        visible: actionDetails.iconAsset === ""
-                                        text: actionDetails.defaultIcon
+                                        visible: resolvedIconAsset === ""
+                                        text: resolvedDefaultIcon
                                         fill: 1
                                         iconSize: Math.round(parent.width * 0.58)
                                         color: root.colIconText

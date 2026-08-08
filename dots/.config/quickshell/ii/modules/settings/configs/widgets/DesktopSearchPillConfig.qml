@@ -78,6 +78,39 @@ ContentPage {
                 ]
             }
 
+            ContentSubsectionLabel { text: Translation.tr("Outer Left Icon") }
+
+            ConfigSwitch {
+                buttonIcon: "text_fields"
+                text: Translation.tr("Use Material Symbol for outer icon")
+                checked: Config.options.background.widgets.search_pill.useMaterialSymbolForOuterLeftIcon ?? false
+                onCheckedChanged: {
+                    Config.options.background.widgets.search_pill.useMaterialSymbolForOuterLeftIcon = checked;
+                }
+            }
+
+            ConfigTextField {
+                id: outerLeftIconField
+                text: Translation.tr("Outer icon identifier")
+                icon: "image"
+                tooltip: Translation.tr("Use a Material Symbol name or an SVG/distro name from the icons folder.")
+                placeholderText: Translation.tr("spark, distro, arch...")
+                Component.onCompleted: {
+                    inputText = Config.options.background.widgets.search_pill.outerLeftIcon ?? "spark";
+                }
+                textField.onTextChanged: {
+                    var value = textField.text.trim();
+                    if (value !== "" && textField.activeFocus)
+                        Config.options.background.widgets.search_pill.outerLeftIcon = value;
+                }
+                Connections {
+                    target: Config.options.background.widgets.search_pill
+                    function onOuterLeftIconChanged() {
+                        outerLeftIconField.textField.text = Config.options.background.widgets.search_pill.outerLeftIcon;
+                    }
+                }
+            }
+
             ContentSubsectionLabel { text: Translation.tr("AI Chat Logo") }
 
             ConfigSelectionArray {

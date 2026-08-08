@@ -603,19 +603,21 @@ done"
             echo "[switchwall_vynx.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
             python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
         fi
-        python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
-        source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
-        python3 "$SCRIPT_DIR/generate_colors_material_vynx.py" "${generate_colors_material_args[@]}" \
-            > "$STATE_DIR"/user/generated/material_colors.scss.tmp && \
-            mv "$STATE_DIR"/user/generated/material_colors.scss.tmp "$STATE_DIR"/user/generated/material_colors.scss
-        deactivate
-        "$SCRIPT_DIR"/applycolor_vynx.sh
+        (
+            python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py" &
+            (
+                source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
+                python3 "$SCRIPT_DIR/generate_colors_material_vynx.py" "${generate_colors_material_args[@]}" \
+                    > "$STATE_DIR"/user/generated/material_colors.scss.tmp && \
+                    mv "$STATE_DIR"/user/generated/material_colors.scss.tmp "$STATE_DIR"/user/generated/material_colors.scss
+                deactivate
+                "$SCRIPT_DIR"/applycolor_vynx.sh
+            ) &
+        ) & disown
     fi
 
     # Pass screen width, height, and wallpaper path to post_process
-    max_width_desired="$(hyprctl monitors -j | jq '([.[].width] | min)' | xargs)"
-    max_height_desired="$(hyprctl monitors -j | jq '([.[].height] | min)' | xargs)"
-    post_process "$max_width_desired" "$max_height_desired" "$imgpath"
+    post_process "1920" "1080" "$imgpath"
 }
 
 main() {
