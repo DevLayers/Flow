@@ -139,7 +139,7 @@ Scope {
                 interval: 300
                 onTriggered: {
                     if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
-                        Quickshell.execDetached(["hyprctl", "reload"]);
+                        Quickshell.execDetached(["hyprctl", "eval", "hl.window_rule({ match = { class = '.*' }, opacity = '1.0 1.0' })"]);
                     }
                 }
             }
@@ -253,7 +253,7 @@ Scope {
                     if (!transitionScope.featureEnabled) {
                         openDelayTimer.stop()
                         if (GlobalStates.overviewOpen && (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0])) {
-                            Quickshell.execDetached(["hyprctl", "reload"]);
+                            Quickshell.execDetached(["hyprctl", "eval", "hl.window_rule({ match = { class = '.*' }, opacity = '1.0 1.0' })"]);
                         }
                     }
                 }

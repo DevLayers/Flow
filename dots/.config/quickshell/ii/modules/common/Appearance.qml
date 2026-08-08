@@ -293,12 +293,14 @@ Singleton {
         if (Config.ready) {
             var a = root.ignoreAlpha;
             var script = "";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:overview' }, blur = false }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true, ignore_alpha = 0.0 }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1 }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:notificationPopup' }, noanim = true }) ";
             script += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
             Quickshell.execDetached(["hyprctl", "eval", script]);
@@ -323,12 +325,14 @@ Singleton {
         Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
         var a = root.ignoreAlpha;
         var bs = "";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:overview' }, blur = false }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true, ignore_alpha = 0.0 }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1 }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:notificationPopup' }, noanim = true }) ";
         bs += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
         Quickshell.execDetached(["hyprctl", "eval", bs]);
