@@ -41,6 +41,35 @@ Item {
     readonly property int handleSize: 12
     readonly property bool editing: gesture.mode !== "none"
 
+    // Overlapping zones are a valid layout - the cursor decides which of them a
+    // window lands in - but two windows tiled into the same space cover each
+    // other, and nothing on the screen itself says the zones were drawn that
+    // way. The editor is the only place it can be seen, so it is shown rather
+    // than prevented.
+    readonly property var overlaps: {
+        const list = Array.from(root.zones ?? []);
+        const out = [];
+        for (let i = 0; i < list.length; i++) {
+            for (let j = i + 1; j < list.length; j++) {
+                const x = Math.max(list[i].x, list[j].x);
+                const y = Math.max(list[i].y, list[j].y);
+                const right = Math.min(list[i].x + list[i].w, list[j].x + list[j].w);
+                const bottom = Math.min(list[i].y + list[i].h, list[j].y + list[j].h);
+                // Zones drawn edge to edge meet without overlapping, and a
+                // rounding error is not worth painting a warning over.
+                if (right - x < 0.002 || bottom - y < 0.002) continue;
+                out.push({
+                    "x": x,
+                    "y": y,
+                    "w": right - x,
+                    "h": bottom - y
+                });
+            }
+        }
+        return out;
+    }
+    readonly property int overlapCount: root.overlaps.length
+
     signal zonesEdited(var updated)
 
     implicitHeight: canvas.height
@@ -240,6 +269,54 @@ Item {
             }
         }
 
+        Repeater {
+            // Nothing while a gesture is in flight: these come from the stored
+            // zones, and the draft below is not one of them yet, so they would
+            // be hatching a layout that is no longer the one on screen.
+            model: gesture.mode === "none" ? root.overlaps : 0
+
+            delegate: Item {
+                id: overlapPatch
+
+                required property var modelData
+
+                // Long enough that a bar leaning across the patch at 45 degrees
+                // still crosses it from corner to corner.
+                readonly property real span: overlapPatch.width + overlapPatch.height
+
+                x: Math.round(modelData.x * canvas.width)
+                y: Math.round(modelData.y * canvas.height)
+                width: Math.round(modelData.w * canvas.width)
+                height: Math.round(modelData.h * canvas.height)
+                clip: true
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: ColorUtils.applyAlpha(Appearance.colors.colError, 0.16)
+                }
+
+                Repeater {
+                    // Diagonal hatching: upright bars rotated about their own
+                    // centre, stepped across the patch. The first centres half a
+                    // patch-height off the left edge, which is how far a leaning
+                    // bar reaches back.
+                    model: Math.ceil(overlapPatch.span / 10) + 1
+
+                    delegate: Rectangle {
+                        required property int index
+
+                        width: 2
+                        height: overlapPatch.span * 1.5
+                        x: index * 10 - overlapPatch.height / 2 - width / 2
+                        y: (overlapPatch.height - height) / 2
+                        color: ColorUtils.applyAlpha(Appearance.colors.colError, 0.4)
+                        transformOrigin: Item.Center
+                        rotation: 45
+                    }
+                }
+            }
+        }
+
         Rectangle {
             visible: gesture.draft !== null
             x: Math.round((gesture.draft?.x ?? 0) * canvas.width)
@@ -283,6 +360,10 @@ Item {
         anchors.fill: canvas
         enabled: !root.readOnly
         hoverEnabled: true
+        // The settings page scrolls vertically, and it would otherwise take
+        // every drag that has any height to it: a zone could be made wider but
+        // never taller. Scrolling the page over the canvas is the wheel's job.
+        preventStealing: true
         cursorShape: gesture.mode === "move" ? Qt.ClosedHandCursor : Qt.CrossCursor
 
         onPressed: event => {

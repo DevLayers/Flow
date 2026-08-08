@@ -1,16 +1,17 @@
 pragma ComponentBehavior: Bound
 
 /**
- * Zone overlay shown while a window is being dragged, and for a moment after a
- * keyboard quick-tile, which has no drag to appear during.
+ * Marker for zones holding more than one window, shown while nothing is being
+ * dragged.
  *
- * One click-through layer surface per monitor, each drawing the zones that
- * monitor is configured for, so a drag that crosses screens keeps showing the
- * right targets. Only the monitor under the cursor highlights a zone.
+ * Two windows in one zone is a perfectly legal thing to ask for, but the second
+ * one covers the first and the zone then looks exactly like a zone with one
+ * window in it. The overlay says so during a drag; this says so the rest of the
+ * time, drawing nothing at all for the zones that hold zero or one window.
  *
- * The surface is created when a drag starts and torn down once the fade-out
- * finishes - there is no reason to hold a layer surface open the rest of the
- * time. Nothing is moved on drop yet; that comes with the apply phase.
+ * Click-through, one layer surface per monitor, and only alive while that
+ * monitor actually has a crowded zone - there is no reason to hold a surface
+ * open for a screen with nothing to report.
  */
 
 import qs
@@ -34,7 +35,10 @@ Scope {
 
             required property var modelData
             readonly property string screenName: monitorScope.modelData?.name ?? ""
-            readonly property bool shown: TilingAssistant.overlayVisible
+            readonly property var crowded: TilingAssistant.crowdedZonesFor(monitorScope.screenName)
+            // Nothing of ours goes over a fullscreen window, and a zone marker
+            // is the last thing that should.
+            readonly property bool shown: monitorScope.crowded.length > 0 && !TilingAssistant.monitorHasFullscreen(monitorScope.screenName)
 
             // Outlives `shown` so the surface is still there to fade out on.
             property bool surfaceAlive: false
@@ -50,6 +54,7 @@ Scope {
 
             Timer {
                 id: fadeOutTimer
+
                 interval: root.fadeDuration + 50
                 onTriggered: monitorScope.surfaceAlive = false
             }
@@ -58,16 +63,17 @@ Scope {
                 active: monitorScope.surfaceAlive
 
                 sourceComponent: PanelWindow {
-                    id: overlayWindow
-
                     screen: monitorScope.modelData
-                    WlrLayershell.namespace: "quickshell:tiling_assistant"
-                    WlrLayershell.layer: WlrLayer.Overlay
+                    WlrLayershell.namespace: "quickshell:tiling_stack_badges"
+                    // Above the windows it is describing, below the overlay the
+                    // drag puts up - and below the bar, which owns that strip.
+                    WlrLayershell.layer: WlrLayer.Top
                     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
                     // Ignoring exclusive zones keeps the surface aligned with the
                     // monitor origin, which is what the zone rects are relative to.
                     exclusionMode: ExclusionMode.Ignore
-                    // Empty mask: every click goes through to the window being dragged.
+                    // Empty mask: the marker never takes a click meant for the
+                    // window underneath it.
                     mask: Region {}
                     color: "transparent"
                     visible: true
@@ -81,6 +87,7 @@ Scope {
 
                     Item {
                         id: content
+
                         anchors.fill: parent
                         opacity: 0
 
@@ -91,30 +98,33 @@ Scope {
                                 duration: root.fadeDuration
                                 easing.type: Easing.OutCubic
                             }
+
                         }
 
                         Repeater {
-                            model: TilingAssistant.overlayZonesFor(monitorScope.screenName)
+                            model: monitorScope.crowded
 
                             ZoneIndicator {
-                                id: indicator
+                                id: badge
 
                                 required property var modelData
-                                required property int index
 
-                                x: indicator.modelData.x
-                                y: indicator.modelData.y
-                                width: indicator.modelData.width
-                                height: indicator.modelData.height
+                                x: badge.modelData.x
+                                y: badge.modelData.y
+                                width: badge.modelData.width
+                                height: badge.modelData.height
                                 radius: root.overlayOptions?.cornerRadius ?? 12
 
-                                label: indicator.modelData.label
-                                showLabel: root.overlayOptions?.showLabels ?? true
-                                baseOpacity: root.overlayOptions?.zoneOpacity ?? 0.28
-                                hoveredOpacity: root.overlayOptions?.hoveredOpacity ?? 0.55
+                                // Outline and count only: filling the zone would
+                                // wash out the windows it is drawn over, and it
+                                // stays there as long as they are stacked.
+                                label: ""
+                                showLabel: false
+                                baseOpacity: 0
+                                hoveredOpacity: 0
+                                hovered: false
                                 animationDuration: root.fadeDuration
-                                occupants: indicator.modelData.occupants
-                                hovered: monitorScope.screenName === TilingAssistant.highlightMonitor && TilingAssistant.highlightZone === indicator.index
+                                occupants: badge.modelData.occupants
                             }
                         }
                     }
@@ -122,4 +132,5 @@ Scope {
             }
         }
     }
+
 }

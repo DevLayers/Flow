@@ -192,6 +192,14 @@ Scope {
         component: TilingOverlay {}
     }
     PanelLoader {
+        extraCondition: Config.options.tiling.enable
+        component: LayoutHint {}
+    }
+    PanelLoader {
+        extraCondition: Config.options.tiling.enable && Config.options.tiling.overlay.stackIndicator
+        component: TilingStackBadges {}
+    }
+    PanelLoader {
         extraCondition: GlobalStates.connectModeActive
         component: TopLayer {}
     }

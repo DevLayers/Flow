@@ -144,6 +144,12 @@ for i = 1, 4 do
     local arrowkey = { "Left", "Right", "Up", "Down" }
     hl.bind("SUPER + ALT + " .. arrowkey[i], hl.dsp.global("quickshell:tilingTile" .. arrowkey[i]))
 end
+--# Tiling assistant: swap the focused monitor between zone layouts without
+--# opening settings
+--#/# bind = SUPER + ALT, Tab,, # Next tiling layout
+hl.bind("SUPER + ALT + Tab", hl.dsp.global("quickshell:tilingLayoutCycle"))
+--#/# bind = SUPER + ALT + SHIFT, Tab,, # Previous tiling layout
+hl.bind("SUPER + ALT + SHIFT + Tab", hl.dsp.global("quickshell:tilingLayoutCyclePrev"))
 
 -- hl.bind("ALT + F4",
 --     function() hl.exec_cmd(

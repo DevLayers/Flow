@@ -609,6 +609,26 @@ var PRESET_NAMES = {
     sixths: "Six tiles"
 };
 
+var PRESET_ICONS = {
+    kde: "dashboard",
+    halves: "vertical_split",
+    thirds: "view_column",
+    sidebars: "view_week",
+    quarters: "grid_view",
+    sixths: "view_module",
+    custom: "draw"
+};
+
+// A hand-drawn layout has no entry above and is the only thing an unknown id
+// can be, since the settings page writes "custom" for exactly that.
+function presetName(id) {
+    return PRESET_NAMES[id] ?? "Custom";
+}
+
+function presetIcon(id) {
+    return PRESET_ICONS[id] ?? "grid_view";
+}
+
 // Custom layouts carry their own zones, so an unknown id has to resolve to
 // something rather than leaving the overlay empty.
 function presetZones(id) {

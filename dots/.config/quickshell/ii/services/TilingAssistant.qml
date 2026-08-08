@@ -102,8 +102,19 @@ Singleton {
     }
 
     // The overlay is a move-drag affordance: a resize drag keeps its own
-    // neighbours, so painting zone targets over it would only mislead.
-    readonly property bool overlayVisible: root.enabled && root.dragging && root.dragKind === "move" && (root.options?.showOnDragStart ?? true)
+    // neighbours, so painting zone targets over it would only mislead. The
+    // keyboard has no drag to hang it on, so it is flashed afterwards instead.
+    readonly property bool overlayVisible: root.enabled && ((root.dragging && root.dragKind === "move" && (root.options?.showOnDragStart ?? true)) || root.flashVisible)
+
+    // The marker on zones holding more than one window, shown while nothing is
+    // being dragged. It steps aside for the overlay rather than being drawn
+    // twice, since the overlay carries the same counts.
+    readonly property bool stackIndicatorEnabled: root.enabled && (root.options?.overlay?.stackIndicator ?? true) && !root.overlayVisible
+
+    // Which zone the overlay picks out, and on which screen: the one under the
+    // cursor during a drag, the one a window just landed in after a keypress.
+    readonly property string highlightMonitor: root.flashVisible ? root.flashMonitor : root.monitorName
+    readonly property int highlightZone: root.flashVisible ? root.flashZone : root.hoveredZone
 
     // Hyprland announces monitors and workspaces, but not the space a layer
     // surface reserves. A bar that changed side or height therefore leaves the
@@ -141,6 +152,36 @@ Singleton {
         return Tiling.gapsForMonitor(root.options?.monitors, name, root.gaps);
     }
 
+    // How many windows the assistant has in each zone of a monitor, counting
+    // only the workspace that monitor is showing. Two windows in one zone is a
+    // layout that can be asked for - dropping onto an occupied zone is
+    // allowed - but one window ends up behind the other with nothing on screen
+    // to say so, which is the whole reason this is counted.
+    function zoneOccupancy(name, exceptAddress) {
+        // Read so the overlay's counts re-evaluate when the map changes; the
+        // map itself announces nothing.
+        const revision = root.zoneMemoryRevision;
+        const counts = [];
+        const zones = root.zonesFor(name);
+        for (let i = 0; i < zones.length; i++) counts.push(0);
+
+        const workspace = root.monitorByName(name)?.activeWorkspace?.id ?? null;
+        const known = HyprlandData.windowByAddress ?? {};
+        for (const address in root.zoneMemory) {
+            if (address === exceptAddress) continue;
+            const zone = root.zoneMemory[address];
+            if (zone.monitor !== name || zone.index < 0 || zone.index >= counts.length) continue;
+            // A window the layout changed under is not in the zone it
+            // remembers, so it is not standing in anyone's way there.
+            if (root.zoneDrifted(address)) continue;
+            const window = known[address];
+            if (!window) continue;
+            if (workspace !== null && (window.workspace?.id ?? null) !== workspace) continue;
+            counts[zone.index]++;
+        }
+        return counts;
+    }
+
     // Zones of one monitor as drawable rects, relative to that monitor's own
     // origin. Every coordinate conversion the overlay needs lives here so the
     // overlay itself stays presentational.
@@ -150,6 +191,9 @@ Singleton {
         const origin = Tiling.monitorLogicalRect(monitor);
         const zones = root.zonesFor(name);
         const rects = Tiling.zoneRects(zones, Tiling.usableArea(monitor), root.gapsFor(name));
+        // The window being dragged is on its way out of wherever it was, so it
+        // is not counted as being in the way of where it is going.
+        const occupancy = root.zoneOccupancy(name, root.dragging ? root.dragAddress : "");
         const out = [];
         for (let i = 0; i < rects.length; i++) {
             out.push({
@@ -157,10 +201,33 @@ Singleton {
                 y: rects[i].y - origin.y,
                 width: rects[i].width,
                 height: rects[i].height,
-                label: Tiling.labelFor(zones[i])
+                label: Tiling.labelFor(zones[i]),
+                occupants: occupancy[i] ?? 0
             });
         }
         return out;
+    }
+
+    // The zones of a monitor that hold more than one window, for the marker that
+    // stands there while nothing is being dragged. A stack of windows in a zone
+    // looks exactly like a single window in that zone, so without this the only
+    // hint that something is buried is that it is missing.
+    function crowdedZonesFor(name) {
+        if (!root.stackIndicatorEnabled) return [];
+        return root.overlayZonesFor(name).filter(zone => zone.occupants > 1);
+    }
+
+    // Whether a fullscreen window is on the workspace the monitor is showing.
+    // Nothing of ours belongs on top of one, marker included. Read from the
+    // window list rather than the workspace list because only the former is
+    // refreshed when Hyprland reports a fullscreen change.
+    function monitorHasFullscreen(name) {
+        const workspace = root.monitorByName(name)?.activeWorkspace?.id ?? null;
+        if (workspace === null) return false;
+        for (const window of HyprlandData.windowList ?? []) {
+            if ((window.workspace?.id ?? null) === workspace && (window.fullscreen ?? 0) > 0) return true;
+        }
+        return false;
     }
 
     function zoneLabel(index) {
@@ -186,6 +253,16 @@ Singleton {
     // window actually is.
     property var zoneMemory: ({})
 
+    // Writing to a plain object notifies nothing, so anything bound to what is
+    // in the map - the occupancy counts the overlay draws - watches this
+    // instead. Bumped by every write and every forget.
+    property int zoneMemoryRevision: 0
+
+    function forgetZone(address) {
+        delete root.zoneMemory[address];
+        root.zoneMemoryRevision++;
+    }
+
     // Zone rects as windows rather than as boxes: Hyprland positions and sizes a
     // window inside its border, so the border comes off every side.
     function windowRectForZone(name, index) {
@@ -207,6 +284,44 @@ Singleton {
         const grown = Tiling.insetRect(rect, -root.hyprBorderSize);
         const usable = Tiling.usableArea(monitor);
         return Tiling.zoneIndexForRect(root.zonesFor(name), usable, root.gapsFor(name), grown, 4);
+    }
+
+    // Whether the zone a window remembers has moved out from under it. That
+    // happens when the layout is changed and the windows on it are left alone,
+    // which is on purpose - but the index they remember then points at a
+    // different piece of screen, and everything that steps or resizes from it
+    // would be working off a zone the window was never in.
+    //
+    // Compared by geometry rather than by a "the layout changed" flag, because
+    // dragging a divider changes the zones on purpose and the windows follow,
+    // and a change on one monitor says nothing about the other.
+    function zoneDrifted(address) {
+        const zone = root.zoneMemory[address];
+        // Nothing recorded, or recorded before the rect was kept: neither is a
+        // window that has drifted, so neither is one to move.
+        if (!zone?.rect) return false;
+        const rect = root.windowRectForZone(zone.monitor, zone.index);
+        return !rect || !Tiling.rectsEqual(rect, zone.rect, 2);
+    }
+
+    // The zone of the current layout closest to where a window actually is.
+    function nearestZoneToRect(name, rect) {
+        const monitor = root.monitorByName(name);
+        if (!monitor || !rect) return -1;
+        const rects = Tiling.zoneRects(root.zonesFor(name), Tiling.usableArea(monitor), root.gapsFor(name));
+        const centre = Tiling.rectCenter(rect);
+        let best = -1;
+        let bestDistance = Infinity;
+        for (let i = 0; i < rects.length; i++) {
+            const candidate = Tiling.rectCenter(rects[i]);
+            const dx = candidate.x - centre.x;
+            const dy = candidate.y - centre.y;
+            const distance = dx * dx + dy * dy;
+            if (distance >= bestDistance) continue;
+            bestDistance = distance;
+            best = i;
+        }
+        return best;
     }
 
     // Hyprland's float dispatcher is a toggle and takes no target state, so the
@@ -257,10 +372,17 @@ Singleton {
             };
         }
 
+        // The rect goes in with the index. Changing the layout deliberately
+        // leaves tiled windows where they are, so an index on its own stops
+        // describing anything once the zone behind it has moved - and the
+        // window list cannot settle that, since Hyprland never reports a
+        // floating window moving. What it was actually given can.
         root.zoneMemory[address] = {
             monitor: name,
-            index: index
+            index: index,
+            rect: rect
         };
+        root.zoneMemoryRevision++;
 
         root.setFloating(address, true, floating);
         root.moveToMonitor(address, name, before?.monitor);
@@ -271,7 +393,7 @@ Singleton {
 
     function restoreWindow(address, floating) {
         const record = root.tileRecords[address];
-        delete root.zoneMemory[address];
+        root.forgetZone(address);
         if (!record) return;
         delete root.tileRecords[address];
 
@@ -299,7 +421,7 @@ Singleton {
             if (!known[address]) delete root.tileRecords[address];
         }
         for (const address in root.zoneMemory) {
-            if (!known[address]) delete root.zoneMemory[address];
+            if (!known[address]) root.forgetZone(address);
         }
     }
 
@@ -316,8 +438,10 @@ Singleton {
         // Nothing under the cursor: the window was dragged out of its zone, so
         // put it back the way it was found.
         if (zoneIndex < 0) {
-            delete root.zoneMemory[address];
-            if (root.options?.restoreOnUntile ?? true) root.restoreWindow(address, floating);
+            root.forgetZone(address);
+            if (!(root.options?.restoreOnUntile ?? true)) return;
+            root.restoreWindow(address, floating);
+            root.releaseWorkspace(address);
             return;
         }
         // Hybrid leaves windows that live in the layout tree to Hyprland and
@@ -325,9 +449,13 @@ Singleton {
         if (root.mode === "hybrid" && !(before?.floating ?? false) && !root.tileRecords[address]) return;
 
         root.applyZone(address, root.monitorName, zoneIndex, before, floating);
+        root.adoptWorkspace(address, root.monitorName, zoneIndex);
     }
 
     onDragStarted: {
+        // A flash still up would be pointing at the wrong zone for the rest of
+        // its life: the drag decides what is highlighted from here.
+        root.flashVisible = false;
         root.refreshMonitors();
         root.pruneRecords();
     }
@@ -339,16 +467,128 @@ Singleton {
     // ----------------------------------------------------------- co-resize
 
     readonly property bool coResizeEnabled: root.enabled && root.mode !== "preview" && (root.options?.coResize?.enable ?? true)
+    readonly property bool adoptWorkspaceEnabled: root.coResizeEnabled && (root.options?.coResize?.adoptWorkspace ?? false)
+    readonly property bool releaseWorkspaceEnabled: root.coResizeEnabled && (root.options?.coResize?.releaseWorkspace ?? false)
+
+    // The reverse of adoptWorkspace: taking one window out of the layout takes
+    // the whole workspace out with it, every window the assistant put there
+    // going back to where it was before. A workspace tiled in one gesture is
+    // worth being able to undo in one gesture.
+    //
+    // Only ever reached from the two untile paths. A window closing is not an
+    // untile - the arrangement it leaves behind is still the one that was
+    // asked for, so pruning a dead window pulls nothing else apart.
+    function releaseWorkspace(anchorAddress) {
+        if (!root.releaseWorkspaceEnabled) return;
+        const known = HyprlandData.windowByAddress ?? {};
+        // A workspace belongs to one monitor, so matching on it is already
+        // matching on the screen. Without one there is nothing to scope the
+        // release to, and releasing everything would reach other screens.
+        const workspace = known[anchorAddress]?.workspace?.id ?? null;
+        if (workspace === null) return;
+
+        for (const address of Object.keys(root.zoneMemory)) {
+            if (address === anchorAddress) continue;
+            const window = known[address];
+            if (!window || (window.workspace?.id ?? null) !== workspace) continue;
+            root.restoreWindow(address, window.floating);
+        }
+    }
+
+    // Tiling one window takes its whole workspace with it: every other window
+    // on it is floated and given a zone of its own, so all of them share edges
+    // and one divider drag moves the lot. Without this only the windows the
+    // assistant placed take part, which on a fresh workspace is the single one
+    // that was just dropped - which is what makes the resizing look broken.
+    //
+    // Each window goes to the free zone it is already nearest, so the workspace
+    // snaps into shape rather than being shuffled, and a zone can be left empty
+    // rather than a window dragged the width of the screen to fill it. Windows
+    // past the last free zone are left exactly as they were: piling two into
+    // one zone would hide one behind the other, which is worse than not tiling.
+    function adoptWorkspace(anchorAddress, name, anchorZone) {
+        if (!root.adoptWorkspaceEnabled || !name) return;
+        const monitor = root.monitorByName(name);
+        const zones = root.zonesFor(name);
+        if (!monitor || zones.length === 0) return;
+
+        const windows = HyprlandData.windowList ?? [];
+        const anchor = windows.find(candidate => candidate?.address === anchorAddress) ?? null;
+        // No anchor means no workspace to adopt: the window list has not
+        // arrived, and guessing at a workspace would tile the wrong screenful.
+        if (!anchor) return;
+        const workspace = anchor.workspace?.id;
+        if (workspace === undefined) return;
+
+        const taken = {};
+        if (anchorZone >= 0) taken[anchorZone] = true;
+        const candidates = [];
+        for (const window of windows) {
+            if (!window || window.address === anchorAddress) continue;
+            if ((window.workspace?.id ?? null) !== workspace) continue;
+            // Hidden and fullscreen windows are not part of the arrangement the
+            // user is looking at, so they are not part of the one being made.
+            if (window.hidden || window.fullscreen) continue;
+            const remembered = root.zoneMemory[window.address];
+            // Already ours: it keeps the zone it has rather than being dealt a
+            // new one, so tiling a second window does not reshuffle the first.
+            // Unless the layout has changed since - then the zone it remembers
+            // is not where it is, and it is dealt one like anything else.
+            if (remembered && remembered.monitor === name && !root.zoneDrifted(window.address)) {
+                taken[remembered.index] = true;
+                continue;
+            }
+            candidates.push(window);
+        }
+        if (candidates.length === 0) return;
+
+        const rects = Tiling.zoneRects(zones, Tiling.usableArea(monitor), root.gapsFor(name));
+        const free = [];
+        for (let index = 0; index < rects.length; index++) {
+            if (!taken[index]) free.push(index);
+        }
+
+        // Closest pair first, over and over, rather than filling the zones in
+        // order: a window belongs in the zone it is already nearest, even when
+        // that leaves an earlier zone empty. Packing the layout tight by
+        // dragging a window across the screen is the opposite of the point.
+        while (free.length > 0 && candidates.length > 0) {
+            let bestZone = 0;
+            let bestWindow = 0;
+            let bestDistance = Infinity;
+            for (let z = 0; z < free.length; z++) {
+                const centre = Tiling.rectCenter(rects[free[z]]);
+                for (let i = 0; i < candidates.length; i++) {
+                    const sample = root.windowSample(candidates[i]);
+                    const dx = sample.x + sample.width / 2 - centre.x;
+                    const dy = sample.y + sample.height / 2 - centre.y;
+                    const distance = dx * dx + dy * dy;
+                    if (distance >= bestDistance) continue;
+                    bestDistance = distance;
+                    bestZone = z;
+                    bestWindow = i;
+                }
+            }
+            const index = free.splice(bestZone, 1)[0];
+            const window = candidates.splice(bestWindow, 1)[0];
+            root.applyZone(window.address, name, index, root.windowSample(window), window.floating);
+        }
+    }
 
     // Every window the assistant put on this monitor moves with the divider,
     // not just the one under the mouse - that is what a shared edge means. The
     // resized one is in here too, so a drag that overshot snaps back onto it.
-    function reapplyZones(name) {
+    //
+    // `only` is the set of windows that were standing in their zones before the
+    // dividers moved. It has to be worked out beforehand, because moving them
+    // is exactly what makes every stored rect disagree with its zone.
+    function reapplyZones(name, only) {
         const known = HyprlandData.windowByAddress ?? {};
         const alive = Object.keys(known).length > 0;
         for (const address in root.zoneMemory) {
             const zone = root.zoneMemory[address];
             if (zone.monitor !== name || (alive && !known[address])) continue;
+            if (only && !only[address]) continue;
             root.applyZone(address, name, zone.index, null, true);
         }
     }
@@ -362,6 +602,10 @@ Singleton {
         const zone = root.zoneMemory[address];
         const monitor = zone ? root.monitorByName(zone.monitor) : null;
         if (!monitor) return;
+        // The layout changed under this window: it is not in the zone it
+        // remembers, so there is no divider between it and anything else. The
+        // resize is left as a resize and nothing follows it.
+        if (root.zoneDrifted(address)) return;
 
         let zones = root.zonesFor(zone.monitor);
         if (zone.index < 0 || zone.index >= zones.length) return;
@@ -409,12 +653,117 @@ Singleton {
         }
         if (!moved) return;
 
+        // Who follows the divider, decided while the old zones are still the
+        // ones in force. Windows a layout change left behind are not in this
+        // layout at all and are not dragged into it by someone else's resize.
+        const following = {};
+        for (const other in root.zoneMemory) {
+            if (root.zoneMemory[other].monitor === zone.monitor && !root.zoneDrifted(other)) following[other] = true;
+        }
+
         // A new object rather than a mutated one: the zone bindings only notice
         // the property being reassigned.
         const overrides = Object.assign({}, root.zoneOverrides);
         overrides[zone.monitor] = zones;
         root.zoneOverrides = overrides;
-        root.reapplyZones(zone.monitor);
+        root.reapplyZones(zone.monitor, following);
+    }
+
+    // -------------------------------------------------------- quick-tile flash
+
+    // A keyboard quick-tile has no drag for the overlay to appear during, so
+    // the zones are shown for a moment after it instead, with the one the
+    // window landed in picked out. Without it a press says nothing about what
+    // is already in the zone the window went to - the other window is simply
+    // covered up. Deliberately not tied to showOnDragStart: turning the drag
+    // overlay off is what leaves the keyboard as the only place it appears.
+    property string flashMonitor: ""
+    property int flashZone: -1
+    property bool flashVisible: false
+
+    Timer {
+        id: flashTimer
+        interval: root.options?.overlay?.quickTileDuration ?? 500
+        onTriggered: root.flashVisible = false
+    }
+
+    function flashZones(name, index) {
+        if (!name) return;
+        root.flashMonitor = name;
+        root.flashZone = index;
+        root.flashVisible = true;
+        flashTimer.restart();
+    }
+
+    // ------------------------------------------------------- layout cycling
+
+    // Which layout the strip is describing, and for how long. The layout has
+    // already changed by the time this is up: the zones themselves are the real
+    // feedback, and this only names what they became, because on an empty
+    // workspace a preset changing is otherwise completely silent.
+    property string layoutHintMonitor: ""
+    property bool layoutHintVisible: false
+
+    Timer {
+        id: layoutHintTimer
+        interval: root.options?.overlay?.layoutHintDuration ?? 1400
+        onTriggered: root.layoutHintVisible = false
+    }
+
+    function entryFor(name) {
+        for (const entry of Array.from(root.options?.monitors ?? [])) {
+            if (entry?.name === name) return entry;
+        }
+        return null;
+    }
+
+    function presetFor(name) {
+        return root.entryFor(name)?.preset ?? (root.options?.defaultPreset ?? "kde");
+    }
+
+    // A monitor with a hand-drawn layout keeps it in the ring, so cycling past
+    // it and back does not quietly throw the drawing away.
+    function layoutRing(name) {
+        const ring = Array.from(Tiling.PRESET_IDS);
+        if (root.presetFor(name) === "custom") ring.push("custom");
+        return ring;
+    }
+
+    // The monitor list is stored rather than derived, so one entry cannot be
+    // changed in place: the adapter only notices the array being reassigned.
+    function setPreset(name, preset) {
+        if (!name) return;
+        const list = Array.from(root.options?.monitors ?? []).map(entry => Object.assign({}, entry));
+        const index = list.findIndex(entry => entry?.name === name);
+        if (index < 0) list.push({
+            "name": name,
+            "preset": preset
+        });
+        else list[index] = Object.assign({}, list[index], {
+            "preset": preset
+        });
+        Config.options.tiling.monitors = list;
+    }
+
+    // The cursor is only sampled during a drag, so between gestures it is the
+    // focused monitor rather than the pointer that says which screen is meant.
+    function hintMonitorName() {
+        return Hyprland.focusedMonitor?.name ?? root.monitorName;
+    }
+
+    function cycleLayout(step) {
+        if (!root.enabled) return;
+        const name = root.hintMonitorName();
+        if (!name) return;
+        const ring = root.layoutRing(name);
+        const current = ring.indexOf(root.presetFor(name));
+        // A preset the ring does not know is not somewhere to step from, so the
+        // first press lands on its start rather than nowhere.
+        const next = current < 0 ? 0 : (current + step + ring.length) % ring.length;
+        root.setPreset(name, ring[next]);
+        root.layoutHintMonitor = name;
+        root.layoutHintVisible = true;
+        layoutHintTimer.restart();
     }
 
     // ------------------------------------------------------------ keyboard
@@ -440,7 +789,9 @@ Singleton {
         return null;
     }
 
-    // A raw hyprctl client in the shape the zone helpers expect.
+    // A raw hyprctl client in the shape the zone helpers expect. The monitor id
+    // rides along so a window restored later is handed back to the screen it
+    // came from rather than to whichever one it happens to be on.
     function windowSample(window) {
         if (!window) return null;
         return {
@@ -448,7 +799,8 @@ Singleton {
             y: window.at?.[1] ?? 0,
             width: window.size?.[0] ?? 0,
             height: window.size?.[1] ?? 0,
-            floating: window.floating ?? false
+            floating: window.floating ?? false,
+            monitor: window.monitor
         };
     }
 
@@ -459,12 +811,28 @@ Singleton {
     // take me out". Float state, unlike geometry, does come with an event.
     function currentZone(address, name, sample) {
         if (!(sample?.floating ?? false)) {
-            delete root.zoneMemory[address];
+            root.forgetZone(address);
             return -1;
         }
         const remembered = root.zoneMemory[address];
         if (remembered && remembered.monitor === name) return remembered.index;
         return root.sampleZoneIndex(name, sample);
+    }
+
+    // Puts a window the layout changed under into the zone of the current
+    // layout nearest where it is sitting, and says whether it did. A window
+    // whose zone came through the change in the same place has not drifted and
+    // is not touched, so a change on one monitor costs the other nothing.
+    function adoptCurrentLayout(address, name, sample) {
+        if (!(sample?.floating ?? false)) return false;
+        const zone = root.zoneMemory[address];
+        if (!zone || zone.monitor !== name || !root.zoneDrifted(address)) return false;
+        const index = root.nearestZoneToRect(name, zone.rect);
+        if (index < 0) return false;
+
+        root.applyZone(address, name, index, null, sample.floating);
+        root.flashZones(name, index);
+        return true;
     }
 
     // Tiles the focused window one zone over. Unlike a drag, this is explicit
@@ -481,6 +849,14 @@ Singleton {
 
         const address = window.address;
         const sample = root.windowSample(window);
+        // The layout changed under this window and it was left where it was, so
+        // the press hands it to the layout in force rather than stepping
+        // through one it was never in - which is what untiled it before, the
+        // window reading as against an edge it was nowhere near. It has
+        // visibly moved, which is as much as one press should do; the next one
+        // steps from there.
+        if (root.adoptCurrentLayout(address, name, sample)) return;
+
         const from = root.currentZone(address, name, sample);
         const target = (from < 0) ? Tiling.edgeZoneIndex(zones, direction) : Tiling.resolveDirection(zones, from, direction);
         if (target < 0) return;
@@ -489,10 +865,14 @@ Singleton {
         // against the edge it is being pushed towards has nothing else to want
         // in that direction, so the press means "out of the layout" instead.
         if (target === from) {
-            if (root.options?.restoreOnUntile ?? true) root.restoreWindow(address, sample.floating);
+            if (!(root.options?.restoreOnUntile ?? true)) return;
+            root.restoreWindow(address, sample.floating);
+            root.releaseWorkspace(address);
             return;
         }
         root.applyZone(address, name, target, sample, sample.floating);
+        root.adoptWorkspace(address, name, target);
+        root.flashZones(name, target);
     }
 
     function send(message) {
@@ -568,6 +948,7 @@ Singleton {
         }
         root.dragging = false;
         root.dragKind = "";
+        root.flashVisible = false;
     }
 
     // ------------------------------------------------------- keybind check
@@ -700,6 +1081,27 @@ Singleton {
                 name: `tilingTile${modelData}`
                 description: `Quick-tiles the focused window ${modelData.toLowerCase()}`
                 onPressed: root.quickTile(modelData.toLowerCase())
+            }
+        }
+    }
+
+    // Switching layouts without opening settings. Not gated on quick-tile: this
+    // changes what the zones are rather than what is put in them, so preview
+    // mode has just as much use for it.
+    Loader {
+        active: root.enabled
+
+        sourceComponent: Item {
+            GlobalShortcut {
+                name: "tilingLayoutCycle"
+                description: "Switches the focused monitor to the next tiling layout"
+                onPressed: root.cycleLayout(1)
+            }
+
+            GlobalShortcut {
+                name: "tilingLayoutCyclePrev"
+                description: "Switches the focused monitor to the previous tiling layout"
+                onPressed: root.cycleLayout(-1)
             }
         }
     }

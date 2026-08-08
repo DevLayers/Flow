@@ -27,26 +27,20 @@ ContentPage {
         return 16 / 9;
     }
 
+    // Names and icons come from the preset table so the layout strip shown by
+    // Super + Alt + Tab and this page cannot drift apart.
     readonly property var presetOptions: {
         const list = [];
-        const icons = {
-            "kde": "dashboard",
-            "halves": "vertical_split",
-            "thirds": "view_column",
-            "sidebars": "view_week",
-            "quarters": "grid_view",
-            "sixths": "view_module"
-        };
         for (const id of Tiling.PRESET_IDS) {
             list.push({
-                "displayName": Translation.tr(Tiling.PRESET_NAMES[id]),
-                "icon": icons[id] ?? "grid_view",
+                "displayName": Translation.tr(Tiling.presetName(id)),
+                "icon": Tiling.presetIcon(id),
                 "value": id
             });
         }
         list.push({
             "displayName": Translation.tr("Custom"),
-            "icon": "draw",
+            "icon": Tiling.presetIcon("custom"),
             "value": "custom"
         });
         return list;
@@ -97,10 +91,19 @@ ContentPage {
 
     KeyboardShortcutBox {
         Layout.fillWidth: true
-        Layout.bottomMargin: 8
-        visible: Config.options.tiling.enable && Config.options.tiling.keyboardQuickTile
+        visible: Config.options.tiling.enable && Config.options.tiling.keyboardQuickTile && Config.options.tiling.mode !== "preview"
         text: Translation.tr("Quick-tile in a direction, or untile at the edge")
         keys: ["Super", "Alt", "←↑→↓"]
+    }
+
+    // Not tied to quick-tile: this changes what the zones are rather than what
+    // goes in them, so preview mode has just as much use for it.
+    KeyboardShortcutBox {
+        Layout.fillWidth: true
+        Layout.bottomMargin: 8
+        visible: Config.options.tiling.enable
+        text: Translation.tr("Switch the focused monitor to the next layout (Shift for the previous one)")
+        keys: ["Super", "Alt", "Tab"]
     }
 
     ContentSection {
@@ -131,7 +134,7 @@ ContentPage {
             }
 
             ConfigSwitch {
-                enabled: Config.options.tiling.enable
+                enabled: Config.options.tiling.enable && Config.options.tiling.mode !== "preview"
                 buttonIcon: "keyboard"
                 text: Translation.tr("Quick-tile with Super + Alt + arrows")
                 checked: Config.options.tiling.keyboardQuickTile
@@ -177,6 +180,13 @@ ContentPage {
                             value: "hybrid"
                         }
                     ]
+                }
+
+                TipBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.tiling.mode === "preview"
+                    materialIcon: "keyboard_off"
+                    text: Translation.tr("Preview only never moves a window, so Super + Alt + arrows and the neighbour resizing below do nothing while it is selected.")
                 }
             }
         }
@@ -289,6 +299,21 @@ ContentPage {
             Item {
                 Layout.fillWidth: true
             }
+        }
+
+        TipBox {
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            visible: editor.overlapCount > 0
+            materialIcon: "layers"
+            text: Translation.tr("Some zones share space, hatched above. That is a layout rather than a mistake — the cursor decides which one a window lands in — but two windows tiled into overlapping zones will cover each other.")
+        }
+
+        TipBox {
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            materialIcon: "grid_goldenratio"
+            text: Translation.tr("Changing the layout leaves the windows already tiled exactly where they are. The next Super + Alt + arrow snaps one into the zone of the new layout nearest it, and the press after that moves it.")
         }
 
         TipBox {
@@ -463,13 +488,44 @@ ContentPage {
                     Config.options.tiling.overlay.fadeDuration = value;
                 }
             }
+
+            ConfigSpinBox {
+                icon: "keyboard"
+                text: Translation.tr("Shown after a keyboard quick-tile (ms)")
+                value: Config.options.tiling.overlay.quickTileDuration
+                from: 0
+                to: 2000
+                stepSize: 50
+                onValueChanged: {
+                    Config.options.tiling.overlay.quickTileDuration = value;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "layers"
+                text: Translation.tr("Mark zones holding more than one window")
+                checked: Config.options.tiling.overlay.stackIndicator
+                onCheckedChanged: {
+                    Config.options.tiling.overlay.stackIndicator = checked;
+                }
+            }
+
+            TipBox {
+                Layout.fillWidth: true
+                visible: Config.options.tiling.overlay.stackIndicator
+                materialIcon: "layers"
+                text: Translation.tr("A zone with two windows in it looks exactly like a zone with one — the second simply covers the first. Those zones keep a thin outline and a count in the corner while nothing is being dragged.")
+            }
         }
     }
 
     ContentSection {
         title: Translation.tr("Resizing")
         icon: "open_in_full"
-        visible: Config.options.tiling.enable && Config.options.tiling.mode !== "preview"
+        visible: Config.options.tiling.enable
+        // Greyed out rather than gone in preview mode: a setting that vanishes
+        // reads as one the shell does not have.
+        enabled: Config.options.tiling.mode !== "preview"
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -496,12 +552,48 @@ ContentPage {
                     Config.options.tiling.coResize.edgeTolerancePx = value;
                 }
             }
+
+            ConfigSwitch {
+                enabled: Config.options.tiling.coResize.enable
+                buttonIcon: "select_all"
+                text: Translation.tr("Tile the whole workspace when one window is tiled")
+                checked: Config.options.tiling.coResize.adoptWorkspace
+                onCheckedChanged: {
+                    Config.options.tiling.coResize.adoptWorkspace = checked;
+                }
+            }
+
+            WarningBox {
+                Layout.fillWidth: true
+                visible: Config.options.tiling.coResize.enable && Config.options.tiling.coResize.adoptWorkspace
+                materialIcon: "select_all"
+                text: Translation.tr("Every window on the workspace is floated and given a zone of its own, nearest first, so Hyprland's own tiling no longer applies there. Windows past the last free zone are left exactly where they are.")
+                isFirst: true
+                isLast: true
+            }
+
+            ConfigSwitch {
+                enabled: Config.options.tiling.coResize.enable
+                buttonIcon: "deselect"
+                text: Translation.tr("Untile the whole workspace when one window is untiled")
+                checked: Config.options.tiling.coResize.releaseWorkspace
+                onCheckedChanged: {
+                    Config.options.tiling.coResize.releaseWorkspace = checked;
+                }
+            }
+
+            TipBox {
+                Layout.fillWidth: true
+                visible: Config.options.tiling.coResize.enable && Config.options.tiling.coResize.releaseWorkspace
+                materialIcon: "deselect"
+                text: Translation.tr("Dragging one window out of its zone, or arrowing it past the edge, hands the whole workspace back — every window the assistant placed there returns to where it was. Closing a window does not: what it leaves behind is still the arrangement you made.")
+            }
         }
 
         TipBox {
             Layout.fillWidth: true
             materialIcon: "info"
-            text: Translation.tr("Dragged edges last until the shell restarts, and are dropped when the layout above changes. Only windows the assistant placed take part.")
+            text: Translation.tr("Dragged edges last until the shell restarts, and are dropped when the layout above changes. Only windows the assistant placed take part — which on a workspace with one tiled window is only that window, unless the setting above takes the rest with it.")
         }
     }
 

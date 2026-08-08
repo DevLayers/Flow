@@ -2990,6 +2990,18 @@ Singleton {
                     // How near a shared edge a resize has to land to pull its
                     // neighbours along.
                     property int edgeTolerancePx: 8
+                    // Tiling one window takes the whole workspace with it:
+                    // every other window on it is floated and given a zone, so
+                    // they all share edges and one divider drag moves the lot.
+                    // Off by default - it hands the workspace over wholesale
+                    // and leaves Hyprland's own layout with nothing to tile.
+                    property bool adoptWorkspace: false
+                    // The reverse: untiling one window hands the whole
+                    // workspace back, every window the assistant placed on it
+                    // returning to where it was. Closing a window is not
+                    // untiling it - what it leaves behind is still the
+                    // arrangement that was asked for.
+                    property bool releaseWorkspace: false
                 }
 
                 property JsonObject overlay: JsonObject {
@@ -2998,6 +3010,19 @@ Singleton {
                     property int cornerRadius: 12
                     property bool showLabels: true
                     property int fadeDuration: 150
+                    // How long the strip of layout names stays up after the
+                    // layout is cycled.
+                    property int layoutHintDuration: 1400
+                    // How long the zones are shown after a keyboard
+                    // quick-tile, which has no drag to show them during. Long
+                    // enough to see where the window landed, short enough that
+                    // arrowing a window across the screen is not one continuous
+                    // flash.
+                    property int quickTileDuration: 500
+                    // Marks a zone holding more than one window while nothing is
+                    // being dragged. Windows stacked in a zone are otherwise
+                    // indistinguishable from one window sitting there.
+                    property bool stackIndicator: true
                 }
 
                 property JsonObject gaps: JsonObject {
