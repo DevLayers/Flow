@@ -50,6 +50,23 @@ Item {
             return;
         }
 
+        if (fadeAnim.running) {
+            fadeAnim.stop();
+            var oldBack = root.imgAIsBack ? imgA : imgB;
+            oldBack.source = "";
+            root.imgAIsBack = !root.imgAIsBack;
+            back = root.imgAIsBack ? imgA : imgB;
+            front = root.imgAIsBack ? imgB : imgA;
+        }
+        if (shaderProgressAnim.running) {
+            shaderProgressAnim.stop();
+            var oldBackShader = root.imgAIsBack ? imgA : imgB;
+            oldBackShader.source = "";
+            root.imgAIsBack = !root.imgAIsBack;
+            back = root.imgAIsBack ? imgA : imgB;
+            front = root.imgAIsBack ? imgB : imgA;
+        }
+
         front.source = newSrc;
         front.z = 1;
         back.z = 0;

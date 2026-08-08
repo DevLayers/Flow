@@ -101,7 +101,7 @@ MouseArea {
                         generateThumbnail: false
                         sourcePath: fileModelData.filePath
 
-                        cache: false
+                        cache: true
                         fillMode: Image.PreserveAspectCrop
                         clip: true
 

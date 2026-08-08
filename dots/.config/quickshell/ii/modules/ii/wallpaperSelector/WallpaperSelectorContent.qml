@@ -894,11 +894,11 @@ function moveToTrashFile(modelData) {
 
                         Timer {
                             id: loadTimer
-                            interval: 16
+                            interval: 8
                             repeat: true
                             running: false
                             onTriggered: {
-                                grid.loadedCount += 1
+                                grid.loadedCount = Math.min(grid.count, grid.loadedCount + 4);
                                 if (grid.loadedCount >= grid.count) loadTimer.stop()
                             }
                         }
@@ -925,7 +925,7 @@ function moveToTrashFile(modelData) {
                             readonly property int cols: grid.columns
                             readonly property int itemRow: Math.floor(index / Math.max(1, cols))
                             readonly property int itemCol: index % Math.max(1, cols)
-                            readonly property int cascadeDelay: (itemRow * 50) + (itemCol * 35)
+                            readonly property int cascadeDelay: Math.min(250, (itemRow * 30) + (itemCol * 20))
 
                             colBackground: (index === grid?.currentIndex || containsMouse) ? Appearance.colors.colPrimary : (fileModelData.filePath === Config.options.background.wallpaperPath) ? Appearance.colors.colSecondaryContainer : (fileModelData.filePath === wallpaperSelectorContent.moreOptionsModelData?.filePath) ? Appearance.colors.colPrimary : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer)
                             colText: (index === grid.currentIndex || containsMouse) ? Appearance.colors.colOnPrimary : (fileModelData.filePath === Config.options.background.wallpaperPath) ? Appearance.colors.colOnSecondaryContainer : (fileModelData.filePath === wallpaperSelectorContent.moreOptionsModelData?.filePath) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer0
