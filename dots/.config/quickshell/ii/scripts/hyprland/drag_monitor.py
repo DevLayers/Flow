@@ -56,6 +56,12 @@ MAX_WAIT_S = 0.25
 # the two are told apart by how long the window stays put.
 STALE_DRAG_S = 2.0
 
+# Once the window is following the cursor, it stopping while the cursor keeps
+# going is the gesture being let go, and there is no ambiguity left to wait out.
+# Long enough that a frame or two of lag between the two samples cannot pass for
+# it, short enough that the drop still feels like one.
+STALE_FOLLOW_S = 0.15
+
 # Backstop for anything the checks below still miss: no gesture is a minute
 # long, and an overlay that never goes away is worse than one that goes away
 # early.
@@ -218,6 +224,15 @@ def same_address(one, other):
     return one.lower().lstrip("0x") == other.lower().lstrip("0x")
 
 
+def shifted(before, after):
+    """Whether two consecutive samples of the same window differ at all. No
+    tolerance, unlike the comparison against the pre-drag geometry: Hyprland
+    reports whole pixels and there is no noise to absorb between two polls, so
+    anything else would read a slow drag as a stopped one."""
+    return (after["x"] != before["x"] or after["y"] != before["y"]
+            or after["width"] != before["width"] or after["height"] != before["height"])
+
+
 class Monitor:
     def __init__(self, ctl):
         self.ctl = ctl
@@ -231,8 +246,8 @@ class Monitor:
         self.cursor = None
         self.window = None
         # Geometry the dragged window had before the gesture, and whether it
-        # has left it since - that is what says a drag Hyprland dropped apart
-        # from one that simply has not moved yet.
+        # has left it at any point since - a window back at a place it once
+        # left was put there by Hyprland dropping the gesture.
         self.before = None
         self.left_origin = False
         # When the gesture began, and since when the window has had nothing to
@@ -338,21 +353,24 @@ class Monitor:
 
     def poll_dragging(self):
         cursor, window = self.ctl.sample()
-        if cursor is not None and cursor != self.cursor:
+        cursor_moved = cursor is not None and cursor != self.cursor
+        if cursor_moved:
             self.cursor = cursor
             emit({"event": "dragMove", "x": cursor[0], "y": cursor[1]})
         if time.monotonic() - self.started_at > MAX_DRAG_S:
             self.stop(cancelled=True)
             return
-        self.poll_keybind_drag(window)
+        self.poll_keybind_drag(window, cursor_moved)
 
-    def poll_keybind_drag(self, window):
+    def poll_keybind_drag(self, window, cursor_moved):
         """Hyprland ends a gesture the instant its modifier goes up, and it
         neither fires the bind's release nor lets the modifier's own release
         bind through while it owns the pointer, so nothing announces it. The
-        window is what says so instead: Hyprland holds it focused for as long
-        as it owns the gesture, and puts it back exactly where it started once
-        it drops one."""
+        window is what says so instead. Two things it says, and they answer
+        different questions: whether it is still following the cursor says the
+        gesture is still held, and whether it is back where it started says how
+        the gesture ended, since Hyprland restores one it drops and leaves one
+        the user dropped where they put it."""
         if not self.before:
             self.stop(cancelled=True)
             return
@@ -363,29 +381,44 @@ class Monitor:
             return
         if not window:
             # A reply that never arrived says nothing either way.
-            self.mark_settled()
+            self.mark_settled(cursor_moved, dropped=False)
             return
+        previous = self.window
         self.window = window
-        if self.moved(self.before, window):
-            # Away from where it started is the one positive sign the gesture
-            # is still held, since a dropped one is restored.
-            self.left_origin = True
+        if not self.moved(self.before, window):
+            if self.left_origin:
+                # It went somewhere and came back, which only Hyprland does.
+                self.stop(cancelled=True)
+                return
+            # It has never moved at all. Hyprland leaves a tiled window alone
+            # until the release swaps it, and a gesture it silently dropped
+            # looks the same, so the only thing left is how long this lasts.
+            self.mark_settled(cursor_moved, dropped=False)
+            return
+        self.left_origin = True
+        if previous and shifted(previous, window):
+            # Still keeping up with the cursor, so the gesture is still held.
             self.settled_at = None
             return
-        if self.left_origin:
-            self.stop(cancelled=True)
-            return
-        # It has never moved at all. Hyprland leaves a tiled window alone until
-        # the release swaps it, and a gesture it silently dropped looks exactly
-        # the same, so the only thing left to go on is how long this lasts.
-        self.mark_settled()
+        # Away from where it started and no longer moving: the user let go, and
+        # since Hyprland would have put it back had it dropped the gesture
+        # itself, this is a drop to be tiled rather than a cancel.
+        self.mark_settled(cursor_moved, dropped=True)
 
-    def mark_settled(self):
+    def mark_settled(self, cursor_moved, dropped):
         now = time.monotonic()
+        # A window that has stopped while the cursor carried on has been let go,
+        # and that is clear within a frame or two. One that is merely sitting
+        # still alongside a still cursor says nothing, so it has to last.
+        # Resizes are the exception: a window at its minimum size stops while
+        # the cursor keeps going and looks exactly like a released one, so they
+        # wait it out instead.
+        quick = dropped and cursor_moved and self.kind == "move"
+        limit = STALE_FOLLOW_S if quick else STALE_DRAG_S
         if self.settled_at is None:
             self.settled_at = now
-        elif now - self.settled_at > STALE_DRAG_S:
-            self.stop(cancelled=True)
+        elif now - self.settled_at > limit:
+            self.stop(cancelled=not dropped)
 
     def event(self, name, data):
         """Hyprland announces the things that can only happen once a gesture is
