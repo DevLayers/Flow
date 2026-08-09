@@ -78,9 +78,14 @@ Singleton {
     }
     
     function openFallbackPicker(darkMode = Appearance.m3colors.darkmode, lockscreen = false) {
-        let cmd = `pkill -f switchwall_vynx.sh || true; pkill -f switchwall.sh || true; env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH "${Directories.wallpaperSwitchScriptPath}" --mode ${darkMode ? "dark" : "light"}`;
-        if (lockscreen) cmd += " --lockscreen";
-        Quickshell.execDetached(["bash", "-c", cmd]);
+        const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
+        let args = [
+            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
+            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            "--mode", darkMode ? "dark" : "light"
+        ];
+        if (lockscreen) args.push("--lockscreen");
+        Quickshell.execDetached(args);
     }
 
     function apply(path, darkMode = Appearance.m3colors.darkmode) {
@@ -96,25 +101,41 @@ Singleton {
             }
         }
         Config.saveOptionsNow();
-        let cmd = `pkill -f switchwall_vynx.sh || true; pkill -f switchwall.sh || true; env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH "${Directories.wallpaperSwitchScriptPath}" --mode ${darkMode ? "dark" : "light"} --image "${path}"`;
-        Quickshell.execDetached(["bash", "-c", cmd]);
+        const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
+        Quickshell.execDetached([
+            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
+            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            "--mode", darkMode ? "dark" : "light", "--image", path
+        ]);
         root.changed();
     }
 
     function applyLockscreen(path, darkMode = Appearance.m3colors.darkmode) {
         if (!path || path.length === 0) return;
         Config.saveOptionsNow();
-        let cmd = `pkill -f switchwall_vynx.sh || true; pkill -f switchwall.sh || true; env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH "${Directories.wallpaperSwitchScriptPath}" --mode ${darkMode ? "dark" : "light"} --image "${path}" --lockscreen --noswitch`;
-        Quickshell.execDetached(["bash", "-c", cmd]);
-        Quickshell.execDetached(["bash", "-c", `env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH bash "${Directories.generateLockscreenColorsScriptPath}" --image "${path}" --mode ${darkMode ? "dark" : "light"}`]);
+        const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
+        Quickshell.execDetached([
+            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
+            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            "--mode", darkMode ? "dark" : "light", "--image", path, "--lockscreen", "--noswitch"
+        ]);
+        Quickshell.execDetached([
+            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
+            `PATH=${envBinPath}`, "bash", Directories.generateLockscreenColorsScriptPath,
+            "--image", path, "--mode", darkMode ? "dark" : "light"
+        ]);
         root.changed();
     }
 
     function applyLightModeWallpaper(path) {
         if (!path || path.length === 0) return;
         Config.saveOptionsNow();
-        let cmd = `pkill -f switchwall_vynx.sh || true; pkill -f switchwall.sh || true; env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH "${Directories.wallpaperSwitchScriptPath}" --mode light --image "${path}" --lightmode`;
-        Quickshell.execDetached(["bash", "-c", cmd]);
+        const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
+        Quickshell.execDetached([
+            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
+            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            "--mode", "light", "--image", path, "--lightmode"
+        ]);
         root.changed();
     }
 

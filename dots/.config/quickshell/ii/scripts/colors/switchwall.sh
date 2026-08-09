@@ -542,6 +542,7 @@ done"
                 exit 1
             fi
         else
+            kill_existing_mpvpaper
             matugen_args+=(image "$imgpath")
             generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
