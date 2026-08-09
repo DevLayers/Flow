@@ -110,7 +110,7 @@ CUSTOM_DIR="$XDG_CONFIG_HOME/hypr/custom"
 RESTORE_SCRIPT_DIR="$CUSTOM_DIR/scripts"
 RESTORE_SCRIPT="$RESTORE_SCRIPT_DIR/__restore_video_wallpaper.sh"
 THUMBNAIL_DIR="$RESTORE_SCRIPT_DIR/mpvpaper_thumbnails"
-VIDEO_OPTS="no-audio loop hwdec=nvdec scale=bilinear interpolation=no video-sync=display-resample panscan=1.0 video-zoom=0.08 load-scripts=no"
+VIDEO_OPTS="no-audio loop hwdec=auto scale=bilinear interpolation=no video-sync=display-resample panscan=1.0 video-zoom=0.08 load-scripts=no"
 
 is_video() {
     local extension="${1##*.}"
@@ -118,7 +118,8 @@ is_video() {
 }
 
 kill_existing_mpvpaper() {
-    pkill -f -9 mpvpaper || true
+    pkill -9 -f mpvpaper || true
+    sleep 0.2
 }
 
 kill_existing_wpe() {
@@ -262,15 +263,39 @@ switch() {
         fi
 
         if [[ $is_wpe -eq 1 ]]; then
-            # Try to resolve workshop directory from assets directory if it's a numeric ID
-            if [[ "$imgpath" =~ ^[0-9]+$ && -n "$wpe_assets" ]]; then
-                wpe_workshop="${wpe_assets/common\/wallpaper_engine\/assets/workshop\/content\/431960}"
-                if [[ ! -d "$wpe_workshop" ]]; then
-                    wpe_workshop="${wpe_assets/common\/wallpaper_engine/workshop\/content\/431960}"
+            # Auto-detect wpe_assets if empty or invalid
+            if [[ -z "$wpe_assets" || ! -d "$wpe_assets" ]]; then
+                for candidate_assets in \
+                    "/mnt/01DA34356F1F3C40/SteamLibrary/steamapps/common/wallpaper_engine/assets" \
+                    "$HOME/.local/share/Steam/steamapps/common/wallpaper_engine/assets" \
+                    "$HOME/.steam/steam/steamapps/common/wallpaper_engine/assets" \
+                    "$HOME/.steam/root/steamapps/common/wallpaper_engine/assets"; do
+                    if [[ -d "$candidate_assets" ]]; then
+                        wpe_assets="$candidate_assets"
+                        break
+                    fi
+                done
+            fi
+
+            # Try to resolve workshop directory from assets directory or candidate paths if it's a numeric ID
+            if [[ "$imgpath" =~ ^[0-9]+$ ]]; then
+                local wpe_candidates=()
+                if [[ -n "$wpe_assets" ]]; then
+                    wpe_candidates+=("${wpe_assets/common\/wallpaper_engine\/assets/workshop\/content\/431960}")
+                    wpe_candidates+=("${wpe_assets/common\/wallpaper_engine/workshop\/content\/431960}")
                 fi
-                if [[ -d "$wpe_workshop/$imgpath" ]]; then
-                    imgpath="$wpe_workshop/$imgpath"
-                fi
+                wpe_candidates+=(
+                    "/mnt/01DA34356F1F3C40/SteamLibrary/steamapps/workshop/content/431960"
+                    "$HOME/.local/share/Steam/steamapps/workshop/content/431960"
+                    "$HOME/.steam/steam/steamapps/workshop/content/431960"
+                    "$HOME/.steam/root/steamapps/workshop/content/431960"
+                )
+                for cand in "${wpe_candidates[@]}"; do
+                    if [[ -d "$cand/$imgpath" ]]; then
+                        imgpath="$cand/$imgpath"
+                        break
+                    fi
+                done
             fi
             enable_wpe_config
 
@@ -320,7 +345,7 @@ switch() {
                 wpe_nofullscreenpause=$(jq -r '.background.wpeNoFullscreenPause' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "false")
 
                 # Determine assets directory and build restore options array
-                local wpe_restore_opts=()
+                local wpe_restore_opts=(--layer background)
                 if [[ -n "$wpe_assets" && -d "$wpe_assets" ]]; then
                     wpe_restore_opts+=(--assets-dir "$wpe_assets")
                 fi
@@ -501,9 +526,10 @@ done"
             if [[ -f "${imgpath%.*}_1080p.mp4" ]]; then
                 video_path="${imgpath%.*}_1080p.mp4"
             fi
+            kill_existing_mpvpaper
             monitors=$(hyprctl monitors -j | jq -r '.[] | .name')
             for monitor in $monitors; do
-                nohup mpvpaper -o "$VIDEO_OPTS input-ipc-server=/tmp/mpvpaper-$monitor.sock" "$monitor" "$video_path" >/dev/null 2>&1 &
+                nohup setsid mpvpaper -o "$VIDEO_OPTS input-ipc-server=/tmp/mpvpaper-$monitor.sock" "$monitor" "$video_path" >/dev/null 2>&1 &
                 sleep 0.1
             done
 
@@ -524,6 +550,7 @@ done"
                 exit 1
             fi
         else
+            pkill -f mpvpaper || true
             matugen_args+=(image "$imgpath")
             generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
@@ -603,6 +630,7 @@ done"
             echo "[switchwall_vynx.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
             python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
         fi
+        qs -c ii ipc call theme reapplyTheme 2>/dev/null || true
         (
             python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py" &
             (

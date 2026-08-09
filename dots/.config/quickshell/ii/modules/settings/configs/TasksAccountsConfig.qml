@@ -20,7 +20,7 @@ Item {
     property string tempClientId: ""
     property string tempClientSecret: ""
     property string tempAccessToken: ""
-    
+
     // Auth process state
     property bool authRunning: false
     property string authErrorMsg: ""
@@ -29,12 +29,13 @@ Item {
     property string excludePatternError: ""
     property int activityGranularityIndex: 0
     property int activityMetricIndex: 0
+    property int performanceViewIndex: 0
 
     readonly property var driveOptions: Config.options.googleDrive
     readonly property list<var> activityGranularities: [
-        { key: "day", value: "day", displayName: Translation.tr("Day"), icon: "today" },
-        { key: "week", value: "week", displayName: Translation.tr("Week"), icon: "date_range" },
-        { key: "month", value: "month", displayName: Translation.tr("Month"), icon: "calendar_month" }
+        { key: "day", value: "day", displayName: Translation.tr("Last 7 days"), selectorName: Translation.tr("7 days"), icon: "today" },
+        { key: "week", value: "week", displayName: Translation.tr("Last 8 weeks"), selectorName: Translation.tr("8 weeks"), icon: "date_range" },
+        { key: "month", value: "month", displayName: Translation.tr("Last 12 months"), selectorName: Translation.tr("12 months"), icon: "calendar_month" }
     ]
     readonly property list<var> activityMetrics: [
         { key: "data", value: "data", displayName: Translation.tr("Data transferred"), icon: "data_usage" },
@@ -46,19 +47,23 @@ Item {
     readonly property list<real> activityTransferValues: root.activityBuckets.map(bucket => bucket.runs)
     readonly property list<string> activityLabels: root.activityBuckets.map(bucket => bucket.label)
     readonly property list<string> activityTooltipLabels: root.activityBuckets.map(bucket => bucket.tooltip)
-    readonly property list<var> activityTableRows: root.activityBuckets
-        .filter(bucket => bucket.runs > 0 || bucket.files > 0 || bucket.dataMb > 0 || bucket.errors > 0)
-        .slice()
-        .reverse()
     readonly property real activitySelectedTotal: {
         const values = root.activityMetricIndex === 0 ? root.activityDataValues : root.activityTransferValues;
-        return values.reduce((total, value) => total + Number(value || 0), 0);
+        return values.reduce((total, value) => total + Math.max(0, Number(value || 0)), 0);
     }
-    readonly property string activityWindowLabel: root.activityGranularity === "day"
-        ? Translation.tr("Last 7 days")
-        : root.activityGranularity === "week"
-            ? Translation.tr("Last 8 weeks")
-            : Translation.tr("Last 12 months")
+    readonly property list<int> activityVisibleLabelIndices: {
+        const indices = [];
+        const lastIndex = Math.max(0, root.activityLabels.length - 1);
+        for (let index = 0; index < root.activityLabels.length; ++index) {
+            if (root.activityLabels.length <= 5
+                    || index === 0
+                    || index === Math.floor(lastIndex / 2)
+                    || index === lastIndex)
+                indices.push(index);
+        }
+        return indices;
+    }
+    readonly property string activityWindowLabel: root.activityGranularities[root.activityGranularityIndex].displayName
     readonly property bool hasActivity: {
         const entries = GoogleDriveService.syncHistory || [];
         for (const entry of entries) {
@@ -67,8 +72,58 @@ Item {
         }
         return false;
     }
-    readonly property int activityFilesTotal: root.activityBuckets.reduce((total, bucket) => total + Number(bucket.files || 0), 0)
-    readonly property int activityErrors: root.activityBuckets.reduce((total, bucket) => total + Number(bucket.errors || 0), 0)
+    readonly property real storageBackupMb: Math.max(0, Number(GoogleDriveService.driveBackupUsageMb || 0))
+    readonly property real storageUsedMb: Math.max(0, Number(GoogleDriveService.driveUsedMb || 0))
+    readonly property real storageQuotaMb: Math.max(0, Number(GoogleDriveService.driveQuotaMb || 0))
+    readonly property real storageOtherMb: Math.max(0, root.storageUsedMb - root.storageBackupMb)
+    readonly property real storageFreeMb: Math.max(0, root.storageQuotaMb - root.storageUsedMb)
+    readonly property real storageUsedRatio: root.storageQuotaMb > 0
+        ? Math.min(1, root.storageUsedMb / root.storageQuotaMb)
+        : 0
+    readonly property real backupFootprintRatio: root.storageQuotaMb > 0
+        ? Math.min(1, root.storageBackupMb / root.storageQuotaMb)
+        : 0
+    readonly property list<real> storageSegments: [root.storageBackupMb, root.storageOtherMb, root.storageFreeMb]
+    readonly property real heatmapCellSpacing: 6
+    readonly property int heatmapWeekCount: root.currentMonthWeekCount()
+    readonly property list<var> heatmapCells: root.buildHeatmapCells(root.heatmapWeekCount)
+    readonly property list<string> heatmapWeekLabels: root.buildHeatmapWeekLabels(root.heatmapWeekCount)
+    readonly property list<string> heatmapDayLabels: [
+        Translation.tr("Mon"), "", Translation.tr("Wed"), "", Translation.tr("Fri"), "", Translation.tr("Sun")
+    ]
+    readonly property int heatmapActiveDays: root.heatmapCells.filter(cell => Number(cell?.value || 0) > 0).length
+    readonly property string heatmapActiveDaysLabel: String(root.heatmapActiveDays) + " "
+        + (root.heatmapActiveDays === 1
+            ? Translation.tr("active day")
+            : Translation.tr("active days"))
+    readonly property real heatmapTotal: root.heatmapCells.reduce((total, cell) => total + Number(cell?.value || 0), 0)
+    readonly property real heatmapMaxValue: root.heatmapCells.reduce((maximum, cell) => Math.max(maximum, Number(cell?.value || 0)), 0)
+    readonly property list<var> recentSyncRows: root.buildRecentSyncRows()
+    readonly property int successfulSyncCount: (GoogleDriveService.syncHistory || [])
+        .filter(entry => entry && entry.status === "success").length
+    readonly property int failedSyncCount: (GoogleDriveService.syncHistory || [])
+        .filter(entry => entry && entry.status === "error").length
+    readonly property real syncSuccessRatio: root.successfulSyncCount + root.failedSyncCount > 0
+        ? root.successfulSyncCount / (root.successfulSyncCount + root.failedSyncCount)
+        : 0
+    readonly property list<var> recentPerformanceRows: root.recentSyncRows.filter(entry => entry && entry.status === "success")
+    readonly property bool hasDetailedPerformanceData: root.recentPerformanceRows.some(entry => root.entryDurationSeconds(entry) > 0 || root.entrySpeedBytesPerSecond(entry) > 0)
+    readonly property real averageDurationSeconds: root.performanceAverage("durationSeconds")
+    readonly property real averageSpeedBytesPerSecond: root.performanceAverage("averageBytesPerSecond")
+    readonly property var largestTransfer: root.findLargestTransfer()
+    readonly property bool hasPerformanceData: root.largestTransfer !== null || root.hasDetailedPerformanceData
+    readonly property list<real> performanceTransferValues: root.recentPerformanceRows.slice().reverse()
+        .map(entry => Math.max(0, Number(entry?.sizeMb || 0)))
+    readonly property real averageTransferMb: root.performanceTransferValues.length > 0
+        ? root.performanceTransferValues.reduce((sum, value) => sum + value, 0) / root.performanceTransferValues.length
+        : 0
+    readonly property real recentTransferTotalMb: root.performanceTransferValues.reduce((sum, value) => sum + value, 0)
+    readonly property int timedPerformanceCount: root.recentPerformanceRows
+        .filter(entry => root.entryDurationSeconds(entry) > 0).length
+    readonly property list<var> performanceViews: [
+        { name: Translation.tr("Transfers"), icon: "data_usage" },
+        { name: Translation.tr("Timing"), icon: "schedule" }
+    ]
 
     function rcloneInstallFamilyFor(value: string): string {
         const distro = String(value || "").toLowerCase();
@@ -203,6 +258,57 @@ Item {
     }
 
     function buildActivityBuckets(granularity: string): list<var> {
+        if (granularity === "day") {
+            const bucketCount = 7;
+            const dayMilliseconds = 24 * 60 * 60 * 1000;
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6, 12);
+            const buckets = [];
+
+            for (let index = 0; index < bucketCount; ++index) {
+                const start = new Date(firstDay.getTime() + index * dayMilliseconds);
+                buckets.push({
+                    key: "day-" + String(index),
+                    runs: 0,
+                    files: 0,
+                    dataMb: 0,
+                    errors: 0,
+                    label: start.toLocaleDateString(Qt.locale(), "dd"),
+                    start: start,
+                    end: start
+                });
+            }
+
+            for (const entry of GoogleDriveService.syncHistory || []) {
+                if (!entry || !entry.time)
+                    continue;
+                const date = new Date(String(entry.time));
+                if (!isFinite(date.getTime()))
+                    continue;
+                const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12);
+                const offset = Math.floor((localDate.getTime() - firstDay.getTime()) / dayMilliseconds);
+                if (offset < 0 || offset >= 7)
+                    continue;
+                const bucket = buckets[offset];
+                bucket.runs += Math.max(1, Number(entry.transferCount || 1));
+                bucket.files += Math.max(0, Number(entry.fileCount || 0));
+                bucket.dataMb += Math.max(0, Number(entry.sizeMb || 0));
+                if (entry.status === "error")
+                    bucket.errors += 1;
+            }
+
+            return buckets.map(bucket => {
+                const rangeLabel = bucket.start.getTime() === bucket.end.getTime()
+                    ? root.activityBucketTooltip(bucket.start, "day")
+                    : root.activityBucketTooltip(bucket.start, "day") + " – "
+                        + root.activityBucketTooltip(bucket.end, "day");
+                bucket.tooltip = root.activityMetricIndex === 0
+                    ? rangeLabel + " · " + root.formatMegabytes(bucket.dataMb)
+                    : rangeLabel + " · " + String(Math.round(bucket.runs)) + " " + Translation.tr("backups");
+                return bucket;
+            });
+        }
+
         const grouped = ({ });
         const orderedKeys = [];
         const now = new Date();
@@ -252,11 +358,189 @@ Item {
         return orderedKeys.map(key => grouped[key]);
     }
 
+    function currentMonthGridStart(): var {
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1, 12);
+        firstDay.setDate(firstDay.getDate() - ((firstDay.getDay() + 6) % 7));
+        return firstDay;
+    }
+
+    function currentMonthWeekCount(): int {
+        const today = new Date();
+        const gridStart = root.currentMonthGridStart();
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0, 12);
+        lastDay.setDate(lastDay.getDate() + (7 - ((lastDay.getDay() + 6) % 7) - 1));
+        return Math.max(4, Math.floor((lastDay.getTime() - gridStart.getTime()) / 604800000) + 1);
+    }
+
+    function buildHeatmapCells(weekCount: int): list<var> {
+        const grouped = ({ });
+        const today = new Date();
+        const current = root.currentMonthGridStart();
+        const totalWeeks = Math.max(1, Number(weekCount || 5));
+
+        for (const entry of GoogleDriveService.syncHistory || []) {
+            if (!entry || !entry.time)
+                continue;
+            const date = new Date(String(entry.time));
+            if (!isFinite(date.getTime()))
+                continue;
+            const key = root.dateKey(date);
+            if (!grouped[key])
+                grouped[key] = { runs: 0, dataMb: 0, files: 0, errors: 0 };
+            grouped[key].runs += Math.max(1, Number(entry.transferCount || 1));
+            grouped[key].dataMb += Math.max(0, Number(entry.sizeMb || 0));
+            grouped[key].files += Math.max(0, Number(entry.fileCount || 0));
+            if (entry.status === "error")
+                grouped[key].errors += 1;
+        }
+
+        const cells = [];
+        for (let week = 0; week < totalWeeks; ++week) {
+            for (let day = 0; day < 7; ++day) {
+                const date = new Date(current.getFullYear(), current.getMonth(), current.getDate() + week * 7 + day, 12);
+                const key = root.dateKey(date);
+                const inRange = date.getFullYear() === today.getFullYear()
+                    && date.getMonth() === today.getMonth();
+                const bucket = inRange && grouped[key]
+                    ? grouped[key]
+                    : { runs: 0, dataMb: 0, files: 0, errors: 0 };
+                const value = root.activityMetricIndex === 0 ? bucket.dataMb : bucket.runs;
+                cells.push({
+                    inRange: inRange,
+                    value: value,
+                    tooltip: root.activityMetricIndex === 0
+                        ? root.activityBucketTooltip(date, "day") + " · " + root.formatMegabytes(value)
+                        : root.activityBucketTooltip(date, "day") + " · " + String(Math.round(value)) + " " + Translation.tr("backups")
+                });
+            }
+        }
+        return cells;
+    }
+
+    function buildHeatmapWeekLabels(weekCount: int): list<string> {
+        const labels = [];
+        const today = new Date();
+        const current = root.currentMonthGridStart();
+        const totalWeeks = Math.max(1, Number(weekCount || 5));
+        for (let week = 0; week < totalWeeks; ++week) {
+            labels.push(week === 0
+                ? today.toLocaleDateString(Qt.locale(), "MMM")
+                : "");
+        }
+        return labels;
+    }
+
+    function buildRecentSyncRows(): list<var> {
+        const rows = (GoogleDriveService.syncHistory || []).filter(entry => entry && entry.time).slice();
+        rows.sort((left, right) => Date.parse(String(right.time)) - Date.parse(String(left.time)));
+        return rows.slice(0, 4);
+    }
+
+    function entryDurationSeconds(entry: var): real {
+        return Math.max(0, Number(entry?.durationSeconds || 0));
+    }
+
+    function entrySpeedBytesPerSecond(entry: var): real {
+        const storedSpeed = Math.max(0, Number(entry?.averageBytesPerSecond || 0));
+        if (storedSpeed > 0)
+            return storedSpeed;
+        const duration = root.entryDurationSeconds(entry);
+        const bytes = Math.max(0, Number(entry?.sizeMb || 0)) * 1024 * 1024;
+        return duration > 0 ? bytes / duration : 0;
+    }
+
+    function performanceAverage(field: string): real {
+        const values = root.recentPerformanceRows
+            .map(entry => field === "durationSeconds"
+                ? root.entryDurationSeconds(entry)
+                : root.entrySpeedBytesPerSecond(entry))
+            .filter(value => value > 0);
+        if (values.length === 0)
+            return 0;
+        return values.reduce((sum, value) => sum + value, 0) / values.length;
+    }
+
+    function findLargestTransfer(): var {
+        let largest = null;
+        for (const entry of GoogleDriveService.syncHistory || []) {
+            if (!entry || entry.status !== "success" || Number(entry.sizeMb || 0) <= 0)
+                continue;
+            if (!largest || Number(entry.sizeMb) > Number(largest.sizeMb || 0))
+                largest = entry;
+        }
+        return largest;
+    }
+
+    function scheduleIntervalLabel(value: string): string {
+        const labels = ({
+            "1h": Translation.tr("Every hour"),
+            "4h": Translation.tr("Every 4 hours"),
+            "1d": Translation.tr("Every day"),
+            "2d": Translation.tr("Every 2 days"),
+            "3d": Translation.tr("Every 3 days")
+        });
+        return labels[value] || Translation.tr("Scheduled");
+    }
+
+    function nextRunDate(): var {
+        if (!driveOptions.enabled || !GoogleDriveService.configured || !driveOptions.lastSyncTime)
+            return null;
+        const last = Date.parse(String(driveOptions.lastSyncTime));
+        if (!isFinite(last))
+            return null;
+        return new Date(last + GoogleDriveService.intervalFor(String(driveOptions.syncInterval || "3d")));
+    }
+
+    function nextRunLabel(): string {
+        const next = root.nextRunDate();
+        if (!next)
+            return driveOptions.enabled ? Translation.tr("Waiting for first sync") : Translation.tr("Backup is disabled");
+        return next.toLocaleDateString(Qt.locale(), "dd MMM") + " · " + next.toLocaleTimeString(Qt.locale(), "HH:mm");
+    }
+
+    function syncStatusLabel(entry: var): string {
+        return entry && entry.status === "success" ? Translation.tr("Completed") : Translation.tr("Failed");
+    }
+
+    function syncStatusIcon(entry: var): string {
+        if (!entry)
+            return "cloud_queue";
+        return entry.status === "success" ? "cloud_done" : "cloud_off";
+    }
+
+    function syncStatusColor(entry: var): var {
+        return entry && entry.status === "success"
+            ? Appearance.colors.colPrimary
+            : Appearance.colors.colError;
+    }
+
+    function entryDurationText(entry: var): string {
+        const seconds = root.entryDurationSeconds(entry);
+        return seconds > 0 ? root.formatDuration(seconds) : "—";
+    }
+
+    function entryTimeText(entry: var): string {
+        const date = new Date(String(entry?.time || ""));
+        if (!isFinite(date.getTime()))
+            return Translation.tr("Unknown time");
+        return date.toLocaleDateString(Qt.locale(), "dd MMM") + " · " + date.toLocaleTimeString(Qt.locale(), "HH:mm");
+    }
+
     function formatMegabytes(value: real): string {
         const amount = Number(value || 0);
         if (amount >= 1024)
             return (amount / 1024).toFixed(1) + " GB";
         return amount.toFixed(1) + " MB";
+    }
+
+    function heatmapLegendLabel(weight: real): string {
+        const value = root.heatmapMaxValue * Math.max(0, Number(weight || 0));
+        if (root.heatmapMaxValue <= 0)
+            return "0";
+        return root.activityMetricIndex === 0
+            ? root.formatMegabytes(value)
+            : String(Math.max(1, Math.round(value)));
     }
 
     function formatTransferSize(value: real): string {
@@ -835,10 +1119,10 @@ Item {
         ConfigSwitch {
             buttonIcon: "cloud_done"
             text: Translation.tr("Enable Google Drive backups")
-            checked: driveOptions.enabled
+            checked: Config.options.googleDrive.enabled
             onCheckedChanged: {
-                if (checked !== driveOptions.enabled)
-                    driveOptions.enabled = checked;
+                if (checked !== Config.options.googleDrive.enabled)
+                    Config.options.googleDrive.enabled = checked;
             }
         }
     }
@@ -897,271 +1181,1170 @@ Item {
         onClicked: GoogleDriveService.setupRclone()
     }
 
-    // ── Google Drive — activity ─────────────────────────────────────────────
+    // ── Google Drive — bento dashboard ──────────────────────────────────────
     ContentSection {
         Layout.fillWidth: true
         icon: "monitoring"
-        title: Translation.tr("Sync Activity")
+        title: Translation.tr("Backup overview")
+        customBackgroundColor: Appearance.colors.colLayer0
 
-        RowLayout {
+        ColumnLayout {
             Layout.fillWidth: true
-            spacing: 12
+            spacing: 6
 
-            ColumnLayout {
+            StyledText {
                 Layout.fillWidth: true
-                spacing: 2
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Backup trends")
-                    color: Appearance.colors.colOnLayer1
-                    font.bold: true
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Transfers grouped by calendar period")
-                    color: Appearance.colors.colSubtext
-                    wrapMode: Text.WordWrap
-                }
+                text: Translation.tr("Storage, health and transfer activity")
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.WordWrap
             }
 
-            ConfigSelectionArray {
-                Layout.alignment: Qt.AlignVCenter
-                currentValue: root.activityGranularity
-                options: root.activityGranularities
-                onSelected: value => {
-                    const index = root.activityGranularities.findIndex(option => option.key === value);
-                    if (index >= 0)
-                        root.activityGranularityIndex = index;
-                }
-            }
-
-            ConfigSelectionArray {
-                Layout.alignment: Qt.AlignVCenter
-                currentValue: root.activityMetrics[root.activityMetricIndex].value
-                options: root.activityMetrics
-                onSelected: value => {
-                    const index = root.activityMetrics.findIndex(option => option.key === value);
-                    if (index >= 0)
-                        root.activityMetricIndex = index;
-                }
-            }
         }
 
-        Rectangle {
+        GridLayout {
+            id: backupBentoGrid
+            readonly property bool compactLayout: width < 760
             Layout.fillWidth: true
-            implicitHeight: root.hasActivity ? 258 : 156
-            radius: Appearance.rounding.large
-            color: Appearance.colors.colLayer1
+            columns: compactLayout ? 1 : 12
+            uniformCellWidths: true
+            columnSpacing: 12
+            rowSpacing: 12
 
-            PagePlaceholder {
-                anchors.fill: parent
-                anchors.margins: 8
-                visible: !root.hasActivity
-                shown: visible
-                icon: "monitoring"
-                title: Translation.tr("No sync activity yet")
-                description: Translation.tr("Completed backups will appear here.")
-                shape: MaterialShape.Shape.Cookie9Sided
-            }
+            StyledRectangle {
+                id: periodSummaryCard
+                Layout.column: 0
+                Layout.row: 0
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 7
+                Layout.rowSpan: 1
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
+                implicitHeight: 230
+                radius: Appearance.rounding.large
+                contentLayer: StyledRectangle.ContentLayer.Group
+                color: Appearance.colors.colPrimaryContainer
+                clip: true
 
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 16
-                visible: root.hasActivity
-                spacing: 12
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 0
-
-                        StyledText {
-                            text: root.activityMetrics[root.activityMetricIndex].displayName
-                            color: Appearance.colors.colSubtext
-                        }
-
-                        StyledText {
-                            text: root.activityMetricIndex === 0
-                                ? root.formatMegabytes(root.activitySelectedTotal)
-                                : String(Math.round(root.activitySelectedTotal))
-                            color: Appearance.colors.colOnLayer1
-                            font.pixelSize: Appearance.font.pixelSize.huge
-                            font.bold: true
-                        }
-                    }
-
-                    Rectangle {
-                        implicitWidth: activityWindowText.implicitWidth + 24
-                        implicitHeight: activityWindowText.implicitHeight + 12
-                        radius: Appearance.rounding.full
-                        color: Appearance.colors.colSecondaryContainer
-
-                        StyledText {
-                            id: activityWindowText
-                            anchors.centerIn: parent
-                            text: root.activityWindowLabel
-                            color: Appearance.colors.colOnSecondaryContainer
-                            font.bold: true
-                        }
-                    }
-                }
-
-                UsageBarChart {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    visible: root.hasActivity
-                    values: root.activityMetricIndex === 0 ? root.activityDataValues : root.activityTransferValues
-                    labels: root.activityLabels
-                    tooltipLabels: root.activityTooltipLabels
-                    barColor: root.activityMetricIndex === 0 ? Appearance.colors.colPrimary : Appearance.colors.colTertiary
-                    emptyColor: Appearance.colors.colLayer2
-                    labelStride: Math.max(1, Math.ceil(root.activityLabels.length / 6))
-                    labelAnchorEnd: true
-                    formatValue: value => root.activityMetricIndex === 0
-                        ? root.formatMegabytes(value)
-                        : String(Math.round(value)) + " " + Translation.tr("backups")
-                    formatTick: value => root.activityMetricIndex === 0
-                        ? root.formatMegabytes(value)
-                        : String(Math.round(value))
-                }
-            }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            visible: root.hasActivity
-            implicitHeight: activityDetailsLayout.implicitHeight + 24
-            radius: Appearance.rounding.large
-            color: Appearance.colors.colLayer1
-
-            ColumnLayout {
-                id: activityDetailsLayout
-                anchors.fill: parent
-                anchors.margins: 12
-                spacing: 4
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 4
-                    Layout.rightMargin: 4
-                    Layout.bottomMargin: 4
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
                     spacing: 10
 
-                    MaterialSymbol {
-                        text: "table_rows"
-                        iconSize: Appearance.font.pixelSize.large
-                        color: Appearance.colors.colPrimary
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Transfer trend")
+                            color: Appearance.colors.colOnPrimaryContainer
+                            font.bold: true
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            elide: Text.ElideRight
+                        }
+
+                        StyledComboBox {
+                            id: activityMetricSelector
+                            Layout.preferredWidth: 48
+                            Layout.minimumWidth: 48
+                            Layout.maximumWidth: 48
+                            popupWidth: 184
+                            iconOnly: true
+                            textRole: "displayName"
+                            model: root.activityMetrics
+                            currentIndex: root.activityMetricIndex
+                            onActivated: index => root.activityMetricIndex = index
+
+                            StyledToolTip {
+                                text: root.activityMetrics[root.activityMetricIndex].displayName
+                                extraVisibleCondition: activityMetricSelector.hovered
+                            }
+                        }
+
+                        StyledComboBox {
+                            id: periodRangeSelector
+                            Layout.preferredWidth: 104
+                            Layout.minimumWidth: 96
+                            Layout.maximumWidth: 108
+                            popupWidth: 176
+                            buttonIcon: "calendar_month"
+                            textRole: "selectorName"
+                            model: root.activityGranularities
+                            currentIndex: root.activityGranularityIndex
+                            onActivated: index => root.activityGranularityIndex = index
+
+                            StyledToolTip {
+                                text: root.activityGranularities[root.activityGranularityIndex].displayName
+                                extraVisibleCondition: periodRangeSelector.hovered
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+
+                            StyledText {
+                                text: root.activityMetricIndex === 0
+                                    ? root.formatMegabytes(root.activitySelectedTotal)
+                                    : String(Math.round(root.activitySelectedTotal))
+                                color: Appearance.colors.colOnPrimaryContainer
+                                font.pixelSize: Appearance.font.pixelSize.huge
+                                font.bold: true
+                            }
+
+                            StyledText {
+                                text: root.activityMetrics[root.activityMetricIndex].displayName
+                                    + " · " + root.activityWindowLabel
+                                color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.24)
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        StyledText {
+                            text: root.heatmapActiveDaysLabel
+                            color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.18)
+                            font.bold: true
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        UsageColumnChart {
+                            anchors.fill: parent
+                            visible: root.hasActivity
+                            values: root.activityMetricIndex === 0 ? root.activityDataValues : root.activityTransferValues
+                            labels: root.activityLabels
+                            tooltipLabels: root.activityTooltipLabels
+                            barColor: root.activityMetricIndex === 0 ? Appearance.colors.colPrimary : Appearance.colors.colTertiary
+                            emptyColor: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.84)
+                            axisColor: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.28)
+                            gridLineColor: Appearance.colors.colOnPrimaryContainer
+                            gridLineOpacity: 0.14
+                            textureColor: Appearance.colors.colOnPrimaryContainer
+                            textureOpacity: 0.30
+                            barWidth: 30
+                            labelStride: Math.max(1, Math.ceil(root.activityLabels.length / 6))
+                            labelIndices: root.activityVisibleLabelIndices
+                            formatValue: value => root.activityMetricIndex === 0
+                                ? root.formatMegabytes(value)
+                                : String(Math.round(value)) + " " + Translation.tr("backups")
+                        }
+
+                        PagePlaceholder {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            visible: !root.hasActivity
+                            shown: visible
+                            icon: "monitoring"
+                            title: Translation.tr("No sync activity yet")
+                            description: Translation.tr("Completed backups will appear here.")
+                            shape: MaterialShape.Shape.Cookie9Sided
+                        }
+                    }
+                }
+            }
+
+            StyledRectangle {
+                id: healthCard
+                property var latestSync: root.recentSyncRows.length > 0 ? root.recentSyncRows[0] : null
+                Layout.column: backupBentoGrid.compactLayout ? 0 : 5
+                Layout.row: backupBentoGrid.compactLayout ? 3 : 1
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 7
+                Layout.rowSpan: 1
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
+                implicitHeight: 250
+                radius: Appearance.rounding.large
+                contentLayer: StyledRectangle.ContentLayer.Group
+                color: Appearance.colors.colTertiaryContainer
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 6
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Sync health")
+                            color: Appearance.colors.colOnTertiaryContainer
+                            font.bold: true
+                            font.pixelSize: Appearance.font.pixelSize.large
+                        }
+
+                        MaterialShapeWrappedMaterialSymbol {
+                            iconSize: Appearance.font.pixelSize.large
+                            padding: 7
+                            shape: MaterialShape.Shape.Circle
+                            fill: 1
+                            color: !healthCard.latestSync
+                                ? Appearance.colors.colSecondaryContainer
+                                : healthCard.latestSync.status === "success"
+                                    ? Appearance.colors.colPrimaryContainer
+                                    : Appearance.colors.colErrorContainer
+                            colSymbol: !healthCard.latestSync
+                                ? Appearance.colors.colOnSecondaryContainer
+                                : healthCard.latestSync.status === "success"
+                                    ? Appearance.colors.colOnPrimaryContainer
+                                    : Appearance.colors.colOnErrorContainer
+                            text: root.syncStatusIcon(healthCard.latestSync)
+                        }
                     }
 
                     StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Period details")
-                        color: Appearance.colors.colOnLayer1
+                        text: healthCard.latestSync
+                            ? root.syncStatusLabel(healthCard.latestSync)
+                            : Translation.tr("Waiting for first sync")
+                        color: !healthCard.latestSync || healthCard.latestSync.status === "success"
+                            ? Appearance.colors.colOnTertiaryContainer
+                            : Appearance.colors.colError
+                        font.pixelSize: Appearance.font.pixelSize.huge
                         font.bold: true
                     }
 
                     StyledText {
-                        text: String(root.activityTableRows.length) + " " + Translation.tr("periods")
-                        color: Appearance.colors.colSubtext
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: 34
-                    radius: Appearance.rounding.small
-                    color: Appearance.colors.colLayer2
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 8
-
-                        StyledText { Layout.fillWidth: true; text: Translation.tr("Period"); color: Appearance.colors.colSubtext; font.bold: true }
-                        StyledText { Layout.preferredWidth: 76; text: Translation.tr("Backups"); color: Appearance.colors.colSubtext; font.bold: true; horizontalAlignment: Text.AlignRight }
-                        StyledText { Layout.preferredWidth: 76; text: Translation.tr("Files"); color: Appearance.colors.colSubtext; font.bold: true; horizontalAlignment: Text.AlignRight }
-                        StyledText { Layout.preferredWidth: 88; text: Translation.tr("Data"); color: Appearance.colors.colSubtext; font.bold: true; horizontalAlignment: Text.AlignRight }
-                    }
-                }
-
-                Repeater {
-                    model: root.activityTableRows
-
-                    delegate: Rectangle {
-                        required property var modelData
-                        required property int index
                         Layout.fillWidth: true
-                        implicitHeight: 42
-                        radius: Appearance.rounding.small
-                        color: index % 2 === 0
-                            ? ColorUtils.transparentize(Appearance.colors.colLayer1, 1)
-                            : Appearance.colors.colLayer1Hover
+                        text: healthCard.latestSync
+                            ? Translation.tr("Last sync · ") + root.entryTimeText(healthCard.latestSync)
+                            : Translation.tr("No completed backup recorded yet")
+                        color: ColorUtils.transparentize(Appearance.colors.colOnTertiaryContainer, 0.26)
+                        wrapMode: Text.WordWrap
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 5
 
                         RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 12
-                            spacing: 8
+                            Layout.fillWidth: true
 
-                            StyledText { Layout.fillWidth: true; text: modelData.label; color: Appearance.colors.colOnLayer1; font.bold: true }
-                            StyledText { Layout.preferredWidth: 76; text: String(modelData.runs); color: Appearance.colors.colOnLayer1; horizontalAlignment: Text.AlignRight }
-                            StyledText { Layout.preferredWidth: 76; text: String(modelData.files); color: Appearance.colors.colOnLayer1; horizontalAlignment: Text.AlignRight }
-                            StyledText { Layout.preferredWidth: 88; text: root.formatMegabytes(modelData.dataMb); color: Appearance.colors.colOnLayer1; horizontalAlignment: Text.AlignRight }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Success rate")
+                                color: ColorUtils.transparentize(Appearance.colors.colOnTertiaryContainer, 0.26)
+                            }
+
+                            StyledText {
+                                text: root.successfulSyncCount + root.failedSyncCount > 0
+                                    ? Math.round(root.syncSuccessRatio * 100) + "%"
+                                    : "—"
+                                color: Appearance.colors.colOnTertiaryContainer
+                                font.bold: true
+                            }
+                        }
+
+                        StyledProgressBar {
+                            Layout.fillWidth: true
+                            valueBarHeight: 8
+                            value: root.syncSuccessRatio
+                            highlightColor: Appearance.colors.colTertiary
+                            trackColor: ColorUtils.transparentize(Appearance.colors.colOnTertiaryContainer, 0.86)
+                        }
+                    }
+
+                    Item { Layout.fillHeight: true }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+
+                            StyledText {
+                                text: Translation.tr("Next run") + " · "
+                                    + root.scheduleIntervalLabel(String(Config.options.googleDrive.syncInterval || "3d"))
+                                color: ColorUtils.transparentize(Appearance.colors.colOnTertiaryContainer, 0.26)
+                            }
+
+                            StyledText {
+                                text: root.nextRunLabel()
+                                color: Appearance.colors.colOnTertiaryContainer
+                                font.bold: true
+                            }
                         }
                     }
                 }
             }
-        }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 12
-            Layout.topMargin: root.hasActivity ? 8 : 0
+            StyledRectangle {
+                id: storageCard
+                Layout.column: backupBentoGrid.compactLayout ? 0 : 7
+                Layout.row: backupBentoGrid.compactLayout ? 1 : 0
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 5
+                Layout.rowSpan: 1
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
+                implicitHeight: 230
+                radius: Appearance.rounding.large
+                contentLayer: StyledRectangle.ContentLayer.Group
+                clip: true
 
-            Repeater {
-                model: [
-                    { label: Translation.tr("Files"), value: String(root.activityFilesTotal), icon: "description" },
-                    { label: Translation.tr("Data"), value: root.formatMegabytes(root.activityDataValues.reduce((total, value) => total + Number(value || 0), 0)), icon: "data_usage" },
-                    { label: Translation.tr("Errors"), value: String(root.activityErrors), icon: "error" }
-                ]
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 6
 
-                delegate: Rectangle {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    implicitHeight: metricColumn.implicitHeight + 24
-                    radius: Appearance.rounding.normal
-                    color: Appearance.colors.colLayer2
-
-                    ColumnLayout {
-                        id: metricColumn
-                        anchors.centerIn: parent
-                        spacing: 2
-
-                        MaterialSymbol {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: modelData.icon
-                            iconSize: Appearance.font.pixelSize.large
-                            color: Appearance.colors.colPrimary
-                        }
+                    RowLayout {
+                        Layout.fillWidth: true
 
                         StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: modelData.value
+                            Layout.fillWidth: true
+                            text: Translation.tr("Storage breakdown")
                             color: Appearance.colors.colOnLayer2
-                            font.pixelSize: Appearance.font.pixelSize.huge
                             font.bold: true
+                            font.pixelSize: Appearance.font.pixelSize.large
+                        }
+
+                        MaterialShapeWrappedMaterialSymbol {
+                            iconSize: Appearance.font.pixelSize.large
+                            padding: 6
+                            shape: MaterialShape.Shape.Circle
+                            fill: 1
+                            color: Appearance.colors.colSecondaryContainer
+                            colSymbol: Appearance.colors.colOnSecondaryContainer
+                            text: "cloud"
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        implicitHeight: 120
+
+                        UsageSemiDonut {
+                            width: Math.min(parent.width, 250)
+                            height: Math.min(parent.height, 104)
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.top
+                            values: root.storageSegments
+                            segmentColors: [
+                                Appearance.colors.colPrimary,
+                                Appearance.colors.colSecondaryContainer,
+                                Appearance.colors.colTertiary
+                            ]
+                            trackColor: Appearance.colors.colLayer3
+                            thickness: 18
+                            minimumSegmentRadians: 0.15
+                        }
+
+                        ColumnLayout {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.verticalCenterOffset: parent.height * 0.10
+                            spacing: 0
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: root.storageQuotaMb > 0
+                                    ? root.formatMegabytes(root.storageUsedMb)
+                                    : root.storageBackupMb > 0
+                                        ? root.formatMegabytes(root.storageBackupMb)
+                                        : "—"
+                                color: Appearance.colors.colOnLayer2
+                                font.pixelSize: Appearance.font.pixelSize.huge
+                                font.bold: true
+                            }
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: root.storageQuotaMb > 0
+                                    ? (root.storageUsedRatio * 100).toFixed(1) + "% " + Translation.tr("used")
+                                    : Translation.tr("Used storage")
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 3
+                        columnSpacing: 8
+
+                        Repeater {
+                            model: [
+                                { label: Translation.tr("Backups"), value: root.formatMegabytes(root.storageBackupMb), color: Appearance.colors.colPrimary },
+                                { label: Translation.tr("Other files"), value: root.formatMegabytes(root.storageOtherMb), color: Appearance.colors.colSecondaryContainer },
+                                { label: Translation.tr("Free space"), value: root.formatMegabytes(root.storageFreeMb), color: Appearance.colors.colTertiary }
+                            ]
+
+                            delegate: ColumnLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+
+                                    MaterialShape {
+                                        implicitSize: 9
+                                        shape: MaterialShape.Shape.Circle
+                                        color: modelData.color
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: modelData.label
+                                        color: Appearance.colors.colSubtext
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                StyledText {
+                                    text: modelData.value
+                                    color: Appearance.colors.colOnLayer2
+                                    font.bold: true
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            StyledRectangle {
+                id: heatmapCard
+                Layout.column: 0
+                Layout.row: backupBentoGrid.compactLayout ? 2 : 1
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 5
+                Layout.rowSpan: 1
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
+                implicitHeight: 250
+                radius: Appearance.rounding.large
+                contentLayer: StyledRectangle.ContentLayer.Group
+                clip: true
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        ColumnLayout {
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 1
+
+                            StyledText {
+                                text: Translation.tr("Activity heatmap")
+                                color: Appearance.colors.colOnLayer2
+                                font.bold: true
+                                font.pixelSize: Appearance.font.pixelSize.large
+                            }
+
+                            StyledText {
+                                text: Translation.tr("Current month") + " · " + root.heatmapActiveDaysLabel
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        RowLayout {
+                            Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                            spacing: 6
+
+                            Repeater {
+                                model: [
+                                    { weight: 0.28, label: Translation.tr("Low") },
+                                    { weight: 1.0, label: Translation.tr("High") }
+                                ]
+                                delegate: RowLayout {
+                                    required property var modelData
+                                    spacing: 4
+
+                                    MaterialShape {
+                                        implicitSize: 10
+                                        shape: MaterialShape.Shape.Circle
+                                        color: ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colLayer3, modelData.weight)
+                                    }
+
+                                    StyledText {
+                                        text: modelData.label
+                                        color: Appearance.colors.colSubtext
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                    }
+                                }
+                            }
+                        }
+
+                    }
+
+                    UsageActivityHeatmap {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        cells: root.heatmapCells
+                        weekLabels: root.heatmapWeekLabels
+                        dayLabels: root.heatmapDayLabels
+                        weekCount: root.heatmapWeekCount
+                        cellSize: 0
+                        cellSpacing: root.heatmapCellSpacing
+                        activeColor: Appearance.colors.colPrimary
+                        midColor: Appearance.colors.colTertiary
+                        emptyColor: Appearance.colors.colLayer3
+                    }
+
+                }
+            }
+
+            StyledRectangle {
+                id: timelineCard
+                Layout.column: 0
+                Layout.row: backupBentoGrid.compactLayout ? 4 : 2
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 7
+                Layout.rowSpan: 1
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
+                implicitHeight: 220
+                radius: Appearance.rounding.large
+                contentLayer: StyledRectangle.ContentLayer.Group
+                clip: true
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 8
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Recent syncs")
+                            color: Appearance.colors.colOnLayer2
+                            font.bold: true
+                            font.pixelSize: Appearance.font.pixelSize.large
                         }
 
                         StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: modelData.label
+                            text: String(root.recentSyncRows.length)
                             color: Appearance.colors.colSubtext
+                        }
+
+                        MaterialShapeWrappedMaterialSymbol {
+                            iconSize: Appearance.font.pixelSize.large
+                            padding: 6
+                            shape: MaterialShape.Shape.Circle
+                            fill: 1
+                            color: Appearance.colors.colPrimaryContainer
+                            colSymbol: Appearance.colors.colOnPrimaryContainer
+                            text: "history"
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        PagePlaceholder {
+                            anchors.fill: parent
+                            visible: !root.hasActivity
+                            shown: visible
+                            icon: "history"
+                            title: Translation.tr("No sync history")
+                            description: Translation.tr("Completed backups will appear here.")
+                            shape: MaterialShape.Shape.Cookie9Sided
+                        }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            visible: root.hasActivity
+                            spacing: 2
+
+                        Repeater {
+                            model: root.recentSyncRows.slice(0, 3)
+
+                            delegate: Item {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                implicitHeight: 40
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+
+                                    MaterialShapeWrappedMaterialSymbol {
+                                        iconSize: Appearance.font.pixelSize.normal
+                                        padding: 6
+                                        shape: MaterialShape.Shape.SoftBurst
+                                        fill: 1
+                                        color: ColorUtils.transparentize(root.syncStatusColor(modelData), 0.78)
+                                        colSymbol: root.syncStatusColor(modelData)
+                                        text: root.syncStatusIcon(modelData)
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: root.entryTimeText(modelData)
+                                            color: Appearance.colors.colOnLayer2
+                                            font.bold: true
+                                            elide: Text.ElideRight
+                                        }
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: String(modelData.fileCount || 0) + " " + Translation.tr("files")
+                                                + " · " + root.formatMegabytes(modelData.sizeMb || 0)
+                                            color: Appearance.colors.colSubtext
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    StyledText {
+                                        text: root.entryDurationText(modelData)
+                                        color: Appearance.colors.colSubtext
+                                        visible: root.entryDurationSeconds(modelData) > 0
+                                    }
+                                }
+                            }
+                        }
+                        }
+                    }
+                }
+            }
+
+            StyledRectangle {
+                id: folderCard
+                Layout.column: 0
+                Layout.row: backupBentoGrid.compactLayout ? 6 : 3
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 7
+                Layout.rowSpan: 1
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
+                implicitHeight: 155
+                radius: Appearance.rounding.large
+                contentLayer: StyledRectangle.ContentLayer.Group
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 6
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            text: Translation.tr("Backup scope")
+                            color: Appearance.colors.colOnLayer2
+                            font.bold: true
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            elide: Text.ElideRight
+                        }
+
+                        MaterialShapeWrappedMaterialSymbol {
+                            iconSize: Appearance.font.pixelSize.large
+                            padding: 6
+                            shape: MaterialShape.Shape.Circle
+                            fill: 1
+                            color: Appearance.colors.colSecondaryContainer
+                            colSymbol: Appearance.colors.colOnSecondaryContainer
+                            text: "folder_copy"
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        PagePlaceholder {
+                            anchors.fill: parent
+                            visible: Config.options.googleDrive.backupFolders.length === 0
+                            shown: visible
+                            icon: "folder_off"
+                            title: Translation.tr("No backup folders")
+                            description: Translation.tr("Add a source folder to see its usage here.")
+                            shape: MaterialShape.Shape.Cookie9Sided
+                        }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            visible: Config.options.googleDrive.backupFolders.length > 0
+                            spacing: 6
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            spacing: 10
+
+                            MaterialShapeWrappedMaterialSymbol {
+                                iconSize: Appearance.font.pixelSize.large
+                                padding: 8
+                                shape: MaterialShape.Shape.ClamShell
+                                fill: 1
+                                color: Appearance.colors.colTertiaryContainer
+                                colSymbol: Appearance.colors.colOnTertiaryContainer
+                                text: "folder"
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 1
+
+                                StyledText {
+                                    text: Translation.tr("Configured folders")
+                                    color: Appearance.colors.colSubtext
+                                }
+
+                                StyledText {
+                                    text: String(Config.options.googleDrive.backupFolders.length) + " "
+                                        + (Config.options.googleDrive.backupFolders.length === 1
+                                            ? Translation.tr("folder")
+                                            : Translation.tr("folders"))
+                                    color: Appearance.colors.colOnLayer2
+                                    font.pixelSize: Appearance.font.pixelSize.huge
+                                    font.bold: true
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Config.options.googleDrive.backupFolders[0] || ""
+                            color: Appearance.colors.colOnLayer2
+                            elide: Text.ElideMiddle
+                            maximumLineCount: 1
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Drive destination") + " · " + GoogleDriveService.effectiveDriveBasePath
+                            color: Appearance.colors.colSubtext
+                            maximumLineCount: 1
+                            elide: Text.ElideRight
+                        }
+                        }
+                    }
+                }
+            }
+
+            StyledRectangle {
+                id: performanceCard
+                Layout.column: backupBentoGrid.compactLayout ? 0 : 7
+                Layout.row: backupBentoGrid.compactLayout ? 5 : 2
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 5
+                Layout.rowSpan: 1
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
+                implicitHeight: 220
+                radius: Appearance.rounding.large
+                contentLayer: StyledRectangle.ContentLayer.Group
+                color: Appearance.colors.colSecondaryContainer
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            text: Translation.tr("Performance")
+                            color: Appearance.colors.colOnSecondaryContainer
+                            font.bold: true
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            elide: Text.ElideRight
+                        }
+
+                        StyledRectangle {
+                            implicitWidth: performanceTabRow.implicitWidth + 4
+                            implicitHeight: 38
+                            radius: Appearance.rounding.full
+                            color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.90)
+                            contentLayer: StyledRectangle.ContentLayer.Group
+
+                            RowLayout {
+                                id: performanceTabRow
+                                anchors.fill: parent
+                                anchors.margins: 2
+                                spacing: 2
+
+                                Repeater {
+                                    model: root.performanceViews
+
+                                    delegate: RippleButton {
+                                        id: performanceViewButton
+                                        required property var modelData
+                                        required property int index
+                                        implicitHeight: 34
+                                        horizontalPadding: 11
+                                        buttonRadius: Appearance.rounding.full
+                                        buttonText: modelData.name
+                                        toggled: root.performanceViewIndex === index
+                                        colBackground: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 1)
+                                        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.88)
+                                        colBackgroundActive: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.82)
+                                        colBackgroundToggled: Appearance.colors.colPrimaryContainer
+                                        colBackgroundToggledHover: Appearance.colors.colPrimaryContainer
+                                        colBackgroundToggledActive: Appearance.colors.colPrimary
+                                        colRipple: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.78)
+                                        colRippleToggled: Appearance.colors.colPrimary
+                                        onClicked: root.performanceViewIndex = index
+
+                                        contentItem: StyledText {
+                                            text: performanceViewButton.modelData.name
+                                            color: root.performanceViewIndex === performanceViewButton.index
+                                                ? Appearance.colors.colOnPrimaryContainer
+                                                : Appearance.colors.colOnSecondaryContainer
+                                            font.bold: root.performanceViewIndex === performanceViewButton.index
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        PagePlaceholder {
+                            anchors.fill: parent
+                            visible: !root.hasPerformanceData
+                            shown: visible
+                            icon: "speed"
+                            title: Translation.tr("Performance data pending")
+                            description: Translation.tr("Future sync history will include speed and duration metrics.")
+                            shape: MaterialShape.Shape.Cookie9Sided
+                        }
+
+                        StackLayout {
+                            anchors.fill: parent
+                            visible: root.hasPerformanceData
+                            currentIndex: root.performanceViewIndex
+
+                            Item {
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        spacing: 18
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            MaterialShapeWrappedMaterialSymbol {
+                                                iconSize: Appearance.font.pixelSize.large
+                                                padding: 6
+                                                shape: MaterialShape.Shape.SemiCircle
+                                                fill: 1
+                                                color: Appearance.colors.colPrimaryContainer
+                                                colSymbol: Appearance.colors.colOnPrimaryContainer
+                                                text: "data_usage"
+                                            }
+
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: Translation.tr("Largest transfer")
+                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.28)
+                                                elide: Text.ElideRight
+                                            }
+
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: root.largestTransfer
+                                                    ? root.formatMegabytes(root.largestTransfer.sizeMb || 0)
+                                                    : "—"
+                                                color: Appearance.colors.colOnSecondaryContainer
+                                                font.pixelSize: Appearance.font.pixelSize.huge
+                                                font.bold: true
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            MaterialShapeWrappedMaterialSymbol {
+                                                iconSize: Appearance.font.pixelSize.large
+                                                padding: 6
+                                                shape: MaterialShape.Shape.Circle
+                                                fill: 1
+                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.84)
+                                                colSymbol: Appearance.colors.colOnSecondaryContainer
+                                                text: "moving"
+                                            }
+
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: Translation.tr("Average transfer")
+                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.28)
+                                                elide: Text.ElideRight
+                                            }
+
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: root.formatMegabytes(root.averageTransferMb)
+                                                color: Appearance.colors.colOnSecondaryContainer
+                                                font.pixelSize: Appearance.font.pixelSize.huge
+                                                font.bold: true
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: Translation.tr("Recent volume") + " · " + root.formatMegabytes(root.recentTransferTotalMb)
+                                            color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.24)
+                                            elide: Text.ElideRight
+                                        }
+
+                                        StyledText {
+                                            text: String(root.recentPerformanceRows.length) + " " + Translation.tr("recent runs")
+                                            color: Appearance.colors.colOnSecondaryContainer
+                                            font.bold: true
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item {
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        spacing: 18
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            MaterialShapeWrappedMaterialSymbol {
+                                                iconSize: Appearance.font.pixelSize.large
+                                                padding: 6
+                                                shape: MaterialShape.Shape.Circle
+                                                fill: 1
+                                                color: Appearance.colors.colPrimaryContainer
+                                                colSymbol: Appearance.colors.colOnPrimaryContainer
+                                                text: "speed"
+                                            }
+
+                                            StyledText {
+                                                text: Translation.tr("Average speed")
+                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.28)
+                                            }
+
+                                            StyledText {
+                                                text: root.hasDetailedPerformanceData
+                                                    ? root.formatTransferSize(root.averageSpeedBytesPerSecond) + "/s"
+                                                    : "—"
+                                                color: Appearance.colors.colOnSecondaryContainer
+                                                font.pixelSize: Appearance.font.pixelSize.huge
+                                                font.bold: true
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            MaterialShapeWrappedMaterialSymbol {
+                                                iconSize: Appearance.font.pixelSize.large
+                                                padding: 6
+                                                shape: MaterialShape.Shape.Square
+                                                fill: 1
+                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.84)
+                                                colSymbol: Appearance.colors.colOnSecondaryContainer
+                                                text: "timer"
+                                            }
+
+                                            StyledText {
+                                                text: Translation.tr("Average duration")
+                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.28)
+                                            }
+
+                                            StyledText {
+                                                text: root.hasDetailedPerformanceData
+                                                    ? root.formatDuration(root.averageDurationSeconds)
+                                                    : "—"
+                                                color: Appearance.colors.colOnSecondaryContainer
+                                                font.pixelSize: Appearance.font.pixelSize.huge
+                                                font.bold: true
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: root.hasDetailedPerformanceData
+                                                ? Translation.tr("Measured during completed syncs")
+                                                : Translation.tr("Timing telemetry pending")
+                                            color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.24)
+                                            elide: Text.ElideRight
+                                        }
+
+                                        StyledText {
+                                            text: String(root.timedPerformanceCount) + " " + Translation.tr("timed runs")
+                                            color: Appearance.colors.colOnSecondaryContainer
+                                            font.bold: true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            StyledRectangle {
+                id: versionsCard
+                Layout.column: backupBentoGrid.compactLayout ? 0 : 7
+                Layout.row: backupBentoGrid.compactLayout ? 7 : 3
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 5
+                Layout.rowSpan: 1
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
+                implicitHeight: 155
+                radius: Appearance.rounding.large
+                contentLayer: StyledRectangle.ContentLayer.Group
+                color: Appearance.colors.colLayer2
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 6
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            text: Translation.tr("Retention policy")
+                            color: Appearance.colors.colOnLayer2
+                            font.bold: true
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            elide: Text.ElideRight
+                        }
+
+                        MaterialShapeWrappedMaterialSymbol {
+                            iconSize: Appearance.font.pixelSize.large
+                            padding: 6
+                            shape: MaterialShape.Shape.Circle
+                            fill: 1
+                            color: Appearance.colors.colSecondaryContainer
+                            colSymbol: Appearance.colors.colOnSecondaryContainer
+                            text: "history"
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        spacing: 12
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            spacing: 0
+
+                            StyledText {
+                                text: String(Config.options.googleDrive.keepVersions || 0) + " " + Translation.tr("versions")
+                                color: Appearance.colors.colOnLayer2
+                                font.pixelSize: Appearance.font.pixelSize.huge
+                                font.bold: true
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Historical copies kept on Drive")
+                                color: Appearance.colors.colSubtext
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.minimumWidth: 0
+                            spacing: 0
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignRight
+                                text: root.storageQuotaMb > 0
+                                    ? root.formatMegabytes(root.storageBackupMb)
+                                    : "—"
+                                color: Appearance.colors.colOnLayer2
+                                font.bold: true
+                            }
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignRight
+                                text: Translation.tr("Backup footprint")
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
+                    }
+
+                    StyledProgressBar {
+                        Layout.fillWidth: true
+                        visible: root.storageQuotaMb > 0
+                        valueBarHeight: 8
+                        value: root.backupFootprintRatio
+                        highlightColor: Appearance.colors.colTertiary
+                        trackColor: Appearance.colors.colLayer3
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Config.options.googleDrive.deleteRemoteOrphans
+                                ? Translation.tr("Remote orphans are removed")
+                                : Translation.tr("Remote orphans are preserved")
+                            color: Appearance.colors.colSubtext
+                            elide: Text.ElideRight
+                        }
+
+                        StyledText {
+                            visible: root.storageQuotaMb > 0
+                            text: (root.backupFootprintRatio * 100).toFixed(2) + "%"
+                            color: Appearance.colors.colOnLayer2
+                            font.bold: true
                         }
                     }
                 }
@@ -1198,7 +2381,7 @@ Item {
 
         Item {
             Layout.fillWidth: true
-            visible: driveOptions.backupFolders.length === 0
+            visible: Config.options.googleDrive.backupFolders.length === 0
             implicitHeight: visible ? 140 : 0
 
             PagePlaceholder {
@@ -1216,7 +2399,7 @@ Item {
             spacing: 4
 
             Repeater {
-                model: driveOptions.backupFolders
+                model: Config.options.googleDrive.backupFolders
 
                 delegate: Rectangle {
                     id: folderRow
@@ -1288,7 +2471,7 @@ Item {
 
         ConfigSelectionArray {
             Layout.fillWidth: true
-            currentValue: driveOptions.syncInterval
+            currentValue: Config.options.googleDrive.syncInterval
             options: [
                 { displayName: Translation.tr("1 hour"), value: "1h", icon: "hourglass_top" },
                 { displayName: Translation.tr("4 hours"), value: "4h", icon: "schedule" },
@@ -1296,16 +2479,16 @@ Item {
                 { displayName: Translation.tr("2 days"), value: "2d", icon: "date_range" },
                 { displayName: Translation.tr("3 days"), value: "3d", icon: "calendar_month" }
             ]
-            onSelected: value => driveOptions.syncInterval = value
+            onSelected: value => Config.options.googleDrive.syncInterval = value
         }
 
         ConfigSwitch {
             buttonIcon: "power_settings_new"
             text: Translation.tr("Sync on boot")
-            checked: driveOptions.syncOnBoot
+            checked: Config.options.googleDrive.syncOnBoot
             onCheckedChanged: {
-                if (checked !== driveOptions.syncOnBoot)
-                    driveOptions.syncOnBoot = checked;
+                if (checked !== Config.options.googleDrive.syncOnBoot)
+                    Config.options.googleDrive.syncOnBoot = checked;
             }
         }
     }
@@ -1430,7 +2613,7 @@ Item {
                 spacing: 6
 
                 Repeater {
-                    model: driveOptions.excludePatterns
+                    model: Config.options.googleDrive.excludePatterns
 
                     delegate: Rectangle {
                         required property string modelData

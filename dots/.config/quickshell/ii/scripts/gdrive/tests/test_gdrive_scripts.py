@@ -274,7 +274,16 @@ class QmlIntegrationTests(unittest.TestCase):
         self.assertIn("activityDataValues", settings)
         self.assertIn("activityTransferValues", settings)
         self.assertIn("Backups completed", settings)
-        self.assertEqual(settings.count("UsageBarChart {"), 1)
+        self.assertEqual(settings.count("UsageColumnChart {"), 1)
+        self.assertIn("return rows.slice(0, 4)", settings)
+        self.assertIn('"durationSeconds": durationSeconds', service)
+        self.assertIn('"averageBytesPerSecond": averageBytesPerSecond', service)
+        self.assertIn('property real driveBackupUsageMb: 0.0', config)
+        self.assertIn('root.driveBackupUsageMb = Math.max(0, Number(options.driveBackupUsageMb || 0));', service)
+        self.assertIn('popupWidth: 184', settings)
+        self.assertIn('iconOnly: true', settings)
+        self.assertIn('text: Translation.tr("Backup footprint / Drive quota")', settings)
+        self.assertIn('visible: root.entryDurationSeconds(modelData) > 0', settings)
 
     def test_exclude_patterns_accept_user_input(self) -> None:
         settings = (GDRIVE_DIR.parents[1] / "modules" / "settings" / "configs" / "TasksAccountsConfig.qml").read_text(encoding="utf-8")
@@ -284,6 +293,23 @@ class QmlIntegrationTests(unittest.TestCase):
         self.assertIn("textField.onTextChanged: root.excludePatternDraft = textField.text", settings)
         self.assertNotIn('values.push("*.cache")', settings)
         self.assertIn("**/*.log", settings)
+
+    def test_searchable_drive_bindings_use_global_config_scope(self) -> None:
+        settings = (GDRIVE_DIR.parents[1] / "modules" / "settings" / "configs" / "TasksAccountsConfig.qml").read_text(encoding="utf-8")
+
+        self.assertIn("checked: Config.options.googleDrive.enabled", settings)
+        self.assertNotIn("checked: driveOptions.enabled", settings)
+
+    def test_dashboard_visual_components_are_responsive_and_token_driven(self) -> None:
+        root = GDRIVE_DIR.parents[1]
+        heatmap = (root / "modules" / "ii" / "usage" / "UsageActivityHeatmap.qml").read_text(encoding="utf-8")
+        combo = (root / "modules" / "common" / "widgets" / "StyledComboBox.qml").read_text(encoding="utf-8")
+
+        self.assertIn("resolvedCellWidth", heatmap)
+        self.assertIn("resolvedCellHeight", heatmap)
+        self.assertIn("ColorUtils.transparentize", heatmap)
+        self.assertIn("property real popupWidth: 0", combo)
+        self.assertIn("itemDelegate.hovered && root.popup.visible", combo)
 
 
 if __name__ == "__main__":

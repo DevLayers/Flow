@@ -45,6 +45,7 @@ Singleton {
     property string currentFolder: ""
     property string statsLine: ""
     property int syncElapsedSeconds: 0
+    property real syncStartedAtMs: 0
     property int currentFolderFiles: 0
     property int currentFolderTotalFiles: 0
     property real currentFolderBytes: 0.0
@@ -128,6 +129,9 @@ Singleton {
             return;
         const storedHistory = options.syncHistory || [];
         root.syncHistory = storedHistory.slice().filter(entry => entry && entry.time);
+        root.driveUsedMb = Math.max(0, Number(options.totalDriveUsageMb || 0));
+        root.driveQuotaMb = Math.max(0, Number(options.driveQuotaMb || 0));
+        root.driveBackupUsageMb = Math.max(0, Number(options.driveBackupUsageMb || 0));
         const normalizedSyncInterval = root.normalizedInterval(String(options.syncInterval || ""));
         if (options.syncInterval !== normalizedSyncInterval)
             options.syncInterval = normalizedSyncInterval;
@@ -314,6 +318,7 @@ Singleton {
         root.currentFolder = "";
         root.statsLine = "";
         root.syncElapsedSeconds = 0;
+        root.syncStartedAtMs = Date.now();
         root.currentFolderFiles = 0;
         root.currentFolderTotalFiles = 0;
         root.currentFolderBytes = 0.0;
@@ -340,6 +345,7 @@ Singleton {
         root.currentFolder = "";
         root.statsLine = "";
         root.syncElapsedSeconds = 0;
+        root.syncStartedAtMs = 0;
         root.currentFolderFiles = 0;
         root.currentFolderTotalFiles = 0;
         root.currentFolderBytes = 0.0;
@@ -404,6 +410,10 @@ Singleton {
 
     function _finishSync(exitCode: int): void {
         const wasCancelled = root.cancelRequested;
+        const elapsedMilliseconds = root.syncStartedAtMs > 0
+            ? Date.now() - root.syncStartedAtMs
+            : root.syncElapsedSeconds * 1000;
+        const durationSeconds = Math.max(1, Math.round(elapsedMilliseconds / 1000));
         root.syncing = false;
         root.cancelRequested = false;
         root.currentFolder = "";
@@ -414,6 +424,7 @@ Singleton {
         root.currentFolderTotalFiles = 0;
         root.currentFolderBytes = 0.0;
         root.currentFolderTotalBytes = 0.0;
+        root.syncStartedAtMs = 0;
         if (wasCancelled)
             return;
 
@@ -421,6 +432,9 @@ Singleton {
         const success = exitCode === 0 && root.errorMessage === "";
         const status = success ? "success" : "error";
         const sizeMb = root.bytesTransferred / (1024 * 1024);
+        const averageBytesPerSecond = durationSeconds > 0
+            ? root.bytesTransferred / durationSeconds
+            : 0;
         root.progress = success ? 1.0 : root.progress;
         root._setSyncConfig(status, now, root.filesTransferred, sizeMb);
         const history = root.syncHistory.slice();
@@ -429,6 +443,8 @@ Singleton {
             "fileCount": root.filesTransferred,
             "sizeMb": sizeMb,
             "transferCount": 1,
+            "durationSeconds": durationSeconds,
+            "averageBytesPerSecond": averageBytesPerSecond,
             "status": status
         });
         // Keep a year of events so day/week/month views remain useful while
@@ -469,12 +485,21 @@ Singleton {
             const info = JSON.parse(String(text || ""));
             const usedMb = Number(info.used || 0) / (1024 * 1024);
             const quotaMb = Number(info.total || 0) / (1024 * 1024);
-            root.driveUsedMb = usedMb;
-            root.driveQuotaMb = quotaMb;
-            root.driveBackupUsageMb = Number(info.backupSize || 0) / (1024 * 1024);
+            const backupMb = Number(info.backupSize || 0) / (1024 * 1024);
+            const hasError = String(info.error || "") !== "";
+            if (!hasError || quotaMb > 0) {
+                root.driveUsedMb = usedMb;
+                root.driveQuotaMb = quotaMb;
+            }
+            if (!hasError || backupMb > 0)
+                root.driveBackupUsageMb = backupMb;
             if (Config.ready) {
-                Config.options.googleDrive.totalDriveUsageMb = usedMb;
-                Config.options.googleDrive.driveQuotaMb = quotaMb;
+                if (!hasError || quotaMb > 0) {
+                    Config.options.googleDrive.totalDriveUsageMb = usedMb;
+                    Config.options.googleDrive.driveQuotaMb = quotaMb;
+                }
+                if (!hasError || backupMb > 0)
+                    Config.options.googleDrive.driveBackupUsageMb = backupMb;
             }
         } catch (error) {
             // A missing rclone remote is already represented by configured=false.
@@ -535,6 +560,8 @@ Singleton {
                 const result = JSON.parse(checkOutput.text || "{}");
                 root.rcloneInstalled = result.installed === true;
                 root.configured = result.configured === true;
+                if (root.configured)
+                    root.fetchDriveInfo();
                 if (!root.rcloneInstalled)
                     root.errorMessage = Translation.tr("rclone is not installed");
             } catch (error) {

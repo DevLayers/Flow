@@ -898,6 +898,7 @@ Singleton {
                 property list<var> syncHistory: []
                 property real totalDriveUsageMb: 0.0
                 property real driveQuotaMb: 0.0
+                property real driveBackupUsageMb: 0.0
             }
 
             property JsonObject vpn: JsonObject {
@@ -1232,6 +1233,17 @@ Singleton {
                         property real y: 200
                         property int widgetSize: 100
                         property bool useAltColors: false
+                    }
+                    property JsonObject clock_nothing: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool use24h: true
+                        property bool showAmPmChip: true
+                        property bool showTopLabel: true
+                        property bool showDate: true
+                        property bool useAccentColor: false
                     }
                     property JsonObject media: JsonObject {
                         property bool enable: true

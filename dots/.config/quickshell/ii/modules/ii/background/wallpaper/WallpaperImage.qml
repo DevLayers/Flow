@@ -98,7 +98,7 @@ Item {
         imageSource: !wallpaperSafetyTriggered ? wallpaperPath : ""
         animated: Config.options.background.animateWallpaperChanges
         fillMode: Image.PreserveAspectCrop
-        visible: Config.options.background.zoomOutStyle !== 2 && !wallpaperSafetyTriggered && !wallpaperIsVideo
+        visible: Config.options.background.zoomOutStyle !== 2 && !wallpaperSafetyTriggered && !wallpaperIsVideo && !Config.options.background.useWallpaperEngine
         opacity: 1.0
         mipmap: false
         antialiasing: false
@@ -113,8 +113,8 @@ Item {
         // GPU: only instantiate MultiEffect when zoomed-out state is active.
         // Previously always-loaded (active:true) with opacity controlling visibility —
         // the shader + texture stayed resident on GPU even at idle.
-        active: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperIsVideo
-        opacity: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperIsVideo ? 1.0 : 0.0
+        active: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperIsVideo && !Config.options.background.useWallpaperEngine
+        opacity: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperIsVideo && !Config.options.background.useWallpaperEngine ? 1.0 : 0.0
         Behavior on opacity {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(wallpaperImageRoot)
         }
@@ -278,7 +278,7 @@ Item {
                         anchors.fill: parent
 
                         visible: opacity > 0
-                        opacity: (wallpaper.status === Image.Ready && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
+                        opacity: (wallpaper.status === Image.Ready && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
                         // GPU: cap sourceSize to screen resolution — loading > native res wastes VRAM with no visual gain.
                         // Clamp to max 110% of screen (enough for parallax headroom).
                         sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.min(Math.round(screen.width * preferredWallpaperScale), Math.round(screen.width * 1.1)) : 1920, screen.height > 0 ? Math.min(Math.round(screen.height * preferredWallpaperScale), Math.round(screen.height * 1.1)) : 1080) : Qt.size(-1, -1)
@@ -344,7 +344,7 @@ Item {
                     sourceItem: wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
-                    wallpaperIsVideo: wallpaperImageRoot.wallpaperIsVideo
+                    wallpaperIsVideo: wallpaperImageRoot.wallpaperIsVideo || Config.options.background.useWallpaperEngine
                 }
 
                 LockDesaturate {

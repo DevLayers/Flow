@@ -57,6 +57,15 @@ Singleton {
             "configPage": "widgets/DesktopHoriClockConfig.qml"
         },
         {
+            "widgetId": "clock_nothing",
+            "name": Translation.tr("Nothing Digital Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/NothingDigitalClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A 1x1 Nothing OS styled digital clock widget with Ndot dot-matrix typography, stacked hours/minutes, AM/PM chip, and date."),
+            "configPage": "widgets/DesktopNothingClockConfig.qml"
+        },
+        {
             "widgetId": "nagasaki_text",
             "name": Translation.tr("Nagasaki Text Clock"),
             "category": "Clock",
@@ -640,6 +649,33 @@ Singleton {
             "icon": "donut_large",
             "description": Translation.tr("Dynamic 1x1 fill cards widget combining CPU Usage, RAM Memory, and Disk Storage. Scales horizontally or vertically per active toggle (1x1, 2x1, or 3x1)."),
             "configPage": "widgets/DesktopResourceFillCardsConfig.qml"
+        },
+        {
+            "widgetId": "resource_nothing_disk",
+            "name": Translation.tr("Nothing Storage Widget"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/NothingDiskWidget.qml"),
+            "icon": "hard_drive",
+            "description": Translation.tr("Nothing OS styled 1x0.5 storage widget with segmented progress bar and Ndot font."),
+            "configPage": ""
+        },
+        {
+            "widgetId": "resource_nothing_cpu",
+            "name": Translation.tr("Nothing CPU Widget"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/NothingCpuWidget.qml"),
+            "icon": "memory",
+            "description": Translation.tr("Nothing OS styled 1x0.5 CPU usage widget with segmented progress bar and Ndot font."),
+            "configPage": ""
+        },
+        {
+            "widgetId": "resource_nothing_ram",
+            "name": Translation.tr("Nothing RAM Widget"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/NothingRamWidget.qml"),
+            "icon": "memory_alt",
+            "description": Translation.tr("Nothing OS styled 1x0.5 RAM memory widget with segmented progress bar and Ndot font."),
+            "configPage": ""
         },
     ]
 

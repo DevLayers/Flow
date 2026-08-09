@@ -116,6 +116,18 @@ Item {
     }
 
     Component {
+        id: component_clock_nothing
+        NothingDigitalClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+            wallpaperSafetyTriggered: delegateRoot.wallpaperSafetyTriggered
+        }
+    }
+
+    Component {
         id: component_clock_dial
         DialClockWidget {
             screenWidth: delegateRoot.screenWidth
@@ -809,6 +821,39 @@ Item {
         }
     }
 
+    Component {
+        id: component_resource_nothing_disk
+        NothingDiskWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_resource_nothing_cpu
+        NothingCpuWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_resource_nothing_ram
+        NothingRamWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
     readonly property var widgetComponentMap: ({
             "clock_cookie": component_clock_cookie,
             "clock_digital": component_clock_digital,
@@ -816,6 +861,7 @@ Item {
             "clock_word": component_clock_word,
             "clock_flex": component_clock_flex,
             "clock_hori": component_clock_hori,
+            "clock_nothing": component_clock_nothing,
             "clock_dial": component_clock_dial,
             "clock_wearos": component_clock_wearos,
             "wearos_arc_clock": component_wearos_arc_clock,
@@ -878,7 +924,10 @@ Item {
             "resource_cpu_pill": component_resource_cpu_pill,
             "resource_ram_pill": component_resource_ram_pill,
             "resource_disk_pill": component_resource_disk_pill,
-            "resource_fill_cards": component_resource_fill_cards
+            "resource_fill_cards": component_resource_fill_cards,
+            "resource_nothing_disk": component_resource_nothing_disk,
+            "resource_nothing_cpu": component_resource_nothing_cpu,
+            "resource_nothing_ram": component_resource_nothing_ram
         })
 
     function getExtUrl(extId) {

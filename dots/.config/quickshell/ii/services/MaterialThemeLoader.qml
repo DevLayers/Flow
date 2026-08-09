@@ -21,8 +21,26 @@ Singleton {
     property var _targetColors: ({})
     property bool _hasOldColors: false
 
+    Connections {
+        target: Config.options.background
+        function onWallpaperPathChanged() { colorReloadTimer.restart(); }
+        function onThumbnailPathChanged() { colorReloadTimer.restart(); }
+        function onWallpaperEngineIdChanged() { colorReloadTimer.restart(); }
+        function onUseWallpaperEngineChanged() { colorReloadTimer.restart(); }
+    }
+
+    Timer {
+        id: colorReloadTimer
+        interval: 800
+        repeat: false
+        onTriggered: {
+            root.reapplyTheme();
+        }
+    }
+
     function reapplyTheme() {
-        themeFileView.reload()
+        themeFileView.path = "";
+        themeFileView.path = Qt.resolvedUrl(root.filePath);
     }
 
     function applyColors(fileContent) {
@@ -117,13 +135,13 @@ Singleton {
     function _applyInterpolatedColors(t) {
         const isEnd = (t >= 1.0);
         for (const key in root._targetColors) {
-            const start = root._oldColors[key]
-            const end = root._targetColors[key]
+            const start = root._oldColors[key];
+            const end = root._targetColors[key];
             if (start !== undefined && end !== undefined) {
                 if (start === end && !isEnd) continue;
-                Appearance.m3colors[key] = isEnd ? end : root._interpolateColor(start, end, t)
+                Appearance.m3colors[key] = isEnd ? Qt.color(end) : root._interpolateColor(start, end, t);
             } else if (end !== undefined) {
-                Appearance.m3colors[key] = end
+                Appearance.m3colors[key] = Qt.color(end);
             }
         }
     }
@@ -196,8 +214,7 @@ Singleton {
         watchChanges: true
         onFileChanged: {
             console.log("[MaterialThemeLoader] onFileChanged triggered, reloading...")
-            this.reload()
-            delayedFileRead.start()
+            root.reapplyTheme();
         }
         onLoadedChanged: {
             console.log("[MaterialThemeLoader] onLoadedChanged, loaded=", themeFileView.loaded)
@@ -233,7 +250,7 @@ Singleton {
                 }
             }
         }
-        Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", currentlyDark ? "light" : "dark", "--noswitch"]);
+        Quickshell.execDetached(["bash", "-c", `env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH "${Directories.wallpaperSwitchScriptPath}" --mode ${currentlyDark ? "light" : "dark"} --noswitch`]);
     }
 
     GlobalShortcut {

@@ -173,9 +173,12 @@ PanelWindow {
         if (!Appearance.m3colors.darkmode && useSeparateLightModeWallpaper && lightModeWallpaperPath !== "") {
             return lightModeWallpaperPath;
         }
-        const rawPath = wallpaperIsVideo
-            ? (Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "")
-            : (Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "");
+        if (wallpaperIsVideo) {
+            const thumb = Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "";
+            if (thumb !== "") return thumb;
+            return "";
+        }
+        const rawPath = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
         if (rawPath !== "")
             return rawPath;
         return `${Directories.assetsPath}/images/default_wallpaper.png`;

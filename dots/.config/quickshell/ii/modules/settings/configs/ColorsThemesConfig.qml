@@ -730,12 +730,16 @@ ContentPage {
             onCheckedChanged: {
                 if (Config.options.background.useWallpaperEngine === checked) return;
                 Config.options.background.useWallpaperEngine = checked;
+                Config.saveOptionsNow();
                 if (checked) {
                     if (Config.options.background.wallpaperEngineId) {
                         Wallpapers.apply(Config.options.background.wallpaperEngineId);
                     }
                 } else {
                     Quickshell.execDetached(["bash", "-c", "pkill -f linux-wallpaperengine; sleep 0.3; pkill -9 -f linux-wallpaperengine 2>/dev/null; true"]);
+                    if (Config.options.background.wallpaperPath) {
+                        Wallpapers.apply(Config.options.background.wallpaperPath);
+                    }
                 }
             }
         }
