@@ -80,12 +80,16 @@ LockScreen {
                         hasCmds = true
                     }
                     var ws = (mData?.activeWorkspace?.id ?? 1)
-                    next[mon] = ws
-                    var hasWindows = HyprlandData.windowList.some(function(w) { return w.workspace.id === ws; })
-                    if (hasWindows) {
-                        batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${2147483647 - ws}}`
-                        hasCmds = true
+                    // If already on a lock workspace (> 1000000), preserve existing saved workspace if present
+                    if (ws <= 1000000 || !root.savedWorkspaces[mon]) {
+                        next[mon] = ws
+                    } else {
+                        next[mon] = root.savedWorkspaces[mon]
                     }
+                    
+                    var lockWs = ws > 1000000 ? ws : (2147483647 - Math.abs(ws))
+                    batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${lockWs}}`
+                    hasCmds = true
                 }
                 if (activeMon !== "") {
                     batch += ` ; dispatch hl.dsp.focus {monitor="${activeMon}"}`
