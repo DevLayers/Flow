@@ -43,6 +43,9 @@ Item {
     required property real scaleOriginY
     required property real scaleProgress
 
+    readonly property real effectiveParallaxX: videoEffectsDisabled ? 0 : (wallpaperZoomedOut ? wallpaperPlanes.centeredX : parallaxX)
+    readonly property real effectiveParallaxY: videoEffectsDisabled ? 0 : (wallpaperZoomedOut ? wallpaperPlanes.centeredY : parallaxY)
+
     required property bool anyWidgetIsDragging
     required property bool mediaModeOpen
     property bool lockAnimationActive: false
@@ -243,18 +246,8 @@ Item {
                     },
                     Translate {
                         id: parallaxTranslate
-                        x: {
-                            if (Config.options.background.zoomOutStyle === 1) {
-                                return 0;
-                            }
-                            return wallpaperImageRoot.wallpaperZoomedOut ? wallpaperPlanes.centeredX : parallaxX;
-                        }
-                        y: {
-                            if (Config.options.background.zoomOutStyle === 1) {
-                                return 0;
-                            }
-                            return wallpaperImageRoot.wallpaperZoomedOut ? wallpaperPlanes.centeredY : parallaxY;
-                        }
+                        x: Config.options.background.zoomOutStyle === 1 ? 0 : wallpaperImageRoot.effectiveParallaxX
+                        y: Config.options.background.zoomOutStyle === 1 ? 0 : wallpaperImageRoot.effectiveParallaxY
                         Behavior on x {
                             NumberAnimation {
                                 duration: Math.round(450 * Appearance.animMultiplier)
@@ -377,6 +370,14 @@ Item {
                     overviewOpen: wallpaperImageRoot.overviewOpen
                 }
             }
+        }
+
+        BarGradientOverlay {
+            sourceItem: wallpaperVisualContainer
+            parallaxX: wallpaperImageRoot.effectiveParallaxX
+            parallaxY: wallpaperImageRoot.effectiveParallaxY
+            screenWidth: wallpaperImageRoot.screen.width
+            screenHeight: wallpaperImageRoot.screen.height
         }
     }
 }

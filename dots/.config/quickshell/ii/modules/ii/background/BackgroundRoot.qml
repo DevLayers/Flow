@@ -416,12 +416,6 @@ PanelWindow {
             widgetStateManager: bgRoot.widgetStateManager
         }
 
-        BarGradientOverlay {
-            sourceItem: wallpaperImage.clipRectItem
-            screenWidth: bgRoot.screen.width
-            screenHeight: bgRoot.screen.height
-        }
-
         GlobalShortcut {
             name: "mediaModeToggle"
             description: "Toggles media mode on press"
