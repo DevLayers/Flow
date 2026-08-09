@@ -72,6 +72,13 @@ LockScreen {
                     if (mData?.activeWorkspace == undefined) {
                         continue; // Skip this monitor rather than aborting all others
                     }
+                    if (mData.specialWorkspace && mData.specialWorkspace.name !== "" && mData.specialWorkspace.id !== 0) {
+                        var specName = mData.specialWorkspace.name || "";
+                        var cleanSpecName = specName.startsWith("special:") ? specName.substring(8) : specName;
+                        if (!cleanSpecName) cleanSpecName = "special";
+                        batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.workspace.toggle_special('${cleanSpecName}')`
+                        hasCmds = true
+                    }
                     var ws = (mData?.activeWorkspace?.id ?? 1)
                     next[mon] = ws
                     var hasWindows = HyprlandData.windowList.some(function(w) { return w.workspace.id === ws; })

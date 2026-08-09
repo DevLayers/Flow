@@ -14,6 +14,7 @@ import qs.modules.common
 Singleton {
     id: root
     property var windowList: []
+    property bool windowListLoaded: false
     property var addresses: []
     property var windowByAddress: ({})
     property var workspaces: []
@@ -130,6 +131,7 @@ Singleton {
                 case "activespecialv2":
                     root.updateMonitors();
                     root.updateWorkspaces();
+                    root.updateWindowList();
                     break;
 
                 case "activewindow":
@@ -176,6 +178,7 @@ Singleton {
             id: clientsCollector
             onStreamFinished: {
                 root.windowList = JSON.parse(clientsCollector.text)
+                root.windowListLoaded = true;
                 let tempWinByAddress = {};
                 for (var i = 0; i < root.windowList.length; ++i) {
                     var win = root.windowList[i];
