@@ -167,6 +167,45 @@ AbstractWidget {
     property real targetY: isPreview ? 0 : (forceCenter ? centeringY : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(widgetInstance !== null ? widgetInstance.y : (configEntry ? configEntry.y : 0), scaledScreenHeight - height)) : calculatedY))
     property bool isDraggingOrSettling: false
 
+    // Raw (pre-grid, pre-snap) drag position — tracks the drag system's raw output each frame.
+    // Proximity/threshold checks use these so snap decisions are based on where the mouse IS,
+    // not the already-transformed rendered position (prevents oscillation).
+    property real _rawDragX: 0
+    property real _rawDragY: 0
+    property bool _applyingGridSnap: false  // re-entrancy guard for onXChanged/onYChanged
+
+    // ── Snap hysteresis state ─────────────────────────────────────────────────
+    // Enter: snap when raw is within _snapEnter px of an alignment edge.
+    // Exit:  unsnap only when raw has moved > _snapExit px FROM THE ENTRY POINT
+    //        (not from the target). This prevents the re-entry loop that happens
+    //        when exit is measured from the target and the entry zone overlaps
+    //        with the exit zone.
+    readonly property int _snapEnter: 18
+    readonly property int _snapExit:  55
+    property bool _snapLockX: false
+    property real _snapLockXTarget: 0  // rendered x when snapped
+    property real _snapEntryX: 0      // rawX at the moment snap was established
+    property bool _snapLockY: false
+    property real _snapLockYTarget: 0  // rendered y when snapped
+    property real _snapEntryY: 0      // rawY at the moment snap was established
+
+    // ── Grid anchor state ─────────────────────────────────────────────────────
+    // Grid cells are 20px wide. The anchor stores the raw mouse position at the
+    // time of the last cell commit. A new cell is committed only when raw has
+    // moved >= _gridStep from the anchor. The anchor then updates to rawX so the
+    // NEXT jump again requires a full _gridStep of mouse movement.
+    //
+    // Why this beats distance-from-cell-centre hysteresis:
+    //   After each cell jump the "current cell" changes. If mouse jitters ±6px
+    //   around the jump boundary, the cell alternates because the new cell's
+    //   hysteresis zone is immediately triggered. With anchor tracking the
+    //   required movement is ALWAYS relative to the raw position — stable.
+    readonly property int _gridStep: 20
+    property real _gridAnchorX: 0   // raw x at last grid commit
+    property real _gridAnchorY: 0   // raw y at last grid commit
+    property real _lastGridX: 0     // last committed grid cell x
+    property real _lastGridY: 0     // last committed grid cell y
+
     onIsPreviewChanged: {
         if (isPreview) {
             root.x = 0;
@@ -215,12 +254,6 @@ AbstractWidget {
         }
     }
 
-    Item {
-        id: dragProxy
-        x: root.x
-        y: root.y
-    }
-
     readonly property bool isDragging: drag.active
     onIsDraggingChanged: {
         let canvas = findCanvas(root.parent);
@@ -228,8 +261,6 @@ AbstractWidget {
             canvas.draggingActive = isDragging;
         }
         if (!isDragging) {
-            dragProxy.x = root.x;
-            dragProxy.y = root.y;
             if (canvas) {
                 canvas.snapLineX = -1;
                 canvas.snapLineY = -1;
@@ -237,24 +268,19 @@ AbstractWidget {
         }
     }
 
-    Binding {
-        target: root
-        property: "x"
-        value: applyGridAndSnapX(dragProxy.x)
-        when: isDragging && !root.isPreview
-        restoreMode: Binding.RestoreNone
-    }
-    Binding {
-        target: root
-        property: "y"
-        value: applyGridAndSnapY(dragProxy.y)
-        when: isDragging && !root.isPreview
-        restoreMode: Binding.RestoreNone
-    }
-
     onPressedChanged: {
         if (pressed) {
             isDraggingOrSettling = true;
+            _rawDragX = root.x;
+            _rawDragY = root.y;
+            // Reset ALL hysteresis state at drag start
+            _snapLockX = false;
+            _snapLockY = false;
+            // Grid: anchor starts at current raw position; cell starts at current grid-aligned position
+            _gridAnchorX = root.x;
+            _gridAnchorY = root.y;
+            _lastGridX   = Math.round(root.x / _gridStep) * _gridStep;
+            _lastGridY   = Math.round(root.y / _gridStep) * _gridStep;
         }
     }
 
@@ -307,146 +333,216 @@ AbstractWidget {
         return null
     }
 
-    function applyGridAndSnapX(targetXVal) {
-        if (Config.options.background.widgets.enableGrid ?? false) {
-            targetXVal = Math.round(targetXVal / 10) * 10;
-        }
+    function applyGridAndSnapX(rawX, rawY) {
+        let targetXVal = rawX;
         let canvas = findCanvas(root.parent);
         let snapped = false;
+
         if (Config.options.background.widgets.enableSnap ?? false) {
-            let snapThreshold = 20;
-            if (widgetListModel) {
+            // ── Snap with entry-point hysteresis ────────────────────────────
+            // Exit is measured from _snapEntryX (raw position when snap fired),
+            // NOT from _snapLockXTarget (the rendered alignment position).
+            // This prevents the tight enter/exit loop: because the entry zone
+            // is near the alignment edge, measuring exit from the target means
+            // a tiny backward mouse movement can unsnap, then the forward movement
+            // re-snaps — continuous oscillation. Measuring from the entry point
+            // means the user must move _snapExit px from where they physically
+            // were when snap engaged.
+            if (_snapLockX) {
+                if (Math.abs(rawX - _snapEntryX) < _snapExit) {
+                    targetXVal = _snapLockXTarget;
+                    if (isDragging && canvas) canvas.snapLineX = _snapLockXTarget;
+                    snapped = true;
+                } else {
+                    _snapLockX = false;
+                }
+            }
+
+            if (!snapped && widgetListModel) {
                 for (let i = 0; i < widgetListModel.count; i++) {
                     let w = widgetListModel.get(i);
                     if (widgetInstance && w.instanceId === widgetInstance.id) continue;
-                    
-                    let verticallyClose = Math.abs(root.y - w.widgetY) < 600;
+
+                    let verticallyClose = Math.abs(rawY - w.widgetY) < 600;
                     if (!verticallyClose) continue;
 
                     let wId = w.instanceId || w.id;
                     let wWidth = (widgetSizes && widgetSizes[wId] && widgetSizes[wId].width > 0) ? widgetSizes[wId].width : root.width;
-                    
-                    // 1. Align Left-to-Left: root.x = w.widgetX
-                    if (Math.abs(targetXVal - w.widgetX) < snapThreshold) {
-                        targetXVal = w.widgetX;
-                        if (isDragging && canvas) canvas.snapLineX = w.widgetX;
-                        snapped = true;
-                        break;
+
+                    let hasCandidate = false;
+                    let candidate = 0;
+                    let lineX    = 0;
+                    if (Math.abs(rawX - w.widgetX) < _snapEnter) {
+                        candidate = w.widgetX; lineX = w.widgetX; hasCandidate = true;
+                    } else if (Math.abs((rawX + root.width) - (w.widgetX + wWidth)) < _snapEnter) {
+                        candidate = w.widgetX + wWidth - root.width; lineX = w.widgetX + wWidth; hasCandidate = true;
+                    } else if (Math.abs(rawX - (w.widgetX + wWidth)) < _snapEnter) {
+                        candidate = w.widgetX + wWidth; lineX = w.widgetX + wWidth; hasCandidate = true;
+                    } else if (Math.abs((rawX + root.width) - w.widgetX) < _snapEnter) {
+                        candidate = w.widgetX - root.width; lineX = w.widgetX; hasCandidate = true;
                     }
-                    // 2. Align Right-to-Right: root.x + root.width = w.widgetX + wWidth => root.x = w.widgetX + wWidth - root.width
-                    if (Math.abs((targetXVal + root.width) - (w.widgetX + wWidth)) < snapThreshold) {
-                        targetXVal = w.widgetX + wWidth - root.width;
-                        if (isDragging && canvas) canvas.snapLineX = w.widgetX + wWidth;
-                        snapped = true;
-                        break;
-                    }
-                    // 3. Align Left-to-Right (Adjacent): root.x = w.widgetX + wWidth
-                    if (Math.abs(targetXVal - (w.widgetX + wWidth)) < snapThreshold) {
-                        targetXVal = w.widgetX + wWidth;
-                        if (isDragging && canvas) canvas.snapLineX = w.widgetX + wWidth;
-                        snapped = true;
-                        break;
-                    }
-                    // 4. Align Right-to-Left (Adjacent): root.x + root.width = w.widgetX => root.x = w.widgetX - root.width
-                    if (Math.abs((targetXVal + root.width) - w.widgetX) < snapThreshold) {
-                        targetXVal = w.widgetX - root.width;
-                        if (isDragging && canvas) canvas.snapLineX = w.widgetX;
+
+                    if (hasCandidate) {
+                        targetXVal = candidate;
+                        if (isDragging && canvas) canvas.snapLineX = lineX;
+                        _snapLockX = true;
+                        _snapLockXTarget = candidate;
+                        _snapEntryX = rawX;  // record WHERE mouse was, not the snap target
                         snapped = true;
                         break;
                     }
                 }
             }
         }
+
         if (!snapped && canvas) canvas.snapLineX = -1;
+
+        // ── Grid with anchor-based tracking ──────────────────────────────────
+        // A cell commit happens only when rawX has moved >= _gridStep from
+        // _gridAnchorX (the raw position at the last commit). After committing,
+        // _gridAnchorX = rawX so the NEXT jump again needs a full step of travel.
+        // This is stable regardless of how the cell boundaries shift: the required
+        // movement is always _gridStep of physical cursor distance.
+        if (!snapped && (Config.options.background.widgets.enableGrid ?? false)) {
+            let delta = rawX - _gridAnchorX;
+            if (delta >= _gridStep) {
+                // Moved right by at least one step
+                let steps = Math.floor(delta / _gridStep);
+                _gridAnchorX += steps * _gridStep;
+                _lastGridX = Math.round(_gridAnchorX / _gridStep) * _gridStep;
+            } else if (delta <= -_gridStep) {
+                // Moved left by at least one step
+                let steps = Math.ceil(delta / _gridStep);   // negative
+                _gridAnchorX += steps * _gridStep;
+                _lastGridX = Math.round(_gridAnchorX / _gridStep) * _gridStep;
+            }
+            targetXVal = _lastGridX;
+        }
+
         return targetXVal;
     }
 
-    function applyGridAndSnapY(targetYVal) {
-        if (Config.options.background.widgets.enableGrid ?? false) {
-            targetYVal = Math.round(targetYVal / 10) * 10;
-        }
+    function applyGridAndSnapY(rawY, rawX) {
+        let targetYVal = rawY;
         let canvas = findCanvas(root.parent);
         let snapped = false;
+
         if (Config.options.background.widgets.enableSnap ?? false) {
-            let snapThreshold = 20;
-            if (widgetListModel) {
+            if (_snapLockY) {
+                if (Math.abs(rawY - _snapEntryY) < _snapExit) {
+                    targetYVal = _snapLockYTarget;
+                    if (isDragging && canvas) canvas.snapLineY = _snapLockYTarget;
+                    snapped = true;
+                } else {
+                    _snapLockY = false;
+                }
+            }
+
+            if (!snapped && widgetListModel) {
                 for (let i = 0; i < widgetListModel.count; i++) {
                     let w = widgetListModel.get(i);
                     if (widgetInstance && w.instanceId === widgetInstance.id) continue;
-                    
-                    let horizontallyClose = Math.abs(root.x - w.widgetX) < 600;
+
+                    let horizontallyClose = Math.abs(rawX - w.widgetX) < 600;
                     if (!horizontallyClose) continue;
 
                     let wId = w.instanceId || w.id;
                     let wHeight = (widgetSizes && widgetSizes[wId] && widgetSizes[wId].height > 0) ? widgetSizes[wId].height : root.height;
-                    
-                    // 1. Align Top-to-Top: root.y = w.widgetY
-                    if (Math.abs(targetYVal - w.widgetY) < snapThreshold) {
-                        targetYVal = w.widgetY;
-                        if (isDragging && canvas) canvas.snapLineY = w.widgetY;
-                        snapped = true;
-                        break;
+
+                    let hasCandidate = false;
+                    let candidate = 0;
+                    let lineY    = 0;
+                    if (Math.abs(rawY - w.widgetY) < _snapEnter) {
+                        candidate = w.widgetY; lineY = w.widgetY; hasCandidate = true;
+                    } else if (Math.abs((rawY + root.height) - (w.widgetY + wHeight)) < _snapEnter) {
+                        candidate = w.widgetY + wHeight - root.height; lineY = w.widgetY + wHeight; hasCandidate = true;
+                    } else if (Math.abs(rawY - (w.widgetY + wHeight)) < _snapEnter) {
+                        candidate = w.widgetY + wHeight; lineY = w.widgetY + wHeight; hasCandidate = true;
+                    } else if (Math.abs((rawY + root.height) - w.widgetY) < _snapEnter) {
+                        candidate = w.widgetY - root.height; lineY = w.widgetY; hasCandidate = true;
                     }
-                    // 2. Align Bottom-to-Bottom: root.y + root.height = w.widgetY + wHeight => root.y = w.widgetY + wHeight - root.height
-                    if (Math.abs((targetYVal + root.height) - (w.widgetY + wHeight)) < snapThreshold) {
-                        targetYVal = w.widgetY + wHeight - root.height;
-                        if (isDragging && canvas) canvas.snapLineY = w.widgetY + wHeight;
-                        snapped = true;
-                        break;
-                    }
-                    // 3. Align Top-to-Bottom (Adjacent): root.y = w.widgetY + wHeight
-                    if (Math.abs(targetYVal - (w.widgetY + wHeight)) < snapThreshold) {
-                        targetYVal = w.widgetY + wHeight;
-                        if (isDragging && canvas) canvas.snapLineY = w.widgetY + wHeight;
-                        snapped = true;
-                        break;
-                    }
-                    // 4. Align Bottom-to-Top (Adjacent): root.y + root.height = w.widgetY => root.y = w.widgetY - root.height
-                    if (Math.abs((targetYVal + root.height) - w.widgetY) < snapThreshold) {
-                        targetYVal = w.widgetY - root.height;
-                        if (isDragging && canvas) canvas.snapLineY = w.widgetY;
+
+                    if (hasCandidate) {
+                        targetYVal = candidate;
+                        if (isDragging && canvas) canvas.snapLineY = lineY;
+                        _snapLockY = true;
+                        _snapLockYTarget = candidate;
+                        _snapEntryY = rawY;
                         snapped = true;
                         break;
                     }
                 }
             }
         }
+
         if (!snapped && canvas) canvas.snapLineY = -1;
+
+        if (!snapped && (Config.options.background.widgets.enableGrid ?? false)) {
+            let delta = rawY - _gridAnchorY;
+            if (delta >= _gridStep) {
+                let steps = Math.floor(delta / _gridStep);
+                _gridAnchorY += steps * _gridStep;
+                _lastGridY = Math.round(_gridAnchorY / _gridStep) * _gridStep;
+            } else if (delta <= -_gridStep) {
+                let steps = Math.ceil(delta / _gridStep);
+                _gridAnchorY += steps * _gridStep;
+                _lastGridY = Math.round(_gridAnchorY / _gridStep) * _gridStep;
+            }
+            targetYVal = _lastGridY;
+        }
+
         return targetYVal;
     }
 
     draggable: !isPreview && !(Config.options.background.widgets.lockWidgetPositions ?? false) && (placementStrategy === "free" || placementStrategy === "draggable")
-    drag.target: draggable ? dragProxy : undefined
+    // Use root directly as drag target — no proxy needed.
+    // This eliminates the one-evaluation-pass lag of the proxy+Binding approach.
+    drag.target: draggable ? root : undefined
     drag.minimumX: 0
     drag.maximumX: scaledScreenWidth - width
     drag.minimumY: 0
     drag.maximumY: scaledScreenHeight - height
-
+    // Disable animation while dragging/settling so position is immediate
     animateXPos: !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
     animateYPos: !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
     onXChanged: {
-        if (isDragging) {
-            if (widgetInstance === null && configEntry) configEntry.x = x;
+        if (!isDragging || _applyingGridSnap) return;
+        // Capture the drag-system's raw position before any transform
+        _rawDragX = x;
+        // Apply grid/snap using raw coordinates to prevent oscillation
+        let snappedX = applyGridAndSnapX(_rawDragX, _rawDragY);
+        if (snappedX !== x) {
+            _applyingGridSnap = true;
+            root.x = snappedX;
+            _applyingGridSnap = false;
         }
     }
     onYChanged: {
-        if (isDragging) {
-            if (widgetInstance === null && configEntry) configEntry.y = y;
+        if (!isDragging || _applyingGridSnap) return;
+        // Capture the drag-system's raw position before any transform
+        _rawDragY = y;
+        // Apply grid/snap using raw coordinates to prevent oscillation
+        let snappedY = applyGridAndSnapY(_rawDragY, _rawDragX);
+        if (snappedY !== y) {
+            _applyingGridSnap = true;
+            root.y = snappedY;
+            _applyingGridSnap = false;
         }
     }
     onReleased: {
         if (isPreview) return;
-        let finalX = applyGridAndSnapX(dragProxy.x);
-        let finalY = applyGridAndSnapY(dragProxy.y);
+        // Final snap/grid on release using the last known raw position
+        let finalX = applyGridAndSnapX(_rawDragX, _rawDragY);
+        let finalY = applyGridAndSnapY(_rawDragY, _rawDragX);
         root.x = finalX;
         root.y = finalY;
-        
+
         let canvas = findCanvas(root.parent);
         if (canvas) {
             canvas.snapLineX = -1;
             canvas.snapLineY = -1;
         }
-        
+
         if (widgetInstance !== null) {
             Config.updateWidgetPosition(widgetInstance.id, finalX, finalY);
         } else if (configEntry) {
