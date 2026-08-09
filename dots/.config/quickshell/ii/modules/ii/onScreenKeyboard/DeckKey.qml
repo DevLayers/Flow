@@ -50,10 +50,13 @@ RippleButton {
     }
 
     // A letter's shift glyph is just its capital, so printing it in the corner says nothing. Only
-    // keys whose second level is a different character earn a corner legend.
-    readonly property bool showsShiftLegend: root.role === "key" && root.shiftGlyph !== ""
+    // keys whose second level is a different character earn a corner legend - and only if the user
+    // wants the corners at all, since a plain deck reads more easily on a small screen.
+    readonly property bool showsSecondaryGlyphs: Config.options?.osk.secondaryGlyphs ?? true
+    readonly property bool showsShiftLegend: root.showsSecondaryGlyphs && root.role === "key" && root.shiftGlyph !== ""
         && root.shiftGlyph !== root.baseGlyph.toUpperCase() && root.level === 0
-    readonly property bool showsAltGrLegend: root.role === "key" && root.altGrGlyph !== "" && root.level !== 2
+    readonly property bool showsAltGrLegend: root.showsSecondaryGlyphs && root.role === "key"
+        && root.altGrGlyph !== "" && root.level !== 2
 
     readonly property int latchState: root.isModifier ? (Ydotool.latched[root.keycode] ?? Ydotool.latchOff) : Ydotool.latchOff
     readonly property bool locked: root.latchState === Ydotool.latchLocked

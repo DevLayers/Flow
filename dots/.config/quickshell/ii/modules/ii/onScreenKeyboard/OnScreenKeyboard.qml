@@ -19,7 +19,6 @@ Scope { // Scope
     readonly property bool autoShowEnabled: OskAutoShow.enabled
 
     // The deck is the keyboard now; the classic one stays available for anyone who wants it back.
-    // Phase 6 adds the setting - until it exists the option reads as undefined, hence the default.
     readonly property bool useDeck: (Config.options?.osk.style ?? "deck") === "deck"
 
     component OskControlButton: GroupButton { // Pin button

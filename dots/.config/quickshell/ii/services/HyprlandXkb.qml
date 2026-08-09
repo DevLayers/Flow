@@ -4,10 +4,13 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
-import qs.modules.common
 
 /**
  * Exposes the active Hyprland Xkb keyboard layout name and code for indicators.
+ *
+ * It only reports. It used to also write the layout into the on-screen keyboard's config on every
+ * switch, which meant the keyboard could never be pinned to a layout and the config file carried a
+ * value nobody chose; the keyboard reads this service directly instead.
  */
 Singleton {
     id: root
@@ -107,9 +110,6 @@ Singleton {
                 // Update when layout might have changed
                 const dataString = event.data;
                 root.currentLayoutName = dataString.substring(dataString.indexOf(",") + 1);
-
-                // Update layout for on-screen keyboard (osk)
-                Config.options.osk.layout = root.currentLayoutName.split(" (")[0];
             } else if (event.name == "configreloaded") {
                 // Mark layout code list to be updated when config is reloaded
                 root.needsLayoutRefresh = true;

@@ -1,13 +1,23 @@
+import qs.services
 import qs.modules.common
 import "layouts.js" as Layouts
 import QtQuick
 import QtQuick.Layouts
 
 Item {
-    id: root    
+    id: root
     property var layouts: Layouts.byName
-    property var activeLayoutName: (layouts.hasOwnProperty(Config.options?.osk.layout)) 
-        ? Config.options?.osk.layout 
+
+    // "auto" follows Hyprland, which HyprlandXkb used to arrange by writing the layout into the
+    // config. It reports and nothing more now, so the keyboard does the resolving. deckFor names a
+    // layout for any xkb code and falls back to the default one, which is the answer anyway for a
+    // code no classic table covers.
+    readonly property string requestedLayout: {
+        const configured = Config.options?.osk.layout ?? "auto";
+        return configured === "auto" ? Layouts.deckFor(HyprlandXkb.currentLayoutCode).name : configured;
+    }
+    property var activeLayoutName: (layouts.hasOwnProperty(root.requestedLayout))
+        ? root.requestedLayout
         : Layouts.defaultLayout
     property var currentLayout: layouts[activeLayoutName]
 
