@@ -50,6 +50,7 @@ Please refer to the **[upstream ii-vynx wiki](https://github.com/vaguesyntax/ii-
 - **[pc-trade](https://github.com/pctrade):** Some design and features inspo.
 - **[so-do-i-look-like-him](https://github.com/so-do-i-look-like-him):** Installation bug fixes.
 - **[asteriau](https://github.com/asteriau):** Cheatsheet keybinds animations.
+- **[hnpf](https://github.com/hnpf):** Nothing widgets design
 - **[gowall](https://github.com/Achno/gowall):** Dynamic icons theme system.
 - **[hyprmon](https://github.com/erans/hyprmon):** Monitor management in settings.
 - **[Quickshell](https://quickshell.org/):** Widget system.
