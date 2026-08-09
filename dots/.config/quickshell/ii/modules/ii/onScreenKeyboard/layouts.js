@@ -322,8 +322,11 @@ const byName = {
 // geometry. Hence a single row definition plus one glyph table per layout.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const deckUnits = 15; // Every row is 15 units wide
-const deckClusterUnits = 2.5; // The arrow cluster claims the last 2.5 units of the bottom two rows
+// Every row is exactly deckUnits wide, cluster included, so the columns line up down the deck.
+// The arrows are full-size keys rather than the half-height pair a real board uses, which costs
+// the extra half unit over a 15u board - Esc, Backspace, Enter and Caps absorb it.
+const deckUnits = 15.5;
+const deckClusterUnits = 3; // The arrow cluster claims the last 3 units of the bottom two rows
 const deckFnRowScale = 0.62; // The F-row is shorter than a full row
 const deckDefaultCode = "us";
 
@@ -352,6 +355,18 @@ function deckSpace(u, code, badge) {
 
 function deckAction(u, action, label) {
     return { role: "action", u: u, action: action, label: label };
+}
+
+// Stamps each key with the offset of its left edge, in units. The deck places its keys at those
+// offsets rather than leaning on a positioner: a grid this fixed has nothing to negotiate, and
+// explicit coordinates cannot drift out of step when a layout swap rebuilds the rows.
+function deckPlace(row) {
+    let at = 0;
+    row.forEach(key => {
+        key.at = at;
+        at += key.u;
+    });
+    return row;
 }
 
 // keycode -> [base, shift, altgr], dumped from `xkbcli compile-keymap --layout <code>`, so every
@@ -443,28 +458,30 @@ const deckMeta = {
     ru: { name: "Russian", short: "RU", description: "ЙЦУКЕН" }
 };
 
+// [keycode, label, units]
 const deckFnKeys = [
-    [1, "Esc"], [59, "F1"], [60, "F2"], [61, "F3"], [62, "F4"], [63, "F5"], [64, "F6"], [65, "F7"],
-    [66, "F8"], [67, "F9"], [68, "F10"], [87, "F11"], [88, "F12"], [99, "PrtSc"], [111, "Del"]
+    [1, "Esc", 1.5], [59, "F1"], [60, "F2"], [61, "F3"], [62, "F4"], [63, "F5"], [64, "F6"],
+    [65, "F7"], [66, "F8"], [67, "F9"], [68, "F10"], [87, "F11"], [88, "F12"], [99, "PrtSc"],
+    [111, "Del"]
 ];
 
 // Rows 5 and 6 end here instead of in a right Shift and a Menu key. Pin and Hide take the two dead
 // corners of the inverted T, so the panel needs no control rail of its own.
 const deckCluster = {
-    top: [deckAction(1, "pin", "Pin"), deckSpecial(1, 103, "↑"), deckAction(1, "hide", "Hide")],
-    bottom: [deckSpecial(1, 105, "←"), deckSpecial(1, 108, "↓"), deckSpecial(1, 106, "→")]
+    top: deckPlace([deckAction(1, "pin", "Pin"), deckSpecial(1, 103, "↑"), deckAction(1, "hide", "Hide")]),
+    bottom: deckPlace([deckSpecial(1, 105, "←"), deckSpecial(1, 108, "↓"), deckSpecial(1, 106, "→")])
 };
 
 function deckRows(glyphs, badge) {
     const key = (code, u) => deckLevelKey(u ?? 1, code, glyphs);
     return [
-        deckFnKeys.map(entry => deckSpecial(1, entry[0], entry[1])),
+        deckFnKeys.map(entry => deckSpecial(entry[2] ?? 1, entry[0], entry[1])),
         [41, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(code => key(code))
-            .concat([deckSpecial(2, 14, "⌫")]),
+            .concat([deckSpecial(2.5, 14, "⌫")]),
         [deckSpecial(1.5, 15, "Tab")]
             .concat([16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27].map(code => key(code)))
-            .concat([deckSpecial(1.5, 28, "⏎")]),
-        [deckSpecial(2, 58, "Caps")]
+            .concat([deckSpecial(2, 28, "⏎")]),
+        [deckSpecial(2.5, 58, "Caps")]
             .concat([30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40].map(code => key(code)))
             .concat([key(43, 2)]),
         [deckMod(1.5, 42, "Shift")]
@@ -473,7 +490,7 @@ function deckRows(glyphs, badge) {
             deckMod(1.5, 29, "Ctrl"), deckMod(1.25, 125, "Super"), deckMod(1.25, 56, "Alt"),
             deckSpace(6, 57, badge), deckMod(1.25, 100, "AltGr"), deckMod(1.25, 97, "Ctrl")
         ]
-    ];
+    ].map(deckPlace);
 }
 
 function buildDeck(code) {
@@ -499,13 +516,25 @@ const byXkbCode = {
 };
 
 /**
+ * The key of the deck an xkb code ("fr") or a layout name ("French") names, or null when no deck
+ * covers it. Hyprland glues a variant onto its layout ("frazerty"), so a leading two-letter match
+ * counts as well: the variant only moves a few glyphs, and the base table beats no keyboard at all.
+ */
+function deckCodeFor(codeOrName) {
+    if (!codeOrName) return null;
+    const name = String(codeOrName);
+    const code = name.toLowerCase();
+    if (byXkbCode.hasOwnProperty(code)) return code;
+    const named = Object.keys(byXkbCode).find(key => byXkbCode[key].name === name);
+    if (named) return named;
+    const head = code.slice(0, 2);
+    return byXkbCode.hasOwnProperty(head) ? head : null;
+}
+
+/**
  * Resolves a deck from an xkb code ("fr") or a layout name ("French"), falling back to US.
  * Deciding what to pass - the live layout or a pinned one - is the caller's job.
  */
 function deckFor(codeOrName) {
-    if (!codeOrName) return byXkbCode[deckDefaultCode];
-    const code = String(codeOrName).toLowerCase();
-    if (byXkbCode.hasOwnProperty(code)) return byXkbCode[code];
-    const match = Object.keys(byXkbCode).find(key => byXkbCode[key].name === codeOrName);
-    return match ? byXkbCode[match] : byXkbCode[deckDefaultCode];
+    return byXkbCode[deckCodeFor(codeOrName) ?? deckDefaultCode];
 }
