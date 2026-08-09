@@ -651,6 +651,8 @@ Singleton {
         property real verticalBarWindowWidth: Config.options.bar.cornerStyle === 1 ? (baseVerticalBarWidth + root.sizes.hyprlandGapsOut * 2) : baseVerticalBarWidth
         property real wallpaperSelectorWidth: 1200
         property real wallpaperSelectorHeight: 690
+        property real wallpaperSelectorSearchWidth: 300
+        property real wallpaperSelectorSortDialogWidth: 280
         property real wallpaperSelectorItemMargins: 8
         property real wallpaperSelectorItemPadding: 6
         property int dockButtonSize: Math.round((Config.options?.dock.height ?? 60) * 0.85)

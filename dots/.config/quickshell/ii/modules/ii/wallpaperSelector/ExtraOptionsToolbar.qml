@@ -14,6 +14,7 @@ Toolbar {
 
     property string text: filterField.text
     property alias searchField: filterField
+    signal closeRequested
 
     function focusSearch() {
         filterField.forceActiveFocus();
@@ -31,7 +32,7 @@ Toolbar {
 
     ToolbarTextField {
         id: filterField
-        implicitWidth: Appearance.sizes.searchWidthCollapsed
+        implicitWidth: Appearance.sizes.wallpaperSelectorSearchWidth
         colBackground: Appearance.colors.colLayer2
         placeholderText: {
             if (wallpaperSelectorContent.browserMode) return Translation.tr("Search API (e.g. nature, city)");
@@ -63,6 +64,10 @@ Toolbar {
                 WallpaperBrowser.makeRequest(allTags, 20, 1);
                 grid.currentIndex = 0;
                 text = "";
+            } else if (!wallpaperSelectorContent.browserMode && grid.count > 0) {
+                // TextInput owns the focus while searching, so forward Enter
+                // explicitly to the same activation path used by the shell.
+                grid.activateCurrent();
             }
         }
 
@@ -99,9 +104,8 @@ Toolbar {
         colText: Appearance.colors.colOnLayer2
         colRipple: Appearance.colors.colLayer2Active
         colRippleToggled: Appearance.colors.colPrimaryActive
-        onClicked: {
-            GlobalStates.wallpaperSelectorOpen = false;
-        }
+        downAction: () => extraOptions.closeRequested()
+        onClicked: extraOptions.closeRequested()
         text: "close"
         StyledToolTip {
             text: Translation.tr("Cancel wallpaper selection")

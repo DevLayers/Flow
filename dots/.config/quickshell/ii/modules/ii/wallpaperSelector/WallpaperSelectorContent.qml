@@ -28,8 +28,7 @@ MouseArea {
             { icon: "image", name: Translation.tr("Pictures"), path: Directories.pictures }, 
             { icon: "movie", name: Translation.tr("Videos"), path: Directories.videos }, 
             { icon: "public", name: Translation.tr("Browser"), path: "BROWSER_MODE" }, 
-            { icon: "favorite", name: Translation.tr("Favourites"), path: "FAVOURITES_MODE" }, 
-            { icon: "", name: "---", path: "INTENTIONALLY_INVALID_DIR" }
+            { icon: "favorite", name: Translation.tr("Favourites"), path: "FAVOURITES_MODE" }
         ];
 
         const favDirs = Persistent.states.wallpaper.favouriteDirectories;
@@ -37,9 +36,8 @@ MouseArea {
             for (let i = 0; i < favDirs.length; i++) {
                 const path = favDirs[i];
                 const folderName = path.split('/').pop() || path;
-                base.push({ icon: "folder_special", name: folderName, path: path });
+                base.push({ icon: "folder_special", name: folderName, path: path, groupStart: i === 0 });
             }
-            base.push({ icon: "", name: "---", path: "INTENTIONALLY_INVALID_DIR" });
         }
 
         const configDirs = Config.options.wallpaperSelector.directories || [];
@@ -48,7 +46,8 @@ MouseArea {
             base.push({
                 icon: entry.icon || "folder",
                 name: entry.name || entry.path.split('/').pop() || "Dir",
-                path: entry.path
+                path: entry.path,
+                groupStart: i === 0
             });
         }
 
@@ -83,6 +82,13 @@ MouseArea {
         if (!colorFilterToolbar.visible) updateColorCache();
         colorFilterToolbar.visible = !colorFilterToolbar.visible;
         if (!colorFilterToolbar.visible) activeColorFilter = "";
+    }
+
+    function closeSelector() {
+        moreOptionsModelData = null;
+        colorFilterToolbar.visible = false;
+        activeColorFilter = "";
+        GlobalStates.wallpaperSelectorOpen = false;
     }
 
     focus: true
@@ -277,16 +283,20 @@ function moveToTrashFile(modelData) {
     }
 
     function selectWallpaperPath(filePath) {
-        if (filePath && filePath.length > 0) {
-            if (GlobalStates.wallpaperSelectorTarget === "lockscreen") {
-                Wallpapers.selectLockscreen(filePath, wallpaperSelectorContent.useDarkMode);
-            } else if (GlobalStates.wallpaperSelectorTarget === "lightmode") {
-                Wallpapers.selectLightmode(filePath, wallpaperSelectorContent.useDarkMode);
-            } else {
-                Wallpapers.select(filePath, wallpaperSelectorContent.useDarkMode);
-            }
-            extraOptions.clearSearch();
-            wallpaperSelectorContent.browserMode = false;
+        if (!filePath || filePath.length === 0) return;
+
+        // Reset the filter before Wallpapers.changed closes this selector.
+        // Otherwise the destroyed search field can leave searchQuery active,
+        // and the next open may rebuild an apparently empty model.
+        extraOptions.clearSearch();
+        wallpaperSelectorContent.browserMode = false;
+
+        if (GlobalStates.wallpaperSelectorTarget === "lockscreen") {
+            Wallpapers.selectLockscreen(filePath, wallpaperSelectorContent.useDarkMode);
+        } else if (GlobalStates.wallpaperSelectorTarget === "lightmode") {
+            Wallpapers.selectLightmode(filePath, wallpaperSelectorContent.useDarkMode);
+        } else {
+            Wallpapers.select(filePath, wallpaperSelectorContent.useDarkMode);
         }
     }
 
@@ -538,6 +548,7 @@ function moveToTrashFile(modelData) {
                                         baseSize: 40
                                         baseHighlightHeight: 32
                                         iconSize: 18
+                                        groupSpacing: modelData.groupStart ? Appearance.font.pixelSize.small : 0
                                         
                                         buttonIcon: modelData.icon
                                         buttonText: modelData.name
@@ -899,16 +910,18 @@ function moveToTrashFile(modelData) {
                         }
 
                         function activateCurrent() {
-                            let filePath;
-                            let isDir = false;
-                            if (wallpaperSelectorContent.browserMode) {
-                                filePath = grid.model[currentIndex].filePath;
-                            } else if (wallpaperSelectorContent.favMode || wallpaperSelectorContent.activeColorFilter) {
-                                filePath = grid.model.get(currentIndex).filePath;
-                            } else {
-                                filePath = grid.model.get(currentIndex, "filePath");
-                                isDir = grid.model.get(currentIndex, "fileIsDir");
-                            }
+                            if (grid.count <= 0 || currentIndex < 0) return;
+
+                            const modelData = wallpaperSelectorContent.browserMode
+                                ? grid.model[currentIndex]
+                                : grid.model.get(currentIndex);
+                            if (!modelData) return;
+
+                            const filePath = modelData.actualPath
+                                || (wallpaperSelectorContent.browserMode ? modelData.fileUrl : modelData.filePath)
+                                || modelData.filePath
+                                || "";
+                            const isDir = Boolean(modelData.fileIsDir);
                             if (isDir) {
                                 Wallpapers.setDirectory(filePath);
                             } else {
@@ -929,7 +942,7 @@ function moveToTrashFile(modelData) {
                             }
                         }
 
-                        model: wallpaperSelectorContent.browserMode ? wallpaperSelectorContent.apiImages : (wallpaperSelectorContent.favMode ? favouritesModel : (wallpaperSelectorContent.activeColorFilter ? colorFilteredModel : Wallpapers.folderModel))
+                        model: wallpaperSelectorContent.browserMode ? wallpaperSelectorContent.apiImages : (wallpaperSelectorContent.favMode ? favouritesModel : (wallpaperSelectorContent.activeColorFilter ? colorFilteredModel : Wallpapers.sortedFolderModel))
                         onModelChanged: {
                             currentIndex = 0
                             loadedCount = 0
@@ -1092,9 +1105,32 @@ function moveToTrashFile(modelData) {
                     ExtraOptionsToolbar {
                         id: extraOptions
                         z: 20
+                        onCloseRequested: wallpaperSelectorContent.closeSelector()
                         anchors {
                             bottom: parent.bottom
                             horizontalCenter: parent.horizontalCenter
+                            bottomMargin: 8
+                        }
+
+                        opacity: wallpaperGridBackground.animateIn ? 1.0 : 0.0
+                        transform: Translate {
+                            y: wallpaperGridBackground.animateIn ? 0 : 25
+                        }
+                        Behavior on opacity {
+                            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+                        }
+                        Behavior on transform {
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                        }
+                    }
+
+                    WallpaperSortToolbar {
+                        id: sortToolbar
+                        z: 20
+                        anchors {
+                            left: extraOptions.right
+                            leftMargin: Appearance.sizes.hyprlandGapsOut
+                            bottom: parent.bottom
                             bottomMargin: 8
                         }
 
@@ -1144,6 +1180,14 @@ function moveToTrashFile(modelData) {
             } else {
                 colorCacheProc.signal(9)
             }
+        }
+    }
+
+    Connections {
+        target: Wallpapers
+        function onSortChanged() {
+            grid.currentIndex = 0;
+            grid.positionViewAtBeginning();
         }
     }
 

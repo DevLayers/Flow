@@ -36,12 +36,158 @@ Singleton {
     readonly property bool thumbnailGenerationRunning: thumbgenProc.running
     property real thumbnailGenerationProgress: 0
     property var colorCache: ({})
+    property string sortField: "modified"
+    property bool sortReversed: false
+    property var creationTimes: ({})
+    property list<string> pendingCreationPaths: []
+    property alias sortedFolderModel: sortedFolderModel
 
     signal changed()
     signal thumbnailGenerated(directory: string)
     signal thumbnailGeneratedFile(filePath: string)
+    signal sortChanged()
 
     function load () {} // For forcing initialization
+
+    function normalizeSortField(value) {
+        const field = String(value || "modified");
+        return ["name", "modified", "created", "size"].includes(field) ? field : "modified";
+    }
+
+    function normalizeDateValue(value) {
+        if (typeof value === "number" && isFinite(value)) return value;
+        if (value && typeof value.toMSecsSinceEpoch === "function") {
+            const milliseconds = Number(value.toMSecsSinceEpoch());
+            if (isFinite(milliseconds)) return milliseconds;
+        }
+        if (value && typeof value.getTime === "function") {
+            const milliseconds = Number(value.getTime());
+            if (isFinite(milliseconds)) return milliseconds;
+        }
+        const parsed = Date.parse(String(value || ""));
+        return isFinite(parsed) ? parsed : 0;
+    }
+
+    function sortValue(entry) {
+        switch (root.sortField) {
+        case "name":
+            return entry.fileName.toLocaleLowerCase();
+        case "created":
+            return entry.fileCreated > 0 ? entry.fileCreated : entry.fileLastModified;
+        case "size":
+            return entry.fileSize;
+        case "modified":
+        default:
+            return entry.fileLastModified;
+        }
+    }
+
+    function rebuildSortedFolderModel() {
+        const entries = [];
+        for (let i = 0; i < folderModel.count; i++) {
+            const filePath = String(folderModel.get(i, "filePath") || "");
+            if (!filePath) continue;
+
+            const normalizedPath = FileUtils.trimFileProtocol(filePath);
+            entries.push({
+                filePath: filePath,
+                fileUrl: String(folderModel.get(i, "fileURL") || filePath),
+                fileName: String(folderModel.get(i, "fileName") || ""),
+                fileBaseName: String(folderModel.get(i, "fileBaseName") || ""),
+                fileSuffix: String(folderModel.get(i, "fileSuffix") || ""),
+                fileSize: Number(folderModel.get(i, "fileSize") || 0),
+                fileLastModified: root.normalizeDateValue(folderModel.get(i, "fileLastModified")),
+                fileCreated: Number(root.creationTimes[normalizedPath] || 0),
+                fileIsDir: Boolean(folderModel.get(i, "fileIsDir"))
+            });
+        }
+
+        entries.sort((left, right) => {
+            const leftValue = root.sortValue(left);
+            const rightValue = root.sortValue(right);
+            let comparison = 0;
+            if (typeof leftValue === "string") {
+                comparison = leftValue.localeCompare(rightValue);
+            } else if (leftValue < rightValue) {
+                comparison = -1;
+            } else if (leftValue > rightValue) {
+                comparison = 1;
+            }
+
+            if (comparison === 0) {
+                comparison = left.fileName.toLocaleLowerCase().localeCompare(right.fileName.toLocaleLowerCase());
+            }
+            return root.sortReversed ? -comparison : comparison;
+        });
+
+        sortedFolderModel.clear();
+        for (let i = 0; i < entries.length; i++) {
+            sortedFolderModel.append(entries[i]);
+        }
+    }
+
+    function refreshCreationTimes() {
+        const paths = [];
+        for (let i = 0; i < folderModel.count; i++) {
+            const filePath = String(folderModel.get(i, "filePath") || "");
+            if (filePath) paths.push(FileUtils.trimFileProtocol(filePath));
+        }
+
+        root.pendingCreationPaths = paths;
+        if (paths.length === 0) {
+            root.creationTimes = ({});
+            root.rebuildSortedFolderModel();
+            return;
+        }
+
+        creationTimesProc.command = [
+            "bash", "-c",
+            "for path do stat -c '%W' -- \"$path\" 2>/dev/null || printf '0\\n'; done",
+            "wallpaper-birth-times"
+        ].concat(paths);
+        creationTimesProc.running = true;
+        root.rebuildSortedFolderModel();
+    }
+
+    function queueFolderModelRefresh() {
+        folderModelRefreshTimer.restart();
+    }
+
+    function applyNativeSort() {
+        if (root.sortField === "name") {
+            folderModel.sortField = FolderListModel.Name;
+        } else if (root.sortField === "size") {
+            folderModel.sortField = FolderListModel.Size;
+        } else {
+            folderModel.sortField = FolderListModel.Time;
+        }
+        folderModel.sortReversed = root.sortReversed;
+    }
+
+    function loadSortOptions() {
+        const options = Config.options?.wallpaperSelector;
+        root.sortField = root.normalizeSortField(options?.sortField);
+        root.sortReversed = options?.sortReversed === true;
+        root.applyNativeSort();
+        root.queueFolderModelRefresh();
+    }
+
+    function selectSortField(field) {
+        const nextField = root.normalizeSortField(field);
+        if (root.sortField === nextField) {
+            root.sortReversed = !root.sortReversed;
+        } else {
+            root.sortField = nextField;
+            root.sortReversed = false;
+        }
+
+        Config.options.wallpaperSelector.sortField = root.sortField;
+        Config.options.wallpaperSelector.sortReversed = root.sortReversed;
+        Config.saveOptionsNow();
+        root.applyNativeSort();
+        root.rebuildSortedFolderModel();
+        root.sortChanged();
+    }
 
     property list<string> videoExtensions: [
         "mp4", "mkv", "webm", "avi", "mov", "m4v", "ogv"
@@ -100,6 +246,7 @@ Singleton {
         target: Config
         function onReadyChanged() {
             if (!Config.ready) return;
+            root.loadSortOptions();
             if (Config.options.background.useWallpaperEngine) {
                 if (Config.options.background.wallpaperEngineId) {
                     root.apply(Config.options.background.wallpaperEngineId, Appearance.m3colors.darkmode);
@@ -338,7 +485,37 @@ Singleton {
                 const path = folderModel.get(i, "filePath") || FileUtils.trimFileProtocol(folderModel.get(i, "fileURL"))
                 if (path && path.length) root.wallpapers.push(path)
             }
+            root.queueFolderModelRefresh();
         }
+        onFolderChanged: root.queueFolderModelRefresh()
+        onStatusChanged: root.queueFolderModelRefresh()
+    }
+
+    Timer {
+        id: folderModelRefreshTimer
+        interval: 100
+        repeat: false
+        onTriggered: root.refreshCreationTimes()
+    }
+
+    Process {
+        id: creationTimesProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const values = text.trim().length > 0 ? text.trim().split(/\r?\n/) : [];
+                const nextCreationTimes = ({});
+                for (let i = 0; i < root.pendingCreationPaths.length; i++) {
+                    const value = Number(values[i] || 0);
+                    nextCreationTimes[root.pendingCreationPaths[i]] = isFinite(value) ? value : 0;
+                }
+                root.creationTimes = nextCreationTimes;
+                root.rebuildSortedFolderModel();
+            }
+        }
+    }
+
+    ListModel {
+        id: sortedFolderModel
     }
 
     // Thumbnail generation

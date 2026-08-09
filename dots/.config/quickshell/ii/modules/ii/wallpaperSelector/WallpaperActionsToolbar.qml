@@ -153,7 +153,7 @@ Toolbar {
             anchors.centerIn: parent
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            iconSize: 22
+            iconSize: expandButton.iconSize
             text: expandButton.text
             fill: expandButton.iconFill ? 1 : 0
             color: expandButton.colText

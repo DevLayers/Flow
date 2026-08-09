@@ -3192,6 +3192,8 @@ Singleton {
                 property list<var> directories: []
                 property bool useCustomDefaultPath: false
                 property string customDefaultPath: FileUtils.trimFileProtocol(`${Directories.pictures}/Wallpapers`)
+                property string sortField: "modified"
+                property bool sortReversed: false
             }
 
             property JsonObject windows: JsonObject {

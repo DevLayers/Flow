@@ -22,12 +22,14 @@ TabButton {
     property real baseSize: 56
     property real baseHighlightHeight: 32
     property real iconSize: 24
+    property real groupSpacing: 0
     property real highlightCollapsedTopMargin: 8
     padding: 0
 
     // The navigation item’s target area always spans the full width of the
     // nav rail, even if the item container hugs its contents.
     Layout.fillWidth: true
+    Layout.topMargin: root.groupSpacing
     // implicitWidth: contentItem.implicitWidth
     implicitHeight: baseSize
 
