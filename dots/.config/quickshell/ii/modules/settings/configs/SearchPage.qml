@@ -49,7 +49,7 @@ ContentPage {
 
             let qmlStr = section.fileImports + "\n";
             qmlStr += "import QtQuick; import QtQuick.Layouts; import qs.modules.common.widgets; import qs.services; import qs.modules.common; \n";
-            qmlStr += "ContentSection { title: \"" + section.title.replace(/"/g, '\\"') + "\"; icon: \"" + section.icon + "\"; Layout.fillWidth: true; \n";
+            qmlStr += "ContentSection { title: \"" + section.title.replace(/"/g, '\\"') + "\"; icon: \"" + section.icon + "\"; pageId: \"" + (section.pageId ? section.pageId.replace(/"/g, '\\"') : "") + "\"; Layout.fillWidth: true; \n";
 
             for (let j = 0; j < section.items.length; j++) {
                 qmlStr += section.items[j].full + "\n";

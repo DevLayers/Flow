@@ -389,6 +389,7 @@ Item {
 
             if (sectionMatches) {
                 results.push({
+                    pageId: section.pageId,
                     title: section.title,
                     icon: section.icon,
                     fileImports: section.fileImports,

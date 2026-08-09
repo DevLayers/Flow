@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Quickshell
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -16,6 +17,27 @@ ColumnLayout {
 
     Layout.fillWidth: true
     spacing: 12
+
+    property string pageId: ""
+
+    function navigateToPage() {
+        if (!root.pageId || root.pageId === "")
+            return;
+        const win = root.QsWindow.window;
+        if (!win || win.pageIndexById === undefined)
+            return;
+        const idx = win.pageIndexById(root.pageId);
+        if (idx < 0)
+            return;
+
+        if (win.currentPage === idx) {
+            SearchRegistry.currentSearch = root.title;
+            win.pendingSectionHighlight = "";
+        } else {
+            win.pendingSectionHighlight = root.title;
+            win.currentPage = idx;
+        }
+    }
 
     // NOTE: The `page` id (declared in the consuming ContentPage file, e.g.
     // `WidgetsConfig.qml`) is NOT accessible from this separate component file
@@ -123,6 +145,15 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 8
 
+                MouseArea {
+                    id: headerMouseArea
+                    anchors.fill: parent
+                    hoverEnabled: root.pageId !== "" && root.pageId.length > 0
+                    cursorShape: (root.pageId !== "" && root.pageId.length > 0) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    enabled: root.pageId !== "" && root.pageId.length > 0
+                    onClicked: root.navigateToPage()
+                }
+
                 Loader {
                     id: iconLoader
                     active: root.icon && root.icon.length > 0
@@ -133,7 +164,7 @@ ColumnLayout {
                     sourceComponent: MaterialSymbol {
                         text: root.icon
                         iconSize: Appearance.font.pixelSize.huge
-                        color: Appearance.colors.colOnLayer1
+                        color: headerMouseArea.containsMouse && root.pageId ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
                     }
                 }
 
@@ -143,8 +174,36 @@ ColumnLayout {
                     font.pixelSize: Appearance.font.pixelSize.huge
                     font.weight: Font.DemiBold
                     font.variableAxes: Appearance.font.variableAxes.titleRounded
-                    color: Appearance.colors.colOnLayer1
+                    color: headerMouseArea.containsMouse && root.pageId ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
                     Layout.fillWidth: true
+
+                    Behavior on color {
+                        ColorAnimation { duration: 150 }
+                    }
+                }
+
+                RowLayout {
+                    spacing: 4
+                    visible: root.pageId !== "" && root.pageId.length > 0
+                    Layout.alignment: Qt.AlignVCenter
+                    opacity: headerMouseArea.containsMouse ? 1.0 : 0.65
+
+                    Behavior on opacity {
+                        NumberAnimation { duration: 150 }
+                    }
+
+                    StyledText {
+                        readonly property var pageObj: SettingsPageRegistry.pageById(root.pageId)
+                        text: pageObj ? Translation.tr(pageObj.name) : ""
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: headerMouseArea.containsMouse ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                    }
+
+                    MaterialSymbol {
+                        text: "arrow_forward"
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: headerMouseArea.containsMouse ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                    }
                 }
 
                 MaterialSymbol {
