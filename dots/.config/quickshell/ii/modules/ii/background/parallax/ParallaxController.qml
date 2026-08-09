@@ -17,6 +17,7 @@ Item {
     required property bool parallaxFrozen
     required property var activeWorkspaceId
     property bool wallpaperCentered: false
+    property bool wallpaperIsVideo: false
 
     // Intermediate calculations
     readonly property int lower: Math.floor(firstWorkspaceId / chunkSize) * chunkSize
@@ -25,7 +26,7 @@ Item {
 
     readonly property real valueX: {
         let result = 0.5;
-        if (Config.options.background.parallax.enableWorkspace && !verticalParallax) {
+        if (!wallpaperIsVideo && Config.options.background.parallax.enableWorkspace && !verticalParallax) {
             let activeId = activeWorkspaceId ?? 1;
             let ratio = ((activeId - lower) / range);
             result = Config.options.background.parallax.invertHorizontal ? (1.0 - ratio) : ratio;
@@ -34,14 +35,14 @@ Item {
     }
 
     readonly property real sidebarOffsetX: {
-        if (!Config.options.background.parallax.enableSidebar)
+        if (wallpaperIsVideo || !Config.options.background.parallax.enableSidebar)
             return 0;
         return (0.15 * GlobalStates.effectiveRightOpen - 0.15 * GlobalStates.effectiveLeftOpen);
     }
 
     readonly property real valueY: {
         let result = 0.5;
-        if (Config.options.background.parallax.enableWorkspace && verticalParallax) {
+        if (!wallpaperIsVideo && Config.options.background.parallax.enableWorkspace && verticalParallax) {
             let activeId = activeWorkspaceId ?? 1;
             let ratio = ((activeId - lower) / range);
             result = Config.options.background.parallax.invertVertical ? (1.0 - ratio) : ratio;
@@ -49,8 +50,8 @@ Item {
         return result;
     }
 
-    readonly property real effectiveValueX: parallaxFrozen ? 0.5 : Math.max(0, Math.min(1, valueX)) + sidebarOffsetX
-    readonly property real effectiveValueY: parallaxFrozen ? 0.5 : Math.max(0, Math.min(1, valueY))
+    readonly property real effectiveValueX: wallpaperIsVideo || parallaxFrozen ? 0.5 : Math.max(0, Math.min(1, valueX)) + sidebarOffsetX
+    readonly property real effectiveValueY: wallpaperIsVideo || parallaxFrozen ? 0.5 : Math.max(0, Math.min(1, valueY))
 
     // Outputs
     readonly property real parallaxX: ((GlobalStates.screenLocked && wallpaperCentered) || parallaxFrozen)

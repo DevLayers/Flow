@@ -13,13 +13,27 @@ ContentPage {
 
     forceWidth: false
 
+    readonly property bool videoWallpaper: {
+        const background = Config.options && Config.options.background ? Config.options.background : null;
+        if (!background) return false;
+        return background.useWallpaperEngine === true || Wallpapers.isVideoFile(background.wallpaperPath || "");
+    }
+
     ContentSection {
         title: Translation.tr("Parallax Engine")
         icon: "sync_alt"
 
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: page.videoWallpaper
+            materialIcon: "movie"
+            text: Translation.tr("Video wallpaper active: window blur and parallax are disabled automatically; only the Default zoom style is available.")
+        }
+
         ConfigSwitch {
             buttonIcon: "unfold_more_double"
             text: Translation.tr("Vertical movement")
+            enabled: !page.videoWallpaper
             checked: Config.options.background.parallax.vertical
             onCheckedChanged: {
                 HyprlandSettings.changeAnimation("workspaces", checked ? "slidevert" : "slide");
@@ -30,6 +44,7 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "counter_1"
             text: Translation.tr("Depends on workspace")
+            enabled: !page.videoWallpaper
             checked: Config.options.background.parallax.enableWorkspace
             onCheckedChanged: {
                 Config.options.background.parallax.enableWorkspace = checked;
@@ -39,6 +54,7 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "loop"
             text: Translation.tr("Loop wallpaper")
+            enabled: !page.videoWallpaper
             checked: Config.options.background.parallax.loop
             onCheckedChanged: {
                 Config.options.background.parallax.loop = checked;
@@ -48,6 +64,7 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "swap_horiz"
             text: Translation.tr("Invert horizontal movement")
+            enabled: !page.videoWallpaper
             checked: Config.options.background.parallax.invertHorizontal
             onCheckedChanged: {
                 Config.options.background.parallax.invertHorizontal = checked;
@@ -57,6 +74,7 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "swap_vert"
             text: Translation.tr("Invert vertical movement")
+            enabled: !page.videoWallpaper
             checked: Config.options.background.parallax.invertVertical
             onCheckedChanged: {
                 Config.options.background.parallax.invertVertical = checked;
@@ -66,6 +84,7 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "side_navigation"
             text: Translation.tr("Depends on sidebars")
+            enabled: !page.videoWallpaper
             checked: Config.options.background.parallax.enableSidebar
             onCheckedChanged: {
                 Config.options.background.parallax.enableSidebar = checked;
@@ -75,6 +94,7 @@ ContentPage {
         ConfigSlider {
             buttonIcon: "speed"
             text: Translation.tr("Parallax movement intensity")
+            enabled: !page.videoWallpaper
             visible: Config.options.background.parallax.enableWorkspace
             usePercentTooltip: false
             from: 1
@@ -89,6 +109,7 @@ ContentPage {
         ConfigSlider {
             buttonIcon: "loupe"
             text: Translation.tr("Preferred wallpaper zoom (%)")
+            enabled: !page.videoWallpaper
             from: 100
             to: 150
             stepSize: 1
@@ -176,6 +197,7 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "blur_circular"
             text: Translation.tr("Blur wallpaper when a window is open")
+            enabled: !page.videoWallpaper
             checked: Config.options.background.blurWhenWindowsOpen
             onCheckedChanged: {
                 Config.options.background.blurWhenWindowsOpen = checked;
@@ -189,6 +211,7 @@ ContentPage {
         ConfigSlider {
             buttonIcon: "lens_blur"
             text: Translation.tr("Blur intensity when a window is open")
+            enabled: !page.videoWallpaper
             visible: Config.options.background.blurWhenWindowsOpen
             usePercentTooltip: true
             from: 0
@@ -214,7 +237,7 @@ ContentPage {
         }
 
         ContentSubsection {
-            visible: Config.options.background.zoomOutEnabled
+            visible: Config.options.background.zoomOutEnabled || page.videoWallpaper
             title: Translation.tr("Zoom background style")
             icon: "style"
             Layout.fillWidth: true
@@ -228,6 +251,7 @@ ContentPage {
                     {
                         "displayName": Translation.tr("Gnome Like"),
                         "icon": "blur_on",
+                        "enabled": !page.videoWallpaper,
                         "value": 0
                     },
                     {
@@ -238,6 +262,7 @@ ContentPage {
                     {
                         "displayName": Translation.tr("Zoom In"),
                         "icon": "zoom_in",
+                        "enabled": !page.videoWallpaper,
                         "value": 2
                     }
                 ]
@@ -245,7 +270,8 @@ ContentPage {
         }
 
         ConfigSwitch {
-            visible: Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0
+            visible: (Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0) || page.videoWallpaper
+            enabled: !page.videoWallpaper
             buttonIcon: "open_with"
             text: Translation.tr("Scale windows with wallpaper (Experimental)")
             checked: Config.options.background.windowZoomOnOverview
@@ -259,7 +285,8 @@ ContentPage {
         }
 
         ConfigSwitch {
-            visible: Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0 && Config.options.background.windowZoomOnOverview
+            visible: (Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0 && Config.options.background.windowZoomOnOverview) || page.videoWallpaper
+            enabled: !page.videoWallpaper
             buttonIcon: "videocam"
             text: Translation.tr("Keep screencopy live (no freeze)")
             checked: Config.options.background.windowZoomLiveCapture

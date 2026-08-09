@@ -32,6 +32,7 @@ Item {
     required property real movableXSpace
     required property real movableYSpace
     required property real minSafeScale
+    readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
 
     required property real parallaxX
     required property real parallaxY
@@ -54,7 +55,7 @@ Item {
 
     // Calculations
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
-    readonly property bool zoomInStyle: Config.options.overview.scrollingStyle.zoomStyle === "in"
+    readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
     readonly property bool overviewOpen: GlobalStates.overviewOpen
 
@@ -72,12 +73,12 @@ Item {
     readonly property real defaultRatio: zoomInStyle ? zoomLevels.in.default : zoomLevels.out.default
     readonly property real zoomedRatio: zoomInStyle ? zoomLevels.in.zoomed : zoomLevels.out.zoomed
 
-    property real scaleAnimated: overviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
+    property real scaleAnimated: !videoEffectsDisabled && overviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
     Behavior on scaleAnimated {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(wallpaperImageRoot)
     }
 
-    scale: showOpeningAnimation && overviewOpen && isScrollingLayout ? zoomedRatio : defaultRatio
+    scale: !videoEffectsDisabled && showOpeningAnimation && overviewOpen && isScrollingLayout ? zoomedRatio : defaultRatio
     opacity: mediaModeOpen ? 0 : 1
 
     Behavior on opacity {
@@ -113,8 +114,8 @@ Item {
         // GPU: only instantiate MultiEffect when zoomed-out state is active.
         // Previously always-loaded (active:true) with opacity controlling visibility —
         // the shader + texture stayed resident on GPU even at idle.
-        active: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperIsVideo && !Config.options.background.useWallpaperEngine
-        opacity: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperIsVideo && !Config.options.background.useWallpaperEngine ? 1.0 : 0.0
+        active: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperImageRoot.videoEffectsDisabled
+        opacity: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperImageRoot.videoEffectsDisabled ? 1.0 : 0.0
         Behavior on opacity {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(wallpaperImageRoot)
         }

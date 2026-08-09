@@ -46,8 +46,49 @@ Singleton {
     property list<string> videoExtensions: [
         "mp4", "mkv", "webm", "avi", "mov", "m4v", "ogv"
     ]
+    readonly property bool videoWallpaperActive: {
+        const background = Config.options && Config.options.background ? Config.options.background : null;
+        if (!background) return false;
+        return background.useWallpaperEngine === true || root.isVideoFile(background.wallpaperPath || "");
+    }
+    property bool enforcingVideoWallpaperConstraints: false
+
     function isVideoFile(name) {
-        return videoExtensions.some(ext => name.endsWith("." + ext))
+        const value = String(name || "").toLowerCase();
+        return videoExtensions.some(ext => value.endsWith("." + ext));
+    }
+
+    function enforceVideoWallpaperConstraints() {
+        if (!Config.ready || !root.videoWallpaperActive || root.enforcingVideoWallpaperConstraints)
+            return;
+
+        const background = Config.options.background;
+        const parallax = background.parallax;
+        if (!parallax)
+            return;
+
+        root.enforcingVideoWallpaperConstraints = true;
+
+        background.blurWhenWindowsOpen = false;
+        background.zoomOutEnabled = false;
+        background.zoomOutStyle = 1;
+        background.windowZoomOnOverview = false;
+        background.windowZoomLiveCapture = false;
+        background.cheatsheetZoomOut = false;
+        background.overviewZoomOut = false;
+        background.workspaceBlur = false;
+
+        parallax.vertical = false;
+        parallax.autoVertical = false;
+        parallax.enableWorkspace = false;
+        parallax.enableSidebar = false;
+        parallax.loop = false;
+        parallax.invertHorizontal = false;
+        parallax.invertVertical = false;
+        parallax.workspaceZoom = 1.0;
+
+        root.enforcingVideoWallpaperConstraints = false;
+        Config.saveOptionsNow();
     }
 
     // Executions
@@ -66,6 +107,7 @@ Singleton {
             } else if (root.isVideoFile(Config.options.background.wallpaperPath.toLowerCase())) {
                 root.apply(Config.options.background.wallpaperPath, Appearance.m3colors.darkmode);
             }
+            root.enforceVideoWallpaperConstraints();
             // Pre-generate lockscreen colors if configured but missing
             if (Config.options.background.useSeparateLockscreenWallpaper) {
                 const lockPath = Config.options.background.lockscreenWallpaperPath;
@@ -74,6 +116,17 @@ Singleton {
                     lockscreenColorsCheckProc.exec(["test", "-f", Directories.lockscreenColorsPath]);
                 }
             }
+        }
+    }
+
+    Connections {
+        target: Config.options ? Config.options.background : null
+        enabled: Config.ready
+        function onWallpaperPathChanged() {
+            root.enforceVideoWallpaperConstraints();
+        }
+        function onUseWallpaperEngineChanged() {
+            root.enforceVideoWallpaperConstraints();
         }
     }
     
@@ -289,13 +342,14 @@ Singleton {
     }
 
     // Thumbnail generation
-    function generateThumbnail(size: string) {
+    function generateThumbnail(size: string, force = false) {
         if (!["normal", "large", "x-large", "xx-large"].includes(size)) throw new Error("Invalid thumbnail size");
         thumbgenProc.directory = root.directory
         thumbgenProc.running = false
+        const forceArg = force ? " --force" : ""
         thumbgenProc.command = [
             "bash", "-c",
-            `${thumbgenScriptPath} --size ${size} --machine_progress -d ${FileUtils.trimFileProtocol(root.directory)} || ${generateThumbnailsMagickScriptPath} --size ${size} -d ${FileUtils.trimFileProtocol(root.directory)}`,
+            `${thumbgenScriptPath} --size ${size} --machine_progress -d '${StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(root.directory))}' || true; ${generateThumbnailsMagickScriptPath} --size ${size}${forceArg} -d '${StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(root.directory))}'`,
         ]
         // console.log("[Wallpapers] Updating thumbnails with command ", thumbgenProc.command.join(" "))
         root.thumbnailGenerationProgress = 0

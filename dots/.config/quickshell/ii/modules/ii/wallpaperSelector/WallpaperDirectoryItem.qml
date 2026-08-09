@@ -83,7 +83,7 @@ MouseArea {
 
                 Loader {
                     id: thumbnailShadowLoader
-                    active: thumbnailImageLoader.active && thumbnailImageLoader.item.status === Image.Ready && root.shouldLoad
+                    active: thumbnailImageLoader.active && thumbnailImageLoader.item && thumbnailImageLoader.item.status === Image.Ready && root.shouldLoad
                     anchors.fill: thumbnailImageLoader
                     sourceComponent: StyledRectangularShadow {
                         target: thumbnailImageLoader
@@ -98,34 +98,38 @@ MouseArea {
                     active: root.useThumbnail && root.shouldLoad
                     sourceComponent: ThumbnailImage {
                         id: thumbnailImage
-                        generateThumbnail: false
+                        generateThumbnail: root.isVideo
                         sourcePath: fileModelData.filePath
+                        thumbnailService: Wallpapers
 
-                        cache: true
+                        cache: false
                         fillMode: Image.PreserveAspectCrop
                         clip: true
-
-                        Connections {
-                            target: Wallpapers
-                            function onThumbnailGenerated(directory) {
-                                if (thumbnailImage.status !== Image.Error) return;
-                                if (FileUtils.parentDirectory(thumbnailImage.sourcePath) !== FileUtils.trimFileProtocol(directory)) return;
-                                thumbnailImage.source = "";
-                                thumbnailImage.source = thumbnailImage.thumbnailPath;
-                            }
-                            function onThumbnailGeneratedFile(filePath) {
-                                if (thumbnailImage.status !== Image.Error) return;
-                                if (Qt.resolvedUrl(thumbnailImage.sourcePath) !== Qt.resolvedUrl(filePath)) return;
-                                thumbnailImage.source = "";
-                                thumbnailImage.source = thumbnailImage.thumbnailPath;
-                            }
-                        }
 
                         layer.enabled: true
                         layer.effect: OpacityMask {
                             maskSource: Rectangle {
                                 width: wallpaperItemImageContainer.width
                                 height: wallpaperItemImageContainer.height
+                                radius: Appearance.rounding.small
+                            }
+                        }
+                    }
+                }
+
+                Loader {
+                    id: videoThumbnailFallbackLoader
+                    anchors.fill: thumbnailImageLoader
+                    active: root.isVideo && root.shouldLoad && thumbnailImageLoader.active && thumbnailImageLoader.item && thumbnailImageLoader.item.status === Image.Error
+                    sourceComponent: StyledImage {
+                        source: `${Directories.assetsPath}/images/default_wallpaper.png`
+                        fillMode: Image.PreserveAspectCrop
+                        clip: true
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: videoThumbnailFallbackLoader.width
+                                height: videoThumbnailFallbackLoader.height
                                 radius: Appearance.rounding.small
                             }
                         }

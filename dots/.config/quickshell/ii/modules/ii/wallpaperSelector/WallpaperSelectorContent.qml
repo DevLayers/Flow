@@ -66,6 +66,8 @@ MouseArea {
     property real colorCacheProgress: 0
     property bool isColorFiltering: false
 
+    focus: true
+
     property var apiImages: {
         let allImages = [];
         for (let i = 0; i < WallpaperBrowser.responses.length; i++) {
@@ -87,10 +89,10 @@ MouseArea {
         return allImages;
     }
 
-    function updateThumbnails() {
+    function updateThumbnails(force = false) {
         const totalImageMargin = (Appearance.sizes.wallpaperSelectorItemMargins + Appearance.sizes.wallpaperSelectorItemPadding) * 2;
         const thumbnailSizeName = Images.thumbnailSizeNameForDimensions(grid.cellWidth - totalImageMargin, grid.cellHeight - totalImageMargin);
-        Wallpapers.generateThumbnail(thumbnailSizeName);
+        Wallpapers.generateThumbnail(thumbnailSizeName, force);
     }
 
     Connections {
@@ -264,7 +266,7 @@ function moveToTrashFile(modelData) {
             } else {
                 Wallpapers.select(filePath, wallpaperSelectorContent.useDarkMode);
             }
-            filterText = "";
+            extraOptions.clearSearch();
             wallpaperSelectorContent.browserMode = false;
         }
     }
@@ -283,7 +285,7 @@ function moveToTrashFile(modelData) {
         WallpaperBrowser.moreLikeThisPicture(id, 1);
         wallpaperSelectorContent.browserMode = true;
         wallpaperSelectorContent.favMode = false;
-        filterText = "";
+        extraOptions.clearSearch();
     }
 
     function toggleFavourite(path) {
@@ -338,21 +340,20 @@ function moveToTrashFile(modelData) {
             event.accepted = true;
         } else if (event.key === Qt.Key_Backspace) {
             if (filterText.length > 0) {
-                filterText = filterText.substring(0, filterText.length - 1);
+                extraOptions.setSearchText(filterText.substring(0, filterText.length - 1));
             }
-            filterField.forceActiveFocus();
+            extraOptions.focusSearch();
             event.accepted = true;
         } else if (event.modifiers & Qt.ControlModifier && event.key === Qt.Key_L) {
             addressBar.focusBreadcrumb();
             event.accepted = true;
         } else if (event.key === Qt.Key_Slash) {
-            filterField.forceActiveFocus();
+            extraOptions.focusSearch();
             event.accepted = true;
         } else {
             if (event.text.length > 0) {
-                filterText += event.text;
-                filterField.cursorPosition = filterText.length;
-                filterField.forceActiveFocus();
+                extraOptions.setSearchText(filterText + event.text);
+                extraOptions.focusSearch();
             }
             event.accepted = true;
         }
@@ -1100,9 +1101,7 @@ function moveToTrashFile(modelData) {
         target: GlobalStates
         function onWallpaperSelectorOpenChanged() {
             if (GlobalStates.wallpaperSelectorOpen) {
-                if (monitorIsFocused) {
-                    filterField.forceActiveFocus();
-                }
+                extraOptions.focusSearch();
             } else {
                 colorCacheProc.signal(9)
             }

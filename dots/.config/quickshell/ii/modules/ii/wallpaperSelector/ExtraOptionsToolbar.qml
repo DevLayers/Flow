@@ -10,6 +10,21 @@ Toolbar {
     z: 20
 
     property string text: filterField.text
+    property alias searchField: filterField
+
+    function focusSearch() {
+        filterField.forceActiveFocus();
+        filterField.cursorPosition = filterField.text.length;
+    }
+
+    function setSearchText(value) {
+        filterField.text = value;
+        filterField.cursorPosition = filterField.text.length;
+    }
+
+    function clearSearch() {
+        setSearchText("");
+    }
 
     IconToolbarButton {
         implicitWidth: height
@@ -55,7 +70,7 @@ Toolbar {
     IconToolbarButton {
         implicitWidth: height
         onClicked: {
-            wallpaperSelectorContent.updateThumbnails();
+            wallpaperSelectorContent.updateThumbnails(true);
         }
         text: "refresh"
         StyledToolTip {
@@ -108,6 +123,8 @@ Toolbar {
                 }
             }
         }
+
+        Component.onCompleted: extraOptions.focusSearch()
 
         onAccepted: {
             if (wallpaperSelectorContent.browserMode && text.trim().length > 0) {

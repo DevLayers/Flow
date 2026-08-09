@@ -955,9 +955,10 @@ ContentPage {
                                 AnimatedImage {
                                     id: previewImage
                                     anchors.fill: parent
-                                    source: model.preview ? "file://" + model.preview : ""
+                                    source: model.preview ? Qt.resolvedUrl(model.preview) : ""
                                     fillMode: Image.PreserveAspectCrop
                                     playing: wpeGrid.visible && (presetItem.x + presetItem.width >= wpeGrid.contentX && presetItem.x <= wpeGrid.contentX + wpeGrid.width)
+                                    visible: status === Image.Ready
                                     layer.enabled: true
                                     layer.effect: OpacityMask {
                                         maskSource: Rectangle {
@@ -966,6 +967,33 @@ ContentPage {
                                             radius: Appearance.rounding.normal
                                         }
                                     }
+                                }
+
+                                ThumbnailImage {
+                                    id: previewFrameImage
+                                    anchors.fill: parent
+                                    visible: (!model.preview || previewImage.status === Image.Error) && !!model.file
+                                    sourcePath: model.file || ""
+                                    thumbnailService: Wallpapers
+                                    generateThumbnail: visible
+                                    cache: false
+                                    fillMode: Image.PreserveAspectCrop
+                                    clip: true
+                                    layer.enabled: true
+                                    layer.effect: OpacityMask {
+                                        maskSource: Rectangle {
+                                            width: previewFrameImage.width
+                                            height: previewFrameImage.height
+                                            radius: Appearance.rounding.normal
+                                        }
+                                    }
+                                }
+
+                                StyledImage {
+                                    anchors.fill: parent
+                                    visible: !previewImage.visible && (!previewFrameImage.visible || previewFrameImage.status !== Image.Ready)
+                                    source: `${Directories.assetsPath}/images/default_wallpaper.png`
+                                    fillMode: Image.PreserveAspectCrop
                                 }
 
                                 // Active Badge / Checkmark

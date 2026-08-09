@@ -59,6 +59,7 @@ PanelWindow {
         verticalParallax: bgRoot.verticalParallax
         parallaxFrozen: lockAnim.parallaxFrozen
         wallpaperCentered: lockAnim.wallpaperCentered
+        wallpaperIsVideo: bgRoot.videoEffectsDisabled
         activeWorkspaceId: {
             let activeId = bgRoot.monitor && bgRoot.monitor.activeWorkspace ? bgRoot.monitor.activeWorkspace.id : 1;
             return activeId > 1000000 ? (2147483647 - activeId) : activeId;
@@ -129,7 +130,7 @@ PanelWindow {
     // Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
     readonly property bool isMonitorFocused: (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : "")
-    readonly property bool loopEnabled: Config.options.background.parallax.loop
+    readonly property bool loopEnabled: !wallpaperIsVideo && Config.options.background.parallax.loop
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
     readonly property int chunkSize: {
         let intensity = Config.options.background.parallax.intensity;
@@ -167,8 +168,9 @@ PanelWindow {
     property string lightModeWallpaperPath: Config.options && Config.options.background && Config.options.background.lightModeWallpaperPath ? Config.options.background.lightModeWallpaperPath : ""
     property bool wallpaperIsVideo: {
         const path = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
-        return path !== "" && (path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mkv") || path.endsWith(".avi") || path.endsWith(".mov"));
+        return Wallpapers.isVideoFile(path);
     }
+    readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
     property string wallpaperPath: {
         if (!Appearance.m3colors.darkmode && useSeparateLightModeWallpaper && lightModeWallpaperPath !== "") {
             return lightModeWallpaperPath;
@@ -197,7 +199,7 @@ PanelWindow {
         return enabled && sensitiveWallpaper && sensitiveNetwork;
     }
     property real wallpaperToScreenRatio: Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height)
-    property real preferredWallpaperScale: Config.options.background.parallax.workspaceZoom
+    property real preferredWallpaperScale: videoEffectsDisabled ? 1.0 : Config.options.background.parallax.workspaceZoom
     property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
     property real movableYSpace: ((wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
 
@@ -209,7 +211,7 @@ PanelWindow {
         return Math.max(screen.width / w, screen.height / h);
     }
 
-    readonly property bool verticalParallax: (Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical
+    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical)
     // Colors
     property bool shouldBlur: (GlobalStates.screenLocked && Config.options.lock.blur.enable)
     property color dominantColor: Appearance.colors.colPrimary // Default, to be changed
@@ -256,12 +258,12 @@ PanelWindow {
     property real defaultRatio: zoomInStyle ? zoomLevels.in.default : zoomLevels.out.default
     property real zoomedRatio: zoomInStyle ? zoomLevels.in.zoomed : zoomLevels.out.zoomed
 
-    readonly property bool zoomInStyle: Config.options.overview.scrollingStyle.zoomStyle === "in"
+    readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
 
     property bool overviewOpen: GlobalStates.overviewOpen
 
-    property real scaleAnimated: GlobalStates.overviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
+    property real scaleAnimated: !videoEffectsDisabled && GlobalStates.overviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
     Behavior on scaleAnimated {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
@@ -399,10 +401,10 @@ PanelWindow {
             movableXSpace: bgRoot.movableXSpace
             movableYSpace: bgRoot.movableYSpace
             minSafeScale: bgRoot.minSafeScale
-            parallaxX: parallax.parallaxX
-            parallaxY: parallax.parallaxY
-            effectiveValueX: parallax.effectiveValueX
-            effectiveValueY: parallax.effectiveValueY
+            parallaxX: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxX
+            parallaxY: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxY
+            effectiveValueX: bgRoot.videoEffectsDisabled ? 0.5 : parallax.effectiveValueX
+            effectiveValueY: bgRoot.videoEffectsDisabled ? 0.5 : parallax.effectiveValueY
             scaleValue: ovZoom.scaleValue
             scaleOriginX: ovZoom.scaleOriginX
             scaleOriginY: ovZoom.scaleOriginY

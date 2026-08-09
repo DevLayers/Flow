@@ -47,9 +47,27 @@ generate_thumbnail() {
     local src="$1"
     local abs_path
     abs_path="$(realpath "$src")"
-    # Skip files with multiple frames (GIFs, videos, etc.)
+    # Extract one frame from animated sources so the selector always has a
+    # static preview. ImageMagick cannot decode every video format reliably.
     case "${abs_path,,}" in
         *.gif|*.mp4|*.webm|*.mkv|*.avi|*.mov)
+            if ! command -v ffmpeg >/dev/null 2>&1; then
+                return 1
+            fi
+            local encoded_path
+            encoded_path="$(urlencode "$abs_path")"
+            local uri
+            uri="file://$encoded_path"
+            local hash
+            hash="$(md5 "$uri")"
+            local out="$CACHE_DIR/$hash.png"
+            mkdir -p "$CACHE_DIR"
+            if [ -f "$out" ] && [ "$FORCE" -eq 0 ]; then
+                return
+            fi
+            ffmpeg -v error -y -i "$abs_path" -frames:v 1 \
+                -vf "scale=${THUMBNAIL_SIZE}:${THUMBNAIL_SIZE}:force_original_aspect_ratio=decrease" \
+                "$out"
             return
             ;;
     esac
@@ -61,7 +79,7 @@ generate_thumbnail() {
     hash="$(md5 "$uri")"
     local out="$CACHE_DIR/$hash.png"
     mkdir -p "$CACHE_DIR"
-    if [ -f "$out" ]; then
+    if [ -f "$out" ] && [ "$FORCE" -eq 0 ]; then
         return
     fi
     magick "$abs_path" -resize "${THUMBNAIL_SIZE}x${THUMBNAIL_SIZE}" "$out"
@@ -71,6 +89,7 @@ generate_thumbnail() {
 SIZE_NAME="normal"
 MODE=""
 TARGET=""
+FORCE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --file|-f)
@@ -86,6 +105,10 @@ while [[ $# -gt 0 ]]; do
         --size|-s)
             SIZE_NAME="$2"
             shift 2
+            ;;
+        --force)
+            FORCE=1
+            shift
             ;;
         *)
             usage
@@ -125,4 +148,3 @@ case "$MODE" in
         usage
         ;;
 esac
-

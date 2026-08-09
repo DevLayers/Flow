@@ -14,7 +14,14 @@ StyledImage {
 
     property bool generateThumbnail: true
     required property string sourcePath
-    property string thumbnailSizeName: Images.thumbnailSizeNameForDimensions(sourceSize.width, sourceSize.height)
+    readonly property real thumbnailDevicePixelRatio: (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1
+    property string thumbnailSizeName: Images.thumbnailSizeNameForDimensions(
+        Math.max(1, Math.ceil(width * thumbnailDevicePixelRatio)),
+        Math.max(1, Math.ceil(height * thumbnailDevicePixelRatio))
+    )
+    readonly property bool sourceIsVideo: /\.(mp4|mkv|webm|avi|mov|m4v|ogv|gif)$/i.test(sourcePath)
+    property var thumbnailService: null
+    property bool reloadRequested: false
     property string thumbnailPath: {
         if (sourcePath.length == 0)
             return;
@@ -23,7 +30,7 @@ StyledImage {
         const md5Hash = Qt.md5(`file://${encodedUrlWithoutFileProtocol}`);
         return `${Directories.genericCache}/thumbnails/${thumbnailSizeName}/${md5Hash}.png`;
     }
-    source: thumbnailPath
+    source: reloadRequested ? "" : thumbnailPath
 
     asynchronous: true
     smooth: true
@@ -34,22 +41,65 @@ StyledImage {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
-    onSourceSizeChanged: {
+    function startThumbnailGeneration() {
         if (!root.generateThumbnail)
             return;
         thumbnailGeneration.running = false;
         thumbnailGeneration.running = true;
     }
+
+    onSourcePathChanged: root.startThumbnailGeneration()
+    onGenerateThumbnailChanged: root.startThumbnailGeneration()
+    onSourceSizeChanged: root.startThumbnailGeneration()
+
+    function reloadThumbnail() {
+        if (!root.thumbnailPath)
+            return;
+
+        root.cache = false;
+        root.reloadRequested = true;
+        Qt.callLater(function() {
+            root.reloadRequested = false;
+            root.cache = true;
+        });
+    }
+
+    Connections {
+        target: root.thumbnailService
+        enabled: root.thumbnailService !== null
+        ignoreUnknownSignals: true
+
+        function onThumbnailGenerated(directory) {
+            if (FileUtils.parentDirectory(root.sourcePath) === FileUtils.trimFileProtocol(directory))
+                root.reloadThumbnail();
+        }
+
+        function onThumbnailGeneratedFile(filePath) {
+            if (Qt.resolvedUrl(root.sourcePath) === Qt.resolvedUrl(filePath))
+                root.reloadThumbnail();
+        }
+    }
+
     Process {
         id: thumbnailGeneration
         command: {
+            if (!root.generateThumbnail || root.sourcePath.length === 0)
+                return ["true"];
+
             const maxSize = Images.thumbnailSizes[root.thumbnailSizeName];
-            return ["bash", "-c", `[ -f '${FileUtils.trimFileProtocol(root.thumbnailPath)}' ] && exit 0 || { magick '${root.sourcePath}' -resize ${maxSize}x${maxSize} '${FileUtils.trimFileProtocol(root.thumbnailPath)}' && exit 1; }`];
+            const sourcePath = StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(root.sourcePath));
+            const thumbnailPath = StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(root.thumbnailPath));
+            const thumbnailDirectory = StringUtils.shellSingleQuoteEscape(FileUtils.parentDirectory(FileUtils.trimFileProtocol(root.thumbnailPath)));
+
+            if (root.sourceIsVideo) {
+                return ["bash", "-c", `mkdir -p '${thumbnailDirectory}' && [ -f '${thumbnailPath}' ] && exit 0 || { command -v ffmpeg >/dev/null 2>&1 && ffmpeg -v error -y -i '${sourcePath}' -frames:v 1 -vf 'scale=${maxSize}:${maxSize}:force_original_aspect_ratio=decrease' '${thumbnailPath}' && exit 1; exit 2; }`];
+            }
+
+            return ["bash", "-c", `mkdir -p '${thumbnailDirectory}' && [ -f '${thumbnailPath}' ] && exit 0 || { magick '${sourcePath}' -resize ${maxSize}x${maxSize} '${thumbnailPath}' && exit 1; }`];
         }
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 1) { // Force reload if thumbnail had to be generated
-                root.source = "";
-                root.source = root.thumbnailPath; // Force reload
+                root.reloadThumbnail();
             }
         }
     }
