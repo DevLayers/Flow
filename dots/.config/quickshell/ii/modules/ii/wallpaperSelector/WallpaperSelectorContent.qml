@@ -61,10 +61,29 @@ MouseArea {
 
     property var moreOptionsModelData: null
     property string filterText: extraOptions.text
+    readonly property bool colorFilterVisible: colorFilterToolbar.visible
+    readonly property bool colorCacheUpdating: colorCacheProc.running
 
     property string activeColorFilter: ""
     property real colorCacheProgress: 0
     property bool isColorFiltering: false
+
+    function wallpaperModelKey(modelData) {
+        if (!modelData) return "";
+        return String(modelData.actualPath || modelData.filePath || modelData.fileUrl || "");
+    }
+
+    function toggleMoreOptions(modelData) {
+        const selectedKey = wallpaperModelKey(moreOptionsModelData);
+        const requestedKey = wallpaperModelKey(modelData);
+        moreOptionsModelData = selectedKey !== "" && selectedKey === requestedKey ? null : modelData;
+    }
+
+    function toggleColorFilter() {
+        if (!colorFilterToolbar.visible) updateColorCache();
+        colorFilterToolbar.visible = !colorFilterToolbar.visible;
+        if (!colorFilterToolbar.visible) activeColorFilter = "";
+    }
 
     focus: true
 
@@ -1012,7 +1031,7 @@ function moveToTrashFile(modelData) {
                                 wallpaperSelectorContent.searchForSimilarImages(id)
                             }
                             onMoreOptionsRequested: (modelData) => {
-                                wallpaperSelectorContent.moreOptionsModelData = modelData
+                                wallpaperSelectorContent.toggleMoreOptions(modelData)
                             }
                         }
 
@@ -1026,14 +1045,35 @@ function moveToTrashFile(modelData) {
                         }
                     }
 
+                    WallpaperActionsToolbar {
+                        id: actionToolbar
+                        z: 20
+                        anchors {
+                            bottom: parent.bottom
+                            right: extraOptions.left
+                            rightMargin: Appearance.sizes.hyprlandGapsOut
+                            bottomMargin: 8
+                        }
+
+                        opacity: wallpaperGridBackground.animateIn ? 1.0 : 0.0
+                        transform: Translate {
+                            y: wallpaperGridBackground.animateIn ? 0 : 25
+                        }
+                        Behavior on opacity {
+                            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+                        }
+                        Behavior on transform {
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                        }
+                    }
+
                     ColorFilterToolbar {
                         id: colorFilterToolbar
                         z: 20
                         colBackground: Appearance.m3colors.m3surfaceContainerLow
                         anchors {
-                            bottom: parent.bottom
-                            left: parent.left
-                            leftMargin: 16
+                            bottom: actionToolbar.top
+                            left: actionToolbar.left
                             bottomMargin: 8
                         }
 
@@ -1052,7 +1092,6 @@ function moveToTrashFile(modelData) {
                     ExtraOptionsToolbar {
                         id: extraOptions
                         z: 20
-                        colBackground: Appearance.m3colors.m3surfaceContainerLow
                         anchors {
                             bottom: parent.bottom
                             horizontalCenter: parent.horizontalCenter

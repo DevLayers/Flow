@@ -8,6 +8,9 @@ import QtQuick.Layouts
 Toolbar {
     id: extraOptions
     z: 20
+    padding: 6
+    spacing: 6
+    colBackground: Appearance.m3colors.m3surfaceContainerLow
 
     property string text: filterField.text
     property alias searchField: filterField
@@ -26,85 +29,10 @@ Toolbar {
         setSearchText("");
     }
 
-    IconToolbarButton {
-        implicitWidth: height
-        onClicked: {
-            Wallpapers.openFallbackPicker(wallpaperSelectorContent.useDarkMode);
-            GlobalStates.wallpaperSelectorOpen = false;
-        }
-        altAction: () => {
-            Wallpapers.openFallbackPicker(wallpaperSelectorContent.useDarkMode);
-            GlobalStates.wallpaperSelectorOpen = false;
-            Config.options.wallpaperSelector.useSystemFileDialog = true
-        }
-        text: "open_in_new"
-        StyledToolTip {
-            text: Translation.tr("Use the system file picker instead\nRight-click to make this the default behavior")
-        }
-    }
-
-    IconToolbarButton {
-        implicitWidth: height
-            onClicked: {
-                if (wallpaperSelectorContent.browserMode) {
-                    if (wallpaperSelectorContent.apiImages.length > 0) {
-                        const randomImg = wallpaperSelectorContent.apiImages[Math.floor(Math.random() * wallpaperSelectorContent.apiImages.length)];
-                        wallpaperSelectorContent.selectWallpaperPath(randomImg.actualPath || randomImg.filePath);
-                    }
-                } else if (wallpaperSelectorContent.favMode) {
-                    const favs = Persistent.states.wallpaper.favourites;
-                    if (favs.length > 0) {
-                        const randomPath = favs[Math.floor(Math.random() * favs.length)];
-                        wallpaperSelectorContent.selectWallpaperPath(randomPath);
-                    }
-                } else {
-                    Wallpapers.randomFromCurrentFolder();
-                }
-            }
-        text: "ifl"
-        StyledToolTip {
-            text: Translation.tr("Pick random from this folder")
-        }
-    }
-
-    IconToolbarButton {
-        implicitWidth: height
-        onClicked: {
-            wallpaperSelectorContent.updateThumbnails(true);
-        }
-        text: "refresh"
-        StyledToolTip {
-            text: Translation.tr("Reload thumbnails (for high resolution displays)")
-        }
-    }
-
-    IconToolbarButton {
-        implicitWidth: height
-        onClicked: {
-            if (!toggled) wallpaperSelectorContent.updateColorCache();
-            colorFilterToolbar.visible = !colorFilterToolbar.visible
-            if (!colorFilterToolbar.visible) {
-                wallpaperSelectorContent.activeColorFilter = ""
-            }
-        }
-        toggled: colorFilterToolbar.visible
-        text: "palette"
-        StyledToolTip {
-            text: colorCacheProc.running ? Translation.tr("Updating color cache...") : Translation.tr("Filter by color")
-        }
-    }
-
-    IconToolbarButton {
-        implicitWidth: height
-            onClicked: wallpaperSelectorContent.useDarkMode = !wallpaperSelectorContent.useDarkMode
-            text: wallpaperSelectorContent.useDarkMode ? "dark_mode" : "light_mode"
-        StyledToolTip {
-            text: Translation.tr("Click to toggle light/dark mode\n(applied when wallpaper is chosen)")
-        }
-    }
-
     ToolbarTextField {
         id: filterField
+        implicitWidth: Appearance.sizes.searchWidthCollapsed
+        colBackground: Appearance.colors.colLayer2
         placeholderText: {
             if (wallpaperSelectorContent.browserMode) return Translation.tr("Search API (e.g. nature, city)");
             return focus ? Translation.tr("Search wallpapers") : Translation.tr("Hit \"/\" to search")
@@ -162,6 +90,15 @@ Toolbar {
 
     IconToolbarButton {
         implicitWidth: height
+        colBackground: Appearance.colors.colLayer2
+        colBackgroundHover: Appearance.colors.colLayer2Hover
+        colBackgroundActive: Appearance.colors.colLayer2Active
+        colBackgroundToggled: Appearance.colors.colPrimary
+        colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+        colBackgroundToggledActive: Appearance.colors.colPrimaryActive
+        colText: Appearance.colors.colOnLayer2
+        colRipple: Appearance.colors.colLayer2Active
+        colRippleToggled: Appearance.colors.colPrimaryActive
         onClicked: {
             GlobalStates.wallpaperSelectorOpen = false;
         }

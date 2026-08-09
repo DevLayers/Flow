@@ -99,7 +99,7 @@ MouseArea {
                     sourceComponent: ThumbnailImage {
                         id: thumbnailImage
                         generateThumbnail: root.isVideo
-                        sourcePath: fileModelData.filePath
+                        sourcePath: String(fileModelData.filePath || "")
                         thumbnailService: Wallpapers
 
                         cache: false

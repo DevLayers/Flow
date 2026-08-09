@@ -8,12 +8,13 @@ import QtQuick.Layouts
 Toolbar {
     id: extraOptions
     z: 20
-    implicitWidth: 196 // magic numbers are needed to make the toolbar make 2 rows
-    implicitHeight: 90
+    implicitWidth: 196 // Keep three palette columns at the selector's compact toolbar width.
+    implicitHeight: Math.max(52, colorOptions.implicitHeight + padding * 2)
     radius: Appearance.rounding.large
     visible: false
 
     ConfigSelectionArray {
+        id: colorOptions
         currentValue: wallpaperSelectorContent.activeColorFilter
         onSelected: newValue => {
             wallpaperSelectorContent.activeColorFilter = newValue
