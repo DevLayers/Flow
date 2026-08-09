@@ -1193,6 +1193,8 @@ Scope {
             // Center Bar uses the same reveal model as Search/OSD: the notch
             // grows and shrinks in place, so no bounce can expose a gap.
             y: {
+                if (root.idleHidden && !Config.options.bar.floatingNotch.centerInBar)
+                    return -targetH - 10;
                 if (root.hasTopBar && !Config.options.bar.floatingNotch.centerInBar)
                     return Appearance.sizes.barHeight;
                 if (root.usingWrappedFrame)
@@ -1204,7 +1206,8 @@ Scope {
                 enabled: !Config.options.bar.floatingNotch.centerInBar
                 NumberAnimation {
                     duration: 330
-                    easing.type: Easing.OutCubic
+                    easing.type: Easing.OutBack
+                    easing.overshoot: root.idleHidden ? 0.9 : 0.3
                 }
             }
 
