@@ -880,14 +880,20 @@ function moveToTrashFile(modelData) {
 
                         function activateCurrent() {
                             let filePath;
+                            let isDir = false;
                             if (wallpaperSelectorContent.browserMode) {
                                 filePath = grid.model[currentIndex].filePath;
                             } else if (wallpaperSelectorContent.favMode || wallpaperSelectorContent.activeColorFilter) {
                                 filePath = grid.model.get(currentIndex).filePath;
                             } else {
                                 filePath = grid.model.get(currentIndex, "filePath");
+                                isDir = grid.model.get(currentIndex, "fileIsDir");
                             }
-                            wallpaperSelectorContent.selectWallpaperPath(filePath);
+                            if (isDir) {
+                                Wallpapers.setDirectory(filePath);
+                            } else {
+                                wallpaperSelectorContent.selectWallpaperPath(filePath);
+                            }
                         }
 
                         property int loadedCount: 0
@@ -994,7 +1000,11 @@ function moveToTrashFile(modelData) {
                             }
 
                             onActivated: {
-                                wallpaperSelectorContent.selectWallpaperPath(fileModelData.actualPath || fileModelData.filePath);
+                                if (fileModelData.fileIsDir) {
+                                    Wallpapers.setDirectory(fileModelData.filePath);
+                                } else {
+                                    wallpaperSelectorContent.selectWallpaperPath(fileModelData.actualPath || fileModelData.filePath);
+                                }
                             }
 
                             onSearchSimilarRequested: (path, id) => {
