@@ -19,7 +19,7 @@ hl.bind("SUPER_R", hl.dsp.global("quickshell:workspaceNumber"), { ignore_mods = 
 hl.bind("SUPER_L", hl.dsp.global("quickshell:workspaceNumber"), { ignore_mods = true, transparent = true, release = true })
 hl.bind("SUPER_R", hl.dsp.global("quickshell:workspaceNumber"), { ignore_mods = true, transparent = true, release = true })
 hl.bind("SUPER + Tab", hl.dsp.global("quickshell:overviewWorkspacesToggle"), { description = "Shell: Toggle overview" })
-hl.bind("CTRL + Space", hl.dsp.global("quickshell:searchOnlyToggle"), { description = "Shell: Open search only" })
+-- hl.bind("CTRL + Space", hl.dsp.global("quickshell:searchOnlyToggle"), { description = "Shell: Open search only" }) -- Disabled by default for those who play games
 hl.bind("SUPER + V", hl.dsp.global("quickshell:overviewClipboardToggle"))
 hl.bind("SUPER + Period", hl.dsp.global("quickshell:overviewEmojiToggle"))
 hl.bind("SUPER + A", hl.dsp.global("quickshell:sidebarLeftToggle"), { description = "Shell: Toggle left sidebar" })
