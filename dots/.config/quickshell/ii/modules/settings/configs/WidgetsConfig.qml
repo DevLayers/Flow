@@ -40,6 +40,9 @@ Item {
     property var resourceWidgets: (WidgetsRegistry.allWidgets || []).filter(function (w) {
         return w.category === "Resources";
     })
+    property var systemWidgets: (WidgetsRegistry.allWidgets || []).filter(function (w) {
+        return w.category === "System";
+    })
 
     // Accordion collapse state per category. Default: Clocks expanded, all others collapsed.
     // When collapsed, widget preview Loaders are not active → no GPU/memory cost.
@@ -51,6 +54,7 @@ Item {
     property bool bluetoothExpanded: false
     property bool utilityExpanded: false
     property bool resourceExpanded: false
+    property bool systemExpanded: false
 
     property var _previewQueue: []
     property bool _previewStaggerActive: false
@@ -357,6 +361,28 @@ Item {
                         spacing: 12
                         Repeater {
                             model: widgetsConfigRoot.utilityWidgets
+                            delegate: widgetCardComponent
+                        }
+                    }
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("System")
+                icon: "tune"
+                Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.systemExpanded
+                onExpandedChanged: widgetsConfigRoot.systemExpanded = expanded
+
+                Loader {
+                    Layout.fillWidth: true
+                    active: widgetsConfigRoot.systemExpanded
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.systemWidgets
                             delegate: widgetCardComponent
                         }
                     }

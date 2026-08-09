@@ -47,10 +47,6 @@ Item {
     readonly property list<real> activityTransferValues: root.activityBuckets.map(bucket => bucket.runs)
     readonly property list<string> activityLabels: root.activityBuckets.map(bucket => bucket.label)
     readonly property list<string> activityTooltipLabels: root.activityBuckets.map(bucket => bucket.tooltip)
-    readonly property real activitySelectedTotal: {
-        const values = root.activityMetricIndex === 0 ? root.activityDataValues : root.activityTransferValues;
-        return values.reduce((total, value) => total + Math.max(0, Number(value || 0)), 0);
-    }
     readonly property list<int> activityVisibleLabelIndices: {
         const indices = [];
         const lastIndex = Math.max(0, root.activityLabels.length - 1);
@@ -63,7 +59,6 @@ Item {
         }
         return indices;
     }
-    readonly property string activityWindowLabel: root.activityGranularities[root.activityGranularityIndex].displayName
     readonly property bool hasActivity: {
         const entries = GoogleDriveService.syncHistory || [];
         for (const entry of entries) {
@@ -84,13 +79,15 @@ Item {
         ? Math.min(1, root.storageBackupMb / root.storageQuotaMb)
         : 0
     readonly property list<real> storageSegments: [root.storageBackupMb, root.storageOtherMb, root.storageFreeMb]
-    readonly property real heatmapCellSpacing: 6
+    readonly property real heatmapCellSpacing: 4
     readonly property int heatmapWeekCount: root.currentMonthWeekCount()
     readonly property list<var> heatmapCells: root.buildHeatmapCells(root.heatmapWeekCount)
     readonly property list<string> heatmapWeekLabels: root.buildHeatmapWeekLabels(root.heatmapWeekCount)
     readonly property list<string> heatmapDayLabels: [
-        Translation.tr("Mon"), "", Translation.tr("Wed"), "", Translation.tr("Fri"), "", Translation.tr("Sun")
+        Translation.tr("Mon"), Translation.tr("Tue"), Translation.tr("Wed"),
+        Translation.tr("Thu"), Translation.tr("Fri"), Translation.tr("Sat"), Translation.tr("Sun")
     ]
+    readonly property string heatmapMonthLabel: new Date().toLocaleDateString(Qt.locale(), "MMMM yyyy")
     readonly property int heatmapActiveDays: root.heatmapCells.filter(cell => Number(cell?.value || 0) > 0).length
     readonly property string heatmapActiveDaysLabel: String(root.heatmapActiveDays) + " "
         + (root.heatmapActiveDays === 1
@@ -529,9 +526,22 @@ Item {
 
     function formatMegabytes(value: real): string {
         const amount = Number(value || 0);
+        if (amount >= 1024 * 1024)
+            return (amount / (1024 * 1024)).toFixed(1) + " TB";
         if (amount >= 1024)
             return (amount / 1024).toFixed(1) + " GB";
         return amount.toFixed(1) + " MB";
+    }
+
+    function storagePercentageLabel(value: real): string {
+        if (root.storageQuotaMb <= 0)
+            return "—";
+        const percentage = Math.max(0, Number(value || 0)) / root.storageQuotaMb * 100;
+        if (percentage > 0 && percentage < 0.1)
+            return "<0.1%";
+        return percentage < 10
+            ? percentage.toFixed(1) + "%"
+            : percentage.toFixed(0) + "%";
     }
 
     function heatmapLegendLabel(weight: real): string {
@@ -1188,33 +1198,45 @@ Item {
         title: Translation.tr("Backup overview")
         customBackgroundColor: Appearance.colors.colLayer0
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 6
-
-            StyledText {
-                Layout.fillWidth: true
-                text: Translation.tr("Storage, health and transfer activity")
-                color: Appearance.colors.colSubtext
-                wrapMode: Text.WordWrap
-            }
-
-        }
-
         GridLayout {
             id: backupBentoGrid
             readonly property bool compactLayout: width < 760
             Layout.fillWidth: true
-            columns: compactLayout ? 1 : 12
+            // 24 logical columns allow the bento spans to move in smaller
+            // increments instead of jumping between visibly different 5/7
+            // and 6/6 layouts.
+            columns: compactLayout ? 1 : 24
             uniformCellWidths: true
             columnSpacing: 12
             rowSpacing: 12
+
+            // Give every logical column the same zero-based stretch constraint.
+            // Keep the constraints in a dedicated zero-height row: overlapping
+            // them with the top cards makes Qt merge incompatible cell hints and
+            // collapses whole column groups despite uniformCellWidths.
+            Repeater {
+                model: backupBentoGrid.compactLayout ? 1 : 24
+
+                delegate: Item {
+                    required property int index
+                    Layout.row: backupBentoGrid.compactLayout ? 7 : 4
+                    Layout.column: backupBentoGrid.compactLayout ? 0 : index
+                    Layout.preferredWidth: 0
+                    Layout.minimumWidth: 0
+                    Layout.fillWidth: true
+                    Layout.horizontalStretchFactor: 1
+                    Layout.preferredHeight: 0
+                    Layout.minimumHeight: 0
+                    Layout.maximumHeight: 0
+                    implicitHeight: 0
+                }
+            }
 
             StyledRectangle {
                 id: periodSummaryCard
                 Layout.column: 0
                 Layout.row: 0
-                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 7
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 14
                 Layout.rowSpan: 1
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
@@ -1280,38 +1302,6 @@ Item {
                         }
                     }
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
-
-                            StyledText {
-                                text: root.activityMetricIndex === 0
-                                    ? root.formatMegabytes(root.activitySelectedTotal)
-                                    : String(Math.round(root.activitySelectedTotal))
-                                color: Appearance.colors.colOnPrimaryContainer
-                                font.pixelSize: Appearance.font.pixelSize.huge
-                                font.bold: true
-                            }
-
-                            StyledText {
-                                text: root.activityMetrics[root.activityMetricIndex].displayName
-                                    + " · " + root.activityWindowLabel
-                                color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.24)
-                                elide: Text.ElideRight
-                            }
-                        }
-
-                        StyledText {
-                            text: root.heatmapActiveDaysLabel
-                            color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.18)
-                            font.bold: true
-                        }
-                    }
-
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -1354,17 +1344,17 @@ Item {
             StyledRectangle {
                 id: healthCard
                 property var latestSync: root.recentSyncRows.length > 0 ? root.recentSyncRows[0] : null
-                Layout.column: backupBentoGrid.compactLayout ? 0 : 5
+                Layout.column: backupBentoGrid.compactLayout ? 0 : 13
                 Layout.row: backupBentoGrid.compactLayout ? 3 : 1
-                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 7
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 11
                 Layout.rowSpan: 1
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.preferredWidth: 0
-                implicitHeight: 250
+                implicitHeight: 220
                 radius: Appearance.rounding.large
                 contentLayer: StyledRectangle.ContentLayer.Group
-                color: Appearance.colors.colTertiaryContainer
+                color: Appearance.colors.colSecondaryContainer
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -1377,7 +1367,7 @@ Item {
                         StyledText {
                             Layout.fillWidth: true
                             text: Translation.tr("Sync health")
-                            color: Appearance.colors.colOnTertiaryContainer
+                            color: Appearance.colors.colOnSecondaryContainer
                             font.bold: true
                             font.pixelSize: Appearance.font.pixelSize.large
                         }
@@ -1387,16 +1377,12 @@ Item {
                             padding: 7
                             shape: MaterialShape.Shape.Circle
                             fill: 1
-                            color: !healthCard.latestSync
-                                ? Appearance.colors.colSecondaryContainer
-                                : healthCard.latestSync.status === "success"
-                                    ? Appearance.colors.colPrimaryContainer
-                                    : Appearance.colors.colErrorContainer
-                            colSymbol: !healthCard.latestSync
-                                ? Appearance.colors.colOnSecondaryContainer
-                                : healthCard.latestSync.status === "success"
-                                    ? Appearance.colors.colOnPrimaryContainer
-                                    : Appearance.colors.colOnErrorContainer
+                            color: healthCard.latestSync && healthCard.latestSync.status !== "success"
+                                ? Appearance.colors.colErrorContainer
+                                : Appearance.colors.colSecondary
+                            colSymbol: healthCard.latestSync && healthCard.latestSync.status !== "success"
+                                ? Appearance.colors.colOnErrorContainer
+                                : Appearance.colors.colOnSecondary
                             text: root.syncStatusIcon(healthCard.latestSync)
                         }
                     }
@@ -1406,7 +1392,7 @@ Item {
                             ? root.syncStatusLabel(healthCard.latestSync)
                             : Translation.tr("Waiting for first sync")
                         color: !healthCard.latestSync || healthCard.latestSync.status === "success"
-                            ? Appearance.colors.colOnTertiaryContainer
+                            ? Appearance.colors.colOnSecondaryContainer
                             : Appearance.colors.colError
                         font.pixelSize: Appearance.font.pixelSize.huge
                         font.bold: true
@@ -1417,7 +1403,7 @@ Item {
                         text: healthCard.latestSync
                             ? Translation.tr("Last sync · ") + root.entryTimeText(healthCard.latestSync)
                             : Translation.tr("No completed backup recorded yet")
-                        color: ColorUtils.transparentize(Appearance.colors.colOnTertiaryContainer, 0.26)
+                        color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.26)
                         wrapMode: Text.WordWrap
                     }
 
@@ -1431,14 +1417,14 @@ Item {
                             StyledText {
                                 Layout.fillWidth: true
                                 text: Translation.tr("Success rate")
-                                color: ColorUtils.transparentize(Appearance.colors.colOnTertiaryContainer, 0.26)
+                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.26)
                             }
 
                             StyledText {
                                 text: root.successfulSyncCount + root.failedSyncCount > 0
                                     ? Math.round(root.syncSuccessRatio * 100) + "%"
                                     : "—"
-                                color: Appearance.colors.colOnTertiaryContainer
+                                color: Appearance.colors.colOnSecondaryContainer
                                 font.bold: true
                             }
                         }
@@ -1447,8 +1433,8 @@ Item {
                             Layout.fillWidth: true
                             valueBarHeight: 8
                             value: root.syncSuccessRatio
-                            highlightColor: Appearance.colors.colTertiary
-                            trackColor: ColorUtils.transparentize(Appearance.colors.colOnTertiaryContainer, 0.86)
+                            highlightColor: Appearance.colors.colSecondary
+                            trackColor: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.86)
                         }
                     }
 
@@ -1465,12 +1451,12 @@ Item {
                             StyledText {
                                 text: Translation.tr("Next run") + " · "
                                     + root.scheduleIntervalLabel(String(Config.options.googleDrive.syncInterval || "3d"))
-                                color: ColorUtils.transparentize(Appearance.colors.colOnTertiaryContainer, 0.26)
+                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.26)
                             }
 
                             StyledText {
                                 text: root.nextRunLabel()
-                                color: Appearance.colors.colOnTertiaryContainer
+                                color: Appearance.colors.colOnSecondaryContainer
                                 font.bold: true
                             }
                         }
@@ -1480,9 +1466,9 @@ Item {
 
             StyledRectangle {
                 id: storageCard
-                Layout.column: backupBentoGrid.compactLayout ? 0 : 7
+                Layout.column: backupBentoGrid.compactLayout ? 0 : 14
                 Layout.row: backupBentoGrid.compactLayout ? 1 : 0
-                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 5
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 10
                 Layout.rowSpan: 1
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
@@ -1490,6 +1476,7 @@ Item {
                 implicitHeight: 230
                 radius: Appearance.rounding.large
                 contentLayer: StyledRectangle.ContentLayer.Group
+                color: Appearance.colors.colLayer2
                 clip: true
 
                 ColumnLayout {
@@ -1507,26 +1494,17 @@ Item {
                             font.bold: true
                             font.pixelSize: Appearance.font.pixelSize.large
                         }
-
-                        MaterialShapeWrappedMaterialSymbol {
-                            iconSize: Appearance.font.pixelSize.large
-                            padding: 6
-                            shape: MaterialShape.Shape.Circle
-                            fill: 1
-                            color: Appearance.colors.colSecondaryContainer
-                            colSymbol: Appearance.colors.colOnSecondaryContainer
-                            text: "cloud"
-                        }
                     }
 
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        implicitHeight: 120
+                        implicitHeight: 126
 
                         UsageSemiDonut {
-                            width: Math.min(parent.width, 250)
-                            height: Math.min(parent.height, 104)
+                            id: storageDonut
+                            width: Math.min(parent.width, 280)
+                            height: Math.min(parent.height, 118)
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: parent.top
                             values: root.storageSegments
@@ -1535,15 +1513,26 @@ Item {
                                 Appearance.colors.colSecondaryContainer,
                                 Appearance.colors.colTertiary
                             ]
-                            trackColor: Appearance.colors.colLayer3
-                            thickness: 18
-                            minimumSegmentRadians: 0.15
+                            // The reference uses separated color segments on the
+                            // card surface, without a competing full-track ring.
+                            trackColor: ColorUtils.transparentize(Appearance.colors.colLayer3, 1)
+                            // The band is intentionally thicker than the corner
+                            // token so the ends read as small-radius corners, not
+                            // as fully rounded pills.
+                            thickness: Math.max(Appearance.font.pixelSize.huge,
+                                Appearance.rounding.normal * 2)
+                            segmentCornerRadius: Appearance.rounding.small
+                            gapRadians: 0.045
+                            // Restore the broad reference arc without changing
+                            // the token-driven trace thickness.
+                            radiusScale: 1.0
+                            minimumSegmentRadians: 0.30
                         }
 
                         ColumnLayout {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.verticalCenterOffset: parent.height * 0.10
+                            anchors.verticalCenter: storageDonut.verticalCenter
+                            anchors.verticalCenterOffset: storageDonut.height * 0.18
                             spacing: 0
 
                             StyledText {
@@ -1560,9 +1549,7 @@ Item {
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: root.storageQuotaMb > 0
-                                    ? (root.storageUsedRatio * 100).toFixed(1) + "% " + Translation.tr("used")
-                                    : Translation.tr("Used storage")
+                                text: Translation.tr("Used storage")
                                 color: Appearance.colors.colSubtext
                             }
                         }
@@ -1575,15 +1562,31 @@ Item {
 
                         Repeater {
                             model: [
-                                { label: Translation.tr("Backups"), value: root.formatMegabytes(root.storageBackupMb), color: Appearance.colors.colPrimary },
-                                { label: Translation.tr("Other files"), value: root.formatMegabytes(root.storageOtherMb), color: Appearance.colors.colSecondaryContainer },
-                                { label: Translation.tr("Free space"), value: root.formatMegabytes(root.storageFreeMb), color: Appearance.colors.colTertiary }
+                                { label: Translation.tr("Backups"), value: root.formatMegabytes(root.storageBackupMb) + " (" + root.storagePercentageLabel(root.storageBackupMb) + ")", color: Appearance.colors.colPrimary },
+                                { label: Translation.tr("Other files"), value: root.formatMegabytes(root.storageOtherMb) + " (" + root.storagePercentageLabel(root.storageOtherMb) + ")", color: Appearance.colors.colSecondaryContainer },
+                                { label: Translation.tr("Free space"), value: root.formatMegabytes(root.storageFreeMb) + " (" + root.storagePercentageLabel(root.storageFreeMb) + ")", color: Appearance.colors.colTertiary }
                             ]
 
                             delegate: ColumnLayout {
                                 required property var modelData
+                                required property int index
                                 Layout.fillWidth: true
                                 spacing: 2
+                                opacity: storageDonut.hoveredIndex < 0 || storageDonut.hoveredIndex === index ? 1.0 : 0.42
+
+                                Behavior on opacity {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                }
+
+                                HoverHandler {
+                                    id: storageLegendHover
+                                    onHoveredChanged: {
+                                        if (hovered)
+                                            storageDonut.hoveredIndex = index;
+                                        else if (storageDonut.hoveredIndex === index)
+                                            storageDonut.hoveredIndex = -1;
+                                    }
+                                }
 
                                 RowLayout {
                                     Layout.fillWidth: true
@@ -1599,14 +1602,19 @@ Item {
                                         Layout.fillWidth: true
                                         text: modelData.label
                                         color: Appearance.colors.colSubtext
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
                                         elide: Text.ElideRight
                                     }
                                 }
 
                                 StyledText {
+                                    Layout.fillWidth: true
                                     text: modelData.value
                                     color: Appearance.colors.colOnLayer2
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
                                     font.bold: true
+                                    maximumLineCount: 1
+                                    elide: Text.ElideRight
                                 }
                             }
                         }
@@ -1618,15 +1626,17 @@ Item {
                 id: heatmapCard
                 Layout.column: 0
                 Layout.row: backupBentoGrid.compactLayout ? 2 : 1
-                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 5
-                Layout.rowSpan: 1
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 13
+                Layout.rowSpan: backupBentoGrid.compactLayout ? 1 : 2
                 Layout.fillWidth: true
+                Layout.fillHeight: true
                 Layout.minimumWidth: 0
                 Layout.preferredWidth: 0
-                implicitHeight: 250
+                implicitHeight: backupBentoGrid.compactLayout ? 380 : 452
                 radius: Appearance.rounding.large
                 contentLayer: StyledRectangle.ContentLayer.Group
                 clip: true
+                color: Appearance.colors.colLayer2
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -1648,7 +1658,7 @@ Item {
                             }
 
                             StyledText {
-                                text: Translation.tr("Current month") + " · " + root.heatmapActiveDaysLabel
+                                text: root.heatmapMonthLabel + " · " + root.heatmapActiveDaysLabel
                                 color: Appearance.colors.colSubtext
                             }
                         }
@@ -1661,17 +1671,20 @@ Item {
 
                             Repeater {
                                 model: [
-                                    { weight: 0.28, label: Translation.tr("Low") },
-                                    { weight: 1.0, label: Translation.tr("High") }
+                                    { weight: 0.12, label: root.heatmapLegendLabel(0.12), texture: true },
+                                    { weight: 0.42, label: root.heatmapLegendLabel(0.42), texture: true },
+                                    { weight: 0.72, label: root.heatmapLegendLabel(0.72), texture: false },
+                                    { weight: 1.0, label: root.heatmapLegendLabel(1.0), texture: false }
                                 ]
                                 delegate: RowLayout {
                                     required property var modelData
                                     spacing: 4
 
                                     MaterialShape {
-                                        implicitSize: 10
-                                        shape: MaterialShape.Shape.Circle
-                                        color: ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colLayer3, modelData.weight)
+                                        implicitSize: 9
+                                        shape: MaterialShape.Shape.Square
+                                        color: ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colLayer3, 1 - modelData.weight)
+                                        opacity: modelData.texture ? 0.76 : 1.0
                                     }
 
                                     StyledText {
@@ -1688,6 +1701,8 @@ Item {
                     UsageActivityHeatmap {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        Layout.minimumWidth: 0
+                        Layout.preferredWidth: 0
                         cells: root.heatmapCells
                         weekLabels: root.heatmapWeekLabels
                         dayLabels: root.heatmapDayLabels
@@ -1705,16 +1720,17 @@ Item {
             StyledRectangle {
                 id: timelineCard
                 Layout.column: 0
-                Layout.row: backupBentoGrid.compactLayout ? 4 : 2
-                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 7
+                Layout.row: backupBentoGrid.compactLayout ? 5 : 3
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 12
                 Layout.rowSpan: 1
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.preferredWidth: 0
-                implicitHeight: 220
+                implicitHeight: 210
                 radius: Appearance.rounding.large
                 contentLayer: StyledRectangle.ContentLayer.Group
                 clip: true
+                color: Appearance.colors.colLayer2
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -1742,8 +1758,8 @@ Item {
                             padding: 6
                             shape: MaterialShape.Shape.Circle
                             fill: 1
-                            color: Appearance.colors.colPrimaryContainer
-                            colSymbol: Appearance.colors.colOnPrimaryContainer
+                            color: Appearance.colors.colSecondaryContainer
+                            colSymbol: Appearance.colors.colOnSecondaryContainer
                             text: "history"
                         }
                     }
@@ -1774,6 +1790,13 @@ Item {
                                 required property var modelData
                                 Layout.fillWidth: true
                                 implicitHeight: 40
+                                opacity: syncRowHover.hovered ? 1.0 : 0.86
+
+                                Behavior on opacity {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                }
+
+                                HoverHandler { id: syncRowHover }
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -1824,127 +1847,10 @@ Item {
             }
 
             StyledRectangle {
-                id: folderCard
-                Layout.column: 0
-                Layout.row: backupBentoGrid.compactLayout ? 6 : 3
-                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 7
-                Layout.rowSpan: 1
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                Layout.preferredWidth: 0
-                implicitHeight: 155
-                radius: Appearance.rounding.large
-                contentLayer: StyledRectangle.ContentLayer.Group
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 14
-                    spacing: 6
-
-                    RowLayout {
-                        Layout.fillWidth: true
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: 0
-                            text: Translation.tr("Backup scope")
-                            color: Appearance.colors.colOnLayer2
-                            font.bold: true
-                            font.pixelSize: Appearance.font.pixelSize.large
-                            elide: Text.ElideRight
-                        }
-
-                        MaterialShapeWrappedMaterialSymbol {
-                            iconSize: Appearance.font.pixelSize.large
-                            padding: 6
-                            shape: MaterialShape.Shape.Circle
-                            fill: 1
-                            color: Appearance.colors.colSecondaryContainer
-                            colSymbol: Appearance.colors.colOnSecondaryContainer
-                            text: "folder_copy"
-                        }
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-
-                        PagePlaceholder {
-                            anchors.fill: parent
-                            visible: Config.options.googleDrive.backupFolders.length === 0
-                            shown: visible
-                            icon: "folder_off"
-                            title: Translation.tr("No backup folders")
-                            description: Translation.tr("Add a source folder to see its usage here.")
-                            shape: MaterialShape.Shape.Cookie9Sided
-                        }
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            visible: Config.options.googleDrive.backupFolders.length > 0
-                            spacing: 6
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: 0
-                            spacing: 10
-
-                            MaterialShapeWrappedMaterialSymbol {
-                                iconSize: Appearance.font.pixelSize.large
-                                padding: 8
-                                shape: MaterialShape.Shape.ClamShell
-                                fill: 1
-                                color: Appearance.colors.colTertiaryContainer
-                                colSymbol: Appearance.colors.colOnTertiaryContainer
-                                text: "folder"
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 1
-
-                                StyledText {
-                                    text: Translation.tr("Configured folders")
-                                    color: Appearance.colors.colSubtext
-                                }
-
-                                StyledText {
-                                    text: String(Config.options.googleDrive.backupFolders.length) + " "
-                                        + (Config.options.googleDrive.backupFolders.length === 1
-                                            ? Translation.tr("folder")
-                                            : Translation.tr("folders"))
-                                    color: Appearance.colors.colOnLayer2
-                                    font.pixelSize: Appearance.font.pixelSize.huge
-                                    font.bold: true
-                                }
-                            }
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Config.options.googleDrive.backupFolders[0] || ""
-                            color: Appearance.colors.colOnLayer2
-                            elide: Text.ElideMiddle
-                            maximumLineCount: 1
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("Drive destination") + " · " + GoogleDriveService.effectiveDriveBasePath
-                            color: Appearance.colors.colSubtext
-                            maximumLineCount: 1
-                            elide: Text.ElideRight
-                        }
-                        }
-                    }
-                }
-            }
-
-            StyledRectangle {
                 id: performanceCard
-                Layout.column: backupBentoGrid.compactLayout ? 0 : 7
-                Layout.row: backupBentoGrid.compactLayout ? 5 : 2
-                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 5
+                Layout.column: backupBentoGrid.compactLayout ? 0 : 13
+                Layout.row: backupBentoGrid.compactLayout ? 4 : 2
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 11
                 Layout.rowSpan: 1
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
@@ -1952,7 +1858,7 @@ Item {
                 implicitHeight: 220
                 radius: Appearance.rounding.large
                 contentLayer: StyledRectangle.ContentLayer.Group
-                color: Appearance.colors.colSecondaryContainer
+                color: Appearance.colors.colLayer2
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -1967,7 +1873,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
                             text: Translation.tr("Performance")
-                            color: Appearance.colors.colOnSecondaryContainer
+                            color: Appearance.colors.colOnLayer2
                             font.bold: true
                             font.pixelSize: Appearance.font.pixelSize.large
                             elide: Text.ElideRight
@@ -1977,7 +1883,7 @@ Item {
                             implicitWidth: performanceTabRow.implicitWidth + 4
                             implicitHeight: 38
                             radius: Appearance.rounding.full
-                            color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.90)
+                            color: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.90)
                             contentLayer: StyledRectangle.ContentLayer.Group
 
                             RowLayout {
@@ -1998,21 +1904,21 @@ Item {
                                         buttonRadius: Appearance.rounding.full
                                         buttonText: modelData.name
                                         toggled: root.performanceViewIndex === index
-                                        colBackground: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 1)
-                                        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.88)
-                                        colBackgroundActive: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.82)
+                                        colBackground: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 1)
+                                        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.88)
+                                        colBackgroundActive: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.82)
                                         colBackgroundToggled: Appearance.colors.colPrimaryContainer
-                                        colBackgroundToggledHover: Appearance.colors.colPrimaryContainer
-                                        colBackgroundToggledActive: Appearance.colors.colPrimary
-                                        colRipple: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.78)
-                                        colRippleToggled: Appearance.colors.colPrimary
+                                        colBackgroundToggledHover: Appearance.colors.colPrimaryContainerHover
+                                        colBackgroundToggledActive: Appearance.colors.colPrimaryContainerActive
+                                        colRipple: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.78)
+                                        colRippleToggled: Appearance.colors.colPrimaryContainerActive
                                         onClicked: root.performanceViewIndex = index
 
                                         contentItem: StyledText {
                                             text: performanceViewButton.modelData.name
                                             color: root.performanceViewIndex === performanceViewButton.index
                                                 ? Appearance.colors.colOnPrimaryContainer
-                                                : Appearance.colors.colOnSecondaryContainer
+                                                : Appearance.colors.colOnLayer2
                                             font.bold: root.performanceViewIndex === performanceViewButton.index
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
@@ -2061,15 +1967,15 @@ Item {
                                                 padding: 6
                                                 shape: MaterialShape.Shape.SemiCircle
                                                 fill: 1
-                                                color: Appearance.colors.colPrimaryContainer
-                                                colSymbol: Appearance.colors.colOnPrimaryContainer
+                                                color: Appearance.colors.colSecondaryContainer
+                                                colSymbol: Appearance.colors.colOnSecondaryContainer
                                                 text: "data_usage"
                                             }
 
                                             StyledText {
                                                 Layout.fillWidth: true
                                                 text: Translation.tr("Largest transfer")
-                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.28)
+                                                color: Appearance.colors.colSubtext
                                                 elide: Text.ElideRight
                                             }
 
@@ -2078,7 +1984,7 @@ Item {
                                                 text: root.largestTransfer
                                                     ? root.formatMegabytes(root.largestTransfer.sizeMb || 0)
                                                     : "—"
-                                                color: Appearance.colors.colOnSecondaryContainer
+                                                color: Appearance.colors.colOnLayer2
                                                 font.pixelSize: Appearance.font.pixelSize.huge
                                                 font.bold: true
                                                 elide: Text.ElideRight
@@ -2094,7 +2000,7 @@ Item {
                                                 padding: 6
                                                 shape: MaterialShape.Shape.Circle
                                                 fill: 1
-                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.84)
+                                                color: Appearance.colors.colSecondaryContainer
                                                 colSymbol: Appearance.colors.colOnSecondaryContainer
                                                 text: "moving"
                                             }
@@ -2102,14 +2008,14 @@ Item {
                                             StyledText {
                                                 Layout.fillWidth: true
                                                 text: Translation.tr("Average transfer")
-                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.28)
+                                                color: Appearance.colors.colSubtext
                                                 elide: Text.ElideRight
                                             }
 
                                             StyledText {
                                                 Layout.fillWidth: true
                                                 text: root.formatMegabytes(root.averageTransferMb)
-                                                color: Appearance.colors.colOnSecondaryContainer
+                                                color: Appearance.colors.colOnLayer2
                                                 font.pixelSize: Appearance.font.pixelSize.huge
                                                 font.bold: true
                                                 elide: Text.ElideRight
@@ -2123,13 +2029,13 @@ Item {
                                         StyledText {
                                             Layout.fillWidth: true
                                             text: Translation.tr("Recent volume") + " · " + root.formatMegabytes(root.recentTransferTotalMb)
-                                            color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.24)
+                                            color: Appearance.colors.colSubtext
                                             elide: Text.ElideRight
                                         }
 
                                         StyledText {
                                             text: String(root.recentPerformanceRows.length) + " " + Translation.tr("recent runs")
-                                            color: Appearance.colors.colOnSecondaryContainer
+                                            color: Appearance.colors.colOnLayer2
                                             font.bold: true
                                         }
                                     }
@@ -2155,21 +2061,21 @@ Item {
                                                 padding: 6
                                                 shape: MaterialShape.Shape.Circle
                                                 fill: 1
-                                                color: Appearance.colors.colPrimaryContainer
-                                                colSymbol: Appearance.colors.colOnPrimaryContainer
+                                                color: Appearance.colors.colSecondaryContainer
+                                                colSymbol: Appearance.colors.colOnSecondaryContainer
                                                 text: "speed"
                                             }
 
                                             StyledText {
                                                 text: Translation.tr("Average speed")
-                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.28)
+                                                color: Appearance.colors.colSubtext
                                             }
 
                                             StyledText {
                                                 text: root.hasDetailedPerformanceData
                                                     ? root.formatTransferSize(root.averageSpeedBytesPerSecond) + "/s"
                                                     : "—"
-                                                color: Appearance.colors.colOnSecondaryContainer
+                                                color: Appearance.colors.colOnLayer2
                                                 font.pixelSize: Appearance.font.pixelSize.huge
                                                 font.bold: true
                                             }
@@ -2184,21 +2090,21 @@ Item {
                                                 padding: 6
                                                 shape: MaterialShape.Shape.Square
                                                 fill: 1
-                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.84)
+                                                color: Appearance.colors.colSecondaryContainer
                                                 colSymbol: Appearance.colors.colOnSecondaryContainer
                                                 text: "timer"
                                             }
 
                                             StyledText {
                                                 text: Translation.tr("Average duration")
-                                                color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.28)
+                                                color: Appearance.colors.colSubtext
                                             }
 
                                             StyledText {
                                                 text: root.hasDetailedPerformanceData
                                                     ? root.formatDuration(root.averageDurationSeconds)
                                                     : "—"
-                                                color: Appearance.colors.colOnSecondaryContainer
+                                                color: Appearance.colors.colOnLayer2
                                                 font.pixelSize: Appearance.font.pixelSize.huge
                                                 font.bold: true
                                             }
@@ -2213,13 +2119,13 @@ Item {
                                             text: root.hasDetailedPerformanceData
                                                 ? Translation.tr("Measured during completed syncs")
                                                 : Translation.tr("Timing telemetry pending")
-                                            color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.24)
+                                            color: Appearance.colors.colSubtext
                                             elide: Text.ElideRight
                                         }
 
                                         StyledText {
                                             text: String(root.timedPerformanceCount) + " " + Translation.tr("timed runs")
-                                            color: Appearance.colors.colOnSecondaryContainer
+                                            color: Appearance.colors.colOnLayer2
                                             font.bold: true
                                         }
                                     }
@@ -2232,14 +2138,14 @@ Item {
 
             StyledRectangle {
                 id: versionsCard
-                Layout.column: backupBentoGrid.compactLayout ? 0 : 7
-                Layout.row: backupBentoGrid.compactLayout ? 7 : 3
-                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 5
+                Layout.column: backupBentoGrid.compactLayout ? 0 : 12
+                Layout.row: backupBentoGrid.compactLayout ? 6 : 3
+                Layout.columnSpan: backupBentoGrid.compactLayout ? 1 : 12
                 Layout.rowSpan: 1
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.preferredWidth: 0
-                implicitHeight: 155
+                implicitHeight: 210
                 radius: Appearance.rounding.large
                 contentLayer: StyledRectangle.ContentLayer.Group
                 color: Appearance.colors.colLayer2
@@ -2327,6 +2233,8 @@ Item {
                         highlightColor: Appearance.colors.colTertiary
                         trackColor: Appearance.colors.colLayer3
                     }
+
+                    Item { Layout.fillHeight: true }
 
                     RowLayout {
                         Layout.fillWidth: true

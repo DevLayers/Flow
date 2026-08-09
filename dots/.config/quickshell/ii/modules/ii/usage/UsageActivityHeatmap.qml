@@ -1,12 +1,13 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
- * Contribution-style activity heatmap. Cells are supplied in week-major order
- * and the grid sizes itself to the available card width.
+ * Calendar-style activity heatmap. Cells are supplied in week-major order
+ * (seven consecutive day entries per week) and the grid keeps square cells.
  */
 Item {
     id: root
@@ -20,27 +21,36 @@ Item {
     property int weekCount: 6
     property int dayCount: 7
     property real cellSize: 0
-    property real minCellWidth: 14
-    property real minCellHeight: 14
-    property real maxCellWidth: 28
-    property real maxCellHeight: 28
+    property real minCellWidth: 0
+    property real minCellHeight: 0
+    property real maxCellWidth: 46
+    property real maxCellHeight: 46
     property real cellSpacing: 4
-    property real labelWidth: 30
+    property int hoveredIndex: -1
 
+    // Keep the item from contributing an implicit minimum width to its parent
+    // layout; the parent card owns the available width.
+    implicitWidth: 0
+
+    readonly property real resolvedCellSpacing: root.width > 0
+        ? Math.min(root.cellSpacing, root.width / Math.max(1, root.dayCount - 1))
+        : 0
     readonly property real resolvedCellSize: root.cellSize > 0
         ? root.cellSize
         : Math.max(Math.max(root.minCellWidth, root.minCellHeight),
             Math.min(root.maxCellWidth, root.maxCellHeight,
-                (root.width - root.labelWidth - (root.weekCount - 1) * root.cellSpacing)
-                    / Math.max(1, root.weekCount),
+                (root.width - (root.dayCount - 1) * root.resolvedCellSpacing)
+                    / Math.max(1, root.dayCount),
                 (root.height - Appearance.font.pixelSize.normal - 8
-                    - (root.dayCount - 1) * root.cellSpacing)
-                    / Math.max(1, root.dayCount)))
+                    - (root.weekCount - 1) * root.resolvedCellSpacing)
+                    / Math.max(1, root.weekCount)))
     readonly property real resolvedCellWidth: root.resolvedCellSize
     readonly property real resolvedCellHeight: root.resolvedCellSize
-    readonly property real gridContentWidth: root.weekCount * root.resolvedCellWidth
-        + Math.max(0, root.weekCount - 1) * root.cellSpacing
-    readonly property real heatmapContentWidth: root.labelWidth + root.cellSpacing + root.gridContentWidth
+    readonly property real gridContentWidth: root.dayCount * root.resolvedCellWidth
+        + Math.max(0, root.dayCount - 1) * root.resolvedCellSpacing
+    readonly property real gridContentHeight: root.weekCount * root.resolvedCellHeight
+        + Math.max(0, root.weekCount - 1) * root.resolvedCellSpacing
+    readonly property real heatmapContentWidth: root.gridContentWidth
 
     readonly property real maxValue: {
         let max = 0;
@@ -50,8 +60,8 @@ Item {
     }
 
     implicitHeight: Appearance.font.pixelSize.normal + 8
-        + root.dayCount * Math.max(root.minCellWidth, root.minCellHeight)
-        + (root.dayCount - 1) * root.cellSpacing
+        + root.weekCount * Math.max(root.minCellWidth, root.minCellHeight)
+        + (root.weekCount - 1) * root.resolvedCellSpacing
 
     function cellColor(value) {
         const amount = Math.max(0, Number(value || 0));
@@ -62,6 +72,8 @@ Item {
             return ColorUtils.mix(root.emptyColor, root.midColor, intensity / 0.34);
         if (intensity < 0.72)
             return ColorUtils.mix(root.midColor, root.activeColor, (intensity - 0.34) / 0.38);
+        if (intensity < 0.9)
+            return ColorUtils.mix(root.activeColor, root.midColor, 0.14);
         return root.activeColor;
     }
 
@@ -73,76 +85,72 @@ Item {
     }
 
     function textureOpacity(value): real {
-        return Number(value || 0) <= 0 ? 0.22 : 0.28;
+        const amount = Math.max(0, Number(value || 0));
+        if (amount <= 0 || root.maxValue <= 0)
+            return 0.18;
+        return amount / root.maxValue < 0.34 ? 0.18 : 0.30;
+    }
+
+    function textureSpacing(value): real {
+        const amount = Math.max(0, Number(value || 0));
+        const intensity = root.maxValue > 0 ? amount / root.maxValue : 0;
+        return intensity < 0.34 ? 9 : 5;
+    }
+
+    function textureLineWidth(value): real {
+        const amount = Math.max(0, Number(value || 0));
+        const intensity = root.maxValue > 0 ? amount / root.maxValue : 0;
+        return intensity < 0.34 ? 1 : 2;
     }
 
     ColumnLayout {
         anchors.fill: parent
         spacing: 6
 
-        RowLayout {
-            Layout.preferredWidth: root.heatmapContentWidth
-            Layout.alignment: Qt.AlignHCenter
-            spacing: root.cellSpacing
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: Appearance.font.pixelSize.normal
 
-            Item { Layout.preferredWidth: root.labelWidth }
-
-            Repeater {
-                model: root.weekLabels
-
-                delegate: StyledText {
-                    required property string modelData
-                    Layout.preferredWidth: root.resolvedCellWidth
-                    Layout.minimumWidth: root.resolvedCellWidth
-                    Layout.maximumWidth: root.resolvedCellWidth
-                    text: modelData
-                    color: Appearance.colors.colSubtext
-                    horizontalAlignment: Text.AlignLeft
-                    elide: Text.ElideNone
-                    maximumLineCount: 1
-                }
-            }
-        }
-
-        RowLayout {
-            Layout.preferredWidth: root.heatmapContentWidth
-            Layout.alignment: Qt.AlignHCenter
-            Layout.fillHeight: true
-            spacing: root.cellSpacing
-
-            ColumnLayout {
-                Layout.preferredWidth: root.labelWidth
-                Layout.minimumWidth: root.labelWidth
-                Layout.maximumWidth: root.labelWidth
-                Layout.fillHeight: true
-                spacing: root.cellSpacing
+            RowLayout {
+                x: (parent.width - width) / 2
+                y: (parent.height - height) / 2
+                width: root.heatmapContentWidth
+                height: parent.height
+                spacing: root.resolvedCellSpacing
 
                 Repeater {
                     model: root.dayLabels
 
                     delegate: StyledText {
                         required property string modelData
-                        Layout.preferredHeight: root.resolvedCellHeight
-                        Layout.minimumHeight: root.resolvedCellHeight
-                        Layout.maximumHeight: root.resolvedCellHeight
-                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.resolvedCellWidth
+                        Layout.minimumWidth: root.resolvedCellWidth
+                        Layout.maximumWidth: root.resolvedCellWidth
                         text: modelData
                         color: Appearance.colors.colSubtext
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideNone
+                        maximumLineCount: 1
                     }
                 }
             }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
 
             GridLayout {
                 id: cellGrid
-                Layout.preferredWidth: root.gridContentWidth
-                Layout.fillHeight: true
-                rows: root.dayCount
-                columns: root.weekCount
-                rowSpacing: root.cellSpacing
-                columnSpacing: root.cellSpacing
-                Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                x: (parent.width - width) / 2
+                y: (parent.height - height) / 2
+                width: root.gridContentWidth
+                height: root.gridContentHeight
+                rows: root.weekCount
+                columns: root.dayCount
+                rowSpacing: root.resolvedCellSpacing
+                columnSpacing: root.resolvedCellSpacing
 
                 Repeater {
                     model: root.cells
@@ -151,19 +159,32 @@ Item {
                         required property var modelData
                         required property int index
                         // Cells are supplied week-major: seven consecutive
-                        // entries belong to the same week/column.
-                        Layout.row: index % root.dayCount
-                        Layout.column: Math.floor(index / root.dayCount)
+                        // entries belong to the same calendar week/row.
+                        Layout.row: Math.floor(index / root.dayCount)
+                        Layout.column: index % root.dayCount
                         Layout.minimumWidth: root.resolvedCellWidth
                         Layout.maximumWidth: root.resolvedCellWidth
                         Layout.preferredWidth: root.resolvedCellWidth
                         Layout.preferredHeight: root.resolvedCellHeight
                         Layout.minimumHeight: root.resolvedCellHeight
                         Layout.maximumHeight: root.resolvedCellHeight
-                        visible: modelData?.inRange !== false
+                        visible: true
+                        opacity: (modelData?.inRange === false ? 0.24 : 1.0)
+                            * (root.hoveredIndex < 0 || root.hoveredIndex === index ? 1.0 : 0.34)
                         color: root.cellColor(modelData?.value)
                         radius: Math.min(Appearance.rounding.verysmall, height / 4)
                         clip: true
+
+                        Behavior on opacity {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+
+                        layer.enabled: root.hoveredIndex >= 0 && root.hoveredIndex !== index
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blurMax: 8
+                            blur: 0.45
+                        }
 
                         Canvas {
                             id: cellTexture
@@ -190,8 +211,8 @@ Item {
                                 context.quadraticCurveTo(0, 0, cornerRadius, 0);
                                 context.clip();
                                 context.strokeStyle = textureColor;
-                                context.lineWidth = Math.max(1, Math.min(2, Math.min(width, height) / 5));
-                                const textureSpacing = Math.max(4, Math.min(9, height * 0.42));
+                                context.lineWidth = root.textureLineWidth(modelData?.value);
+                                const textureSpacing = root.textureSpacing(modelData?.value);
                                 for (let x = -height; x < width + height; x += textureSpacing) {
                                     context.beginPath();
                                     context.moveTo(x, height);
@@ -212,6 +233,13 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
+
+                            onContainsMouseChanged: {
+                                if (containsMouse)
+                                    root.hoveredIndex = index;
+                                else if (root.hoveredIndex === index)
+                                    root.hoveredIndex = -1;
+                            }
 
                             StyledToolTip {
                                 extraVisibleCondition: cellArea.containsMouse
