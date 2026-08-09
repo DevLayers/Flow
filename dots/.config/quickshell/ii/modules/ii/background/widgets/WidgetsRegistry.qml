@@ -66,6 +66,15 @@ Singleton {
             "configPage": "widgets/DesktopNothingClockConfig.qml"
         },
         {
+            "widgetId": "nothing_wheel_clock",
+            "name": Translation.tr("Nothing Wheel Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/NothingWheelClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("NothingOS style clock widget with date header, big hours, 3-dot indicator, and minute wheel."),
+            "configPage": "widgets/DesktopNothingWheelClockConfig.qml"
+        },
+        {
             "widgetId": "nagasaki_text",
             "name": Translation.tr("Nagasaki Text Clock"),
             "category": "Clock",
@@ -228,6 +237,15 @@ Singleton {
             "configPage": "widgets/DesktopCdMediaConfig.qml"
         },
         {
+            "widgetId": "nothing_ring_media",
+            "name": Translation.tr("Nothing Ring Media 1x1"),
+            "category": "Media",
+            "qmlPath": Qt.resolvedUrl("media/NothingRingMediaWidget.qml"),
+            "icon": "graphic_eq",
+            "description": Translation.tr("1x1 Nothing OS style circular progress media widget with empty state support."),
+            "configPage": "widgets/DesktopNothingRingMediaConfig.qml"
+        },
+        {
             "widgetId": "weather_default",
             "name": Translation.tr("Default Weather"),
             "category": "Weather",
@@ -289,6 +307,78 @@ Singleton {
             "icon": "sunny",
             "description": Translation.tr("Circular weather widget with inner Cookie12Sided shape."),
             "configPage": "widgets/DesktopWeatherCircleConfig.qml"
+        },
+        {
+            "widgetId": "nothing_weather_circle",
+            "name": Translation.tr("Nothing Weather Circle"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/NothingWeatherWidget.qml"),
+            "icon": "cloud",
+            "description": Translation.tr("NothingOS style dot-matrix circular weather widget."),
+            "configPage": "widgets/DesktopNothingWeatherConfig.qml"
+        },
+        {
+            "widgetId": "volume_mute_pill",
+            "name": Translation.tr("Volume Mute Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/VolumeMutePillWidget.qml"),
+            "icon": "volume_off",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for volume mute."),
+            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+        },
+        {
+            "widgetId": "wifi_pill",
+            "name": Translation.tr("Wi-Fi Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/WifiPillWidget.qml"),
+            "icon": "wifi",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for Wi-Fi."),
+            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+        },
+        {
+            "widgetId": "bluetooth_pill",
+            "name": Translation.tr("Bluetooth Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/BluetoothPillWidget.qml"),
+            "icon": "bluetooth",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for Bluetooth."),
+            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+        },
+        {
+            "widgetId": "mic_pill",
+            "name": Translation.tr("Microphone Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/MicPillWidget.qml"),
+            "icon": "mic",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for microphone mute."),
+            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+        },
+        {
+            "widgetId": "dark_mode_pill",
+            "name": Translation.tr("Dark Mode Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/DarkModePillWidget.qml"),
+            "icon": "dark_mode",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for Dark Mode."),
+            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+        },
+        {
+            "widgetId": "screen_record_pill",
+            "name": Translation.tr("Screen Record Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/ScreenRecordPillWidget.qml"),
+            "icon": "videocam",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for screen recording."),
+            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+        },
+        {
+            "widgetId": "easy_effects_pill",
+            "name": Translation.tr("EasyEffects Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/EasyEffectsPillWidget.qml"),
+            "icon": "graphic_eq",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for EasyEffects."),
+            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
         },
         {
             "widgetId": "weather_typography",
