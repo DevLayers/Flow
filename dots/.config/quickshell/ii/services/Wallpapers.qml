@@ -41,6 +41,8 @@ Singleton {
     property var creationTimes: ({})
     property list<string> pendingCreationPaths: []
     property alias sortedFolderModel: sortedFolderModel
+    property string directoryError: ""
+    readonly property bool directoryLoading: folderModel.status === FolderListModel.Loading
 
     signal changed()
     signal thumbnailGenerated(directory: string)
@@ -312,6 +314,9 @@ Singleton {
 
     function applyLockscreen(path, darkMode = Appearance.m3colors.darkmode) {
         if (!path || path.length === 0) return;
+        if (Config.options && Config.options.background) {
+            Config.options.background.lockscreenWallpaperPath = path;
+        }
         Config.saveOptionsNow();
         const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
@@ -329,6 +334,9 @@ Singleton {
 
     function applyLightModeWallpaper(path) {
         if (!path || path.length === 0) return;
+        if (Config.options && Config.options.background) {
+            Config.options.background.lightModeWallpaperPath = path;
+        }
         Config.saveOptionsNow();
         const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
@@ -414,9 +422,18 @@ Singleton {
     }
 
     function randomFromCurrentFolder(darkMode = Appearance.m3colors.darkmode) {
-        if (folderModel.count === 0) return;
-        const randomIndex = Math.floor(Math.random() * folderModel.count);
-        const filePath = folderModel.get(randomIndex, "filePath");
+        const candidates = [];
+        for (let i = 0; i < folderModel.count; i++) {
+            if (Boolean(folderModel.get(i, "fileIsDir"))) continue;
+
+            const filePath = String(folderModel.get(i, "filePath") || folderModel.get(i, "fileURL") || "");
+            const fileName = String(folderModel.get(i, "fileName") || filePath).toLowerCase();
+            if (!filePath || !root.extensions.some(ext => fileName.endsWith("." + ext))) continue;
+            candidates.push(filePath);
+        }
+
+        if (candidates.length === 0) return;
+        const filePath = candidates[Math.floor(Math.random() * candidates.length)];
         print("Randomly selected wallpaper:", filePath);
         root.select(filePath, darkMode);
     }
@@ -427,20 +444,20 @@ Singleton {
         function setDirectoryIfValid(path) {
             validateDirProc.nicePath = FileUtils.trimFileProtocol(path).replace(/\/+$/, "")
             if (/^\/*$/.test(validateDirProc.nicePath)) validateDirProc.nicePath = "/";
+            root.directoryError = "";
             validateDirProc.exec([
-                "bash", "-c",
-                `if [ -d "${validateDirProc.nicePath}" ]; then echo dir; elif [ -f "${validateDirProc.nicePath}" ]; then echo file; else echo invalid; fi`
+                "stat", "-c", "%f", "--", validateDirProc.nicePath
             ])
         }
         stdout: StdioCollector {
             onStreamFinished: {
+                const result = text.trim().toLowerCase()
+                if (result.startsWith("4")) {
                     root.directory = Qt.resolvedUrl(validateDirProc.nicePath)
-                const result = text.trim()
-                if (result === "dir") {
-                } else if (result === "file") {
+                } else if (result.startsWith("8")) {
                     root.directory = Qt.resolvedUrl(FileUtils.parentDirectory(validateDirProc.nicePath))
                 } else {
-                    // Ignore
+                    root.directoryError = Translation.tr("The selected path is not a readable folder or file.");
                 }
             }
         }
@@ -487,7 +504,10 @@ Singleton {
             }
             root.queueFolderModelRefresh();
         }
-        onFolderChanged: root.queueFolderModelRefresh()
+        onFolderChanged: {
+            root.directoryError = "";
+            root.queueFolderModelRefresh();
+        }
         onStatusChanged: root.queueFolderModelRefresh()
     }
 

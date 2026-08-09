@@ -13,6 +13,8 @@ MouseArea {
     property bool isDirectory: fileModelData.fileIsDir
 
     property bool shouldLoad: true
+    property bool isApplied: false
+    property string appliedLabel: ""
 
     property bool isVideo: {
         const path = fileModelData.fileName.toLowerCase();
@@ -167,6 +169,37 @@ MouseArea {
 
                         onClicked: {
                             root.moreOptionsRequested(fileModelData);
+                        }
+                    }
+                }
+
+                Pill {
+                    id: appliedBadge
+                    z: 2
+                    visible: root.isApplied && !root.isDirectory
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.margins: Appearance.sizes.wallpaperSelectorItemMargins
+                    implicitHeight: Appearance.font.pixelSize.huge + Appearance.sizes.wallpaperSelectorItemPadding * 2
+                    implicitWidth: appliedBadgeContent.implicitWidth + Appearance.sizes.wallpaperSelectorItemPadding * 2
+                    color: Appearance.colors.colPrimary
+
+                    RowLayout {
+                        id: appliedBadgeContent
+                        anchors.centerIn: parent
+                        spacing: Appearance.sizes.wallpaperSelectorItemPadding / 2
+
+                        MaterialSymbol {
+                            text: "check_circle"
+                            iconSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnPrimary
+                        }
+
+                        StyledText {
+                            text: root.appliedLabel
+                            color: Appearance.colors.colOnPrimary
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            font.weight: Font.Medium
                         }
                     }
                 }

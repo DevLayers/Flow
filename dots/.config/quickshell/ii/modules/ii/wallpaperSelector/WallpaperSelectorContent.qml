@@ -19,16 +19,24 @@ MouseArea {
     property bool useDarkMode: Appearance.m3colors.darkmode
     property bool favMode: false
     property bool browserMode: false
+    readonly property bool localMode: !favMode && !browserMode
+    readonly property bool localSearchActive: localMode && Wallpapers.searchQuery.trim().length > 0
+    readonly property bool browserSearchActive: browserMode && WallpaperBrowser.currentSearchTags.length > 0
+    readonly property string targetLabel: {
+        if (GlobalStates.wallpaperSelectorTarget === "lockscreen") return Translation.tr("Lockscreen");
+        if (GlobalStates.wallpaperSelectorTarget === "lightmode") return Translation.tr("Light mode");
+        return Translation.tr("Desktop");
+    }
 
     readonly property var sidebarDirectoriesModel: {
         let base = [
-            { icon: "home", name: Translation.tr("Home"), path: Directories.home }, 
+            { icon: "home", name: Translation.tr("Home"), path: Directories.home, groupStart: true },
             { icon: "docs", name: Translation.tr("Documents"), path: Directories.documents }, 
             { icon: "wallpaper", name: Translation.tr("Wallpapers"), path: Config.options.wallpaperSelector.useCustomDefaultPath && Config.options.wallpaperSelector.customDefaultPath ? ("file://" + Config.options.wallpaperSelector.customDefaultPath) : (Directories.pictures + "/Wallpapers") }, 
             { icon: "image", name: Translation.tr("Pictures"), path: Directories.pictures }, 
             { icon: "movie", name: Translation.tr("Videos"), path: Directories.videos }, 
             { icon: "public", name: Translation.tr("Browser"), path: "BROWSER_MODE" }, 
-            { icon: "favorite", name: Translation.tr("Favourites"), path: "FAVOURITES_MODE" }
+            { icon: "favorite", name: Translation.tr("Favourites"), path: "FAVOURITES_MODE", groupEnd: true }
         ];
 
         const favDirs = Persistent.states.wallpaper.favouriteDirectories;
@@ -36,7 +44,13 @@ MouseArea {
             for (let i = 0; i < favDirs.length; i++) {
                 const path = favDirs[i];
                 const folderName = path.split('/').pop() || path;
-                base.push({ icon: "folder_special", name: folderName, path: path, groupStart: i === 0 });
+                base.push({
+                    icon: "folder_special",
+                    name: folderName,
+                    path: path,
+                    groupStart: i === 0,
+                    groupEnd: i === favDirs.length - 1
+                });
             }
         }
 
@@ -47,12 +61,19 @@ MouseArea {
                 icon: entry.icon || "folder",
                 name: entry.name || entry.path.split('/').pop() || "Dir",
                 path: entry.path,
-                groupStart: i === 0
+                groupStart: i === 0,
+                groupEnd: i === configDirs.length - 1 && Config.options.policies.weeb !== 1
             });
         }
 
         if (Config.options.policies.weeb === 1) {
-            base.push({ icon: "favorite", name: Translation.tr("Homework"), path: `${Directories.pictures}/homework` });
+            base.push({
+                icon: "favorite",
+                name: Translation.tr("Homework"),
+                path: `${Directories.pictures}/homework`,
+                groupStart: configDirs.length === 0,
+                groupEnd: true
+            });
         }
 
         return base;
@@ -72,6 +93,29 @@ MouseArea {
         return String(modelData.actualPath || modelData.filePath || modelData.fileUrl || "");
     }
 
+    function normalizedModelPath(modelData) {
+        if (!modelData) return "";
+        return FileUtils.trimFileProtocol(String(modelData.actualPath || modelData.filePath || ""));
+    }
+
+    function currentTargetPath() {
+        const background = Config.options?.background;
+        if (!background) return "";
+        if (GlobalStates.wallpaperSelectorTarget === "lockscreen") {
+            return FileUtils.trimFileProtocol(String(background.lockscreenWallpaperPath || ""));
+        }
+        if (GlobalStates.wallpaperSelectorTarget === "lightmode") {
+            return FileUtils.trimFileProtocol(String(background.lightModeWallpaperPath || ""));
+        }
+        return FileUtils.trimFileProtocol(String(background.wallpaperPath || ""));
+    }
+
+    function modelIsApplied(modelData) {
+        const candidate = normalizedModelPath(modelData);
+        const applied = currentTargetPath();
+        return candidate.length > 0 && applied.length > 0 && candidate === applied;
+    }
+
     function toggleMoreOptions(modelData) {
         const selectedKey = wallpaperModelKey(moreOptionsModelData);
         const requestedKey = wallpaperModelKey(modelData);
@@ -89,6 +133,19 @@ MouseArea {
         colorFilterToolbar.visible = false;
         activeColorFilter = "";
         GlobalStates.wallpaperSelectorOpen = false;
+    }
+
+    function openDefaultFolder() {
+        wallpaperSelectorContent.favMode = false;
+        wallpaperSelectorContent.browserMode = false;
+        Wallpapers.setDirectory(Wallpapers.defaultFolder);
+    }
+
+    function retryBrowserSearch() {
+        const tags = Array.from(WallpaperBrowser.currentSearchTags || []);
+        if (tags.length === 0) return;
+        WallpaperBrowser.clearResponses();
+        WallpaperBrowser.makeRequest(tags, 20, 1);
     }
 
     focus: true
@@ -126,7 +183,8 @@ MouseArea {
             wallpaperSelectorContent.favMode = false;
             wallpaperSelectorContent.browserMode = false;
             wallpaperSelectorContent.updateThumbnails();
-            grid.currentIndex = 0;
+            grid.currentIndex = -1;
+            grid.keyboardNavigationActive = false;
         }
     }
 
@@ -500,7 +558,7 @@ function moveToTrashFile(modelData) {
                         id: quickDirsContainer
                         Layout.fillHeight: true
                         Layout.fillWidth: true
-                        implicitWidth: 160
+                        implicitWidth: Appearance.sizes.wallpaperSelectorSidebarWidth
 
                         Flickable {
                             id: sideBarFlickable
@@ -518,10 +576,11 @@ function moveToTrashFile(modelData) {
                                 anchors.top: parent.top
                                 anchors.left: parent.left
                                 anchors.right: parent.right
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 10
+                                anchors.leftMargin: Appearance.sizes.wallpaperSelectorSidebarHorizontalPadding
+                                anchors.rightMargin: Appearance.sizes.wallpaperSelectorSidebarHorizontalPadding
                                 Layout.topMargin: 0
                                 expanded: true
+                                spacing: Appearance.sizes.wallpaperSelectorSidebarButtonSpacing
                                 currentIndex: {
                                     const model = sideBarRepeater.model;
                                     for (let i = 0; i < model.length; i++) {
@@ -545,16 +604,31 @@ function moveToTrashFile(modelData) {
                                         required property var modelData
                                         required property int index
                                         
-                                        baseSize: 40
-                                        baseHighlightHeight: 32
-                                        iconSize: 18
-                                        groupSpacing: modelData.groupStart ? Appearance.font.pixelSize.small : 0
+                                        baseSize: Appearance.sizes.wallpaperSelectorSidebarButtonHeight
+                                        baseHighlightHeight: Appearance.sizes.wallpaperSelectorSidebarButtonHeight
+                                        iconSize: Appearance.font.pixelSize.larger
+                                        textPixelSize: Appearance.font.pixelSize.normal
+                                        useDynamicRadius: true
+                                        fillExpandedWidth: true
+                                        groupFirst: modelData.groupStart === true
+                                        groupLast: modelData.groupEnd === true
+                                        groupSpacing: modelData.groupStart ? Appearance.sizes.wallpaperSelectorSidebarGroupSpacing : 0
+                                        colBackground: Appearance.colors.colLayer2
+                                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                                        colBackgroundActive: Appearance.colors.colLayer2Active
+                                        colBackgroundToggled: Appearance.colors.colPrimary
+                                        colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+                                        colBackgroundToggledActive: Appearance.colors.colPrimaryActive
+                                        colRipple: Appearance.colors.colLayer2Active
+                                        colRippleToggled: Appearance.colors.colPrimaryActive
+                                        colText: Appearance.colors.colOnLayer2
+                                        colTextToggled: Appearance.colors.colOnPrimary
                                         
                                         buttonIcon: modelData.icon
                                         buttonText: modelData.name
                                         expanded: true
                                         toggled: sideBarRail.currentIndex === index
-                                        showToggledHighlight: false
+                                        showToggledHighlight: true
                                         
                                         opacity: 0
                                         transform: Translate { id: navRailTrans; x: -16 }
@@ -609,6 +683,7 @@ function moveToTrashFile(modelData) {
                                             } else if (quickDirButton.modelData.path === "BROWSER_MODE") {
                                                 wallpaperSelectorContent.favMode = false;
                                                 wallpaperSelectorContent.browserMode = true;
+                                                WallpaperBrowser.clearResponses();
                                             } else {
                                                 wallpaperSelectorContent.favMode = false;
                                                 wallpaperSelectorContent.browserMode = false;
@@ -803,7 +878,7 @@ function moveToTrashFile(modelData) {
 
                     StyledIndeterminateProgressBar {
                         id: indeterminateProgressBar
-                        visible: (Wallpapers.thumbnailGenerationRunning && value == 0) || (wallpaperSelectorContent.browserMode && WallpaperBrowser.runningRequests > 0) || (wallpaperSelectorContent.colorCacheProgress === 0 && colorCacheProc.running) || wallpaperSelectorContent.isColorFiltering
+                        visible: (Wallpapers.thumbnailGenerationRunning && value == 0) || (wallpaperSelectorContent.browserMode && WallpaperBrowser.runningRequests > 0) || (wallpaperSelectorContent.localMode && Wallpapers.directoryLoading) || (wallpaperSelectorContent.colorCacheProgress === 0 && colorCacheProc.running) || wallpaperSelectorContent.isColorFiltering
                         anchors {
                             bottom: parent.top
                             left: parent.left
@@ -825,17 +900,113 @@ function moveToTrashFile(modelData) {
                         anchors.fill: indeterminateProgressBar
                     }
 
-                    StyledText {
-                        visible: (wallpaperSelectorContent.favMode && grid.model.count === 0) || (wallpaperSelectorContent.browserMode && grid.model.length === 0)
-                        text: {
-                            if (wallpaperSelectorContent.browserMode) {
-                                return (WallpaperBrowser.runningRequests > 0) ? Translation.tr("Searching...") : Translation.tr("Search wallpapers with the search bar at the bottom.");
-                            }
-                            return Translation.tr("No favourites yet. Click the heart icon on any wallpaper to add it to favourites.");
-                        }
-                        anchors.centerIn: parent
+                    Item {
+                        id: emptyStateRegion
+                        anchors.fill: parent
+                        visible: grid.count === 0 && !(
+                            (wallpaperSelectorContent.browserMode && WallpaperBrowser.runningRequests > 0)
+                            || (wallpaperSelectorContent.localMode && (Wallpapers.directoryLoading || colorCacheProc.running || wallpaperSelectorContent.isColorFiltering))
+                        )
 
-                        font.family: Appearance.font.family.reading
+                        readonly property bool hasError: wallpaperSelectorContent.localMode && Wallpapers.directoryError.length > 0
+                        readonly property bool isSearchEmpty: wallpaperSelectorContent.localSearchActive || wallpaperSelectorContent.activeColorFilter.length > 0
+                        readonly property bool isBrowserError: wallpaperSelectorContent.browserMode && WallpaperBrowser.errorMessage.length > 0
+                        readonly property bool showAction: wallpaperSelectorContent.browserMode
+                            || wallpaperSelectorContent.favMode
+                            || wallpaperSelectorContent.localMode
+
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            width: Math.min(parent.width - Appearance.font.pixelSize.huge, Appearance.animationCurves.mediaControlsWidth)
+                            spacing: Appearance.sizes.hyprlandGapsOut
+
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Appearance.sizes.barHeight * 3
+
+                                PagePlaceholder {
+                                    anchors.fill: parent
+                                    shown: emptyStateRegion.visible
+                                    icon: emptyStateRegion.hasError || emptyStateRegion.isBrowserError ? "error"
+                                        : wallpaperSelectorContent.browserMode ? "public"
+                                        : wallpaperSelectorContent.favMode ? "favorite_border"
+                                        : emptyStateRegion.isSearchEmpty ? "search_off"
+                                        : "wallpaper"
+                                    title: emptyStateRegion.hasError ? Translation.tr("Folder unavailable")
+                                        : emptyStateRegion.isBrowserError ? Translation.tr("Wallpaper search failed")
+                                        : wallpaperSelectorContent.browserMode ? Translation.tr("No wallpapers found")
+                                        : wallpaperSelectorContent.favMode ? Translation.tr("No favourites yet")
+                                        : wallpaperSelectorContent.activeColorFilter.length > 0 ? Translation.tr("No wallpapers match this color")
+                                        : wallpaperSelectorContent.localSearchActive ? Translation.tr("No wallpapers match this search")
+                                        : Translation.tr("This folder has no wallpapers")
+                                    description: emptyStateRegion.hasError ? Wallpapers.directoryError
+                                        : emptyStateRegion.isBrowserError ? WallpaperBrowser.errorMessage
+                                        : wallpaperSelectorContent.browserMode ? Translation.tr("Try different tags or search again.")
+                                        : wallpaperSelectorContent.favMode ? Translation.tr("Click the heart icon on a wallpaper to add it here.")
+                                        : wallpaperSelectorContent.activeColorFilter.length > 0 ? Translation.tr("Choose another color or clear the color filter.")
+                                        : wallpaperSelectorContent.localSearchActive ? Translation.tr("Clear the search to see every wallpaper in this folder.")
+                                        : Translation.tr("Choose another folder or add wallpapers to this directory.")
+                                    shape: MaterialShape.Shape.Cookie7Sided
+                                }
+                            }
+
+                            RippleButton {
+                                visible: emptyStateRegion.showAction
+                                Layout.alignment: Qt.AlignHCenter
+                                implicitHeight: Appearance.sizes.barHeight
+                                implicitWidth: emptyActionContent.implicitWidth + Appearance.font.pixelSize.huge
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Appearance.colors.colPrimary
+                                colBackgroundHover: Appearance.colors.colPrimaryHover
+                                colBackgroundActive: Appearance.colors.colPrimaryActive
+                                colRipple: Appearance.colors.colPrimaryActive
+
+                                contentItem: RowLayout {
+                                    id: emptyActionContent
+                                    anchors.centerIn: parent
+                                    spacing: Appearance.font.pixelSize.smaller
+
+                                    MaterialSymbol {
+                                        text: wallpaperSelectorContent.browserMode ? (wallpaperSelectorContent.browserSearchActive ? "refresh" : "search")
+                                            : wallpaperSelectorContent.favMode ? "wallpaper"
+                                            : wallpaperSelectorContent.localSearchActive || wallpaperSelectorContent.activeColorFilter.length > 0 ? "close"
+                                            : "folder_open"
+                                        iconSize: Appearance.font.pixelSize.large
+                                        color: Appearance.colors.colOnPrimary
+                                    }
+
+                                    StyledText {
+                                        text: wallpaperSelectorContent.browserMode
+                                            ? (wallpaperSelectorContent.browserSearchActive ? Translation.tr("Search again") : Translation.tr("Search wallpapers"))
+                                            : wallpaperSelectorContent.favMode ? Translation.tr("Open wallpapers")
+                                            : wallpaperSelectorContent.localSearchActive ? Translation.tr("Clear search")
+                                            : wallpaperSelectorContent.activeColorFilter.length > 0 ? Translation.tr("Clear color filter")
+                                            : Translation.tr("Open file picker")
+                                        color: Appearance.colors.colOnPrimary
+                                        font.weight: Font.Medium
+                                    }
+                                }
+
+                                onClicked: {
+                                    if (wallpaperSelectorContent.browserMode) {
+                                        if (wallpaperSelectorContent.browserSearchActive) {
+                                            wallpaperSelectorContent.retryBrowserSearch();
+                                        } else {
+                                            extraOptions.focusSearch();
+                                        }
+                                    } else if (wallpaperSelectorContent.favMode) {
+                                        wallpaperSelectorContent.openDefaultFolder();
+                                    } else if (wallpaperSelectorContent.localSearchActive) {
+                                        extraOptions.clearSearch();
+                                    } else if (wallpaperSelectorContent.activeColorFilter.length > 0) {
+                                        wallpaperSelectorContent.activeColorFilter = "";
+                                    } else {
+                                        Wallpapers.openFallbackPicker(wallpaperSelectorContent.useDarkMode, GlobalStates.wallpaperSelectorTarget === "lockscreen");
+                                        wallpaperSelectorContent.closeSelector();
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     GridView {
@@ -844,7 +1015,8 @@ function moveToTrashFile(modelData) {
 
                         readonly property int columns: wallpaperSelectorContent.columns
                         readonly property int rows: Math.max(1, Math.ceil(count / columns))
-                        property int currentIndex: 0
+                        property int currentIndex: -1
+                        property bool keyboardNavigationActive: false
 
                         anchors.fill: parent
                         cellWidth: width / wallpaperSelectorContent.columns
@@ -905,7 +1077,12 @@ function moveToTrashFile(modelData) {
                         }
 
                         function moveSelection(delta) {
-                            currentIndex = Math.max(0, Math.min(grid.model.count - 1, currentIndex + delta));
+                            if (grid.count <= 0) {
+                                currentIndex = -1;
+                                return;
+                            }
+                            keyboardNavigationActive = true;
+                            currentIndex = Math.max(0, Math.min(grid.count - 1, currentIndex + delta));
                             positionViewAtIndex(currentIndex, GridView.Contain);
                         }
 
@@ -944,11 +1121,16 @@ function moveToTrashFile(modelData) {
 
                         model: wallpaperSelectorContent.browserMode ? wallpaperSelectorContent.apiImages : (wallpaperSelectorContent.favMode ? favouritesModel : (wallpaperSelectorContent.activeColorFilter ? colorFilteredModel : Wallpapers.sortedFolderModel))
                         onModelChanged: {
-                            currentIndex = 0
+                            currentIndex = -1
+                            keyboardNavigationActive = false
                             loadedCount = 0
                             loadTimer.restart()
                         }
                         onCountChanged: {
+                            if (count <= 0) {
+                                currentIndex = -1;
+                                keyboardNavigationActive = false;
+                            }
                             if (count > 0 && loadedCount < count) {
                                 loadTimer.restart()
                             }
@@ -965,9 +1147,20 @@ function moveToTrashFile(modelData) {
                             readonly property int itemRow: Math.floor(index / Math.max(1, cols))
                             readonly property int itemCol: index % Math.max(1, cols)
                             readonly property int cascadeDelay: Math.min(250, (itemRow * 30) + (itemCol * 20))
+                            readonly property bool appliedState: wallpaperSelectorContent.modelIsApplied(fileModelData)
+                            readonly property bool isKeyboardSelected: grid.keyboardNavigationActive && index === grid.currentIndex
+                            readonly property bool isMoreOptionsSelected: wallpaperSelectorContent.moreOptionsModelData !== null
+                                && wallpaperSelectorContent.wallpaperModelKey(fileModelData) === wallpaperSelectorContent.wallpaperModelKey(wallpaperSelectorContent.moreOptionsModelData)
 
-                            colBackground: (index === grid?.currentIndex || containsMouse) ? Appearance.colors.colPrimary : (fileModelData.filePath === Config.options.background.wallpaperPath) ? Appearance.colors.colSecondaryContainer : (fileModelData.filePath === wallpaperSelectorContent.moreOptionsModelData?.filePath) ? Appearance.colors.colPrimary : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer)
-                            colText: (index === grid.currentIndex || containsMouse) ? Appearance.colors.colOnPrimary : (fileModelData.filePath === Config.options.background.wallpaperPath) ? Appearance.colors.colOnSecondaryContainer : (fileModelData.filePath === wallpaperSelectorContent.moreOptionsModelData?.filePath) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer0
+                            colBackground: appliedState ? Appearance.colors.colPrimaryContainer
+                                : (isMoreOptionsSelected ? Appearance.colors.colSecondaryContainer
+                                : (isKeyboardSelected || containsMouse) ? Appearance.colors.colLayer2Hover
+                                : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer))
+                            colText: appliedState ? Appearance.colors.colOnPrimaryContainer
+                                : (isMoreOptionsSelected || isKeyboardSelected || containsMouse) ? Appearance.colors.colOnLayer2
+                                : Appearance.colors.colOnLayer0
+                            isApplied: appliedState
+                            appliedLabel: wallpaperSelectorContent.targetLabel
                             shouldLoad: index < grid.loadedCount
 
                             scale: 0.72
@@ -1028,9 +1221,7 @@ function moveToTrashFile(modelData) {
                                 }
                             }
 
-                            onEntered: {
-                                grid.currentIndex = index;
-                            }
+                            onEntered: grid.keyboardNavigationActive = false
 
                             onActivated: {
                                 if (fileModelData.fileIsDir) {
@@ -1186,7 +1377,8 @@ function moveToTrashFile(modelData) {
     Connections {
         target: Wallpapers
         function onSortChanged() {
-            grid.currentIndex = 0;
+            grid.currentIndex = -1;
+            grid.keyboardNavigationActive = false;
             grid.positionViewAtBeginning();
         }
     }
