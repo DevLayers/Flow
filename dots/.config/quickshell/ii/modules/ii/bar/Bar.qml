@@ -26,7 +26,11 @@ Scope {
             required property ShellScreen modelData
             property int monitorIndex: barVariant.variantModel.indexOf(modelData)
 
-            active: GlobalStates.barOpen && !GlobalStates.screenLocked && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
+            // Keep an already-open bar mapped while the lock surface is entering.
+            // Destroying the PanelWindow here makes Wayland recompute the layer
+            // geometry in the same frame as the lock animation, which produces a
+            // visible slide when wrapped frame is enabled.
+            active: GlobalStates.barOpen && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
             component: BarWindow {
                 screen:       barLoader.modelData
                 monitorIndex: barLoader.monitorIndex

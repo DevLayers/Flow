@@ -93,6 +93,9 @@ Scope {
 
             // Unlock the screen before exiting, or the compositor will display a
             // fallback lock you can't interact with.
+            // Suppress workspace numbers before screenLocked changes so the
+            // temporary lock workspace ID cannot flash during unlock.
+            GlobalStates.workspaceRestoreInProgress = true;
             GlobalStates.screenLocked = false;
 
             // Reset

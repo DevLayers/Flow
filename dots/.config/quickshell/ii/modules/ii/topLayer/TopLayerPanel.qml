@@ -32,6 +32,14 @@ PanelWindow {
     }
 
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && !(Config.options.bar.cornerStyle === 3 && !topPanel.barVertical) && hasBarOnThisMonitor
+    readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
+    readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
+    readonly property real lockSlideDistance: topPanel.barVertical
+        ? Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding
+        : Appearance.sizes.barHeight + Appearance.rounding.screenRounding
+    readonly property real lockSlideOffsetX: topPanel.barVertical ? (topPanel.barOnLeft ? -lockSlideDistance : lockSlideDistance) : 0
+    readonly property real lockSlideOffsetY: topPanel.barVertical ? 0 : (topPanel.barBottom ? lockSlideDistance : -lockSlideDistance)
+    readonly property real lockVisualOpacity: topPanel.usingWrappedFrame ? 1.0 - lockTransitionProgress : 1.0
 
     BarThemes {
         id: barThemes
@@ -185,9 +193,10 @@ PanelWindow {
     // 1. Wrapped Frame Visuals
     Loader {
         id: frameLoader
-        active: topPanel.usingWrappedFrame && !GlobalStates.screenLocked && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        active: topPanel.usingWrappedFrame && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
         visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
         anchors.fill: parent
+        opacity: topPanel.lockVisualOpacity
         sourceComponent: Frame.WrappedFrameVisuals {
             showBarBackground: horizontalBarLoader.item ? horizontalBarLoader.item.showBarBackground : (verticalBarLoader.item ? verticalBarLoader.item.showBarBackground : false)
             screen: topPanel.screen
@@ -206,9 +215,13 @@ PanelWindow {
     // 2. Horizontal Bar Visual Layer
     Loader {
         id: horizontalBarLoader
-        active: !topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && hasBarOnThisMonitor && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        active: !topPanel.barVertical && GlobalStates.barOpen && hasBarOnThisMonitor && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
         visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
         anchors.fill: parent
+        opacity: topPanel.lockVisualOpacity
+        transform: Translate {
+            y: topPanel.usingWrappedFrame ? 0 : topPanel.lockSlideOffsetY * topPanel.lockTransitionProgress
+        }
         sourceComponent: Component {
             Item {
                 id: hBarItem
@@ -399,9 +412,13 @@ PanelWindow {
     // 3. Vertical Bar Visual Layer
     Loader {
         id: verticalBarLoader
-        active: topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && hasBarOnThisMonitor && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        active: topPanel.barVertical && GlobalStates.barOpen && hasBarOnThisMonitor && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
         visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
         anchors.fill: parent
+        opacity: topPanel.lockVisualOpacity
+        transform: Translate {
+            x: topPanel.usingWrappedFrame ? 0 : topPanel.lockSlideOffsetX * topPanel.lockTransitionProgress
+        }
         sourceComponent: Component {
             Item {
                 id: vBarItem
@@ -1143,15 +1160,15 @@ PanelWindow {
     mask: Region {
         Region {
             // Bar horizontal
-            item: (horizontalBarLoader.item && horizontalBarLoader.item.maskItem) ? horizontalBarLoader.item.maskItem : null
+            item: !topPanel.lockTransitionActive && (horizontalBarLoader.item && horizontalBarLoader.item.maskItem) ? horizontalBarLoader.item.maskItem : null
         }
         Region {
             // Bar vertical
-            item: (verticalBarLoader.item && verticalBarLoader.item.maskItem) ? verticalBarLoader.item.maskItem : null
+            item: !topPanel.lockTransitionActive && (verticalBarLoader.item && verticalBarLoader.item.maskItem) ? verticalBarLoader.item.maskItem : null
         }
         Region {
             // Frame
-            regions: frameLoader.item ? [frameLoader.item.frameMask] : []
+            regions: !topPanel.lockTransitionActive && frameLoader.item ? [frameLoader.item.frameMask] : []
         }
         Region {
             item: (!GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarWarmOnMonitor) ? leftSidebarMaskItem : null

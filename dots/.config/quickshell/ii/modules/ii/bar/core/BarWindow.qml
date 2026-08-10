@@ -22,6 +22,13 @@ Scope {
     required property ShellScreen screen
     required property int monitorIndex
 
+    readonly property bool lockUsesFade: Config.options.appearance.fakeScreenRounding === 3
+        && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical)
+    readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
+    readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
+    readonly property real lockSlideDistance: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
+    readonly property real lockSlideOffsetY: Config.options.bar.bottom ? lockSlideDistance : -lockSlideDistance
+
     // ── Space reserver (reserves space so windows don't overlap bar) ──────────
     PanelWindow {
         id: barSpaceReserver
@@ -126,7 +133,7 @@ Scope {
         // Shadow from MultiEffect is visual-only and outside the mask.
         // In fullscreen, mask becomes empty to allow clicks through.
         mask: Region {
-            item: barRoot.hasFullscreenWindowOnMonitor ? null : hoverMaskRegion
+            item: barRoot.hasFullscreenWindowOnMonitor || root.lockTransitionActive ? null : hoverMaskRegion
         }
         color: "transparent"
         anchors {
@@ -143,14 +150,7 @@ Scope {
         Loader {
             active: Config.options.appearance.fakeScreenRounding == 3 && Config.options.bar.cornerStyle !== 3
             anchors.fill: parent
-            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : 1.0
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                }
-            }
+            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
             sourceComponent: Component {
                 Item {
                     anchors.fill: parent
@@ -167,13 +167,9 @@ Scope {
         MouseArea {
             id: hoverRegion
             hoverEnabled: true
-            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : 1.0
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                }
+            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
+            transform: Translate {
+                y: root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress
             }
             anchors {
                 left: parent.left

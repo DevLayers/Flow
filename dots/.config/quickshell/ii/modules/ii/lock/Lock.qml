@@ -21,6 +21,9 @@ LockScreen {
         interval: 450 // Delayed until zoom-in is fully finished (450ms)
         repeat: false
         onTriggered: {
+            if (GlobalStates.screenLocked)
+                return;
+
             var batch = "keyword animation workspaces,0";
             var hasCmds = false;
             for (var j = 0; j < Quickshell.screens.length; ++j) {
@@ -50,12 +53,21 @@ LockScreen {
             }
             batch += " ; keyword animation workspaces,1";
             if (hasCmds) {
-                GlobalStates.workspaceRestoreInProgress = false;
                 Quickshell.execDetached(["hyprctl", "--batch", batch]);
-            } else {
-                GlobalStates.workspaceRestoreInProgress = false;
             }
+
+            // Keep workspace labels hidden until Hyprland has applied the
+            // restore batch. The reveal is then driven by the label's own
+            // opacity Behavior instead of exposing the temporary lock ID.
+            workspaceNumbersRevealTimer.restart();
         }
+    }
+
+    Timer {
+        id: workspaceNumbersRevealTimer
+        interval: Appearance.animation.elementMoveSlow.duration
+        repeat: false
+        onTriggered: GlobalStates.workspaceRestoreInProgress = false
     }
 
     lockSurface: LockSurface {
@@ -70,6 +82,8 @@ LockScreen {
                 if (Config.options && Config.options.background && Config.options.background.useSeparateLockscreenWallpaper) {
                     Quickshell.execDetached(["bash", Directories.swapLockscreenColorsScriptPath, "lock"]);
                 }
+                restoreTimer.stop();
+                workspaceNumbersRevealTimer.stop();
                 GlobalStates.workspaceRestoreInProgress = false;
                 // Lock: save workspace per monitor and move all to temp workspace in one batch
                 var activeMon = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";

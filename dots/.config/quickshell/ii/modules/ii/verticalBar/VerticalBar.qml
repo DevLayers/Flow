@@ -17,6 +17,12 @@ import qs.modules.ii.wrappedFrame
 Scope {
     id: bar
 
+    readonly property bool lockUsesFade: Config.options.appearance.fakeScreenRounding === 3
+    readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
+    readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
+    readonly property real lockSlideDistance: Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding
+    readonly property real lockSlideOffsetX: Config.options.bar.bottom ? lockSlideDistance : -lockSlideDistance
+
     Variants {
         id: barVariant
         // For each monitor
@@ -27,7 +33,9 @@ Scope {
             required property ShellScreen modelData
             property var monitorIndex: barVariant.variantModel.indexOf(barLoader.modelData)
 
-            active: GlobalStates.barOpen && !GlobalStates.screenLocked && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
+            // Preserve the mapped PanelWindow through lock entry so the
+            // compositor does not reflow the screen while WlSessionLock appears.
+            active: GlobalStates.barOpen && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
             component: Scope {
                 id: barScope
 
@@ -119,7 +127,7 @@ Scope {
                     // WlrLayershell.layer: WlrLayer.Overlay // TODO: enable this when bar can reliably hide when fullscreen without crashing
 
                     mask: Region {
-                        item: hoverMaskRegion
+                        item: bar.lockTransitionActive ? null : hoverMaskRegion
                     }
                     color: "transparent"
 
@@ -143,6 +151,7 @@ Scope {
                     Loader {
                         active: Config.options.appearance.fakeScreenRounding == 3
                         anchors.fill: parent
+                        opacity: bar.lockUsesFade ? 1.0 - bar.lockTransitionProgress : 1.0
                         sourceComponent: Component {
                             Item {
                                 anchors.fill: parent
@@ -159,6 +168,10 @@ Scope {
                         id: hoverRegion
                         hoverEnabled: true
                         anchors.fill: parent
+                        opacity: bar.lockUsesFade ? 1.0 - bar.lockTransitionProgress : 1.0
+                        transform: Translate {
+                            x: bar.lockUsesFade ? 0 : bar.lockSlideOffsetX * bar.lockTransitionProgress
+                        }
 
                         Item {
                             id: hoverMaskRegion
