@@ -11,6 +11,11 @@ RippleButton {
     property string buttonIcon
     property real iconSize: 18
     property Component extraComponent: null
+    property url configPage: ""
+    property bool hasSubPageOverride: false
+    readonly property bool hasSubPage: configPage.toString() !== "" || hasSubPageOverride
+
+    signal openSubPage()
 
     Layout.fillWidth: true
     implicitHeight: contentLayout.implicitHeight + 20
@@ -18,7 +23,23 @@ RippleButton {
     property bool forceUniformRadius: false
     useDynamicRadius: true
 
-    onClicked: checked = !checked
+    onClicked: {
+        if (root.hasSubPage) {
+            root.openSubPage();
+            if (root.configPage.toString() !== "") {
+                var p = root.parent;
+                while (p) {
+                    if (typeof p.activeSubPage !== "undefined") {
+                        p.activeSubPage = root.configPage;
+                        return;
+                    }
+                    p = p.parent;
+                }
+            }
+        } else {
+            checked = !checked;
+        }
+    }
 
     property color normalColor: Appearance.colors.colLayer2
     property color highlightColor: Appearance.colors.colSecondaryContainer
@@ -245,13 +266,40 @@ RippleButton {
                 Layout.alignment: Qt.AlignVCenter
             }
 
-            StyledSwitch {
-                id: switchWidget
-                Layout.fillWidth: false
-                checked: root.checked
-                enabled: false
-                isPressed: root.isPressed
-                opacity: root.enabled ? 1.0 : 0.4
+            Rectangle {
+                visible: root.hasSubPage
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 18
+                Layout.alignment: Qt.AlignVCenter
+                Layout.leftMargin: 2
+                Layout.rightMargin: 2
+                color: Appearance.colors.colOnLayer2
+                opacity: 0.25
+            }
+
+            Item {
+                implicitWidth: switchWidget.implicitWidth
+                implicitHeight: switchWidget.implicitHeight
+                Layout.alignment: Qt.AlignVCenter
+
+                StyledSwitch {
+                    id: switchWidget
+                    anchors.centerIn: parent
+                    checked: root.checked
+                    enabled: false
+                    isPressed: root.isPressed
+                    opacity: root.enabled ? 1.0 : 0.4
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: root.hasSubPage && root.enabled
+                    hoverEnabled: enabled
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: {
+                        root.checked = !root.checked;
+                    }
+                }
             }
         }
     }
