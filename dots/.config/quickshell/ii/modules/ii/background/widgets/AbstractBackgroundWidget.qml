@@ -6,6 +6,7 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets.widgetCanvas
 import qs.modules.ii.background.widgets
+import "WidgetDragMath.js" as WidgetDragMath
 
 AbstractWidget {
     id: root
@@ -167,30 +168,31 @@ AbstractWidget {
     property real targetY: isPreview ? 0 : (forceCenter ? centeringY : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(widgetInstance !== null ? widgetInstance.y : (configEntry ? configEntry.y : 0), scaledScreenHeight - height)) : calculatedY))
     property bool isDraggingOrSettling: false
 
-    // Raw (pre-grid, pre-snap) drag position — tracks the drag system's raw output each frame.
-    // Proximity/threshold checks use these so snap decisions are based on where the mouse IS,
-    // not the already-transformed rendered position (prevents oscillation).
+    // Pointer coordinates and rendered coordinates are intentionally separate.
+    // MouseArea.drag must not write root.x/y because snap/grid also write them.
+    property bool _pointerGestureReady: false
+    property bool _dragMovementActive: false
+    property real _pressCanvasX: 0
+    property real _pressCanvasY: 0
+    property real _dragOriginX: 0
+    property real _dragOriginY: 0
     property real _rawDragX: 0
     property real _rawDragY: 0
-    property bool _applyingGridSnap: false  // re-entrancy guard for onXChanged/onYChanged
 
     // ── Snap hysteresis state ─────────────────────────────────────────────────
-    // Enter: snap when raw is within _snapEnter px of an alignment edge.
-    // Exit:  unsnap only when raw has moved > _snapExit px FROM THE ENTRY POINT
-    //        (not from the target). This prevents the re-entry loop that happens
-    //        when exit is measured from the target and the entry zone overlaps
-    //        with the exit zone.
+    // This is a Schmitt trigger: acquire close to a guide, release farther away.
     readonly property int _snapEnter: 18
-    readonly property int _snapExit:  55
+    readonly property int _snapExit: 32
+    readonly property int _snapOrthogonalRange: 600
     property bool _snapLockX: false
-    property real _snapLockXTarget: 0  // rendered x when snapped
-    property real _snapEntryX: 0      // rawX at the moment snap was established
+    property real _snapLockXTarget: 0
+    property real _snapGuideX: -1
     property bool _snapLockY: false
-    property real _snapLockYTarget: 0  // rendered y when snapped
-    property real _snapEntryY: 0      // rawY at the moment snap was established
+    property real _snapLockYTarget: 0
+    property real _snapGuideY: -1
 
     // ── Grid anchor state ─────────────────────────────────────────────────────
-    // Grid cells are 20px wide. The anchor stores the raw mouse position at the
+    // Grid cells are 10px wide. The anchor stores the raw pointer position at the
     // time of the last cell commit. A new cell is committed only when raw has
     // moved >= _gridStep from the anchor. The anchor then updates to rawX so the
     // NEXT jump again requires a full _gridStep of mouse movement.
@@ -200,7 +202,10 @@ AbstractWidget {
     //   around the jump boundary, the cell alternates because the new cell's
     //   hysteresis zone is immediately triggered. With anchor tracking the
     //   required movement is ALWAYS relative to the raw position — stable.
-    readonly property int _gridStep: 20
+    readonly property int _gridStep: {
+        const canvas = findCanvas(root.parent);
+        return Math.max(1, canvas ? canvas.alignmentGridStep : 10);
+    }
     property real _gridAnchorX: 0   // raw x at last grid commit
     property real _gridAnchorY: 0   // raw y at last grid commit
     property real _lastGridX: 0     // last committed grid cell x
@@ -224,8 +229,8 @@ AbstractWidget {
             root.y = root.targetY;
         }
         Qt.callLater(() => {
-            root.animateXPos = !root.drag.active;
-            root.animateYPos = !root.drag.active;
+            root.animateXPos = !root.isDragging;
+            root.animateYPos = !root.isDragging;
         });
     }
 
@@ -254,7 +259,7 @@ AbstractWidget {
         }
     }
 
-    readonly property bool isDragging: drag.active
+    readonly property bool isDragging: _dragMovementActive
     onIsDraggingChanged: {
         let canvas = findCanvas(root.parent);
         if (canvas) {
@@ -268,21 +273,67 @@ AbstractWidget {
         }
     }
 
-    onPressedChanged: {
-        if (pressed) {
-            isDraggingOrSettling = true;
-            _rawDragX = root.x;
-            _rawDragY = root.y;
-            // Reset ALL hysteresis state at drag start
-            _snapLockX = false;
-            _snapLockY = false;
-            // Grid: anchor starts at current raw position; cell starts at current grid-aligned position
-            _gridAnchorX = root.x;
-            _gridAnchorY = root.y;
-            _lastGridX   = Math.round(root.x / _gridStep) * _gridStep;
-            _lastGridY   = Math.round(root.y / _gridStep) * _gridStep;
-        }
+    function beginPointerGesture(mouse) {
+        if (!draggable)
+            return;
+
+        const canvas = findCanvas(root.parent);
+        if (!canvas)
+            return;
+
+        settleTimer.stop();
+        staggerTimer.stop();
+        _pendingPosition = false;
+
+        const pointer = root.mapToItem(canvas, mouse.x, mouse.y);
+        _pointerGestureReady = true;
+        _dragMovementActive = false;
+        isDraggingOrSettling = true;
+        _pressCanvasX = pointer.x;
+        _pressCanvasY = pointer.y;
+        _dragOriginX = root.x;
+        _dragOriginY = root.y;
+        _rawDragX = root.x;
+        _rawDragY = root.y;
+
+        _snapLockX = false;
+        _snapLockY = false;
+        _snapGuideX = -1;
+        _snapGuideY = -1;
+
+        _gridAnchorX = root.x;
+        _gridAnchorY = root.y;
+        _lastGridX = Math.max(0, Math.min(Math.round(root.x / _gridStep) * _gridStep, gridMaximumX()));
+        _lastGridY = Math.max(0, Math.min(Math.round(root.y / _gridStep) * _gridStep, gridMaximumY()));
     }
+
+    function updatePointerGesture(mouse) {
+        if (!_pointerGestureReady || !pressed || !draggable)
+            return;
+
+        const canvas = findCanvas(root.parent);
+        if (!canvas)
+            return;
+
+        const pointer = root.mapToItem(canvas, mouse.x, mouse.y);
+        const deltaX = pointer.x - _pressCanvasX;
+        const deltaY = pointer.y - _pressCanvasY;
+
+        if (!_dragMovementActive) {
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            if (distance < root.drag.threshold)
+                return;
+            _dragMovementActive = true;
+        }
+
+        _rawDragX = WidgetDragMath.clamp(_dragOriginX + deltaX, 0, dragMaximumX());
+        _rawDragY = WidgetDragMath.clamp(_dragOriginY + deltaY, 0, dragMaximumY());
+        root.x = applyGridAndSnapX(_rawDragX, _rawDragY);
+        root.y = applyGridAndSnapY(_rawDragY, _rawDragX);
+    }
+
+    onPressed: mouse => beginPointerGesture(mouse)
+    onPositionChanged: mouse => updatePointerGesture(mouse)
 
     onTargetXChanged: {
         if (!isDragging && !root.isDraggingOrSettling && !root.isPreview) {
@@ -333,211 +384,175 @@ AbstractWidget {
         return null
     }
 
+    function dragMaximumX() {
+        return Math.max(0, scaledScreenWidth - width);
+    }
+
+    function dragMaximumY() {
+        return Math.max(0, scaledScreenHeight - height);
+    }
+
+    function gridMaximumX() {
+        return Math.floor(dragMaximumX() / _gridStep) * _gridStep;
+    }
+
+    function gridMaximumY() {
+        return Math.floor(dragMaximumY() / _gridStep) * _gridStep;
+    }
+
+    function advanceGridX(rawX) {
+        const state = WidgetDragMath.advanceGrid(rawX, _gridAnchorX, _lastGridX, _gridStep, 0, gridMaximumX());
+        _gridAnchorX = state.anchor;
+        _lastGridX = state.value;
+        return _lastGridX;
+    }
+
+    function advanceGridY(rawY) {
+        const state = WidgetDragMath.advanceGrid(rawY, _gridAnchorY, _lastGridY, _gridStep, 0, gridMaximumY());
+        _gridAnchorY = state.anchor;
+        _lastGridY = state.value;
+        return _lastGridY;
+    }
+
+    function snapCandidateX(rawX, rawY) {
+        if (!widgetListModel)
+            return null;
+
+        const candidates = [];
+        for (let i = 0; i < widgetListModel.count; i++) {
+            const widget = widgetListModel.get(i);
+            if (widgetInstance && widget.instanceId === widgetInstance.id)
+                continue;
+            if (Math.abs(rawY - widget.widgetY) >= _snapOrthogonalRange)
+                continue;
+
+            const widgetId = widget.instanceId || widget.id;
+            const widgetWidth = (widgetSizes && widgetSizes[widgetId] && widgetSizes[widgetId].width > 0)
+                ? widgetSizes[widgetId].width
+                : root.width;
+            const otherLeft = widget.widgetX;
+            const otherRight = widget.widgetX + widgetWidth;
+
+            candidates.push({ "target": otherLeft, "guide": otherLeft, "distance": Math.abs(rawX - otherLeft) });
+            candidates.push({ "target": otherRight - root.width, "guide": otherRight, "distance": Math.abs(rawX + root.width - otherRight) });
+            candidates.push({ "target": otherRight, "guide": otherRight, "distance": Math.abs(rawX - otherRight) });
+            candidates.push({ "target": otherLeft - root.width, "guide": otherLeft, "distance": Math.abs(rawX + root.width - otherLeft) });
+        }
+
+        return WidgetDragMath.nearestValidCandidate(candidates, 0, dragMaximumX(), _snapEnter);
+    }
+
+    function snapCandidateY(rawY, rawX) {
+        if (!widgetListModel)
+            return null;
+
+        const candidates = [];
+        for (let i = 0; i < widgetListModel.count; i++) {
+            const widget = widgetListModel.get(i);
+            if (widgetInstance && widget.instanceId === widgetInstance.id)
+                continue;
+            if (Math.abs(rawX - widget.widgetX) >= _snapOrthogonalRange)
+                continue;
+
+            const widgetId = widget.instanceId || widget.id;
+            const widgetHeight = (widgetSizes && widgetSizes[widgetId] && widgetSizes[widgetId].height > 0)
+                ? widgetSizes[widgetId].height
+                : root.height;
+            const otherTop = widget.widgetY;
+            const otherBottom = widget.widgetY + widgetHeight;
+
+            candidates.push({ "target": otherTop, "guide": otherTop, "distance": Math.abs(rawY - otherTop) });
+            candidates.push({ "target": otherBottom - root.height, "guide": otherBottom, "distance": Math.abs(rawY + root.height - otherBottom) });
+            candidates.push({ "target": otherBottom, "guide": otherBottom, "distance": Math.abs(rawY - otherBottom) });
+            candidates.push({ "target": otherTop - root.height, "guide": otherTop, "distance": Math.abs(rawY + root.height - otherTop) });
+        }
+
+        return WidgetDragMath.nearestValidCandidate(candidates, 0, dragMaximumY(), _snapEnter);
+    }
+
     function applyGridAndSnapX(rawX, rawY) {
-        let targetXVal = rawX;
-        let canvas = findCanvas(root.parent);
+        const canvas = findCanvas(root.parent);
+        let targetXVal = (Config.options.background.widgets.enableGrid ?? false) ? advanceGridX(rawX) : rawX;
         let snapped = false;
 
         if (Config.options.background.widgets.enableSnap ?? false) {
-            // ── Snap with entry-point hysteresis ────────────────────────────
-            // Exit is measured from _snapEntryX (raw position when snap fired),
-            // NOT from _snapLockXTarget (the rendered alignment position).
-            // This prevents the tight enter/exit loop: because the entry zone
-            // is near the alignment edge, measuring exit from the target means
-            // a tiny backward mouse movement can unsnap, then the forward movement
-            // re-snaps — continuous oscillation. Measuring from the entry point
-            // means the user must move _snapExit px from where they physically
-            // were when snap engaged.
-            if (_snapLockX) {
-                if (Math.abs(rawX - _snapEntryX) < _snapExit) {
-                    targetXVal = _snapLockXTarget;
-                    if (isDragging && canvas) canvas.snapLineX = _snapLockXTarget;
+            if (_snapLockX && WidgetDragMath.shouldHoldSnap(rawX, _snapLockXTarget, _snapExit)) {
+                targetXVal = _snapLockXTarget;
+                snapped = true;
+            } else {
+                _snapLockX = false;
+                const candidate = snapCandidateX(rawX, rawY);
+                if (candidate) {
+                    _snapLockX = true;
+                    _snapLockXTarget = candidate.target;
+                    _snapGuideX = candidate.guide;
+                    targetXVal = candidate.target;
                     snapped = true;
-                } else {
-                    _snapLockX = false;
                 }
             }
-
-            if (!snapped && widgetListModel) {
-                for (let i = 0; i < widgetListModel.count; i++) {
-                    let w = widgetListModel.get(i);
-                    if (widgetInstance && w.instanceId === widgetInstance.id) continue;
-
-                    let verticallyClose = Math.abs(rawY - w.widgetY) < 600;
-                    if (!verticallyClose) continue;
-
-                    let wId = w.instanceId || w.id;
-                    let wWidth = (widgetSizes && widgetSizes[wId] && widgetSizes[wId].width > 0) ? widgetSizes[wId].width : root.width;
-
-                    let hasCandidate = false;
-                    let candidate = 0;
-                    let lineX    = 0;
-                    if (Math.abs(rawX - w.widgetX) < _snapEnter) {
-                        candidate = w.widgetX; lineX = w.widgetX; hasCandidate = true;
-                    } else if (Math.abs((rawX + root.width) - (w.widgetX + wWidth)) < _snapEnter) {
-                        candidate = w.widgetX + wWidth - root.width; lineX = w.widgetX + wWidth; hasCandidate = true;
-                    } else if (Math.abs(rawX - (w.widgetX + wWidth)) < _snapEnter) {
-                        candidate = w.widgetX + wWidth; lineX = w.widgetX + wWidth; hasCandidate = true;
-                    } else if (Math.abs((rawX + root.width) - w.widgetX) < _snapEnter) {
-                        candidate = w.widgetX - root.width; lineX = w.widgetX; hasCandidate = true;
-                    }
-
-                    if (hasCandidate) {
-                        targetXVal = candidate;
-                        if (isDragging && canvas) canvas.snapLineX = lineX;
-                        _snapLockX = true;
-                        _snapLockXTarget = candidate;
-                        _snapEntryX = rawX;  // record WHERE mouse was, not the snap target
-                        snapped = true;
-                        break;
-                    }
-                }
-            }
+        } else {
+            _snapLockX = false;
         }
 
-        if (!snapped && canvas) canvas.snapLineX = -1;
-
-        // ── Grid with anchor-based tracking ──────────────────────────────────
-        // A cell commit happens only when rawX has moved >= _gridStep from
-        // _gridAnchorX (the raw position at the last commit). After committing,
-        // _gridAnchorX = rawX so the NEXT jump again needs a full step of travel.
-        // This is stable regardless of how the cell boundaries shift: the required
-        // movement is always _gridStep of physical cursor distance.
-        if (!snapped && (Config.options.background.widgets.enableGrid ?? false)) {
-            let delta = rawX - _gridAnchorX;
-            if (delta >= _gridStep) {
-                // Moved right by at least one step
-                let steps = Math.floor(delta / _gridStep);
-                _gridAnchorX += steps * _gridStep;
-                _lastGridX = Math.round(_gridAnchorX / _gridStep) * _gridStep;
-            } else if (delta <= -_gridStep) {
-                // Moved left by at least one step
-                let steps = Math.ceil(delta / _gridStep);   // negative
-                _gridAnchorX += steps * _gridStep;
-                _lastGridX = Math.round(_gridAnchorX / _gridStep) * _gridStep;
-            }
-            targetXVal = _lastGridX;
-        }
-
+        if (canvas)
+            canvas.snapLineX = snapped && isDragging ? _snapGuideX : -1;
         return targetXVal;
     }
 
     function applyGridAndSnapY(rawY, rawX) {
-        let targetYVal = rawY;
-        let canvas = findCanvas(root.parent);
+        const canvas = findCanvas(root.parent);
+        let targetYVal = (Config.options.background.widgets.enableGrid ?? false) ? advanceGridY(rawY) : rawY;
         let snapped = false;
 
         if (Config.options.background.widgets.enableSnap ?? false) {
-            if (_snapLockY) {
-                if (Math.abs(rawY - _snapEntryY) < _snapExit) {
-                    targetYVal = _snapLockYTarget;
-                    if (isDragging && canvas) canvas.snapLineY = _snapLockYTarget;
+            if (_snapLockY && WidgetDragMath.shouldHoldSnap(rawY, _snapLockYTarget, _snapExit)) {
+                targetYVal = _snapLockYTarget;
+                snapped = true;
+            } else {
+                _snapLockY = false;
+                const candidate = snapCandidateY(rawY, rawX);
+                if (candidate) {
+                    _snapLockY = true;
+                    _snapLockYTarget = candidate.target;
+                    _snapGuideY = candidate.guide;
+                    targetYVal = candidate.target;
                     snapped = true;
-                } else {
-                    _snapLockY = false;
                 }
             }
-
-            if (!snapped && widgetListModel) {
-                for (let i = 0; i < widgetListModel.count; i++) {
-                    let w = widgetListModel.get(i);
-                    if (widgetInstance && w.instanceId === widgetInstance.id) continue;
-
-                    let horizontallyClose = Math.abs(rawX - w.widgetX) < 600;
-                    if (!horizontallyClose) continue;
-
-                    let wId = w.instanceId || w.id;
-                    let wHeight = (widgetSizes && widgetSizes[wId] && widgetSizes[wId].height > 0) ? widgetSizes[wId].height : root.height;
-
-                    let hasCandidate = false;
-                    let candidate = 0;
-                    let lineY    = 0;
-                    if (Math.abs(rawY - w.widgetY) < _snapEnter) {
-                        candidate = w.widgetY; lineY = w.widgetY; hasCandidate = true;
-                    } else if (Math.abs((rawY + root.height) - (w.widgetY + wHeight)) < _snapEnter) {
-                        candidate = w.widgetY + wHeight - root.height; lineY = w.widgetY + wHeight; hasCandidate = true;
-                    } else if (Math.abs(rawY - (w.widgetY + wHeight)) < _snapEnter) {
-                        candidate = w.widgetY + wHeight; lineY = w.widgetY + wHeight; hasCandidate = true;
-                    } else if (Math.abs((rawY + root.height) - w.widgetY) < _snapEnter) {
-                        candidate = w.widgetY - root.height; lineY = w.widgetY; hasCandidate = true;
-                    }
-
-                    if (hasCandidate) {
-                        targetYVal = candidate;
-                        if (isDragging && canvas) canvas.snapLineY = lineY;
-                        _snapLockY = true;
-                        _snapLockYTarget = candidate;
-                        _snapEntryY = rawY;
-                        snapped = true;
-                        break;
-                    }
-                }
-            }
+        } else {
+            _snapLockY = false;
         }
 
-        if (!snapped && canvas) canvas.snapLineY = -1;
-
-        if (!snapped && (Config.options.background.widgets.enableGrid ?? false)) {
-            let delta = rawY - _gridAnchorY;
-            if (delta >= _gridStep) {
-                let steps = Math.floor(delta / _gridStep);
-                _gridAnchorY += steps * _gridStep;
-                _lastGridY = Math.round(_gridAnchorY / _gridStep) * _gridStep;
-            } else if (delta <= -_gridStep) {
-                let steps = Math.ceil(delta / _gridStep);
-                _gridAnchorY += steps * _gridStep;
-                _lastGridY = Math.round(_gridAnchorY / _gridStep) * _gridStep;
-            }
-            targetYVal = _lastGridY;
-        }
-
+        if (canvas)
+            canvas.snapLineY = snapped && isDragging ? _snapGuideY : -1;
         return targetYVal;
     }
 
     draggable: !isPreview && !(Config.options.background.widgets.lockWidgetPositions ?? false) && (placementStrategy === "free" || placementStrategy === "draggable")
-    // Use root directly as drag target — no proxy needed.
-    // This eliminates the one-evaluation-pass lag of the proxy+Binding approach.
-    drag.target: draggable ? root : undefined
-    drag.minimumX: 0
-    drag.maximumX: scaledScreenWidth - width
-    drag.minimumY: 0
-    drag.maximumY: scaledScreenHeight - height
-    // Disable animation while dragging/settling so position is immediate
+    drag.target: undefined
+    drag.threshold: 4
+    preventStealing: true
     animateXPos: !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
     animateYPos: !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
-    onXChanged: {
-        if (!isDragging || _applyingGridSnap) return;
-        // Capture the drag-system's raw position before any transform
-        _rawDragX = x;
-        // Apply grid/snap using raw coordinates to prevent oscillation
-        let snappedX = applyGridAndSnapX(_rawDragX, _rawDragY);
-        if (snappedX !== x) {
-            _applyingGridSnap = true;
-            root.x = snappedX;
-            _applyingGridSnap = false;
-        }
-    }
-    onYChanged: {
-        if (!isDragging || _applyingGridSnap) return;
-        // Capture the drag-system's raw position before any transform
-        _rawDragY = y;
-        // Apply grid/snap using raw coordinates to prevent oscillation
-        let snappedY = applyGridAndSnapY(_rawDragY, _rawDragX);
-        if (snappedY !== y) {
-            _applyingGridSnap = true;
-            root.y = snappedY;
-            _applyingGridSnap = false;
-        }
-    }
+
     onReleased: {
-        if (isPreview) return;
-        // Final snap/grid on release using the last known raw position
-        let finalX = applyGridAndSnapX(_rawDragX, _rawDragY);
-        let finalY = applyGridAndSnapY(_rawDragY, _rawDragX);
+        if (!_pointerGestureReady) {
+            isDraggingOrSettling = false;
+            return;
+        }
+        if (isPreview || !_dragMovementActive) {
+            _pointerGestureReady = false;
+            _dragMovementActive = false;
+            isDraggingOrSettling = false;
+            return;
+        }
+
+        const finalX = applyGridAndSnapX(_rawDragX, _rawDragY);
+        const finalY = applyGridAndSnapY(_rawDragY, _rawDragX);
         root.x = finalX;
         root.y = finalY;
 
-        let canvas = findCanvas(root.parent);
+        const canvas = findCanvas(root.parent);
         if (canvas) {
             canvas.snapLineX = -1;
             canvas.snapLineY = -1;
@@ -549,7 +564,20 @@ AbstractWidget {
             configEntry.x = finalX;
             configEntry.y = finalY;
         }
+
+        _pointerGestureReady = false;
+        _dragMovementActive = false;
         settleTimer.restart();
+    }
+
+    onCanceled: {
+        if (_pointerGestureReady && _dragMovementActive) {
+            root.x = _dragOriginX;
+            root.y = _dragOriginY;
+        }
+        _pointerGestureReady = false;
+        _dragMovementActive = false;
+        isDraggingOrSettling = false;
     }
 
     property bool needsColText: false
@@ -623,4 +651,3 @@ AbstractWidget {
 
 
 }
-

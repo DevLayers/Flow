@@ -304,6 +304,7 @@ PanelWindow {
             layer.enabled: false
             antialiasing: true
             smooth: true
+            gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
 
             anchors {
                 left: parent.left
