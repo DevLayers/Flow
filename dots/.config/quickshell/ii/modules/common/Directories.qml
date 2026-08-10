@@ -102,6 +102,7 @@ Singleton {
         Quickshell.execDetached(["bash", "-c", `rm -rf '${latexOutput}'; mkdir -p '${latexOutput}'`]);
         Quickshell.execDetached(["bash", "-c", `rm -rf '${cliphistDecode}'; mkdir -p '${cliphistDecode}'`]);
         Quickshell.execDetached(["mkdir", "-p", `${aiChats}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${appStats}`]);
         Quickshell.execDetached(["mkdir", "-p", `${userActions}`]);
         Quickshell.execDetached(["mkdir", "-p", `${userWidgetsPath}`]);
         Quickshell.execDetached(["rm", "-rf", `${tempImages}`]);

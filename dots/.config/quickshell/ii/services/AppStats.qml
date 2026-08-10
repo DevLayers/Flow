@@ -70,6 +70,10 @@ Singleton {
     /// daemon. Assumed present until the probe says otherwise — the overlay would
     /// otherwise flash its install screen on every start.
     property bool binaryPresent: true
+    /// Whether the install probe has answered yet. The sampler waits for it so a
+    /// config without a daemon never execs a path that isn't there, while the overlay
+    /// keeps reading `binaryPresent` and so still doesn't flash its install screen.
+    property bool probed: false
     /// 1 readable, 0 present but root-only, 2 no intel-rapl on this machine.
     property int raplState: 1
     /// True once the sampler has announced itself, not merely once it was spawned.
@@ -248,6 +252,10 @@ Singleton {
             sampler.write(`${JSON.stringify({
                 t: "flush"
             })}\n`);
+            // On a cold shell the day file did not exist when the view was set up, and
+            // FileView cannot watch a path that is not there — nothing would tell us the
+            // flush landed, and the overlay would sit empty until the retry came round.
+            reloadTimer.restart();
             return;
         }
         todayView.reload();
@@ -672,13 +680,21 @@ Singleton {
     }
 
     // The sampler writes its first day file one flush interval after launch, and
-    // FileView cannot watch a path that does not exist yet.
+    // FileView cannot watch a path that does not exist yet. Only worth retrying while
+    // there is a sampler that could still write it — without a binary the file is
+    // never coming, and the retry would otherwise run for the life of the session.
+    // The interval backs off so a sampler that keeps failing does not poll at full rate
+    // forever, but stays short enough that a first flush is picked up soon after it lands.
     Timer {
         id: todayRetryTimer
-        interval: 10000
+        interval: 5000
         repeat: true
-        running: root.enabled && root.history[root.todayDate] === null
-        onTriggered: todayView.reload()
+        running: root.enabled && root.binaryPresent && root.history[root.todayDate] === null
+        onRunningChanged: if (running) interval = 5000
+        onTriggered: {
+            todayView.reload();
+            interval = Math.min(interval * 2, 30000);
+        }
     }
 
     Timer {
@@ -711,6 +727,7 @@ Singleton {
                 // shell was up — one just built — starts collecting on its own.
                 root.binaryPresent = parts[0] === "1";
                 root.raplState = parseInt(parts[1]);
+                root.probed = true;
             }
         }
     }
@@ -732,6 +749,10 @@ Singleton {
         id: todayView
         path: `${root.stateDir}/${root.todayDate}.json`
         watchChanges: true
+        // A day file that does not exist yet is the normal state before the first
+        // flush, and the permanent state where the sampler was never built. Neither
+        // is worth a warning per retry.
+        printErrors: false
 
         onFileChanged: reloadTimer.restart()
         onLoaded: root.storeDay(root.todayDate, root.parseDoc(todayView.text()))
@@ -760,7 +781,7 @@ Singleton {
 
     Process {
         id: sampler
-        running: root.enabled && root.binaryPresent && !root.restarting
+        running: root.enabled && root.probed && root.binaryPresent && !root.restarting
         stdinEnabled: true
         command: {
             const args = [root.binaryPath, "--state-dir", root.stateDir, "--interval-ms", `${root.intervalMs}`, "--flush-ms", `${root.flushMs}`, "--retention-days", `${root.retentionDays}`, "--retention-mode", root.retentionMode === "previousMonth" ? "previous-month" : "fixed", "--energy", root.energySource, "--gpu-full-every", `${root.gpuFullEvery}`];
