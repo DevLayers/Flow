@@ -2654,6 +2654,7 @@ Singleton {
                 property int height: 500
                 property int timeout: 3000
                 property bool showValues: true
+                property bool hideWhenFullscreen: true
             }
 
             property JsonObject osk: JsonObject {

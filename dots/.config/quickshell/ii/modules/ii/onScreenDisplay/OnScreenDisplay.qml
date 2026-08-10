@@ -149,6 +149,8 @@ Scope {
     function triggerOsd() {
         if (Config.ready && Config.options.osd && !Config.options.osd.enable)
             return;
+        if (Config.ready && Config.options.osd && Config.options.osd.hideWhenFullscreen && Notifications.focusedWindowFullscreen)
+            return;
         // If the OSD was fully closed (not just closing), reset expansion state
         // so the next open always starts collapsed. This prevents stale state
         // from a previous session when the Loader reuses the same PanelWindow.
