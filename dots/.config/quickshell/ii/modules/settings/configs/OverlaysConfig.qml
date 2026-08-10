@@ -90,6 +90,14 @@ Item {
                     Config.options.osd.enable = checked;
                 }
             }
+            ConfigSwitch {
+                buttonIcon: "fullscreen"
+                text: Translation.tr("Hide OSD when fullscreen")
+                checked: Config.options.osd.hideWhenFullscreen
+                onCheckedChanged: {
+                    Config.options.osd.hideWhenFullscreen = checked;
+                }
+            }
 
             NoticeBox {
                 Layout.fillWidth: true
