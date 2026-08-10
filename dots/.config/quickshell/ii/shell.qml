@@ -131,6 +131,12 @@ ShellRoot {
             onTriggered: {
                 if (GlobalStates.settingsOpen)
                     return
+                // The visual Loader only owns the Settings object tree. These
+                // singletons outlive it, so release their page-specific data
+                // before dropping the component as well.
+                SearchRegistry.clearIndex()
+                ThemePreviewCache.release()
+                WallpaperPreviewCache.release()
                 settingsLoader.loadedOnce = false
             }
         }
@@ -169,7 +175,6 @@ ShellRoot {
         onPressed: root.cyclePanelFamily()
     }
 }
-
 
 
 

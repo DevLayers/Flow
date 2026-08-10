@@ -52,14 +52,14 @@ ContentPage {
             qmlStr += "ContentSection { title: \"" + section.title.replace(/"/g, '\\"') + "\"; icon: \"" + section.icon + "\"; pageId: \"" + (section.pageId ? section.pageId.replace(/"/g, '\\"') : "") + "\"; Layout.fillWidth: true; \n";
 
             for (let j = 0; j < section.items.length; j++) {
-                qmlStr += section.items[j].full + "\n";
+                qmlStr += SearchRegistry.getBlockSource(section.items[j]) + "\n";
             }
 
             for (let k = 0; k < section.subsections.length; k++) {
                 let sub = section.subsections[k];
                 qmlStr += "ContentSubsection { title: \"" + sub.title.replace(/"/g, '\\"') + "\"; icon: \"" + sub.icon + "\"; Layout.fillWidth: true; \n";
                 for (let j = 0; j < sub.items.length; j++) {
-                    qmlStr += sub.items[j].full + "\n";
+                    qmlStr += SearchRegistry.getBlockSource(sub.items[j]) + "\n";
                 }
                 qmlStr += "}\n";
             }

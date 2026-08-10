@@ -10,6 +10,7 @@ Item {
     property real baseWidth: 600
     property bool forceWidth: false
     property real bottomContentPadding: 100
+    readonly property bool scrollFadeMaskEnabled: Config.options?.appearance?.scrollFadeMask ?? true
 
     property alias contentY: flickable.contentY
     property alias atYBeginning: flickable.atYBeginning
@@ -35,14 +36,17 @@ Item {
         anchors.right: parent.right
         clip: true
 
-        layer.enabled: true
+        // Avoid allocating the offscreen mask texture when there is no fade
+        // to render. The visible result remains identical for scrollable
+        // pages and for pages with scroll fading enabled.
+        layer.enabled: root.scrollFadeMaskEnabled && flickable.contentHeight > flickable.height
         layer.effect: OpacityMask {
             maskSource: Item {
                 id: maskRoot
                 width: flickable.width
                 height: flickable.height
 
-                property bool fadeEnabled: Config.options?.appearance?.scrollFadeMask ?? true
+                property bool fadeEnabled: root.scrollFadeMaskEnabled
                 property color topFadeColor: (fadeEnabled && !flickable.atYBeginning) ? "transparent" : "white"
                 property color bottomFadeColor: (fadeEnabled && !flickable.atYEnd) ? "transparent" : "white"
 

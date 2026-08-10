@@ -5,16 +5,12 @@ pragma ComponentBehavior: Bound
 //@ pragma Env QT_QUICK_FLICKABLE_WHEEL_DECELERATION=10000
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import Quickshell
 import qs.services
 import qs.modules.common
-import qs.modules.common.widgets
 import qs.modules.common.functions as CF
 import "modules/settings"
-import "modules/settings/configs"
 
 FloatingWindow {
     id: root
@@ -30,6 +26,7 @@ FloatingWindow {
     property int lastSearchIndex: -1
     property int resultsCount: 0
     property string activeSearchQuery: ""
+    property string pendingSearchText: ""
 
     property string pendingSectionHighlight: ""
 
@@ -83,6 +80,7 @@ FloatingWindow {
         function onSettingsOpenChanged() {
             root.visible = GlobalStates.settingsOpen;
             if (GlobalStates.settingsOpen) {
+                SearchRegistry.setSettingsActive(true);
                 settingsSearchBar.forceFocus();
                 if (GlobalStates.settingsPendingPageName !== "") {
                     // Accepts a page id ("tasksAccounts") or a component file name
@@ -94,17 +92,39 @@ FloatingWindow {
                     }
                     GlobalStates.settingsPendingPageName = "";
                 }
+            } else {
+                root.pendingSearchText = "";
+                SearchRegistry.setSettingsActive(false);
             }
         }
     }
 
+    Connections {
+        target: SearchRegistry
+        function onIndexReady() {
+            if (!root.visible || root.pendingSearchText === "")
+                return;
+            const query = root.pendingSearchText;
+            root.pendingSearchText = "";
+            root.acceptSearch(query);
+        }
+    }
+
     onVisibleChanged: {
-        if (!visible && GlobalStates.settingsOpen)
-            GlobalStates.settingsOpen = false;
+        if (!visible) {
+            root.pendingSearchText = "";
+            SearchRegistry.setSettingsActive(false);
+            if (GlobalStates.settingsOpen)
+                GlobalStates.settingsOpen = false;
+        } else if (GlobalStates.settingsOpen) {
+            SearchRegistry.setSettingsActive(true);
+        }
     }
 
     Component.onCompleted: {
         root.visible = GlobalStates.settingsOpen;
+        if (root.visible)
+            Qt.callLater(() => SearchRegistry.setSettingsActive(true));
         MaterialThemeLoader.reapplyTheme();
         Config.readWriteDelay = 0; // Settings app always only sets one var at a time so delay isn't needed
         // Re-apply ignore alpha rule: Settings is lazy-loaded, so the rule fired
@@ -113,6 +133,39 @@ FloatingWindow {
         var a = Appearance.ignoreAlpha;
         Quickshell.execDetached(["hyprctl", "eval",
             "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " })"]);
+    }
+
+    function acceptSearch(text) {
+        const result = SearchRegistry.getDynamicSearchResults(text);
+
+        if (result == null || result.length === 0) {
+            settingsSearchBar.shakeNoResults();
+            root.activeSearchQuery = "";
+            root.resultsCount = 0;
+            root.lastSearchIndex = -1;
+            if (root.currentPage === root.pageIndexById("search")) {
+                root.currentPage = root.previousPage;
+            }
+            return;
+        }
+
+        let totalWidgets = 0;
+        for (let s of result) {
+            totalWidgets += s.items.length;
+            for (let sub of s.subsections) {
+                totalWidgets += sub.items.length;
+            }
+        }
+
+        root.resultsCount = totalWidgets;
+        root.lastSearchIndex = 0;
+
+        if (root.currentPage !== root.pageIndexById("search")) {
+            root.previousPage = root.currentPage;
+        }
+        root.activeSearchQuery = text;
+        SearchRegistry.currentSearch = text;
+        root.currentPage = root.pageIndexById("search");
     }
 
     Rectangle {
@@ -174,6 +227,8 @@ FloatingWindow {
                 resultsCount: root.resultsCount
 
                 onTextChanged: text => {
+                    if (text === "")
+                        root.pendingSearchText = "";
                     if (text === "") {
                         if (root.currentPage === root.pageIndexById("search")) {
                             root.currentPage = root.previousPage;
@@ -185,36 +240,16 @@ FloatingWindow {
                 }
 
                 onAccepted: text => {
-                    const result = SearchRegistry.getDynamicSearchResults(text);
-
-                    if (result == null || result.length === 0) {
-                        settingsSearchBar.shakeNoResults();
-                        root.activeSearchQuery = "";
-                        root.resultsCount = 0;
-                        root.lastSearchIndex = -1;
-                        if (root.currentPage === root.pageIndexById("search")) {
-                            root.currentPage = root.previousPage;
-                        }
+                    if (text.trim() === "") {
+                        root.acceptSearch(text);
                         return;
                     }
-
-                    let totalWidgets = 0;
-                    for (let s of result) {
-                        totalWidgets += s.items.length;
-                        for (let sub of s.subsections) {
-                            totalWidgets += sub.items.length;
-                        }
+                    if (!SearchRegistry.indexed) {
+                        root.pendingSearchText = text;
+                        SearchRegistry.ensureIndexing();
+                        return;
                     }
-
-                    root.resultsCount = totalWidgets;
-                    root.lastSearchIndex = 0;
-
-                    if (root.currentPage !== root.pageIndexById("search")) {
-                        root.previousPage = root.currentPage;
-                    }
-                    root.activeSearchQuery = text;
-                    SearchRegistry.currentSearch = text;
-                    root.currentPage = root.pageIndexById("search");
+                    root.acceptSearch(text);
                 }
 
                 onCloseRequested: GlobalStates.settingsOpen = false

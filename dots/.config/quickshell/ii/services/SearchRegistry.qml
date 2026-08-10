@@ -10,6 +10,13 @@ Item {
     id: root
 
     property list<var> sections: []
+    property var fileSources: ({})
+    property var fileImportsBySource: ({})
+    property bool settingsActive: false
+    property bool indexing: false
+    property bool indexed: false
+
+    signal indexReady
 
     property string currentSearch: ""
     onCurrentSearchChanged: {
@@ -17,7 +24,14 @@ Item {
     }
 
     function startIndexing() {
+        if (!root.settingsActive || root.indexing)
+            return;
+
         sections = [];
+        fileSources = ({});
+        fileImportsBySource = ({});
+        root.indexed = false;
+        root.indexing = true;
         let configRoot = FileUtils.trimFileProtocol(Directories.config) + "/quickshell/ii/";
         let basePath = configRoot + "modules/settings/configs/";
 
@@ -40,16 +54,45 @@ Item {
         pageFile.start(files, ids);
         listPresetsSearchProc.running = false;
         listPresetsSearchProc.running = true;
+
+        if (files.length === 0) {
+            root.indexing = false;
+            root.indexed = true;
+            root.indexReady();
+        }
     }
 
-    // Deferred: this singleton is first referenced from inside the settings window's
-    // own construction, and indexing there would add itself to the cost of opening it.
-    Component.onCompleted: Qt.callLater(startIndexing)
+    function setSettingsActive(active) {
+        root.settingsActive = active;
+        if (!active) {
+            root.clearIndex();
+        }
+    }
+
+    function ensureIndexing() {
+        if (!root.settingsActive || root.indexing || root.indexed)
+            return;
+        root.startIndexing();
+    }
+
+    function clearIndex() {
+        root.indexing = false;
+        root.indexed = false;
+        root.sections = [];
+        root.fileSources = ({});
+        root.fileImportsBySource = ({});
+        root.currentSearch = "";
+        pageFile.cancel();
+        listPresetsSearchProc.running = false;
+    }
 
     Connections {
         target: Translation
         function onLanguageCodeChanged() {
-            startIndexing();
+            if (root.settingsActive && (root.indexed || root.indexing)) {
+                root.clearIndex();
+                root.startIndexing();
+            }
         }
     }
 
@@ -65,10 +108,18 @@ Item {
         property int currentIndex: 0
 
         function start(filesArray, idsArray) {
+            pageFile.cancel();
             files = filesArray;
             pageIds = idsArray;
             currentIndex = 0;
             loadNext();
+        }
+
+        function cancel() {
+            files = [];
+            pageIds = [];
+            currentIndex = 0;
+            path = "";
         }
 
         function loadNext() {
@@ -77,17 +128,39 @@ Item {
             path = files[currentIndex];
         }
 
+        function finishIndexing() {
+            root.indexing = false;
+            root.indexed = true;
+            path = "";
+            files = [];
+            pageIds = [];
+            currentIndex = 0;
+            root.indexReady();
+        }
+
         onLoaded: {
+            if (currentIndex >= files.length || !root.indexing)
+                return;
             root.indexQmlFile(text(), pageIds[currentIndex]);
             currentIndex++;
-            Qt.callLater(() => loadNext());
+            if (currentIndex >= files.length) {
+                finishIndexing();
+            } else {
+                Qt.callLater(() => loadNext());
+            }
         }
 
         // A page that cannot be read must not stop the sweep — the rest of the
         // settings would silently drop out of search.
         onLoadFailed: {
+            if (currentIndex >= files.length || !root.indexing)
+                return;
             currentIndex++;
-            Qt.callLater(() => loadNext());
+            if (currentIndex >= files.length) {
+                finishIndexing();
+            } else {
+                Qt.callLater(() => loadNext());
+            }
         }
     }
 
@@ -117,9 +190,6 @@ Item {
             if (section.pageId === "presets") {
                 if (section.searchStrings.indexOf(name) === -1) {
                     section.searchStrings.push(name);
-                    let combined = (section.title + " " + section.searchStrings.join(" ")).toLowerCase();
-                    section._tokens = tokenize(combined);
-                    section._searchText = combined;
                 }
             }
         }
@@ -138,6 +208,10 @@ Item {
     }
 
     function extractWidgets(text) {
+        return extractWidgetsWithOffset(text, 0);
+    }
+
+    function extractWidgetsWithOffset(text, baseOffset, sourceKey) {
         let items = [];
         let types = ["ConfigSwitch", "ConfigSpinBox", "ConfigSelectionArray", "ConfigTextField", "ConfigSlider", "ConfigComboBox", "ConfigWallpaperSelector", "ConfigLightDarkToggle", "ConfigPresetsView"];
         for (let t of types) {
@@ -147,7 +221,9 @@ Item {
                 items.push({
                     type: t,
                     text: textProp,
-                    full: b.full
+                    sourceKey: sourceKey,
+                    sourceStart: b.start + baseOffset,
+                    sourceEnd: b.end + baseOffset
                 });
             }
         }
@@ -156,9 +232,16 @@ Item {
 
     function indexQmlFile(qmlText, pageId) {
         if (!qmlText) return;
-        
+
+        const sourceKey = pageFile.files[pageFile.currentIndex];
         let fileImports = extractImports(qmlText);
         let sectionsExtracted = extractBlocks(qmlText, "ContentSection");
+
+        if (sectionsExtracted.length === 0)
+            return;
+
+        root.fileSources[sourceKey] = qmlText;
+        root.fileImportsBySource[sourceKey] = fileImports;
 
         for (let sectionBlock of sectionsExtracted) {
             let sectionText = sectionBlock.inner;
@@ -170,26 +253,35 @@ Item {
             let sectionSubsections = [];
 
             // 1. extract subsections
-            let subsections = extractBlocks(sectionText, "ContentSubsection");
+            let subsections = extractBlocks(sectionText, "ContentSubsection", sectionBlock.innerStart);
             for (let subBlock of subsections) {
                 let subTitle = extractProperty(subBlock.inner, "title");
                 let subIcon = extractProperty(subBlock.inner, "icon");
                 
-                let subItems = extractWidgets(subBlock.inner);
+                let subItems = extractWidgetsWithOffset(subBlock.inner, subBlock.innerStart, sourceKey);
 
                 sectionSubsections.push({
                     title: subTitle,
                     icon: subIcon,
                     items: subItems,
-                    full: subBlock.full
+                    sourceStart: subBlock.start,
+                    sourceEnd: subBlock.end
                 });
-
-                // remove the subsection from sectionText to avoid double counting
-                sectionText = sectionText.replace(subBlock.full, "");
             }
 
             // 2. extract remaining widgets from sectionText
-            sectionItems = sectionItems.concat(extractWidgets(sectionText));
+            const allSectionItems = extractWidgetsWithOffset(sectionText, sectionBlock.innerStart, sourceKey);
+            for (let item of allSectionItems) {
+                let belongsToSubsection = false;
+                for (let sub of subsections) {
+                    if (item.sourceStart >= sub.start && item.sourceEnd <= sub.end) {
+                        belongsToSubsection = true;
+                        break;
+                    }
+                }
+                if (!belongsToSubsection)
+                    sectionItems.push(item);
+            }
 
             // collect all search strings for scoring (excluding individual item texts to prevent them from matching the whole section)
             if (title) searchStrings.push(title);
@@ -204,12 +296,13 @@ Item {
                 searchStrings: searchStrings,
                 items: sectionItems,
                 subsections: sectionSubsections,
-                fileImports: fileImports
+                sourceKey: sourceKey
             });
         }
     }
 
-    function extractBlocks(text, type) {
+    function extractBlocks(text, type, baseOffset) {
+        baseOffset = baseOffset || 0;
         let results = [];
         let i = 0;
 
@@ -259,13 +352,26 @@ Item {
             }
 
             let block = text.substring(braceStart + 1, j - 1);
-            let fullMatch = text.substring(index, j);
-            results.push({ inner: block, full: fullMatch });
+            results.push({
+                inner: block,
+                innerStart: baseOffset + braceStart + 1,
+                start: baseOffset + index,
+                end: baseOffset + j
+            });
 
             i = j;
         }
 
         return results;
+    }
+
+    function getBlockSource(item) {
+        if (!item || !item.sourceKey)
+            return "";
+        const source = root.fileSources[item.sourceKey];
+        if (!source || item.sourceStart === undefined || item.sourceEnd === undefined)
+            return "";
+        return source.substring(item.sourceStart, item.sourceEnd);
     }
 
     function extractProperty(block, prop) {
@@ -305,9 +411,6 @@ Item {
         data.searchStrings = searchStringsKeys.map(s => Translation.tr(s));
 
         let combined = (titleKey + " " + searchStringsKeys.join(" ") + " " + data.title + " " + data.searchStrings.join(" ")).toLowerCase();
-        data._tokens = tokenize(combined);
-        data._searchText = combined;
-
         sections.push(data);
     }
 
@@ -404,7 +507,8 @@ Item {
                     pageId: section.pageId,
                     title: section.title,
                     icon: section.icon,
-                    fileImports: section.fileImports,
+                    fileImports: root.fileImportsBySource[section.sourceKey] || "",
+                    sourceKey: section.sourceKey,
                     items: matchedItems,
                     subsections: matchedSubsections,
                     score: sectionScore

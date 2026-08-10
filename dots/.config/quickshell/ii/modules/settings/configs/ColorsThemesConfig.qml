@@ -912,6 +912,12 @@ ContentPage {
                         border.width: 2
 
                         readonly property bool isActive: Config.options.background.wallpaperEngineId === model.id
+                        readonly property bool previewActive: wpeGrid.visible
+                                                               && presetItem.visible
+                                                               && presetItem.x + presetItem.width >= wpeGrid.contentX
+                                                               && presetItem.x <= wpeGrid.contentX + wpeGrid.width
+                                                               && presetItem.y + presetItem.height >= wpeGrid.contentY
+                                                               && presetItem.y <= wpeGrid.contentY + wpeGrid.height
 
                         Behavior on border.color {
                             ColorAnimation {
@@ -955,11 +961,11 @@ ContentPage {
                                 AnimatedImage {
                                     id: previewImage
                                     anchors.fill: parent
-                                    source: model.preview ? Qt.resolvedUrl(model.preview) : ""
+                                    source: presetItem.previewActive && model.preview ? Qt.resolvedUrl(model.preview) : ""
                                     fillMode: Image.PreserveAspectCrop
-                                    playing: wpeGrid.visible && (presetItem.x + presetItem.width >= wpeGrid.contentX && presetItem.x <= wpeGrid.contentX + wpeGrid.width)
-                                    visible: status === Image.Ready
-                                    layer.enabled: true
+                                    playing: presetItem.previewActive
+                                    visible: presetItem.previewActive && status === Image.Ready
+                                    layer.enabled: presetItem.previewActive && status === Image.Ready
                                     layer.effect: OpacityMask {
                                         maskSource: Rectangle {
                                             width: previewImage.width
@@ -972,10 +978,10 @@ ContentPage {
                                 ThumbnailImage {
                                     id: previewFrameImage
                                     anchors.fill: parent
-                                    visible: (!model.preview || previewImage.status === Image.Error) && !!model.file
-                                    sourcePath: model.file || ""
+                                    visible: presetItem.previewActive && (!model.preview || previewImage.status === Image.Error) && !!model.file
+                                    sourcePath: presetItem.previewActive ? (model.file || "") : ""
                                     thumbnailService: Wallpapers
-                                    generateThumbnail: visible
+                                    generateThumbnail: presetItem.previewActive && visible
                                     cache: false
                                     fillMode: Image.PreserveAspectCrop
                                     clip: true
@@ -991,8 +997,8 @@ ContentPage {
 
                                 StyledImage {
                                     anchors.fill: parent
-                                    visible: !previewImage.visible && (!previewFrameImage.visible || previewFrameImage.status !== Image.Ready)
-                                    source: `${Directories.assetsPath}/images/default_wallpaper.png`
+                                    visible: presetItem.previewActive && !previewImage.visible && (!previewFrameImage.visible || previewFrameImage.status !== Image.Ready)
+                                    source: presetItem.previewActive ? `${Directories.assetsPath}/images/default_wallpaper.png` : ""
                                     fillMode: Image.PreserveAspectCrop
                                 }
 

@@ -1,9 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Shapes
-import Qt5Compat.GraphicalEffects
 import Quickshell
-import Quickshell.Io
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -89,131 +87,75 @@ RippleButton {
         }
     }
 
-    FileView {
-        id: previewCacheFileView
-        path: (!root.customTheme && !root.builtInTheme) ? Directories.wallpaperPreviewColorsPath : ""
-        watchChanges: true
-        onLoaded: {
-            root.cacheRetryCount = 0;
-            root.loadFromCache();
-            if (root._awaitingFreshCache) {
-                if (root.primaryColor !== root._preReloadPrimaryColor) {
-                    root._awaitingFreshCache = false;
-                } else if (root._staleRetryCount < 6) {
-                    root._staleRetryCount++;
-                    staleCacheRetryTimer.restart();
-                } else {
-                    root._awaitingFreshCache = false;
-                }
-            }
-        }
-        onLoadFailed: {
-            cacheRetryTimer.start();
-        }
-    }
+    // Widget scheme buttons already receive all three preview colors from the
+    // caller. Do not create a watcher/read cycle for the shared wallpaper
+    // cache in that mode; doing so duplicated the same JSON parse per button.
+    readonly property bool cacheIoEnabled: !root.usePreviewColors
+                                          && !root.customTheme
+                                          && !root.builtInTheme
 
-    property int cacheRetryCount: 0
+    readonly property string themePreviewPath: root.customTheme ? root.customThemeFilePath
+                                            : root.builtInTheme ? root.builtInThemeFilePath : ""
 
-    // The backend write we're waiting for is atomic (os.replace), so file-watcher
-    // events on the same path can be missed or coalesced depending on how the watch
-    // is implemented under the hood. A fixed debounce alone can't tell "reloaded before
-    // the backend finished" apart from "reloaded after" -- so track what was on screen
-    // before the wallpaper changed and keep polling until it actually differs.
-    property bool _awaitingFreshCache: false
-    property color _preReloadPrimaryColor: "transparent"
-    property int _staleRetryCount: 0
-
-    // Background regeneration of the preview cache (matugen + material color gen for
-    // all schemes) takes well over a second, so an immediate reload right after the
-    // wallpaper changes would just re-read the previous wallpaper's stale cache.
-    Timer {
-        id: cacheReloadTimer
-        interval: 900
-        repeat: false
-        onTriggered: {
-            if (root.customTheme || root.builtInTheme)
-                return;
-            root._preReloadPrimaryColor = root.primaryColor;
-            root._awaitingFreshCache = true;
-            root._staleRetryCount = 0;
-            root.loaded = false;
-            previewCacheFileView.reload();
-        }
-    }
-
-    Timer {
-        id: staleCacheRetryTimer
-        interval: 400
-        repeat: false
-        onTriggered: previewCacheFileView.reload();
-    }
-
-    Timer {
-        id: cacheRetryTimer
-        interval: 150
-        repeat: false
-        onTriggered: {
-            if (root.cacheRetryCount >= 5)
-                return;
-            root.cacheRetryCount++;
-            previewCacheFileView.reload();
-        }
-    }
-
-    FileView {
-        id: themeFileView
-        path: root.customTheme ? root.customThemeFilePath : root.builtInTheme ? root.builtInThemeFilePath : ""
-        watchChanges: false
-        onLoaded: {
-            try {
-                const raw = themeFileView.text().trim();
-                if (!raw)
-                    return;
-                const data = JSON.parse(raw);
-                root.primaryColor = data.primary || "transparent";
-                root.secondaryColor = data.primary_container || "transparent";
-                root.tertiaryColor = data.secondary || "transparent";
-                root.loaded = true;
-            } catch (e) {
-                console.log("[ColorPreviewButton] Failed to parse theme file:", path);
-            }
-        }
-    }
-
-    function loadFromCache() {
-        if (root.customTheme || root.builtInTheme)
+    function applyCachedPreview() {
+        if (!root.cacheIoEnabled)
             return false;
-        try {
-            const raw = previewCacheFileView.text().trim();
-            if (!raw)
-                return false;
-            const cache = JSON.parse(raw);
-            const schemeData = cache[root.colorScheme];
-            if (schemeData && schemeData.primary) {
-                root.primaryColor = schemeData.primary;
-                root.secondaryColor = schemeData.primary_container;
-                root.tertiaryColor = schemeData.secondary;
-                root.loaded = true;
-                return true;
-            }
-        } catch (e) {
-            // Ignore parse error
+        const schemeData = WallpaperPreviewCache.get(root.colorScheme);
+        if (!schemeData)
+            return false;
+        root.primaryColor = schemeData.primary || "transparent";
+        root.secondaryColor = schemeData.primary_container || "transparent";
+        root.tertiaryColor = schemeData.secondary || "transparent";
+        root.loaded = true;
+        return true;
+    }
+
+    function applyThemePreview() {
+        if (!root.themePreviewPath)
+            return false;
+        const themeData = ThemePreviewCache.get(root.themePreviewPath);
+        if (!themeData)
+            return false;
+        root.primaryColor = themeData.primary || "transparent";
+        root.secondaryColor = themeData.secondary || "transparent";
+        root.tertiaryColor = themeData.tertiary || "transparent";
+        root.loaded = true;
+        return true;
+    }
+
+    Connections {
+        target: WallpaperPreviewCache
+        function onCacheChanged() {
+            if (root.shouldLoad)
+                root.applyCachedPreview();
         }
-        return false;
+    }
+
+    Connections {
+        target: ThemePreviewCache
+        function onCacheChanged(path) {
+            if (root.shouldLoad && path === root.themePreviewPath)
+                root.applyThemePreview();
+        }
     }
 
     function requestLoad() {
+        if (root.usePreviewColors)
+            return;
+
         if (root.customTheme || root.builtInTheme) {
-            themeFileView.reload();
+            if (!root.applyThemePreview())
+                ThemePreviewCache.request(root.themePreviewPath);
             return;
         }
 
-        if (root.loadFromCache()) {
+        WallpaperPreviewCache.ensureActive();
+        if (root.applyCachedPreview()) {
             return;
         }
 
         if (root.fullCommand !== "") {
-            colorFetchProcess.running = true;
+            WallpaperPreviewCache.requestGeneration(root.fullCommand, root.colorScheme);
         }
     }
 
@@ -224,37 +166,27 @@ RippleButton {
     }
 
     onWallpaperPathChanged: {
-        if (shouldLoad && !root.customTheme && !root.builtInTheme) {
-            cacheReloadTimer.restart();
+        if (shouldLoad && root.cacheIoEnabled) {
+            root.loaded = false;
+            WallpaperPreviewCache.invalidateForWallpaperChange();
         }
     }
 
     readonly property string wpeId: (Config.options && Config.options.background)
                                     ? Config.options.background.wallpaperEngineId : ""
     onWpeIdChanged: {
-        if (shouldLoad && !root.customTheme && !root.builtInTheme) {
-            cacheReloadTimer.restart();
+        if (shouldLoad && root.cacheIoEnabled) {
+            root.loaded = false;
+            WallpaperPreviewCache.invalidateForWallpaperChange();
         }
     }
 
     property bool useWpe: (Config.options && Config.options.background)
                           ? Config.options.background.useWallpaperEngine : false
     onUseWpeChanged: {
-        if (shouldLoad && !root.customTheme && !root.builtInTheme) {
-            cacheReloadTimer.restart();
-        }
-    }
-
-    Process {
-        id: colorFetchProcess
-        running: false
-        command: ["bash", "-c", root.fullCommand]
-
-        onExited: {
-            // After running fallback process, reload cache
-            Qt.callLater(() => {
-                previewCacheFileView.reload();
-            });
+        if (shouldLoad && root.cacheIoEnabled) {
+            root.loaded = false;
+            WallpaperPreviewCache.invalidateForWallpaperChange();
         }
     }
 
@@ -322,11 +254,11 @@ RippleButton {
             }
 
             // Circle mode (GPU-accelerated Shape with anti-aliased arcs)
-            Shape {
+                Shape {
                 id: circleShape
                 anchors.fill: parent
                 visible: !root.sharpMode
-                layer.enabled: true
+                layer.enabled: root.loaded && !root.sharpMode
                 layer.samples: 4
 
                 // Top half semi-circle (primary)

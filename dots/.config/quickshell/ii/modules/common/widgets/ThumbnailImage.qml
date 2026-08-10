@@ -24,7 +24,7 @@ StyledImage {
     property bool reloadRequested: false
     property string thumbnailPath: {
         if (sourcePath.length == 0)
-            return;
+            return "";
         const resolvedUrlWithoutFileProtocol = FileUtils.trimFileProtocol(`${Qt.resolvedUrl(sourcePath)}`);
         const encodedUrlWithoutFileProtocol = resolvedUrlWithoutFileProtocol.split("/").map(part => encodeURIComponent(part)).join("/");
         const md5Hash = Qt.md5(`file://${encodedUrlWithoutFileProtocol}`);
