@@ -312,8 +312,21 @@ Item {
                         }
 
                         onLoaded: {
-                            if (item)
+                            if (item) {
                                 item.anchors.fill = this;
+
+                                // Opening the sidebar and changing policy toggles can
+                                // activate this Loader asynchronously. In that case
+                                // the open/index handlers may run before AiChat exists,
+                                // leaving its entrance-only content at opacity 0.
+                                if (isCurrent && GlobalStates.sidebarLeftOpen) {
+                                    Qt.callLater(function() {
+                                        if (tabDelegate.item && tabDelegate.isCurrent && GlobalStates.sidebarLeftOpen && typeof tabDelegate.item.triggerContentEntrance === "function") {
+                                            tabDelegate.item.triggerContentEntrance();
+                                        }
+                                    });
+                                }
+                            }
                         }
 
                         readonly property bool isCurrent: swipeView.currentIndex === index
