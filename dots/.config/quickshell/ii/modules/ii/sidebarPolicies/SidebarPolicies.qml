@@ -70,12 +70,23 @@ Scope { // Scope
         else GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
     }
 
+    // Reattaches the content to whichever window is currently up. Safe to call before
+    // either side is ready, so the window loading and the content being built no longer
+    // have to happen in a particular order.
+    function attachContent() {
+        if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
+        if (!root.sidebarContent) return;
+        const window = root.detach ? detachedSidebarLoader.item : sidebarLoader.item;
+        if (!window) return;
+        window.contentParent.children = [root.sidebarContent];
+    }
+
     Component.onCompleted: {
         if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
         root.sidebarContent = contentComponent.createObject(null, {
             "scopeRoot": root,
         });
-        sidebarLoader.item.contentParent.children = [root.sidebarContent];
+        root.attachContent();
     }
 
     onDetachChanged: {
@@ -105,7 +116,8 @@ Scope { // Scope
     Loader {
         id: sidebarLoader
         active: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
-        
+        onLoaded: root.attachContent()
+
         sourceComponent: PanelWindow {
             id: panelWindow
             visible: GlobalStates.sidebarLeftOpen
@@ -330,6 +342,7 @@ Scope { // Scope
     Loader {
         id: detachedSidebarLoader
         active: false
+        onLoaded: root.attachContent()
 
         sourceComponent: FloatingWindow {
             id: detachedSidebarRoot
