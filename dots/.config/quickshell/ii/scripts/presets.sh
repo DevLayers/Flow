@@ -20,6 +20,22 @@ case $action in
             cp "$wall_path" "$PRESETS_DIR/$name.$ext"
         fi
         ;;
+        update)
+    if [[ -z "$name" ]]; then exit 1; fi
+    if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
+    # Remove stale wallpaper files for this preset before overwriting
+    for file in "$PRESETS_DIR/$name".*; do
+        if [[ -f "$file" && "${file##*.}" != "json" ]]; then
+            rm -f "$file"
+        fi
+    done
+    cp "$CONFIG_FILE" "$PRESETS_DIR/$name.json"
+    wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
+    if [[ -f "$wall_path" ]]; then
+        ext="${wall_path##*.}"
+        cp "$wall_path" "$PRESETS_DIR/$name.$ext"
+    fi
+    ;;
     load)
         if [[ -z "$name" ]]; then exit 1; fi
         if [[ -f "$PRESETS_DIR/$name.json" ]]; then
