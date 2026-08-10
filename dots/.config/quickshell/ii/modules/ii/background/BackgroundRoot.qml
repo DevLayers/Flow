@@ -271,7 +271,10 @@ PanelWindow {
     // Layer props
     screen: modelData
     exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.layer: bgRoot.mediaModeOpen ? WlrLayer.Overlay : WlrLayer.Bottom
+    // Keep the wallpaper below the dedicated widgets surface. Both used to be
+    // mapped in WlrLayer.Bottom, where Hyprland's map order could leave the
+    // wallpaper above the widgets after startup or a reload.
+    WlrLayershell.layer: bgRoot.mediaModeOpen ? WlrLayer.Overlay : WlrLayer.Background
     WlrLayershell.keyboardFocus: bgRoot.mediaModeOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     WlrLayershell.namespace: "quickshell:background"
     anchors {
