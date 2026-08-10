@@ -888,6 +888,7 @@ Singleton {
                 property bool notifyOnError: true
                 property int keepVersions: 3
                 property bool deleteRemoteOrphans: false
+                property bool onlyModifiedSinceLastSync: false
                 property string lastSyncTime: ""
                 property string lastSyncStatus: ""
                 property int lastSyncFileCount: 0

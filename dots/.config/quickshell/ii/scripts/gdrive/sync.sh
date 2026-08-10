@@ -8,6 +8,7 @@ base_path=""
 bandwidth_kbps=0
 keep_versions=0
 delete_orphans=false
+max_age=""
 exclude_file=""
 folders=()
 generated_exclude_file=""
@@ -66,6 +67,11 @@ while (($# > 0)); do
         --delete-orphans)
             (($# >= 2)) || usage_error "missing value for --delete-orphans"
             delete_orphans=$2
+            shift 2
+            ;;
+        --max-age)
+            (($# >= 2)) || usage_error "missing value for --max-age"
+            max_age=$2
             shift 2
             ;;
         --exclude-file)
@@ -235,6 +241,9 @@ for folder in "${folders[@]}"; do
     fi
     if ((keep_versions > 0)); then
         command+=(--backup-dir "${REMOTE}:${base_path}/.versions/${run_stamp}/${folder_name}")
+    fi
+    if [[ -n "$max_age" ]]; then
+        command+=(--max-age "$max_age")
     fi
 
     folder_files=0

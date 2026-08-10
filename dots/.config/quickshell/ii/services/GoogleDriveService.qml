@@ -297,6 +297,7 @@ Singleton {
             return;
         }
 
+        const previousSyncTime = String(options.lastSyncTime || "").trim();
         const command = [
             "bash", root.scriptRoot + "/sync.sh",
             "--base-path", root.effectiveDriveBasePath,
@@ -304,6 +305,9 @@ Singleton {
             "--keep-versions", String(Math.max(0, options.keepVersions || 0)),
             "--delete-orphans", options.deleteRemoteOrphans ? "true" : "false"
         ];
+        if (options.onlyModifiedSinceLastSync && previousSyncTime !== "") {
+            command.push("--max-age", previousSyncTime);
+        }
         for (const folder of folders)
             command.push("--folder", String(folder));
 

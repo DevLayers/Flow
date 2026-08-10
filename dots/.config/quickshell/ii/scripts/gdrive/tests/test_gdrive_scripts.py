@@ -169,6 +169,44 @@ class SyncScriptTests(FakeRcloneTestCase):
         self.assertEqual(copy_call[copy_call.index("--stats") + 1], "2s")
         self.assertEqual(copy_call[copy_call.index("--stats-log-level") + 1], "NOTICE")
 
+    def test_sync_forwards_max_age_to_rclone(self) -> None:
+        self.install_rclone(
+            """
+            #!/usr/bin/env python3
+            import json, os, sys
+            with open(os.environ["FAKE_RCLONE_CALLS"], "a", encoding="utf-8") as stream:
+                stream.write(json.dumps(sys.argv[1:]) + "\\n")
+            if sys.argv[1] == "size":
+                print('{"count": 1, "bytes": 12}')
+            else:
+                print("2026/08/08 12:00:00 - 12 B / 12 B, 100%, 12 B/s, ETA 0s (xfr#1/1)")
+            sys.exit(0)
+            """
+        )
+        source = self.root / "source"
+        source.mkdir()
+
+        result = subprocess.run(
+            [
+                "bash", str(SYNC_SCRIPT),
+                "--base-path", "test_backups",
+                "--bandwidth-kbps", "0",
+                "--keep-versions", "0",
+                "--delete-orphans", "false",
+                "--max-age", "2026-08-09T20:15:00Z",
+                "--folder", str(source),
+            ],
+            text=True,
+            capture_output=True,
+            env=self.env,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+        copy_call = next(call for call in self.calls() if call and call[0] == "copy")
+        self.assertIn("--max-age", copy_call)
+        self.assertEqual(copy_call[copy_call.index("--max-age") + 1], "2026-08-09T20:15:00Z")
+
     def test_terminating_sync_also_terminates_rclone_child(self) -> None:
         child_pid_path = self.root / "child.pid"
         term_marker_path = self.root / "child.terminated"
@@ -282,7 +320,7 @@ class QmlIntegrationTests(unittest.TestCase):
         self.assertIn('root.driveBackupUsageMb = Math.max(0, Number(options.driveBackupUsageMb || 0));', service)
         self.assertIn('popupWidth: 184', settings)
         self.assertIn('iconOnly: true', settings)
-        self.assertIn('text: Translation.tr("Backup footprint / Drive quota")', settings)
+        self.assertIn('text: Translation.tr("Backup footprint")', settings)
         self.assertIn('visible: root.entryDurationSeconds(modelData) > 0', settings)
 
     def test_exclude_patterns_accept_user_input(self) -> None:
@@ -307,9 +345,22 @@ class QmlIntegrationTests(unittest.TestCase):
 
         self.assertIn("resolvedCellWidth", heatmap)
         self.assertIn("resolvedCellHeight", heatmap)
-        self.assertIn("ColorUtils.transparentize", heatmap)
+        self.assertIn("resolvedCellSize", heatmap)
         self.assertIn("property real popupWidth: 0", combo)
         self.assertIn("itemDelegate.hovered && root.popup.visible", combo)
+
+    def test_only_modified_since_last_sync_option_is_wired_end_to_end(self) -> None:
+        root = GDRIVE_DIR.parents[1]
+        config = (root / "modules" / "common" / "Config.qml").read_text(encoding="utf-8")
+        service = (root / "services" / "GoogleDriveService.qml").read_text(encoding="utf-8")
+        sync_sh = (root / "scripts" / "gdrive" / "sync.sh").read_text(encoding="utf-8")
+        advanced_settings = (root / "modules" / "settings" / "configs" / "widgets" / "AdvancedDriveConfig.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property bool onlyModifiedSinceLastSync: false", config)
+        self.assertIn('command.push("--max-age", previousSyncTime);', service)
+        self.assertIn("--max-age)", sync_sh)
+        self.assertIn('command+=(--max-age "$max_age")', sync_sh)
+        self.assertIn("checked: Config.options.googleDrive.onlyModifiedSinceLastSync", advanced_settings)
 
 
 if __name__ == "__main__":

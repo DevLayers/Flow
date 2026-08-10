@@ -120,6 +120,16 @@ ContentPage {
                     Config.options.googleDrive.syncOnNetworkChange = checked;
             }
         }
+
+        ConfigSwitch {
+            buttonIcon: "update"
+            text: Translation.tr("Backup only files modified since last backup")
+            checked: Config.options.googleDrive.onlyModifiedSinceLastSync
+            onCheckedChanged: {
+                if (checked !== Config.options.googleDrive.onlyModifiedSinceLastSync)
+                    Config.options.googleDrive.onlyModifiedSinceLastSync = checked;
+            }
+        }
     }
 
     ContentSection {
