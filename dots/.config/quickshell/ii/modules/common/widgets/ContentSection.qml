@@ -262,9 +262,10 @@ ColumnLayout {
                 id: sectionContentContainer
                 Layout.fillWidth: true
                 implicitHeight: root.expanded ? sectionContent.implicitHeight : 0
-                clip: true
+                clip: sectionContentAnim.running || sectionContentContainer.implicitHeight < sectionContent.implicitHeight
 
                 Behavior on implicitHeight {
+                    id: sectionContentAnim
                     NumberAnimation {
                         duration: Appearance.animation.elementMove.duration
                         easing.type: Appearance.animation.elementMove.type

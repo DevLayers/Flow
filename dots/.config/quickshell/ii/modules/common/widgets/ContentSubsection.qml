@@ -273,11 +273,13 @@ Rectangle {
 
         // Content area: animated expand/collapse with clip and height transition
         Item {
+            id: subSectionContentContainer
             Layout.fillWidth: true
             implicitHeight: root.expanded ? sectionContent.implicitHeight : 0
-            clip: true
+            clip: subSectionAnim.running || subSectionContentContainer.implicitHeight < sectionContent.implicitHeight
 
             Behavior on implicitHeight {
+                id: subSectionAnim
                 NumberAnimation {
                     duration: 250
                     easing.type: Easing.OutCubic
