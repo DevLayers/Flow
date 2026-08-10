@@ -1849,7 +1849,32 @@ apply_config() {
     fi
 
     handle_base_config "$verb"
+
+    # Only launch the welcome window at the end of default installation.
+    # Prevent it from opening during update, fork switch, branch hop, or apply.
+    local first_run_file="${XDG_STATE_HOME:-$HOME/.local/state}/illogical-impulse/user/first_run.txt"
+    if [[ "$verb" == "install" ]]; then
+        rm -f "$first_run_file"
+    else
+        mkdir -p "$(dirname "$first_run_file")"
+        if [[ ! -f "$first_run_file" ]]; then
+            echo "This file is just here to confirm you've been greeted :>" > "$first_run_file"
+        fi
+    fi
+
     start_quickshell
+
+    if [[ "$verb" == "install" ]]; then
+        local bin=""
+        if have qs; then
+            bin="qs"
+        elif have quickshell; then
+            bin="quickshell"
+        fi
+        if [[ -n "$bin" ]]; then
+            nohup "$bin" -p "$TARGET_DIR/welcome.qml" >/dev/null 2>&1 &
+        fi
+    fi
 
     local summary="$fork/$branch${head:+ @ ${head:0:8}}"
     [[ -n "$LOCAL_SRC" ]] && summary="local $G_ARROW $(tilde "$LOCAL_SRC")"

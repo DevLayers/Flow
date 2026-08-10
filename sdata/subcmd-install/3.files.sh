@@ -42,6 +42,7 @@ function gen_firstrun(){
   x touch "${FIRSTRUN_FILE}"
   x mkdir -p "$(dirname ${INSTALLED_LISTFILE})"
   realpath -se "${FIRSTRUN_FILE}" >> "${INSTALLED_LISTFILE}"
+  rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/illogical-impulse/user/first_run.txt"
 }
 cp_file(){
   # NOTE: This function is only for using in other functions
