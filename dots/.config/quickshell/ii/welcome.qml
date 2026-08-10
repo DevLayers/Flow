@@ -297,15 +297,9 @@ ApplicationWindow {
                         }
                         RippleButtonWithIcon {
                             materialIcon: "wallpaper"
-            ActionContentButton {
-                anchors.fill: parent
-                colBackground: "transparent"
-                colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
-                colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
-                onClicked: {
-                    Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggle"]);
-                }
-            }
+                            onClicked: {
+                                Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggle"]);
+                            }
                             mainContentComponent: Component {
                                 RowLayout {
                                     spacing: 10
