@@ -97,18 +97,28 @@ ShellRoot {
         component: WaffleFamily {}
     }
 
-    // Settings app loaded in-process once requested, then kept alive
-    // for fast re-opens. After `unloadAfterSeconds` of inactivity we
-    // drop the component to recover ~70 MB of QML memory. Set to 0 in
-    // Config.options.settingsApp.unloadAfterSeconds to keep it warm.
+    // Settings app loaded in-process once requested, then kept alive briefly
+    // for fast re-opens. After the delay we drop the component to recover
+    // its QML memory. Positive configured delays are capped at five seconds;
+    // 0 still means keep it warm explicitly.
+    readonly property int settingsUnloadCapSeconds: 5
+
+    function settingsUnloadDelaySeconds() {
+        const settingsApp = Config.options && Config.options.settingsApp;
+        let configured = settingsApp && settingsApp.unloadAfterSeconds !== undefined
+            ? settingsApp.unloadAfterSeconds
+            : settingsUnloadCapSeconds;
+
+        if (configured <= 0)
+            return 0;
+        return Math.min(configured, settingsUnloadCapSeconds);
+    }
+
     Loader {
         id: settingsLoader
         property bool loadedOnce: false
         active: loadedOnce || GlobalStates.settingsOpen
-        // Deliberately synchronous. Built asynchronously the window assembles itself in
-        // stages in front of the user, which reads worse than a single pause on an open
-        // they asked for. The cost of that pause is cut in SearchRegistry instead, which
-        // used to do 55 blocking file reads in the middle of it.
+        asynchronous: true
         source: "SettingsWindow.qml"
 
         // When settings closes, schedule an unload pass. If the user
@@ -116,7 +126,7 @@ ShellRoot {
         // keep the warm component.
         Timer {
             id: settingsUnloadTimer
-            interval: Math.max(0, (Config.options && Config.options.settingsApp && Config.options.settingsApp.unloadAfterSeconds !== undefined ? Config.options.settingsApp.unloadAfterSeconds : 300)) * 1000
+            interval: root.settingsUnloadDelaySeconds() * 1000
             repeat: false
             onTriggered: {
                 if (GlobalStates.settingsOpen)
@@ -133,7 +143,7 @@ ShellRoot {
                     if (!settingsLoader.loadedOnce)
                         settingsLoader.loadedOnce = true
                 } else {
-                    const s = Config.options && Config.options.settingsApp && Config.options.settingsApp.unloadAfterSeconds !== undefined ? Config.options.settingsApp.unloadAfterSeconds : 300
+                    const s = root.settingsUnloadDelaySeconds()
                     if (s > 0) {
                         settingsUnloadTimer.interval = s * 1000
                         settingsUnloadTimer.restart()
@@ -159,7 +169,6 @@ ShellRoot {
         onPressed: root.cyclePanelFamily()
     }
 }
-
 
 
 

@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -13,6 +15,10 @@ Item {
     property alias contentY: page.contentY
     // ── Active sub-page URL ("" = none) ───────────────────────────────────
     property alias activeSubPage: subPageOverlay.activeSubPage
+
+    function openWidgetPage(componentId) {
+        page.openWidgetPage(componentId);
+    }
 
     // ── Main content page ─────────────────────────────────────────────────
     ContentPage {
@@ -791,9 +797,14 @@ Item {
         // Every bar component that carries its own settings page gets a card,
         // so per-widget settings are reachable without right-clicking the bar.
         ContentSection {
+            id: widgetsSection
             icon: "widgets"
             title: Translation.tr("Widgets")
+            collapsible: true
+            expanded: false
 
+            // Keep the lightweight description instantiated so search and
+            // section indexing continue to work while the cards stay lazy.
             StyledText {
                 Layout.fillWidth: true
                 text: Translation.tr("Settings for the individual widgets that can sit on the bar. Right-clicking a widget on the bar opens the same page.")
@@ -803,29 +814,37 @@ Item {
                 wrapMode: Text.Wrap
             }
 
-            ColumnLayout {
+            // Keep the complete widget-card subtree out of the page until the
+            // user expands this section. The Loader is asynchronous so the
+            // section can finish its expand transition before card delegates
+            // are incubated.
+            Loader {
+                id: widgetContentLoader
                 Layout.fillWidth: true
-                spacing: 4
+                active: widgetsSection.expanded
+                asynchronous: true
 
-                Repeater {
-                    model: BarComponentRegistry.allComponents.filter((c) => {
-                        return c.configPage || c.pageId;
-                    })
+                sourceComponent: ColumnLayout {
+                    width: widgetContentLoader.width
+                    spacing: 4
 
-                    delegate: ServiceCard {
-                        required property var modelData
-                        required property int index
+                    Repeater {
+                        model: BarComponentRegistry.configurableComponents
 
-                        cardIcon: modelData.icon ?? "widgets"
-                        cardHue: 210
-                        cardShape: "Cookie4Sided"
-                        title: Translation.tr(modelData.title)
-                        description: Translation.tr("Widget settings")
-                        onOpenCard: {
-                            page.openWidgetPage(modelData.id);
+                        delegate: ServiceCard {
+                            required property var modelData
+                            required property int index
+
+                            cardIcon: modelData.icon ?? "widgets"
+                            cardHue: 210
+                            cardShape: "Cookie4Sided"
+                            title: Translation.tr(modelData.title)
+                            description: Translation.tr("Widget settings")
+                            onOpenCard: {
+                                barConfigRoot.openWidgetPage(modelData.id);
+                            }
                         }
                     }
-
                 }
 
             }

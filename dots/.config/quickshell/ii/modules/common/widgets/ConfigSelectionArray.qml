@@ -1,9 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.common.functions
 
 Flow {
     id: root
@@ -26,6 +24,17 @@ Flow {
             }
         }
         root.calculatedWidth = Math.max(0, w - root.spacing);
+    }
+
+    function scheduleWidthUpdate() {
+        widthUpdateTimer.restart();
+    }
+
+    Timer {
+        id: widthUpdateTimer
+        interval: 0
+        repeat: false
+        onTriggered: root.updateWidth()
     }
 
     Layout.preferredWidth: calculatedWidth
@@ -69,9 +78,9 @@ Flow {
             opacity: isOptionEnabled ? 1.0 : 0.5
             mouseArea.cursorShape: isOptionEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             
-            onImplicitWidthChanged: root.updateWidth()
-            Component.onCompleted: root.updateWidth()
-            Component.onDestruction: root.updateWidth()
+            onImplicitWidthChanged: root.scheduleWidthUpdate()
+            Component.onCompleted: root.scheduleWidthUpdate()
+            Component.onDestruction: root.scheduleWidthUpdate()
             
             color: isOptionEnabled ? (toggled ? 
                 (down ? colBackgroundToggledActive : 

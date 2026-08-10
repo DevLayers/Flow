@@ -44,9 +44,9 @@ Item {
         return w.category === "System";
     })
 
-    // Accordion collapse state per category. Default: Clocks expanded, all others collapsed.
+    // Accordion collapse state per category. Default: all categories collapsed.
     // When collapsed, widget preview Loaders are not active → no GPU/memory cost.
-    property bool clockExpanded: true
+    property bool clockExpanded: false
     property bool mediaExpanded: false
     property bool weatherExpanded: false
     property bool dateExpanded: false
@@ -60,11 +60,21 @@ Item {
     property bool _previewStaggerActive: false
 
     function _enqueuePreview(card) {
+        if (!card || card._previewActive || card._previewQueued || !card.previewNearViewport)
+            return;
+
+        card._previewQueued = true;
         _previewQueue.push(card);
         if (!_previewStaggerActive) {
             _previewStaggerActive = true;
             _previewStaggerTimer.start();
         }
+    }
+
+    function _removePreview(card) {
+        const index = _previewQueue.indexOf(card);
+        if (index >= 0)
+            _previewQueue.splice(index, 1);
     }
 
     Timer {
@@ -74,8 +84,11 @@ Item {
         onTriggered: {
             if (widgetsConfigRoot._previewQueue.length > 0) {
                 var card = widgetsConfigRoot._previewQueue.shift();
-                if (card)
-                    card._previewActive = true;
+                if (card) {
+                    card._previewQueued = false;
+                    if (card.previewNearViewport)
+                        card._previewActive = true;
+                }
             } else {
                 widgetsConfigRoot._previewStaggerActive = false;
                 stop();
@@ -224,6 +237,7 @@ Item {
                 Loader {
                     Layout.fillWidth: true
                     active: widgetsConfigRoot.clockExpanded
+                    asynchronous: true
                     sourceComponent: Flow {
                         Layout.fillWidth: true
                         spacing: 12
@@ -246,6 +260,7 @@ Item {
                 Loader {
                     Layout.fillWidth: true
                     active: widgetsConfigRoot.mediaExpanded
+                    asynchronous: true
                     sourceComponent: Flow {
                         Layout.fillWidth: true
                         spacing: 12
@@ -268,6 +283,7 @@ Item {
                 Loader {
                     Layout.fillWidth: true
                     active: widgetsConfigRoot.weatherExpanded
+                    asynchronous: true
                     sourceComponent: Flow {
                         Layout.fillWidth: true
                         spacing: 12
@@ -290,6 +306,7 @@ Item {
                 Loader {
                     Layout.fillWidth: true
                     active: widgetsConfigRoot.dateExpanded
+                    asynchronous: true
                     sourceComponent: Flow {
                         Layout.fillWidth: true
                         spacing: 12
@@ -312,6 +329,7 @@ Item {
                 Loader {
                     Layout.fillWidth: true
                     active: widgetsConfigRoot.photoExpanded
+                    asynchronous: true
                     sourceComponent: Flow {
                         Layout.fillWidth: true
                         spacing: 12
@@ -334,6 +352,7 @@ Item {
                 Loader {
                     Layout.fillWidth: true
                     active: widgetsConfigRoot.bluetoothExpanded
+                    asynchronous: true
                     sourceComponent: Flow {
                         Layout.fillWidth: true
                         spacing: 12
@@ -356,6 +375,7 @@ Item {
                 Loader {
                     Layout.fillWidth: true
                     active: widgetsConfigRoot.utilityExpanded
+                    asynchronous: true
                     sourceComponent: Flow {
                         Layout.fillWidth: true
                         spacing: 12
@@ -378,6 +398,7 @@ Item {
                 Loader {
                     Layout.fillWidth: true
                     active: widgetsConfigRoot.systemExpanded
+                    asynchronous: true
                     sourceComponent: Flow {
                         Layout.fillWidth: true
                         spacing: 12
@@ -400,6 +421,7 @@ Item {
                 Loader {
                     Layout.fillWidth: true
                     active: widgetsConfigRoot.resourceExpanded
+                    asynchronous: true
                     sourceComponent: Flow {
                         Layout.fillWidth: true
                         spacing: 12
@@ -1118,9 +1140,37 @@ Item {
             implicitHeight: mainColumn.implicitHeight + 12
 
             property bool _previewActive: false
+            property bool _previewQueued: false
             property bool hovered: cardMouseArea.containsMouse
 
-            Component.onCompleted: widgetsConfigRoot._enqueuePreview(cardItem)
+            readonly property bool previewNearViewport: {
+                // These explicit dependencies make the binding react to
+                // scrolling and Flow relayouts; mapToItem itself is not a
+                // reactive dependency in QML.
+                widgetsConfigRoot.contentY;
+                widgetsConfigRoot.width;
+                widgetsConfigRoot.height;
+                cardItem.x;
+                cardItem.y;
+                cardItem.height;
+
+                if (!cardItem.visible || widgetsConfigRoot.height <= 0)
+                    return false;
+
+                const point = cardItem.mapToItem(widgetsConfigRoot, 0, 0);
+                const lookahead = Math.max(cardItem.height, widgetsConfigRoot.height * 0.25);
+                return point.y < widgetsConfigRoot.height + lookahead
+                    && point.y + cardItem.height > -lookahead;
+            }
+
+            function requestPreviewIfVisible() {
+                if (previewNearViewport)
+                    widgetsConfigRoot._enqueuePreview(cardItem);
+            }
+
+            Component.onCompleted: Qt.callLater(requestPreviewIfVisible)
+            Component.onDestruction: widgetsConfigRoot._removePreview(cardItem)
+            onPreviewNearViewportChanged: requestPreviewIfVisible()
 
             readonly property var widgetData: modelData
             readonly property var _activeWidgets: Config.options.background.activeWidgets
@@ -1230,6 +1280,7 @@ Item {
                             id: widgetPreviewLoader
                             anchors.fill: parent
                             active: cardItem._previewActive
+                            asynchronous: true
                             source: cardItem._previewActive ? cardItem.widgetData.qmlPath : ""
 
                             Binding {

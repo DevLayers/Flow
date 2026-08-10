@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import qs.services
@@ -19,6 +18,8 @@ ColumnLayout {
     spacing: 12
 
     property string pageId: ""
+    property bool collapsible: false
+    property bool expanded: true
 
     function navigateToPage() {
         if (!root.pageId || root.pageId === "")
@@ -140,97 +141,152 @@ ColumnLayout {
             }
             spacing: 12
 
-            RowLayout {
-                id: headerRow
+            Item {
+                id: headerSurface
                 Layout.fillWidth: true
-                spacing: 8
+                implicitHeight: headerRow.implicitHeight
 
                 MouseArea {
                     id: headerMouseArea
                     anchors.fill: parent
-                    hoverEnabled: root.pageId !== "" && root.pageId.length > 0
-                    cursorShape: (root.pageId !== "" && root.pageId.length > 0) ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    enabled: root.pageId !== "" && root.pageId.length > 0
-                    onClicked: root.navigateToPage()
-                }
-
-                Loader {
-                    id: iconLoader
-                    active: root.icon && root.icon.length > 0
-                    visible: active
-                    Layout.alignment: Qt.AlignVCenter
-                    opacity: 1 - highlightOverlay.opacity
-
-                    sourceComponent: MaterialSymbol {
-                        text: root.icon
-                        iconSize: Appearance.font.pixelSize.huge
-                        color: headerMouseArea.containsMouse && root.pageId ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-                    }
-                }
-
-                StyledText {
-                    opacity: 1 - highlightOverlay.opacity
-                    text: root.title
-                    font.pixelSize: Appearance.font.pixelSize.huge
-                    font.weight: Font.DemiBold
-                    font.variableAxes: Appearance.font.variableAxes.titleRounded
-                    color: headerMouseArea.containsMouse && root.pageId ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-                    Layout.fillWidth: true
-
-                    Behavior on color {
-                        ColorAnimation { duration: 150 }
+                    hoverEnabled: root.collapsible || (root.pageId !== "" && root.pageId.length > 0)
+                    cursorShape: root.collapsible || (root.pageId !== "" && root.pageId.length > 0) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    enabled: root.collapsible || (root.pageId !== "" && root.pageId.length > 0)
+                    onClicked: {
+                        if (root.collapsible)
+                            root.expanded = !root.expanded;
+                        else
+                            root.navigateToPage();
                     }
                 }
 
                 RowLayout {
-                    spacing: 4
-                    visible: root.pageId !== "" && root.pageId.length > 0
-                    Layout.alignment: Qt.AlignVCenter
-                    opacity: headerMouseArea.containsMouse ? 1.0 : 0.65
+                    id: headerRow
+                    anchors.fill: parent
+                    spacing: 8
 
-                    Behavior on opacity {
-                        NumberAnimation { duration: 150 }
+                    MaterialSymbol {
+                        visible: root.icon && root.icon.length > 0
+                        text: root.icon
+                        iconSize: Appearance.font.pixelSize.huge
+                        color: headerMouseArea.containsMouse && root.pageId ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                        opacity: 1 - highlightOverlay.opacity
+                        Layout.alignment: Qt.AlignVCenter
                     }
 
                     StyledText {
-                        readonly property var pageObj: SettingsPageRegistry.pageById(root.pageId)
-                        text: pageObj ? Translation.tr(pageObj.name) : ""
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: headerMouseArea.containsMouse ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                        opacity: 1 - highlightOverlay.opacity
+                        text: root.title
+                        font.pixelSize: Appearance.font.pixelSize.huge
+                        font.weight: Font.DemiBold
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        color: headerMouseArea.containsMouse && root.pageId ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                        Layout.fillWidth: true
+
+                        Behavior on color {
+                            ColorAnimation { duration: 150 }
+                        }
                     }
 
                     MaterialSymbol {
-                        text: "arrow_forward"
-                        iconSize: Appearance.font.pixelSize.normal
-                        color: headerMouseArea.containsMouse ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                        visible: root.collapsible
+                        text: "keyboard_arrow_down"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnLayer1
+                        opacity: headerMouseArea.containsMouse ? 1.0 : 0.6
+                        Layout.alignment: Qt.AlignVCenter
+                        rotation: root.expanded ? 0 : -90
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                            }
+                        }
+
+                        Behavior on rotation {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMove.duration
+                                easing.type: Appearance.animation.elementMove.type
+                                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                            }
+                        }
                     }
-                }
 
-                MaterialSymbol {
-                    opacity: 1 - highlightOverlay.opacity
-                    visible: root.tooltip && root.tooltip.length > 0
-                    text: "info"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnLayer1
+                    RowLayout {
+                        spacing: 4
+                        visible: root.pageId !== "" && root.pageId.length > 0
+                        Layout.alignment: Qt.AlignVCenter
+                        opacity: headerMouseArea.containsMouse ? 1.0 : 0.65
 
-                    MouseArea {
-                        id: infoMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.WhatsThisCursor
-                        StyledToolTip {
-                            extraVisibleCondition: false
-                            alternativeVisibleCondition: infoMouseArea.containsMouse
-                            text: root.tooltip
+                        Behavior on opacity {
+                            NumberAnimation { duration: 150 }
+                        }
+
+                        StyledText {
+                            readonly property var pageObj: SettingsPageRegistry.pageById(root.pageId)
+                            text: pageObj ? Translation.tr(pageObj.name) : ""
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: headerMouseArea.containsMouse ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                        }
+
+                        MaterialSymbol {
+                            text: "arrow_forward"
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: headerMouseArea.containsMouse ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                        }
+                    }
+
+                    MaterialSymbol {
+                        opacity: 1 - highlightOverlay.opacity
+                        visible: root.tooltip && root.tooltip.length > 0
+                        text: "info"
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colOnLayer1
+
+                        MouseArea {
+                            id: infoMouseArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.WhatsThisCursor
+                            StyledToolTip {
+                                extraVisibleCondition: false
+                                alternativeVisibleCondition: infoMouseArea.containsMouse
+                                text: root.tooltip
+                            }
                         }
                     }
                 }
             }
 
-            ColumnLayout {
-                id: sectionContent
+            Item {
+                id: sectionContentContainer
                 Layout.fillWidth: true
-                spacing: 4
+                implicitHeight: root.expanded ? sectionContent.implicitHeight : 0
+                clip: true
+
+                Behavior on implicitHeight {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    }
+                }
+
+                ColumnLayout {
+                    id: sectionContent
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    opacity: root.expanded ? 1.0 : 0.0
+                    spacing: 4
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: root.expanded
+                                ? Appearance.animation.elementMove.duration
+                                : Appearance.animation.elementMoveFast.duration
+                        }
+                    }
+                }
             }
         }
 

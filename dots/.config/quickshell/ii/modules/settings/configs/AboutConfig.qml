@@ -1054,11 +1054,11 @@ command: ["bash", "-c",
             text: Translation.tr("Free Settings memory after closing")
             checked: Config.options.settingsApp.unloadAfterSeconds > 0
             onCheckedChanged: {
-                Config.options.settingsApp.unloadAfterSeconds = checked ? 300 : 0;
+                Config.options.settingsApp.unloadAfterSeconds = checked ? 5 : 0;
             }
 
             StyledToolTip {
-                text: Translation.tr("When enabled, the Settings app is removed from memory 5 minutes after it is closed. The next opening will have a short cold-start delay.")
+                text: Translation.tr("When enabled, the Settings app is removed from memory 5 seconds after it is closed. The next opening will have a short cold-start delay.")
             }
         }
     }

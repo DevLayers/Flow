@@ -4,9 +4,9 @@ import QtQuick
 import QtQuick.Layouts
 import QtQml.Models
 
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 Rectangle {
     id: root
@@ -48,8 +48,35 @@ Rectangle {
      * We have to initilize the layout because we don't define the default values in Config.qml file
     */
     function initilizateLayout(list) {
-        let initilizatedLayout = list.map(comp => initilizateComponent(comp));
-        root.updated(initilizatedLayout);
+        const source = list || [];
+        const initializedLayout = source.map(comp => initilizateComponent(comp));
+
+        // Config layouts are already normalized in the normal case. Avoid
+        // assigning a fresh list back to Config during page construction:
+        // list<var> emits a change even when the values are equivalent, which
+        // otherwise retriggers all bar layout consumers and schedules a disk
+        // write for each of the three editors.
+        let needsNormalization = source.length !== initializedLayout.length;
+        if (!needsNormalization) {
+            for (let i = 0; i < source.length; ++i) {
+                const original = source[i];
+                const normalized = initializedLayout[i];
+                const keys = original ? Object.keys(original) : [];
+                const hasOnlyLayoutFields = keys.length === 3 &&
+                        keys.indexOf("id") !== -1 &&
+                        keys.indexOf("centered") !== -1 &&
+                        keys.indexOf("visible") !== -1;
+                if (!original || !hasOnlyLayoutFields || original.id !== normalized.id ||
+                        original.centered !== normalized.centered ||
+                        original.visible !== normalized.visible) {
+                    needsNormalization = true;
+                    break;
+                }
+            }
+        }
+
+        if (needsNormalization)
+            root.updated(initializedLayout);
     }
 
     function initilizateComponent(comp) {
