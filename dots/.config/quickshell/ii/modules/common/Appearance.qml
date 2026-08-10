@@ -299,11 +299,19 @@ Singleton {
 
     property real ignoreAlpha: Config.options.appearance.ignoreAlpha ?? 0.2
 
+    // Antialiased edges of the bar and Dynamic Island are semi-transparent.
+    // Letting Hyprland blur those edge pixels with a very low ignore_alpha
+    // produces a jagged/halo-like fringe around rounded surfaces. Keep the
+    // global slider free for other layers, but use the known-safe bar floor.
+    readonly property real barIgnoreAlpha: Math.max(root.ignoreAlpha, 0.6)
+
     onIgnoreAlphaChanged: {
         if (Config.ready) {
             var a = root.ignoreAlpha;
+            var barA = root.barIgnoreAlpha;
             var script = "";
             script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:overview' }, blur = false }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
@@ -334,8 +342,10 @@ Singleton {
         Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + root.windowRounding + " } })"]);
         Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
         var a = root.ignoreAlpha;
+        var barA = root.barIgnoreAlpha;
         var bs = "";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:overview' }, blur = false }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
