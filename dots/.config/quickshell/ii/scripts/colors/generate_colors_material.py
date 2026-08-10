@@ -27,6 +27,8 @@ parser.add_argument('--cache', type=str, default=None, help='file path to store 
 parser.add_argument('--debug', action='store_true', default=False, help='debug mode')
 parser.add_argument('--preview', action='store_true', help='preview the generated colorscheme and returns three accent colors to be previewed in the UI')
 parser.add_argument('--all-previews', type=str, default=None, help='generate preview colors for all schemes and save to json file')
+parser.add_argument('--request-token', type=str, default=None, help='file whose content must still equal --request-value when the all-previews write completes')
+parser.add_argument('--request-value', type=str, default=None, help='token this invocation was launched with, used to detect a superseding wallpaper switch')
 args = parser.parse_args()
 
 rgba_to_hex = lambda rgba: "#{:02X}{:02X}{:02X}".format(rgba[0], rgba[1], rgba[2])
@@ -170,12 +172,29 @@ if args.all_previews:
             "secondary": m_colors.get("secondary", "transparent")
         }
 
+    if args.request_token and args.request_value:
+        try:
+            with open(args.request_token, 'r') as f:
+                current_token = f.read().strip()
+        except Exception:
+            current_token = None
+        try:
+            is_stale = current_token is not None and int(current_token) > int(args.request_value)
+        except ValueError:
+            is_stale = False
+        if is_stale:
+            print("Skipping stale all-previews write (superseded by a newer wallpaper change)")
+            import sys
+            sys.exit(0)
+
     try:
         out_dir = os.path.dirname(args.all_previews)
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
-        with open(args.all_previews, 'w') as f:
+        tmp_path = args.all_previews + ".tmp"
+        with open(tmp_path, 'w') as f:
             json.dump(previews, f, indent=2)
+        os.replace(tmp_path, args.all_previews)
     except Exception as e:
         print(f"Error saving all previews: {e}")
     import sys

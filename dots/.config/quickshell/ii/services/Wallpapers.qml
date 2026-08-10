@@ -16,6 +16,16 @@ pragma ComponentBehavior: Bound
 Singleton {
     id: root
 
+    // Strictly increasing per apply() call, since QML dispatch is single-threaded.
+    // Passed to switchwall*.sh as --request-seq so a slower, superseded backend
+    // run can tell it lost the race and skip writing preview colors. Seeded from
+    // Date.now() (not 0): the on-disk token file survives Quickshell restarts, but
+    // this counter doesn't, so starting at 0 again let old high-water marks (from a
+    // prior session, or from a PID that beat a low seq) permanently outrank every
+    // future request and freeze the swatches. A wall-clock seed is always greater
+    // than whatever was written before, so it self-heals on the very next switch.
+    property real _wallpaperRequestSeq: Date.now()
+
     property string thumbgenScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/thumbnails/thumbgen-venv.sh`
     property string generateThumbnailsMagickScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/thumbnails/generate-thumbnails-magick.sh`
     property string extractColorsScriptPath: FileUtils.trimFileProtocol(Directories.extractColorsScriptPath)
@@ -287,6 +297,7 @@ Singleton {
             "--mode", darkMode ? "dark" : "light"
         ];
         if (lockscreen) args.push("--lockscreen");
+        args.push("--request-seq", String(++root._wallpaperRequestSeq));
         Quickshell.execDetached(args);
     }
 
@@ -303,11 +314,13 @@ Singleton {
             }
         }
         Config.saveOptionsNow();
+        const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
             `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
-            "--mode", darkMode ? "dark" : "light", "--image", path
+            "--mode", darkMode ? "dark" : "light", "--image", path,
+            "--request-seq", String(requestSeq)
         ]);
         root.changed();
     }
@@ -318,11 +331,13 @@ Singleton {
             Config.options.background.lockscreenWallpaperPath = path;
         }
         Config.saveOptionsNow();
+        const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
             `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
-            "--mode", darkMode ? "dark" : "light", "--image", path, "--lockscreen", "--noswitch"
+            "--mode", darkMode ? "dark" : "light", "--image", path, "--lockscreen", "--noswitch",
+            "--request-seq", String(requestSeq)
         ]);
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
@@ -338,11 +353,13 @@ Singleton {
             Config.options.background.lightModeWallpaperPath = path;
         }
         Config.saveOptionsNow();
+        const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
             `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
-            "--mode", "light", "--image", path, "--lightmode"
+            "--mode", "light", "--image", path, "--lightmode",
+            "--request-seq", String(requestSeq)
         ]);
         root.changed();
     }
@@ -416,7 +433,8 @@ Singleton {
         if (Config.options?.background?.useSeparateLightModeWallpaper && !Appearance.m3colors.darkmode) {
             root.applyLightModeWallpaper(cleanPath);
         } else {
-            Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", darkMode ? "dark" : "light", "--image", cleanPath, "--lightmode", "--noswitch"]);
+            Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", darkMode ? "dark" : "light", "--image", cleanPath, "--lightmode", "--noswitch",
+                "--request-seq", String(++root._wallpaperRequestSeq)]);
             root.changed()
         }
     }

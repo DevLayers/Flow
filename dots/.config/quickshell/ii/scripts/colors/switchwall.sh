@@ -215,6 +215,24 @@ switch() {
     color="$5"
     theme_file="$6"
 
+    # Guard against rapid wallpaper switches racing each other: the all-previews
+    # generation below takes over a second, so a second switch launched before it
+    # finishes must not have its result overwritten by the older, slower run.
+    # request_seq_flag (--request-seq) comes from the QML caller and is strictly
+    # increasing in click order, since QML dispatch is single-threaded; process
+    # start/PID order is not reliable under scheduling jitter, so callers that
+    # don't pass it (PID fallback) only get a best-effort guard.
+    request_token_file="$STATE_DIR/user/generated/.preview_request_token"
+    mkdir -p "$(dirname "$request_token_file")"
+    my_request_token="${request_seq_flag:-$$}"
+    (
+        flock -x 201
+        current_seq=$(cat "$request_token_file" 2>/dev/null)
+        if [[ -z "$current_seq" ]] || ! [[ "$current_seq" =~ ^[0-9]+$ ]] || (( my_request_token > current_seq )); then
+            printf '%s' "$my_request_token" > "$request_token_file"
+        fi
+    ) 201>"$request_token_file.lock"
+
     # Start Gemini auto-categorization if enabled
     aiStylingEnabled=$(jq -r '.background.widgets.clock.cookie.aiStyling' "$SHELL_CONFIG_FILE")
     aiStylingModel=$(jq -r '.background.widgets.clock.cookie.aiStylingModel' "$SHELL_CONFIG_FILE")
@@ -620,6 +638,7 @@ done"
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
         python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
             --all-previews "$STATE_DIR/user/generated/wallpaper_preview_colors.json" \
+            --request-token "$request_token_file" --request-value "$my_request_token" \
             > "$STATE_DIR"/user/generated/material_colors.scss.tmp && \
             mv "$STATE_DIR"/user/generated/material_colors.scss.tmp "$STATE_DIR"/user/generated/material_colors.scss
         deactivate
@@ -712,6 +731,10 @@ main() {
                 ;;
             --image)
                 imgpath="$2"
+                shift 2
+                ;;
+            --request-seq)
+                request_seq_flag="$2"
                 shift 2
                 ;;
             --noswitch)

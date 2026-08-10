@@ -52,11 +52,14 @@ RippleButton {
 
     property bool isWidgetScheme: false
     property bool widgetSchemeToggled: false
-    readonly property bool toggled: isWidgetScheme ? widgetSchemeToggled : (Config.options.appearance.palette.type === root.colorScheme)
+    readonly property bool toggled: isWidgetScheme ? widgetSchemeToggled : (
+                                                         Config.options.appearance.palette.type
+                                                         === root.colorScheme)
     readonly property bool sharpMode: Config.options.appearance.sharpMode
 
     colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-    colBackgroundHover: toggled ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+    colBackgroundHover: toggled ? Appearance.colors.colPrimaryContainerHover :
+                                  Appearance.colors.colLayer2Hover
     colRipple: toggled ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
 
     buttonRadius: Appearance.rounding.small
@@ -91,7 +94,69 @@ RippleButton {
         path: (!root.customTheme && !root.builtInTheme) ? Directories.wallpaperPreviewColorsPath : ""
         watchChanges: true
         onLoaded: {
+            root.cacheRetryCount = 0;
             root.loadFromCache();
+            if (root._awaitingFreshCache) {
+                if (root.primaryColor !== root._preReloadPrimaryColor) {
+                    root._awaitingFreshCache = false;
+                } else if (root._staleRetryCount < 6) {
+                    root._staleRetryCount++;
+                    staleCacheRetryTimer.restart();
+                } else {
+                    root._awaitingFreshCache = false;
+                }
+            }
+        }
+        onLoadFailed: {
+            cacheRetryTimer.start();
+        }
+    }
+
+    property int cacheRetryCount: 0
+
+    // The backend write we're waiting for is atomic (os.replace), so file-watcher
+    // events on the same path can be missed or coalesced depending on how the watch
+    // is implemented under the hood. A fixed debounce alone can't tell "reloaded before
+    // the backend finished" apart from "reloaded after" -- so track what was on screen
+    // before the wallpaper changed and keep polling until it actually differs.
+    property bool _awaitingFreshCache: false
+    property color _preReloadPrimaryColor: "transparent"
+    property int _staleRetryCount: 0
+
+    // Background regeneration of the preview cache (matugen + material color gen for
+    // all schemes) takes well over a second, so an immediate reload right after the
+    // wallpaper changes would just re-read the previous wallpaper's stale cache.
+    Timer {
+        id: cacheReloadTimer
+        interval: 900
+        repeat: false
+        onTriggered: {
+            if (root.customTheme || root.builtInTheme)
+                return;
+            root._preReloadPrimaryColor = root.primaryColor;
+            root._awaitingFreshCache = true;
+            root._staleRetryCount = 0;
+            root.loaded = false;
+            previewCacheFileView.reload();
+        }
+    }
+
+    Timer {
+        id: staleCacheRetryTimer
+        interval: 400
+        repeat: false
+        onTriggered: previewCacheFileView.reload();
+    }
+
+    Timer {
+        id: cacheRetryTimer
+        interval: 150
+        repeat: false
+        onTriggered: {
+            if (root.cacheRetryCount >= 5)
+                return;
+            root.cacheRetryCount++;
+            previewCacheFileView.reload();
         }
     }
 
@@ -102,7 +167,8 @@ RippleButton {
         onLoaded: {
             try {
                 const raw = themeFileView.text().trim();
-                if (!raw) return;
+                if (!raw)
+                    return;
                 const data = JSON.parse(raw);
                 root.primaryColor = data.primary || "transparent";
                 root.secondaryColor = data.primary_container || "transparent";
@@ -115,10 +181,12 @@ RippleButton {
     }
 
     function loadFromCache() {
-        if (root.customTheme || root.builtInTheme) return false;
+        if (root.customTheme || root.builtInTheme)
+            return false;
         try {
             const raw = previewCacheFileView.text().trim();
-            if (!raw) return false;
+            if (!raw)
+                return false;
             const cache = JSON.parse(raw);
             const schemeData = cache[root.colorScheme];
             if (schemeData && schemeData.primary) {
@@ -157,24 +225,23 @@ RippleButton {
 
     onWallpaperPathChanged: {
         if (shouldLoad && !root.customTheme && !root.builtInTheme) {
-            loaded = false;
-            root.requestLoad();
+            cacheReloadTimer.restart();
         }
     }
 
-    readonly property string wpeId: (Config.options && Config.options.background) ? Config.options.background.wallpaperEngineId : ""
+    readonly property string wpeId: (Config.options && Config.options.background)
+                                    ? Config.options.background.wallpaperEngineId : ""
     onWpeIdChanged: {
         if (shouldLoad && !root.customTheme && !root.builtInTheme) {
-            loaded = false;
-            root.requestLoad();
+            cacheReloadTimer.restart();
         }
     }
 
-    property bool useWpe: (Config.options && Config.options.background) ? Config.options.background.useWallpaperEngine : false
+    property bool useWpe: (Config.options && Config.options.background)
+                          ? Config.options.background.useWallpaperEngine : false
     onUseWpeChanged: {
         if (shouldLoad && !root.customTheme && !root.builtInTheme) {
-            loaded = false;
-            root.requestLoad();
+            cacheReloadTimer.restart();
         }
     }
 
