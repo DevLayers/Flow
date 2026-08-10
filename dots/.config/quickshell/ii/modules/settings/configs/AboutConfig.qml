@@ -613,7 +613,8 @@ command: ["bash", "-c",
                     }
                     enabled: !actionProc.running
                     onClicked: {
-                        page.runAction("update", ["update", "--yes", "--keep-config"]);
+                        page.runAction("update", ["update", "--yes", "--keep-config",
+                            Config.options.update.replaceHyprConfig ? "--hypr" : "--no-hypr"]);
                     }
                 }
 
@@ -655,6 +656,21 @@ command: ["bash", "-c",
                     }
 
                     Behavior on opacity { NumberAnimation { duration: 200 } }
+                }
+            }
+
+            // ── Toggle: whether the update also overlays this fork's Hyprland config ──
+            ConfigSwitch {
+                id: replaceHyprConfigSwitch
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                buttonIcon: "settings_applications"
+                text: Translation.tr("Also replace Hyprland config")
+                checked: Config.options.update.replaceHyprConfig
+                onCheckedChanged: Config.options.update.replaceHyprConfig = checked
+
+                StyledToolTip {
+                    text: Translation.tr("When enabled, updating also overlays this fork's ~/.config/hypr onto yours (custom/ is never touched, and anything replaced is backed up first). Disable to update only the Quickshell config.")
                 }
             }
 

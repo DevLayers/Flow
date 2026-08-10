@@ -2810,6 +2810,10 @@ Singleton {
             property JsonObject update: JsonObject {
                 property string scriptPath: ""
                 property string scriptFlags: "--no-backup --no-confirm"
+                // Whether the Settings "Update" button also overlays the fork's
+                // dots/.config/hypr onto ~/.config/hypr (passes --hypr/--no-hypr
+                // to setup-ii-p3drovfx.sh). See AboutConfig.qml.
+                property bool replaceHyprConfig: true
             }
 
             property JsonObject musicRecognition: JsonObject {
