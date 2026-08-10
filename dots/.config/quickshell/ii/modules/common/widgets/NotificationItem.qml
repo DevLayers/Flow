@@ -17,7 +17,6 @@ Item { // Notification item area
     property real zoom: 1.0
     property real fontSize: Appearance.font.pixelSize.small * zoom
     property real padding: onlyNotification ? 0 : 8 * zoom
-    property real summaryElideRatio: 0.85
 
     property real dragConfirmThreshold: 70 // Drag further to discard notification
     property real dismissOvershoot: notificationIcon.implicitWidth + 20 // Account for gaps and bouncy animations
@@ -48,12 +47,6 @@ Item { // Notification item area
         }
         destroyAnimation.left = left;
         destroyAnimation.running = true;
-    }
-
-    TextMetrics {
-        id: summaryTextMetrics
-        font.pixelSize: root.fontSize
-        text: root.notificationObject.summary || ""
     }
 
     SequentialAnimation { // Drag finish animation
@@ -183,14 +176,14 @@ Item { // Notification item area
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
 
-            RowLayout { // Summary row
+            ColumnLayout { // Summary and collapsed body
                 id: summaryRow
                 visible: !root.onlyNotification || !root.expanded
                 Layout.fillWidth: true
-                implicitHeight: summaryText.implicitHeight
+                spacing: 3
                 StyledText {
                     id: summaryText
-                    Layout.fillWidth: summaryTextMetrics.width >= root.width * root.summaryElideRatio
+                    Layout.fillWidth: true
                     visible: !root.onlyNotification
                     font.pixelSize: root.fontSize
                     color: Appearance.colors.colOnLayer3
@@ -198,6 +191,7 @@ Item { // Notification item area
                     text: root.notificationObject.summary || ""
                 }
                 StyledText {
+                    id: collapsedBodyText
                     opacity: !root.expanded ? 1 : 0
                     visible: opacity > 0
                     Layout.fillWidth: true
@@ -271,9 +265,6 @@ Item { // Notification item area
                         contentWidth: actionRowLayout.implicitWidth
 
                         Behavior on opacity {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                        }
-                        Behavior on height {
                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
                         Behavior on implicitHeight {

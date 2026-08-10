@@ -71,7 +71,7 @@ Singleton {
         interval: 7000
         running: true
         onTriggered: () => {
-            const index = root.list.findIndex((notif) => notif.notificationId === notificationId);
+            const index = root.list.findIndex((notif) => notif && notif.notificationId === notificationId);
             const notifObject = root.list[index];
             print("[Notifications] Notification timer triggered for ID: " + notificationId + ", transient: " + notifObject?.isTransient);
             if (notifObject) {
@@ -111,8 +111,12 @@ Singleton {
     readonly property bool effectiveSilent: silent || autoSilent
     property int unread: 0
     property var filePath: Directories.notificationsPath
-    property list<Notif> list: []
-    property var popupList: list.filter((notif) => notif.popup);
+    // Keep the list typed to the stable Qt base class. A list<Notif> retains the
+    // generated QML type revision in its element type; after a hot reload, existing
+    // Notif objects then fail assignment to the regenerated Notif type and become
+    // null entries ("Cannot append Notif(...) to a QML list").
+    property list<QtObject> list: []
+    property var popupList: list.filter((notif) => notif && notif.popup);
     property bool popupInhibited: (GlobalStates?.sidebarRightOpen ?? false) || effectiveSilent
     property var latestTimeForApp: ({})
     // See Config.qml for the rationale on these guards.
@@ -168,20 +172,21 @@ Singleton {
     }
 
     function stringifyList(list) {
-        return JSON.stringify(list.map((notif) => notifToJSON(notif)), null, 2);
+        return JSON.stringify(list.filter((notif) => notif).map((notif) => notifToJSON(notif)), null, 2);
     }
     
     onListChanged: {
         // Update latest time for each app reactively via reassignment
         const nextLatestTime = Object.assign({}, root.latestTimeForApp);
         root.list.forEach((notif) => {
+            if (!notif) return;
             if (!nextLatestTime[notif.appName] || notif.time > nextLatestTime[notif.appName]) {
                 nextLatestTime[notif.appName] = Math.max(nextLatestTime[notif.appName] || 0, notif.time);
             }
         });
         // Remove apps that no longer have notifications
         Object.keys(nextLatestTime).forEach((appName) => {
-            if (!root.list.some((notif) => notif.appName === appName)) {
+            if (!root.list.some((notif) => notif && notif.appName === appName)) {
                 delete nextLatestTime[appName];
             }
         });
@@ -198,6 +203,7 @@ Singleton {
     function groupsForList(list) {
         const groups = {};
         list.forEach((notif) => {
+            if (!notif) return;
             const appNameLower = (notif.appName || "").toLowerCase();
             const isKdeConnect = appNameLower === "kdeconnect"
                 || appNameLower === "kde connect"
@@ -434,7 +440,7 @@ Singleton {
 
     function discardNotification(id) {
         console.log("[Notifications] Discarding notification with ID: " + id);
-        const index = root.list.findIndex((notif) => notif.notificationId === id);
+        const index = root.list.findIndex((notif) => notif && notif.notificationId === id);
         const notifServerIndex = notifServer.trackedNotifications.values.findIndex((notif) => notif.id + root.idOffset === id);
         if (index !== -1) {
             root.list.splice(index, 1);
@@ -450,7 +456,7 @@ Singleton {
     function discardMultipleNotifications(ids) {
         if (!ids || ids.length === 0) return;
         const idSet = new Set(ids);
-        root.list = root.list.filter(notif => !idSet.has(notif.notificationId));
+        root.list = root.list.filter(notif => notif && !idSet.has(notif.notificationId));
         root.scheduleDiskWrite();
         triggerListChange();
         notifServer.trackedNotifications.values.forEach(notif => {
@@ -472,13 +478,13 @@ Singleton {
     }
 
     function cancelTimeout(id) {
-        const index = root.list.findIndex((notif) => notif.notificationId === id);
+        const index = root.list.findIndex((notif) => notif && notif.notificationId === id);
         if (root.list[index] != null)
             root.list[index].timer.stop();
     }
 
     function timeoutNotification(id) {
-        const index = root.list.findIndex((notif) => notif.notificationId === id);
+        const index = root.list.findIndex((notif) => notif && notif.notificationId === id);
         if (root.list[index] != null)
             root.list[index].popup = false;
         root.timeout(id);
@@ -551,6 +557,7 @@ Singleton {
             // Find largest notificationId
             let maxId = 0;
             root.list.forEach((notif) => {
+                if (!notif) return;
                 maxId = Math.max(maxId, notif.notificationId);
             });
 
