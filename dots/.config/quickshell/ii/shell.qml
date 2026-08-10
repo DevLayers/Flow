@@ -105,6 +105,10 @@ ShellRoot {
         id: settingsLoader
         property bool loadedOnce: false
         active: loadedOnce || GlobalStates.settingsOpen
+        // Deliberately synchronous. Built asynchronously the window assembles itself in
+        // stages in front of the user, which reads worse than a single pause on an open
+        // they asked for. The cost of that pause is cut in SearchRegistry instead, which
+        // used to do 55 blocking file reads in the middle of it.
         source: "SettingsWindow.qml"
 
         // When settings closes, schedule an unload pass. If the user

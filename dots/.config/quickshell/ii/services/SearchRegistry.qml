@@ -42,7 +42,9 @@ Item {
         listPresetsSearchProc.running = true;
     }
 
-    Component.onCompleted: startIndexing()
+    // Deferred: this singleton is first referenced from inside the settings window's
+    // own construction, and indexing there would add itself to the cost of opening it.
+    Component.onCompleted: Qt.callLater(startIndexing)
 
     Connections {
         target: Translation
@@ -53,7 +55,10 @@ Item {
 
     FileView {
         id: pageFile
-        blockLoading: true
+        // Read asynchronously: this walks every settings page in turn, and each one
+        // is then brace-scanned character by character. Done blocking, the whole
+        // sweep lands in one main loop pass.
+        printErrors: false
 
         property var files: []
         property var pageIds: []
@@ -74,6 +79,13 @@ Item {
 
         onLoaded: {
             root.indexQmlFile(text(), pageIds[currentIndex]);
+            currentIndex++;
+            Qt.callLater(() => loadNext());
+        }
+
+        // A page that cannot be read must not stop the sweep — the rest of the
+        // settings would silently drop out of search.
+        onLoadFailed: {
             currentIndex++;
             Qt.callLater(() => loadNext());
         }
