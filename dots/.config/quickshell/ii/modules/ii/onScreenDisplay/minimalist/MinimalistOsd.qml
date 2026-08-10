@@ -47,6 +47,8 @@ Scope {
     ]
 
     function triggerOsd() {
+        if (Config.ready && Config.options.osd && Config.options.osd.hideWhenFullscreen && Notifications.focusedWindowFullscreen)
+            return;
         GlobalStates.osdVolumeOpen = true;
         osdTimeout.restart();
     }
