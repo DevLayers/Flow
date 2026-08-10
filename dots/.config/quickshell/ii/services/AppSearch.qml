@@ -2,6 +2,7 @@ pragma Singleton
 
 import qs.modules.common
 import qs.modules.common.functions
+import QtQuick
 import Quickshell
 
 /**
@@ -44,9 +45,18 @@ Singleton {
         }
     ]
 
-    // Deduped list to fix double icons, pre-sorted alphabetically to avoid sorting on every query
+    // Deduped list to fix double icons, pre-sorted alphabetically to avoid sorting on every query.
+    // Deduped through a Set rather than findIndex per entry: this rebuilds on every
+    // desktop entry rescan, and the quadratic version made each rescan a visible hitch.
     readonly property list<DesktopEntry> list: {
-        var arr = Array.from(DesktopEntries.applications.values).filter((app, index, self) => index === self.findIndex(t => (t.id === app.id)));
+        const seen = new Set();
+        const arr = [];
+        for (const app of DesktopEntries.applications.values) {
+            if (seen.has(app.id))
+                continue;
+            seen.add(app.id);
+            arr.push(app);
+        }
         arr.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         return arr;
     }
@@ -146,10 +156,30 @@ Singleton {
         });
     }
 
+    // Quickshell.iconPath() walks the icon theme on disk and caches nothing, and
+    // guessIcon calls it up to eight times for a single name it fails to resolve.
+    property var _iconExistsCache: ({})
+
     function iconExists(iconName) {
         if (!iconName || iconName.length == 0)
             return false;
-        return (Quickshell.iconPath(iconName, true).length > 0) && !iconName.includes("image-missing");
+        const cached = _iconExistsCache[iconName];
+        if (cached !== undefined)
+            return cached;
+
+        const result = (Quickshell.iconPath(iconName, true).length > 0) && !iconName.includes("image-missing");
+        _iconExistsCache[iconName] = result;
+        return result;
+    }
+
+    // A rescan can bring in entries whose icons were not on disk when a name was last
+    // guessed, so both caches are dropped rather than left to answer from before.
+    Connections {
+        target: DesktopEntries
+        function onApplicationsChanged() {
+            root._iconExistsCache = ({});
+            root._iconCache = ({});
+        }
     }
 
     function getReverseDomainNameAppName(str) {
