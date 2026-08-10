@@ -197,8 +197,6 @@ if args.all_previews:
         os.replace(tmp_path, args.all_previews)
     except Exception as e:
         print(f"Error saving all previews: {e}")
-    import sys
-    sys.exit(0)
 
 if args.scheme == 'scheme-fruit-salad':
     from materialyoucolor.scheme.scheme_fruit_salad import SchemeFruitSalad as Scheme
