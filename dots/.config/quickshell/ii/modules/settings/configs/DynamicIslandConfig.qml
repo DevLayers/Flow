@@ -9,20 +9,19 @@ ContentPage {
     id: dynamicIslandConfigRoot
 
     forceWidth: false
+    readonly property bool barNotTop: Config.options.bar.bottom || Config.options.bar.vertical
+    readonly property bool centerInBarActive: Config.options.bar.floatingNotch.centerInBar
 
     // ── Dynamic Island in Bar Center ──────────────────────────────────────
     ContentSection {
         icon: "align_justify_center"
         title: Translation.tr("Dynamic Island in Bar Center")
 
-        readonly property bool barNotTop: Config.options.bar.bottom || Config.options.bar.vertical
-        readonly property bool centerInBarActive: Config.options.bar.floatingNotch.centerInBar
-
         ConfigSwitch {
             buttonIcon: "align_justify_center"
             text: Translation.tr("Dynamic Island in bar center")
             checked: Config.options.bar.floatingNotch.centerInBar
-            enabled: !parent.barNotTop
+            enabled: !dynamicIslandConfigRoot.barNotTop
 
             onCheckedChanged: {
                 if (checked === Config.options.bar.floatingNotch.centerInBar)
@@ -65,7 +64,7 @@ ContentPage {
 
         NoticeBox {
             Layout.fillWidth: true
-            visible: !parent.centerInBarActive
+            visible: !dynamicIslandConfigRoot.centerInBarActive
             materialIcon: "info"
             text: Translation.tr("Prerequisites to enable:\n• Bar position must be set to Top\n• Bar background style must be Transparent or Islands\n• No widgets can be placed in the bar center layout")
 
@@ -80,7 +79,7 @@ ContentPage {
 
         NoticeBox {
             Layout.fillWidth: true
-            visible: parent.centerInBarActive
+            visible: dynamicIslandConfigRoot.centerInBarActive
             materialIcon: "check_circle"
             text: Translation.tr("Active: Dynamic Island floats above the bar center. All prerequisites are active and locked (Bar at Top, Transparent background, Center widgets hidden).")
         }

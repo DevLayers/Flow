@@ -220,19 +220,35 @@ switch() {
     # generation below takes over a second, so a second switch launched before it
     # finishes must not have its result overwritten by the older, slower run.
     # request_seq_flag (--request-seq) comes from the QML caller and is strictly
-    # increasing in click order, since QML dispatch is single-threaded; process
-    # start/PID order is not reliable under scheduling jitter, so callers that
-    # don't pass it (PID fallback) only get a best-effort guard.
+    # increasing in click order, since QML dispatch is single-threaded. Direct
+    # callers without a sequence receive the next token under the same lock, so
+    # they cannot be rejected just because an older QML token uses timestamps.
     request_token_file="$STATE_DIR/user/generated/.preview_request_token"
     mkdir -p "$(dirname "$request_token_file")"
-    my_request_token="${request_seq_flag:-$$}"
-    (
-        flock -x 201
-        current_seq=$(cat "$request_token_file" 2>/dev/null)
-        if [[ -z "$current_seq" ]] || ! [[ "$current_seq" =~ ^[0-9]+$ ]] || (( my_request_token > current_seq )); then
-            printf '%s' "$my_request_token" > "$request_token_file"
-        fi
-    ) 201>"$request_token_file.lock"
+    if [[ -n "$request_seq_flag" ]]; then
+        my_request_token="$request_seq_flag"
+        (
+            flock -x 201
+            current_seq=$(cat "$request_token_file" 2>/dev/null)
+            if [[ -z "$current_seq" ]] || ! [[ "$current_seq" =~ ^[0-9]+$ ]] || (( my_request_token > current_seq )); then
+                printf '%s' "$my_request_token" > "$request_token_file"
+            fi
+        ) 201>"$request_token_file.lock"
+    else
+        my_request_token=$(
+            (
+                flock -x 201
+                current_seq=$(cat "$request_token_file" 2>/dev/null)
+                if [[ "$current_seq" =~ ^[0-9]+$ ]]; then
+                    next_seq=$((current_seq + 1))
+                else
+                    next_seq=$(date +%s%3N)
+                fi
+                printf '%s' "$next_seq" > "$request_token_file"
+                printf '%s' "$next_seq"
+            ) 201>"$request_token_file.lock"
+        )
+    fi
 
     # Start Gemini auto-categorization if enabled
     aiStylingEnabled=$(jq -r '.background.widgets.clock.cookie.aiStyling' "$SHELL_CONFIG_FILE")
@@ -653,11 +669,15 @@ done"
             python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py" &
             (
                 source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
-                python3 "$SCRIPT_DIR/generate_colors_material_vynx.py" "${generate_colors_material_args[@]}" \
+                if python3 "$SCRIPT_DIR/generate_colors_material_vynx.py" "${generate_colors_material_args[@]}" \
                     --all-previews "$STATE_DIR/user/generated/wallpaper_preview_colors.json" \
                     --request-token "$request_token_file" --request-value "$my_request_token" \
-                    > "$STATE_DIR"/user/generated/material_colors.scss.tmp && \
+                    > "$STATE_DIR"/user/generated/material_colors.scss.tmp; then
                     mv "$STATE_DIR"/user/generated/material_colors.scss.tmp "$STATE_DIR"/user/generated/material_colors.scss
+                else
+                    rm -f "$STATE_DIR"/user/generated/material_colors.scss.tmp
+                    echo "[switchwall_vynx.sh] Color generation skipped; preserving the previous terminal palette." >&2
+                fi
                 deactivate
                 "$SCRIPT_DIR"/applycolor_vynx.sh
             ) &

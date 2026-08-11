@@ -2,6 +2,7 @@
 import argparse
 import math
 import json
+import sys
 from PIL import Image
 from materialyoucolor.quantize import QuantizeCelebi
 from materialyoucolor.score.score import Score
@@ -183,9 +184,11 @@ if args.all_previews:
         except ValueError:
             is_stale = False
         if is_stale:
-            print("Skipping stale all-previews write (superseded by a newer wallpaper change)")
-            import sys
-            sys.exit(0)
+            print(
+                "Skipping stale all-previews write (superseded by a newer wallpaper change)",
+                file=sys.stderr,
+            )
+            sys.exit(75)
 
     try:
         out_dir = os.path.dirname(args.all_previews)

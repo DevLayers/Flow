@@ -299,11 +299,14 @@ Singleton {
 
     property real ignoreAlpha: Config.options.appearance.ignoreAlpha ?? 0.2
 
-    // Antialiased edges of the bar and Dynamic Island are semi-transparent.
-    // Letting Hyprland blur those edge pixels with a very low ignore_alpha
-    // produces a jagged/halo-like fringe around rounded surfaces. Keep the
-    // global slider free for other layers, but use the known-safe bar floor.
-    readonly property real barIgnoreAlpha: Math.max(root.ignoreAlpha, 0.6)
+    // Hyprland ignores pixels with opacity <= ignore_alpha. The bar and both
+    // Dynamic Island variants use colLayer0, whose opacity follows the
+    // configured background transparency. Keep the threshold below that
+    // rendered opacity, otherwise the entire island is excluded from blur.
+    readonly property real barIgnoreAlpha: Math.min(
+        root.ignoreAlpha,
+        Math.max(0, 1 - root.backgroundTransparency - 0.01)
+    )
 
     onIgnoreAlphaChanged: {
         if (Config.ready) {

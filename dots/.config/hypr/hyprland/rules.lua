@@ -151,6 +151,8 @@ hl.layer_rule({ match = { namespace = "quickshell:lockWindowPusher" }, no_anim =
 hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animation = "fade"})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, ignore_alpha = 0.3})
+hl.layer_rule({ match = { namespace = "quickshell:floatingNotch" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:floatingNotch" }, ignore_alpha = 0.2})
 hl.layer_rule({ match = { namespace = "quickshell:floatingNotch" }, animation = "slide"})
 hl.layer_rule({ match = { namespace = "quickshell:overview" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overview" }, blur = true})

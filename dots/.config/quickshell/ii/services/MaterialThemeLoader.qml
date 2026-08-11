@@ -61,11 +61,26 @@ Singleton {
             } else {
                 root.startColorTransition(json)
             }
-            
-            Appearance.m3colors.darkmode = (Appearance.m3colors.m3background.hslLightness < 0.5)
+
+            // During a transition m3background still contains the old color.
+            // Deriving the mode from it leaves the shell in the previous mode,
+            // so the next toggle requests the same mode again.
+            root.updateDarkMode(json)
             console.log("[MaterialThemeLoader] applyColors: darkmode=", Appearance.m3colors.darkmode, "bg=", Appearance.m3colors.m3background)
         } catch(e) {
             console.log("[MaterialThemeLoader] Error parsing colors.json:", e)
+        }
+    }
+
+    function updateDarkMode(json) {
+        if (typeof json.darkmode === "boolean") {
+            Appearance.m3colors.darkmode = json.darkmode;
+            return;
+        }
+
+        const background = json.background ?? json.surface;
+        if (background !== undefined && background !== null && background !== "") {
+            Appearance.m3colors.darkmode = Qt.color(background).hslLightness < 0.5;
         }
     }
 
