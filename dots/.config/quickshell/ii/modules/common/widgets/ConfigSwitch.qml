@@ -294,11 +294,22 @@ RippleButton {
                     opacity: root.enabled ? 1.0 : 0.4
                 }
 
+                // Keep the cursor above the disabled visual switch without
+                // consuming any click; the row handles the interaction.
                 MouseArea {
                     anchors.fill: parent
+                    z: 1
+                    acceptedButtons: Qt.NoButton
+                    hoverEnabled: true
+                    cursorShape: root.pointingHandCursor ? Qt.PointingHandCursor : Qt.ArrowCursor
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    z: 2
                     enabled: root.hasSubPage && root.enabled
                     hoverEnabled: enabled
-                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    cursorShape: root.enabled && root.pointingHandCursor ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: {
                         if (!root.subPageOnly)
                             root.checked = !root.checked;

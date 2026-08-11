@@ -12,8 +12,8 @@ import Quickshell.Services.UPower
 Rectangle {
     id: root
 
-    property var screen: root.QsWindow.window?.screen
-    property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
+    property var screen: Brightness.targetScreen
+    property var brightnessMonitor: Brightness.getTargetMonitor()
 
     implicitWidth: contentItem.implicitWidth + root.horizontalPadding * 2
     implicitHeight: contentItem.implicitHeight + root.verticalPadding * 2

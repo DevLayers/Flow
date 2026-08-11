@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# Quickshell may run inside a read-only user namespace. Keep the generated
+# helper in the per-user runtime scratch area, which is writable in both the
+# normal session and that sandbox.
+cache_root=${TMPDIR:-/tmp}/quickshell-${USER}
+build_dir=${cache_root}/ii-gamma-control
+binary=${build_dir}/ii-gamma-control
+xml_file=${script_dir}/hyprland-ctm-control-v1.xml
+source_file=${script_dir}/ii-gamma-control.cpp
+
+if [[ ! -x ${binary} || ${source_file} -nt ${binary} || ${xml_file} -nt ${binary} ]]; then
+    command -v c++ >/dev/null
+    command -v cc >/dev/null
+    command -v wayland-scanner >/dev/null
+    pkg-config --exists wayland-client
+
+    mkdir -p -- "${build_dir}"
+    build_tmp=$(mktemp -d "${build_dir}/build.XXXXXX")
+    trap 'rm -rf -- "${build_tmp}"' EXIT
+
+    wayland-scanner client-header "${xml_file}" "${build_tmp}/hyprland-ctm-control-v1-client-protocol.h"
+    wayland-scanner private-code "${xml_file}" "${build_tmp}/hyprland-ctm-control-v1-client-protocol.c"
+    cc -I"${build_tmp}" -c "${build_tmp}/hyprland-ctm-control-v1-client-protocol.c" -o "${build_tmp}/protocol.o"
+    c++ -std=c++20 -O2 -Wall -Wextra -Wpedantic -I"${build_tmp}" \
+        "${source_file}" "${build_tmp}/protocol.o" \
+        $(pkg-config --cflags --libs wayland-client) \
+        -o "${build_tmp}/ii-gamma-control"
+    mv -- "${build_tmp}/ii-gamma-control" "${binary}"
+fi
+
+# The shell owns the color controller. hyprsunset must release its CTM manager
+# before this per-output controller can bind the protocol.
+hyprsunset_pids=$(pgrep -x hyprsunset || true)
+if [[ -n ${hyprsunset_pids} ]]; then
+    kill -TERM ${hyprsunset_pids} 2>/dev/null || true
+    for _ in {1..20}; do
+        pgrep -x hyprsunset >/dev/null 2>&1 || break
+        sleep 0.05
+    done
+fi
+exec "${binary}" --daemon
