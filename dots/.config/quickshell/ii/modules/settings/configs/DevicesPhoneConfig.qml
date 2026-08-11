@@ -8,11 +8,21 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 
-ContentPage {
+Item {
     id: root
+    anchors.fill: parent
 
-    forceWidth: false
+    property alias contentY: page.contentY
     property alias activeSubPage: subPageOverlay.activeSubPage
+
+    ContentPage {
+        id: page
+        anchors.fill: parent
+        forceWidth: false
+        // Fade the parent content while the KDE Connect sub-page slides in so
+        // its switches cannot remain visible behind the loaded page.
+        opacity: subPageOverlay.slideProgress
+        visible: opacity > 0
 
     ContentSection {
         icon: "smartphone"
@@ -392,6 +402,8 @@ ContentPage {
                 Config.options.localsend.downloadPath = text;
             }
         }
+    }
+
     }
 
     ConfigSubPageHost {

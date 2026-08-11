@@ -166,6 +166,11 @@ Item {
 
             }
 
+            ContentSubsectionLabel {
+                text: Translation.tr("Bar dimensions")
+                Layout.topMargin: 4
+            }
+
             ConfigSpinBox {
                 icon: "height"
                 text: Translation.tr("Bar height")
@@ -237,6 +242,11 @@ Item {
 
             }
 
+            ContentSubsectionLabel {
+                text: Translation.tr("Dynamic Island behavior")
+                Layout.topMargin: 4
+            }
+
             ConfigSwitch {
                 buttonIcon: "auto_fix"
                 text: Translation.tr("Auto spacing")
@@ -289,6 +299,11 @@ Item {
                     }]
                 }
 
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Group color")
+                Layout.topMargin: 4
             }
 
             ConfigSwitch {
@@ -366,6 +381,11 @@ Item {
                     }
                 }
 
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Bar effects")
+                Layout.topMargin: 4
             }
 
             ConfigSwitch {
@@ -505,6 +525,7 @@ Item {
 
             ContentSubsectionLabel {
                 text: Translation.tr("Top Left Brand Icon")
+                Layout.topMargin: 4
             }
 
             ConfigSwitch {

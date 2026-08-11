@@ -299,38 +299,47 @@ Item {
         title: Translation.tr("Wallpaper Theming & Matugen Integration")
         icon: "wallpaper"
 
-        ConfigSwitch {
-            buttonIcon: "desktop_windows"
-            text: Translation.tr("Shell & utilities")
-            checked: Config.options.appearance.wallpaperTheming.enableAppsAndShell
-            onCheckedChanged: {
-                Config.options.appearance.wallpaperTheming.enableAppsAndShell = checked;
-            }
+        ContentSubsectionLabel {
+            text: Translation.tr("Application theming")
         }
 
-        ConfigSwitch {
-            buttonIcon: "widgets"
-            text: Translation.tr("Qt apps")
-            checked: Config.options.appearance.wallpaperTheming.enableQtApps
-            onCheckedChanged: {
-                Config.options.appearance.wallpaperTheming.enableQtApps = checked;
+            ConfigSwitch {
+                buttonIcon: "desktop_windows"
+                text: Translation.tr("Shell & utilities")
+                checked: Config.options.appearance.wallpaperTheming.enableAppsAndShell
+                onCheckedChanged: {
+                    Config.options.appearance.wallpaperTheming.enableAppsAndShell = checked;
+                }
             }
-            StyledToolTip {
-                text: Translation.tr("Shell & utilities theming must also be enabled")
-            }
-        }
 
-        ConfigSwitch {
-            buttonIcon: "terminal"
-            text: Translation.tr("Terminal")
-            checked: Config.options.appearance.wallpaperTheming.enableTerminal
-            onCheckedChanged: {
-                Config.options.appearance.wallpaperTheming.enableTerminal = checked;
+            ConfigSwitch {
+                buttonIcon: "widgets"
+                text: Translation.tr("Qt apps")
+                checked: Config.options.appearance.wallpaperTheming.enableQtApps
+                onCheckedChanged: {
+                    Config.options.appearance.wallpaperTheming.enableQtApps = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shell & utilities theming must also be enabled")
+                }
             }
-            StyledToolTip {
-                text: Translation.tr("Shell & utilities theming must also be enabled")
+
+            ConfigSwitch {
+                buttonIcon: "terminal"
+                text: Translation.tr("Terminal")
+                checked: Config.options.appearance.wallpaperTheming.enableTerminal
+                onCheckedChanged: {
+                    Config.options.appearance.wallpaperTheming.enableTerminal = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shell & utilities theming must also be enabled")
+                }
             }
-        }
+    }
+
+    ContentSection {
+        title: Translation.tr("Wallpaper Picker")
+        icon: "folder_open"
 
         ConfigSwitch {
             buttonIcon: "folder_shared"
@@ -343,125 +352,142 @@ Item {
                 text: Translation.tr("Uses xdg-desktop-portal instead of the built-in quickshell picker")
             }
         }
+    }
 
-        ConfigSwitch {
-            buttonIcon: "lock"
-            text: Translation.tr("Separate Lockscreen Wallpaper")
-            checked: Config.options.background.useSeparateLockscreenWallpaper
-            onCheckedChanged: {
-                Config.options.background.useSeparateLockscreenWallpaper = checked;
-                if (checked && !Config.options.background.lockscreenWallpaperPath) {
-                    Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLockscreen"]);
-                }
-            }
-            StyledToolTip {
-                text: Translation.tr("Use a different wallpaper on the lockscreen with custom Matugen color scheme transition")
-            }
+    ContentSection {
+        title: Translation.tr("Wallpaper Variants")
+        icon: "collections"
+
+        ContentSubsectionLabel {
+            text: Translation.tr("Lockscreen wallpaper")
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            visible: Config.options.background.useSeparateLockscreenWallpaper
-
-            ConfigWallpaperSelector {
-                targetMode: "lockscreen"
-                text: Translation.tr("Lockscreen Wallpaper Selector")
-            }
-
-            ColumnLayout {
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                spacing: 8
-
-                RippleButtonWithIcon {
-                    useDynamicRadius: true
-                    Layout.fillWidth: true
-                    materialIcon: "wallpaper"
-                    mainText: Translation.tr("Select Lockscreen Wallpaper")
-                    onClicked: {
+            ConfigSwitch {
+                buttonIcon: "lock"
+                text: Translation.tr("Separate Lockscreen Wallpaper")
+                checked: Config.options.background.useSeparateLockscreenWallpaper
+                onCheckedChanged: {
+                    Config.options.background.useSeparateLockscreenWallpaper = checked;
+                    if (checked && !Config.options.background.lockscreenWallpaperPath) {
                         Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLockscreen"]);
                     }
                 }
+                StyledToolTip {
+                    text: Translation.tr("Use a different wallpaper on the lockscreen with custom Matugen color scheme transition")
+                }
+            }
 
-                RippleButtonWithIcon {
-                    useDynamicRadius: true
+            RowLayout {
+                Layout.fillWidth: true
+                visible: Config.options.background.useSeparateLockscreenWallpaper
+
+                ConfigWallpaperSelector {
+                    targetMode: "lockscreen"
+                    text: Translation.tr("Lockscreen Wallpaper Selector")
+                }
+
+                ColumnLayout {
+                    Layout.fillHeight: true
                     Layout.fillWidth: true
-                    materialIcon: "swap_horiz"
-                    mainText: Translation.tr("Swap Desktop & Lockscreen Wallpapers")
-                    onClicked: {
-                        const desktopWall = Config.options.background.wallpaperPath;
-                        const lockWall = Config.options.background.lockscreenWallpaperPath;
-                        if (desktopWall && lockWall) {
-                            Config.options.background.wallpaperPath = lockWall;
-                            Wallpapers.applyLockscreen(desktopWall);
-                            Wallpapers.apply(lockWall);
+                    spacing: 8
+
+                    RippleButtonWithIcon {
+                        useDynamicRadius: true
+                        Layout.fillWidth: true
+                        materialIcon: "wallpaper"
+                        mainText: Translation.tr("Select Lockscreen Wallpaper")
+                        onClicked: {
+                            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLockscreen"]);
                         }
                     }
-                }
-            }
-        }
 
-        ConfigSwitch {
-            buttonIcon: "light_mode"
-            text: Translation.tr("Separate Light Mode Wallpaper")
-            checked: Config.options.background.useSeparateLightModeWallpaper
-            onCheckedChanged: {
-                Config.options.background.useSeparateLightModeWallpaper = checked;
-                if (checked && !Config.options.background.lightModeWallpaperPath) {
-                    Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLightmode"]);
-                }
-            }
-            StyledToolTip {
-                text: Translation.tr("Use a different wallpaper when in light mode. The current desktop wallpaper will be used for dark mode.")
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            visible: Config.options.background.useSeparateLightModeWallpaper
-
-            ConfigWallpaperSelector {
-                targetMode: "lightmode"
-                text: Translation.tr("Light Mode Wallpaper Selector")
-            }
-
-            ColumnLayout {
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                spacing: 8
-
-                RippleButtonWithIcon {
-                    useDynamicRadius: true
-                    Layout.fillWidth: true
-                    materialIcon: "wallpaper"
-                    mainText: Translation.tr("Select Light Mode Wallpaper")
-                    onClicked: {
-                        Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLightmode"]);
-                    }
-                }
-
-                RippleButtonWithIcon {
-                    useDynamicRadius: true
-                    Layout.fillWidth: true
-                    materialIcon: "swap_horiz"
-                    mainText: Translation.tr("Swap Dark & Light Wallpapers")
-                    onClicked: {
-                        const darkWall = Config.options.background.wallpaperPath;
-                        const lightWall = Config.options.background.lightModeWallpaperPath;
-                        if (darkWall && lightWall) {
-                            Config.options.background.wallpaperPath = lightWall;
-                            Config.options.background.lightModeWallpaperPath = darkWall;
-                            // Re-apply current mode's wallpaper
-                            if (Appearance.m3colors.darkmode) {
-                                Wallpapers.apply(darkWall, true);
-                            } else {
-                                Wallpapers.applyLightModeWallpaper(lightWall);
+                    RippleButtonWithIcon {
+                        useDynamicRadius: true
+                        Layout.fillWidth: true
+                        materialIcon: "swap_horiz"
+                        mainText: Translation.tr("Swap Desktop & Lockscreen Wallpapers")
+                        onClicked: {
+                            const desktopWall = Config.options.background.wallpaperPath;
+                            const lockWall = Config.options.background.lockscreenWallpaperPath;
+                            if (desktopWall && lockWall) {
+                                Config.options.background.wallpaperPath = lockWall;
+                                Wallpapers.applyLockscreen(desktopWall);
+                                Wallpapers.apply(lockWall);
                             }
                         }
                     }
                 }
             }
+        ContentSubsectionLabel {
+            text: Translation.tr("Light-mode wallpaper")
         }
+
+            ConfigSwitch {
+                buttonIcon: "light_mode"
+                text: Translation.tr("Separate Light Mode Wallpaper")
+                checked: Config.options.background.useSeparateLightModeWallpaper
+                onCheckedChanged: {
+                    Config.options.background.useSeparateLightModeWallpaper = checked;
+                    if (checked && !Config.options.background.lightModeWallpaperPath) {
+                        Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLightmode"]);
+                    }
+                }
+                StyledToolTip {
+                    text: Translation.tr("Use a different wallpaper when in light mode. The current desktop wallpaper will be used for dark mode.")
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                visible: Config.options.background.useSeparateLightModeWallpaper
+
+                ConfigWallpaperSelector {
+                    targetMode: "lightmode"
+                    text: Translation.tr("Light Mode Wallpaper Selector")
+                }
+
+                ColumnLayout {
+                    Layout.fillHeight: true
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    RippleButtonWithIcon {
+                        useDynamicRadius: true
+                        Layout.fillWidth: true
+                        materialIcon: "wallpaper"
+                        mainText: Translation.tr("Select Light Mode Wallpaper")
+                        onClicked: {
+                            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLightmode"]);
+                        }
+                    }
+
+                    RippleButtonWithIcon {
+                        useDynamicRadius: true
+                        Layout.fillWidth: true
+                        materialIcon: "swap_horiz"
+                        mainText: Translation.tr("Swap Dark & Light Wallpapers")
+                        onClicked: {
+                            const darkWall = Config.options.background.wallpaperPath;
+                            const lightWall = Config.options.background.lightModeWallpaperPath;
+                            if (darkWall && lightWall) {
+                                Config.options.background.wallpaperPath = lightWall;
+                                Config.options.background.lightModeWallpaperPath = darkWall;
+                                // Re-apply current mode's wallpaper
+                                if (Appearance.m3colors.darkmode) {
+                                    Wallpapers.apply(darkWall, true);
+                                } else {
+                                    Wallpapers.applyLightModeWallpaper(lightWall);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+    }
+
+    ContentSection {
+        title: Translation.tr("OpenRGB Integration")
+        icon: "palette"
 
         ConfigSwitch {
             buttonIcon: "palette"
