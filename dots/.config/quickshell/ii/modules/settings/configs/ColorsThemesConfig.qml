@@ -8,9 +8,18 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 
-ContentPage {
-    id: pageRoot
-    forceWidth: false
+Item {
+    id: colorsThemesRoot
+    anchors.fill: parent
+
+    property alias contentY: pageRoot.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
+
+    ContentPage {
+        id: pageRoot
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
 
     property bool showRestartFab: false
 
@@ -458,6 +467,7 @@ ContentPage {
             buttonIcon: "palette"
             text: Translation.tr("OpenRGB integration")
             checked: Config.options.appearance.openrgb.enable
+            configPage: Qt.resolvedUrl("widgets/OpenRGBConfig.qml")
             onCheckedChanged: {
                 Config.options.appearance.openrgb.enable = checked;
             }
@@ -488,7 +498,7 @@ ContentPage {
         }
 
         function refreshOpenRgbConfig() {
-            const openrgb = Config.options.appearance?.openrgb;
+            const openrgb = Config.options.appearance && Config.options.appearance.openrgb ? Config.options.appearance.openrgb : null;
             openRgbConfig = Object.assign(defaultOpenRgbConfig(), openrgb || {});
             openRgbDevices = openRgbConfig.devices || [];
         }
@@ -727,6 +737,7 @@ ContentPage {
             buttonIcon: "play_circle"
             text: Translation.tr("Enable Wallpaper Engine")
             checked: Config.options.background.useWallpaperEngine
+            configPage: Qt.resolvedUrl("widgets/WallpaperEngineConfig.qml")
             onCheckedChanged: {
                 if (Config.options.background.useWallpaperEngine === checked) return;
                 Config.options.background.useWallpaperEngine = checked;
@@ -1362,5 +1373,12 @@ ContentPage {
                 Config.options.wallpapers.paths.download = text;
             }
         }
+    }
+    }
+
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }

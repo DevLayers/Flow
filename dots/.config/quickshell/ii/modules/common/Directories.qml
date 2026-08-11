@@ -21,6 +21,7 @@ Singleton {
     readonly property string music: StandardPaths.standardLocations(StandardPaths.MusicLocation)[0] || ""
     readonly property string videos: StandardPaths.standardLocations(StandardPaths.MoviesLocation)[0] || ""
 
+    readonly property string losslessCutDesktopPath: FileUtils.trimFileProtocol(`${Directories.home}/.local/share/applications/losslesscut.desktop`)
 
     readonly property string cliPath: FileUtils.trimFileProtocol(`${Directories.home}/.local/bin/vynx`)
 

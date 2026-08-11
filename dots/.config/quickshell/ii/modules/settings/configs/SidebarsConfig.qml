@@ -6,447 +6,261 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 
-ContentPage {
-    id: page
+Item {
+    id: sidebarsRoot
+    anchors.fill: parent
 
-    property bool showBackButton: false
+    property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
 
-    signal goBack()
+    ContentPage {
+        id: page
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
 
-    forceWidth: false
+        property bool showBackButton: false
+        signal goBack()
 
-    RowLayout {
-        spacing: 12
-        visible: page.showBackButton
+        RowLayout {
+            spacing: 12
+            visible: page.showBackButton
 
-        RippleButton {
-            implicitWidth: implicitHeight
-            implicitHeight: 40
-            topLeftRadius: Appearance.rounding.full
-            topRightRadius: Appearance.rounding.full
-            bottomLeftRadius: Appearance.rounding.full
-            bottomRightRadius: Appearance.rounding.full
-            colBackground: Appearance.colors.colSecondaryContainer
-            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-            colRipple: Appearance.colors.colSecondaryContainerActive
-            onClicked: page.goBack()
+            RippleButton {
+                implicitWidth: implicitHeight
+                implicitHeight: 40
+                topLeftRadius: Appearance.rounding.full
+                topRightRadius: Appearance.rounding.full
+                bottomLeftRadius: Appearance.rounding.full
+                bottomRightRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colRipple: Appearance.colors.colSecondaryContainerActive
+                onClicked: page.goBack()
 
-            MaterialSymbol {
-                anchors.centerIn: parent
-                text: "arrow_back"
-                iconSize: Appearance.font.pixelSize.large
-                color: Appearance.colors.colOnSecondaryContainer
-            }
-
-        }
-
-        StyledText {
-            text: Translation.tr("Sidebars")
-            font.pixelSize: Appearance.font.pixelSize.large
-            font.family: Appearance.font.family.title
-            color: Appearance.colors.colOnLayer0
-        }
-
-    }
-
-    ContentSection {
-        icon: "policy"
-        title: Translation.tr("Sidebar Policies Visibility")
-
-        NoticeBox {
-            Layout.fillWidth: true
-            isFirst: true
-            text: Translation.tr("Choose which policy tabs are visible in the left sidebar when it is opened.")
-        }
-
-        ConfigToggleGrid {
-            Layout.fillWidth: true
-            gridColumns: Math.max(1, Math.floor(parent.width / 300))
-            currentValues: {
-                return {
-                    "ai": Config.options.policies.ai,
-                    "weeb": Config.options.policies.weeb,
-                    "wallpapers": Config.options.policies.wallpapers,
-                    "translator": Config.options.policies.translator,
-                    "player": Config.options.policies.player,
-                    "phone": Config.options.policies.phone
-                };
-            }
-            model: [{
-                "key": "ai",
-                "name": Translation.tr("AI"),
-                "icon": "smart_toy",
-                "options": [{
-                    "displayName": Translation.tr("No"),
-                    "icon": "close",
-                    "value": 0
-                }, {
-                    "displayName": Translation.tr("Yes"),
-                    "icon": "check",
-                    "value": 1
-                }, {
-                    "displayName": Translation.tr("Local"),
-                    "icon": "sync_saved_locally",
-                    "value": 2
-                }]
-            }, {
-                "key": "weeb",
-                "name": Translation.tr("Weeb"),
-                "icon": "face",
-                "options": [{
-                    "displayName": Translation.tr("No"),
-                    "icon": "close",
-                    "value": 0
-                }, {
-                    "displayName": Translation.tr("Yes"),
-                    "icon": "check",
-                    "value": 1
-                }, {
-                    "displayName": Translation.tr("Closet"),
-                    "icon": "ev_shadow",
-                    "value": 2
-                }]
-            }, {
-                "key": "wallpapers",
-                "name": Translation.tr("Wallpaper browser"),
-                "icon": "wallpaper",
-                "options": [{
-                    "displayName": Translation.tr("No"),
-                    "icon": "close",
-                    "value": 0
-                }, {
-                    "displayName": Translation.tr("Yes"),
-                    "icon": "check",
-                    "value": 1
-                }]
-            }, {
-                "key": "translator",
-                "name": Translation.tr("Translator"),
-                "icon": "translate",
-                "options": [{
-                    "displayName": Translation.tr("No"),
-                    "icon": "close",
-                    "value": 0
-                }, {
-                    "displayName": Translation.tr("Yes"),
-                    "icon": "check",
-                    "value": 1
-                }]
-            }, {
-                "key": "player",
-                "name": Translation.tr("Sidebar player"),
-                "icon": "music_note",
-                "options": [{
-                    "displayName": Translation.tr("No"),
-                    "icon": "close",
-                    "value": 0
-                }, {
-                    "displayName": Translation.tr("Yes"),
-                    "icon": "check",
-                    "value": 1
-                }]
-            }, {
-                "key": "phone",
-                "name": Translation.tr("Phone"),
-                "icon": "smartphone",
-                "options": [{
-                    "displayName": Translation.tr("No"),
-                    "icon": "close",
-                    "value": 0
-                }, {
-                    "displayName": Translation.tr("Yes"),
-                    "icon": "check",
-                    "value": 1
-                }]
-            }]
-            onItemChanged: (key, value) => {
-                Config.options.policies[key] = value;
-            }
-        }
-
-    }
-
-    ContentSection {
-        title: Translation.tr("Right Control Sidebar")
-        icon: "view_sidebar"
-
-        ConfigSwitch {
-            buttonIcon: "keep"
-            text: Translation.tr("Keep right sidebar loaded")
-            checked: Config.options.sidebar.keepRightSidebarLoaded
-            onCheckedChanged: {
-                // Do not write the binding's initial/config-reload value back
-                // to disk. Only a real user change should mutate Config.
-                if (Config.ready && checked !== Config.options.sidebar.keepRightSidebarLoaded)
-                    Config.options.sidebar.keepRightSidebarLoaded = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "music_note"
-            text: Translation.tr("Show media player in volume dialog")
-            checked: Config.options.sidebar.volumeDialogMediaWidget
-            onCheckedChanged: {
-                Config.options.sidebar.volumeDialogMediaWidget = checked;
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Sidebar position")
-            icon: "switch_right"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.sidebar.position
-                onSelected: (newValue) => {
-                    Config.options.sidebar.position = newValue;
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "arrow_back"
+                    iconSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colOnSecondaryContainer
                 }
-                options: [{
-                    "displayName": Translation.tr("Default"),
-                    "icon": "vertical_align_center",
-                    "value": "default"
-                }, {
-                    "displayName": Translation.tr("Inverted"),
-                    "icon": "swap_horiz",
-                    "value": "inverted"
-                }, {
-                    "displayName": Translation.tr("Left"),
-                    "icon": "keyboard_arrow_left",
-                    "value": "left"
-                }, {
-                    "displayName": Translation.tr("Right"),
-                    "icon": "keyboard_arrow_right",
-                    "value": "right"
-                }]
             }
 
+            StyledText {
+                text: Translation.tr("Sidebars")
+                font.pixelSize: Appearance.font.pixelSize.large
+                font.family: Appearance.font.family.title
+                color: Appearance.colors.colOnLayer0
+            }
         }
 
-    }
+        ContentSection {
+            icon: "policy"
+            title: Translation.tr("Sidebar Policies Visibility")
 
-    ContentSection {
-        title: Translation.tr("Quick Toggles & Sliders")
-        icon: "tune"
+            NoticeBox {
+                Layout.fillWidth: true
+                isFirst: true
+                text: Translation.tr("Choose which policy tabs are visible in the left sidebar when it is opened.")
+            }
 
-        ContentSubsection {
-            title: Translation.tr("Quick toggles style")
-            icon: "apps"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.sidebar.quickToggles.style
-                onSelected: (newValue) => {
-                    Config.options.sidebar.quickToggles.style = newValue;
+            ConfigToggleGrid {
+                Layout.fillWidth: true
+                gridColumns: Math.max(1, Math.floor(parent.width / 300))
+                currentValues: {
+                    return {
+                        "ai": Config.options.policies.ai,
+                        "weeb": Config.options.policies.weeb,
+                        "wallpapers": Config.options.policies.wallpapers,
+                        "translator": Config.options.policies.translator,
+                        "player": Config.options.policies.player,
+                        "phone": Config.options.policies.phone
+                    };
                 }
-                options: [{
-                    "displayName": Translation.tr("Classic"),
-                    "icon": "grid_view",
-                    "value": "classic"
+                model: [{
+                    "key": "ai",
+                    "name": Translation.tr("AI"),
+                    "icon": "smart_toy",
+                    "options": [{
+                        "displayName": Translation.tr("No"),
+                        "icon": "close",
+                        "value": 0
+                    }, {
+                        "displayName": Translation.tr("Yes"),
+                        "icon": "check",
+                        "value": 1
+                    }, {
+                        "displayName": Translation.tr("Local"),
+                        "icon": "sync_saved_locally",
+                        "value": 2
+                    }]
                 }, {
-                    "displayName": Translation.tr("Android"),
-                    "icon": "android",
-                    "value": "android"
+                    "key": "weeb",
+                    "name": Translation.tr("Weeb"),
+                    "icon": "face",
+                    "options": [{
+                        "displayName": Translation.tr("No"),
+                        "icon": "close",
+                        "value": 0
+                    }, {
+                        "displayName": Translation.tr("Yes"),
+                        "icon": "check",
+                        "value": 1
+                    }, {
+                        "displayName": Translation.tr("Closet"),
+                        "icon": "ev_shadow",
+                        "value": 2
+                    }]
+                }, {
+                    "key": "wallpapers",
+                    "name": Translation.tr("Wallpaper browser"),
+                    "icon": "wallpaper",
+                    "options": [{
+                        "displayName": Translation.tr("No"),
+                        "icon": "close",
+                        "value": 0
+                    }, {
+                        "displayName": Translation.tr("Yes"),
+                        "icon": "check",
+                        "value": 1
+                    }]
+                }, {
+                    "key": "translator",
+                    "name": Translation.tr("Translator"),
+                    "icon": "translate",
+                    "options": [{
+                        "displayName": Translation.tr("No"),
+                        "icon": "close",
+                        "value": 0
+                    }, {
+                        "displayName": Translation.tr("Yes"),
+                        "icon": "check",
+                        "value": 1
+                    }]
+                }, {
+                    "key": "player",
+                    "name": Translation.tr("Sidebar player"),
+                    "icon": "music_note",
+                    "options": [{
+                        "displayName": Translation.tr("No"),
+                        "icon": "close",
+                        "value": 0
+                    }, {
+                        "displayName": Translation.tr("Yes"),
+                        "icon": "check",
+                        "value": 1
+                    }]
+                }, {
+                    "key": "phone",
+                    "name": Translation.tr("Phone"),
+                    "icon": "smartphone",
+                    "options": [{
+                        "displayName": Translation.tr("No"),
+                        "icon": "close",
+                        "value": 0
+                    }, {
+                        "displayName": Translation.tr("Yes"),
+                        "icon": "check",
+                        "value": 1
+                    }]
                 }]
-            }
-
-        }
-
-        ConfigSpinBox {
-            visible: Config.options.sidebar.quickToggles.style === "android"
-            icon: "view_column"
-            text: Translation.tr("Android style Columns")
-            value: Config.options.sidebar.quickToggles.android.columns
-            from: 1
-            to: 6
-            stepSize: 1
-            onValueChanged: {
-                Config.options.sidebar.quickToggles.android.columns = value;
+                onItemChanged: (key, value) => {
+                    Config.options.policies[key] = value;
+                }
             }
         }
 
-        ConfigSwitch {
-            visible: Config.options.sidebar.quickToggles.style === "android"
-            buttonIcon: "tune"
-            text: Translation.tr("Use 2x1 Capsule Sliders for 3-State Toggles")
-            checked: Config.options.sidebar.quickToggles.useThreeWaySliders
-            onCheckedChanged: {
-                Config.options.sidebar.quickToggles.useThreeWaySliders = checked;
+        ContentSection {
+            title: Translation.tr("Right Control Sidebar")
+            icon: "view_sidebar"
+
+            ConfigSwitch {
+                buttonIcon: "keep"
+                text: Translation.tr("Keep right sidebar loaded")
+                checked: Config.options.sidebar.keepRightSidebarLoaded
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.sidebar.keepRightSidebarLoaded)
+                        Config.options.sidebar.keepRightSidebarLoaded = checked;
+                }
             }
 
-            StyledToolTip {
-                text: Translation.tr("Convert compatible 3-state widgets (ANC, Power Profiles, Keyboard Light) into 2x1 slide/swipe toggles.")
+            ConfigSwitch {
+                buttonIcon: "music_note"
+                text: Translation.tr("Show media player in volume dialog")
+                checked: Config.options.sidebar.volumeDialogMediaWidget
+                onCheckedChanged: {
+                    Config.options.sidebar.volumeDialogMediaWidget = checked;
+                }
             }
 
-        }
+            ContentSubsection {
+                title: Translation.tr("Sidebar position")
+                icon: "switch_right"
+                Layout.fillWidth: true
 
-        ConfigSwitch {
-            buttonIcon: "linear_scale"
-            text: Translation.tr("Enable fixed sliders")
-            checked: Config.options.sidebar.quickSliders.enable
-            onCheckedChanged: {
-                Config.options.sidebar.quickSliders.enable = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Enabling this, the sliders will be fixed on top of the sidebar, disable this if you wan sliders to be inside a page.")
-            }
-
-        }
-
-        ConfigSwitch {
-            enabled: Config.options.sidebar.quickSliders.enable
-            buttonIcon: "brightness_high"
-            text: Translation.tr("Show Brightness")
-            checked: Config.options.sidebar.quickSliders.showBrightness
-            onCheckedChanged: {
-                Config.options.sidebar.quickSliders.showBrightness = checked;
-            }
-        }
-
-        ConfigSwitch {
-            enabled: Config.options.sidebar.quickSliders.enable
-            buttonIcon: "contrast"
-            text: Translation.tr("Show Gamma")
-            checked: Config.options.sidebar.quickSliders.showGamma
-            onCheckedChanged: {
-                Config.options.sidebar.quickSliders.showGamma = checked;
-            }
-        }
-
-        ConfigSwitch {
-            enabled: Config.options.sidebar.quickSliders.enable
-            buttonIcon: "volume_up"
-            text: Translation.tr("Show Volume")
-            checked: Config.options.sidebar.quickSliders.showVolume
-            onCheckedChanged: {
-                Config.options.sidebar.quickSliders.showVolume = checked;
+                ConfigSelectionArray {
+                    currentValue: Config.options.sidebar.position
+                    onSelected: (newValue) => {
+                        Config.options.sidebar.position = newValue;
+                    }
+                    options: [{
+                        "displayName": Translation.tr("Default"),
+                        "icon": "vertical_align_center",
+                        "value": "default"
+                    }, {
+                        "displayName": Translation.tr("Inverted"),
+                        "icon": "swap_horiz",
+                        "value": "inverted"
+                    }, {
+                        "displayName": Translation.tr("Left"),
+                        "icon": "keyboard_arrow_left",
+                        "value": "left"
+                    }, {
+                        "displayName": Translation.tr("Right"),
+                        "icon": "keyboard_arrow_right",
+                        "value": "right"
+                    }]
+                }
             }
         }
 
-        ConfigSwitch {
-            enabled: Config.options.sidebar.quickSliders.enable
-            buttonIcon: "mic"
-            text: Translation.tr("Show Microphone")
-            checked: Config.options.sidebar.quickSliders.showMic
-            onCheckedChanged: {
-                Config.options.sidebar.quickSliders.showMic = checked;
+        ContentSection {
+            title: Translation.tr("Quick Toggles & Sliders")
+            icon: "tune"
+
+            ConfigSwitch {
+                buttonIcon: "tune"
+                text: Translation.tr("Quick toggles and slider settings")
+                checked: true
+                configPage: Qt.resolvedUrl("widgets/SidebarQuickTogglesConfig.qml")
+                StyledToolTip {
+                    text: Translation.tr("Click button text to configure quick toggle styles, column counts, 2x1 capsule sliders, and fixed sliders.")
+                }
             }
         }
 
-        ConfigSwitch {
-            enabled: Config.options.sidebar.quickSliders.enable
-            buttonIcon: "swap_vert"
-            text: Translation.tr("Vertical layout for sliders")
-            checked: Config.options.sidebar.quickSliders.vertical
-            onCheckedChanged: {
-                Config.options.sidebar.quickSliders.vertical = checked;
+        ContentSection {
+            title: Translation.tr("Screen Corners")
+            icon: "mouse"
+
+            ConfigSwitch {
+                buttonIcon: "touch_app"
+                text: Translation.tr("Enable corner open")
+                checked: Config.options.sidebar.cornerOpen.enable
+                configPage: Qt.resolvedUrl("widgets/ScreenCornersConfig.qml")
+                onCheckedChanged: {
+                    Config.options.sidebar.cornerOpen.enable = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Toggle corner open activation. Click button text to configure hover trigger, vertical offset, and region bounds.")
+                }
             }
         }
-
     }
 
-    ContentSection {
-        title: Translation.tr("Screen corners")
-        icon: "mouse"
-
-        ConfigSwitch {
-            buttonIcon: "touch_app"
-            text: Translation.tr("Enable corner open")
-            checked: Config.options.sidebar.cornerOpen.enable
-            onCheckedChanged: {
-                Config.options.sidebar.cornerOpen.enable = checked;
-            }
-        }
-
-        ConfigSwitch {
-            enabled: Config.options.sidebar.cornerOpen.enable
-            buttonIcon: "pan_tool_alt"
-            text: Translation.tr("Hover to trigger")
-            checked: Config.options.sidebar.cornerOpen.clickless
-            onCheckedChanged: {
-                Config.options.sidebar.cornerOpen.clickless = checked;
-            }
-        }
-
-        ConfigSwitch {
-            enabled: Config.options.sidebar.cornerOpen.enable && Config.options.sidebar.cornerOpen.clickless
-            buttonIcon: "format_align_justify"
-            text: Translation.tr("Force hover open at absolute corner")
-            checked: Config.options.sidebar.cornerOpen.clicklessCornerEnd
-            onCheckedChanged: {
-                Config.options.sidebar.cornerOpen.clicklessCornerEnd = checked;
-            }
-        }
-
-        ConfigSpinBox {
-            enabled: Config.options.sidebar.cornerOpen.enable
-            icon: "vertical_align_top"
-            text: Translation.tr("Vertical offset")
-            value: Config.options.sidebar.cornerOpen.clicklessCornerVerticalOffset
-            from: 0
-            to: 500
-            stepSize: 10
-            onValueChanged: {
-                Config.options.sidebar.cornerOpen.clicklessCornerVerticalOffset = value;
-            }
-        }
-
-        ConfigSwitch {
-            enabled: Config.options.sidebar.cornerOpen.enable
-            buttonIcon: "vertical_align_bottom"
-            text: Translation.tr("Place at bottom")
-            checked: Config.options.sidebar.cornerOpen.bottom
-            onCheckedChanged: {
-                Config.options.sidebar.cornerOpen.bottom = checked;
-            }
-        }
-
-        ConfigSwitch {
-            enabled: Config.options.sidebar.cornerOpen.enable
-            buttonIcon: "swap_vert"
-            text: Translation.tr("Value scroll (Volume/Brightness)")
-            checked: Config.options.sidebar.cornerOpen.valueScroll
-            onCheckedChanged: {
-                Config.options.sidebar.cornerOpen.valueScroll = checked;
-            }
-        }
-
-        ConfigSwitch {
-            enabled: Config.options.sidebar.cornerOpen.enable
-            buttonIcon: "visibility"
-            text: Translation.tr("Visualize corner region")
-            checked: Config.options.sidebar.cornerOpen.visualize
-            onCheckedChanged: {
-                Config.options.sidebar.cornerOpen.visualize = checked;
-            }
-        }
-
-        ConfigSpinBox {
-            enabled: Config.options.sidebar.cornerOpen.enable
-            icon: "straighten"
-            text: Translation.tr("Region width")
-            value: Config.options.sidebar.cornerOpen.cornerRegionWidth
-            from: 1
-            to: 100
-            stepSize: 1
-            onValueChanged: {
-                Config.options.sidebar.cornerOpen.cornerRegionWidth = value;
-            }
-        }
-
-        ConfigSpinBox {
-            enabled: Config.options.sidebar.cornerOpen.enable
-            icon: "height"
-            text: Translation.tr("Region height")
-            value: Config.options.sidebar.cornerOpen.cornerRegionHeight
-            from: 1
-            to: 500
-            stepSize: 5
-            onValueChanged: {
-                Config.options.sidebar.cornerOpen.cornerRegionHeight = value;
-            }
-        }
-
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
-
 }

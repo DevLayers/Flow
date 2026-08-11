@@ -274,6 +274,13 @@ Singleton {
         }
     }
 
+    function launchLosslessCut(path) {
+        root.videoEditorPath = path;
+        root.videoEditorPopupOpen = false;
+        root.videoEditorOpen = false;
+        Quickshell.execDetached(["gio", "launch", Directories.losslessCutDesktopPath, path]);
+    }
+
     function launchVideoEditor(path) {
         root.videoEditorPath = path;
         root.videoEditorPopupOpen = true;

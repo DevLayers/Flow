@@ -36,7 +36,7 @@ Singleton {
         "name": "Colors & Themes",
         "icon": "palette",
         "component": "modules/settings/configs/ColorsThemesConfig.qml",
-        "subPages": [],
+        "subPages": ["widgets/OpenRGBConfig.qml", "widgets/WallpaperEngineConfig.qml"],
         "aliases": []
     }, {
         "id": "bar",
@@ -50,7 +50,7 @@ Singleton {
         "name": "Background",
         "icon": "wallpaper",
         "component": "modules/settings/configs/BackgroundConfig.qml",
-        "subPages": [],
+        "subPages": ["widgets/ParallaxConfig.qml", "widgets/MediaModeBackgroundConfig.qml"],
         "aliases": ["Wallpaper", "Backgrounds", "Wallpaper Engine"]
     }, {
         "id": "interfaceFonts",
@@ -71,7 +71,7 @@ Singleton {
         "name": "Sidebars",
         "icon": "side_navigation",
         "component": "modules/settings/configs/SidebarsConfig.qml",
-        "subPages": [],
+        "subPages": ["widgets/SidebarQuickTogglesConfig.qml", "widgets/ScreenCornersConfig.qml"],
         "aliases": ["Sidebars & Panels", "Panels"]
     }, {
         "id": "dock",
@@ -85,7 +85,7 @@ Singleton {
         "name": "Workspaces",
         "icon": "workspaces",
         "component": "modules/settings/configs/WorkspacesConfig.qml",
-        "subPages": [],
+        "subPages": ["widgets/DockWorkspaceConfig.qml"],
         "aliases": ["Tint workspaces icons"]
     }, {
         "id": "overview",
@@ -176,7 +176,7 @@ Singleton {
         "name": "Media & Music",
         "icon": "album",
         "component": "modules/settings/configs/MediaMusicConfig.qml",
-        "subPages": [],
+        "subPages": ["widgets/MusicRecognitionConfig.qml", "widgets/LyricsConfig.qml", "widgets/MediaDownloaderConfig.qml"],
         "aliases": ["Core Services", "Media Integrations", "Media Downloader", "Music", "Lyrics", "yt-dlp"]
     }, {
         "id": "languageTime",
@@ -211,7 +211,7 @@ Singleton {
         "name": "Sound & Alerts",
         "icon": "volume_up",
         "component": "modules/settings/configs/SoundAlertsConfig.qml",
-        "subPages": [],
+        "subPages": ["widgets/SoundEventsConfig.qml", "widgets/AlarmAudioConfig.qml"],
         "aliases": ["Core Services", "Audio Controls", "Earbang protection", "Interactive Alerts", "Battery sound", "Pomodoro sound"]
     }, {
         "id": "power",
@@ -239,14 +239,14 @@ Singleton {
         "name": "Privacy & Content",
         "icon": "policy",
         "component": "modules/settings/configs/PrivacyConfig.qml",
-        "subPages": [],
+        "subPages": ["widgets/VPNConfig.qml", "widgets/TailscaleConfig.qml"],
         "aliases": ["Core Services", "Work Safety", "Hide clipboard images", "Hide suspect wallpapers", "Hiding Suspects"]
     }, {
         "id": "lockScreen",
         "name": "Lock Screen",
         "icon": "lock",
         "component": "modules/settings/configs/LockScreenConfig.qml",
-        "subPages": [],
+        "subPages": ["widgets/LockscreenNotificationsConfig.qml", "widgets/LockscreenEffectsConfig.qml", "widgets/LockscreenWidgetsConfig.qml"],
         "aliases": []
     }, {
         "id": "about",

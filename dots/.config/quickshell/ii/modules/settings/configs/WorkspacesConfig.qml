@@ -6,14 +6,23 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 
-ContentPage {
-    id: page
+Item {
+    id: workspacesRoot
+    anchors.fill: parent
 
-    property bool showBackButton: false
+    property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
 
-    signal goBack()
+    ContentPage {
+        id: page
 
-    forceWidth: false
+        property bool showBackButton: false
+
+        signal goBack()
+
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
 
     RowLayout {
         spacing: 12
@@ -442,48 +451,16 @@ ContentPage {
         title: Translation.tr("Dock Workspace Style")
         icon: "dock"
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            ConfigSwitch {
-                buttonIcon: "radio_button_checked"
-                text: Translation.tr("Show active workspace indicator")
-                checked: Config.options.bar.workspaces.dockShowActiveIndicator
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.dockShowActiveIndicator = checked;
-                }
+        ConfigSwitch {
+            buttonIcon: "dock"
+            text: Translation.tr("Dock workspace style options")
+            checked: Config.options.bar.workspaces.dockShowActiveIndicator
+            configPage: Qt.resolvedUrl("widgets/DockWorkspaceConfig.qml")
+            onCheckedChanged: {
+                Config.options.bar.workspaces.dockShowActiveIndicator = checked;
             }
-
-            ConfigSwitch {
-                buttonIcon: "more_horiz"
-                text: Translation.tr("Show window count dots")
-                checked: Config.options.bar.workspaces.dockShowWindowDots
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.dockShowWindowDots = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "touch_app"
-                text: Translation.tr("Hover animations")
-                checked: Config.options.bar.workspaces.dockHoverEffect
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.dockHoverEffect = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "apps"
-                text: Translation.tr("Show app icons")
-                checked: Config.options.bar.workspaces.dockShowAppIcons
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.dockShowAppIcons = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Show the first window's icon inside each workspace button")
-                }
+            StyledToolTip {
+                text: Translation.tr("Click button text to configure active indicator, window count dots, hover effects, and app icons in dock style.")
             }
         }
     }
@@ -510,5 +487,12 @@ cp target/release/workspace_compactor ../`
             text: Translation.tr("Compact workspaces into 1..N")
             keys: ["Ctrl", "Super", "C"]
         }
+    }
+    }
+
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }

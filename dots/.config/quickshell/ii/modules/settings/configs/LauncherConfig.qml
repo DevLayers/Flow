@@ -14,7 +14,7 @@ ContentPage {
 
     ContentSection {
         icon: "tune"
-        title: Translation.tr("Search Behavior")
+        title: Translation.tr("Search Behavior & Positioning")
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -31,70 +31,6 @@ ContentPage {
                 StyledToolTip {
                     text: Translation.tr("Sort apps by usage frequency and recency")
                 }
-
-            }
-
-            ConfigSwitch {
-                buttonIcon: "list"
-                text: Translation.tr("Show default actions without prefix")
-                checked: Config.options.search.prefix.showDefaultActionsWithoutPrefix
-                onCheckedChanged: {
-                    Config.options.search.prefix.showDefaultActionsWithoutPrefix = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Always show Command, Math, and Web Search at the bottom")
-                }
-
-            }
-
-            ConfigSpinBox {
-                icon: "timer"
-                text: Translation.tr("Non-app result delay (ms)")
-                value: Config.options.search.nonAppResultDelay
-                from: 0
-                to: 500
-                stepSize: 10
-                onValueChanged: {
-                    Config.options.search.nonAppResultDelay = value;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "blur_on"
-                text: Translation.tr("Blur file search result previews")
-                checked: Config.options.search.blurFileSearchResultPreviews
-                onCheckedChanged: {
-                    Config.options.search.blurFileSearchResultPreviews = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "terminal"
-                text: Translation.tr("Enable built-in system controls (:lock, :reboot...)")
-                checked: Config.options.search.enableSystemControls
-                onCheckedChanged: {
-                    Config.options.search.enableSystemControls = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Allows running commands like :lock, :reboot, :poweroff, :suspend, and :restart directly from search")
-                }
-
-            }
-
-            ConfigSwitch {
-                buttonIcon: "calculate"
-                text: Translation.tr("Enable integrated math & unit converter previews")
-                checked: Config.options.search.enableMathPreview
-                onCheckedChanged: {
-                    Config.options.search.enableMathPreview = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Displays real-time answers for math expressions and unit conversions in the result list")
-                }
-
             }
 
             ConfigSwitch {
@@ -108,22 +44,22 @@ ContentPage {
                 StyledToolTip {
                     text: Translation.tr("Opens the app list immediately when search is opened with no query, bypassing the workspace overview")
                 }
-
             }
 
             ConfigSwitch {
-                buttonIcon: "music_note"
-                text: Translation.tr("Show now playing media bubble")
-                checked: Config.options.search.showNowPlayingBubble
+                buttonIcon: "list"
+                text: Translation.tr("Show default actions without prefix")
+                checked: Config.options.search.prefix.showDefaultActionsWithoutPrefix
                 onCheckedChanged: {
-                    Config.options.search.showNowPlayingBubble = checked;
+                    Config.options.search.prefix.showDefaultActionsWithoutPrefix = checked;
                 }
 
                 StyledToolTip {
-                    text: Translation.tr("Shows a floating media player bubble in the search launcher when media is playing")
+                    text: Translation.tr("Always show Command, Math, and Web Search at the bottom")
                 }
-
             }
+
+            Item { Layout.fillWidth: true; implicitHeight: 8 }
 
             ConfigSlider {
                 buttonIcon: "search"
@@ -176,10 +112,90 @@ ContentPage {
                 text: Translation.tr("Note: In Center mode, the Overview workspace previews are disabled and the open animation is fixed to zoom.")
                 materialIcon: "info"
             }
+        }
+    }
+
+    ContentSection {
+        icon: "extension"
+        title: Translation.tr("Search Features & Previews")
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            ConfigSwitch {
+                buttonIcon: "terminal"
+                text: Translation.tr("Enable built-in system controls (:lock, :reboot...)")
+                checked: Config.options.search.enableSystemControls
+                onCheckedChanged: {
+                    Config.options.search.enableSystemControls = checked;
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Allows running commands like :lock, :reboot, :poweroff, :suspend, and :restart directly from search")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "calculate"
+                text: Translation.tr("Enable integrated math & unit converter previews")
+                checked: Config.options.search.enableMathPreview
+                onCheckedChanged: {
+                    Config.options.search.enableMathPreview = checked;
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Displays real-time answers for math expressions and unit conversions in the result list")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "blur_on"
+                text: Translation.tr("Blur file search result previews")
+                checked: Config.options.search.blurFileSearchResultPreviews
+                onCheckedChanged: {
+                    Config.options.search.blurFileSearchResultPreviews = checked;
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "timer"
+                text: Translation.tr("Non-app result delay (ms)")
+                value: Config.options.search.nonAppResultDelay
+                from: 0
+                to: 500
+                stepSize: 10
+                onValueChanged: {
+                    Config.options.search.nonAppResultDelay = value;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "music_note"
+                text: Translation.tr("Show now playing media bubble")
+                checked: Config.options.search.showNowPlayingBubble
+                onCheckedChanged: {
+                    Config.options.search.showNowPlayingBubble = checked;
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Shows a floating media player bubble in the search launcher when media is playing")
+                }
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "auto_awesome"
+        title: Translation.tr("Suggestions Panel (Empty Query)")
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
 
             ConfigSwitch {
                 buttonIcon: "auto_awesome"
-                text: Translation.tr("Enable Suggestions Panel (Empty query)")
+                text: Translation.tr("Enable Suggestions Panel")
                 checked: Config.options.search.suggestions.enable
                 onCheckedChanged: {
                     Config.options.search.suggestions.enable = checked;
@@ -237,9 +253,7 @@ ContentPage {
                 codeSnippet: 'hl.bind("CTRL + Space", hl.dsp.global("quickshell:searchOnlyToggle"), { description = "Shell: Open search only" })'
                 snippetWrapMode: Text.Wrap
             }
-
         }
-
     }
 
     ContentSection {
