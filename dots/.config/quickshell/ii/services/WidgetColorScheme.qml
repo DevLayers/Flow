@@ -31,7 +31,7 @@ Singleton {
             "successColor": Appearance.m3colors.m3success,
             "warningColor": Appearance.colors.colError,
             "outlineColor": Appearance.colors.colOutline,
-            "surfaceVariantColor": Appearance.colors.colSurfaceVariant
+            "surfaceVariantColor": Appearance.m3colors.m3surfaceVariant
         },
         "expressive_primary": {
             "name": Translation.tr("Expressive Primary"),
@@ -145,7 +145,7 @@ Singleton {
             "successColor": Appearance.colors.colTertiary,
             "warningColor": Appearance.colors.colError,
             "outlineColor": Appearance.colors.colOutline,
-            "surfaceVariantColor": Appearance.colors.colSurfaceVariant
+            "surfaceVariantColor": Appearance.m3colors.m3surfaceVariant
         },
         "secondary_fixed": {
             "name": Translation.tr("Secondary Fixed"),
@@ -436,13 +436,13 @@ Singleton {
         if (scheme === "expressive_tertiary") return ColorUtils.mix(Appearance.colors.colTertiaryContainer, Appearance.colors.colSurfaceContainerHigh, 0.5);
         if (scheme === "hero_primary") return ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colOnPrimary, 0.2);
         if (scheme === "vibrant_mix") return ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colTertiaryContainer, 0.2);
-        if (scheme === "muted_surface") return Appearance.colors.colSurfaceVariant;
+        if (scheme === "muted_surface") return Appearance.m3colors.m3surfaceVariant;
         if (scheme === "secondary_fixed") return ColorUtils.mix(Appearance.m3colors.m3secondaryFixed, Appearance.m3colors.m3onSecondaryFixed, 0.15);
         if (scheme === "tertiary_showcase") return ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colTertiaryContainer, 0.2);
         if (scheme === "error_alert") return ColorUtils.mix(Appearance.colors.colError, Appearance.colors.colErrorContainer, 0.2);
         if (scheme === "inverse_surface") return ColorUtils.mix(Appearance.m3colors.m3inverseSurface, Appearance.m3colors.m3inverseOnSurface, 0.15);
         if (scheme === "tri_blend") return ColorUtils.mix(Appearance.colors.colPrimaryContainer, Appearance.colors.colTertiaryContainer, 0.3);
-        return Appearance.colors.colSurfaceVariant;
+        return Appearance.m3colors.m3surfaceVariant;
     }
 
     // Dynamic reactive color properties

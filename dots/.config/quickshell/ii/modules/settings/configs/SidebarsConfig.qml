@@ -175,7 +175,10 @@ ContentPage {
             text: Translation.tr("Keep right sidebar loaded")
             checked: Config.options.sidebar.keepRightSidebarLoaded
             onCheckedChanged: {
-                Config.options.sidebar.keepRightSidebarLoaded = checked;
+                // Do not write the binding's initial/config-reload value back
+                // to disk. Only a real user change should mutate Config.
+                if (Config.ready && checked !== Config.options.sidebar.keepRightSidebarLoaded)
+                    Config.options.sidebar.keepRightSidebarLoaded = checked;
             }
         }
 

@@ -451,7 +451,7 @@ ContentPage {
     component AppSoundRulesEditor: ColumnLayout {
         id: editor
 
-        readonly property var conf: Config.options.sounds.notificationApps
+        readonly property var conf: Config.options.sounds
         readonly property string query: searchField.text.trim()
 
         function ruleFor(name) {
@@ -502,9 +502,9 @@ ContentPage {
         spacing: 8
 
         ConfigSelectionArray {
-            currentValue: editor.conf.defaultPolicy
+            currentValue: editor.conf.notificationDefaultPolicy
             onSelected: newValue => {
-                editor.conf.defaultPolicy = newValue;
+                editor.conf.notificationDefaultPolicy = newValue;
             }
             options: [
                 {

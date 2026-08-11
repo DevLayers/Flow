@@ -379,10 +379,12 @@ Item {
                 property bool isLocalArt: artUrl.startsWith("file://")
                 property string artFilePath: artUrl.length > 0 && !isLocalArt ? `${Directories.coverArt}/${Qt.md5(artUrl)}` : ""
                 property string artTempPath: artFilePath + ".tmp"
+                property bool cachedArtReady: false
                 property string artSource: {
                     if (artUrl.length === 0) return "";
-                    if (isLocalArt) return artUrl;
+                    if (isLocalArt) return cachedArtReady ? artUrl : "";
                     if (coverDownloader.running) return "";
+                    if (!cachedArtReady) return "";
                     return `file://${artFilePath}`;
                 }
 
@@ -392,14 +394,20 @@ Item {
                     property string artFilePath: widgetRoot.artFilePath
                     property string artTempPath: widgetRoot.artTempPath
                     command: ["bash", "-c", `[ -f '${artFilePath}' ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-                    onExited: {
-                        // Force reload by briefly clearing source
-                        widgetRoot.artSource = "";
+                    onExited: (exitCode, exitStatus) => {
+                        // The binding exposes the cached file only after the download
+                        // has completed, avoiding a failed image load on every change.
+                        widgetRoot.cachedArtReady = exitCode === 0;
                     }
                 }
 
                 onArtUrlChanged: {
-                    if (artUrl.length === 0 || isLocalArt) return;
+                    cachedArtReady = false;
+                    if (artUrl.length === 0) return;
+                    if (isLocalArt) {
+                        cachedArtReady = true;
+                        return;
+                    }
                     coverDownloader.targetFile = artUrl;
                     coverDownloader.artFilePath = artFilePath;
                     coverDownloader.artTempPath = artTempPath;

@@ -252,7 +252,7 @@ ContentPage {
                         spacing: 6
                         MaterialSymbol {
                             text: "add"
-                            iconSize: Appearance.font.pixelSize.medium
+                            iconSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colOnPrimary
                         }
                         StyledText {
@@ -430,7 +430,7 @@ ContentPage {
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: "close"
-                    iconSize: Appearance.font.pixelSize.medium
+                    iconSize: Appearance.font.pixelSize.normal
                     color: parent.parent.parent.checked ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
                 }
                 

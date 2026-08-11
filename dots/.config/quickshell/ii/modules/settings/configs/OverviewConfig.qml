@@ -13,7 +13,7 @@ ContentPage {
         Layout.fillWidth: true
         Layout.bottomMargin: 8
         text: Translation.tr("Toggle the Overview screen")
-        keys: ["Super", "Tab"]
+        keys: ["Super"]
     }
 
     ContentSection {

@@ -2975,6 +2975,7 @@ Singleton {
                 property int bitrate: 8
                 property int framerate: 60
                 property bool showNotifications: true
+                property bool openInLosslessCut: false
             }
 
             property JsonObject screenSnip: JsonObject {
@@ -2983,6 +2984,7 @@ Singleton {
 
             property JsonObject sounds: JsonObject {
                 property bool enable: true
+                property int volume: 100
                 property string theme: "freedesktop"
                 property bool monoAudio: false
 
@@ -2997,6 +2999,7 @@ Singleton {
                 property bool lock: false
 
                 property bool alarmFadeIn: false
+                property int alarmFadeInSeconds: 30
 
                 property string notificationDefaultPolicy: "play" // "play" | "mute"
                 property list<string> alwaysPlayApps: []

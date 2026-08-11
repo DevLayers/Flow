@@ -313,6 +313,8 @@ Rectangle {
             Loader {
                 id: tabStack
                 anchors.fill: parent
+                active: GlobalStates.sidebarRightOpen && !root.effectivelyCollapsed
+                asynchronous: true
 
                 Component.onCompleted: {
                     tabStack.source = root.tabs[root.selectedTab].widget;
@@ -336,9 +338,9 @@ Rectangle {
                 Connections {
                     target: root
                     function onSelectedTabChanged() {
-                        if (root.currentTab > root.previousIndex)
+                        if (root.selectedTab > root.previousIndex)
                             tabSwitchBehavior.animation.down = true;
-                        else if (root.currentTab < root.previousIndex)
+                        else if (root.selectedTab < root.previousIndex)
                             tabSwitchBehavior.animation.down = false;
                         tabStack.source = root.tabs[root.selectedTab].widget;
                     }

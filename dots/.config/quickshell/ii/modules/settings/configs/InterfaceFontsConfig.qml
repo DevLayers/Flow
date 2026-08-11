@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -6,388 +8,224 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 
-ContentPage {
-    id: page
+Item {
+    id: interfaceFontsRoot
 
-    forceWidth: false
+    property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
 
-    ContentSection {
-        title: Translation.tr("System Rounding")
-        icon: "rounded_corner"
+    ContentPage {
+        id: page
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
 
-        ConfigSlider {
-            buttonIcon: "rounded_corner"
-            text: Translation.tr("Corner radius")
-            usePercentTooltip: false
-            stopIndicatorValues: [24]
-            tooltipContent: `${value}px`
-            from: 0
-            to: 48
-            stepSize: 1
-            value: Config.options.appearance.roundingValue >= 0 ? Config.options.appearance.roundingValue : 24
-            onValueChanged: {
-                Config.options.appearance.roundingValue = value;
-                Config.options.appearance.sharpMode = (value === 0);
-            }
-        }
-    }
+        ContentSection {
+            title: Translation.tr("System Rounding")
+            icon: "rounded_corner"
 
-    ContentSection {
-        title: Translation.tr("Animations")
-        icon: "motion_photos_on"
-
-        ConfigSlider {
-            buttonIcon: "speed"
-            text: Translation.tr("Animation speed multiplier")
-            usePercentTooltip: false
-            stopIndicatorValues: [1.0]
-            tooltipContent: `${value.toFixed(2)}x`
-            from: 0.25
-            to: 2.5
-            stepSize: 0.05
-            value: Config.options.appearance.animationMultiplier ?? 1.0
-            onValueChanged: {
-                Config.options.appearance.animationMultiplier = value;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "animation"
-            text: Translation.tr("Scroll animations")
-            checked: Config.options.appearance.scrollAnimations ?? true
-            onCheckedChanged: {
-                Config.options.appearance.scrollAnimations = checked;
-            }
-        }
-    }
-
-
-
-    ContentSection {
-        title: Translation.tr("Icons")
-        icon: "category"
-
-        ConfigSwitch {
-            buttonIcon: "magic_button"
-            text: Translation.tr("Themed icons (Experimental)")
-            checked: Config.options.appearance.icons.enableThemed
-            onCheckedChanged: {
-                Config.options.appearance.icons.enableThemed = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("When enabled, uses the dynamic Matugen generated icon pack. Fallbacks to Tint Icons.")
-            }
-
-        }
-
-        ContentSubsection {
-            visible: Config.options.appearance.icons.enableThemed
-            title: Translation.tr("Base icon theme")
-            icon: "palette"
-            Layout.fillWidth: true
-            tooltip: Translation.tr("Select the base icon theme to be recolored by Matugen.\nRequires generating colors again to apply.")
-
-            ConfigSelectionArray {
-                currentValue: Config.options.appearance.iconTheme
-                onSelected: (newValue) => {
-                    Config.options.appearance.iconTheme = newValue;
-                }
-                options: IconThemes.availableThemes.map((theme) => {
-                    return ({
-                        "displayName": theme,
-                        "value": theme,
-                        "icon": "category"
-                    });
-                })
-            }
-
-        }
-
-        RippleButtonWithIcon {
-            visible: Config.options.appearance.icons.enableThemed
-            materialIcon: "magic_button"
-            mainText: Translation.tr("Apply Theme")
-            useDynamicRadius: true
-            implicitHeight: 48
-            Layout.fillWidth: true
-            colBackground: Appearance.colors.colPrimaryContainer
-            colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-            colRipple: Appearance.colors.colPrimaryContainerActive
-            colText: Appearance.colors.colOnPrimaryContainer
-            onClicked: {
-                IconThemes.applyTheme(false);
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "restart_alt"
-            text: Translation.tr("Auto restart Quickshell on theme change")
-            checked: Config.options.appearance.wallpaperTheming.autoRestartQuickshell
-            onCheckedChanged: {
-                Config.options.appearance.wallpaperTheming.autoRestartQuickshell = checked;
-            }
-        }
-
-    }
-
-    ContentSection {
-        title: Translation.tr("Details")
-        icon: "auto_awesome"
-
-        ConfigSwitch {
-            buttonIcon: "colors"
-            text: Translation.tr("Colorful scrollbar")
-            checked: Config.options.appearance.colorfulScrollbar
-            onCheckedChanged: {
-                Config.options.appearance.colorfulScrollbar = checked;
-            }
-        }
-
-
-        ContentSubsectionLabel {
-            text: Translation.tr("This window")
-        }
-
-        ConfigSwitch {
-            buttonIcon: "animation"
-            text: Translation.tr("Scroll animation in settings")
-            checked: Config.options.appearance.scrollAnimations
-            onCheckedChanged: {
-                Config.options.appearance.scrollAnimations = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "blur_linear"
-            text: Translation.tr("Scroll fade gradient mask in settings")
-            checked: Config.options.appearance.scrollFadeMask
-            onCheckedChanged: {
-                Config.options.appearance.scrollFadeMask = checked;
-            }
-        }
-
-    }
-
-    ContentSection {
-        title: Translation.tr("Fonts Management")
-        icon: "text_format"
-
-        ConfigSwitch {
-            buttonIcon: "custom_typography"
-            text: Translation.tr("Enable custom fonts")
-            checked: Config.options.appearance.fonts.enableCustom
-            onCheckedChanged: {
-                Config.options.appearance.fonts.enableCustom = checked;
-                if (checked) {
-                    Config.options.appearance.fonts.main = Persistent.states.settings.fonts.main;
-                    Config.options.appearance.fonts.numbers = Persistent.states.settings.fonts.numbers;
-                    Config.options.appearance.fonts.title = Persistent.states.settings.fonts.title;
-                    Config.options.appearance.fonts.monospace = Persistent.states.settings.fonts.monospace;
-                    Config.options.appearance.fonts.iconNerd = Persistent.states.settings.fonts.iconNerd;
-                    Config.options.appearance.fonts.reading = Persistent.states.settings.fonts.reading;
-                    Config.options.appearance.fonts.expressive = Persistent.states.settings.fonts.expressive;
-                } else {
-                    Config.options.appearance.fonts.main = "Google Sans Flex";
-                    Config.options.appearance.fonts.numbers = "Google Sans Flex";
-                    Config.options.appearance.fonts.title = "Google Sans Flex";
-                    Config.options.appearance.fonts.iconNerd = "JetBrainsMono Nerd Font";
-                    Config.options.appearance.fonts.monospace = "JetBrainsMono Nerd Font";
-                    Config.options.appearance.fonts.reading = "Readex Pro";
-                    Config.options.appearance.fonts.expressive = "Space Grotesk";
+            ConfigSlider {
+                buttonIcon: "rounded_corner"
+                text: Translation.tr("Corner radius")
+                usePercentTooltip: false
+                stopIndicatorValues: [24]
+                tooltipContent: `${value}px`
+                from: 0
+                to: 48
+                stepSize: 1
+                value: Config.options.appearance.roundingValue >= 0 ? Config.options.appearance.roundingValue : 24
+                onValueChanged: {
+                    Config.options.appearance.roundingValue = value;
+                    Config.options.appearance.sharpMode = (value === 0);
                 }
             }
         }
 
-        ConfigSwitch {
-            buttonIcon: "rounded_corner"
-            text: Translation.tr("Full font roundness")
-            checked: Config.options.appearance.fonts.roundnessFull
-            onCheckedChanged: {
-                Config.options.appearance.fonts.roundnessFull = checked;
-                Persistent.states.settings.fonts.roundnessFull = checked;
+        ContentSection {
+            title: Translation.tr("Animations")
+            icon: "motion_photos_on"
+
+            ConfigSlider {
+                buttonIcon: "speed"
+                text: Translation.tr("Animation speed multiplier")
+                usePercentTooltip: false
+                stopIndicatorValues: [1.0]
+                tooltipContent: `${value.toFixed(2)}x`
+                from: 0.25
+                to: 2.5
+                stepSize: 0.05
+                value: Config.options.appearance.animationMultiplier ?? 1.0
+                onValueChanged: {
+                    Config.options.appearance.animationMultiplier = value;
+                }
             }
 
-            StyledToolTip {
-                text: Translation.tr("Use rounded font variant (ROND: 100) for variable fonts like Google Sans Flex")
+            ConfigSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Scroll animations")
+                checked: Config.options.appearance.scrollAnimations ?? true
+                onCheckedChanged: {
+                    Config.options.appearance.scrollAnimations = checked;
+                }
             }
-
         }
 
-        ContentSubsection {
-            title: Translation.tr("Main font")
-            icon: "font_download"
-            Layout.fillWidth: true
+        ContentSection {
+            title: Translation.tr("Icons")
+            icon: "category"
 
-            MaterialTextArea {
-                enabled: Config.options.appearance.fonts.enableCustom
+            ConfigSwitch {
+                buttonIcon: "magic_button"
+                text: Translation.tr("Themed icons (Experimental)")
+                checked: Config.options.appearance.icons.enableThemed
+                onCheckedChanged: {
+                    Config.options.appearance.icons.enableThemed = checked;
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("When enabled, uses the dynamic Matugen generated icon pack. Fallbacks to Tint Icons.")
+                }
+            }
+
+            ContentSubsection {
+                visible: Config.options.appearance.icons.enableThemed
+                title: Translation.tr("Base icon theme")
+                icon: "palette"
                 Layout.fillWidth: true
-                placeholderText: Translation.tr("Font family name (e.g., Google Sans Flex)")
-                text: Persistent.states.settings.fonts.main
-                wrapMode: TextEdit.NoWrap
-                onTextChanged: {
-                    if (!enabled)
-                        return ;
+                tooltip: Translation.tr("Select the base icon theme to be recolored by Matugen.\nRequires generating colors again to apply.")
 
-                    Persistent.states.settings.fonts.main = text;
-                    Config.options.appearance.fonts.main = text;
+                ConfigSelectionArray {
+                    currentValue: Config.options.appearance.iconTheme
+                    onSelected: (newValue) => {
+                        Config.options.appearance.iconTheme = newValue;
+                    }
+                    options: IconThemes.availableThemes.map((theme) => {
+                        return ({
+                            "displayName": theme,
+                            "value": theme,
+                            "icon": "category"
+                        });
+                    })
                 }
             }
 
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Numbers font")
-            icon: "pin"
-            Layout.fillWidth: true
-
-            MaterialTextArea {
-                enabled: Config.options.appearance.fonts.enableCustom
+            RippleButtonWithIcon {
+                visible: Config.options.appearance.icons.enableThemed
+                materialIcon: "magic_button"
+                mainText: Translation.tr("Apply Theme")
+                useDynamicRadius: true
+                implicitHeight: 48
                 Layout.fillWidth: true
-                placeholderText: Translation.tr("Font family name")
-                text: Persistent.states.settings.fonts.numbers
-                wrapMode: TextEdit.NoWrap
-                onTextChanged: {
-                    if (!enabled)
-                        return ;
-
-                    Persistent.states.settings.fonts.numbers = text;
-                    Config.options.appearance.fonts.numbers = text;
+                colBackground: Appearance.colors.colPrimaryContainer
+                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                colRipple: Appearance.colors.colPrimaryContainerActive
+                colText: Appearance.colors.colOnPrimaryContainer
+                onClicked: {
+                    IconThemes.applyTheme(false);
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "restart_alt"
+                text: Translation.tr("Auto restart Quickshell on theme change")
+                checked: Config.options.appearance.wallpaperTheming.autoRestartQuickshell
+                onCheckedChanged: {
+                    Config.options.appearance.wallpaperTheming.autoRestartQuickshell = checked;
+                }
+            }
         }
 
-        ContentSubsection {
-            title: Translation.tr("Title font")
-            icon: "title"
-            Layout.fillWidth: true
+        ContentSection {
+            title: Translation.tr("Details")
+            icon: "auto_awesome"
 
-            MaterialTextArea {
-                enabled: Config.options.appearance.fonts.enableCustom
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Font family name")
-                text: Persistent.states.settings.fonts.title
-                wrapMode: TextEdit.NoWrap
-                onTextChanged: {
-                    if (!enabled)
-                        return ;
-
-                    Persistent.states.settings.fonts.title = text;
-                    Config.options.appearance.fonts.title = text;
+            ConfigSwitch {
+                buttonIcon: "colors"
+                text: Translation.tr("Colorful scrollbar")
+                checked: Config.options.appearance.colorfulScrollbar
+                onCheckedChanged: {
+                    Config.options.appearance.colorfulScrollbar = checked;
                 }
             }
 
-        }
+            ContentSubsectionLabel {
+                text: Translation.tr("This window")
+            }
 
-        ContentSubsection {
-            title: Translation.tr("Monospace font")
-            icon: "space_bar"
-            Layout.fillWidth: true
-
-            MaterialTextArea {
-                enabled: Config.options.appearance.fonts.enableCustom
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Font family name (e.g., JetBrainsMono Nerd Font)")
-                text: Persistent.states.settings.fonts.monospace
-                wrapMode: TextEdit.NoWrap
-                onTextChanged: {
-                    if (!enabled)
-                        return ;
-
-                    Persistent.states.settings.fonts.monospace = text;
-                    Config.options.appearance.fonts.monospace = text;
+            ConfigSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Scroll animation in settings")
+                checked: Config.options.appearance.scrollAnimations
+                onCheckedChanged: {
+                    Config.options.appearance.scrollAnimations = checked;
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "blur_linear"
+                text: Translation.tr("Scroll fade gradient mask in settings")
+                checked: Config.options.appearance.scrollFadeMask
+                onCheckedChanged: {
+                    Config.options.appearance.scrollFadeMask = checked;
+                }
+            }
         }
 
-        ContentSubsection {
-            title: Translation.tr("Nerd font icons")
-            icon: "emoji_symbols"
-            Layout.fillWidth: true
+        ContentSection {
+            title: Translation.tr("Fonts Management")
+            icon: "text_format"
 
-            HelperLinkBox {
-                Layout.fillWidth: true
-                title: Translation.tr("NerdFonts Cheat Sheet")
-                text: Translation.tr("Find icon names and symbols for your Nerd Fonts here.")
-                isFirst: true
-
-                RippleButtonWithIcon {
-                    mainText: Translation.tr("Open Website")
-                    materialIcon: "open_in_new"
-                    Layout.topMargin: 4
-                    Layout.bottomMargin: 4
-                    colBackground: Appearance.colors.colLayer0
-                    colBackgroundHover: Appearance.colors.colLayer0Hover
-                    colRipple: Appearance.colors.colLayer0Active
-                    downAction: () => {
-                        Qt.openUrlExternally("https://www.nerdfonts.com/cheat-sheet");
+            ConfigSwitch {
+                buttonIcon: "custom_typography"
+                text: Translation.tr("Enable custom fonts")
+                checked: Config.options.appearance.fonts.enableCustom
+                configPage: Qt.resolvedUrl("widgets/CustomFontsConfig.qml")
+                onCheckedChanged: {
+                    Config.options.appearance.fonts.enableCustom = checked;
+                    if (checked) {
+                        Config.options.appearance.fonts.main = Persistent.states.settings.fonts.main;
+                        Config.options.appearance.fonts.numbers = Persistent.states.settings.fonts.numbers;
+                        Config.options.appearance.fonts.title = Persistent.states.settings.fonts.title;
+                        Config.options.appearance.fonts.monospace = Persistent.states.settings.fonts.monospace;
+                        Config.options.appearance.fonts.iconNerd = Persistent.states.settings.fonts.iconNerd;
+                        Config.options.appearance.fonts.reading = Persistent.states.settings.fonts.reading;
+                        Config.options.appearance.fonts.expressive = Persistent.states.settings.fonts.expressive;
+                    } else {
+                        Config.options.appearance.fonts.main = "Google Sans Flex";
+                        Config.options.appearance.fonts.numbers = "Google Sans Flex";
+                        Config.options.appearance.fonts.title = "Google Sans Flex";
+                        Config.options.appearance.fonts.iconNerd = "JetBrainsMono Nerd Font";
+                        Config.options.appearance.fonts.monospace = "JetBrainsMono Nerd Font";
+                        Config.options.appearance.fonts.reading = "Readex Pro";
+                        Config.options.appearance.fonts.expressive = "Space Grotesk";
                     }
                 }
 
-            }
-
-            MaterialTextArea {
-                enabled: Config.options.appearance.fonts.enableCustom
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Font family name (e.g., JetBrainsMono Nerd Font)")
-                text: Persistent.states.settings.fonts.iconNerd
-                wrapMode: TextEdit.NoWrap
-                onTextChanged: {
-                    if (!enabled)
-                        return ;
-
-                    Persistent.states.settings.fonts.iconNerd = text;
-                    Config.options.appearance.fonts.iconNerd = text;
+                StyledToolTip {
+                    text: Translation.tr("Toggle custom fonts. Click on the button text to configure individual font family overrides.")
                 }
             }
 
-        }
+            ConfigSwitch {
+                buttonIcon: "rounded_corner"
+                text: Translation.tr("Full font roundness")
+                checked: Config.options.appearance.fonts.roundnessFull
+                onCheckedChanged: {
+                    Config.options.appearance.fonts.roundnessFull = checked;
+                    Persistent.states.settings.fonts.roundnessFull = checked;
+                }
 
-        ContentSubsection {
-            title: Translation.tr("Reading font")
-            icon: "menu_book"
-            Layout.fillWidth: true
-
-            MaterialTextArea {
-                enabled: Config.options.appearance.fonts.enableCustom
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Font family name (e.g., Readex Pro)")
-                text: Persistent.states.settings.fonts.reading
-                wrapMode: TextEdit.NoWrap
-                onTextChanged: {
-                    if (!enabled)
-                        return ;
-
-                    Persistent.states.settings.fonts.reading = text;
-                    Config.options.appearance.fonts.reading = text;
+                StyledToolTip {
+                    text: Translation.tr("Use rounded font variant (ROND: 100) for variable fonts like Google Sans Flex")
                 }
             }
-
         }
+    }
 
-        ContentSubsection {
-            title: Translation.tr("Expressive font")
-            icon: "brush"
-            Layout.fillWidth: true
-
-            MaterialTextArea {
-                enabled: Config.options.appearance.fonts.enableCustom
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Font family name (e.g., Space Grotesk)")
-                text: Persistent.states.settings.fonts.expressive
-                wrapMode: TextEdit.NoWrap
-                onTextChanged: {
-                    if (!enabled)
-                        return ;
-
-                    Persistent.states.settings.fonts.expressive = text;
-                    Config.options.appearance.fonts.expressive = text;
-                }
-            }
-
-        }
-
+    // Sub-page overlay
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }

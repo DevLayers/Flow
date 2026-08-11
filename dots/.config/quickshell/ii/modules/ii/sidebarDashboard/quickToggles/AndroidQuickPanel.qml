@@ -464,7 +464,16 @@ AbstractQuickPanel {
                             property bool isCurrent: root.currentPage === index
                             property list<var> pageToggles: root.pages[index] || []
 
-                                GridLayout {
+                            Loader {
+                                id: pageContentLoader
+                                anchors {
+                                    left: parent.left
+                                    right: parent.right
+                                    top: parent.top
+                                }
+                                active: pageContainer.isCurrent || root.editMode
+                                asynchronous: true
+                                sourceComponent: GridLayout {
                                     id: pageContentGrid
                                     anchors {
                                         left: parent.left
@@ -522,6 +531,7 @@ AbstractQuickPanel {
                                         onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                                     }
                                 }
+                            }
                             }
                         }
                     }
@@ -608,7 +618,7 @@ AbstractQuickPanel {
                         spacing: 8
                         MaterialSymbol {
                             text: "auto_awesome_motion"
-                            font.pixelSize: Appearance.font.pixelSize.medium ?? Appearance.font.pixelSize.normal
+                            font.pixelSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colPrimary
                         }
                         StyledText {

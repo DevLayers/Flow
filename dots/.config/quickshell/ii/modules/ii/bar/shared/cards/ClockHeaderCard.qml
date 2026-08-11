@@ -45,32 +45,6 @@ Rectangle {
         }
     }
 
-    Connections {
-        target: root
-        function onPopupOpenProgressChanged() {
-            if (root && root.popupOpenProgress === 0.0) {
-                clockCircleAnim.stop();
-                clockHandAnim.stop();
-                timeAnim.stop();
-                ampmAnim.stop();
-                dayAnim.stop();
-                dateAnim.stop();
-
-                clockCircle.opacity = 0.0;
-                clockCircleTranslate.x = -50;
-                clockHand.opacity = 0.0;
-                timeText.opacity = 0.0;
-                timeText.scale = 0.9;
-                ampmText.opacity = 0.0;
-                ampmText.scale = 0.9;
-                dayText.opacity = 0.0;
-                dayText.translateX = 20;
-                dateText.opacity = 0.0;
-                dateText.translateX = 20;
-            }
-        }
-    }
-
     // Keep rounded clipping for the oversized clock artwork. Render the mask
     // layer at 2x so the popup scale does not enlarge a low-resolution card.
     layer.enabled: true

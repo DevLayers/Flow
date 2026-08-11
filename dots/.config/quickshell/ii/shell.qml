@@ -25,6 +25,11 @@ ShellRoot {
     ReloadPopup {}
 
     Component.onCompleted: {
+        if (Qt.application) {
+            Qt.application.applicationName = "quickshell";
+            Qt.application.organizationName = "Unknown Organization";
+            Qt.application.organizationDomain = "unknown.organization";
+        }
         MaterialThemeLoader.reapplyTheme();
         Hyprsunset.load();
         FirstRunExperience.load();
@@ -175,7 +180,6 @@ ShellRoot {
         onPressed: root.cyclePanelFamily()
     }
 }
-
 
 
 

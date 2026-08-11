@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import "./widgets"
 import Quickshell
 import Quickshell.Io
 import qs.services
@@ -65,8 +64,8 @@ Item {
 
     // Extension UI is independent from the widget catalog. Keep its cards and
     // community data out of the initial page construction until requested.
-    property bool extensionsExpanded: false
-    property bool communityExpanded: false
+    property bool extensionsExpanded: true
+    property bool communityExpanded: true
 
     property var _previewQueue: []
     property bool _previewStaggerActive: false
@@ -457,9 +456,10 @@ Item {
             Loader {
                 id: extensionsContentLoader
                 Layout.fillWidth: true
+                Layout.preferredHeight: item ? item.implicitHeight : 0
                 active: widgetsConfigRoot.extensionsExpanded
                 asynchronous: true
-                sourceComponent: WidgetExtensionsContent {}
+                source: Qt.resolvedUrl("widgets/WidgetExtensionsContent.qml")
             }
 
             Connections {
@@ -479,9 +479,10 @@ Item {
 
             Loader {
                 Layout.fillWidth: true
+                Layout.preferredHeight: item ? item.implicitHeight : 0
                 active: widgetsConfigRoot.communityExpanded
                 asynchronous: true
-                sourceComponent: WidgetCommunityContent {}
+                source: Qt.resolvedUrl("widgets/WidgetCommunityContent.qml")
             }
         }
     }
@@ -990,11 +991,26 @@ Item {
                         title: Translation.tr("Configuration")
                         icon: "tune"
 
-                        ExtensionWidgetSettingsRenderer {
+                        Loader {
                             id: schemaRenderer
-                            width: parent.width
-                            extId: widgetsConfigRoot.extensionConfigExtId
-                            schema: {
+                            Layout.fillWidth: true
+                            asynchronous: true
+                            active: extConfigOverlay.overlayActive
+                            source: Qt.resolvedUrl("widgets/ExtensionWidgetSettingsRenderer.qml")
+                            Layout.preferredHeight: item ? item.implicitHeight : 0
+                        }
+
+                        Binding {
+                            target: schemaRenderer.item
+                            property: "extId"
+                            value: widgetsConfigRoot.extensionConfigExtId
+                            when: schemaRenderer.item !== null
+                        }
+
+                        Binding {
+                            target: schemaRenderer.item
+                            property: "schema"
+                            value: {
                                 let eId = widgetsConfigRoot.extensionConfigExtId;
                                 if (!eId)
                                     return ({});
@@ -1003,6 +1019,7 @@ Item {
                                     return ({});
                                 return (entry.widgetJson || {}).configSchema || ({});
                             }
+                            when: schemaRenderer.item !== null
                         }
                     }
                 }

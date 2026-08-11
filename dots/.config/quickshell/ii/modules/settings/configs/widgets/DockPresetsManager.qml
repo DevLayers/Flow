@@ -21,7 +21,11 @@ ContentSection {
     FileView {
         id: presetsFile
         path: root.presetsFilePath
+        // A missing file is the normal first-run state until the user saves
+        // the first preset; do not turn that state into a QML warning.
+        printErrors: false
         onLoaded: root.loadPresetsFromJson()
+        onLoadFailed: root.presetsList = []
         onAdapterUpdated: root.loadPresetsFromJson()
     }
 

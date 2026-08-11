@@ -176,8 +176,13 @@ Item {
                 }
             }
 
-            CenterWidgetGroup {
+            Loader {
                 id: centerGroup
+                // Notifications remain backed by their global service; only the
+                // heavy visual center group is discarded while the sidebar is closed.
+                active: GlobalStates.sidebarRightOpen
+                asynchronous: true
+                sourceComponent: CenterWidgetGroup {}
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillHeight: true
                 Layout.fillWidth: true

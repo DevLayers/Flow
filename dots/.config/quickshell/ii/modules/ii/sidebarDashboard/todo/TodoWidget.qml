@@ -73,44 +73,46 @@ Item {
             currentIndex: tabBar.currentIndex
 
             // To Do tab
-            TaskList {
-                listBottomPadding: root.fabSize + root.fabMargins * 2
-                emptyPlaceholderIcon: "check_circle"
-                emptyPlaceholderText: Translation.tr("Nothing here!")
-                entranceTrigger: root.entranceTrigger
-                taskList: Todo.list.map(function(item, i) {
-                    return Object.assign({
-                    }, item, {
-                        "originalIndex": i
-                    });
-                }).filter(function(item) {
-                    return !item.done;
-                }).sort(function(a, b) {
-                    if (a.hasDate && !b.hasDate) return -1;
-                    if (!a.hasDate && b.hasDate) return 1;
-                    if (a.hasDate && b.hasDate) return a.date - b.date;
-                    return b.originalIndex - a.originalIndex;
-                })
+            Loader {
+                active: swipeView.currentIndex === 0
+                asynchronous: true
+                sourceComponent: TaskList {
+                    listBottomPadding: root.fabSize + root.fabMargins * 2
+                    emptyPlaceholderIcon: "check_circle"
+                    emptyPlaceholderText: Translation.tr("Nothing here!")
+                    entranceTrigger: root.entranceTrigger
+                    taskList: Todo.list.map(function(item, i) {
+                        return Object.assign({}, item, { "originalIndex": i });
+                    }).filter(function(item) {
+                        return !item.done;
+                    }).sort(function(a, b) {
+                        if (a.hasDate && !b.hasDate) return -1;
+                        if (!a.hasDate && b.hasDate) return 1;
+                        if (a.hasDate && b.hasDate) return a.date - b.date;
+                        return b.originalIndex - a.originalIndex;
+                    })
+                }
             }
 
-            TaskList {
-                listBottomPadding: root.fabSize + root.fabMargins * 2
-                emptyPlaceholderIcon: "checklist"
-                emptyPlaceholderText: Translation.tr("Finished tasks will go here")
-                entranceTrigger: root.entranceTrigger
-                taskList: Todo.list.map(function(item, i) {
-                    return Object.assign({
-                    }, item, {
-                        "originalIndex": i
-                    });
-                }).filter(function(item) {
-                    return item.done;
-                }).sort(function(a, b) {
-                    if (a.hasDate && !b.hasDate) return -1;
-                    if (!a.hasDate && b.hasDate) return 1;
-                    if (a.hasDate && b.hasDate) return b.date - a.date; // Newest finished tasks first
-                    return b.originalIndex - a.originalIndex;
-                })
+            Loader {
+                active: swipeView.currentIndex === 1
+                asynchronous: true
+                sourceComponent: TaskList {
+                    listBottomPadding: root.fabSize + root.fabMargins * 2
+                    emptyPlaceholderIcon: "checklist"
+                    emptyPlaceholderText: Translation.tr("Finished tasks will go here")
+                    entranceTrigger: root.entranceTrigger
+                    taskList: Todo.list.map(function(item, i) {
+                        return Object.assign({}, item, { "originalIndex": i });
+                    }).filter(function(item) {
+                        return item.done;
+                    }).sort(function(a, b) {
+                        if (a.hasDate && !b.hasDate) return -1;
+                        if (!a.hasDate && b.hasDate) return 1;
+                        if (a.hasDate && b.hasDate) return b.date - a.date;
+                        return b.originalIndex - a.originalIndex;
+                    })
+                }
             }
 
         }

@@ -18,8 +18,8 @@ LazyLoader {
 
     readonly property bool wanted: Config.ready && root.extraCondition
 
-    /// Zero until this panel has asked for a slot. Kept afterwards, so a panel that is
-    /// torn down and wanted again comes straight back rather than queueing a second time.
+    /// Zero until this panel has asked for a slot. It is released when the panel is no
+    /// longer wanted so inactive panel families do not retain a schedule ticket.
     property int ticket: 0
 
     function takeTicket() {
@@ -30,6 +30,11 @@ LazyLoader {
 
     active: root.wanted && root.ticket > 0 && PanelSchedule.released >= root.ticket
 
-    onWantedChanged: root.takeTicket()
+    onWantedChanged: {
+        if (root.wanted)
+            root.takeTicket();
+        else
+            root.ticket = 0;
+    }
     Component.onCompleted: root.takeTicket()
 }

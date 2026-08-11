@@ -11,6 +11,11 @@ Scope {
     id: root
     property int sidebarWidth: Appearance.sizes.sidebarWidth
 
+    // Keep the lightweight panel controller alive, but make the expensive dashboard
+    // tree obey the user's keep-alive preference.
+    readonly property bool keepContentLoaded: Config.ready && Config.options.sidebar.keepRightSidebarLoaded
+    readonly property bool contentWanted: GlobalStates.sidebarRightOpen || root.keepContentLoaded
+
     readonly property bool isOnRight: {
         const pos = Config.options.sidebar.position;
         return pos === "default" || pos === "right"; 
@@ -66,7 +71,7 @@ Scope {
             Loader {
                 id: sidebarContentLoader
 
-                active: GlobalStates.sidebarRightOpen || Config?.options.sidebar.keepRightSidebarLoaded
+                active: root.contentWanted
                 sourceComponent: SidebarDashboardContent {}
                 
                 width: root.sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin

@@ -793,79 +793,21 @@ Item {
 
         }
 
-        // ── Widgets ───────────────────────────────────────────────────────
-        // Every bar component that carries its own settings page gets a card,
-        // so per-widget settings are reachable without right-clicking the bar.
+        // ── Widgets & Waffle Sub-Page ─────────────────────────────────────────
         ContentSection {
-            id: widgetsSection
             icon: "widgets"
-            title: Translation.tr("Widgets")
-            collapsible: true
-            expanded: false
-
-            // Keep the lightweight description instantiated so search and
-            // section indexing continue to work while the cards stay lazy.
-            StyledText {
-                Layout.fillWidth: true
-                text: Translation.tr("Settings for the individual widgets that can sit on the bar. Right-clicking a widget on the bar opens the same page.")
-                color: Appearance.colors.colOnLayer1
-                opacity: 0.75
-                font.pixelSize: Appearance.font.pixelSize.small
-                wrapMode: Text.Wrap
-            }
-
-            // Keep the complete widget-card subtree out of the page until the
-            // user expands this section. The Loader is asynchronous so the
-            // section can finish its expand transition before card delegates
-            // are incubated.
-            Loader {
-                id: widgetContentLoader
-                Layout.fillWidth: true
-                active: widgetsSection.expanded
-                asynchronous: true
-
-                sourceComponent: ColumnLayout {
-                    width: widgetContentLoader.width
-                    spacing: 4
-
-                    Repeater {
-                        model: BarComponentRegistry.configurableComponents
-
-                        delegate: ServiceCard {
-                            required property var modelData
-                            required property int index
-
-                            cardIcon: modelData.icon ?? "widgets"
-                            cardHue: 210
-                            cardShape: "Cookie4Sided"
-                            title: Translation.tr(modelData.title)
-                            description: Translation.tr("Widget settings")
-                            onOpenCard: {
-                                barConfigRoot.openWidgetPage(modelData.id);
-                            }
-                        }
-                    }
-                }
-
-            }
-
-        }
-
-        ContentSection {
-            icon: "grid_view"
-            title: Translation.tr("Waffle")
+            title: Translation.tr("Widgets & Waffle")
 
             ServiceCard {
-                cardIcon: "build"
-                cardHue: 276
-                cardShape: "Cookie4Sided"
-                title: Translation.tr("Waffle tweaks")
-                description: Translation.tr("Optional tweaks for the Waffle panel family")
+                cardIcon: "widgets"
+                cardHue: 210
+                cardShape: "circle"
+                title: Translation.tr("Widgets & Waffle Settings")
+                description: Translation.tr("Configure individual bar widgets and Waffle panel tweaks")
                 onOpenCard: {
-                    barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/WaffleTweaksConfig.qml");
+                    barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/BarWidgetsWaffleConfig.qml");
                 }
             }
-
         }
 
     }

@@ -242,6 +242,19 @@ ContentPage {
             }
         }
 
+        ConfigSwitch {
+            buttonIcon: "open_in_new"
+            text: Translation.tr("Open recordings in LosslessCut")
+            checked: Config.options.screenRecord.openInLosslessCut
+            onCheckedChanged: {
+                Config.options.screenRecord.openInLosslessCut = checked;
+            }
+
+            StyledToolTip {
+                text: Translation.tr("After a recording finishes, open it directly in the installed LosslessCut application instead of showing the built-in editor popup.")
+            }
+        }
+
         ContentSubsectionLabel {
             text: Translation.tr("Local recorder settings (wf-recorder)")
             visible: Config.options.screenRecord.service === "wf-recorder"

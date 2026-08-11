@@ -212,7 +212,8 @@ ContentPage {
                 currentValue: page.selectedMonitor
                 onSelected: newValue => {
                     page.selectedMonitor = newValue;
-                    editor.selectedIndex = -1;
+                    if (editorLoader.item)
+                        editorLoader.item.selectedIndex = -1;
                 }
             }
         }
@@ -225,7 +226,8 @@ ContentPage {
             ConfigSelectionArray {
                 currentValue: page.currentPreset
                 onSelected: newValue => {
-                    editor.selectedIndex = -1;
+                    if (editorLoader.item)
+                        editorLoader.item.selectedIndex = -1;
                     // Custom starts from whatever is on screen: an empty monitor
                     // would throw away the layout the user was looking at.
                     if (newValue === "custom") page.setZones(page.currentZones);
@@ -237,17 +239,41 @@ ContentPage {
             }
         }
 
-        TilingZoneEditor {
-            id: editor
-
+        Loader {
+            id: editorLoader
             Layout.fillWidth: true
             Layout.topMargin: 8
-            // Shown for every layout: on a preset it is a preview of what was
-            // just picked, and only "Custom" makes it editable.
-            readOnly: page.currentPreset !== "custom"
-            zones: page.currentZones
-            aspect: page.monitorAspect
-            onZonesEdited: updated => page.setZones(updated)
+            Layout.preferredHeight: item ? item.implicitHeight : 0
+            asynchronous: true
+            source: Qt.resolvedUrl("TilingZoneEditor.qml")
+
+            Binding {
+                target: editorLoader.item
+                property: "readOnly"
+                value: page.currentPreset !== "custom"
+                when: editorLoader.item !== null
+            }
+
+            Binding {
+                target: editorLoader.item
+                property: "zones"
+                value: page.currentZones
+                when: editorLoader.item !== null
+            }
+
+            Binding {
+                target: editorLoader.item
+                property: "aspect"
+                value: page.monitorAspect
+                when: editorLoader.item !== null
+            }
+
+            Connections {
+                target: editorLoader.item
+                function onZonesEdited(updated) {
+                    page.setZones(updated);
+                }
+            }
         }
 
         RowLayout {
@@ -269,19 +295,23 @@ ContentPage {
                         "h": 1 / 3
                     });
                     page.setZones(list);
-                    editor.selectedIndex = list.length - 1;
+                    if (editorLoader.item)
+                        editorLoader.item.selectedIndex = list.length - 1;
                 }
             }
 
             RippleButtonWithIcon {
                 buttonRadius: Appearance.rounding.small
-                enabled: editor.selectedIndex >= 0
+                enabled: editorLoader.item ? editorLoader.item.selectedIndex >= 0 : false
                 materialIcon: "delete"
                 mainText: Translation.tr("Delete")
                 onClicked: {
                     const list = Array.from(page.currentZones);
-                    list.splice(editor.selectedIndex, 1);
-                    editor.selectedIndex = -1;
+                    const selectedIndex = editorLoader.item ? editorLoader.item.selectedIndex : -1;
+                    if (selectedIndex < 0)
+                        return;
+                    list.splice(selectedIndex, 1);
+                    editorLoader.item.selectedIndex = -1;
                     page.setZones(list);
                 }
             }
@@ -291,7 +321,8 @@ ContentPage {
                 materialIcon: "restart_alt"
                 mainText: Translation.tr("Start over")
                 onClicked: {
-                    editor.selectedIndex = -1;
+                    if (editorLoader.item)
+                        editorLoader.item.selectedIndex = -1;
                     page.setZones([]);
                 }
             }
@@ -304,7 +335,7 @@ ContentPage {
         TipBox {
             Layout.fillWidth: true
             Layout.topMargin: 8
-            visible: editor.overlapCount > 0
+            visible: editorLoader.item ? editorLoader.item.overlapCount > 0 : false
             materialIcon: "layers"
             text: Translation.tr("Some zones share space, hatched above. That is a layout rather than a mistake — the cursor decides which one a window lands in — but two windows tiled into overlapping zones will cover each other.")
         }

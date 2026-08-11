@@ -4,7 +4,6 @@ import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
-import "./widgets"
 
 ContentPage {
     id: page
@@ -409,6 +408,15 @@ ContentPage {
 
     }
 
-    DockPresetsManager {}
+    // Keep this optional section out of the page's static type-import graph.
+    // The directory import used to make the whole Dock page fail when the
+    // preset component (or one of its dependencies) was not registered yet.
+    Loader {
+        id: dockPresetsLoader
+        Layout.fillWidth: true
+        asynchronous: true
+        source: Qt.resolvedUrl("widgets/DockPresetsManager.qml")
+        Layout.preferredHeight: item ? item.implicitHeight : 0
+    }
 
 }

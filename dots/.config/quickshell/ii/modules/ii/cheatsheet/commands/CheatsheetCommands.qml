@@ -316,7 +316,7 @@ Item {
 
                                                 StyledText {
                                                     text: tagMa.tagValue === "" ? qsTr("All") : tagMa.tagValue
-                                                    font.pixelSize: Appearance.font.pixelSize.default
+                                                    font.pixelSize: Appearance.font.pixelSize.normal
                                                     font.weight: root.activeTag === tagMa.tagValue ? Font.Medium : Font.Normal
                                                     color: root.activeTag === tagMa.tagValue ? root.colTitle : root.colSubtitle
                                                     Layout.fillWidth: true

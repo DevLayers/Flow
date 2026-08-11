@@ -60,7 +60,7 @@ Item {
                         StyledText {
                             Layout.fillWidth: true
                             text: Translation.tr("Game Overlay Options")
-                            font.pixelSize: Appearance.font.pixelSize.medium
+                            font.pixelSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colOnTertiaryContainer
                         }
 

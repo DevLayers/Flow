@@ -72,9 +72,17 @@ Item {
             clip: true
             currentIndex: tabBar.currentIndex
 
-            // Tabs
-            PomodoroTimer { entranceTrigger: root.entranceTrigger }
-            Stopwatch { entranceTrigger: root.entranceTrigger }
+            // Tabs: only the selected timer owns its visual tree.
+            Loader {
+                active: swipeView.currentIndex === 0
+                asynchronous: true
+                sourceComponent: PomodoroTimer { entranceTrigger: root.entranceTrigger }
+            }
+            Loader {
+                active: swipeView.currentIndex === 1
+                asynchronous: true
+                sourceComponent: Stopwatch { entranceTrigger: root.entranceTrigger }
+            }
         }
     }
 }

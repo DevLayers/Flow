@@ -6,7 +6,7 @@ import qs.modules.common.widgets
 
 Item {
     id: root
-    readonly property string screenName: QsWindow.window?.screen?.name ?? ""
+    readonly property string screenName: root.QsWindow?.window?.screen?.name ?? ""
     property bool vertical: false
     property bool showPing: false
     property bool aiChatEnabled: Config.options.policies.ai !== 0

@@ -35,7 +35,17 @@ Scope {
                     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
                     property int monitorIndex: overviewVariant.variantModel.indexOf(modelData)
                     property bool monitorIsFocused: (Hyprland.focusedMonitor?.name === monitor?.name) || (Hyprland.focusedMonitor?.id == monitorIndex)
-                    active: monitorIsFocused
+                    // Keep the focused window alive while it is visible or
+                    // while its closing animation still has pixels on screen.
+                    // The Scope and IPC shortcuts remain loaded, but this
+                    // expensive per-monitor PanelWindow is destroyed otherwise.
+                    property bool visualActive: false
+                    active: monitorIsFocused && (GlobalStates.overviewOpen || visualActive)
+
+                    onMonitorIsFocusedChanged: {
+                        if (!monitorIsFocused)
+                            visualActive = false;
+                    }
 
                     component: PanelWindow {
                         id: root
@@ -125,12 +135,19 @@ Scope {
                         }
 
                         Component.onCompleted: {
+                            realOverviewLoader.visualActive = true;
                             root.overviewRevealProgress = root.overviewShouldShow && LauncherSearch.query === "" ? 1.0 : 0.0;
                             root.overviewFadeProgress = root.overviewRevealProgress;
                             root._overviewRevealInitialized = true;
                         }
 
                         visible: GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0
+                        onVisibleChanged: {
+                            if (root.visible)
+                                realOverviewLoader.visualActive = true;
+                            else if (!GlobalStates.overviewOpen)
+                                realOverviewLoader.visualActive = false;
+                        }
 
                         mask: Region {
                             item: GlobalStates.overviewOpen ? contentItem : null

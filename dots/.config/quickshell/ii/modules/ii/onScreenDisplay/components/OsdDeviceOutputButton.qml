@@ -4,6 +4,8 @@ import qs.services
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Wayland
+import Quickshell.Services.Pipewire
 import "../popups"
 
 RippleButton {

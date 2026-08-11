@@ -653,7 +653,7 @@ Item {
                     Rectangle {
                         id: variantCard
                         required property var modelData
-                        readonly property int index: model.index
+                        required property int index
                         Layout.fillWidth: true
                         implicitHeight: root.variantCardHeight
                         radius: Appearance.rounding.normal
@@ -695,7 +695,7 @@ Item {
                             anchors.margins: 12
                             text: modelData.title
                             color: root.getContrastColor(variantCard.color)
-                            font.pixelSize: Appearance.font.pixelSize.medium
+                            font.pixelSize: Appearance.font.pixelSize.normal
                             font.weight: Font.DemiBold
                         }
 

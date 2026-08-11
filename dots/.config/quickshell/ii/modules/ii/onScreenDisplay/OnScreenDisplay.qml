@@ -361,9 +361,9 @@ Scope {
 
                 // Check toggled state of neighbors
                 // Note: In RightToLeft layout, _leftNeighbor is physically to the RIGHT, and _rightNeighbor is physically to the LEFT.
-                readonly property bool isSelfToggled: toggledState || toggled || (activated !== undefined && activated)
-                readonly property bool prevIsToggled: _leftNeighbor ? (_leftNeighbor.isSelfToggled || _leftNeighbor.toggledState || _leftNeighbor.toggled || (_leftNeighbor.activated !== undefined && _leftNeighbor.activated)) : false
-                readonly property bool nextIsToggled: _rightNeighbor ? (_rightNeighbor.isSelfToggled || _rightNeighbor.toggledState || _rightNeighbor.toggled || (_rightNeighbor.activated !== undefined && _rightNeighbor.activated)) : false
+                readonly property bool isSelfToggled: morphToggle.toggledState === true || morphToggle.toggled === true || morphToggle.activated === true
+                readonly property bool prevIsToggled: _leftNeighbor ? (_leftNeighbor.isSelfToggled || _leftNeighbor.toggledState === true || _leftNeighbor.toggled === true || _leftNeighbor.activated === true) : false
+                readonly property bool nextIsToggled: _rightNeighbor ? (_rightNeighbor.isSelfToggled || _rightNeighbor.toggledState === true || _rightNeighbor.toggled === true || _rightNeighbor.activated === true) : false
 
                 // Physical Left side radius:
                 readonly property real leftRadiusCalc: osdRoot.isLeftPosition

@@ -229,6 +229,15 @@ ContentPage {
                 onValueChanged: Config.options.search.suggestions.maxSuggestionsPerSection = value
             }
 
+            HelperCodeBox {
+                Layout.fillWidth: true
+                icon: "search"
+                title: Translation.tr("Open Search Only")
+                text: Translation.tr("To open search directly without launching the overview screen, add this keybind to your ~/.config/hypr/custom/keybinds.lua file:")
+                codeSnippet: 'hl.bind("CTRL + Space", hl.dsp.global("quickshell:searchOnlyToggle"), { description = "Shell: Open search only" })'
+                snippetWrapMode: Text.Wrap
+            }
+
         }
 
     }
