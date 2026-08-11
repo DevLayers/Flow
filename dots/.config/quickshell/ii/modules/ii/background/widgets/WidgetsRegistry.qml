@@ -179,8 +179,7 @@ Singleton {
             "category": "Clock",
             "qmlPath": Qt.resolvedUrl("clock/GridCardClockWidget.qml"),
             "icon": "schedule",
-            "description": Translation.tr("A stylized background clock with vertically stretched typography based on Material 3 cards."),
-            "configPage": "widgets/DesktopClockWidgetConfig.qml"
+            "description": Translation.tr("A stylized background clock with vertically stretched typography based on Material 3 cards.")
         },
         {
             "widgetId": "clock_expressive_card",
@@ -188,8 +187,7 @@ Singleton {
             "category": "Clock",
             "qmlPath": Qt.resolvedUrl("clock/ExpressiveCardClockWidget.qml"),
             "icon": "schedule",
-            "description": Translation.tr("A 1x1 clock with big time, month/day, temp & weather icon and expressive background."),
-            "configPage": "widgets/DesktopClockWidgetConfig.qml"
+            "description": Translation.tr("A 1x1 clock with big time, month/day, temp & weather icon and expressive background.")
         },
         {
             "widgetId": "circular_media",
@@ -224,8 +222,7 @@ Singleton {
             "category": "Media",
             "qmlPath": Qt.resolvedUrl("media/AndroidMediaWidget.qml"),
             "icon": "play_circle",
-            "description": Translation.tr("Beautiful Android style media player widget with dynamic colors, artwork, lyrics, and visualizer."),
-            "configPage": "widgets/DesktopMediaWidgetConfig.qml"
+            "description": Translation.tr("Beautiful Android style media player widget with dynamic colors, artwork, lyrics, and visualizer.")
         },
         {
             "widgetId": "media_cd",
@@ -332,8 +329,7 @@ Singleton {
             "category": "System",
             "qmlPath": Qt.resolvedUrl("system/WifiPillWidget.qml"),
             "icon": "wifi",
-            "description": Translation.tr("1x0.5 system quick toggle pill widget for Wi-Fi."),
-            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for Wi-Fi.")
         },
         {
             "widgetId": "bluetooth_pill",
@@ -341,8 +337,7 @@ Singleton {
             "category": "System",
             "qmlPath": Qt.resolvedUrl("system/BluetoothPillWidget.qml"),
             "icon": "bluetooth",
-            "description": Translation.tr("1x0.5 system quick toggle pill widget for Bluetooth."),
-            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for Bluetooth.")
         },
         {
             "widgetId": "mic_pill",
@@ -350,8 +345,7 @@ Singleton {
             "category": "System",
             "qmlPath": Qt.resolvedUrl("system/MicPillWidget.qml"),
             "icon": "mic",
-            "description": Translation.tr("1x0.5 system quick toggle pill widget for microphone mute."),
-            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for microphone mute.")
         },
         {
             "widgetId": "dark_mode_pill",
@@ -359,8 +353,7 @@ Singleton {
             "category": "System",
             "qmlPath": Qt.resolvedUrl("system/DarkModePillWidget.qml"),
             "icon": "dark_mode",
-            "description": Translation.tr("1x0.5 system quick toggle pill widget for Dark Mode."),
-            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for Dark Mode.")
         },
         {
             "widgetId": "screen_record_pill",
@@ -368,8 +361,7 @@ Singleton {
             "category": "System",
             "qmlPath": Qt.resolvedUrl("system/ScreenRecordPillWidget.qml"),
             "icon": "videocam",
-            "description": Translation.tr("1x0.5 system quick toggle pill widget for screen recording."),
-            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for screen recording.")
         },
         {
             "widgetId": "easy_effects_pill",
@@ -377,8 +369,7 @@ Singleton {
             "category": "System",
             "qmlPath": Qt.resolvedUrl("system/EasyEffectsPillWidget.qml"),
             "icon": "graphic_eq",
-            "description": Translation.tr("1x0.5 system quick toggle pill widget for EasyEffects."),
-            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for EasyEffects.")
         },
         {
             "widgetId": "weather_typography",
