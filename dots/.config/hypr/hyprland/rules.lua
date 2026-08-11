@@ -153,7 +153,7 @@ hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, ignore_alpha = 0.3})
 hl.layer_rule({ match = { namespace = "quickshell:floatingNotch" }, animation = "slide"})
 hl.layer_rule({ match = { namespace = "quickshell:overview" }, no_anim = true})
-hl.layer_rule({ match = { namespace = "quickshell:overview" }, blur = false})
+hl.layer_rule({ match = { namespace = "quickshell:overview" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:overview" }, ignore_alpha = 0.19})
 hl.layer_rule({ match = { namespace = "quickshell:overview" }, xray = false})
 -- overviewWindowTransition: window captures that scale with the wallpaper zoom
