@@ -123,9 +123,24 @@ Item {
         return 1.0;
     }
 
+    function onButtonEntered(slotItem) {
+        if (suppressHover || dragging)
+            return;
+        hoverGraceTimer.stop();
+        hoveredSlot = slotItem;
+        lastHoveredButton = slotItem;
+        buttonHovered = true;
+    }
+
+    function onButtonExited(slotItem) {
+        if (lastHoveredButton === slotItem || hoveredSlot === slotItem) {
+            hoverGraceTimer.restart();
+        }
+    }
+
     Timer {
         id: hoverGraceTimer
-        interval: 250
+        interval: 150
         onTriggered: {
             root.buttonHovered = false;
             root.hoveredSlot = null;

@@ -133,16 +133,11 @@ DockButton {
             root.fileHovered = true;
             if (dockContent?.suppressHover)
                 return;
-            dockContent.hoveredSlot = root;
-            dockContent.lastHoveredButton = root;
-            dockContent.buttonHovered = true;
+            dockContent?.onButtonEntered(root);
         }
         onExited: {
             root.fileHovered = false;
-            if (dockContent?.lastHoveredButton === root) {
-                dockContent.buttonHovered = false;
-                dockContent.hoveredSlot = null;
-            }
+            dockContent?.onButtonExited(root);
         }
     }
 

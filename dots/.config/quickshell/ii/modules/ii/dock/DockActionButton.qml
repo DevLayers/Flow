@@ -64,15 +64,10 @@ DockButton {
             onEntered: {
                 if (root.dockContent?.suppressHover)
                     return;
-                root.dockContent.hoveredSlot = root;
-                root.dockContent.lastHoveredButton = root;
-                root.dockContent.buttonHovered = true;
+                root.dockContent?.onButtonEntered(root);
             }
             onExited: {
-                if (root.dockContent?.lastHoveredButton === root) {
-                    root.dockContent.buttonHovered = false;
-                    root.dockContent.hoveredSlot = null;
-                }
+                root.dockContent?.onButtonExited(root);
             }
 
             onPressed: event => {

@@ -39,8 +39,16 @@ Item {
         property real pressCoord: 0
         property bool dragActive: false
 
-        onEntered: root.weatherHovered = true
-        onExited: root.weatherHovered = false
+        onEntered: {
+            root.weatherHovered = true;
+            if (root.dockContent)
+                root.dockContent.onButtonEntered(root);
+        }
+        onExited: {
+            root.weatherHovered = false;
+            if (root.dockContent)
+                root.dockContent.onButtonExited(root);
+        }
 
         onPressed: (event) => {
             if (event.button === Qt.LeftButton) {

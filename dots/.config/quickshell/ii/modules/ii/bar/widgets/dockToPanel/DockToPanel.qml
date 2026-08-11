@@ -79,7 +79,7 @@ Item {
 
     Timer {
         id: hoverGraceTimer
-        interval: 250
+        interval: 150
         onTriggered: {
             root.buttonHovered = false;
             root.hoveredSlot = null;

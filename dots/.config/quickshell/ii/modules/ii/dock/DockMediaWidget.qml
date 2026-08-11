@@ -647,8 +647,16 @@ Item {
         property bool dragActive: false
         property bool mediaHovered: false
 
-        onEntered: mediaHovered = true
-        onExited: mediaHovered = false
+        onEntered: {
+            mediaHovered = true;
+            if (root.dockContent)
+                root.dockContent.onButtonEntered(root);
+        }
+        onExited: {
+            mediaHovered = false;
+            if (root.dockContent)
+                root.dockContent.onButtonExited(root);
+        }
 
         onPressed: (event) => {
             if (event.button === Qt.LeftButton) {
