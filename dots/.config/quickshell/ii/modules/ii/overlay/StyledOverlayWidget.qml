@@ -54,18 +54,28 @@ AbstractOverlayWidget {
     property bool dragLocked: false // Set to true by children (e.g. volume sliders) to prevent drag
     property int resizeXDirection: getXResizeDirection(mouseX)
     property int resizeYDirection: getYResizeDirection(mouseY)
+    // Gesture origin, in canvas coordinates so that moving root while resizing doesn't feed back
+    property real resizeStartCanvasX: 0
+    property real resizeStartCanvasY: 0
+    property real resizeStartX: 0
+    property real resizeStartY: 0
+    property real resizeStartWidth: 0
+    property real resizeStartHeight: 0
+    property int resizeCursorShape: Qt.ArrowCursor
     draggable: GlobalStates.overlayOpen
     drag.target: undefined
+    preventStealing: root.resizing
     animateXPos: !dragHandler.active
     animateYPos: !dragHandler.active
     z: dragHandler.active ? 2 : 1
     cursorShape: {
-        if (dragHandler.active) return root.resizing ? cursorShape : Qt.ArrowCursor;
+        if (root.resizing) return root.resizeCursorShape;
+        if (dragHandler.active) return Qt.ArrowCursor;
+        if (!root.resizable) return Qt.ArrowCursor;
         if (resizeMargin < mouseX && mouseX < width - resizeMargin &&
             resizeMargin < mouseY && mouseY < height - resizeMargin) {
             return Qt.ArrowCursor;
         } else {
-            if (!root.resizable) return Qt.ArrowCursor;
             const dragIsLeft = mouseX < width / 2
             const dragIsTop = mouseY < height / 2
             if ((dragIsLeft && dragIsTop) || (!dragIsLeft && !dragIsTop)) {
@@ -127,7 +137,6 @@ AbstractOverlayWidget {
             return;
         }
         // Resizing setup
-        root.resizing = true;
         root.resizeXDirection = getXResizeDirection(event.x);
         root.resizeYDirection = getYResizeDirection(event.y);
         if (root.resizeYDirection !== 0 && root.resizeXDirection === 0) {
@@ -135,20 +144,35 @@ AbstractOverlayWidget {
         } else if (root.resizeXDirection !== 0 && root.resizeYDirection === 0) {
             root.resizeYDirection = event.y < root.height / 2 ? -1 : 1;
         }
+        const origin = root.mapToItem(root.parent, event.x, event.y);
+        root.resizeStartCanvasX = origin.x;
+        root.resizeStartCanvasY = origin.y;
+        root.resizeStartX = root.x;
+        root.resizeStartY = root.y;
+        root.resizeStartWidth = contentContainer.implicitWidth;
+        root.resizeStartHeight = contentContainer.implicitHeight;
+        root.resizeCursorShape = root.cursorShape;
+        root.resizing = true;
     }
     onPositionChanged: (event) => {
-        if (!resizing) return;
-        contentContainer.implicitWidth = Math.max(root.persistentStateEntry.width + dragHandler.xAxis.activeValue * root.resizeXDirection, root.minimumWidth);
-        contentContainer.implicitHeight = Math.max(root.persistentStateEntry.height + dragHandler.yAxis.activeValue * root.resizeYDirection, root.minimumHeight);
-        const negativeXDrag = root.resizeXDirection === -1;
-        const negativeYDrag = root.resizeYDirection === -1;
-        const wantedX = root.persistentStateEntry.x + (negativeXDrag ? dragHandler.xAxis.activeValue : 0)
-        const wantedY = root.persistentStateEntry.y + (negativeYDrag ? dragHandler.yAxis.activeValue : 0)
-        const negativeXDragLimit = root.persistentStateEntry.x + root.persistentStateEntry.width - contentContainer.implicitWidth;
-        const negativeYDragLimit = root.persistentStateEntry.y + root.persistentStateEntry.height - contentContainer.implicitHeight;
-        root.x = negativeXDrag ? Math.min(wantedX, negativeXDragLimit) : wantedX;
-        root.y = negativeYDrag ? Math.min(wantedY, negativeYDragLimit) : wantedY;
+        if (!root.resizing) return;
+        const current = root.mapToItem(root.parent, event.x, event.y);
+        const newWidth = Math.max(root.resizeStartWidth + (current.x - root.resizeStartCanvasX) * root.resizeXDirection, root.minimumWidth);
+        const newHeight = Math.max(root.resizeStartHeight + (current.y - root.resizeStartCanvasY) * root.resizeYDirection, root.minimumHeight);
+        contentContainer.implicitWidth = newWidth;
+        contentContainer.implicitHeight = newHeight;
+        // Dragging a left/top edge keeps the opposite edge pinned
+        if (root.resizeXDirection === -1) root.x = root.resizeStartX + root.resizeStartWidth - newWidth;
+        if (root.resizeYDirection === -1) root.y = root.resizeStartY + root.resizeStartHeight - newHeight;
     }
+    function endResize() {
+        if (!root.resizing) return;
+        root.resizing = false;
+        root.savePosition();
+    }
+    onReleased: root.endResize()
+    onCanceled: root.endResize()
+
     DragHandler {
         id: dragHandler
         acceptedButtons: Qt.LeftButton | Qt.RightButton
