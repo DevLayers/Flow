@@ -73,9 +73,11 @@ AbstractQuickPanel {
             .filter(toggle => toggle && root.isToggleVisible(toggle.type))
             .map(toggle => {
                 var t = Object.assign({}, toggle);
-                var w = t.sizeW ?? t.size ?? 1;
+                var defaultH = (t.type === "mediaWidget") ? 2 : 1;
+                var defaultW = (t.type === "mediaWidget") ? 2 : 1;
+                var w = t.sizeW ?? t.size ?? defaultW;
                 t.sizeW = Math.max(1, Math.min(w, root.columns));
-                t.sizeH = Math.max(1, t.sizeH ?? 1);
+                t.sizeH = Math.max(1, t.sizeH ?? defaultH);
                 t.size = t.sizeW;
                 return t;
             })
@@ -109,30 +111,67 @@ AbstractQuickPanel {
         return types.map(type => {
             return {
                 type: type,
-                size: 1
+                size: (type === "mediaWidget") ? 2 : 1,
+                sizeW: (type === "mediaWidget") ? 2 : 1,
+                sizeH: (type === "mediaWidget") ? 2 : 1
             };
         });
     }
+
     function getGridRowsNeeded(togglesList) {
         if (!togglesList || togglesList.length === 0)
             return 0;
         var cols = Math.max(1, columns);
-        var row = 0;
-        var col = 0;
+        var grid = [];
+
+        function isFree(r, c, w, h) {
+            if (c + w > cols) return false;
+            for (var dr = 0; dr < h; dr++) {
+                var rowArr = grid[r + dr];
+                if (rowArr) {
+                    for (var dc = 0; dc < w; dc++) {
+                        if (rowArr[c + dc]) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function markOccupied(r, c, w, h) {
+            for (var dr = 0; dr < h; dr++) {
+                var rowIdx = r + dr;
+                while (grid.length <= rowIdx) {
+                    grid.push(new Array(cols).fill(false));
+                }
+                for (var dc = 0; dc < w; dc++) {
+                    grid[rowIdx][c + dc] = true;
+                }
+            }
+        }
+
         var maxRow = 0;
         for (var i = 0; i < togglesList.length; i++) {
             if (!togglesList[i])
                 continue;
             var t = togglesList[i];
-            var w = Math.min(t.sizeW ?? t.size ?? 1, cols);
-            var h = t.sizeH ?? 1;
+            var defaultH = (t.type === "mediaWidget") ? 2 : 1;
+            var defaultW = (t.type === "mediaWidget") ? 2 : 1;
+            var w = Math.max(1, Math.min(t.sizeW ?? t.size ?? defaultW, cols));
+            var h = Math.max(1, t.sizeH ?? defaultH);
 
-            if (col > 0 && col + w > cols) {
-                row++;
-                col = 0;
+            var r = 0;
+            var placed = false;
+            while (!placed) {
+                for (var c = 0; c <= cols - w; c++) {
+                    if (isFree(r, c, w, h)) {
+                        markOccupied(r, c, w, h);
+                        maxRow = Math.max(maxRow, r + h);
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) r++;
             }
-            col += w;
-            maxRow = Math.max(maxRow, row + h);
         }
         return maxRow;
     }
