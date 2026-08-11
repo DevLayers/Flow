@@ -13,6 +13,9 @@ RippleButton {
     property Component extraComponent: null
     property url configPage: ""
     property bool hasSubPageOverride: false
+    // Navigation-only rows keep the switch visual without exposing a dead
+    // toggle that is not backed by Config.
+    property bool subPageOnly: false
     readonly property bool hasSubPage: configPage.toString() !== "" || hasSubPageOverride
 
     signal openSubPage()
@@ -268,13 +271,13 @@ RippleButton {
 
             Rectangle {
                 visible: root.hasSubPage
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 18
+                Layout.preferredWidth: 2
+                Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
                 Layout.leftMargin: 2
                 Layout.rightMargin: 2
-                color: Appearance.colors.colOnLayer2
-                opacity: 0.25
+                color: Appearance.colors.colOutline
+                opacity: 0.75
             }
 
             Item {
@@ -297,7 +300,8 @@ RippleButton {
                     hoverEnabled: enabled
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: {
-                        root.checked = !root.checked;
+                        if (!root.subPageOnly)
+                            root.checked = !root.checked;
                     }
                 }
             }

@@ -248,7 +248,11 @@ Item {
                 text: Translation.tr("Enable corner open")
                 checked: Config.options.sidebar.cornerOpen.enable
                 configPage: Qt.resolvedUrl("widgets/ScreenCornersConfig.qml")
+                property bool readyForToggle: false
+                Component.onCompleted: readyForToggle = true
                 onCheckedChanged: {
+                    if (!readyForToggle || !Config.ready)
+                        return;
                     Config.options.sidebar.cornerOpen.enable = checked;
                 }
                 StyledToolTip {

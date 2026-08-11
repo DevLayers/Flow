@@ -30,6 +30,197 @@ FloatingWindow {
 
     property string pendingSectionHighlight: ""
 
+    // Settings navigation is intentionally session-local. The stack contains
+    // the states behind the current page, including an open sub-page, and is
+    // capped so a long exploratory session cannot grow without bound.
+    property var navigationHistory: []
+    property bool navigationHistoryActive: false
+    property bool restoringNavigation: false
+    property int observedHistoryPage: -1
+    property string observedHistorySubPage: ""
+    property var pendingNavigationRestore: null
+
+    function findSubPageHost(node) {
+        if (!node)
+            return null;
+        if (node.navigationPath !== undefined)
+            return node;
+
+        if (node.item) {
+            const itemHost = root.findSubPageHost(node.item);
+            if (itemHost)
+                return itemHost;
+        }
+
+        const children = node.children || [];
+        for (let i = 0; i < children.length; ++i) {
+            const childHost = root.findSubPageHost(children[i]);
+            if (childHost)
+                return childHost;
+        }
+        return null;
+    }
+
+    function currentSubPagePath() {
+        const host = root.findSubPageHost(pageLoader.item);
+        if (host && host.navigationPath !== undefined)
+            return host.navigationPath.map(value => value.toString());
+
+        if (!pageLoader.item || pageLoader.item.activeSubPage === undefined)
+            return [];
+        const url = pageLoader.item.activeSubPage.toString();
+        return url === "" ? [] : [url];
+    }
+
+    function currentSubPageUrl() {
+        const path = root.currentSubPagePath();
+        return path.length > 0 ? JSON.stringify(path) : "";
+    }
+
+    readonly property var activeNavigationHost: root.findSubPageHost(pageLoader.item)
+
+    function subPagePathFromState(state) {
+        if (!state || !state.subPage)
+            return [];
+        try {
+            const parsed = JSON.parse(state.subPage);
+            return Array.isArray(parsed) ? parsed : [state.subPage];
+        } catch (error) {
+            // Keep compatibility with the single-URL representation used
+            // before nested subpages were included in the history.
+            return [state.subPage];
+        }
+    }
+
+    function restoreSubPagePath(encodedPath) {
+        const path = encodedPath ? root.subPagePathFromState({ subPage: encodedPath }) : [];
+        const host = root.findSubPageHost(pageLoader.item);
+        if (host && host.restoreNavigationPath) {
+            host.restoreNavigationPath(path);
+            return true;
+        }
+
+        if (pageLoader.item && pageLoader.item.activeSubPage !== undefined)
+            pageLoader.item.activeSubPage = path.length > 0 ? path[0] : "";
+        return false;
+    }
+
+    function sameNavigationState(a, b) {
+        return a && b && a.page === b.page && a.subPage === b.subPage;
+    }
+
+    function rememberObservedState() {
+        if (!root.navigationHistoryActive || root.restoringNavigation || root.observedHistoryPage < 0)
+            return;
+
+        const state = {
+            page: root.observedHistoryPage,
+            subPage: root.observedHistorySubPage
+        };
+        const last = root.navigationHistory.length > 0
+            ? root.navigationHistory[root.navigationHistory.length - 1]
+            : null;
+        if (root.sameNavigationState(last, state))
+            return;
+
+        let next = root.navigationHistory.concat([state]);
+        if (next.length > 10)
+            next = next.slice(next.length - 10);
+        root.navigationHistory = next;
+    }
+
+    function beginNavigationSession() {
+        root.navigationHistory = [];
+        root.restoringNavigation = false;
+        root.pendingNavigationRestore = null;
+        root.observedHistoryPage = root.currentPage;
+        root.observedHistorySubPage = root.currentSubPageUrl();
+        root.navigationHistoryActive = true;
+    }
+
+    function endNavigationSession() {
+        // A sub-page is part of the session too. Clear it when the window
+        // closes so reopening Settings always starts at the page itself and
+        // never inherits a stale overlay from the previous session.
+        if (pageLoader.item && pageLoader.item.activeSubPage !== undefined)
+            pageLoader.item.activeSubPage = "";
+        root.navigationHistoryActive = false;
+        root.navigationHistory = [];
+        root.restoringNavigation = false;
+        root.pendingNavigationRestore = null;
+        root.observedHistoryPage = -1;
+        root.observedHistorySubPage = "";
+    }
+
+    function handleObservedPageChanged() {
+        if (root.navigationHistoryActive && root.observedHistoryPage !== root.currentPage)
+            root.rememberObservedState();
+        root.observedHistoryPage = root.currentPage;
+        root.observedHistorySubPage = "";
+    }
+
+    function handleObservedSubPageChanged() {
+        const nextSubPage = root.currentSubPageUrl();
+        if (!root.navigationHistoryActive) {
+            root.observedHistorySubPage = nextSubPage;
+            return;
+        }
+        if (root.restoringNavigation) {
+            root.observedHistorySubPage = nextSubPage;
+            if (root.pendingNavigationRestore
+                    && nextSubPage === root.pendingNavigationRestore.subPage)
+                root.finishNavigationRestore();
+            return;
+        }
+        if (nextSubPage === root.observedHistorySubPage)
+            return;
+
+        // The built-in sub-page back buttons clear activeSubPage. If the
+        // previous stack entry is the page underneath, consume that entry
+        // instead of adding a duplicate forward transition.
+        const last = root.navigationHistory.length > 0
+            ? root.navigationHistory[root.navigationHistory.length - 1]
+            : null;
+        if (nextSubPage === "" && root.observedHistorySubPage !== ""
+                && root.sameNavigationState(last, { page: root.currentPage, subPage: "" })) {
+            root.navigationHistory = root.navigationHistory.slice(0, -1);
+        } else {
+            root.rememberObservedState();
+        }
+        root.observedHistorySubPage = nextSubPage;
+    }
+
+    function finishNavigationRestore() {
+        if (!root.restoringNavigation)
+            return;
+        root.pendingNavigationRestore = null;
+        root.observedHistoryPage = root.currentPage;
+        root.observedHistorySubPage = root.currentSubPageUrl();
+        Qt.callLater(() => root.restoringNavigation = false);
+    }
+
+    function navigateBack() {
+        if (!root.navigationHistoryActive || root.navigationHistory.length === 0)
+            return false;
+
+        const target = root.navigationHistory[root.navigationHistory.length - 1];
+        root.navigationHistory = root.navigationHistory.slice(0, -1);
+        root.restoringNavigation = true;
+        root.pendingNavigationRestore = target;
+
+        if (root.currentPage !== target.page) {
+            root.currentPage = target.page;
+        } else if (root.restoreSubPagePath(target.subPage)) {
+            // The corresponding navigation-path signal finishes the restore
+            // after all nested loaders have received their target pages.
+            if (target.subPage === root.currentSubPageUrl())
+                root.finishNavigationRestore();
+        } else {
+            root.finishNavigationRestore();
+        }
+        return true;
+    }
+
     // ── Flat page list, derived from SettingsPageRegistry ────────────────
     // Pages are addressed by stable `id`, not index — use pageIndexById().
     property var pages: SettingsPageRegistry.pages.map(p => ({
@@ -80,6 +271,7 @@ FloatingWindow {
         function onSettingsOpenChanged() {
             root.visible = GlobalStates.settingsOpen;
             if (GlobalStates.settingsOpen) {
+                root.navigationHistoryActive = false;
                 SearchRegistry.setSettingsActive(true);
                 settingsSearchBar.forceFocus();
                 if (GlobalStates.settingsPendingPageName !== "") {
@@ -92,9 +284,11 @@ FloatingWindow {
                     }
                     GlobalStates.settingsPendingPageName = "";
                 }
+                Qt.callLater(() => root.beginNavigationSession());
             } else {
                 root.pendingSearchText = "";
                 SearchRegistry.setSettingsActive(false);
+                root.endNavigationSession();
             }
         }
     }
@@ -114,6 +308,7 @@ FloatingWindow {
         if (!visible) {
             root.pendingSearchText = "";
             SearchRegistry.setSettingsActive(false);
+            root.endNavigationSession();
             if (GlobalStates.settingsOpen)
                 GlobalStates.settingsOpen = false;
         } else if (GlobalStates.settingsOpen) {
@@ -123,8 +318,12 @@ FloatingWindow {
 
     Component.onCompleted: {
         root.visible = GlobalStates.settingsOpen;
-        if (root.visible)
-            Qt.callLater(() => SearchRegistry.setSettingsActive(true));
+        if (root.visible) {
+            Qt.callLater(() => {
+                SearchRegistry.setSettingsActive(true);
+                root.beginNavigationSession();
+            });
+        }
         MaterialThemeLoader.reapplyTheme();
         Config.readWriteDelay = 0; // Settings app always only sets one var at a time so delay isn't needed
         // Re-apply ignore alpha rule: Settings is lazy-loaded, so the rule fired
@@ -307,6 +506,12 @@ FloatingWindow {
                             _waitingForLoad = false;
                             switchAnimIncoming.start();
                         }
+                        if (root.restoringNavigation && root.pendingNavigationRestore
+                                && root.pendingNavigationRestore.page === root.currentPage) {
+                            const targetSubPage = root.pendingNavigationRestore.subPage;
+                            if (!root.restoreSubPagePath(targetSubPage))
+                                root.finishNavigationRestore();
+                        }
                     }
 
                     Timer {
@@ -324,6 +529,7 @@ FloatingWindow {
                     Connections {
                         target: root
                         function onCurrentPageChanged() {
+                            root.handleObservedPageChanged();
                             switchAnimOutgoing.complete();
                             switchAnimOutgoing.start();
                         }
@@ -397,8 +603,38 @@ FloatingWindow {
                             }
                         }
                     }
+
                 } // closes Loader
             } // closes Rectangle (Content container)
         } // closes RowLayout (Window content)
+
+        // XButton1/Qt.BackButton is handled by a pointer handler attached to
+        // the content Item, so it can receive the event from any Settings
+        // control without adding a cursor-owning overlay.
+        TapHandler {
+            acceptedButtons: Qt.BackButton | Qt.ExtraButton1
+            grabPermissions: PointerHandler.CanTakeOverFromAnything
+            onTapped: (eventPoint, button) => {
+                root.navigateBack();
+            }
+        }
     } // closes ColumnLayout
+
+    // Keep observation reactive to the actual page host. This also catches
+    // nested hosts whose activeSubPage changes without replacing the page
+    // Loader item.
+    readonly property string liveSubPagePath: root.currentSubPageUrl()
+    onLiveSubPagePathChanged: root.handleObservedSubPageChanged()
+
+    Connections {
+        target: root.activeNavigationHost
+        ignoreUnknownSignals: true
+        function onNavigationPathChanged() {
+            root.handleObservedSubPageChanged();
+        }
+        function onNavigationChanged() {
+            root.handleObservedSubPageChanged();
+        }
+    }
+
 }

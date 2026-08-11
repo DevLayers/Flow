@@ -53,15 +53,32 @@ Scope {
         }
     }
 
+    Connections {
+        target: Config.options.bar.tooltips
+        function onEnablePopupsChanged() {
+            if (!Config.options.bar.tooltips.enablePopups)
+                GlobalStates.colorPickerPopupOpen = false;
+        }
+        function onEnableColorPickerPopupChanged() {
+            if (!Config.options.bar.tooltips.enableColorPickerPopup)
+                GlobalStates.colorPickerPopupOpen = false;
+        }
+    }
+
 
     LazyLoader {
         id: popupLoader
         active: GlobalStates.colorPickerPopupOpen
+            && Config.options.bar.tooltips.enablePopups
+            && Config.options.bar.tooltips.enableColorPickerPopup
 
         component: PanelWindow {
             id: popupWindow
             color: "transparent"
-            visible: Quickshell.screens.length > 0 && !root.sidebarOccludesPopup
+            visible: Quickshell.screens.length > 0
+                && Config.options.bar.tooltips.enablePopups
+                && Config.options.bar.tooltips.enableColorPickerPopup
+                && !root.sidebarOccludesPopup
             screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
 
             WlrLayershell.namespace: "quickshell:colorPickerPopup"

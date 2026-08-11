@@ -15,7 +15,7 @@ Scope {
     Connections {
         target: BluetoothStatus
         function onDeviceConnected(device) {
-            if (Config.options.bar.tooltips.enableBluetoothConnectionPopup) {
+            if (Config.options.bar.tooltips.enablePopups && Config.options.bar.tooltips.enableBluetoothConnectionPopup) {
                 GlobalStates.bluetoothConnectionPopupDevice = device;
                 GlobalStates.bluetoothConnectionPopupOpen = true;
             }
@@ -30,6 +30,18 @@ Scope {
                 GlobalStates.bluetoothConnectionPopupDevice.address === device.address) {
                 GlobalStates.bluetoothConnectionPopupOpen = false;
             }
+        }
+    }
+
+    Connections {
+        target: Config.options.bar.tooltips
+        function onEnablePopupsChanged() {
+            if (!Config.options.bar.tooltips.enablePopups)
+                GlobalStates.bluetoothConnectionPopupOpen = false;
+        }
+        function onEnableBluetoothConnectionPopupChanged() {
+            if (!Config.options.bar.tooltips.enableBluetoothConnectionPopup)
+                GlobalStates.bluetoothConnectionPopupOpen = false;
         }
     }
 
@@ -56,11 +68,14 @@ Scope {
     LazyLoader {
         id: popupLoader
         active: GlobalStates.bluetoothConnectionPopupOpen
+            && Config.options.bar.tooltips.enablePopups
+            && Config.options.bar.tooltips.enableBluetoothConnectionPopup
 
         component: PanelWindow {
             id: popupWindow
             color: "transparent"
-            visible: true
+            visible: Config.options.bar.tooltips.enablePopups
+                && Config.options.bar.tooltips.enableBluetoothConnectionPopup
             screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? null
 
             readonly property real screenWidth: popupWindow.screen?.width ?? 0

@@ -54,7 +54,7 @@ Item {
         }
 
         ContentSection {
-            title: Translation.tr("Overview Animation & Blur")
+            title: Translation.tr("Background Blur")
             icon: "grain"
 
             ConfigSwitch {
@@ -86,81 +86,6 @@ Item {
                 }
             }
 
-            ConfigSwitch {
-                buttonIcon: "zoom_in_map"
-                text: Translation.tr("Zoom animation when overview/cheatsheet is open (Experimental)")
-                checked: Config.options.background.zoomOutEnabled
-                onCheckedChanged: {
-                    Config.options.background.zoomOutEnabled = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Experimental - Scale windows with wallpaper when Overview/Cheatsheet is opened, this is a work in progress, expect bugs and a lags on low end hardware.")
-                }
-            }
-
-            ContentSubsection {
-                visible: Config.options.background.zoomOutEnabled || page.videoWallpaper
-                title: Translation.tr("Zoom background style")
-                icon: "style"
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.background.zoomOutStyle
-                    onSelected: newValue => {
-                        Config.options.background.zoomOutStyle = newValue;
-                    }
-                    options: [
-                        {
-                            "displayName": Translation.tr("Gnome Like"),
-                            "icon": "blur_on",
-                            "enabled": !page.videoWallpaper,
-                            "value": 0
-                        },
-                        {
-                            "displayName": Translation.tr("Default"),
-                            "icon": "grid_view",
-                            "value": 1
-                        },
-                        {
-                            "displayName": Translation.tr("Zoom In"),
-                            "icon": "zoom_in",
-                            "enabled": !page.videoWallpaper,
-                            "value": 2
-                        }
-                    ]
-                }
-            }
-
-            ConfigSwitch {
-                visible: (Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0) || page.videoWallpaper
-                enabled: !page.videoWallpaper
-                buttonIcon: "open_with"
-                text: Translation.tr("Scale windows with wallpaper (Experimental)")
-                checked: Config.options.background.windowZoomOnOverview
-                onCheckedChanged: {
-                    Config.options.background.windowZoomOnOverview = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Shows scaled ScreencopyView of windows zooming out with the wallpaper when the overview opens.\nWindows on the active workspace follow the wallpaper zoom animation.\nWorkspace switching slides the window previews alongside the workspace animation.")
-                }
-            }
-
-            ConfigSwitch {
-                visible: (Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0 && Config.options.background.windowZoomOnOverview) || page.videoWallpaper
-                enabled: !page.videoWallpaper
-                buttonIcon: "videocam"
-                text: Translation.tr("Keep screencopy live (no freeze)")
-                checked: Config.options.background.windowZoomLiveCapture
-                onCheckedChanged: {
-                    Config.options.background.windowZoomLiveCapture = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("When enabled, window previews stay live instead of freezing on overview open.\nDisable for better performance (freezes capture on open).")
-                }
-            }
         }
 
         KeyboardShortcutBox {

@@ -99,23 +99,23 @@ Item {
                     }
                     options: [
                         {
-                            "displayName": Translation.tr("Disabled"),
-                            "icon": "equalizer_off",
+                            "displayName": Translation.tr("Off"),
+                            "icon": "equalizer",
                             "value": 0
                         },
                         {
-                            "displayName": Translation.tr("Linear (Top & Bottom)"),
-                            "icon": "align_vertical_bottom",
+                            "displayName": Translation.tr("Waves"),
+                            "icon": "waves",
                             "value": 1
                         },
                         {
-                            "displayName": Translation.tr("Waveform (Center)"),
-                            "icon": "graphic_eq",
+                            "displayName": Translation.tr("Bars"),
+                            "icon": "bar_chart",
                             "value": 2
                         },
                         {
-                            "displayName": Translation.tr("Both"),
-                            "icon": "dashboard",
+                            "displayName": Translation.tr("Radial"),
+                            "icon": "blur_circular",
                             "value": 3
                         }
                     ]
@@ -124,16 +124,16 @@ Item {
 
             ConfigSwitch {
                 buttonIcon: "linear_scale"
-                text: Translation.tr("Show media seekbar / progress slider")
-                checked: Config.options.background.mediaMode.showSeekbar ?? true
+                text: Translation.tr("Show track progress seekbar")
+                checked: Config.options.background.mediaMode.showSeekBar ?? true
                 onCheckedChanged: {
-                    Config.options.background.mediaMode.showSeekbar = checked;
+                    Config.options.background.mediaMode.showSeekBar = checked;
                 }
             }
 
             ConfigSwitch {
                 buttonIcon: "volume_up"
-                text: Translation.tr("Show volume slider controls")
+                text: Translation.tr("Show volume slider control")
                 checked: Config.options.background.mediaMode.showVolumeSlider ?? true
                 onCheckedChanged: {
                     Config.options.background.mediaMode.showVolumeSlider = checked;

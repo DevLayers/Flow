@@ -939,10 +939,12 @@ command: ["bash", "-c",
                 readonly property bool isFirst: index === 0
                 readonly property bool isLast: index === commitsRepeater.count - 1
 
-                topLeftRadius: isLast ? Appearance.rounding.large : Appearance.rounding.verysmall
-                topRightRadius: isLast ? Appearance.rounding.large : Appearance.rounding.verysmall
-                bottomLeftRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
-                bottomRightRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
+                // ChangelogService returns newest-first: the first delegate
+                // owns the top outer corners and the last owns the bottom.
+                topLeftRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
+                topRightRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
+                bottomLeftRadius: isLast ? Appearance.rounding.large : Appearance.rounding.verysmall
+                bottomRightRadius: isLast ? Appearance.rounding.large : Appearance.rounding.verysmall
 
 
                 readonly property string commitHash: model.hash

@@ -1,10 +1,9 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
-import Quickshell
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 Item {
     id: subPageRoot
@@ -14,7 +13,7 @@ Item {
     signal goBack()
 
     ContentPage {
-        id: root
+        id: page
         anchors.fill: parent
         forceWidth: false
 
@@ -43,7 +42,7 @@ Item {
             }
 
             StyledText {
-                text: Translation.tr("Blur style")
+                text: Translation.tr("Lock Screen Effects")
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.family: Appearance.font.family.title
                 color: Appearance.colors.colOnLayer0
@@ -51,58 +50,129 @@ Item {
         }
 
         ContentSection {
-            title: Translation.tr("Blur style")
             icon: "blur_on"
+            title: Translation.tr("Blur style")
 
-            ConfigSlider {
+            ConfigSwitch {
                 buttonIcon: "lens_blur"
+                text: Translation.tr("Enable blur")
+                checked: Config.options.lock.blur.enable
+                onCheckedChanged: Config.options.lock.blur.enable = checked
+            }
+
+            ConfigSlider {
+                buttonIcon: "blur_circular"
                 text: Translation.tr("Blur intensity")
-                usePercentTooltip: true
+                enabled: Config.options.lock.blur.enable
+                from: 0
+                to: 200
+                stepSize: 5
+                value: Config.options.lock.blur.radius
+                usePercentTooltip: false
+                onValueChanged: Config.options.lock.blur.radius = value
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.lock.blur.enable
+                icon: "zoom_in"
+                text: Translation.tr("Extra wallpaper zoom (%)")
+                value: Config.options.lock.blur.extraZoom * 100
                 from: 0
                 to: 100
-                stepSize: 1
-                value: Config.options.lock.effects.blurRadius ?? 80
-                onValueChanged: {
-                    Config.options.lock.effects.blurRadius = value;
-                }
+                stepSize: 5
+                onValueChanged: Config.options.lock.blur.extraZoom = value / 100
+            }
+        }
+
+        ContentSection {
+            icon: "incomplete_circle"
+            title: Translation.tr("Style: Desaturated")
+
+            ConfigSwitch {
+                buttonIcon: "deblur"
+                text: Translation.tr("Desaturate wallpaper on lock")
+                checked: Config.options.lock.desaturate.enable
+                onCheckedChanged: Config.options.lock.desaturate.enable = checked
             }
 
             ConfigSlider {
-                buttonIcon: "tonality"
+                buttonIcon: "palette"
                 text: Translation.tr("Desaturation amount")
-                usePercentTooltip: true
+                enabled: Config.options.lock.desaturate.enable
                 from: 0
                 to: 100
-                stepSize: 1
-                value: Config.options.lock.effects.desaturate ?? 30
-                onValueChanged: {
-                    Config.options.lock.effects.desaturate = value;
-                }
+                stepSize: 5
+                value: Config.options.lock.desaturate.amount * 100
+                usePercentTooltip: true
+                onValueChanged: Config.options.lock.desaturate.amount = value / 100
             }
+        }
 
-            ConfigSlider {
+        ContentSection {
+            icon: "palette"
+            title: Translation.tr("Style: Color Wash")
+
+            ConfigSwitch {
                 buttonIcon: "format_color_fill"
-                text: Translation.tr("Color wash tint opacity")
-                usePercentTooltip: true
-                from: 0
-                to: 100
-                stepSize: 1
-                value: Config.options.lock.effects.tintOpacity ?? 40
-                onValueChanged: {
-                    Config.options.lock.effects.tintOpacity = value;
-                }
+                text: Translation.tr("Color wash overlay on lock")
+                checked: Config.options.lock.colorWash.enable
+                onCheckedChanged: Config.options.lock.colorWash.enable = checked
             }
 
             ConfigSlider {
-                buttonIcon: "vignette"
-                text: Translation.tr("Vignette intensity")
-                usePercentTooltip: true
+                buttonIcon: "opacity"
+                text: Translation.tr("Color wash intensity")
+                enabled: Config.options.lock.colorWash.enable
                 from: 0
                 to: 100
-                stepSize: 1
-                value: Config.options.lock.effects.vignetteRadius ?? 50
-                onValueChanged: {
-                    Config.options.lock.effects.vignetteRadius = value;
+                stepSize: 5
+                value: Config.options.lock.colorWash.amount * 100
+                usePercentTooltip: true
+                onValueChanged: Config.options.lock.colorWash.amount = value / 100
+            }
+        }
+
+        ContentSection {
+            icon: "vignette"
+            title: Translation.tr("Style: Vignette")
+
+            ConfigSwitch {
+                buttonIcon: "gradient"
+                text: Translation.tr("Vignette effect on lock")
+                checked: Config.options.lock.vignette.enable
+                onCheckedChanged: Config.options.lock.vignette.enable = checked
+            }
+
+            ConfigSlider {
+                buttonIcon: "dark_mode"
+                text: Translation.tr("Vignette intensity")
+                enabled: Config.options.lock.vignette.enable
+                from: 0
+                to: 100
+                stepSize: 5
+                value: Config.options.lock.vignette.amount * 100
+                usePercentTooltip: true
+                onValueChanged: Config.options.lock.vignette.amount = value / 100
+            }
+        }
+
+        ContentSection {
+            icon: "link"
+            title: Translation.tr("Related settings")
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: 8
+
+                RelatedChip {
+                    pageId: "windows"
+                    label: Translation.tr("Window blur")
+                    sectionHighlight: Translation.tr("Transparency & Blur")
+                }
+
+                RelatedChip {
+                    pageId: "wallpaper"
+                    label: Translation.tr("Wallpaper blur")
                 }
             }
         }

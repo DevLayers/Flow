@@ -1,10 +1,9 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
-import Quickshell
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 Item {
     id: subPageRoot
@@ -14,7 +13,6 @@ Item {
     signal goBack()
 
     ContentPage {
-        id: root
         anchors.fill: parent
         forceWidth: false
 
@@ -54,111 +52,82 @@ Item {
             title: Translation.tr("Widgets & Layout")
             icon: "widgets"
 
+            NoticeBox {
+                Layout.fillWidth: true
+                text: Translation.tr("You can also set per-widget lock behavior in the Widgets settings page. Multiple widgets can be centered simultaneously.")
+            }
+
             ConfigSwitch {
                 buttonIcon: "timer_off"
                 text: Translation.tr("Disable clock animation on lock")
                 checked: Config.options.background.widgets.clock_cookie.disableAnimationOnLock
-                onCheckedChanged: {
-                    Config.options.background.widgets.clock_cookie.disableAnimationOnLock = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Skip loading the clock widget during lock screen for better animation performance.")
-                }
+                onCheckedChanged: Config.options.background.widgets.clock_cookie.disableAnimationOnLock = checked
             }
 
-            ConfigSpinBox {
-                icon: "vertical_align_center"
-                text: Translation.tr("Clock center vertical spacing (px)")
-                value: Config.options.lock.widgets.clockCenterSpacing ?? 100
+            ConfigSlider {
+                text: Translation.tr("Center spacing")
+                value: Config.options.lock.centerSpacing ?? 20
                 from: 0
-                to: 300
-                stepSize: 10
-                onValueChanged: {
-                    Config.options.lock.widgets.clockCenterSpacing = value;
-                }
+                to: 100
+                stepSize: 5
+                onValueChanged: Config.options.lock.centerSpacing = value
             }
 
             ContentSubsection {
-                title: Translation.tr("Clock Alignment")
-                icon: "format_align_center"
+                title: Translation.tr("Lockscreen widgets alignment")
+                icon: "align_vertical_center"
                 Layout.fillWidth: true
 
                 ConfigSelectionArray {
-                    currentValue: Config.options.lock.widgets.clockAlignment ?? "center"
-                    onSelected: newValue => {
-                        Config.options.lock.widgets.clockAlignment = newValue;
-                    }
+                    currentValue: Config.options.lock.centerAlignment ?? "horizontal"
+                    onSelected: newValue => Config.options.lock.centerAlignment = newValue
                     options: [
-                        { displayName: Translation.tr("Center"), icon: "format_align_center", value: "center" },
-                        { displayName: Translation.tr("Left"), icon: "format_align_left", value: "left" },
-                        { displayName: Translation.tr("Right"), icon: "format_align_right", value: "right" }
+                        { displayName: Translation.tr("Vertical"), icon: "view_column", value: "vertical" },
+                        { displayName: Translation.tr("Horizontal"), icon: "view_stream", value: "horizontal" }
                     ]
                 }
             }
 
             ConfigSwitch {
-                buttonIcon: "lock"
-                text: Translation.tr("Show locked text indicator")
-                checked: Config.options.lock.widgets.showLockedIndicator ?? true
-                onCheckedChanged: {
-                    Config.options.lock.widgets.showLockedIndicator = checked;
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Material character shape")
-                icon: "shapes"
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.lock.widgets.materialCharacterShape ?? "circle"
-                    onSelected: newValue => {
-                        Config.options.lock.widgets.materialCharacterShape = newValue;
-                    }
-                    options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map(icon => {
-                        return {
-                            "displayName": "",
-                            "shape": icon,
-                            "value": icon
-                        };
-                    })
-                }
+                buttonIcon: "text_fields"
+                text: Translation.tr("Show \"Locked\" text")
+                checked: Config.options.lock.showLockedText
+                onCheckedChanged: Config.options.lock.showLockedText = checked
             }
 
             ConfigSwitch {
-                buttonIcon: "water_drop"
-                text: Translation.tr("Enable ripple effect on unlock")
-                checked: Config.options.lock.widgets.enableUnlockRipple ?? true
-                onCheckedChanged: {
-                    Config.options.lock.widgets.enableUnlockRipple = checked;
-                }
+                buttonIcon: "category"
+                text: Translation.tr("Use varying shapes for password characters")
+                checked: Config.options.lock.materialShapeChars
+                onCheckedChanged: Config.options.lock.materialShapeChars = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "waves"
+                text: Translation.tr("Ripple effect on touch")
+                checked: Config.options.lock.rippleEffect ?? true
+                onCheckedChanged: Config.options.lock.rippleEffect = checked
             }
 
             ConfigSwitch {
                 buttonIcon: "music_note"
                 text: Translation.tr("Show Now Playing widget")
-                checked: Config.options.lock.widgets.showNowPlaying ?? true
-                onCheckedChanged: {
-                    Config.options.lock.widgets.showNowPlaying = checked;
-                }
+                checked: Config.options.lock.nowPlaying ?? true
+                onCheckedChanged: Config.options.lock.nowPlaying = checked
             }
 
             ConfigSwitch {
                 buttonIcon: "alarm"
                 text: Translation.tr("Show next alarm")
-                checked: Config.options.lock.widgets.showNextAlarm ?? true
-                onCheckedChanged: {
-                    Config.options.lock.widgets.showNextAlarm = checked;
-                }
+                checked: Config.options.lock.showAlarm ?? true
+                onCheckedChanged: Config.options.lock.showAlarm = checked
             }
 
             ConfigSwitch {
-                buttonIcon: "wb_sunny"
-                text: Translation.tr("Show weather icon & temperature")
-                checked: Config.options.lock.widgets.showWeather ?? true
-                onCheckedChanged: {
-                    Config.options.lock.widgets.showWeather = checked;
-                }
+                buttonIcon: "cloud"
+                text: Translation.tr("Show weather icon")
+                checked: Config.options.lock.showWeather ?? true
+                onCheckedChanged: Config.options.lock.showWeather = checked
             }
         }
     }

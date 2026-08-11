@@ -72,7 +72,7 @@ LazyLoader {
     property bool _clickActive: false
     property bool _isClosing: false
 
-    readonly property bool _computedActive: (Config.options.bar.tooltips.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced))
+    readonly property bool _computedActive: Config.options.bar.tooltips.enablePopups && ((Config.options.bar.tooltips.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced)))
 
     property bool _openDebounced: false
 

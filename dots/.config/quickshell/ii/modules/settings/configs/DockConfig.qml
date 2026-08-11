@@ -26,6 +26,7 @@ ContentPage {
 
         ConfigSwitch {
             enabled: Config.options.dock.enable
+            visible: Config.options.dock.enable
             buttonIcon: "center_focus_strong"
             text: Translation.tr("Show only on focused monitor")
             checked: Config.options.dock.showOnlyOnFocusedMonitor
@@ -39,6 +40,7 @@ ContentPage {
 
         ConfigSwitch {
             enabled: Config.options.dock.enable
+            visible: Config.options.dock.enable
             buttonIcon: "group_work"
             text: Translation.tr("Smart auto-grouping")
             checked: Config.options.dock.smartGrouping
@@ -49,6 +51,7 @@ ContentPage {
 
         ConfigSwitch {
             enabled: Config.options.dock.enable
+            visible: Config.options.dock.enable
             buttonIcon: "monitor"
             text: Translation.tr("Isolate monitors")
             checked: Config.options.dock.isolateMonitors
@@ -58,11 +61,13 @@ ContentPage {
         }
 
         Item {
+            visible: Config.options.dock.enable
             Layout.preferredHeight: 8
         }
 
         ConfigSwitch {
             enabled: Config.options.dock.enable
+            visible: Config.options.dock.enable
             buttonIcon: "preview"
             text: Translation.tr("Enable windows preview")
             checked: Config.options.dock.enablePreview
@@ -76,6 +81,7 @@ ContentPage {
 
         ConfigSwitch {
             enabled: Config.options.dock.enable
+            visible: Config.options.dock.enable
             buttonIcon: "subtitles"
             text: Translation.tr("Enable app name tooltips")
             checked: Config.options.dock.enableAppTooltip
@@ -89,6 +95,7 @@ ContentPage {
 
         ConfigSwitch {
             enabled: Config.options.dock.enable
+            visible: Config.options.dock.enable
             buttonIcon: "mouse"
             text: Translation.tr("Hover to reveal")
             checked: Config.options.dock.hoverToReveal
@@ -99,6 +106,7 @@ ContentPage {
 
         ConfigSwitch {
             enabled: Config.options.dock.enable
+            visible: Config.options.dock.enable
             buttonIcon: "push_pin"
             text: Translation.tr("Pinned on startup")
             checked: Config.options.dock.pinnedOnStartup
@@ -111,6 +119,7 @@ ContentPage {
 
     // ── Content & buttons ─────────────────────────────────────────────────
     ContentSection {
+        visible: Config.options.dock.enable
         title: Translation.tr("Content & buttons")
         icon: "widgets"
 
@@ -192,6 +201,7 @@ ContentPage {
 
     // ── Appearance ────────────────────────────────────────────────────────
     ContentSection {
+        visible: Config.options.dock.enable
         title: Translation.tr("Appearance")
         icon: "palette"
 
@@ -286,6 +296,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: Config.options.dock.enable
         title: Translation.tr("Dock Shape Mask")
         icon: "category"
 
@@ -325,7 +336,7 @@ ContentPage {
             id: dockShapeMaskLoader
 
             active: false
-            visible: active
+            visible: active && Config.options.dock.enable
             Layout.fillWidth: true
 
             sourceComponent: ContentSubsection {
@@ -354,6 +365,7 @@ ContentPage {
 
     // ── Position & size ───────────────────────────────────────────────────
     ContentSection {
+        visible: Config.options.dock.enable
         title: Translation.tr("Position & size")
         icon: "open_in_full"
 
@@ -415,6 +427,7 @@ ContentPage {
         id: dockPresetsLoader
         Layout.fillWidth: true
         asynchronous: true
+        visible: Config.options.dock.enable
         source: Qt.resolvedUrl("widgets/DockPresetsManager.qml")
         Layout.preferredHeight: item ? item.implicitHeight : 0
     }

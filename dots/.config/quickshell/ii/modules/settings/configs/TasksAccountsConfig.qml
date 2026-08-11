@@ -14,6 +14,9 @@ Item {
 
     property alias contentY: page.contentY
     property alias activeSubPage: subPageOverlay.activeSubPage
+    property bool driveSubPageMode: false
+    property bool showBackButton: false
+    signal goBack()
 
 
     // Temp state before saving
@@ -638,15 +641,48 @@ Item {
         opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
+        RowLayout {
+            visible: root.showBackButton
+            spacing: 12
+
+            RippleButton {
+                implicitWidth: implicitHeight
+                implicitHeight: 40
+                topLeftRadius: Appearance.rounding.full
+                topRightRadius: Appearance.rounding.full
+                bottomLeftRadius: Appearance.rounding.full
+                bottomRightRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colRipple: Appearance.colors.colSecondaryContainerActive
+                onClicked: root.goBack()
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "arrow_back"
+                    iconSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+            }
+
+            StyledText {
+                text: Translation.tr("Google Drive Backup")
+                font.pixelSize: Appearance.font.pixelSize.large
+                font.family: Appearance.font.family.title
+                color: Appearance.colors.colOnLayer0
+            }
+        }
+
     WarningBox {
         Layout.fillWidth: true
-        visible: authErrorMsg !== ""
+        visible: !root.driveSubPageMode && authErrorMsg !== ""
         text: authErrorMsg
     }
 
     ContentSection {
         icon: "cloud_sync"
         title: Translation.tr("TickTick Credentials")
+        visible: !root.driveSubPageMode
 
         HelperLinkBox {
             Layout.fillWidth: true
@@ -698,6 +734,7 @@ Item {
     ContentSection {
         icon: "sync_saved_locally"
         title: Translation.tr("Actions")
+        visible: !root.driveSubPageMode
 
         RowLayout {
             Layout.fillWidth: true
@@ -836,7 +873,26 @@ Item {
         topRightRadius: Appearance.rounding.large
         bottomLeftRadius: Appearance.rounding.large
         bottomRightRadius: Appearance.rounding.large
+        visible: !root.driveSubPageMode
         text: Translation.tr("Gmail credentials are set in ii/.env. Sports (ESPN) options live in the Sports bar widget page.")
+    }
+
+    ContentSection {
+        Layout.fillWidth: true
+        visible: !root.driveSubPageMode
+        icon: "cloud_sync"
+        title: Translation.tr("Google Drive Backup")
+
+        ConfigSwitch {
+            buttonIcon: "cloud_done"
+            text: Translation.tr("Enable Google Drive backups")
+            checked: Config.options.googleDrive.enabled
+            configPage: Qt.resolvedUrl("widgets/GoogleDriveBackupConfig.qml")
+            onCheckedChanged: {
+                if (checked !== Config.options.googleDrive.enabled)
+                    Config.options.googleDrive.enabled = checked;
+            }
+        }
     }
 
     WarningBox {
@@ -846,7 +902,7 @@ Item {
         topRightRadius: Appearance.rounding.large
         bottomLeftRadius: Appearance.rounding.large
         bottomRightRadius: Appearance.rounding.large
-        visible: root.driveUiError !== "" || GoogleDriveService.errorMessage !== "" || GoogleDriveService.warningMessage !== ""
+        visible: root.driveSubPageMode && (root.driveUiError !== "" || GoogleDriveService.errorMessage !== "" || GoogleDriveService.warningMessage !== "")
         text: root.driveUiError !== ""
             ? root.driveUiError
             : GoogleDriveService.errorMessage !== ""
@@ -857,7 +913,7 @@ Item {
     HelperCodeBox {
         Layout.fillWidth: true
         Layout.topMargin: 8
-        visible: !GoogleDriveService.checking && !GoogleDriveService.rcloneInstalled
+        visible: root.driveSubPageMode && !GoogleDriveService.checking && !GoogleDriveService.rcloneInstalled
         topLeftRadius: Appearance.rounding.large
         topRightRadius: Appearance.rounding.large
         bottomLeftRadius: Appearance.rounding.large
@@ -872,6 +928,7 @@ Item {
     // ── Google Drive — status hero ──────────────────────────────────────────
     ContentSection {
         Layout.fillWidth: true
+        visible: root.driveSubPageMode
         icon: "cloud_sync"
         title: Translation.tr("Google Drive Backup")
 
@@ -1126,20 +1183,12 @@ Item {
             }
         }
 
-        ConfigSwitch {
-            buttonIcon: "cloud_done"
-            text: Translation.tr("Enable Google Drive backups")
-            checked: Config.options.googleDrive.enabled
-            onCheckedChanged: {
-                if (checked !== Config.options.googleDrive.enabled)
-                    Config.options.googleDrive.enabled = checked;
-            }
-        }
     }
 
     // ── Google Drive — authorization ────────────────────────────────────────
     ContentSection {
         Layout.fillWidth: true
+        visible: root.driveSubPageMode
         icon: "vpn_key"
         title: Translation.tr("Google Drive Authorization")
 
@@ -1194,6 +1243,7 @@ Item {
     // ── Google Drive — bento dashboard ──────────────────────────────────────
     ContentSection {
         Layout.fillWidth: true
+        visible: root.driveSubPageMode
         icon: "monitoring"
         title: Translation.tr("Backup overview")
         customBackgroundColor: Appearance.colors.colLayer0
@@ -2263,6 +2313,7 @@ Item {
     // ── Google Drive — folders ──────────────────────────────────────────────
     ContentSection {
         Layout.fillWidth: true
+        visible: root.driveSubPageMode
         icon: "folder_copy"
         title: Translation.tr("Backup Folders")
 
@@ -2368,6 +2419,7 @@ Item {
     // ── Google Drive — schedule ─────────────────────────────────────────────
     ContentSection {
         Layout.fillWidth: true
+        visible: root.driveSubPageMode
         icon: "schedule"
         title: Translation.tr("Sync Schedule")
 
@@ -2404,6 +2456,7 @@ Item {
     // ── Google Drive — advanced settings entry ──────────────────────────────
     ContentSection {
         Layout.fillWidth: true
+        visible: root.driveSubPageMode
         icon: "tune"
         title: Translation.tr("Advanced Drive Settings")
 
@@ -2464,6 +2517,7 @@ Item {
     // ── Google Drive — exclusion patterns ───────────────────────────────────
     ContentSection {
         Layout.fillWidth: true
+        visible: root.driveSubPageMode
         icon: "block"
         title: Translation.tr("Exclude Patterns")
 

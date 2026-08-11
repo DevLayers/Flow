@@ -1,3 +1,4 @@
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -233,7 +234,11 @@ Button {
         anchors.fill: parent
         hoverEnabled: root.hoverEnabled
         cursorShape: root.pointingHandCursor ? Qt.PointingHandCursor : Qt.ArrowCursor
-        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton | Qt.BackButton | Qt.ExtraButton1
+        // Settings owns the side-button navigation gesture. Do not let every
+        // RippleButton consume it before SettingsWindow's history handler can
+        // see it; outside Settings, preserve the existing button action.
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+            | (GlobalStates.settingsOpen ? Qt.NoButton : Qt.BackButton | Qt.ExtraButton1)
         onEntered: {
             if (root.enteredAction) root.enteredAction()
         }

@@ -98,46 +98,4 @@ ContentPage {
         }
     }
 
-    ContentSection {
-        icon: "volume_up"
-        title: Translation.tr("Earbang & Volume Limits")
-
-        ConfigSwitch {
-            buttonIcon: "hearing"
-            text: Translation.tr("Earbang protection")
-            checked: Config.options.audio.protection.enable
-            onCheckedChanged: {
-                Config.options.audio.protection.enable = checked;
-            }
-            StyledToolTip {
-                text: Translation.tr("Prevents abrupt increments and restricts volume limit")
-            }
-        }
-
-        ConfigSpinBox {
-            enabled: Config.options.audio.protection.enable
-            icon: "arrow_warm_up"
-            text: Translation.tr("Max allowed volume increase")
-            value: Config.options.audio.protection.maxAllowedIncrease
-            from: 0
-            to: 100
-            stepSize: 2
-            onValueChanged: {
-                Config.options.audio.protection.maxAllowedIncrease = value;
-            }
-        }
-
-        ConfigSpinBox {
-            enabled: Config.options.audio.protection.enable
-            icon: "vertical_align_top"
-            text: Translation.tr("Volume limit")
-            value: Config.options.audio.protection.maxAllowed
-            from: 0
-            to: 154
-            stepSize: 2
-            onValueChanged: {
-                Config.options.audio.protection.maxAllowed = value;
-            }
-        }
-    }
 }

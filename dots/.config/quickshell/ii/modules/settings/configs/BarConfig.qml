@@ -636,120 +636,46 @@ Item {
 
             }
 
-            ContentSubsectionLabel {
-                text: Translation.tr("Scroll Actions")
-            }
-
             ConfigSwitch {
-                buttonIcon: "volume_up"
-                text: Translation.tr("Scroll to change volume")
-                checked: Config.options.bar.enableVolumeScroll
+                buttonIcon: "swap_vert"
+                text: Translation.tr("Scroll actions")
+                checked: Config.options.bar.enableVolumeScroll || Config.options.bar.enableBrightnessScroll
+                configPage: Qt.resolvedUrl("widgets/BarScrollActionsConfig.qml")
+                property bool readyForToggle: false
+                Component.onCompleted: readyForToggle = true
                 onCheckedChanged: {
+                    if (!readyForToggle)
+                        return;
                     Config.options.bar.enableVolumeScroll = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Enable or disable scrolling on the bar to change volume")
-                }
-
-            }
-
-            ConfigSwitch {
-                buttonIcon: "brightness_5"
-                text: Translation.tr("Scroll to change brightness")
-                checked: Config.options.bar.enableBrightnessScroll
-                onCheckedChanged: {
                     Config.options.bar.enableBrightnessScroll = checked;
                 }
-
-                StyledToolTip {
-                    text: Translation.tr("Enable or disable scrolling on the bar to change brightness")
-                }
-
-            }
-
-            ContentSubsectionLabel {
-                text: Translation.tr("Tooltips & Popups")
             }
 
             ConfigSwitch {
-                buttonIcon: "ads_click"
-                text: Translation.tr("Click to show tooltips")
-                checked: Config.options.bar.tooltips.clickToShow
+                buttonIcon: "tooltip"
+                text: Translation.tr("Enable tooltips")
+                checked: Config.options.bar.tooltips.enableTooltips
+                configPage: Qt.resolvedUrl("widgets/BarTooltipsConfig.qml")
+                property bool readyForToggle: false
+                Component.onCompleted: readyForToggle = true
                 onCheckedChanged: {
-                    Config.options.bar.tooltips.clickToShow = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("You will not be able to use the buttons on some popups if you enable this option.")
-                }
-
-            }
-
-            ConfigSwitch {
-                buttonIcon: "compress"
-                text: Translation.tr("Compact popups")
-                checked: Config.options.bar.tooltips.compactPopups
-                onCheckedChanged: {
-                    Config.options.bar.tooltips.compactPopups = checked;
-                }
-            }
-
-            ConfigSlider {
-                buttonIcon: "aspect_ratio"
-                text: Translation.tr("Popup scale multiplier")
-                value: Config.options.bar.tooltips.popupScaleMultiplier
-                usePercentTooltip: false
-                tooltipContent: `${(Config.options.bar.tooltips.popupScaleMultiplier ?? 1.0).toFixed(2)}x`
-                from: 0.5
-                to: 2
-                stepSize: 0.05
-                onValueChanged: {
-                    Config.options.bar.tooltips.popupScaleMultiplier = Math.round(value * 100) / 100;
-                }
-            }
-
-            ConfigSpinBox {
-                icon: "timer"
-                text: Translation.tr("Popup close delay (ms)")
-                value: Config.options.bar.tooltips.closeDelay ?? 0
-                from: 0
-                to: 2000
-                stepSize: 50
-                onValueChanged: {
-                    Config.options.bar.tooltips.closeDelay = value;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Delay in milliseconds before starting to close the popup when mouse leaves.")
-                }
-
-            }
-
-            ConfigSwitch {
-                buttonIcon: "colorize"
-                text: Translation.tr("Enable color picker popup")
-                checked: Config.options.bar.tooltips.enableColorPickerPopup
-                onCheckedChanged: {
-                    Config.options.bar.tooltips.enableColorPickerPopup = checked;
+                    if (!readyForToggle || !Config.ready)
+                        return;
+                    Config.options.bar.tooltips.enableTooltips = checked;
                 }
             }
 
             ConfigSwitch {
-                buttonIcon: "bluetooth"
-                text: Translation.tr("Enable Bluetooth connection popup")
-                checked: Config.options.bar.tooltips.enableBluetoothConnectionPopup
+                buttonIcon: "open_in_new"
+                text: Translation.tr("Enable popups")
+                checked: Config.options.bar.tooltips.enablePopups
+                configPage: Qt.resolvedUrl("widgets/BarPopupsConfig.qml")
+                property bool readyForToggle: false
+                Component.onCompleted: readyForToggle = true
                 onCheckedChanged: {
-                    Config.options.bar.tooltips.enableBluetoothConnectionPopup = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "keyboard"
-                text: Translation.tr("Enable keyboard layout transition popup")
-                checked: Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup
-                onCheckedChanged: {
-                    Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup = checked;
+                    if (!readyForToggle || !Config.ready)
+                        return;
+                    Config.options.bar.tooltips.enablePopups = checked;
                 }
             }
 

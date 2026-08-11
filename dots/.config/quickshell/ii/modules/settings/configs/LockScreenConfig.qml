@@ -113,6 +113,7 @@ Item {
                 buttonIcon: "widgets"
                 text: Translation.tr("Lockscreen widgets and layout")
                 checked: true
+                subPageOnly: true
                 configPage: Qt.resolvedUrl("widgets/LockscreenWidgetsConfig.qml")
                 StyledToolTip {
                     text: Translation.tr("Click button text to configure lockscreen clock animation, alignment, spacing, and widget visibility.")
@@ -129,8 +130,15 @@ Item {
                 text: Translation.tr("Enable visual effects")
                 checked: Config.options.lock.blur.enable || Config.options.lock.desaturate.enable || Config.options.lock.colorWash.enable || Config.options.lock.vignette.enable
                 configPage: Qt.resolvedUrl("widgets/LockscreenEffectsConfig.qml")
+                property bool readyForToggle: false
+                Component.onCompleted: readyForToggle = true
                 onCheckedChanged: {
+                    if (!readyForToggle)
+                        return;
                     Config.options.lock.blur.enable = checked;
+                    Config.options.lock.desaturate.enable = checked;
+                    Config.options.lock.colorWash.enable = checked;
+                    Config.options.lock.vignette.enable = checked;
                 }
                 StyledToolTip {
                     text: Translation.tr("Configure wallpaper blur, desaturation, color wash tint, and vignette effects on lock screen.")

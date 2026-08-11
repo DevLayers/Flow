@@ -236,120 +236,123 @@ Item {
             let never = conf.neverShowApps.filter(app => app.toLowerCase() !== lower);
             let always = conf.alwaysShowApps.filter(app => app.toLowerCase() !== lower);
 
-            if (rule === "hide")
-                never.push(name);
-            else if (rule === "show")
+            if (rule === "show")
                 always.push(name);
+            else if (rule === "hide")
+                never.push(name);
 
             conf.neverShowApps = never;
             conf.alwaysShowApps = always;
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
+        // Apps with explicit rules, then (while searching) installed apps and
+        // the raw query as a free-text fallback, since notification app names
+        // can differ from any desktop entry
+        readonly property var displayedApps: {
+            const lowerQuery = query.toLowerCase();
+            const taken = new Set();
+            const result = [];
+            const add = (name, icon) => {
+                if (!name || taken.has(name.toLowerCase()))
+                    return;
+                taken.add(name.toLowerCase());
+                result.push({
+                    name: name,
+                    icon: icon
+                });
+            };
+            const matches = name => lowerQuery === "" || name.toLowerCase().includes(lowerQuery);
 
-            SearchField {
-                id: searchField
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Filter apps...")
+            [...conf.alwaysShowApps, ...conf.neverShowApps].filter(matches).forEach(name => add(name, ""));
+            if (lowerQuery !== "") {
+                AppSearch.fuzzyQuery(query).slice(0, 8).forEach(entry => add(entry.name, entry.icon));
+                add(query, "");
             }
+            return result;
+        }
+
+        spacing: 8
+
+        ConfigSelectionArray {
+            currentValue: editor.conf.defaultPolicy
+            onSelected: newValue => {
+                editor.conf.defaultPolicy = newValue;
+            }
+            options: [
+                {
+                    displayName: Translation.tr("Show by default"),
+                    icon: "visibility",
+                    value: "show"
+                },
+                {
+                    displayName: Translation.tr("Hide by default"),
+                    icon: "visibility_off",
+                    value: "hide"
+                }
+            ]
+        }
+
+        MaterialTextField {
+            id: searchField
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("Search apps or type a name")
+        }
+
+        StyledText {
+            visible: editor.displayedApps.length === 0
+            Layout.fillWidth: true
+            text: Translation.tr("No rules yet. Search to pick an installed app, or type any name a notification reports.")
+            wrapMode: Text.Wrap
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colSubtext
         }
 
         Repeater {
-            model: AppSearch.appList
-
-            delegate: ColumnLayout {
-                id: delegateRoot
+            model: editor.displayedApps
+            delegate: RowLayout {
+                id: appRow
                 required property var modelData
-                required property int index
+                readonly property string rule: editor.ruleFor(modelData.name)
 
-                readonly property string appName: modelData.name || modelData.appId || ""
-                readonly property string currentRule: editor.ruleFor(appName)
-                readonly property bool matchesSearch: editor.query === "" || appName.toLowerCase().indexOf(editor.query.toLowerCase()) !== -1
-
-                visible: matchesSearch
                 Layout.fillWidth: true
-                spacing: 2
+                spacing: 10
 
-                RowLayout {
+                IconImage {
+                    implicitSize: 28
+                    source: Quickshell.iconPath(appRow.modelData.icon !== "" ? appRow.modelData.icon : AppSearch.guessIcon(appRow.modelData.name), "image-missing")
+                }
+
+                StyledText {
                     Layout.fillWidth: true
-                    spacing: 8
+                    text: appRow.modelData.name
+                    elide: Text.ElideRight
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
 
-                    AppIcon {
-                        implicitWidth: 24
-                        implicitHeight: 24
-                        appIcon: delegateRoot.modelData.icon || "application-x-executable"
+                SelectionGroupButton {
+                    leftmost: true
+                    buttonIcon: "remove"
+                    toggled: appRow.rule === "default"
+                    onClicked: editor.setRule(appRow.modelData.name, "default")
+                    StyledToolTip {
+                        text: Translation.tr("Follow default")
                     }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: delegateRoot.appName
-                        elide: Text.ElideRight
+                }
+                SelectionGroupButton {
+                    buttonIcon: "visibility"
+                    toggled: appRow.rule === "show"
+                    onClicked: editor.setRule(appRow.modelData.name, "show")
+                    StyledToolTip {
+                        text: Translation.tr("Always show")
                     }
-
-                    RowLayout {
-                        spacing: 2
-
-                        RippleButton {
-                            implicitWidth: 28
-                            implicitHeight: 28
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: delegateRoot.currentRule === "default" ? Appearance.colors.colPrimaryContainer : "transparent"
-
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "remove"
-                                iconSize: 16
-                                color: delegateRoot.currentRule === "default" ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer1
-                            }
-
-                            StyledToolTip {
-                                text: Translation.tr("Default (use global privacy settings)")
-                            }
-
-                            onClicked: editor.setRule(delegateRoot.appName, "default")
-                        }
-
-                        RippleButton {
-                            implicitWidth: 28
-                            implicitHeight: 28
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: delegateRoot.currentRule === "hide" ? Appearance.colors.colErrorContainer : "transparent"
-
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "block"
-                                iconSize: 16
-                                color: delegateRoot.currentRule === "hide" ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer1
-                            }
-
-                            StyledToolTip {
-                                text: Translation.tr("Always hide on lockscreen")
-                            }
-
-                            onClicked: editor.setRule(delegateRoot.appName, "hide")
-                        }
-
-                        RippleButton {
-                            implicitWidth: 28
-                            implicitHeight: 28
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: delegateRoot.currentRule === "show" ? Appearance.colors.colSecondaryContainer : "transparent"
-
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "visibility"
-                                iconSize: 16
-                                color: delegateRoot.currentRule === "show" ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
-                            }
-
-                            StyledToolTip {
-                                text: Translation.tr("Always show full content")
-                            }
-
-                            onClicked: editor.setRule(delegateRoot.appName, "show")
-                        }
+                }
+                SelectionGroupButton {
+                    rightmost: true
+                    buttonIcon: "visibility_off"
+                    toggled: appRow.rule === "hide"
+                    onClicked: editor.setRule(appRow.modelData.name, "hide")
+                    StyledToolTip {
+                        text: Translation.tr("Never show")
                     }
                 }
             }

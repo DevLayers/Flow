@@ -81,7 +81,7 @@ Rectangle {
     property bool isFirst: itemIndex === 0
     property bool isLast: itemIndex === totalItems - 1
 
-    readonly property bool isPressed: false
+    readonly property bool isPressed: headerMouseArea.pressed
 
     readonly property bool prevIsPressed: {
         var p = parent;
@@ -181,6 +181,7 @@ Rectangle {
             Layout.preferredHeight: headerRow.implicitHeight + 24
 
             MouseArea {
+                id: headerMouseArea
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor

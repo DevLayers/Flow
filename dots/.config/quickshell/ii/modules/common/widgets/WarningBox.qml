@@ -80,7 +80,14 @@ Rectangle {
     property bool isFirst: itemIndex === 0
     property bool isLast: itemIndex === totalItems - 1
 
-    readonly property bool isPressed: false
+    readonly property bool isPressed: {
+        for (var i = 0; i < buttonRow.children.length; ++i) {
+            var child = buttonRow.children[i];
+            if (child.isPressed === true || (child.down !== undefined && child.down === true))
+                return true;
+        }
+        return false;
+    }
 
     readonly property bool prevIsPressed: {
         var p = parent;

@@ -2299,6 +2299,8 @@ Singleton {
                     ]
                 }
                 property JsonObject tooltips: JsonObject {
+                    property bool enableTooltips: true
+                    property bool enablePopups: true
                     property bool clickToShow: false
                     property bool compactPopups: false
                     property real popupScaleMultiplier: 1.0

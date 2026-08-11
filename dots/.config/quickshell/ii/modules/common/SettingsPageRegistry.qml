@@ -43,7 +43,7 @@ Singleton {
         "name": "Bar",
         "icon": "space_bar",
         "component": "modules/settings/configs/BarConfig.qml",
-        "subPages": ["widgets/BarWidgetsWaffleConfig.qml", "widgets/ActiveWindowConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/ClockDateWidgetConfig.qml", "widgets/WaffleTweaksConfig.qml", "widgets/DockToPanelConfig.qml"],
+        "subPages": ["widgets/BarWidgetsWaffleConfig.qml", "widgets/ActiveWindowConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/ClockDateWidgetConfig.qml", "widgets/WaffleTweaksConfig.qml", "widgets/DockToPanelConfig.qml", "widgets/BarScrollActionsConfig.qml", "widgets/BarTooltipsConfig.qml", "widgets/BarPopupsConfig.qml"],
         "aliases": ["Bar & Status Bar", "Status Bar", "Shell mode", "Waffle"]
     }, {
         "id": "wallpaper",
@@ -113,7 +113,7 @@ Singleton {
         "name": "Overlays & OSD",
         "icon": "picture_in_picture",
         "component": "modules/settings/configs/OverlaysConfig.qml",
-        "subPages": ["widgets/GameOverlayConfig.qml"],
+        "subPages": ["widgets/GameOverlayConfig.qml", "widgets/OnScreenKeyboardConfig.qml"],
         "aliases": ["System Overlays", "Media overlay", "Game overlay"]
     }, {
         "id": "screenCapture",
@@ -204,14 +204,14 @@ Singleton {
         "name": "Accounts & Backup",
         "icon": "checklist",
         "component": "modules/settings/configs/TasksAccountsConfig.qml",
-        "subPages": ["widgets/AdvancedDriveConfig.qml"],
+        "subPages": ["widgets/GoogleDriveBackupConfig.qml", "widgets/AdvancedDriveConfig.qml"],
         "aliases": ["Core Services", "Tasks & Accounts", "TickTick", "Tasks", "Accounts", "Google Drive", "Backup", "Cloud backup", "rclone"]
     }, {
         "id": "soundAlerts",
         "name": "Sound & Alerts",
         "icon": "volume_up",
         "component": "modules/settings/configs/SoundAlertsConfig.qml",
-        "subPages": ["widgets/SoundEventsConfig.qml", "widgets/AlarmAudioConfig.qml"],
+        "subPages": ["widgets/SoundEventsConfig.qml", "widgets/CustomSoundsConfig.qml", "widgets/AlarmAudioConfig.qml", "widgets/AudioProtectionConfig.qml"],
         "aliases": ["Core Services", "Audio Controls", "Earbang protection", "Interactive Alerts", "Battery sound", "Pomodoro sound"]
     }, {
         "id": "power",
@@ -232,7 +232,7 @@ Singleton {
         "name": "Devices & Phone",
         "icon": "smartphone",
         "component": "modules/settings/configs/DevicesPhoneConfig.qml",
-        "subPages": [],
+        "subPages": ["widgets/KdeConnectConfig.qml"],
         "aliases": ["Core Services", "scrcpy", "Bluetooth Device Images", "LocalSend", "Wireless debugging", "Phone"]
     }, {
         "id": "privacy",

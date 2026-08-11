@@ -18,11 +18,23 @@ Scope {
     Connections {
         target: HyprlandXkb
         function onCurrentLayoutNameChanged() {
-            if (root._prevLayout !== "" && root._prevLayout !== HyprlandXkb.currentLayoutName && HyprlandXkb.layoutCodes.length > 1 && Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup) {
+            if (root._prevLayout !== "" && root._prevLayout !== HyprlandXkb.currentLayoutName && HyprlandXkb.layoutCodes.length > 1 && Config.options.bar.tooltips.enablePopups && Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup) {
                 root.isOpen = true;
                 hideTimer.restart();
             }
             root._prevLayout = HyprlandXkb.currentLayoutName;
+        }
+    }
+
+    Connections {
+        target: Config.options.bar.tooltips
+        function onEnablePopupsChanged() {
+            if (!Config.options.bar.tooltips.enablePopups)
+                root.isOpen = false;
+        }
+        function onEnableKeyboardLayoutTransitionPopupChanged() {
+            if (!Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup)
+                root.isOpen = false;
         }
     }
 
@@ -37,12 +49,19 @@ Scope {
     }
 
     LazyLoader {
-        active: root.isOpen || (typeof popupContent !== "undefined" && popupContent ? popupContent.isExitAnimRunning : false)
+        active: (root.isOpen
+                && Config.options.bar.tooltips.enablePopups
+                && Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup)
+            || (typeof popupContent !== "undefined" && popupContent ? popupContent.isExitAnimRunning : false)
 
         component: PanelWindow {
             id: popupWindow
             color: "transparent"
-            visible: Quickshell.screens.length > 0 && (root.isOpen || (typeof popupContent !== "undefined" && popupContent ? popupContent.isExitAnimRunning : false))
+            visible: Quickshell.screens.length > 0
+                && ((root.isOpen
+                    && Config.options.bar.tooltips.enablePopups
+                    && Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup)
+                    || (typeof popupContent !== "undefined" && popupContent ? popupContent.isExitAnimRunning : false))
             screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
 
             WlrLayershell.namespace: "quickshell:keyboardLayoutTransitionPopup"

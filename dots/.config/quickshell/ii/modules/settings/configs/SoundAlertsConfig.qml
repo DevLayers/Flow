@@ -24,18 +24,6 @@ Item {
     // Pick up freshly installed themes whenever the page is opened
     Component.onCompleted: SoundService.rescan()
 
-    readonly property var customizableEvents: [
-        { key: "notifications", icon: "notifications", label: Translation.tr("Notifications") },
-        { key: "volumeChange", icon: "volume_up", label: Translation.tr("Volume change") },
-        { key: "battery", icon: "battery_alert", label: Translation.tr("Battery & power") },
-        { key: "screenshot", icon: "photo_camera", label: Translation.tr("Screenshot shutter") },
-        { key: "pomodoro", icon: "av_timer", label: Translation.tr("Pomodoro") },
-        { key: "alarm", icon: "alarm", label: Translation.tr("Alarm ring") },
-        { key: "session", icon: "login", label: Translation.tr("Login") },
-        { key: "devices", icon: "bluetooth_connected", label: Translation.tr("Device connections") },
-        { key: "lock", icon: "lock", label: Translation.tr("Screen lock") }
-    ]
-
     property string fileDialogTarget: "" // "" = install archive, else custom-sound category key
 
     FileDialog {
@@ -168,6 +156,7 @@ Item {
             buttonIcon: "notifications_active"
             text: Translation.tr("Event sound triggers")
             checked: true
+            subPageOnly: true
             configPage: Qt.resolvedUrl("widgets/SoundEventsConfig.qml")
             StyledToolTip {
                 text: Translation.tr("Click button text to configure sound effects for notifications, battery, volume, lock, screenshot, and alarms.")
@@ -190,10 +179,15 @@ Item {
         title: Translation.tr("Custom sounds")
         tooltip: Translation.tr("Override the theme sound for any event with your own audio file.")
 
-        Repeater {
-            model: page.customizableEvents
-
-            CustomSoundRow {}
+        ConfigSwitch {
+            buttonIcon: "tune"
+            text: Translation.tr("Custom sound overrides")
+            checked: true
+            subPageOnly: true
+            configPage: Qt.resolvedUrl("widgets/CustomSoundsConfig.qml")
+            StyledToolTip {
+                text: Translation.tr("Choose a custom audio file for each shell sound event.")
+            }
         }
     }
 
@@ -477,128 +471,28 @@ Item {
         }
     }
 
-    component CustomSoundRow: Rectangle {
-        id: customRow
-
-        required property var modelData
-        readonly property string customPath: Config.options.sounds.custom[modelData.key] ?? ""
-        readonly property bool hasCustom: customPath !== ""
-
-        Layout.fillWidth: true
-        implicitHeight: customRowLayout.implicitHeight + 16
-        radius: Appearance.rounding.verysmall
-        color: Appearance.colors.colLayer2Base
-
-        RowLayout {
-            id: customRowLayout
-
-            anchors {
-                left: parent.left
-                right: parent.right
-                verticalCenter: parent.verticalCenter
-                leftMargin: 12
-                rightMargin: 8
-            }
-            spacing: 10
-
-            MaterialSymbol {
-                text: customRow.modelData.icon
-                iconSize: Appearance.font.pixelSize.huge
-                color: Appearance.colors.colOnLayer2
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignLeft
-                text: customRow.modelData.label
-                elide: Text.ElideRight
-                color: Appearance.colors.colOnLayer2
-            }
-
-            StyledText {
-                visible: customRow.hasCustom
-                Layout.maximumWidth: 320
-                text: customRow.customPath
-                elide: Text.ElideMiddle
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
-            }
-
-            RippleButton {
-                visible: customRow.hasCustom
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: "transparent"
-                onClicked: SoundService.previewFile(customRow.customPath)
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "play_arrow"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnLayer2
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Play custom sound")
-                }
-            }
-
-            RippleButton {
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: "transparent"
-                onClicked: {
-                    page.fileDialogTarget = customRow.modelData.key;
-                    fileDialog.open();
-                }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "folder_open"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnLayer2
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Choose a custom sound file")
-                }
-            }
-
-            RippleButton {
-                visible: customRow.hasCustom
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: "transparent"
-                onClicked: Config.options.sounds.custom[customRow.modelData.key] = ""
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "close"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnLayer2
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Reset to theme sound")
-                }
-            }
-        }
-    }
-
     ContentSection {
         icon: "alarm"
         title: Translation.tr("Alarm & Audio Controls")
 
         ConfigSwitch {
             buttonIcon: "alarm"
-            text: Translation.tr("Alarm popups and earbang protection")
+            text: Translation.tr("Alarm popup display")
             checked: true
+            subPageOnly: true
             configPage: Qt.resolvedUrl("widgets/AlarmAudioConfig.qml")
             StyledToolTip {
-                text: Translation.tr("Click button text to configure alarm popups, world clocks display, and earbang volume limits.")
+                text: Translation.tr("Configure the alarm popup, world clocks, and alarm section visibility.")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "hearing"
+            text: Translation.tr("Earbang & volume limits")
+            checked: Config.options.audio.protection.enable
+            configPage: Qt.resolvedUrl("widgets/AudioProtectionConfig.qml")
+            onCheckedChanged: {
+                Config.options.audio.protection.enable = checked;
             }
         }
     }
