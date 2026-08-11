@@ -127,6 +127,13 @@ Scope {
                             });
                         }
 
+                        function consumePendingSearchQuery() {
+                            if (!GlobalStates.activeSearchQuery)
+                                return;
+                            root.setSearchingText(GlobalStates.activeSearchQuery);
+                            GlobalStates.activeSearchQuery = "";
+                        }
+
                         Connections {
                             target: LauncherSearch
                             function onQueryChanged() {
@@ -139,6 +146,7 @@ Scope {
                             root.overviewRevealProgress = root.overviewShouldShow && LauncherSearch.query === "" ? 1.0 : 0.0;
                             root.overviewFadeProgress = root.overviewRevealProgress;
                             root._overviewRevealInitialized = true;
+                            root.consumePendingSearchQuery();
                         }
 
                         visible: GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0
@@ -178,6 +186,7 @@ Scope {
                                     if (!overviewScope.dontAutoCancelSearch) {
                                         searchWidget.cancelSearch();
                                     }
+                                    root.consumePendingSearchQuery();
                                     delayedGrabTimer.start();
                                 }
                             }
@@ -470,52 +479,37 @@ Scope {
         }
     }
 
-    function toggleClipboard() {
+    function togglePrefixedSearch(prefix) {
         GlobalStates.superReleaseMightTrigger = false;
-        const prefix = Config.options.search.prefix.clipboard;
         if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
             GlobalStates.overviewOpen = false;
             return;
         }
         overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(prefix);
-        GlobalStates.overviewOpen = true;
+        if (GlobalStates.overviewOpen) {
+            overviewScope.setSearchingTextRequested(prefix);
+        } else {
+            // The default overview is lazy-loaded. Keep the prefix until its
+            // PanelWindow exists so the first shortcut press is not lost.
+            GlobalStates.activeSearchQuery = prefix;
+            GlobalStates.overviewOpen = true;
+        }
+    }
+
+    function toggleClipboard() {
+        togglePrefixedSearch(Config.options.search.prefix.clipboard);
     }
 
     function toggleEmojis() {
-        GlobalStates.superReleaseMightTrigger = false;
-        const prefix = Config.options.search.prefix.emojis;
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
-            GlobalStates.overviewOpen = false;
-            return;
-        }
-        overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(prefix);
-        GlobalStates.overviewOpen = true;
+        togglePrefixedSearch(Config.options.search.prefix.emojis);
     }
 
     function toggleBluetooth() {
-        GlobalStates.superReleaseMightTrigger = false;
-        const prefix = Config.options.search.prefix.bluetooth;
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
-            GlobalStates.overviewOpen = false;
-            return;
-        }
-        overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(prefix);
-        GlobalStates.overviewOpen = true;
+        togglePrefixedSearch(Config.options.search.prefix.bluetooth);
     }
 
     function toggleMaterialSymbols() {
-        GlobalStates.superReleaseMightTrigger = false;
-        const prefix = Config.options.search.prefix.materialSymbols;
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
-            GlobalStates.overviewOpen = false;
-            return;
-        }
-        overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(prefix);
-        GlobalStates.overviewOpen = true;
+        togglePrefixedSearch(Config.options.search.prefix.materialSymbols);
     }
 
     IpcHandler {
