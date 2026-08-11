@@ -21,24 +21,25 @@ ApplicationWindow {
     id: root
     property string firstRunFilePath: FileUtils.trimFileProtocol(`${Directories.state}/user/first_run.txt`)
     property string firstRunFileContent: "This file is just here to confirm you've been greeted :>"
-    property real contentPadding: 8
+    property real contentPadding: 12
     property bool showNextTime: false
     visible: true
+
     onClosing: {
         Quickshell.execDetached(["notify-send", Translation.tr("Welcome app"), Translation.tr("Enjoy! You can reopen the welcome app any time with <tt>Super+Shift+Alt+/</tt>. To open the settings app, hit <tt>Super+I</tt>"), "-a", "Shell"]);
         Qt.quit();
     }
-    title: Translation.tr("illogical-impulse Welcome")
+    title: "illogical-impulse Welcome"
 
     Component.onCompleted: {
         MaterialThemeLoader.reapplyTheme();
-        Config.readWriteDelay = 0 // Welcome app always only sets one var at a time so delay isn't needed
+        Config.readWriteDelay = 0;
     }
 
-    minimumWidth: 600
-    minimumHeight: 400
-    width: 900
-    height: 650
+    minimumWidth: 850
+    minimumHeight: 600
+    width: 1050
+    height: 740
     color: Appearance.m3colors.m3background
 
     Process {
@@ -53,10 +54,59 @@ ApplicationWindow {
         }
     }
 
-    Process {
-        id: translationProc
-        property string locale: ""
-        command: [Directories.aiTranslationScriptPath, translationProc.locale]
+    // Keybind badge helper component
+    component KeybindItem: Rectangle {
+        id: keybindItemRoot
+        required property string title
+        required property string key1
+        property string key2: ""
+        property string key3: ""
+
+        implicitWidth: 230
+        implicitHeight: 65
+        color: Appearance.colors.colLayer2
+        radius: Appearance.rounding.normal
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 8
+
+            StyledText {
+                Layout.fillWidth: true
+                text: keybindItemRoot.title
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnLayer2
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                spacing: 3
+                KeyboardKey {
+                    key: keybindItemRoot.key1
+                }
+                StyledText {
+                    visible: keybindItemRoot.key2 !== ""
+                    text: "+"
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colOnLayer3
+                }
+                KeyboardKey {
+                    visible: keybindItemRoot.key2 !== ""
+                    key: keybindItemRoot.key2
+                }
+                StyledText {
+                    visible: keybindItemRoot.key3 !== ""
+                    text: "+"
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colOnLayer3
+                }
+                KeyboardKey {
+                    visible: keybindItemRoot.key3 !== ""
+                    key: keybindItemRoot.key3
+                }
+            }
+        }
     }
 
     ColumnLayout {
@@ -64,32 +114,37 @@ ApplicationWindow {
             fill: parent
             margins: contentPadding
         }
+        spacing: 10
 
+        // Titlebar
         Item {
-            // Titlebar
-            visible: Config.options?.windows.showTitlebar
+            visible: Config.options?.windows?.showTitlebar ?? true
             Layout.fillWidth: true
             implicitHeight: Math.max(welcomeText.implicitHeight, windowControlsRow.implicitHeight)
+
             StyledText {
                 id: welcomeText
                 anchors {
-                    left: Config.options.windows.centerTitle ? undefined : parent.left
-                    horizontalCenter: Config.options.windows.centerTitle ? parent.horizontalCenter : undefined
+                    left: Config.options?.windows?.centerTitle ? undefined : parent.left
+                    horizontalCenter: Config.options?.windows?.centerTitle ? parent.horizontalCenter : undefined
                     verticalCenter: parent.verticalCenter
                     leftMargin: 12
                 }
                 color: Appearance.colors.colOnLayer0
-                text: Translation.tr("Hi there! First things first...")
+                text: Translation.tr("Quick Actions & Welcome")
                 font {
                     family: Appearance.font.family.title
                     pixelSize: Appearance.font.pixelSize.title
                     variableAxes: Appearance.font.variableAxes.title
                 }
             }
-            RowLayout { // Window controls row
+
+            RowLayout {
                 id: windowControlsRow
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: parent.right
+                spacing: 8
+
                 StyledText {
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     text: Translation.tr("Show next time")
@@ -97,7 +152,7 @@ ApplicationWindow {
                 StyledSwitch {
                     id: showNextTimeSwitch
                     checked: root.showNextTime
-                    scale: 0.6
+                    scale: 0.7
                     Layout.alignment: Qt.AlignVCenter
                     onCheckedChanged: {
                         if (checked) {
@@ -116,22 +171,19 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         horizontalAlignment: Text.AlignHCenter
                         text: "close"
-                        iconSize: 20
+                        iconSize: Appearance.font.pixelSize.normal
                     }
-
                     StyledToolTip {
-                        text: Translation.tr("Tip: Close a window with Super+Q")
+                        text: Translation.tr("Close (Super+Q)")
                     }
                 }
             }
         }
 
+        // Main Content Container
         Rectangle {
-            // Content container
             color: Appearance.m3colors.m3surfaceContainerLow
             radius: Appearance.rounding.windowRounding - root.contentPadding
-            implicitHeight: contentColumn.implicitHeight
-            implicitWidth: contentColumn.implicitWidth
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -139,342 +191,258 @@ ApplicationWindow {
                 id: contentColumn
                 anchors.fill: parent
 
-                ContentSection {
+                // Hero / Banner Card: Quick Open Settings
+                Rectangle {
                     Layout.fillWidth: true
-                    icon: "language"
-                    title: Translation.tr("Language")
-
-                    ContentSubsection {
-                        title: Translation.tr("Select language")
-                        ConfigSelectionArray {
-                            id: languageSelector
-                            currentValue: Config.options.language.ui
-                            onSelected: newValue => {
-                                Config.options.language.ui = newValue;
-                            }
-                            options: [
-                                {
-                                    displayName: Translation.tr("Auto (System)"),
-                                    value: "auto"
-                                },
-                                ...Translation.allAvailableLanguages.map(lang => {
-                                    return {
-                                        displayName: lang,
-                                        value: lang
-                                    };
-                                })]
-                        }
-                    }
-
-                    NoticeBox {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Language not listed or incomplete translations?\nYou can choose to generate translations for it with Gemini.\n1. Open the left sidebar with Super+A, set model to Gemini (if it isn't already)\n2. Type /key, hit Enter and follow the instructions\n3. Type /key YOUR_API_KEY\n4. Type the locale of your language below and press Generate")
-                    }
-
-                    ContentSubsection {
-                        title: Translation.tr("Generate translation with Gemini")
-                        
-                        ConfigRow {
-                            MaterialTextArea {
-                                id: localeInput
-                                Layout.fillWidth: true
-                                placeholderText: Translation.tr("Locale code, e.g. fr_FR, de_DE, zh_CN...")
-                                text: Config.options.language.ui === "auto" ? Qt.locale().name : Config.options.language.ui
-                            }
-                            RippleButtonWithIcon {
-                                id: generateTranslationBtn
-                                Layout.fillHeight: true
-                                nerdIcon: ""
-                                enabled: !translationProc.running || (translationProc.locale !== localeInput.text.trim())
-                                mainText: enabled ? Translation.tr("Generate\nTypically takes 2 minutes") : Translation.tr("Generating...\nDon't close this window!")
-                                onClicked: {
-                                    translationProc.locale = localeInput.text.trim();
-                                    translationProc.running = false;
-                                    translationProc.running = true;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                ContentSection {
-                    icon: "screenshot_monitor"
-                    title: Translation.tr("Bar")
-
-                    ConfigRow {
-                        ContentSubsection {
-                            title: Translation.tr("Bar position")
-                            ConfigSelectionArray {
-                                currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
-                                onSelected: newValue => {
-                                    Config.options.bar.bottom = (newValue & 1) !== 0;
-                                    Config.options.bar.vertical = (newValue & 2) !== 0;
-                                }
-                                options: [
-                                    {
-                                        displayName: Translation.tr("Top"),
-                                        icon: "arrow_upward",
-                                        value: 0 // bottom: false, vertical: false
-                                    },
-                                    {
-                                        displayName: Translation.tr("Left"),
-                                        icon: "arrow_back",
-                                        value: 2 // bottom: false, vertical: true
-                                    },
-                                    {
-                                        displayName: Translation.tr("Bottom"),
-                                        icon: "arrow_downward",
-                                        value: 1 // bottom: true, vertical: false
-                                    },
-                                    {
-                                        displayName: Translation.tr("Right"),
-                                        icon: "arrow_forward",
-                                        value: 3 // bottom: true, vertical: true
-                                    }
-                                ]
-                            }
-                        }
-                        ContentSubsection {
-                            title: Translation.tr("Bar style")
-
-                            ConfigSelectionArray {
-                                currentValue: Config.options.bar.cornerStyle
-                                onSelected: newValue => {
-                                    Config.options.bar.cornerStyle = newValue; // Update local copy
-                                }
-                                options: [
-                                    {
-                                        displayName: Translation.tr("Hug"),
-                                        icon: "line_curve",
-                                        value: 0
-                                    },
-                                    {
-                                        displayName: Translation.tr("Float"),
-                                        icon: "page_header",
-                                        value: 1
-                                    },
-                                    {
-                                        displayName: Translation.tr("Rect"),
-                                        icon: "toolbar",
-                                        value: 2
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-
-                ContentSection {
-                    icon: "format_paint"
-                    title: Translation.tr("Style & wallpaper")
-
-                    ButtonGroup {
-                        Layout.alignment: Qt.AlignHCenter
-                        LightDarkPreferenceButton {
-                            dark: false
-                        }
-                        LightDarkPreferenceButton {
-                            dark: true
-                        }
-                    }
+                    implicitHeight: 90
+                    radius: Appearance.rounding.normal
+                    color: Appearance.colors.colPrimaryContainer
 
                     RowLayout {
-                        Layout.alignment: Qt.AlignHCenter
-                        RippleButtonWithIcon {
-                            id: rndWallBtn
-                            visible: Config.options.policies.weeb === 1
-                            Layout.alignment: Qt.AlignHCenter
-                            buttonRadius: Appearance.rounding.small
-                            materialIcon: "ifl"
-                            mainText: konachanWallProc.running ? Translation.tr("Be patient...") : Translation.tr("Random: Konachan")
-                            onClicked: {
-                                console.log(konachanWallProc.command.join(" "));
-                                konachanWallProc.running = true;
-                            }
-                            StyledToolTip {
-                                text: Translation.tr("Random SFW Anime wallpaper from Konachan\nImage is saved to ~/Pictures/Wallpapers")
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        anchors.topMargin: 12
+                        anchors.bottomMargin: 12
+                        spacing: 16
+
+                        // Settings Icon inside rounded shape container
+                        Rectangle {
+                            width: 52
+                            height: 52
+                            radius: Appearance.rounding.normal
+                            color: Appearance.colors.colPrimary
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "settings"
+                                fill: 1
+                                iconSize: Appearance.font.pixelSize.huge
+                                color: Appearance.colors.colOnPrimary
                             }
                         }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            StyledText {
+                                text: Translation.tr("illogical-impulse Shell Control")
+                                font.pixelSize: Appearance.font.pixelSize.large
+                                font.bold: true
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+                            StyledText {
+                                text: Translation.tr("Quick access to key toggles, theme settings, and system shortcuts")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+                        }
+
                         RippleButtonWithIcon {
-                            materialIcon: "wallpaper"
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                            materialIcon: "settings"
+                            mainText: Translation.tr("Open Full Settings")
+                            colBackground: Appearance.colors.colPrimary
+                            colText: Appearance.colors.colOnPrimary
                             onClicked: {
-                                Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggle"]);
+                                Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "settings", "toggle"]);
                             }
                             mainContentComponent: Component {
                                 RowLayout {
-                                    spacing: 10
+                                    spacing: 8
                                     StyledText {
                                         font.pixelSize: Appearance.font.pixelSize.small
-                                        text: Translation.tr("Choose file")
-                                        color: Appearance.colors.colOnSecondaryContainer
+                                        font.bold: true
+                                        text: Translation.tr("Open Settings")
+                                        color: Appearance.colors.colOnPrimary
                                     }
                                     RowLayout {
-                                        spacing: 3
-                                        KeyboardKey {
-                                            key: "Ctrl"
-                                        }
-                                        KeyboardKey {
-                                            key: "󰖳"
-                                        }
-                                        StyledText {
-                                            Layout.alignment: Qt.AlignVCenter
-                                            text: "+"
-                                        }
-                                        KeyboardKey {
-                                            key: "T"
-                                        }
+                                        spacing: 2
+                                        KeyboardKey { key: "󰖳" }
+                                        KeyboardKey { key: "I" }
                                     }
                                 }
                             }
                         }
                     }
+                }
+
+                // Section 1: Appearance & Theme
+                ContentSection {
+                    icon: "format_paint"
+                    title: Translation.tr("Appearance & Theme")
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 16
+
+                        ConfigWallpaperSelector {
+                            text: Translation.tr("Wallpaper")
+                            implicitWidth: 360
+                            implicitHeight: 202.5
+                            Layout.preferredWidth: 360
+                            Layout.preferredHeight: 202.5
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            ConfigLightDarkToggle {
+                                text: Translation.tr("Light / Dark Theme")
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                                implicitHeight: 142.5
+
+                                StyledFlickable {
+                                    anchors.fill: parent
+                                    contentHeight: colorGrid.implicitHeight
+                                    contentWidth: width
+                                    clip: true
+
+                                    ColorPreviewGrid {
+                                        id: colorGrid
+                                        width: parent.width
+                                        customTheme: false
+                                        builtInTheme: false
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                spacing: 10
+                                RippleButtonWithIcon {
+                                    id: rndWallBtn
+                                    visible: Config.options?.policies?.weeb === 1
+                                    buttonRadius: Appearance.rounding.small
+                                    materialIcon: "ifl"
+                                    mainText: konachanWallProc.running ? Translation.tr("Be patient...") : Translation.tr("Random Konachan Wallpaper")
+                                    onClicked: {
+                                        konachanWallProc.running = true;
+                                    }
+                                    StyledToolTip {
+                                        text: Translation.tr("Random SFW Anime wallpaper from Konachan")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Section 2: Shell Style (Connect vs Default Mode)
+                ContentSection {
+                    icon: "dashboard_customize"
+                    title: Translation.tr("Shell Mode Style")
 
                     NoticeBox {
                         Layout.fillWidth: true
-                        text: Translation.tr("Change any time later with /dark, /light, /wallpaper in the launcher\nIf the shell's colors aren't changing:\n    1. Open the right sidebar with Super+N\n    2. Click \"Reload Hyprland & Quickshell\" in the top-right corner")
+                        text: Translation.tr("Select how the shell UI is structured: Default Mode uses a top bar with concave curves. Connect Mode integrates a floating Dynamic Island and mobile drop overlays.")
+                    }
+
+                    ConfigSelectionArray {
+                        currentValue: Config.options.sidebar.sidebarStyle
+                        onSelected: newValue => {
+                            Config.options.sidebar.sidebarStyle = newValue;
+                        }
+                        options: [
+                            {
+                                displayName: Translation.tr("Default Mode"),
+                                icon: "view_sidebar",
+                                value: "default"
+                            },
+                            {
+                                displayName: Translation.tr("Connect Mode"),
+                                icon: "phone_android",
+                                value: "connect"
+                            }
+                        ]
                     }
                 }
 
+                // Section 3: Keybinds
                 ContentSection {
-                    icon: "rule"
-                    title: Translation.tr("Policies")
-
-                    ConfigRow {
-                        Layout.fillWidth: true
-
-                        ContentSubsection {
-                            title: "Weeb"
-
-                            ConfigSelectionArray {
-                                currentValue: Config.options.policies.weeb
-                                onSelected: newValue => {
-                                    Config.options.policies.weeb = newValue;
-                                }
-                                options: [
-                                    {
-                                        displayName: Translation.tr("No"),
-                                        icon: "close",
-                                        value: 0
-                                    },
-                                    {
-                                        displayName: Translation.tr("Yes"),
-                                        icon: "check",
-                                        value: 1
-                                    },
-                                    {
-                                        displayName: Translation.tr("Closet"),
-                                        icon: "ev_shadow",
-                                        value: 2
-                                    }
-                                ]
-                            }
-                        }
-
-                        ContentSubsection {
-                            title: "AI"
-
-                            ConfigSelectionArray {
-                                currentValue: Config.options.policies.ai
-                                onSelected: newValue => {
-                                    Config.options.policies.ai = newValue;
-                                }
-                                options: [
-                                    {
-                                        displayName: Translation.tr("No"),
-                                        icon: "close",
-                                        value: 0
-                                    },
-                                    {
-                                        displayName: Translation.tr("Yes"),
-                                        icon: "check",
-                                        value: 1
-                                    },
-                                    {
-                                        displayName: Translation.tr("Local only"),
-                                        icon: "sync_saved_locally",
-                                        value: 2
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-
-                ContentSection {
-                    icon: "info"
-                    title: Translation.tr("Info")
+                    icon: "keyboard"
+                    title: Translation.tr("Essential Shortcuts")
 
                     Flow {
                         Layout.fillWidth: true
-                        spacing: 5
+                        spacing: 10
 
-                        RippleButtonWithIcon {
-                            materialIcon: "keyboard_alt"
-                            onClicked: {
-                                Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "cheatsheet", "toggle"]);
-                            }
-                            mainContentComponent: Component {
-                                RowLayout {
-                                    spacing: 10
-                                    StyledText {
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        text: Translation.tr("Keybinds")
-                                        color: Appearance.colors.colOnSecondaryContainer
-                                    }
-                                    RowLayout {
-                                        spacing: 3
-                                        KeyboardKey {
-                                            key: "󰖳"
-                                        }
-                                        StyledText {
-                                            Layout.alignment: Qt.AlignVCenter
-                                            text: "+"
-                                        }
-                                        KeyboardKey {
-                                            key: "/"
-                                        }
-                                    }
-                                }
-                            }
+                        KeybindItem {
+                            title: Translation.tr("Settings App")
+                            key1: "󰖳"
+                            key2: "I"
                         }
-
-                        RippleButtonWithIcon {
-                            materialIcon: "help"
-                            mainText: Translation.tr("Usage")
-                            onClicked: {
-                                Qt.openUrlExternally("https://end-4.github.io/dots-hyprland-wiki/en/ii-qs/02usage/");
-                            }
+                        KeybindItem {
+                            title: Translation.tr("Left Sidebar (AI)")
+                            key1: "󰖳"
+                            key2: "A"
                         }
-                        RippleButtonWithIcon {
-                            materialIcon: "construction"
-                            mainText: Translation.tr("Configuration")
-                            onClicked: {
-                                Qt.openUrlExternally("https://end-4.github.io/dots-hyprland-wiki/en/ii-qs/03config/");
-                            }
+                        KeybindItem {
+                            title: Translation.tr("Right Sidebar (Control)")
+                            key1: "󰖳"
+                            key2: "N"
+                        }
+                        KeybindItem {
+                            title: Translation.tr("Overview")
+                            key1: "󰖳"
+                            key2: "Tab"
+                        }
+                        KeybindItem {
+                            title: Translation.tr("App Launcher")
+                            key1: "󰖳"
+                            key2: "Space"
+                        }
+                        KeybindItem {
+                            title: Translation.tr("Keybinds Cheatsheet")
+                            key1: "󰖳"
+                            key2: "/"
+                        }
+                        KeybindItem {
+                            title: Translation.tr("Welcome App")
+                            key1: "󰖳"
+                            key2: "Shift"
+                            key3: "/"
+                        }
+                        KeybindItem {
+                            title: Translation.tr("Wallpaper Picker")
+                            key1: "Ctrl"
+                            key2: "󰖳"
+                            key3: "T"
                         }
                     }
                 }
 
+                // Section 4: Links & Community
                 ContentSection {
-                    icon: "monitoring"
-                    title: Translation.tr("Useless buttons")
+                    icon: "link"
+                    title: Translation.tr("Project & Links")
 
                     Flow {
                         Layout.fillWidth: true
-                        spacing: 5
+                        spacing: 10
 
                         RippleButtonWithIcon {
                             nerdIcon: "󰊤"
-                            mainText: Translation.tr("GitHub")
+                            mainText: "GitHub Repo (ii-p3drovfx)"
                             onClicked: {
-                                Qt.openUrlExternally("https://github.com/end-4/dots-hyprland");
+                                Qt.openUrlExternally("https://github.com/P3DROVFX/ii-p3drovfx");
                             }
                         }
                         RippleButtonWithIcon {
-                            materialIcon: "favorite"
-                            mainText: "Funny number"
+                            materialIcon: "account_circle"
+                            mainText: "Developer Profile (P3DROVFX)"
                             onClicked: {
-                                Qt.openUrlExternally("https://github.com/sponsors/end-4");
+                                Qt.openUrlExternally("https://github.com/P3DROVFX");
+                            }
+                        }
+                        RippleButtonWithIcon {
+                            materialIcon: "help"
+                            mainText: Translation.tr("Documentation Wiki")
+                            onClicked: {
+                                Qt.openUrlExternally("https://end-4.github.io/dots-hyprland-wiki/en/ii-qs/02usage/");
                             }
                         }
                     }
@@ -482,7 +450,7 @@ ApplicationWindow {
 
                 Item {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    implicitHeight: 10
                 }
             }
         }
