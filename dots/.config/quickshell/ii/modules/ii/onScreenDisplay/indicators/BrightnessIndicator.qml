@@ -7,8 +7,7 @@ import qs.modules.common.widgets
 
 OsdValueIndicator {
     id: brightnessOsd
-    property var focusedScreen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
-    property var brightnessMonitor: Brightness.getMonitorForScreen(focusedScreen)
+    property var brightnessMonitor: Brightness.getTargetMonitor()
 
     icon: {
         if (Hyprsunset.temperatureActive) return "routine";

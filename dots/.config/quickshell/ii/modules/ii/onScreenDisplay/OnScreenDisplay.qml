@@ -39,6 +39,7 @@ Scope {
     }
 
     property string currentIndicator: "volume"
+    readonly property bool isDisplayIndicator: currentIndicator === "brightness" || currentIndicator === "gamma"
     property var indicators: [
         {
             id: "volume",
@@ -70,8 +71,7 @@ Scope {
                 return Audio.sink.audio.muted ? 0 : Audio.sink.audio.volume;
             return 0;
         } else if (currentIndicator === "brightness") {
-            let focusedScreen = Quickshell.screens.find(s => s.name === (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "")) || Quickshell.screens[0] || null;
-            let brightnessMonitor = Brightness.getMonitorForScreen(focusedScreen);
+            let brightnessMonitor = Brightness.getTargetMonitor();
             return brightnessMonitor ? brightnessMonitor.brightness : 0.5;
         } else if (currentIndicator === "playerVolume") {
             return MprisController.activePlayer ? MprisController.activePlayer.volume : 0;
@@ -125,8 +125,7 @@ Scope {
                 }
             }
         } else if (currentIndicator === "brightness") {
-            let focusedScreen = Quickshell.screens.find(s => s.name === (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "")) || Quickshell.screens[0] || null;
-            let brightnessMonitor = Brightness.getMonitorForScreen(focusedScreen);
+            let brightnessMonitor = Brightness.getTargetMonitor();
             if (brightnessMonitor) {
                 brightnessMonitor.setBrightness(newValue);
             }
@@ -316,9 +315,9 @@ Scope {
                     } else {
                         return slidersW + osdGroupSpacing + osdRowSpacing;
                     }
-                } else if (root.currentIndicator === "brightness") {
+                } else if (root.isDisplayIndicator) {
                     var kbd = KeyboardBacklight.available ? 1 : 0;
-                    var n = 2 + kbd; // 2 extra sliders (Gamma, Nightlight) + optional KeyboardBacklight
+                    var n = 2 + kbd; // 2 complementary display sliders + optional KeyboardBacklight
                     return n * osdButtonHeight + 2 * osdGroupSpacing + (n - 1) * osdRowSpacing;
                 }
                 return 0;
@@ -853,7 +852,7 @@ Scope {
                             // (1c) Brightness Top Row Layout (dark mode, nightlight, auto nightlight)
                             RowLayout {
                                 id: brightnessTopRow
-                                visible: root.currentIndicator === "brightness"
+                                visible: root.isDisplayIndicator
                                 spacing: 4 * osdRoot.expandedProgress
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: osdButtonHeight
@@ -1034,10 +1033,10 @@ Scope {
                                 }
                             }
 
-                            // (1b) Original Top button (for brightness/gamma/keyboard indicators)
+                            // (1b) Original Top button (for keyboard/audio indicators)
                             OsdTopButton {
                                 id: topButton
-                                visible: root.currentIndicator !== "volume" && root.currentIndicator !== "brightness"
+                                visible: root.currentIndicator !== "volume" && !root.isDisplayIndicator
                                 currentIndicator: root.currentIndicator
                                 expandedProgress: osdRoot.expandedProgress
                                 buttonHeight: osdButtonHeight
@@ -1321,7 +1320,7 @@ Scope {
                             // (7c) Brightness Bottom Row Layout (keyboard backlight, gamma reset, collapse)
                             RowLayout {
                                 id: brightnessBottomRow
-                                visible: root.currentIndicator === "brightness"
+                                visible: root.isDisplayIndicator
                                 spacing: 4 * osdRoot.expandedProgress
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: osdButtonHeight
@@ -1510,7 +1509,7 @@ Scope {
                                 Layout.alignment: Qt.AlignRight
                                 Layout.preferredHeight: osdCollapseButtonHeight
                                 Layout.preferredWidth: osdCollapseButtonHeight + (parent.width - osdCollapseButtonHeight) * osdRoot.expandedProgress
-                                visible: root.currentIndicator !== "volume" && root.currentIndicator !== "brightness"
+                                visible: root.currentIndicator !== "volume" && !root.isDisplayIndicator
                                     onClicked: {
                                         osdRoot.isExpanded = !osdRoot.isExpanded;
                                         root.triggerOsd();

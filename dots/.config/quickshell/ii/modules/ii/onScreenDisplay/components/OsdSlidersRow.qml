@@ -22,6 +22,7 @@ RowLayout {
 
     property real osdRowSpacing: 8
     property real osdGroupSpacing: 28
+    readonly property bool isDisplayIndicator: currentIndicator === "brightness" || currentIndicator === "gamma"
 
     layoutDirection: Qt.RightToLeft
     spacing: osdRowSpacing * root.expandedProgress
@@ -29,6 +30,7 @@ RowLayout {
     readonly property bool isDragging: mainVolumeSlider.pressed
         || (notificationSoundSlider.activeFocus && notificationSoundSlider.pressed)
         || (micSlider.activeFocus && micSlider.pressed)
+        || (brightnessSlider.activeFocus && brightnessSlider.pressed)
         || (gammaSlider.activeFocus && gammaSlider.pressed)
         || (nightlightSlider.activeFocus && nightlightSlider.pressed)
         || (keyboardBacklightSlider.activeFocus && keyboardBacklightSlider.pressed)
@@ -85,7 +87,7 @@ RowLayout {
         visible: expandedProgress > 0.001
         clip: true
 
-        layer.enabled: root.currentIndicator !== "volume" && root.currentIndicator !== "brightness"
+        layer.enabled: root.currentIndicator !== "volume" && !root.isDisplayIndicator
         layer.effect: OpacityMask {
             maskSource: extrasFadeMask
         }
@@ -202,8 +204,37 @@ RowLayout {
             RowLayout {
                 layoutDirection: Qt.RightToLeft
                 spacing: osdRowSpacing
-                visible: root.currentIndicator === "brightness"
+                visible: root.isDisplayIndicator
                 Layout.fillHeight: true
+
+                // Complementary display slider (immediately next to the main slider)
+                StyledVerticalSlider {
+                    id: brightnessSlider
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: osdRoot ? osdRoot.osdButtonHeight : 56
+                    configuration: sliderTrackWidth
+                    visible: root.currentIndicator === "gamma"
+
+                    from: 0
+                    to: 1
+                    usePercentTooltip: false
+                    tooltipContent: Translation.tr("Brightness")
+                    value: {
+                        const monitor = Brightness.getTargetMonitor();
+                        return monitor ? monitor.brightness : 0.5;
+                    }
+                    rawValue: value
+                    materialSymbol: "brightness_high"
+                    shape: MaterialShape.Shape.Burst
+
+                    onMoved: {
+                        const monitor = Brightness.getTargetMonitor();
+                        if (monitor) {
+                            monitor.setBrightness(value);
+                        }
+                        if (rootOsd) rootOsd.triggerOsd();
+                    }
+                }
 
                 // Gamma Slider (immediately next to Brightness)
                 StyledVerticalSlider {
@@ -211,6 +242,7 @@ RowLayout {
                     Layout.fillHeight: true
                     Layout.preferredWidth: osdRoot ? osdRoot.osdButtonHeight : 56
                     configuration: sliderTrackWidth
+                    visible: root.currentIndicator === "brightness"
 
                     from: Hyprsunset.gammaLowerLimit
                     to: 100
