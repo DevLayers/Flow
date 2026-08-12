@@ -8,7 +8,7 @@ ContentPage {
     id: root
     forceWidth: false
 
-    signal goBack()
+    signal goBack
 
     property string selectedSport: "soccer"
     property int selectedLeagueIndex: 0
@@ -40,7 +40,8 @@ ContentPage {
 
     // ── Helpers ───────────────────────────────────────────────────────────
     function formatLeagueName(slug) {
-        if (!slug) return "";
+        if (!slug)
+            return "";
         let parts = slug.split(/[-.]/);
         return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
     }
@@ -51,7 +52,8 @@ ContentPage {
     }
 
     function addLeague(sportName, leagueName) {
-        if (isLeagueTracked(sportName, leagueName)) return;
+        if (isLeagueTracked(sportName, leagueName))
+            return;
         let list = JSON.parse(JSON.stringify(Config.options.bar.sports.monitoredLeagues || []));
         list.push({
             sport: sportName,
@@ -128,7 +130,7 @@ ContentPage {
             text: Translation.tr("The Sports widget uses the ESPN API to fetch data. Some leagues might not be available or may have different slugs. Check the API docs for more details.")
             isFirst: true
             isLast: true
-            
+
             RippleButtonWithIcon {
                 mainText: Translation.tr("Open API Docs")
                 materialIcon: "open_in_new"
@@ -138,12 +140,14 @@ ContentPage {
                 colBackgroundHover: Appearance.colors.colLayer0Hover
                 colRipple: Appearance.colors.colLayer0Active
                 downAction: () => {
-                    Qt.openUrlExternally("https://gist.github.com/nntrn/ee26cb2a0716de0947a0a4e9a157bc1c/b99b9e0d2df72470fa622e2f76cecb0362111e9a#file-extending-espn-api-md")
+                    Qt.openUrlExternally("https://gist.github.com/nntrn/ee26cb2a0716de0947a0a4e9a157bc1c/b99b9e0d2df72470fa622e2f76cecb0362111e9a#file-extending-espn-api-md");
                 }
             }
         }
-        
-        Item { Layout.preferredHeight: 16 }
+
+        Item {
+            Layout.preferredHeight: 16
+        }
 
         ConfigSwitch {
             buttonIcon: "check"
@@ -156,7 +160,9 @@ ContentPage {
             }
         }
 
-        Item { Layout.preferredHeight: 16 }
+        Item {
+            Layout.preferredHeight: 16
+        }
 
         ContentSubsection {
             title: Translation.tr("Add new league")
@@ -176,15 +182,15 @@ ContentPage {
                     delegate: Rectangle {
                         required property string modelData
                         property bool isSelected: root.selectedSport === modelData
-                        
+
                         width: sportText.implicitWidth + 24
                         height: 32
                         radius: Appearance.rounding.full
-                        
+
                         color: isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
                         border.width: isSelected ? 0 : 1
                         border.color: Appearance.colors.colOutlineVariant
-                        
+
                         HoverHandler {
                             id: sportHover
                             cursorShape: Qt.PointingHandCursor
@@ -205,7 +211,11 @@ ContentPage {
                             cursorShape: Qt.PointingHandCursor
                         }
 
-                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 150
+                            }
+                        }
                     }
                 }
             }
@@ -219,7 +229,10 @@ ContentPage {
                     Layout.fillWidth: true
                     model: {
                         let leagues = root.espnData[root.selectedSport] || [];
-                        return leagues.map(l => ({ display: root.formatLeagueName(l), value: l }));
+                        return leagues.map(l => ({
+                                    display: root.formatLeagueName(l),
+                                    value: l
+                                }));
                     }
                     textRole: "display"
                     currentIndex: root.selectedLeagueIndex
@@ -238,7 +251,7 @@ ContentPage {
                     colBackground: Appearance.colors.colPrimary
                     colBackgroundHover: Qt.lighter(Appearance.colors.colPrimary, 1.15)
                     colRipple: Appearance.colors.colPrimaryContainer
-                    
+
                     property string targetLeague: {
                         let leagues = root.espnData[root.selectedSport] || [];
                         if (leagues.length > root.selectedLeagueIndex) {
@@ -277,7 +290,7 @@ ContentPage {
             icon: "playlist_add_check"
             visible: Config.options.bar.sports.enable && root.getTrackedLeagues().length > 0
             isLast: true
-            
+
             Flow {
                 Layout.fillWidth: true
                 spacing: 8
@@ -297,7 +310,9 @@ ContentPage {
             }
         }
 
-        Item { Layout.preferredHeight: 16 }
+        Item {
+            Layout.preferredHeight: 16
+        }
 
         ContentSubsection {
             title: Translation.tr("Preferences filter")
@@ -377,8 +392,8 @@ ContentPage {
         property string text
         property bool checked: false
         signal toggled(bool checked)
-        signal removed()
-        
+        signal removed
+
         width: chipLayout.implicitWidth + 24
         height: 36
         radius: Appearance.rounding.full
@@ -388,9 +403,7 @@ ContentPage {
             cursorShape: Qt.PointingHandCursor
         }
 
-        color: checked
-            ? (chipHover.hovered ? Qt.lighter(Appearance.colors.colPrimary, 1.15) : Appearance.colors.colPrimary)
-            : (chipHover.hovered ? Appearance.colors.colSurfaceContainerHigh : Appearance.colors.colSurfaceContainer)
+        color: checked ? (chipHover.hovered ? Qt.lighter(Appearance.colors.colPrimary, 1.15) : Appearance.colors.colPrimary) : (chipHover.hovered ? Appearance.colors.colSurfaceContainerHigh : Appearance.colors.colSurfaceContainer)
 
         opacity: checked ? 1.0 : 0.6
 
@@ -398,14 +411,14 @@ ContentPage {
             id: chipLayout
             anchors.centerIn: parent
             spacing: 8
-            
+
             MouseArea {
                 Layout.alignment: Qt.AlignVCenter
                 implicitWidth: chipText.implicitWidth
                 implicitHeight: 36
                 onClicked: parent.parent.toggled(!parent.parent.checked)
                 cursorShape: Qt.PointingHandCursor
-                
+
                 StyledText {
                     id: chipText
                     anchors.centerIn: parent
@@ -426,20 +439,22 @@ ContentPage {
                 colBackground: "transparent"
                 colBackgroundHover: "transparent"
                 colRipple: Appearance.colors.colErrorContainer
-                
+
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: "close"
                     iconSize: Appearance.font.pixelSize.normal
                     color: parent.parent.parent.checked ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
                 }
-                
+
                 onClicked: parent.parent.removed()
             }
         }
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            ColorAnimation {
+                duration: 150
+            }
         }
     }
 }

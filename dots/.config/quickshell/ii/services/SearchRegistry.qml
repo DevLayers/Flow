@@ -35,23 +35,23 @@ Item {
         let configRoot = FileUtils.trimFileProtocol(Directories.config) + "/quickshell/ii/";
         let basePath = configRoot + "modules/settings/configs/";
 
-        // Manifest comes from SettingsPageRegistry: every searchable page plus
-        // the widget sub-pages it hosts. Adding or moving a page is a
-        // one-place change in the registry.
         let files = [];
         let ids = [];
+        let subPages = [];
         for (let p of SettingsPageRegistry.pages) {
             if (p.searchable === false)
                 continue;
             files.push(configRoot + p.component);
             ids.push(p.id);
+            subPages.push("");
             for (let sub of (p.subPages ?? [])) {
                 files.push(basePath + sub);
                 ids.push(p.id);
+                subPages.push(sub);
             }
         }
 
-        pageFile.start(files, ids);
+        pageFile.start(files, ids, subPages);
         listPresetsSearchProc.running = false;
         listPresetsSearchProc.running = true;
 
@@ -98,19 +98,18 @@ Item {
 
     FileView {
         id: pageFile
-        // Read asynchronously: this walks every settings page in turn, and each one
-        // is then brace-scanned character by character. Done blocking, the whole
-        // sweep lands in one main loop pass.
         printErrors: false
 
         property var files: []
         property var pageIds: []
+        property var subPages: []
         property int currentIndex: 0
 
-        function start(filesArray, idsArray) {
+        function start(filesArray, idsArray, subPagesArray) {
             pageFile.cancel();
             files = filesArray;
             pageIds = idsArray;
+            subPages = subPagesArray || [];
             currentIndex = 0;
             loadNext();
         }
@@ -118,6 +117,7 @@ Item {
         function cancel() {
             files = [];
             pageIds = [];
+            subPages = [];
             currentIndex = 0;
             path = "";
         }
@@ -134,6 +134,7 @@ Item {
             path = "";
             files = [];
             pageIds = [];
+            subPages = [];
             currentIndex = 0;
             root.indexReady();
         }
@@ -141,7 +142,7 @@ Item {
         onLoaded: {
             if (currentIndex >= files.length || !root.indexing)
                 return;
-            root.indexQmlFile(text(), pageIds[currentIndex]);
+            root.indexQmlFile(text(), pageIds[currentIndex], subPages[currentIndex]);
             currentIndex++;
             if (currentIndex >= files.length) {
                 finishIndexing();
@@ -150,8 +151,6 @@ Item {
             }
         }
 
-        // A page that cannot be read must not stop the sweep — the rest of the
-        // settings would silently drop out of search.
         onLoadFailed: {
             if (currentIndex >= files.length || !root.indexing)
                 return;
@@ -213,11 +212,23 @@ Item {
 
     function extractWidgetsWithOffset(text, baseOffset, sourceKey) {
         let items = [];
-        let types = ["ConfigSwitch", "ConfigSpinBox", "ConfigSelectionArray", "ConfigTextField", "ConfigSlider", "ConfigComboBox", "ConfigWallpaperSelector", "ConfigLightDarkToggle", "ConfigPresetsView"];
+        let types = [
+            "ConfigSwitch", "ConfigSpinBox", "ConfigSelectionArray", "ConfigTextField",
+            "ConfigSlider", "ConfigComboBox", "ConfigWallpaperSelector", "ConfigLightDarkToggle",
+            "ConfigPresetsView", "HelperLinkBox", "NoticeBox", "ShortcutBox",
+            "MaterialTextField", "Flow", "RowLayout", "ColumnLayout", "ServiceCard",
+            "RippleButtonWithIcon", "ConfigListView", "ColorPreviewButton", "StyledComboBox",
+            "MonitorPicker"
+        ];
         for (let t of types) {
             let blocks = extractBlocks(text, t);
             for (let b of blocks) {
-                let textProp = extractProperty(b.inner, "text") || extractProperty(b.inner, "title") || extractProperty(b.inner, "tooltip");
+                let textProp = extractProperty(b.inner, "text")
+                            || extractProperty(b.inner, "title")
+                            || extractProperty(b.inner, "tooltip")
+                            || extractProperty(b.inner, "value")
+                            || extractProperty(b.inner, "placeholderText")
+                            || extractProperty(b.inner, "description");
                 items.push({
                     type: t,
                     text: textProp,
@@ -230,7 +241,7 @@ Item {
         return items;
     }
 
-    function indexQmlFile(qmlText, pageId) {
+    function indexQmlFile(qmlText, pageId, subPage) {
         if (!qmlText) return;
 
         const sourceKey = pageFile.files[pageFile.currentIndex];
@@ -283,7 +294,7 @@ Item {
                     sectionItems.push(item);
             }
 
-            // collect all search strings for scoring (excluding individual item texts to prevent them from matching the whole section)
+            // collect all search strings for scoring
             if (title) searchStrings.push(title);
             for (let sub of sectionSubsections) {
                 if (sub.title) searchStrings.push(sub.title);
@@ -291,6 +302,7 @@ Item {
 
             registerSection({
                 pageId: pageId,
+                subPage: subPage || "",
                 title: title || "Unknown",
                 icon: icon || "",
                 searchStrings: searchStrings,
@@ -310,7 +322,6 @@ Item {
             let index = text.indexOf(type, i);
             if (index === -1) break;
             
-            // Check if it's a whole word match (to avoid partial matches if any)
             let prevChar = index > 0 ? text[index - 1] : ' ';
             if (/[a-zA-Z0-9_]/.test(prevChar)) {
                 i = index + type.length;
@@ -320,7 +331,6 @@ Item {
             let braceStart = text.indexOf("{", index);
             if (braceStart === -1) break;
             
-            // Validate that between type and brace there are only spaces or nothing
             let between = text.substring(index + type.length, braceStart).trim();
             if (between !== "") {
                 i = index + type.length;
@@ -339,7 +349,6 @@ Item {
                     inString = true;
                     stringChar = ch;
                 } else if (inString && ch === stringChar) {
-                    // Check for escape character
                     if (text[j-1] !== '\\') {
                         inString = false;
                     }
@@ -505,6 +514,7 @@ Item {
             if (sectionMatches) {
                 results.push({
                     pageId: section.pageId,
+                    subPage: section.subPage || "",
                     title: section.title,
                     icon: section.icon,
                     fileImports: root.fileImportsBySource[section.sourceKey] || "",
@@ -524,13 +534,12 @@ Item {
         return getSearchResult(text);
     }
     
-    // Fallback for old behaviour just in case
     function getSearchResult(query) {
         if (!query || query.trim() === "") return [];
         let dyn = getDynamicSearchResults(query);
         let flat = [];
         for (let r of dyn) {
-            flat.push({ pageIndex: 0, matchedString: r.title, score: r.score }); // dummy for old compatibility if needed
+            flat.push({ pageIndex: 0, matchedString: r.title, score: r.score });
         }
         return flat;
     }

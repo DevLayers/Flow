@@ -315,7 +315,8 @@ Singleton {
             var a = root.ignoreAlpha;
             var barA = root.barIgnoreAlpha;
             var script = "";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|.*[pP]opup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
@@ -390,7 +391,8 @@ Singleton {
         var a = root.ignoreAlpha;
         var barA = root.barIgnoreAlpha;
         var bs = "";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|.*[pP]opup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";

@@ -18,6 +18,7 @@ ColumnLayout {
     spacing: 12
 
     property string pageId: ""
+    property string subPage: ""
     property bool collapsible: false
     property bool expanded: true
 
@@ -31,11 +32,19 @@ ColumnLayout {
         if (idx < 0)
             return;
 
+        win.pendingSectionHighlight = root.title;
+        if (root.subPage && root.subPage.length > 0) {
+            win.pendingSubPage = root.subPage;
+        }
+
         if (win.currentPage === idx) {
+            if (win.pendingSubPage && win.restoreSubPagePath) {
+                win.restoreSubPagePath(win.pendingSubPage);
+                win.pendingSubPage = "";
+            }
             SearchRegistry.currentSearch = root.title;
             win.pendingSectionHighlight = "";
         } else {
-            win.pendingSectionHighlight = root.title;
             win.currentPage = idx;
         }
     }

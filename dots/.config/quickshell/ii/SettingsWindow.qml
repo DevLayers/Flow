@@ -29,6 +29,7 @@ FloatingWindow {
     property string pendingSearchText: ""
 
     property string pendingSectionHighlight: ""
+    property string pendingSubPage: ""
 
     // Settings navigation is intentionally session-local. The stack contains
     // the states behind the current page, including an open sub-page, and is
@@ -501,6 +502,11 @@ FloatingWindow {
                     onLoaded: {
                         if (root.pendingSectionHighlight !== "") {
                             pendingHighlightTimer.restart();
+                        }
+                        if (root.pendingSubPage !== undefined && root.pendingSubPage !== "") {
+                            const targetSub = root.pendingSubPage;
+                            root.pendingSubPage = "";
+                            root.restoreSubPagePath(targetSub);
                         }
                         if (_waitingForLoad) {
                             _waitingForLoad = false;
