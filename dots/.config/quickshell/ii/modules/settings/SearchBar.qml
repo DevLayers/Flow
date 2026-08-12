@@ -8,19 +8,10 @@ import qs.modules.common.widgets
 /**
  * Settings v2 – Search Bar
  *
- * Layout (horizontal, fills parent width):
- *   [ Rectangle (colLayer1, rounding.full, height 56) containing:
- *       [MaterialShape circle: search icon (40x40, centered/8px margins)]
- *       [ToolbarTextField (colLayer2 background, height 40, centered/8px margins)]
- *   ]
- *   [RippleButton circle: close, same height as rectangle (56x56)]
- *
- * Signals:
- *   - accepted()          → user pressed Enter to cycle through results
- *   - closeRequested()    → user clicked the close/X button
- *
- * Bindable properties:
- *   - lastSearchIndex / resultsCount → used to show "n/total" inside the icon
+ * Layout (horizontal, fills parent width, height 56):
+ *   [MaterialShape 56x56: search icon / clear button]
+ *   [ToolbarTextField 56 height: main input pill field containing internal 40x40 enter button]
+ *   [RippleButton 56x56: close window button]
  */
 RowLayout {
     id: root
@@ -47,179 +38,258 @@ RowLayout {
         searchInput.forceActiveFocus();
     }
 
-    // ── Left: Main input area rectangle (fills full height 56) ─────────────
-    Rectangle {
-        id: searchInputContainer
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        color: Appearance.colors.colLayer1
-        radius: Appearance.rounding.full
+    // Shake animation targets search input
+    SequentialAnimation {
+        id: noMoreResultsAnim
+        NumberAnimation {
+            target: searchInput
+            property: "Layout.leftMargin"
+            to: -12
+            duration: 50
+        }
+        NumberAnimation {
+            target: searchInput
+            property: "Layout.leftMargin"
+            to: 12
+            duration: 50
+        }
+        NumberAnimation {
+            target: searchInput
+            property: "Layout.leftMargin"
+            to: -8
+            duration: 40
+        }
+        NumberAnimation {
+            target: searchInput
+            property: "Layout.leftMargin"
+            to: 8
+            duration: 40
+        }
+        NumberAnimation {
+            target: searchInput
+            property: "Layout.leftMargin"
+            to: 0
+            duration: 30
+        }
+    }
 
-        border.color: searchInput.activeFocus ? Appearance.colors.colPrimary : Appearance.colors.colLayer0Border
-        border.width: searchInput.activeFocus ? 2 : 1
+    // 1. Left: Search icon & Clear button (56x56 1:1 shape)
+    MaterialShapeWrappedMaterialSymbol {
+        id: searchIconShape
+        Layout.alignment: Qt.AlignVCenter
+        Layout.preferredWidth: 56
+        Layout.preferredHeight: 56
+        iconSize: 22
 
-        Behavior on border.color {
+        readonly property bool hasText: searchInput.text.length > 0
+
+        color: {
+            if (hasText) {
+                return searchIconMouseArea.containsMouse ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary;
+            } else {
+                return searchIconMouseArea.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2;
+            }
+        }
+        colSymbol: hasText ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+
+        Behavior on color {
             ColorAnimation {
                 duration: 150
                 easing.type: Easing.OutQuad
             }
         }
 
-        Behavior on border.width {
-            NumberAnimation {
-                duration: 150
-                easing.type: Easing.OutQuad
+        animateChange: true
+
+        readonly property var circleLikeShapes: [
+            MaterialShape.Shape.Circle,
+            MaterialShape.Shape.Cookie4Sided,
+            MaterialShape.Shape.Cookie6Sided,
+            MaterialShape.Shape.Cookie7Sided,
+            MaterialShape.Shape.Cookie9Sided,
+            MaterialShape.Shape.Cookie12Sided,
+            MaterialShape.Shape.Clover4Leaf,
+            MaterialShape.Shape.Clover8Leaf,
+            MaterialShape.Shape.Puffy,
+            MaterialShape.Shape.Sunny,
+            MaterialShape.Shape.VerySunny,
+            MaterialShape.Shape.Bun,
+            MaterialShape.Shape.Flower,
+            MaterialShape.Shape.SoftBurst
+        ]
+
+        property int currentShapeIndex: 0
+        property bool shapePending: false
+
+        readonly property bool isHoveredAndHasText: searchIconMouseArea.containsMouse && hasText
+
+        shape: isHoveredAndHasText ? MaterialShape.Shape.SoftBurst : circleLikeShapes[currentShapeIndex]
+
+        function advanceShape() {
+            if (searchInput.text.length === 0) {
+                currentShapeIndex = 0;
+                searchIconShape.rotation = 0;
+                shapePending = false;
+                return;
+            }
+
+            if (shapeAnimTimer.running) {
+                shapePending = true;
+                return;
+            }
+
+            shapePending = false;
+            currentShapeIndex = (currentShapeIndex + 1) % circleLikeShapes.length;
+            searchIconShape.rotation += 45;
+            shapeAnimTimer.start();
+        }
+
+        Timer {
+            id: shapeAnimTimer
+            interval: 220
+            repeat: false
+            onTriggered: {
+                if (searchIconShape.shapePending && searchInput.text.length > 0) {
+                    searchIconShape.advanceShape();
+                }
             }
         }
 
-        // Shake animation targets the whole search container
-        SequentialAnimation {
-            id: noMoreResultsAnim
-            NumberAnimation {
-                target: searchInputContainer
-                property: "Layout.leftMargin"
-                to: -12
-                duration: 50
-            }
-            NumberAnimation {
-                target: searchInputContainer
-                property: "Layout.leftMargin"
-                to: 12
-                duration: 50
-            }
-            NumberAnimation {
-                target: searchInputContainer
-                property: "Layout.leftMargin"
-                to: -8
-                duration: 40
-            }
-            NumberAnimation {
-                target: searchInputContainer
-                property: "Layout.leftMargin"
-                to: 8
-                duration: 40
-            }
-            NumberAnimation {
-                target: searchInputContainer
-                property: "Layout.leftMargin"
-                to: 0
-                duration: 30
-            }
+        // Show "n/total" text when there are results
+        readonly property bool _showCount: root.lastSearchIndex !== -1 && root.resultsCount > 0
+        text: isHoveredAndHasText ? "close" : (_showCount ? "" : "search")
+
+        StyledText {
+            id: resultCountText
+            visible: searchIconShape._showCount && !searchIconShape.isHoveredAndHasText
+            animateChange: true
+            anchors.centerIn: parent
+            text: (root.lastSearchIndex % Math.max(root.resultsCount, 1) + 1) + "/" + root.resultsCount
+            color: searchIconShape.hasText ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.weight: Font.DemiBold
+            rotation: 360 - searchIconShape.rotation
         }
 
-        RowLayout {
-            anchors {
-                fill: parent
-                margins: 8
-            }
-            spacing: 8
-
-            // Left inside rectangle: search icon circle (40x40, centered with 8px margins)
-            MaterialShapeWrappedMaterialSymbol {
-                id: searchIconShape
-                Layout.alignment: Qt.AlignVCenter
-                Layout.preferredWidth: 40
-                Layout.fillHeight: true
-                iconSize: 18
-                shape: MaterialShape.Shape.Circle
-                animateChange: true
-
-                // Show "n/total" text when there are results
-                readonly property bool _showCount: root.lastSearchIndex !== -1 && root.resultsCount > 0
-                text: _showCount ? "" : "search"
-
-                StyledText {
-                    id: resultCountText
-                    visible: false
-                    animateChange: true
-                    anchors.centerIn: parent
-                    text: (root.lastSearchIndex % Math.max(root.resultsCount, 1) + 1) + "/" + root.resultsCount
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    font.weight: Font.DemiBold
-                }
-
-                // Delay show so icon fade-out has time
-                Connections {
-                    target: searchIconShape
-                    function on_ShowCountChanged() {
-                        if (!searchIconShape._showCount) {
-                            resultCountText.visible = false;
-                        } else {
-                            showCountTimer.restart();
-                        }
-                    }
-                }
-                Timer {
-                    id: showCountTimer
-                    interval: 100
-                    repeat: false
-                    onTriggered: resultCountText.visible = true
-                }
-            }
-
-            // Right inside rectangle: visible text field (40x40, centered with 8px margins)
-            ToolbarTextField {
-                id: searchInput
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                colBackground: Appearance.colors.colLayer2Base
-                font.pixelSize: Appearance.font.pixelSize.small
-                placeholderText: Translation.tr("Search all settings..")
-
-                Component.onCompleted: {
+        MouseArea {
+            id: searchIconMouseArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: (searchInput.text.length > 0) ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: {
+                if (searchInput.text.length > 0) {
+                    searchInput.text = "";
+                    root.textChanged("");
+                    searchIconShape.advanceShape();
                     searchInput.forceActiveFocus();
                 }
+            }
+        }
+    }
 
-                onTextChanged: root.textChanged(text)
-                onAccepted: root.accepted(text)
+    // 2. Middle: Input text field (fills remaining width, height 56)
+    ToolbarTextField {
+        id: searchInput
+        Layout.fillWidth: true
+        Layout.preferredHeight: 56
+        Layout.fillHeight: true
+        colBackground: Appearance.colors.colLayer1
+        font.pixelSize: Appearance.font.pixelSize.normal
+        placeholderText: Translation.tr("Search all settings..")
+        rightPadding: (searchActionBtn.hasText || searchActionBtn.width > 0.5) ? (searchActionBtn.width + 16) : 16
+
+        Behavior on rightPadding {
+            NumberAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Component.onCompleted: {
+            searchInput.forceActiveFocus();
+        }
+
+        onTextChanged: {
+            searchIconShape.advanceShape();
+            root.textChanged(text);
+        }
+        onAccepted: root.accepted(text)
+
+        // Action button (arrow_forward) appearing inside search input on the right (40x40 circle)
+        Rectangle {
+            id: searchActionBtn
+            property bool hasText: searchInput.text.length > 0
+            visible: hasText || width > 0.5
+            clip: true
+
+            anchors {
+                right: parent.right
+                rightMargin: 8
+                verticalCenter: parent.verticalCenter
             }
 
-            // Action button (arrow_forward) appearing when text is entered
-            Rectangle {
-                id: searchActionBtn
-                Layout.preferredWidth: 40
-                Layout.preferredHeight: 40
-                Layout.alignment: Qt.AlignVCenter
-                radius: Appearance.rounding.full
-                color: Appearance.colors.colPrimary
-                visible: searchInput.text.length > 0
+            width: hasText ? 40 : 0
+            height: 40
+            radius: Appearance.rounding.full
+            color: Appearance.colors.colPrimary
+            opacity: hasText ? 1.0 : 0.0
 
-                scale: {
-                    if (searchInput.text.length === 0)
-                        return 0;
-                    return mouseAreaSearch.pressed ? 0.9 : mouseAreaSearch.containsMouse ? 1.05 : 1.0;
-                }
+            scale: {
+                if (!hasText)
+                    return 0.0;
+                return mouseAreaSearch.pressed ? 0.9 : mouseAreaSearch.containsMouse ? 1.05 : 1.0;
+            }
 
-                Behavior on scale {
-                    animation: Appearance.animation.clickBounce.numberAnimation.createObject(searchActionBtn)
+            Behavior on width {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
                 }
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(searchActionBtn)
-                }
+            }
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "arrow_forward"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnPrimary
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.OutCubic
                 }
+            }
 
-                MouseArea {
-                    id: mouseAreaSearch
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: {
-                        if (searchInput.text.trim().length > 0) {
-                            root.accepted(searchInput.text);
-                        }
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 150
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "arrow_forward"
+                iconSize: 18
+                color: Appearance.colors.colOnPrimary
+            }
+
+            MouseArea {
+                id: mouseAreaSearch
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: {
+                    if (searchInput.text.trim().length > 0) {
+                        root.accepted(searchInput.text);
                     }
                 }
             }
         }
     }
 
-    // ── Right: close button circle (same height as outer rectangle, i.e., 56x56) ──
+    // 3. Rightmost: Close button circle (56x56 1:1 circle)
     RippleButton {
         id: closeBtn
         Layout.alignment: Qt.AlignVCenter
