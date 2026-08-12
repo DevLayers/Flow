@@ -2455,7 +2455,7 @@ Singleton {
                 property bool hoverToReveal: true
                 property bool enableMediaWidget: false
                 property bool enableWeatherWidget: false
-                property bool showPhoneButton: true
+                property bool showPhoneButton: false
                 property bool showDividers: true
                 property bool showOverviewButton: true
                 property bool showPinButton: true
