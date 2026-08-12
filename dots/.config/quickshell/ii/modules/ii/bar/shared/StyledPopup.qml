@@ -71,6 +71,7 @@ LazyLoader {
     property bool _targetHovered: hoverTarget ? (hoverTarget.containsMouse !== undefined ? hoverTarget.containsMouse : (hoverTarget.hovered !== undefined ? hoverTarget.hovered : false)) : false
     property bool _clickActive: false
     property bool _isClosing: false
+    property bool _reopenPending: false
 
     readonly property bool _computedActive: Config.options.bar.tooltips.enablePopups && ((Config.options.bar.tooltips.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced)))
 
@@ -81,6 +82,12 @@ LazyLoader {
     on_ComputedActiveChanged: {
         if (!_computedActive) {
             _isClosing = true;
+            _reopenPending = false;
+        } else if (_isClosing) {
+            // Do not reverse a close halfway through. Child popup animations may
+            // still have queued callbacks from the previous entrance; wait for a
+            // clean progress=0 reset and reopen the instance afterward.
+            _reopenPending = true;
         } else {
             _isClosing = false;
         }
@@ -91,7 +98,7 @@ LazyLoader {
             interval: 60
             repeat: false
             onTriggered: {
-                if (root._targetHovered) {
+                if (root._targetHovered && !root._isClosing) {
                     root._openDebounced = true;
                 }
             }
@@ -119,8 +126,11 @@ LazyLoader {
         if (!stickyHover)
             return;
 
-        // Requirement 1: If close animation has started (_isClosing), hover on the popup body OR target MUST NOT re-open it until fully closed.
+        // Neither the popup body nor the source widget may reverse a close in
+        // progress. The source widget can request a queued re-open separately.
         if (_isClosing) {
+            if (_targetHovered)
+                _reopenPending = true;
             return;
         }
 
@@ -132,16 +142,27 @@ LazyLoader {
         }
     }
 
+    function _queueReopenFromTarget() {
+        if (!_isClosing)
+            return;
+
+        _timers.grace.stop();
+        _reopenPending = true;
+    }
+
     on_TargetHoveredChanged: {
-        if (_targetHovered && !_isClosing) {
+        if (_targetHovered) {
+            if (_isClosing)
+                _queueReopenFromTarget();
             _timers.openDebounce.restart();
         } else {
             _timers.openDebounce.stop();
             _openDebounced = false;
+            _reopenPending = false;
         }
 
-        if (Config.options.bar.tooltips.clickToShow) {
-            if (_targetHovered && !root._clickActive && !_isClosing) {
+        if (Config.options.bar.tooltips.clickToShow || forceClick) {
+            if (_targetHovered && !root._clickActive && !root._isClosing) {
                 root._clickActive = true;
             }
         } else {
@@ -173,7 +194,7 @@ LazyLoader {
         anchors.bottom: root.customPosition ? root.anchorBottom : (!Config.options.bar.vertical && Config.options.bar.bottom)
 
         implicitWidth: popupBackground.targetWidth + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
-        implicitHeight: popupBackground.targetHeight + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
+        implicitHeight: popupBackground._windowHeight + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
 
         // The input region must not follow the open animation. popupBackground lives inside
         // animContainer, which carries a Translate transform, and a transform change does not
@@ -290,6 +311,7 @@ LazyLoader {
                 duration: 50
             }
             NumberAnimation {
+                id: openProgressAnim
                 target: popupWindow
                 property: "animProgress"
                 from: 0.0
@@ -316,7 +338,30 @@ LazyLoader {
         Timer {
             id: destroyTimer
             interval: 30
-            onTriggered: root._isClosing = false
+            onTriggered: {
+                root._isClosing = false;
+                if (root._reopenPending)
+                    reopenAfterClose.start();
+            }
+        }
+
+        Timer {
+            id: reopenAfterClose
+            interval: 1
+            onTriggered: {
+                if (!root._reopenPending)
+                    return;
+
+                root._reopenPending = false;
+                if (root._targetHovered || Config.options.bar.tooltips.clickToShow || root.forceClick) {
+                    if (Config.options.bar.tooltips.clickToShow || root.forceClick)
+                        root._clickActive = true;
+                    else if (root.stickyHover)
+                        root._stickyActive = true;
+                    else
+                        root._openDebounced = true;
+                }
+            }
         }
 
         Connections {
@@ -337,6 +382,7 @@ LazyLoader {
                 } else if (root._computedActive) {
                     closeAnim.stop();
                     destroyTimer.stop();
+                    popupWindow.animProgress = 0.0;
                     openAnimSeq.start();
                 }
             }
@@ -395,25 +441,32 @@ LazyLoader {
                 property int elevation: Appearance.sizes.elevationMargin
 
                 property real _commitHeight: 0
+                property real _windowHeight: 0
                 property bool _heightReady: false
 
                 onTargetHeightChanged: {
                     _commitHeight = targetHeight;
+                    _windowHeight = targetHeight;
                 }
 
                 Component.onCompleted: {
                     _commitHeight = targetHeight;
+                    _windowHeight = targetHeight;
                     Qt.callLater(function () {
                         popupBackground._heightReady = true;
                     });
                 }
 
                 Behavior on _commitHeight {
-                    enabled: popupBackground._heightReady
-                    SmoothedAnimation {
-                        duration: 200
-                        easing: Easing.OutQuad
-                    }
+                    enabled: popupBackground._heightReady && root.animate && root.animateHeight
+                        && root.opened && popupWindow.animProgress >= 1.0
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+
+                Behavior on _windowHeight {
+                    enabled: popupBackground._heightReady && root.animate && root.animateHeight
+                        && root.opened && popupWindow.animProgress >= 1.0
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
 
                 anchors {
@@ -433,6 +486,8 @@ LazyLoader {
 
                 width: targetWidth
                 height: {
+                    if (!root.animateHeight)
+                        return targetHeight;
                     if (!root.animate || !root.contentItem || !heroItem || targetHeight <= heroHeight + margin * 2)
                         return _commitHeight;
                     return (heroHeight + margin * 2) + (_commitHeight - (heroHeight + margin * 2)) * popupWindow.animProgress;
@@ -440,6 +495,9 @@ LazyLoader {
 
                 color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
                 radius: root.popupRadius
+                // During close the surface shrinks before the content tree is destroyed.
+                // Clip that subtree to the same animated bounds so cards cannot spill out.
+                clip: root._isClosing
 
                 Item {
                     id: contentContainer
@@ -447,8 +505,46 @@ LazyLoader {
                     width: root.contentItem ? root.contentItem.implicitWidth : 0
                     height: root.contentItem ? root.contentItem.implicitHeight : 0
 
+                    // Keep the content exit synchronized with the surface close. Scale
+                    // by the currently available surface height so the cards follow the
+                    // same contraction instead of remaining at their full size.
+                    readonly property real closeScale: root._isClosing
+                        ? Math.max(0.0, Math.min(1.0, popupBackground.height / Math.max(1.0, height)))
+                        : 1.0
+                    readonly property real closeOriginX: {
+                        if (root.customPosition) {
+                            if (root.anchorLeft)
+                                return 0;
+                            if (root.anchorRight)
+                                return width;
+                        }
+                        if (popupBackground.isVertical)
+                            return popupBackground.isBottom ? width : 0;
+                        return width / 2;
+                    }
+                    readonly property real closeOriginY: {
+                        if (root.customPosition) {
+                            if (root.anchorTop)
+                                return 0;
+                            if (root.anchorBottom)
+                                return height;
+                        }
+                        if (popupBackground.isVertical)
+                            return height / 2;
+                        return popupBackground.isBottom ? height : 0;
+                    }
+
+                    // Keep the layout scale centered; only the close transform should
+                    // travel toward the bar, so opening geometry remains unchanged.
                     scale: root.layoutScale
+                    opacity: root._isClosing ? closeScale : 1.0
                     transformOrigin: Item.Center
+                    transform: Scale {
+                        origin.x: contentContainer.closeOriginX
+                        origin.y: contentContainer.closeOriginY
+                        xScale: contentContainer.closeScale
+                        yScale: contentContainer.closeScale
+                    }
                     clip: false
 
                     // contentItem is owned by root, which is a LazyLoader (not an Item), so it
