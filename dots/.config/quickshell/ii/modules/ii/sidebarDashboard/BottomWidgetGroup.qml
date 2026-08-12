@@ -227,6 +227,7 @@ Rectangle {
                         required property int index
                         required property var modelData
                         showToggledHighlight: false
+                        colBackgroundHover: toggled ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer1Hover
                         toggled: root.selectedTab == index
                         buttonText: modelData.name
                         buttonIcon: modelData.icon
