@@ -38,7 +38,17 @@ Singleton {
             return;
 
         root.pendingCommand = command;
-        colorGeneration.command = ["bash", "-c", root.pendingCommand];
+        // Unlike switchwall.sh (which sources the venv then runs
+        // `python3 script.py ...` explicitly) this used to exec the .py file
+        // directly, which still triggers the kernel's own parsing of the
+        // script's fragile env -S shebang no matter what venv is sourced
+        // beforehand - plus no venv fallback and no LD_LIBRARY_PATH/
+        // PYTHONHOME/PYTHONPATH sanitization. Any environment quirk here
+        // silently broke every preview swatch with zero error surfaced
+        // anywhere. Mirror switchwall.sh's own activation + invocation, and
+        // the sanitization ColorPreviewButton's onClicked handler applies.
+        const wrapped = `unset LD_LIBRARY_PATH PYTHONHOME PYTHONPATH; export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"; venv="\${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-$XDG_STATE_HOME/quickshell/.venv}"; source "$(eval echo "$venv")/bin/activate" 2>/dev/null; exec python3 ${root.pendingCommand}`;
+        colorGeneration.command = ["bash", "-c", wrapped];
         colorGeneration.running = true;
     }
 
@@ -124,6 +134,17 @@ Singleton {
     Process {
         id: colorGeneration
         running: false
-        onExited: Qt.callLater(root.reloadAfterGeneration)
+        stderr: StdioCollector {
+            onStreamFinished: {
+                const err = String(this.text).trim();
+                if (err.length > 0)
+                    console.warn("[WallpaperPreviewCache] preview generation stderr:", err);
+            }
+        }
+        onExited: (code, status) => {
+            if (code !== 0)
+                console.warn("[WallpaperPreviewCache] preview generation exited with code", code);
+            Qt.callLater(root.reloadAfterGeneration);
+        }
     }
 }
