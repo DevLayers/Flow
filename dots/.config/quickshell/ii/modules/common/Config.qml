@@ -296,7 +296,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 3
+    readonly property int currentConfigVersion: 4
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -382,6 +382,17 @@ Singleton {
                 console.log("[Config] Migrated sidebar.quickToggles.android.toggles to pages");
             }
             delete android.toggles;
+        }
+
+        // v3 -> v4: osk.layout keeps its type but changes meaning (Aug 2026). It used to be
+        // overwritten by HyprlandXkb on every layout switch, so no value on disk was ever a
+        // deliberate choice - and the shipped default "qwerty_full" named no layout at all,
+        // which is why the keyboard always drew the same one. "auto" says out loud what the
+        // overwriting was doing, and the keyboard settings now offer a real choice to anyone
+        // who would rather pin a layout.
+        if (from < 4 && typeof raw.osk?.layout === "string" && raw.osk.layout !== "auto") {
+            console.log(`[Config] Migrated osk.layout "${raw.osk.layout}" -> "auto"`);
+            raw.osk.layout = "auto";
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -511,6 +522,10 @@ Singleton {
             "lock.notifications.privacy": ["full", "redacted", "countOnly"],
             "lock.notifications.defaultPolicy": ["show", "hide"],
             "lock.notifications.filters.criticalOverride": ["full", "none"],
+            // osk.layout is deliberately absent: its values are layout names out of layouts.js,
+            // so a fixed list here would reject a layout added later. An unknown one already
+            // falls back to the keyboard's default.
+            "osk.style": ["deck", "classic"],
             "sidebar.position": ["default", "inverted", "left", "right"],
             "sidebar.sidebarStyle": ["default", "connect"],
             "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
@@ -2622,7 +2637,16 @@ Singleton {
             }
 
             property JsonObject osk: JsonObject {
-                property string layout: "qwerty_full"
+                // "deck" is the full-bleed keyboard, "classic" the original floating one.
+                property string style: "deck"
+                // "auto" follows whatever layout Hyprland reports; any other value pins a
+                // layout by name ("French", "German", ...).
+                property string layout: "auto"
+                // Share of the screen height the deck takes. Key size falls out of it, so this
+                // is the only size control the deck needs.
+                property int heightPercent: 35
+                // The small shift and AltGr glyphs in the corners of a deck key.
+                property bool secondaryGlyphs: true
                 property bool pinnedOnStartup: false
 
                 // Raises the keyboard when a text field is focused by finger or pen.

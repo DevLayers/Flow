@@ -266,6 +266,89 @@ Item {
             title: Translation.tr("On-screen Keyboard")
             icon: "keyboard"
 
+            ContentSubsection {
+                title: Translation.tr("Keyboard Style")
+                icon: "keyboard"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.osk.style ?? "deck"
+                    onSelected: (newValue) => {
+                        Config.options.osk.style = newValue;
+                    }
+                    options: [{
+                        "displayName": Translation.tr("Deck"),
+                        "icon": "keyboard",
+                        "tooltip": Translation.tr("Spans the bottom of the screen"),
+                        "value": "deck"
+                    }, {
+                        "displayName": Translation.tr("Classic"),
+                        "icon": "keyboard_alt",
+                        "tooltip": Translation.tr("Floats above the screen edge"),
+                        "value": "classic"
+                    }]
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Layout")
+                icon: "language"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.osk.layout ?? "auto"
+                    onSelected: (newValue) => {
+                        Config.options.osk.layout = newValue;
+                    }
+                    options: [{
+                        "displayName": Translation.tr("Auto"),
+                        "icon": "autorenew",
+                        "tooltip": Translation.tr("Follows the keyboard layout you are typing in"),
+                        "value": "auto"
+                    }, {
+                        "displayName": Translation.tr("French"),
+                        "value": "French"
+                    }, {
+                        "displayName": Translation.tr("English"),
+                        "value": "English (US)"
+                    }, {
+                        "displayName": Translation.tr("German"),
+                        "value": "German"
+                    }, {
+                        "displayName": Translation.tr("Russian"),
+                        "value": "Russian"
+                    }]
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                enabled: (Config.options.osk.style ?? "deck") === "deck"
+                opacity: enabled ? 1.0 : 0.4
+
+                ConfigSpinBox {
+                    icon: "height"
+                    text: Translation.tr("Height (% of the screen)")
+                    value: Config.options.osk.heightPercent
+                    from: 15
+                    to: 60
+                    stepSize: 1
+                    onValueChanged: {
+                        Config.options.osk.heightPercent = value;
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "text_fields"
+                    text: Translation.tr("Show shift and AltGr glyphs")
+                    checked: Config.options.osk.secondaryGlyphs
+                    onCheckedChanged: {
+                        Config.options.osk.secondaryGlyphs = checked;
+                    }
+                }
+            }
+
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 4

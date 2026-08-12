@@ -125,11 +125,13 @@ Flow {
                 }
             }
 
-            Loader {
-                active: modelData.tooltip !== undefined && modelData.tooltip !== ""
-                sourceComponent: StyledToolTip {
-                    text: modelData.tooltip || ""
-                }
+            // A tooltip watches its own parent's hover state, so it has to hang off the button
+            // itself. Loading it through a Loader made the Loader its parent instead, and a Loader
+            // has no hover state to read - which the tooltip took as "always hovered" and showed
+            // itself the moment the page opened.
+            StyledToolTip {
+                extraVisibleCondition: paletteButton.modelData.tooltip !== undefined && paletteButton.modelData.tooltip !== ""
+                text: paletteButton.modelData.tooltip ?? ""
             }
         }
     }
