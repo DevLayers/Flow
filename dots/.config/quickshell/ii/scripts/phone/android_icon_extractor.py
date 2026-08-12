@@ -13,6 +13,10 @@ resolved out of the installed APKs over adb:
   4. Bitmaps are converted to PNG; adaptive icons are flattened by compositing
      their foreground over their background and cropping to the safe zone;
      vector drawables are translated to SVG, which Qt renders natively.
+  5. Whatever comes out has to actually paint something. A drawable whose
+     colours or layers did not resolve still yields a perfectly valid, entirely
+     invisible icon, so each candidate is checked and rejected in favour of the
+     next one rather than cached as a blank.
 
 Results are cached under XDG_CACHE_HOME so the adb round trips happen once per
 app. Speaks newline-delimited JSON on stdin/stdout:
@@ -34,15 +38,14 @@ import sys
 import threading
 import time
 import xml.etree.ElementTree as ET
-import zipfile
 from io import BytesIO
 from pathlib import Path
+from struct import unpack_from
 
 logging.getLogger("pyaxmlparser").setLevel(logging.CRITICAL)
 
 try:
     from pyaxmlparser.axmlprinter import AXMLPrinter
-    from pyaxmlparser.core import APK
 
     PARSER_AVAILABLE = True
 except ImportError:
@@ -63,10 +66,28 @@ MISS_TTL = 7 * 24 * 3600  # Retry apps we failed to resolve after a week
 OUTPUT_SIZE = 192  # Icons are shown at ~36 px; 192 stays crisp on any scale factor
 WORKER_COUNT = 3
 ADB_TIMEOUT = 25
+# Resource tables are the one entry that can be genuinely huge — Samsung Health
+# ships 175 MB of it — and streaming that off the phone takes its time.
+TABLE_TIMEOUT = 120
 
-RASTER_EXTS = (".png", ".webp", ".jpg", ".jpeg")
 DENSITY_ANY = 0xFFFE  # anydpi: an XML drawable rather than a bitmap
 DENSITY_NONE = 0xFFFF  # nodpi
+
+# resources.arsc chunk and entry tags, from AOSP's ResourceTypes.h
+RES_STRING_POOL = 0x0001
+RES_TABLE = 0x0002
+RES_TABLE_PACKAGE = 0x0200
+RES_TABLE_TYPE = 0x0201
+TYPE_SPARSE = 0x01  # entry offsets are an (index, offset) map, not an array
+TYPE_OFFSET16 = 0x02  # entry offsets are 16-bit
+ENTRY_COMPLEX = 0x0001  # a bag (style, array); never a drawable
+ENTRY_COMPACT = 0x0008  # value packed into the entry header
+VALUE_REFERENCE = 0x01
+VALUE_ATTRIBUTE = 0x02
+VALUE_STRING = 0x03
+VALUE_COLORS = (0x1C, 0x1D, 0x1E, 0x1F)
+NO_ENTRY16 = 0xFFFF
+NO_ENTRY32 = 0xFFFFFFFF
 
 # Adaptive icons draw 108x108 layers of which only the centre 72x72 is
 # guaranteed visible; everything outside is parallax/mask bleed.
@@ -166,10 +187,10 @@ def adb_text(target_args, *args) -> str:
         return ""
 
 
-def adb_binary(target_args, command: str) -> bytes:
+def adb_binary(target_args, command: str, timeout: int = ADB_TIMEOUT) -> bytes:
     try:
         res = subprocess.run(["adb", *resolve_target(target_args), "exec-out", command],
-                             capture_output=True, timeout=ADB_TIMEOUT)
+                             capture_output=True, timeout=timeout)
         return res.stdout
     except (subprocess.SubprocessError, OSError) as exc:
         warn(f"adb exec-out failed: {exc}")
@@ -181,11 +202,161 @@ def apk_paths(target_args, package: str) -> list:
     return [line.strip()[len("package:"):] for line in lines if line.strip().startswith("package:")]
 
 
-def read_entry(target_args, apk: str, entry: str) -> bytes:
-    return adb_binary(target_args, f"unzip -p {shlex.quote(apk)} {shlex.quote(entry)}")
+def read_entry(target_args, apk: str, entry: str, timeout: int = ADB_TIMEOUT) -> bytes:
+    return adb_binary(target_args, f"unzip -p {shlex.quote(apk)} {shlex.quote(entry)}", timeout)
 
 
 # ─── Resource tables ─────────────────────────────────────────────────────────
+
+class StringPool:
+    """A resource table's string pool, read on demand rather than up front."""
+
+    def __init__(self, data: bytes, start: int):
+        header_size = unpack_from("<H", data, start + 2)[0]
+        count, _styles, flags, strings_start = unpack_from("<IIII", data, start + 8)
+
+        self.data = data
+        self.utf8 = bool(flags & 0x0100)
+        self.base = start + strings_start
+        self.offsets = unpack_from(f"<{count}I", data, start + header_size) if count else ()
+
+    def get(self, index: int):
+        if not 0 <= index < len(self.offsets):
+            return None
+        position = self.base + self.offsets[index]
+        try:
+            if self.utf8:
+                _, position = self._length8(position)  # character count, then byte count
+                length, position = self._length8(position)
+                return self.data[position:position + length].decode("utf-8", "replace")
+            length, position = self._length16(position)
+            return self.data[position:position + length * 2].decode("utf-16-le", "replace")
+        except Exception:
+            return None
+
+    def _length8(self, position: int):
+        value = self.data[position]
+        position += 1
+        if value & 0x80:  # A high bit means the length spills into a second byte
+            value = ((value & 0x7F) << 8) | self.data[position]
+            position += 1
+        return value, position
+
+    def _length16(self, position: int):
+        value = unpack_from("<H", self.data, position)[0]
+        position += 2
+        if value & 0x8000:
+            value = ((value & 0x7FFF) << 16) | unpack_from("<H", self.data, position)[0]
+            position += 2
+        return value, position
+
+
+class ResourceTable:
+    """A `resources.arsc` reader, cut down to resolving one id at a time.
+
+    pyaxmlparser walks the whole table as a single stream, so the first chunk it
+    does not recognise — sparse entries and 16-bit entry offsets are both
+    routine aapt2 output — desynchronises it and loses every later resource.
+    Seeking chunk by chunk from their declared offsets instead keeps unknown
+    chunks skippable, which is what makes modern apps resolvable at all.
+    """
+
+    def __init__(self, data: bytes):
+        self.data = data
+        self.values = None
+        self.types = {}
+
+        if len(data) < 12 or unpack_from("<H", data, 0)[0] != RES_TABLE:
+            raise ValueError("not a resource table")
+        header_size, total = unpack_from("<HI", data, 2)
+        self._scan(header_size, min(total, len(data)))
+        if self.values is None:
+            raise ValueError("no value string pool")
+
+    def entries(self, res_id: int) -> list:
+        """Every (density, value) the table holds for a resource id."""
+        index = res_id & 0xFFFF
+        found = []
+        for position, header_size in self.types.get(((res_id >> 24) & 0xFF, (res_id >> 16) & 0xFF), ()):
+            try:
+                value = self._entry(position, header_size, index)
+            except Exception:
+                continue  # One malformed type chunk must not sink the others
+            if value is not None:
+                found.append((self._density(position), value))
+        return found
+
+    def _chunks(self, start: int, end: int):
+        while start + 8 <= end:
+            kind, header_size, size = unpack_from("<HHI", self.data, start)
+            if size < 8 or start + size > end:
+                return
+            yield kind, start, header_size, size
+            start += size
+
+    def _scan(self, start: int, end: int) -> None:
+        for kind, position, header_size, size in self._chunks(start, end):
+            if kind == RES_STRING_POOL and self.values is None:
+                self.values = StringPool(self.data, position)
+            elif kind == RES_TABLE_PACKAGE:
+                self._scan_package(position, header_size, size)
+
+    def _scan_package(self, start: int, header_size: int, size: int) -> None:
+        package_id = unpack_from("<I", self.data, start + 8)[0]
+        for kind, position, child_header, _ in self._chunks(start + header_size, start + size):
+            if kind != RES_TABLE_TYPE:
+                continue
+            # One chunk per configuration, so a resource appears once per density
+            self.types.setdefault((package_id, self.data[position + 8]), []).append((position, child_header))
+
+    def _density(self, position: int) -> int:
+        config = position + 20
+        return unpack_from("<H", self.data, config + 14)[0] if unpack_from("<I", self.data, config)[0] >= 16 else 0
+
+    def _offset(self, position: int, header_size: int, index: int):
+        count = unpack_from("<I", self.data, position + 12)[0]
+        flags = self.data[position + 9]
+        table = position + header_size
+
+        if flags & TYPE_SPARSE:
+            for slot in range(count):
+                key, packed = unpack_from("<HH", self.data, table + slot * 4)
+                if key == index:
+                    return packed * 4
+            return None
+        if index >= count:
+            return None
+        if flags & TYPE_OFFSET16:
+            packed = unpack_from("<H", self.data, table + index * 2)[0]
+            return None if packed == NO_ENTRY16 else packed * 4
+        packed = unpack_from("<I", self.data, table + index * 4)[0]
+        return None if packed == NO_ENTRY32 else packed
+
+    def _entry(self, position: int, header_size: int, index: int):
+        offset = self._offset(position, header_size, index)
+        if offset is None:
+            return None
+        entries_start = unpack_from("<I", self.data, position + 16)[0]
+        return self._value(position + entries_start + offset)
+
+    def _value(self, position: int):
+        first, flags = unpack_from("<HH", self.data, position)
+        if flags & ENTRY_COMPACT:
+            return self._literal((flags >> 8) & 0xFF, unpack_from("<I", self.data, position + 4)[0])
+        if flags & ENTRY_COMPLEX:
+            return None
+        # Otherwise `first` is the entry header size, and the value follows it
+        return self._literal(self.data[position + first + 3], unpack_from("<I", self.data, position + first + 4)[0])
+
+    def _literal(self, kind: int, data: int):
+        if kind == VALUE_STRING:
+            return self.values.get(data)
+        if kind in (VALUE_REFERENCE, VALUE_ATTRIBUTE):
+            return f"@{data:08X}" if data else None
+        if kind in VALUE_COLORS:
+            return f"#{data:08X}"
+        return None
+
 
 class ApkTable:
     """One APK's manifest and resource table, fetched without pulling the APK."""
@@ -193,49 +364,50 @@ class ApkTable:
     def __init__(self, target_args, path: str):
         self.target_args = target_args
         self.path = path
-        self.apk = None
-        self.resources = None
+        self.manifest = None
+        self.table = None
 
         manifest = read_entry(target_args, path, "AndroidManifest.xml")
-        arsc = read_entry(target_args, path, "resources.arsc")
+        arsc = read_entry(target_args, path, "resources.arsc", timeout=TABLE_TIMEOUT)
         if not manifest or not arsc:
             return
 
-        stub = BytesIO()
-        with zipfile.ZipFile(stub, "w") as archive:
-            archive.writestr("AndroidManifest.xml", manifest)
-            archive.writestr("resources.arsc", arsc)
+        self.manifest = parse_axml(manifest)
         try:
-            self.apk = APK(stub.getvalue(), raw=True)
-            self.resources = self.apk.get_android_resources()
+            self.table = ResourceTable(arsc)
         except Exception as exc:
             warn(f"cannot parse {os.path.basename(path)}: {exc}")
 
     @property
     def valid(self) -> bool:
-        return self.resources is not None
+        return self.table is not None
 
-    def icon_id(self):
-        if self.apk is None:
-            return None
-        for attribute in ("icon", "roundIcon"):
-            try:
-                value = self.apk.get_attribute_value("application", attribute)
-            except Exception:
-                continue
-            parsed = parse_reference(value)
-            if parsed is not None:
-                return parsed
-        return None
+    def icon_ids(self) -> list:
+        """The manifest's icon candidates, best first. Apps that ship a round
+        icon as well give a second shot at one that resolves."""
+        if self.manifest is None:
+            return []
+        application = self.manifest.find("application")
+        if application is None:
+            return []
+
+        found = []
+        for attribute in ("icon", "roundIcon", "logo"):
+            parsed = parse_reference(attr(application, attribute))
+            if parsed is not None and parsed not in found:
+                found.append(parsed)
+
+        # Apps that declare no application icon usually put one on the activity
+        # the launcher starts.
+        for activity in application.iter("activity"):
+            parsed = parse_reference(attr(activity, "icon"))
+            if parsed is not None and parsed not in found:
+                found.append(parsed)
+        return found
 
     def resolve(self, res_id: int) -> list:
         """Every (density, value) this table holds for a resource id."""
-        if not self.valid:
-            return []
-        try:
-            return [(config.get_density(), value) for config, value in self.resources.get_resolved_res_configs(res_id)]
-        except Exception:
-            return []
+        return self.table.entries(res_id) if self.valid else []
 
     def read(self, entry: str) -> bytes:
         return read_entry(self.target_args, self.path, entry)
@@ -272,18 +444,32 @@ class PackageResources:
             if table.valid:
                 self.tables.append(table)
 
-    def candidates(self, res_id: int) -> list:
+    def candidates(self, res_id: int, depth: int = 0) -> list:
         """All (table, density, value) entries for a resource id."""
         found = [(table, density, value) for table in self.tables for density, value in table.resolve(res_id)]
-        if found:
+        if not found:
+            # Density-split APKs carry their own slice of the resource table.
+            self._load_splits()
+            found = [(table, density, value) for table in self.tables for density, value in table.resolve(res_id)]
+        if depth > 3:
             return found
-        # Density-split APKs carry their own slice of the resource table.
-        self._load_splits()
-        return [(table, density, value) for table in self.tables for density, value in table.resolve(res_id)]
+
+        # An entry can be a plain alias for another resource rather than a value
+        resolved = []
+        for table, density, value in found:
+            alias = parse_reference(value)
+            if alias is not None and alias != res_id:
+                resolved.extend(self.candidates(alias, depth + 1))
+            else:
+                resolved.append((table, density, value))
+        return resolved
 
     def best_bitmap(self, res_id: int):
         """Highest-density bitmap for a resource id, as (table, entry)."""
-        rasters = [c for c in self.candidates(res_id) if c[2].lower().endswith(RASTER_EXTS)]
+        # Obfuscated APKs strip the extension off their resource files, so
+        # anything that is not XML is worth handing to the decoder to find out.
+        rasters = [c for c in self.candidates(res_id)
+                   if "/" in c[2] and not c[2].lower().endswith(".xml")]
         if not rasters:
             return None
         table, _, entry = max(rasters, key=lambda c: density_rank(c[1]))
@@ -310,7 +496,7 @@ class PackageResources:
             return None
         _, element = found
         for item in element.iter():
-            literal = item.get(f"{ANDROID}color")
+            literal = attr(item, "color")
             if literal:
                 return self.color_value(literal)
         return None
@@ -329,6 +515,16 @@ def density_rank(density: int) -> int:
     if density in (DENSITY_ANY, DENSITY_NONE):
         return 0
     return density or 160  # A default-config bitmap is mdpi by definition
+
+
+def attr(node, name: str):
+    """An `android:`-prefixed attribute, however this APK happens to spell it.
+
+    Optimised APKs drop the namespace declaration from their compiled XML, and
+    the attributes then come back bare. Reading only the namespaced form yields
+    a drawable whose paths all look empty — a valid SVG that paints nothing.
+    """
+    return node.get(f"{ANDROID}{name}", node.get(name))
 
 
 def parse_reference(value):
@@ -382,17 +578,21 @@ class VectorConverter:
         self.resources = resources
         self.defs = []
         self.gradient_seq = 0
+        # Whether anything was actually given a colour. A drawable whose paints
+        # all failed to resolve still produces valid SVG, just an invisible one,
+        # and that has to be caught before it is cached as the app's icon.
+        self.painted = False
 
     def convert(self, vector, view_box: str, background=None) -> str:
-        width = float(vector.get(f"{ANDROID}viewportWidth") or ADAPTIVE_VIEWPORT)
-        height = float(vector.get(f"{ANDROID}viewportHeight") or ADAPTIVE_VIEWPORT)
+        width = float(attr(vector, "viewportWidth") or ADAPTIVE_VIEWPORT)
+        height = float(attr(vector, "viewportHeight") or ADAPTIVE_VIEWPORT)
         scale = ""
         if view_box == self.adaptive_view_box() and (width, height) != (ADAPTIVE_VIEWPORT, ADAPTIVE_VIEWPORT):
             # Some foregrounds declare a smaller viewport than the 108 grid.
             scale = f' transform="scale({ADAPTIVE_VIEWPORT / width:.6f},{ADAPTIVE_VIEWPORT / height:.6f})"'
 
         body = "".join(self.emit_node(child) for child in vector)
-        alpha = vector.get(f"{ANDROID}alpha")
+        alpha = attr(vector, "alpha")
         opacity = f' opacity="{float(alpha):.3f}"' if alpha else ""
 
         parts = [
@@ -422,13 +622,13 @@ class VectorConverter:
 
     def emit_group(self, group) -> str:
         transforms = []
-        translate_x = float(group.get(f"{ANDROID}translateX") or 0)
-        translate_y = float(group.get(f"{ANDROID}translateY") or 0)
-        pivot_x = float(group.get(f"{ANDROID}pivotX") or 0)
-        pivot_y = float(group.get(f"{ANDROID}pivotY") or 0)
-        rotation = float(group.get(f"{ANDROID}rotation") or 0)
-        scale_x = float(group.get(f"{ANDROID}scaleX") or 1)
-        scale_y = float(group.get(f"{ANDROID}scaleY") or 1)
+        translate_x = float(attr(group, "translateX") or 0)
+        translate_y = float(attr(group, "translateY") or 0)
+        pivot_x = float(attr(group, "pivotX") or 0)
+        pivot_y = float(attr(group, "pivotY") or 0)
+        rotation = float(attr(group, "rotation") or 0)
+        scale_x = float(attr(group, "scaleX") or 1)
+        scale_y = float(attr(group, "scaleY") or 1)
 
         if translate_x or translate_y:
             transforms.append(f"translate({translate_x:g},{translate_y:g})")
@@ -446,7 +646,7 @@ class VectorConverter:
         return f"<g{attribute}>{body}</g>"
 
     def emit_path(self, path) -> str:
-        data = path.get(f"{ANDROID}pathData")
+        data = attr(path, "pathData")
         if not data:
             return ""
 
@@ -457,25 +657,27 @@ class VectorConverter:
         else:
             paint, opacity = fill
             attributes.append(f'fill="{paint}"')
-            alpha = path.get(f"{ANDROID}fillAlpha")
+            alpha = attr(path, "fillAlpha")
             opacity *= float(alpha) if alpha else 1.0
             if opacity < 1.0:
                 attributes.append(f'fill-opacity="{opacity:.3f}"')
+            self.painted = self.painted or opacity > 0
 
-        if (path.get(f"{ANDROID}fillType") or "0") in ("1", "evenOdd"):
+        if (attr(path, "fillType") or "0") in ("1", "evenOdd"):
             attributes.append('fill-rule="evenodd"')
 
         stroke = self.paint(path, "strokeColor")
-        stroke_width = float(path.get(f"{ANDROID}strokeWidth") or 0)
+        stroke_width = float(attr(path, "strokeWidth") or 0)
         if stroke is not None and stroke_width > 0:
             paint, opacity = stroke
             attributes.append(f'stroke="{paint}" stroke-width="{stroke_width:g}"')
-            alpha = path.get(f"{ANDROID}strokeAlpha")
+            alpha = attr(path, "strokeAlpha")
             opacity *= float(alpha) if alpha else 1.0
             if opacity < 1.0:
                 attributes.append(f'stroke-opacity="{opacity:.3f}"')
-            cap = path.get(f"{ANDROID}strokeLineCap")
-            join = path.get(f"{ANDROID}strokeLineJoin")
+            self.painted = self.painted or opacity > 0
+            cap = attr(path, "strokeLineCap")
+            join = attr(path, "strokeLineJoin")
             if cap in ("round", "square"):
                 attributes.append(f'stroke-linecap="{cap}"')
             if join in ("round", "bevel"):
@@ -491,7 +693,7 @@ class VectorConverter:
             if reference:
                 return reference, 1.0
 
-        colour = self.resources.color_value(path.get(f"{ANDROID}{attribute}"))
+        colour = self.resources.color_value(attr(path, attribute))
         return colour
 
     @staticmethod
@@ -510,16 +712,16 @@ class VectorConverter:
         for item in gradient:
             if item.tag.rsplit("}", 1)[-1] != "item":
                 continue
-            colour = self.resources.color_value(item.get(f"{ANDROID}color"))
+            colour = self.resources.color_value(attr(item, "color"))
             if colour is None:
                 continue
             paint, opacity = colour
-            offset = float(item.get(f"{ANDROID}offset") or 0)
+            offset = float(attr(item, "offset") or 0)
             stops.append(f'<stop offset="{offset:g}" stop-color="{paint}" stop-opacity="{opacity:.3f}"/>')
 
         if not stops:
             for endpoint in ("startColor", "endColor"):
-                colour = self.resources.color_value(gradient.get(f"{ANDROID}{endpoint}"))
+                colour = self.resources.color_value(attr(gradient, endpoint))
                 if colour is None:
                     continue
                 paint, opacity = colour
@@ -530,11 +732,11 @@ class VectorConverter:
 
         self.gradient_seq += 1
         name = f"g{self.gradient_seq}"
-        kind = gradient.get(f"{ANDROID}type") or "linear"
+        kind = attr(gradient, "type") or "linear"
         if kind in ("1", "radial"):
-            centre_x = gradient.get(f"{ANDROID}centerX") or 0
-            centre_y = gradient.get(f"{ANDROID}centerY") or 0
-            radius = gradient.get(f"{ANDROID}gradientRadius") or 1
+            centre_x = attr(gradient, "centerX") or 0
+            centre_y = attr(gradient, "centerY") or 0
+            radius = attr(gradient, "gradientRadius") or 1
             self.defs.append(
                 f'<radialGradient id="{name}" gradientUnits="userSpaceOnUse" '
                 f'cx="{centre_x}" cy="{centre_y}" r="{radius}">{"".join(stops)}</radialGradient>'
@@ -546,8 +748,8 @@ class VectorConverter:
         else:
             self.defs.append(
                 f'<linearGradient id="{name}" gradientUnits="userSpaceOnUse" '
-                f'x1="{gradient.get(f"{ANDROID}startX") or 0}" y1="{gradient.get(f"{ANDROID}startY") or 0}" '
-                f'x2="{gradient.get(f"{ANDROID}endX") or 0}" y2="{gradient.get(f"{ANDROID}endY") or 0}">'
+                f'x1="{attr(gradient, "startX") or 0}" y1="{attr(gradient, "startY") or 0}" '
+                f'x2="{attr(gradient, "endX") or 0}" y2="{attr(gradient, "endY") or 0}">'
                 f'{"".join(stops)}</linearGradient>'
             )
         return f"url(#{name})"
@@ -560,6 +762,16 @@ def with_extension(stem: Path, extension: str) -> Path:
 
 def escape(value: str) -> str:
     return value.replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")
+
+
+def image_type(data: bytes) -> str:
+    """The format of an embedded bitmap, by magic number. Obfuscated APKs give
+    their resource files no extension, so the name says nothing."""
+    if data.startswith(b"\x89PNG"):
+        return "png"
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "webp"
+    return "jpeg"
 
 
 # ─── Bitmap output ───────────────────────────────────────────────────────────
@@ -585,6 +797,8 @@ def write_bitmap(data: bytes, destination: Path, crop_to_safe_zone: bool, backgr
                                 round(image.width - inset_x), round(image.height - inset_y)))
         if max(image.size) > OUTPUT_SIZE:
             image.thumbnail((OUTPUT_SIZE, OUTPUT_SIZE), Image.LANCZOS)
+        if not image.getchannel("A").getbbox():
+            return False  # Fully transparent: a placeholder layer, not an icon
         image.save(destination, "PNG")
         return True
     except Exception as exc:
@@ -612,7 +826,7 @@ def background_markup(resources: PackageResources, reference) -> str:
         table, entry = bitmap
         data = table.read(entry)
         if data:
-            mime = "png" if entry.lower().endswith(".png") else "webp" if entry.lower().endswith(".webp") else "jpeg"
+            mime = image_type(data)
             encoded = base64.b64encode(data).decode("ascii")
             return (f'<image x="0" y="0" width="{ADAPTIVE_VIEWPORT:g}" height="{ADAPTIVE_VIEWPORT:g}" '
                     f'href="data:image/{mime};base64,{encoded}"/>')
@@ -635,8 +849,8 @@ def wrapped_references(element):
     delegate to another drawable through the same two attributes.
     """
     for node in element.iter():
-        for attribute in (f"{ANDROID}drawable", f"{ANDROID}src"):
-            res_id = parse_reference(node.get(attribute))
+        for attribute in ("drawable", "src"):
+            res_id = parse_reference(attr(node, attribute))
             if res_id is not None:
                 yield res_id
 
@@ -681,21 +895,35 @@ def extract_icon(target_args, package: str, destination_stem: Path):
     if not resources.valid:
         return None
 
-    icon_id = resources.base.icon_id()
-    if icon_id is None:
-        return None
+    for icon_id in resources.base.icon_ids():
+        result = render_icon(resources, icon_id, destination_stem)
+        if result is not None:
+            return result
+    return None
 
+
+def render_icon(resources: PackageResources, icon_id: int, destination_stem: Path):
+    """One icon resource: its own bitmap, else the drawable it points at, else
+    any bitmap reachable from it. Each step only counts if it produced
+    something visible, so an unresolvable layer falls through to the next."""
     bitmap = resources.best_bitmap(icon_id)
     if bitmap is not None:
-        table, entry = bitmap
         destination = with_extension(destination_stem, ".png")
-        if write_bitmap(table.read(entry), destination, crop_to_safe_zone=False):
+        if write_bitmap(bitmap[0].read(bitmap[1]), destination, crop_to_safe_zone=False):
             return destination
 
     drawable = resources.drawable_xml(icon_id)
-    if drawable is None:
-        return None
-    return render_drawable(resources, drawable[1], destination_stem, depth=0)
+    if drawable is not None:
+        result = render_drawable(resources, drawable[1], destination_stem, depth=0)
+        if result is not None:
+            return result
+
+    fallback = find_bitmap(resources, icon_id)
+    if fallback is not None:
+        destination = with_extension(destination_stem, ".png")
+        if write_bitmap(fallback[0].read(fallback[1]), destination, crop_to_safe_zone=False):
+            return destination
+    return None
 
 
 def render_drawable(resources: PackageResources, element, destination_stem: Path, depth: int):
@@ -707,12 +935,15 @@ def render_drawable(resources: PackageResources, element, destination_stem: Path
         return render_adaptive(resources, element, destination_stem)
 
     if tag == "vector":
-        destination = with_extension(destination_stem, ".svg")
-        width = element.get(f"{ANDROID}viewportWidth") or ADAPTIVE_VIEWPORT
-        height = element.get(f"{ANDROID}viewportHeight") or ADAPTIVE_VIEWPORT
-        svg = VectorConverter(resources).convert(element, f"0 0 {float(width):g} {float(height):g}")
-        destination.write_text(svg, encoding="utf-8")
-        return destination
+        width = attr(element, "viewportWidth") or ADAPTIVE_VIEWPORT
+        height = attr(element, "viewportHeight") or ADAPTIVE_VIEWPORT
+        converter = VectorConverter(resources)
+        svg = converter.convert(element, f"0 0 {float(width):g} {float(height):g}")
+        if converter.painted:
+            destination = with_extension(destination_stem, ".svg")
+            destination.write_text(svg, encoding="utf-8")
+            return destination
+        # Nothing visible came out; let the caller try a bitmap instead
 
     for nested_id in wrapped_references(element):
         nested = resources.drawable_xml(nested_id)
@@ -732,21 +963,35 @@ def render_drawable(resources: PackageResources, element, destination_stem: Path
     return None
 
 
+def layer_ids(layer):
+    """The drawables an adaptive layer points at, named by attribute or inlined
+    as a child element. Inlined layer lists give several, base first."""
+    if layer is None:
+        return []
+    reference = parse_reference(attr(layer, "drawable"))
+    if reference is not None:
+        return [reference]
+    return [res_id for child in layer for res_id in wrapped_references(child)]
+
+
 def render_adaptive(resources: PackageResources, element, destination_stem: Path):
     foreground = background = None
     for child in element:
         tag = child.tag.rsplit("}", 1)[-1]
         if tag == "foreground":
-            foreground = child.get(f"{ANDROID}drawable")
+            foreground = child
         elif tag == "background":
-            background = child.get(f"{ANDROID}drawable")
-    if foreground is None:
-        return None
+            background = child
 
-    foreground_id = parse_reference(foreground)
-    if foreground_id is None:
-        return None
+    background_reference = attr(background, "drawable") if background is not None else None
+    for foreground_id in layer_ids(foreground):
+        result = render_adaptive_layer(resources, foreground_id, background_reference, destination_stem)
+        if result is not None:
+            return result
+    return None
 
+
+def render_adaptive_layer(resources: PackageResources, foreground_id: int, background, destination_stem: Path):
     bitmap = find_bitmap(resources, foreground_id)
     if bitmap is not None:
         table, entry = bitmap
@@ -771,6 +1016,9 @@ def render_adaptive(resources: PackageResources, element, destination_stem: Path
     converter = VectorConverter(resources)
     backdrop = background_markup(resources, background) if background is not None else ""
     svg = converter.convert(vector, VectorConverter.adaptive_view_box(), background=backdrop)
+    if not converter.painted:
+        return None  # A foreground that resolved to nothing is not an icon
+
     destination = with_extension(destination_stem, ".svg")
     destination.write_text(svg, encoding="utf-8")
     return destination
