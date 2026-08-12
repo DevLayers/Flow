@@ -311,12 +311,30 @@ Rectangle {
                     opacity: 0.85
                 }
 
-                ScrollView {
+                Flickable {
+                    id: favFlickable
                     Layout.fillWidth: true
                     Layout.preferredHeight: 56
                     contentWidth: favRow.implicitWidth
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                    ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+                    contentHeight: height
+                    clip: true
+                    flickableDirection: Flickable.HorizontalFlick
+                    boundsBehavior: Flickable.DragOverBounds
+                    maximumFlickVelocity: 3500
+
+                    WheelHandler {
+                        enabled: Config?.options.interactions.scrolling.fasterTouchpadScroll ?? false
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                        onWheel: event => {
+                            // Mouse wheels emit multiples of ±120 on one axis; touchpads emit
+                            // small continuous deltas, so each gets its own amplification factor.
+                            const raw = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y;
+                            const threshold = Config.options.interactions.scrolling.mouseScrollDeltaThreshold;
+                            const scrollFactor = Math.abs(raw) >= threshold ? Config.options.interactions.scrolling.mouseScrollFactor : Config.options.interactions.scrolling.touchpadScrollFactor;
+                            const maxX = Math.max(0, favFlickable.contentWidth - favFlickable.width);
+                            favFlickable.contentX = Math.max(0, Math.min(favFlickable.contentX - (raw / threshold) * scrollFactor, maxX));
+                        }
+                    }
 
                     Row {
                         id: favRow
@@ -376,12 +394,13 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            ListView {
+            StyledListView {
                 id: appsList
                 anchors.fill: parent
                 model: PhoneScrcpyService.filteredApps
                 clip: true
                 spacing: 6
+                animateAppearance: false // Model is search-filtered: no pop-in on every keystroke
 
                 delegate: Rectangle {
                     id: appItem
