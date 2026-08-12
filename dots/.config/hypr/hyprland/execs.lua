@@ -9,7 +9,8 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
     hl.exec_cmd("hypridle")
     hl.exec_cmd("dbus-update-activation-environment --all")
-    hl.exec_cmd("sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP") -- Some fix idk
+    hl.exec_cmd("sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user start graphical-session.target 2>/dev/null || (/usr/libexec/xdg-desktop-portal-gtk & /usr/libexec/xdg-desktop-portal-hyprland & sleep 1 && /usr/libexec/xdg-desktop-portal --replace &)") -- Ensure portal communicates color-scheme to GTK4 Libadwaita apps (Nautilus)
+
 
     -- Audio (wait for Quickshell's tray watcher so EasyEffects registers its tray icon successfully)
     hl.exec_cmd(

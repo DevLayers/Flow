@@ -313,7 +313,7 @@ Singleton {
             var a = root.ignoreAlpha;
             var barA = root.barIgnoreAlpha;
             var script = "";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
@@ -346,7 +346,7 @@ Singleton {
         var a = root.ignoreAlpha;
         var barA = root.barIgnoreAlpha;
         var bs = "";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
@@ -621,6 +621,19 @@ Singleton {
                     duration: root.animation.clickBounce.duration
                     easing.type: root.animation.clickBounce.type
                     easing.bezierCurve: root.animation.clickBounce.bezierCurve
+                }
+            }
+        }
+
+        property QtObject dockMagnification: QtObject {
+            property int duration: Math.round(220 * root.animMultiplier)
+            property int type: Easing.OutBack
+            property real overshoot: 1.35
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.dockMagnification.duration
+                    easing.type: root.animation.dockMagnification.type
+                    easing.overshoot: root.animation.dockMagnification.overshoot
                 }
             }
         }

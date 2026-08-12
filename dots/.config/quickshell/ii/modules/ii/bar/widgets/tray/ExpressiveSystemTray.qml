@@ -11,6 +11,7 @@ Item {
     id: root
     property bool vertical: false
     property bool isMaterial: true // Forced expressive
+    visible: tray.hasItems
 
     readonly property real pillPadding: 4
     readonly property real contentW: tray.implicitWidth + pillPadding * 2
@@ -28,7 +29,7 @@ Item {
         radius: Appearance.rounding.large
         width: root.pillW
         height: root.pillH
-        visible: tray.implicitWidth > 0
+        visible: tray.hasItems
 
         SysTray {
             id: tray

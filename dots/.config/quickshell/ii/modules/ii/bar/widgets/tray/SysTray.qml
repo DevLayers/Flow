@@ -22,16 +22,12 @@ Item {
 
     property var pinnedItems: TrayService.pinnedItems
     property var unpinnedItems: TrayService.unpinnedItems
-    onPinnedItemsChanged: updateVisibility()
-    onUnpinnedItemsChanged: updateVisibility()
+    readonly property bool hasItems: pinnedItems.length > 0 || unpinnedItems.length > 0
+    visible: hasItems
 
-    function updateVisibility() {
-        const hasAnyItems = pinnedItems.length > 0 || unpinnedItems.length > 0;
-        sysTrayRoot.visible = hasAnyItems;
-
-        if (unpinnedItems.length === 0) {
+    onUnpinnedItemsChanged: {
+        if (unpinnedItems.length === 0)
             closeOverflowMenu();
-        }
     }
 
     readonly property var overflowWindow: trayOverflowLayout.QsWindow ? trayOverflowLayout.QsWindow.window : null
@@ -140,7 +136,9 @@ Item {
                     rowSpacing: 10
 
                     Repeater {
-                        model: sysTrayRoot.unpinnedItems
+                        model: ScriptModel {
+                            values: sysTrayRoot.unpinnedItems
+                        }
 
                         delegate: SysTrayItem {
                             required property SystemTrayItem modelData
