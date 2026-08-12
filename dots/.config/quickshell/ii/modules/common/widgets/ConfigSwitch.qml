@@ -18,7 +18,7 @@ RippleButton {
     property bool subPageOnly: false
     readonly property bool hasSubPage: configPage.toString() !== "" || hasSubPageOverride
 
-    signal openSubPage()
+    signal openSubPage
 
     Layout.fillWidth: true
     implicitHeight: contentLayout.implicitHeight + 20
@@ -52,9 +52,11 @@ RippleButton {
     colRipple: Appearance.colors.colLayer2Active
 
     readonly property int itemIndex: {
-        if (typeof index !== "undefined") return index;
+        if (typeof index !== "undefined")
+            return index;
         var p = parent;
-        if (!p) return 0;
+        if (!p)
+            return 0;
         var children = p.children;
         var selfIdx = -1;
         for (var i = 0; i < children.length; ++i) {
@@ -63,8 +65,9 @@ RippleButton {
                 break;
             }
         }
-        if (selfIdx === -1) return 0;
-        
+        if (selfIdx === -1)
+            return 0;
+
         var startIdx = 0;
         for (var i = selfIdx - 1; i >= 0; --i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -72,7 +75,7 @@ RippleButton {
                 break;
             }
         }
-        
+
         var idx = 0;
         for (var i = startIdx; i < selfIdx; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
@@ -84,7 +87,8 @@ RippleButton {
 
     readonly property int totalItems: {
         var p = parent;
-        if (!p) return 1;
+        if (!p)
+            return 1;
         if (typeof index !== "undefined" && p.children) {
             var cardCount = 0;
             for (var i = 0; i < p.children.length; ++i) {
@@ -92,7 +96,8 @@ RippleButton {
                     cardCount++;
                 }
             }
-            if (cardCount > 0) return cardCount;
+            if (cardCount > 0)
+                return cardCount;
         }
         var children = p.children;
         var selfIdx = -1;
@@ -102,8 +107,9 @@ RippleButton {
                 break;
             }
         }
-        if (selfIdx === -1) return 1;
-        
+        if (selfIdx === -1)
+            return 1;
+
         var startIdx = 0;
         for (var i = selfIdx - 1; i >= 0; --i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -111,7 +117,7 @@ RippleButton {
                 break;
             }
         }
-        
+
         var endIdx = children.length - 1;
         for (var i = selfIdx + 1; i < children.length; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -119,7 +125,7 @@ RippleButton {
                 break;
             }
         }
-        
+
         var count = 0;
         for (var i = startIdx; i <= endIdx; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
@@ -132,11 +138,10 @@ RippleButton {
     property bool isFirst: forceUniformRadius ? true : ((typeof index !== "undefined") ? (index === 0) : (itemIndex === 0))
     property bool isLast: forceUniformRadius ? true : ((typeof index !== "undefined") ? (index === totalItems - 1) : (itemIndex === totalItems - 1))
 
-
-
     readonly property bool prevIsPressed: {
         var p = parent;
-        if (!p) return false;
+        if (!p)
+            return false;
         var children = p.children;
         var selfIdx = -1;
         for (var i = 0; i < children.length; ++i) {
@@ -145,8 +150,9 @@ RippleButton {
                 break;
             }
         }
-        if (selfIdx <= 0) return false;
-        
+        if (selfIdx <= 0)
+            return false;
+
         var startIdx = 0;
         for (var i = selfIdx - 1; i >= 0; --i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -154,7 +160,7 @@ RippleButton {
                 break;
             }
         }
-        
+
         for (var i = selfIdx - 1; i >= startIdx; --i) {
             var child = children[i];
             if (child.visible && typeof child.topLeftRadius !== "undefined") {
@@ -166,7 +172,8 @@ RippleButton {
 
     readonly property bool nextIsPressed: {
         var p = parent;
-        if (!p) return false;
+        if (!p)
+            return false;
         var children = p.children;
         var selfIdx = -1;
         for (var i = 0; i < children.length; ++i) {
@@ -175,8 +182,9 @@ RippleButton {
                 break;
             }
         }
-        if (selfIdx === -1 || selfIdx >= children.length - 1) return false;
-        
+        if (selfIdx === -1 || selfIdx >= children.length - 1)
+            return false;
+
         var endIdx = children.length - 1;
         for (var i = selfIdx + 1; i < children.length; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -184,7 +192,7 @@ RippleButton {
                 break;
             }
         }
-        
+
         for (var i = selfIdx + 1; i <= endIdx; ++i) {
             var child = children[i];
             if (child.visible && typeof child.topLeftRadius !== "undefined") {
@@ -196,7 +204,8 @@ RippleButton {
 
     readonly property bool isHorizontalLayout: {
         var p = parent;
-        if (!p) return false;
+        if (!p)
+            return false;
         var pStr = p.toString();
         return (pStr.indexOf("RowLayout") !== -1 || pStr.indexOf("Row") !== -1) && pStr.indexOf("Column") === -1;
     }
@@ -208,10 +217,18 @@ RippleButton {
     bottomLeftRadius: forceUniformRadius ? rFull : ((isPressed || nextIsPressed) ? rFull : (isHorizontalLayout ? (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)))
     bottomRightRadius: forceUniformRadius ? rFull : ((isPressed || nextIsPressed) ? rFull : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall))
 
-    Behavior on topLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on topRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on bottomLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on bottomRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on topLeftRadius {
+        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    Behavior on topRightRadius {
+        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    Behavior on bottomLeftRadius {
+        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    Behavior on bottomRightRadius {
+        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
 
     HighlightOverlay {
         id: highlightOverlay

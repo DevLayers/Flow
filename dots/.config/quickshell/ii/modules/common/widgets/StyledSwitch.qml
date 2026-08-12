@@ -49,9 +49,7 @@ Switch {
         color: root.checked ? Appearance.m3colors.m3onPrimary : Appearance.m3colors.m3outline
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
-        anchors.leftMargin: root.checked
-            ? ((root.pressed || root.down) ? (22 * root.sizeScale) : (24 * root.sizeScale))
-            : ((root.pressed || root.down) ? (2 * root.sizeScale) : (4 * root.sizeScale))
+        anchors.leftMargin: root.checked ? ((root.pressed || root.down) ? (22 * root.sizeScale) : (24 * root.sizeScale)) : ((root.pressed || root.down) ? (2 * root.sizeScale) : (4 * root.sizeScale))
 
         Behavior on anchors.leftMargin {
             NumberAnimation {

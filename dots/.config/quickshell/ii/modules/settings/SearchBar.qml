@@ -173,6 +173,49 @@ RowLayout {
                 onTextChanged: root.textChanged(text)
                 onAccepted: root.accepted(text)
             }
+
+            // Action button (arrow_forward) appearing when text is entered
+            Rectangle {
+                id: searchActionBtn
+                Layout.preferredWidth: 40
+                Layout.preferredHeight: 40
+                Layout.alignment: Qt.AlignVCenter
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colPrimary
+                visible: searchInput.text.length > 0
+
+                scale: {
+                    if (searchInput.text.length === 0)
+                        return 0;
+                    return mouseAreaSearch.pressed ? 0.9 : mouseAreaSearch.containsMouse ? 1.05 : 1.0;
+                }
+
+                Behavior on scale {
+                    animation: Appearance.animation.clickBounce.numberAnimation.createObject(searchActionBtn)
+                }
+                Behavior on color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(searchActionBtn)
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "arrow_forward"
+                    iconSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colOnPrimary
+                }
+
+                MouseArea {
+                    id: mouseAreaSearch
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: {
+                        if (searchInput.text.trim().length > 0) {
+                            root.accepted(searchInput.text);
+                        }
+                    }
+                }
+            }
         }
     }
 

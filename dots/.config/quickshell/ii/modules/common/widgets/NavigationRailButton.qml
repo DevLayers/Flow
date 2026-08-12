@@ -19,9 +19,7 @@ TabButton {
     property bool showToggledHighlight: true
     readonly property real visualWidth: {
         const contentWidth = root.baseSize + 20 + itemText.implicitWidth;
-        return root.expanded && root.fillExpandedWidth
-            ? Math.max(root.width, contentWidth)
-            : (root.expanded ? contentWidth : root.baseSize);
+        return root.expanded && root.fillExpandedWidth ? Math.max(root.width, contentWidth) : (root.expanded ? contentWidth : root.baseSize);
     }
 
     property real baseSize: 56
@@ -65,9 +63,9 @@ TabButton {
             left: parent.left
             right: root.expanded && root.fillExpandedWidth ? parent.right : undefined
         }
-        
+
         implicitWidth: root.visualWidth
-        implicitHeight: root.expanded ? itemIconBackground.implicitHeight : itemIconBackground.implicitHeight + itemText.implicitHeight 
+        implicitHeight: root.expanded ? itemIconBackground.implicitHeight : itemIconBackground.implicitHeight + itemText.implicitHeight
 
         Rectangle {
             id: itemBackground
@@ -84,9 +82,7 @@ TabButton {
             topRightRadius: root.useDynamicRadius ? ((root.toggled || root.down) ? fullRadius : topRadius) : Appearance.rounding.full
             bottomLeftRadius: root.useDynamicRadius ? ((root.toggled || root.down) ? fullRadius : bottomRadius) : Appearance.rounding.full
             bottomRightRadius: root.useDynamicRadius ? ((root.toggled || root.down) ? fullRadius : bottomRadius) : Appearance.rounding.full
-            color: root.toggled && root.showToggledHighlight
-                ? (root.down ? root.colBackgroundToggledActive : root.hovered ? root.colBackgroundToggledHover : root.colBackgroundToggled)
-                : (root.down ? root.colBackgroundActive : root.hovered ? root.colBackgroundHover : root.colBackground)
+            color: root.toggled && root.showToggledHighlight ? (root.down ? root.colBackgroundToggledActive : root.hovered ? root.colBackgroundToggledHover : root.colBackgroundToggled) : (root.down ? root.colBackgroundActive : root.hovered ? root.colBackgroundHover : root.colBackground)
 
             states: State {
                 name: "expanded"
@@ -208,5 +204,4 @@ TabButton {
             color: root.toggled ? root.colTextToggled : root.colText
         }
     }
-
 }
