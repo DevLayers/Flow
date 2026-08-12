@@ -25,8 +25,12 @@ Item {
     property bool phoneHovered: false
 
     readonly property real buttonSize: Appearance.sizes.dockButtonSize
-    readonly property real dotMargin: Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2
-    readonly property real dotMarginV: Math.round((Config.options?.dock.height ?? 60) * 0.12) - 2
+    readonly property real dotMargin: root.dockContent?.dotMargin ?? Math.max(1, Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2)
+    readonly property real dotMarginV: root.dockContent?.dotMarginV ?? root.dotMargin
+    readonly property real slotWidth: root.dockContent?.buttonSlotSize ?? (root.buttonSize + root.dotMargin * 2)
+    readonly property real slotHeight: root.dockContent
+        ? (root.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight)
+        : (root.buttonSize + root.dotMarginV * 2)
     readonly property real magnification: root.dockContent ? root.dockContent._getSlotMagScale(root) : 1.0
     // The tile stays visually subordinate while the phone silhouette gets
     // the stronger macOS-style lift on hover.
@@ -65,8 +69,8 @@ Item {
         return root.deviceName + battery + " · KDE Connect\n" + root.mirrorStatus;
     }
 
-    width: root.buttonSize + root.dotMargin * 2
-    height: root.buttonSize + root.dotMarginV * 2
+    width: root.slotWidth
+    height: root.slotHeight
     implicitWidth: width
     implicitHeight: height
 

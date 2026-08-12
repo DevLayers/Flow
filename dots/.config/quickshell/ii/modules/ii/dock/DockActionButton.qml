@@ -30,6 +30,13 @@ DockButton {
     readonly property bool isDragging: dragActive || fileDropActive
 
     readonly property real magScale: root.dockMagnificationScale
+    readonly property real slotWidth: root.dockContent?.buttonSlotSize ?? root.buttonSize
+    readonly property real slotHeight: root.dockContent
+        ? (root.dockContent.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight)
+        : root.buttonSize
+
+    width: root.slotWidth
+    height: root.slotHeight
 
     transformOrigin: {
         let pos = root.dockContent?.dockPos ?? "bottom";
@@ -208,9 +215,7 @@ DockButton {
         Image {
             visible: root.customImageSource !== ""
             source: root.customImageSource
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.topMargin: root.buttonSize * 0.08 // Back to previous stable position
+            anchors.centerIn: parent
             width: root.buttonSize * 1.0 // Standard size
             height: root.buttonSize * 1.0
             fillMode: Image.PreserveAspectFit

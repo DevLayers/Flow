@@ -18,15 +18,19 @@ DockButton {
     property string groupId: ""
     property bool groupHovered: false
 
-    readonly property real dotMargin: Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2
-    readonly property real dotMarginV: Math.round((Config.options?.dock.height ?? 60) * 0.12) - 2
+    readonly property real dotMargin: root.dockContent?.dotMargin ?? Math.max(1, Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2)
+    readonly property real dotMarginV: root.dockContent?.dotMarginV ?? root.dotMargin
+    readonly property real slotWidth: root.dockContent?.buttonSlotSize ?? (root.buttonSize + root.dotMargin * 2)
+    readonly property real slotHeight: root.dockContent
+        ? (root.dockContent.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight)
+        : (root.buttonSize + root.dotMarginV * 2)
     readonly property real magScale: root.dockMagnificationScale
     readonly property string dockPos: root.dockContent?.dockPos ?? "bottom"
     readonly property real cellSize: root.buttonSize * 0.36
     readonly property real gridGap: Math.max(2, Math.round(root.buttonSize * 0.04))
 
-    width: root.buttonSize + root.dotMargin * 2
-    height: root.buttonSize + root.dotMarginV * 2
+    width: root.slotWidth
+    height: root.slotHeight
     transformOrigin: {
         if (root.dockPos === "top")
             return Item.Top

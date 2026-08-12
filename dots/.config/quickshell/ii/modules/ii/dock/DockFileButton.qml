@@ -22,8 +22,12 @@ DockButton {
     property string filePath: ""
 
     property int buttonSize: Appearance.sizes.dockButtonSize
-    property int dotMargin: Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2
-    property int dotMarginV: Math.round((Config.options?.dock.height ?? 60) * 0.12) - 2
+    readonly property real dotMargin: root.dockContent?.dotMargin ?? Math.max(1, Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2)
+    readonly property real dotMarginV: root.dockContent?.dotMarginV ?? root.dotMargin
+    readonly property real slotWidth: root.dockContent?.buttonSlotSize ?? (root.buttonSize + root.dotMargin * 2)
+    readonly property real slotHeight: root.dockContent
+        ? (root.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight)
+        : (root.buttonSize + root.dotMarginV * 2)
 
     readonly property bool isVertical: dockContent?.isVertical ?? false
 
@@ -97,8 +101,8 @@ DockButton {
         return Quickshell.iconPath("text-x-generic", "application-x-generic");
     }
 
-    width: buttonSize + dotMargin * 2
-    height: buttonSize + dotMarginV * 2
+    width: root.slotWidth
+    height: root.slotHeight
     readonly property real magScale: root.dockMagnificationScale
 
     transformOrigin: {
@@ -257,8 +261,6 @@ DockButton {
             width: root.buttonSize
             height: root.buttonSize
             anchors.centerIn: parent
-            anchors.verticalCenterOffset: !root.isVertical ? (root.dockContent?.dockPos === "top" ? 3 : -3) : 0
-            anchors.horizontalCenterOffset: root.isVertical ? (root.dockContent?.dockPos === "right" ? 3 : -3) : 0
 
             MaterialShape {
                 id: iconMask

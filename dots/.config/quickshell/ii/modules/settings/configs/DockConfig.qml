@@ -199,6 +199,16 @@ ContentPage {
 
         ConfigSwitch {
             enabled: Config.options.dock.enable
+            buttonIcon: "sports_soccer"
+            text: Translation.tr("Enable sports widget")
+            checked: Config.options.dock.enableSportsWidget ?? true
+            onCheckedChanged: {
+                Config.options.dock.enableSportsWidget = checked;
+            }
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.dock.enable
             buttonIcon: "smartphone"
             text: Translation.tr("Show phone mirror button")
             checked: Config.options.dock.showPhoneButton ?? true

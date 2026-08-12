@@ -25,16 +25,18 @@ Item {
     property var displayGame: SportsService.currentGame
     property real contentOpacity: 1.0
 
-    readonly property bool shouldBeVisible: !root.isVertical
+    readonly property bool shouldBeVisible: (Config.options?.dock?.enableSportsWidget ?? true) && !root.isVertical
         && SportsService.allGames.length > 0
     readonly property bool activated: root.displayGame?.state === "in"
     readonly property real buttonSize: Appearance.sizes.dockButtonSize
     // Keep the outer slot and the background margins identical to the
     // weather widget so both horizontal widgets occupy the same dock height.
-    readonly property real dotMargin: (Config.options?.dock?.height ?? 60) * 0.2
-    readonly property real dotMarginV: root.dotMargin
-    readonly property real slotSize: root.buttonSize + root.dotMargin * 2
-    readonly property real slotHeight: root.slotSize
+    readonly property real dotMargin: root.dockContent?.dotMargin ?? Math.max(1, Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2)
+    readonly property real dotMarginV: root.dockContent?.dotMarginV ?? root.dotMargin
+    readonly property real slotSize: root.dockContent?.buttonSlotSize ?? (root.buttonSize + root.dotMargin * 2)
+    readonly property real slotHeight: root.dockContent
+        ? (root.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight)
+        : (root.buttonSize + root.dotMarginV * 2)
     readonly property real teamLogoSize: Math.round(root.buttonSize * 0.68)
     readonly property real fixedLength: root.dockContent
         ? root.dockContent.buttonSlotSize * root.dockContent.sportsWidgetSlots

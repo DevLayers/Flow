@@ -63,6 +63,7 @@ ContentSection {
         if (preset.order) Config.options.dock.order = preset.order;
         if (preset.enableMediaWidget !== undefined) Config.options.dock.enableMediaWidget = preset.enableMediaWidget;
         if (preset.enableWeatherWidget !== undefined) Config.options.dock.enableWeatherWidget = preset.enableWeatherWidget;
+        if (preset.enableSportsWidget !== undefined) Config.options.dock.enableSportsWidget = preset.enableSportsWidget;
         if (preset.showPinButton !== undefined) Config.options.dock.showPinButton = preset.showPinButton;
         if (preset.showOverviewButton !== undefined) Config.options.dock.showOverviewButton = preset.showOverviewButton;
         if (preset.showTrashButton !== undefined) Config.options.dock.showTrashButton = preset.showTrashButton;
@@ -77,6 +78,7 @@ ContentSection {
             order: Array.from(Config.options.dock.order ?? []),
             enableMediaWidget: Config.options.dock.enableMediaWidget,
             enableWeatherWidget: Config.options.dock.enableWeatherWidget,
+            enableSportsWidget: Config.options.dock.enableSportsWidget,
             showPinButton: Config.options.dock.showPinButton,
             showOverviewButton: Config.options.dock.showOverviewButton,
             showTrashButton: Config.options.dock.showTrashButton
@@ -330,6 +332,22 @@ ContentSection {
                                     id: weatherTag
                                     anchors.centerIn: parent
                                     text: "🌤 " + Translation.tr("Weather")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colOnSecondaryContainer
+                                }
+                            }
+
+                            Rectangle {
+                                visible: modelData.enableSportsWidget ?? false
+                                implicitHeight: 22
+                                implicitWidth: sportsTag.implicitWidth + 12
+                                radius: Appearance.rounding.full
+                                color: Appearance.colors.colSecondaryContainer
+
+                                StyledText {
+                                    id: sportsTag
+                                    anchors.centerIn: parent
+                                    text: "⚽ " + Translation.tr("Sports")
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                     color: Appearance.colors.colOnSecondaryContainer
                                 }

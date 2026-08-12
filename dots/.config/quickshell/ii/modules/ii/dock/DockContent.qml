@@ -687,7 +687,7 @@ Item {
     readonly property bool showTrash: Config.options?.dock?.showTrashButton ?? true
     readonly property bool showMedia: (Config.options?.dock?.enableMediaWidget ?? false) && root.showMusicPlayer
     readonly property bool showWeather: Config.options?.dock?.enableWeatherWidget ?? false
-    readonly property bool showSports: !root.isVertical
+    readonly property bool showSports: (Config.options?.dock?.enableSportsWidget ?? true) && !root.isVertical
         && SportsService.allGames.length > 0
     readonly property bool showPhone: (Config.options?.dock?.showPhoneButton ?? true)
         && KdeConnectService.activeReachable
@@ -2255,7 +2255,7 @@ Item {
         Item {
             id: mediaItemRoot
             width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
             DockMediaWidget {
                 anchors.centerIn: parent
@@ -2271,7 +2271,7 @@ Item {
         Item {
             id: weatherItemRoot
             width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
             DockWeatherWidget {
                 anchors.centerIn: parent

@@ -6,10 +6,11 @@ import qs.modules.common
 Item {
     id: sportsService
 
-    // Sports can be consumed by either the bar or the dock. The dock widget
-    // no longer has a separate enable/mock switch, so keep the shared source
-    // active and let the configured league filters determine its data.
-    property bool enabled: true
+    // Fetch sports data while either consumer is enabled. The dock and bar
+    // controls stay independent, but share this single data source.
+    readonly property bool barEnabled: Config.options?.bar?.sports?.enable ?? false
+    readonly property bool dockEnabled: Config.options?.dock?.enableSportsWidget ?? true
+    property bool enabled: barEnabled || dockEnabled
     property string teamFilter: Config.options.bar.sports.teamFilter
     property int updateInterval: Config.options.bar.sports.updateInterval
 
