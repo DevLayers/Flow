@@ -357,6 +357,53 @@ ContentPage {
             }
         }
 
+        ConfigSlider {
+            visible: Config.options.dock.enableMagnification ?? false
+            Layout.fillWidth: true
+            text: Translation.tr("Influence radius (icons)")
+            value: Config.options.dock.magnificationInfluenceRadius ?? 2.35
+            from: 1.2
+            to: 4.0
+            stepSize: 0.1
+            usePercentTooltip: false
+            tooltipContent: Number(value).toFixed(1)
+            onValueChanged: {
+                Config.options.dock.magnificationInfluenceRadius = value;
+            }
+        }
+
+        ContentSubsection {
+            visible: Config.options.dock.enableMagnification ?? false
+            title: Translation.tr("Magnification motion")
+            icon: "animation"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.dock.magnificationMotion ?? "balanced"
+                onSelected: newValue => {
+                    Config.options.dock.magnificationMotion = newValue;
+                }
+                options: [
+                    { displayName: Translation.tr("Fast"), icon: "fast_forward", value: "fast" },
+                    { displayName: Translation.tr("Balanced"), icon: "animation", value: "balanced" },
+                    { displayName: Translation.tr("Smooth"), icon: "slow_motion_video", value: "smooth" }
+                ]
+            }
+        }
+
+        ConfigSwitch {
+            visible: Config.options.dock.enableMagnification ?? false
+            buttonIcon: "open_in_full"
+            text: Translation.tr("Dynamic icon spacing")
+            checked: Config.options.dock.magnificationDynamicSpacing ?? true
+            onCheckedChanged: {
+                Config.options.dock.magnificationDynamicSpacing = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Reserve local layout space as icons magnify so their visual gaps stay stable")
+            }
+        }
+
     }
 
     ContentSection {

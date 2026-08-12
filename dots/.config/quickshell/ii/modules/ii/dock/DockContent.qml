@@ -29,9 +29,14 @@ Item {
     readonly property real buttonSlotSize: Appearance.sizes.dockButtonSize + dotMargin * 2
     readonly property real buttonSlotHeight: Appearance.sizes.dockButtonSize + dotMarginV * 2
     readonly property real sportsWidgetSlots: 4
+    readonly property string dockPos: dock.dockEffectivePosition
 
-    readonly property real visualWidth: isVertical ? buttonSlotSize : unifiedRow.width
-    readonly property real visualHeight: isVertical ? unifiedColumn.height : buttonSlotHeight
+    readonly property real layoutVisualMainExtent: isVertical ? unifiedColumn.height : unifiedRow.width
+    readonly property real animatedVisualMainExtent: layoutVisualMainExtent
+    readonly property real visualWidth: isVertical ? buttonSlotSize : animatedVisualMainExtent
+    readonly property real visualHeight: isVertical ? animatedVisualMainExtent : buttonSlotHeight
+    readonly property real baseVisualWidth: isVertical ? buttonSlotSize : baseMetrics.totalMainExtent
+    readonly property real baseVisualHeight: isVertical ? baseMetrics.totalMainExtent : buttonSlotHeight
 
     readonly property bool requestDockShow: previewPopupLoader.item?.visible || anyContextMenuOpen
 
@@ -72,57 +77,182 @@ Item {
 
     readonly property bool enableMagnification: Config.options?.dock?.enableMagnification ?? false
     readonly property real magnificationScale: Config.options?.dock?.magnificationScale ?? 1.5
+    readonly property real magnificationInfluenceRadiusSlots: Config.options?.dock?.magnificationInfluenceRadius ?? 2.35
+    readonly property real magnificationInfluenceRadiusPx: Math.max(
+        Appearance.sizes.dockButtonSize,
+        buttonSlotSize * magnificationInfluenceRadiusSlots
+    )
+    readonly property string magnificationCurve: Config.options?.dock?.magnificationCurve ?? "cosine"
+    readonly property string magnificationMotion: Config.options?.dock?.magnificationMotion ?? "balanced"
+    readonly property bool magnificationDynamicSpacing: Config.options?.dock?.magnificationDynamicSpacing ?? true
+    readonly property var magnificationMotionProfile: {
+        switch (magnificationMotion) {
+        case "fast":
+            return Appearance.animation.dockMagnificationScale.fast;
+        case "smooth":
+            return Appearance.animation.dockMagnificationScale.smooth;
+        default:
+            return Appearance.animation.dockMagnificationScale.balanced;
+        }
+    }
+    property real magnificationPointerMain: 0
+    property bool magnificationHovered: false
+    readonly property bool magnificationInteractionActive: enableMagnification
+        && magnificationHovered
+        && !dragging
+        && !anyContextMenuOpen
+        && !suppressHover
+        && !externalDragOver
+    readonly property real magnificationPointerContentMain: magnificationPointerMain
+        + (isVertical ? scrollArea.contentY : scrollArea.contentX)
+
+    // Stable metrics are based only on the unscaled layout. Animated wrapper
+    // widths never feed back into the proximity field.
+    readonly property var baseMetrics: {
+        const items = [];
+        const spacing = Config.options?.dock?.iconSpacing ?? 0;
+        let cursor = 0;
+        const itemCount = root.flattenedItems.length;
+        for (let i = 0; i < itemCount; i++) {
+            const mainExtent = root._baseMainExtentForIndex(i);
+            items.push({
+                baseStart: cursor,
+                baseCenter: cursor + mainExtent / 2,
+                baseExtent: mainExtent,
+                magnifiable: root._isMagnifiableItem(root.flattenedItems[i])
+            });
+            cursor += mainExtent;
+            if (i < itemCount - 1)
+                cursor += spacing;
+        }
+        return {
+            items: items,
+            totalMainExtent: Math.max(0, cursor)
+        };
+    }
+
+    // The main-axis reserve keeps the PanelWindow stable while the visible
+    // tray follows the animated layout width/height.
+    readonly property real maximumMagnificationExtra: {
+        if (!enableMagnification || baseMetrics.items.length === 0)
+            return 0;
+
+        let maximum = 0;
+        const candidates = baseMetrics.items
+            .filter(metric => metric.magnifiable)
+            .map(metric => metric.baseCenter);
+        for (const candidate of candidates) {
+            let total = 0;
+            for (const metric of baseMetrics.items) {
+                if (metric.magnifiable)
+                    total += root.magnificationSafetyExtraForFactor(root.magnificationFactorForDistance(Math.abs(candidate - metric.baseCenter)));
+            }
+            maximum = Math.max(maximum, total);
+        }
+        return Math.ceil(maximum + Appearance.sizes.elevationMargin);
+    }
+
+    readonly property real maximumMagnificationCrossExtra: enableMagnification
+        ? Math.ceil(Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0))
+        : 0
     readonly property bool enableAppGroups: Config.options?.dock?.enableAppGroups ?? true
     readonly property int maxGroupApps: 6
 
-    function _getSlotMagScale(targetSlot) {
-        if (!enableMagnification || !buttonHovered || !hoveredSlot)
-            return 1.0;
-        let maxScale = magnificationScale;
+    function _isMagnifiableItem(item) {
+        if (!item)
+            return false;
+        return item.type === "app"
+            || item.type === "appGroup"
+            || item.type === "file"
+            || item.type === "action"
+            || item.type === "phone";
+    }
 
-        let repeater = _getActiveRepeater();
-        if (!repeater)
-            return 1.0;
-
-        let children = [];
-        for (let i = 0; i < repeater.count; i++) {
-            let item = repeater.itemAt(i);
-            if (item)
-                children.push(item);
+    function _rawItemMainExtent(item) {
+        if (isVertical || !item)
+            return buttonSlotSize;
+        switch (item.type) {
+        case "media":
+        case "weather":
+            return buttonSlotSize * 3;
+        case "sports":
+            return buttonSlotSize * sportsWidgetSlots;
+        default:
+            return buttonSlotSize;
         }
+    }
 
-        // Find wrapper item for targetSlot and hoveredSlot
-        let findWrapper = slot => {
-            if (!slot)
-                return null;
-            for (let i = 0; i < children.length; i++) {
-                let w = children[i];
-                if (w === slot || w.children.includes(slot))
-                    return w;
-                let loader = w.children ? w.children.find(c => c && c.item !== undefined) : null;
-                if (loader && loader.item && (loader.item === slot || loader.item.children.includes(slot)))
-                    return w;
-            }
-            return null;
-        };
+    function _separatorBeforeSpaceFor(index) {
+        if (!(Config.options?.dock?.showDividers ?? true) || index <= 0)
+            return 0;
+        const item = root.flattenedItems[index];
+        const previous = root.flattenedItems[index - 1];
+        if (Config.options?.dock?.smartGrouping)
+            return root.getItemCategory(item) !== root.getItemCategory(previous) ? Math.max(root.dotMargin, root.sepThickness * 2) : 0;
+        return root.isSpecialItem(item) ? Math.max(root.dotMargin, root.sepThickness * 2) : 0;
+    }
 
-        let targetWrapper = findWrapper(targetSlot);
-        let hoveredWrapper = findWrapper(hoveredSlot);
+    function _separatorAfterSpaceFor(index) {
+        if (!(Config.options?.dock?.showDividers ?? true) || index >= root.flattenedItems.length - 1)
+            return 0;
+        if (Config.options?.dock?.smartGrouping)
+            return 0;
+        const item = root.flattenedItems[index];
+        const next = root.flattenedItems[index + 1];
+        return root.isSpecialItem(item) && !root.isSpecialItem(next)
+            ? Math.max(root.dotMargin, root.sepThickness * 2)
+            : 0;
+    }
 
-        if (!targetWrapper || !hoveredWrapper)
+    function _baseMainExtentForIndex(index) {
+        const item = root.flattenedItems[index];
+        return root._rawItemMainExtent(item)
+            + root._separatorBeforeSpaceFor(index)
+            + root._separatorAfterSpaceFor(index);
+    }
+
+    function magnificationFactorForDistance(distancePx) {
+        const radius = Math.max(1, magnificationInfluenceRadiusPx);
+        if (distancePx >= radius)
+            return 0;
+        const t = Math.max(0, Math.min(1, distancePx / radius));
+        if (magnificationCurve === "gaussian") {
+            const sigma = radius / 2.5;
+            const cutoff = Math.exp(-(radius * radius) / (2 * sigma * sigma));
+            return Math.max(0, (Math.exp(-(distancePx * distancePx) / (2 * sigma * sigma)) - cutoff) / (1 - cutoff));
+        }
+        return 0.5 * (1 + Math.cos(Math.PI * t));
+    }
+
+    function magnificationLayoutExtraForFactor(factor) {
+        if (!magnificationDynamicSpacing)
+            return 0;
+        return Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0) * factor;
+    }
+
+    function magnificationSafetyExtraForFactor(factor) {
+        return Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0) * factor;
+    }
+
+    function _targetMagScaleForIndex(index) {
+        const metric = baseMetrics.items[index];
+        if (!metric || !metric.magnifiable || !magnificationInteractionActive)
             return 1.0;
-        if (targetWrapper === hoveredWrapper)
-            return maxScale;
+        const factor = magnificationFactorForDistance(Math.abs(magnificationPointerContentMain - metric.baseCenter));
+        return 1.0 + (magnificationScale - 1.0) * factor;
+    }
 
-        let myIdx = children.indexOf(targetWrapper);
-        let hvdIdx = children.indexOf(hoveredWrapper);
-        if (myIdx < 0 || hvdIdx < 0)
-            return 1.0;
-        let dist = Math.abs(myIdx - hvdIdx);
-        if (dist === 1)
-            return 1.0 + (maxScale - 1.0) * 0.45;
-        if (dist === 2)
-            return 1.0 + (maxScale - 1.0) * 0.10;
+    // Compatibility helper for tooltip/preview code. Main button scale is
+    // owned by the delegate wrapper, so this no longer scans repeater items.
+    function _getSlotMagScale(targetSlot) {
+        let item = targetSlot;
+        for (let depth = 0; item && depth < 6; depth++) {
+            if (typeof item.dockMagnificationScale !== "undefined")
+                return item.dockMagnificationScale;
+            if (typeof item._magnificationScale !== "undefined")
+                return item._magnificationScale;
+            item = item.parent;
+        }
         return 1.0;
     }
 
@@ -150,6 +280,28 @@ Item {
         }
     }
 
+    Timer {
+        id: magnificationExitTimer
+        interval: Appearance.animation.dockMagnificationScale.hoverExitGrace
+        onTriggered: root.magnificationHovered = false
+    }
+
+    function setMagnificationHovered(value) {
+        if (value) {
+            magnificationExitTimer.stop();
+            root.magnificationHovered = true;
+        } else {
+            magnificationExitTimer.restart();
+        }
+    }
+
+    function updateMagnificationPointerFrom(item, x, y) {
+        if (!item)
+            return;
+        const mapped = item.mapToItem(root, x, y);
+        root.magnificationPointerMain = root.isVertical ? mapped.y : mapped.x;
+    }
+
     readonly property var activePlayer: MprisController.activePlayer
     readonly property string rawTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || ""
     readonly property bool hasRealData: activePlayer !== null && rawTitle !== ""
@@ -175,15 +327,26 @@ Item {
             root.showMusicPlayer = false
     }
 
-    onLastHoveredButtonChanged: {
-        if (root.lastHoveredButton) {
-            let btn = root.lastHoveredButton;
-            let mScale = root._getSlotMagScale(btn);
-            let scaleOffset = (mScale - 1.0) * (btn.height / 2);
-            let yOff = root.isVertical ? btn.height / 2 : (root.dockPos === "top" ? btn.height + scaleOffset : -scaleOffset);
-            let xOff = !root.isVertical ? btn.width / 2 : (root.dockPos === "left" ? btn.width + scaleOffset : -scaleOffset);
-            hoveredButtonCenter = btn.mapToItem(null, xOff, yOff);
-        }
+    function updateHoveredButtonCenter() {
+        const btn = root.lastHoveredButton;
+        if (!btn)
+            return;
+        // Mapping the live visual center includes wrapper reflow and the
+        // delegate's current animated scale without duplicating transform math.
+        root.hoveredButtonCenter = btn.mapToItem(null, btn.width / 2, btn.height / 2);
+    }
+
+    onLastHoveredButtonChanged: root.updateHoveredButtonCenter()
+    onVisualWidthChanged: root.updateHoveredButtonCenter()
+    onVisualHeightChanged: root.updateHoveredButtonCenter()
+
+    Connections {
+        target: root.lastHoveredButton
+        function onXChanged() { root.updateHoveredButtonCenter(); }
+        function onYChanged() { root.updateHoveredButtonCenter(); }
+        function onWidthChanged() { root.updateHoveredButtonCenter(); }
+        function onHeightChanged() { root.updateHoveredButtonCenter(); }
+        function onScaleChanged() { root.updateHoveredButtonCenter(); }
     }
 
     readonly property bool showPin: Config.options?.dock?.showPinButton ?? true
@@ -1238,6 +1401,24 @@ Item {
                 }
             }
             readonly property real itemHeight: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            readonly property bool magnifiable: root._isMagnifiableItem(delegateWrapper.itemData)
+            readonly property real baseMainExtent: root.baseMetrics.items[delegateIndex]?.baseExtent ?? (root.isVertical ? root.buttonSlotSize : itemWidth)
+            readonly property real targetMagScale: root._targetMagScaleForIndex(delegateIndex)
+            property real animatedMagScale: targetMagScale
+            readonly property real layoutExtra: magnifiable && root.magnificationDynamicSpacing
+                ? root.magnificationLayoutExtraForFactor((animatedMagScale - 1.0) / Math.max(0.001, root.magnificationScale - 1.0))
+                : 0
+            readonly property real _magnificationScale: animatedMagScale
+
+            Behavior on animatedMagScale {
+                enabled: !root.dragging
+                SpringAnimation {
+                    spring: root.magnificationMotionProfile.spring
+                    damping: root.magnificationMotionProfile.damping
+                    mass: root.magnificationMotionProfile.mass
+                    epsilon: root.magnificationMotionProfile.epsilon
+                }
+            }
 
             // Drag translation (adapted from dots-hyprland, variable-width support)
             readonly property bool isDragged: root.dragging && delegateIndex === root.dragSourceIndex
@@ -1256,7 +1437,7 @@ Item {
                     return sw;
                 return 0;
             }
-            readonly property real itemMagScale: root._getSlotMagScale(delegateWrapper)
+            readonly property real itemMagScale: animatedMagScale
             z: isDragged ? 100 : (itemMagScale > 1.01 ? Math.round(itemMagScale * 50) : 0)
             opacity: isDragged ? 0.85 : 1
             scale: isDragged ? 1.05 : 1
@@ -1315,8 +1496,8 @@ Item {
             readonly property real _separatorAfterSpace: _sepShowAfter ? _separatorSlot : 0
             readonly property real _separatorLineMargin: (_separatorSlot - root.sepThickness) / 2
 
-            width: root.isVertical ? itemHeight : itemWidth + _separatorBeforeSpace + _separatorAfterSpace
-            height: root.isVertical ? itemWidth + _separatorBeforeSpace + _separatorAfterSpace : itemHeight
+            width: root.isVertical ? itemHeight : baseMainExtent + layoutExtra
+            height: root.isVertical ? baseMainExtent + layoutExtra : itemHeight
 
             // Horizontal mode: left vertical line
             Rectangle {
@@ -1372,6 +1553,7 @@ Item {
                 // Expose delegate data so loaded components can access it via parent
                 readonly property var _itemData: delegateWrapper.itemData
                 readonly property int _index: delegateWrapper.index
+                readonly property real _magnificationScale: delegateWrapper._magnificationScale
 
                 sourceComponent: {
                     switch (itemData.type) {

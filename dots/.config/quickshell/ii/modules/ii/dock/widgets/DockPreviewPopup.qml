@@ -146,8 +146,8 @@ PopupWindow {
             // Compact positions are assigned by onAnchoring. Keeping these
             // bindings at zero provides a safe initial value before the host
             // window is mapped for the first time.
-            x: compactMode ? 0 : dockPos === "left" ? ((dockWindow?.width ?? 0) - (dockWindow?.magExtra ?? 0) + hoveredScaleExtra) : (dockPos === "right" ? Math.max(0, (dockWindow?.magExtra ?? 0) - hoveredScaleExtra) : 0)
-            y: compactMode ? 0 : dockPos === "bottom" ? Math.max(0, (dockWindow?.magExtra ?? 0) - hoveredScaleExtra) : dockPos === "top" ? ((dockWindow?.height ?? 0) - (dockWindow?.magExtra ?? 0) + hoveredScaleExtra) : 0
+            x: compactMode ? 0 : dockPos === "left" ? ((dockWindow?.width ?? 0) - (dockWindow?.magCrossExtra ?? 0) + hoveredScaleExtra) : (dockPos === "right" ? Math.max(0, (dockWindow?.magCrossExtra ?? 0) - hoveredScaleExtra) : 0)
+            y: compactMode ? 0 : dockPos === "bottom" ? Math.max(0, (dockWindow?.magCrossExtra ?? 0) - hoveredScaleExtra) : dockPos === "top" ? ((dockWindow?.height ?? 0) - (dockWindow?.magCrossExtra ?? 0) + hoveredScaleExtra) : 0
         }
 
         gravity: {

@@ -39,17 +39,21 @@ Scope {
 
         const contentW = opts.contentVisualWidth + opts.dockPadding * 2
         const contentH = opts.contentVisualHeight + opts.dockPadding * 2
+        const baseContentW = opts.baseVisualWidth + opts.dockPadding * 2
+        const baseContentH = opts.baseVisualHeight + opts.dockPadding * 2
+        const mainSafety = opts.maxMainExtra || 0
+        const crossSafety = opts.maxCrossExtra || 0
 
-        const magExtra = opts.magExtra || 0
+        // The PanelWindow reserves a stable safe envelope. Only the visible
+        // tray follows the actual animated content geometry.
+        const bgW = Math.max(1, opts.isVertical ? baseContentW : Math.min(contentW, maxW - gapsOut * 2))
+        const bgH = Math.max(1, opts.isVertical ? Math.min(contentH, maxH - gapsOut * 2) : baseContentH)
 
-        const bgW = Math.max(1, opts.isVertical ? contentW : Math.min(contentW, maxW - gapsOut * 2))
-        const bgH = Math.max(1, opts.isVertical ? Math.min(contentH, maxH - gapsOut * 2) : contentH)
+        const baseDockW = opts.isVertical ? baseContentW + crossSafety + gapsOut * 2 : Math.min(baseContentW + mainSafety + gapsOut * 2, maxW)
+        const baseDockH = opts.isVertical ? Math.min(baseContentH + mainSafety + gapsOut * 2, maxH) : Math.min(baseContentH + crossSafety + gapsOut * 2, maxH)
 
-        const baseDockW = opts.isVertical ? contentW + gapsOut * 2 : Math.min(contentW + gapsOut * 2, maxW)
-        const baseDockH = opts.isVertical ? Math.min(contentH + gapsOut * 2, maxH) : contentH + gapsOut * 2
-
-        const fullDockW = Math.min(baseDockW + magExtra, maxW)
-        const fullDockH = Math.min(baseDockH + magExtra, maxH)
+        const fullDockW = Math.min(baseDockW, maxW)
+        const fullDockH = Math.min(baseDockH, maxH)
 
         return {
             maxWidth: maxW,
@@ -57,7 +61,7 @@ Scope {
             dockWidth: fullDockW,
             dockHeight: fullDockH,
             dockThickness: opts.isVertical ? fullDockW : fullDockH,
-            unmagnifiedThickness: opts.isVertical ? baseDockW : baseDockH,
+            unmagnifiedThickness: opts.isVertical ? baseContentW + gapsOut * 2 : baseContentH + gapsOut * 2,
             backgroundWidth: bgW,
             backgroundHeight: bgH
         }
@@ -82,7 +86,10 @@ Scope {
 
             readonly property bool enableMagnification: Config.options?.dock?.enableMagnification ?? false
             readonly property real magnificationScale: Config.options?.dock?.magnificationScale ?? 1.5
-            readonly property real magExtra: enableMagnification ? Math.ceil((magnificationScale - 1.0) * ((isVertical ? dockContent.buttonSlotSize : dockContent.buttonSlotHeight) || Appearance.sizes.dockButtonSize)) : 0
+            // Safe interaction/render reserve; the visual background follows
+            // dockContent.visualWidth/visualHeight independently.
+            readonly property real magExtra: enableMagnification ? dockContent.maximumMagnificationExtra : 0
+            readonly property real magCrossExtra: enableMagnification ? dockContent.maximumMagnificationCrossExtra : 0
 
             readonly property bool isVertical: dock.isVertical
             readonly property real dockThickness: dockRoot.sizing.dockThickness
@@ -120,8 +127,11 @@ Scope {
                 availableH: availableH,
                 contentVisualWidth: dockContent.visualWidth,
                 contentVisualHeight: dockContent.visualHeight,
+                baseVisualWidth: dockContent.baseVisualWidth,
+                baseVisualHeight: dockContent.baseVisualHeight,
                 dockPadding: dockContent.dockPadding,
-                magExtra: dockRoot.magExtra
+                maxMainExtra: dockRoot.magExtra,
+                maxCrossExtra: dockRoot.magCrossExtra
             })
 
             implicitWidth: Math.max(1, dockRoot.sizing.dockWidth)
@@ -206,6 +216,20 @@ Scope {
                 Behavior on anchors.bottomMargin { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea) }
                 Behavior on anchors.leftMargin { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea) }
                 Behavior on anchors.rightMargin { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea) }
+
+                // Stable safe bounds feed one continuous magnification field,
+                // including the overflow area above/next to enlarged icons.
+                HoverHandler {
+                    id: magnificationHover
+                    blocking: false
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+
+                    onPointChanged: {
+                        const position = point.position
+                        dockContent.updateMagnificationPointerFrom(dockMouseArea, position.x, position.y)
+                    }
+                    onHoveredChanged: dockContent.setMagnificationHovered(hovered)
+                }
 
                 StyledRectangularShadow { target: dockVisualBackground }
 

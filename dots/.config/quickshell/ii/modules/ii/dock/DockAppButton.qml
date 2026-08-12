@@ -37,7 +37,7 @@ DockButton {
 
     property bool _pressed: false
 
-    readonly property real magScale: dockContent ? dockContent._getSlotMagScale(root) : 1.0
+    readonly property real magScale: root.dockMagnificationScale
 
     transformOrigin: {
         let pos = root.dockPos;
@@ -107,10 +107,6 @@ DockButton {
 
     scale: (_pressed ? 0.88 : 1.0) * magScale
     z: magScale > 1.01 ? Math.round(magScale * 100) : 1
-
-    Behavior on scale {
-        animation: Appearance.animation.dockMagnification.numberAnimation.createObject(this)
-    }
 
     // Hover-only MouseArea for running apps (shows preview popup)
     Loader {

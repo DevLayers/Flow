@@ -27,49 +27,42 @@ Item {
     readonly property real buttonSize: Appearance.sizes.dockButtonSize
     readonly property real dotMargin: Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2
     readonly property real dotMarginV: Math.round((Config.options?.dock.height ?? 60) * 0.12) - 2
-    readonly property real magnification: root.dockContent
-        ? root.dockContent._getSlotMagScale(root)
-        : 1.0
+    readonly property real magnification: root.dockContent ? root.dockContent._getSlotMagScale(root) : 1.0
     // The tile stays visually subordinate while the phone silhouette gets
     // the stronger macOS-style lift on hover.
-    readonly property real backgroundMagnification: 1.0
-        + (root.magnification - 1.0) * 0.62
-    readonly property real iconMagnification: 1.0
-        + (root.magnification - 1.0) * 1.08
+    readonly property real backgroundMagnification: 1.0 + (root.magnification - 1.0) * 0.62
+    readonly property real iconMagnification: 1.0 + (root.magnification - 1.0) * 1.08
     readonly property int magnificationTransformOrigin: {
-        const pos = root.dockContent?.dockPos ?? "bottom"
+        const pos = root.dockContent?.dockPos ?? "bottom";
         if (pos === "top")
-            return Item.Top
+            return Item.Top;
         if (pos === "left")
-            return Item.Left
+            return Item.Left;
         if (pos === "right")
-            return Item.Right
-        return Item.Bottom
+            return Item.Right;
+        return Item.Bottom;
     }
-    readonly property bool hasDevice: KdeConnectService.activeDeviceId !== ""
-        && KdeConnectService.activeReachable
-    readonly property string deviceName: KdeConnectService.activeDevice?.name
-        || Translation.tr("No connected phone")
+    readonly property bool hasDevice: KdeConnectService.activeDeviceId !== "" && KdeConnectService.activeReachable
+    readonly property string deviceName: KdeConnectService.activeDevice?.name || Translation.tr("No connected phone")
     readonly property int deviceCharge: KdeConnectService.activeDevice?.charge ?? -1
-    readonly property string deviceImageSource: "file://" + Directories.assetsPath
-        + "/images/devices/Google_Pixel_9_Pro_XL_(Hazel)_rear.svg"
+    readonly property string deviceImageSource: "file://" + Directories.assetsPath + "/images/devices/Google_Pixel_9_Pro_XL_(Hazel)_rear.svg"
     readonly property bool isRunning: PhoneScrcpyService.mirrorRunning || KdeConnectService.scrcpyRunning
     readonly property bool isLaunching: PhoneScrcpyService.mirrorLaunching || KdeConnectService.scrcpyLaunching
 
     readonly property string mirrorStatus: {
         if (!PhoneScrcpyService.available && !KdeConnectService.scrcpyAvailable)
-            return Translation.tr("scrcpy unavailable")
+            return Translation.tr("scrcpy unavailable");
         if (isRunning)
-            return Translation.tr("Mirror running · click to focus")
+            return Translation.tr("Mirror running · click to focus");
         if (isLaunching)
-            return Translation.tr("Launching scrcpy…")
+            return Translation.tr("Launching scrcpy…");
         if (!KdeConnectService.adbReachable)
-            return Translation.tr("ADB not connected")
-        return Translation.tr("Click to launch mirror / DeX")
+            return Translation.tr("ADB not connected");
+        return Translation.tr("Click to launch mirror / DeX");
     }
     readonly property string tooltipText: {
-        const battery = root.deviceCharge >= 0 ? " · " + String(root.deviceCharge) + "%" : ""
-        return root.deviceName + battery + " · KDE Connect\n" + root.mirrorStatus
+        const battery = root.deviceCharge >= 0 ? " · " + String(root.deviceCharge) + "%" : "";
+        return root.deviceName + battery + " · KDE Connect\n" + root.mirrorStatus;
     }
 
     width: root.buttonSize + root.dotMargin * 2
@@ -79,16 +72,15 @@ Item {
 
     function openMirror(): void {
         if (!root.hasDevice)
-            return
-
+            return;
         if (isRunning) {
-            PhoneScrcpyService.focusMirror()
-            KdeConnectService.focusScrcpyWindow()
-            return
+            PhoneScrcpyService.focusMirror();
+            KdeConnectService.focusScrcpyWindow();
+            return;
         }
 
         if (!isLaunching) {
-            PhoneScrcpyService.launchMirror()
+            PhoneScrcpyService.launchMirror();
         }
     }
 
@@ -104,44 +96,44 @@ Item {
         property bool dragActive: false
 
         onEntered: {
-            root.phoneHovered = true
+            root.phoneHovered = true;
             if (root.dockContent?.suppressHover)
-                return
-            root.dockContent?.onButtonEntered(root)
+                return;
+            root.dockContent?.onButtonEntered(root);
         }
         onExited: {
-            root.phoneHovered = false
-            root.dockContent?.onButtonExited(root)
+            root.phoneHovered = false;
+            root.dockContent?.onButtonExited(root);
         }
         onPressed: event => {
             if (event.button === Qt.LeftButton)
-                pressCoord = root.isVertical ? event.y : event.x
+                pressCoord = root.isVertical ? event.y : event.x;
         }
         onPositionChanged: event => {
             if (!pressed)
-                return
-            const currentCoord = root.isVertical ? event.y : event.x
-            const distance = Math.abs(currentCoord - pressCoord)
+                return;
+            const currentCoord = root.isVertical ? event.y : event.x;
+            const distance = Math.abs(currentCoord - pressCoord);
             if (!dragActive && distance > 5 && root.delegateIndex >= 0) {
-                dragActive = true
-                root.dockContent?.startItemDrag(root.delegateIndex, interactionArea, event.x, event.y)
+                dragActive = true;
+                root.dockContent?.startItemDrag(root.delegateIndex, interactionArea, event.x, event.y);
             }
             if (dragActive)
-                root.dockContent?.moveItemDrag(interactionArea, event.x, event.y)
+                root.dockContent?.moveItemDrag(interactionArea, event.x, event.y);
         }
         onReleased: event => {
             if (dragActive) {
-                dragActive = false
-                root.dockContent?.endItemDrag()
-                return
+                dragActive = false;
+                root.dockContent?.endItemDrag();
+                return;
             }
             if (event.button === Qt.LeftButton)
-                root.openMirror()
+                root.openMirror();
         }
         onCanceled: {
             if (dragActive) {
-                dragActive = false
-                root.dockContent?.cancelDrag()
+                dragActive = false;
+                root.dockContent?.cancelDrag();
             }
         }
     }
@@ -154,14 +146,9 @@ Item {
         radius: Appearance.rounding.small
         scale: root.backgroundMagnification
         transformOrigin: root.magnificationTransformOrigin
-        color: root.phoneHovered
-            ? Appearance.colors.colLayer2Base
-            : Appearance.colors.colLayer1Base
+        color: root.phoneHovered ? Appearance.colors.colLayer2Base : Appearance.colors.colLayer1Base
         opacity: root.hasDevice ? 1.0 : 0.45
 
-        Behavior on scale {
-            animation: Appearance.animation.dockMagnification.numberAnimation.createObject(this)
-        }
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
@@ -181,10 +168,6 @@ Item {
             smooth: true
             antialiasing: true
             mipmap: true
-
-            Behavior on scale {
-                animation: Appearance.animation.dockMagnification.numberAnimation.createObject(this)
-            }
         }
     }
 
@@ -195,9 +178,7 @@ Item {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Math.max(1, root.dotMarginV * 0.35)
         radius: Appearance.rounding.full
-        color: KdeConnectService.scrcpyRunning
-            ? Appearance.colors.colPrimary
-            : Appearance.colors.colOnLayer1
+        color: KdeConnectService.scrcpyRunning ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
         opacity: KdeConnectService.scrcpyLaunching ? 0.65 : 1.0
     }
 

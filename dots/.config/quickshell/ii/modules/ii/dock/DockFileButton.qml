@@ -99,7 +99,7 @@ DockButton {
 
     width: buttonSize + dotMargin * 2
     height: buttonSize + dotMarginV * 2
-    readonly property real magScale: dockContent ? dockContent._getSlotMagScale(root) : 1.0
+    readonly property real magScale: root.dockMagnificationScale
 
     transformOrigin: {
         let pos = root.dockContent?.dockPos ?? "bottom";
@@ -114,10 +114,6 @@ DockButton {
 
     scale: (_pressed ? 0.88 : 1.0) * magScale
     z: Math.round(magScale * 10)
-
-    Behavior on scale {
-        animation: Appearance.animation.dockMagnification.numberAnimation.createObject(this)
-    }
 
     property bool _pressed: false
     property bool fileHovered: false

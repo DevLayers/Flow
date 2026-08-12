@@ -20,9 +20,7 @@ DockButton {
 
     readonly property real dotMargin: Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2
     readonly property real dotMarginV: Math.round((Config.options?.dock.height ?? 60) * 0.12) - 2
-    readonly property real magScale: root.dockContent
-        ? root.dockContent._getSlotMagScale(root)
-        : 1.0
+    readonly property real magScale: root.dockMagnificationScale
     readonly property string dockPos: root.dockContent?.dockPos ?? "bottom"
     readonly property real cellSize: root.buttonSize * 0.36
     readonly property real gridGap: Math.max(2, Math.round(root.buttonSize * 0.04))
@@ -40,10 +38,6 @@ DockButton {
     }
     scale: root.magScale
     z: root.magScale > 1.01 ? Math.round(root.magScale * 100) : 1
-
-    Behavior on scale {
-        animation: Appearance.animation.dockMagnification.numberAnimation.createObject(this)
-    }
 
     Rectangle {
         id: groupSurface

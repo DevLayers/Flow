@@ -2410,6 +2410,10 @@ Singleton {
                 property real widgetRadius: -1
                 property bool enableMagnification: false
                 property real magnificationScale: 1.5
+                property real magnificationInfluenceRadius: 2.35
+                property string magnificationCurve: "cosine"
+                property string magnificationMotion: "balanced"
+                property bool magnificationDynamicSpacing: true
                 property bool enableAppGroups: true
                 property bool enableShapeMask: true
                 property string shapeMask: "Circle"
