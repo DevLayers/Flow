@@ -821,6 +821,12 @@ Singleton {
             property JsonObject phone: JsonObject {
                 property bool kdeconnectEnabled: true
                 property bool showPeripheralCards: true
+                property JsonObject contacts: JsonObject {
+                    property bool enabled: true
+                    property list<string> favoriteIds: []
+                    property bool showAvatars: true
+                    property string sortBy: "first" // "first" | "last"
+                }
                 property JsonObject scrcpy: JsonObject {
                     property bool stayAwake: false  // bare scrcpy default — don't add overhead
                     property bool turnScreenOff: false  // turning screen off causes input delay on Samsung (touch sampling rate drops)
@@ -2394,6 +2400,7 @@ Singleton {
                 property real widgetRadius: -1
                 property bool enableMagnification: false
                 property real magnificationScale: 1.5
+                property bool enableAppGroups: true
                 property bool enableShapeMask: true
                 property string shapeMask: "Circle"
                 property real height: 56
@@ -2404,6 +2411,7 @@ Singleton {
                 property bool hoverToReveal: true
                 property bool enableMediaWidget: false
                 property bool enableWeatherWidget: false
+                property bool showPhoneButton: true
                 property bool showDividers: true
                 property bool showOverviewButton: true
                 property bool showPinButton: true
@@ -2413,7 +2421,10 @@ Singleton {
                 property list<string> pinnedApps: ["org.kde.dolphin", "kitty"]
                 property list<string> ignoredAppRegexes: []
                 property list<string> pinnedFiles: []
-                property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "trash", "overview"]
+                // Each entry is { id: string, apps: list<string> } and is
+                // rendered as one dock item while app groups are enabled.
+                property list<var> appGroups: []
+                property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "phone", "trash", "overview"]
             }
 
             property JsonObject dockToPanel: JsonObject {

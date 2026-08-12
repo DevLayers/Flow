@@ -47,6 +47,7 @@ ShellRoot {
         TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
+            PhoneContactsService.available;
         }
         root.applyOpenRgbIfEnabled();
     }
@@ -180,6 +181,4 @@ ShellRoot {
         onPressed: root.cyclePanelFamily()
     }
 }
-
-
 
