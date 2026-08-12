@@ -29,6 +29,7 @@ DelegateChooser {
     signal openVpnDialog
     signal openTailscaleDialog
     signal openDnsOverTlsDialog
+    signal openIdleInhibitorDialog
 
     role: "type"
 
@@ -251,6 +252,9 @@ DelegateChooser {
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
+            onOpenMenu: {
+                root.openIdleInhibitorDialog();
+            }
         }
     }
 

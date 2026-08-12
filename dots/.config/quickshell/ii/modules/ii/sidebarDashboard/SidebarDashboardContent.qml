@@ -25,6 +25,7 @@ import qs.modules.ii.sidebarDashboard.localSend
 import qs.modules.ii.sidebarDashboard.vpn
 import qs.modules.ii.sidebarDashboard.tailscale
 import qs.modules.ii.sidebarDashboard.dnsOverTls
+import qs.modules.ii.sidebarDashboard.idleInhibitor
 
 Item {
     id: root
@@ -40,7 +41,8 @@ Item {
     property bool showVpnDialog: false
     property bool showTailscaleDialog: false
     property bool showDnsOverTlsDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog
+    property bool showIdleInhibitorDialog: false
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog
     property bool editMode: false
 
     property int entranceTrigger: -1
@@ -77,6 +79,7 @@ Item {
                 root.showVpnDialog = false;
                 root.showTailscaleDialog = false;
                 root.showDnsOverTlsDialog = false;
+                root.showIdleInhibitorDialog = false;
             }
         }
     }
@@ -273,6 +276,11 @@ Item {
         dialog: DnsOverTlsDialog {}
     }
 
+    ToggleDialog {
+        shownPropertyString: "showIdleInhibitorDialog"
+        dialog: IdleInhibitorDialog {}
+    }
+
     component ToggleDialog: Loader {
         id: toggleDialogLoader
         required property string shownPropertyString
@@ -336,6 +344,9 @@ Item {
             }
             function onOpenLocalSendDialog() {
                 root.showLocalSendDialog = true;
+            }
+            function onOpenIdleInhibitorDialog() {
+                root.showIdleInhibitorDialog = true;
             }
         }
     }

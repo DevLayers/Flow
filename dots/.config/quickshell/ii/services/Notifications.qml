@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 
 import qs.modules.common
 import qs
+import qs.services
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -397,6 +398,16 @@ Singleton {
         // notify-send -a 'Recorder' → appName === "Recorder"
         var isRecording = appName === "Recorder";
 
+        // The "Keep awake" timer warns before it expires and offers to push the deadline out.
+        // Matched on the untranslated app name Idle.qml sends, so it survives UI language changes.
+        if (appName === "Keep awake" && appIcon === "hourglass_bottom") {
+            notifObj.customActions = [
+                { "identifier": "__qs_keepawake_extend", "text": Translation.tr("Extend") },
+                { "identifier": "__qs_keepawake_off", "text": Translation.tr("Stop") }
+            ];
+            return;
+        }
+
         if (!isScreenshot && !isRecording) return;
 
         // Parse file path from body: "Saved to: /path" or "Saved to /path"
@@ -425,6 +436,15 @@ Singleton {
 
     // Execute a QML-handled notification action (identified by "__qs_" prefix).
     function executeShellAction(notifObj, identifier) {
+        // Keep-awake actions carry no file, so they're handled before the file-path guard
+        if (identifier === "__qs_keepawake_extend") {
+            Idle.extendBy(Idle.extendMinutes);
+            return;
+        } else if (identifier === "__qs_keepawake_off") {
+            Idle.toggleInhibit(false);
+            return;
+        }
+
         var filePath = notifObj._qsFilePath || "";
         if (!filePath) return;
 
