@@ -50,6 +50,79 @@ Rectangle {
         }
     }
 
+    // Pulling icons off the phone is slow enough that it only happens when the
+    // user refreshes the list, never on its own. The results are cached, so it
+    // is a one-off rather than something that repeats on every reconnect.
+    QtObject {
+        id: iconHarvest
+        property bool armed: false
+    }
+
+    Timer {
+        id: harvestWindow
+        interval: 10000
+        onTriggered: iconHarvest.armed = false
+    }
+
+    Connections {
+        target: PhoneScrcpyService
+        enabled: iconHarvest.armed
+        function onAppsChanged() {
+            iconHarvest.armed = false
+            harvestWindow.stop()
+            PhoneAppIconService.fetchMissing((PhoneScrcpyService.apps || []).map(a => a.package))
+        }
+    }
+
+    // Launcher icon pulled off the phone, falling back to a generic glyph while
+    // it has not been fetched or cannot be resolved.
+    component AppIcon: Item {
+        id: appIcon
+
+        required property string packageName
+        property real symbolSize: 20
+        property real symbolPadding: 8
+        property color shapeColor: Appearance.colors.colSecondaryContainer
+        property color symbolColor: Appearance.colors.colOnSecondaryContainer
+
+        readonly property string iconPath: PhoneAppIconService.iconFor(packageName)
+
+        implicitWidth: symbolSize + symbolPadding * 2
+        implicitHeight: implicitWidth
+
+        MaterialShapeWrappedMaterialSymbol {
+            anchors.centerIn: parent
+            visible: launcherIcon.status !== Image.Ready
+            text: "android"
+            iconSize: appIcon.symbolSize
+            padding: appIcon.symbolPadding
+            fill: 1.0
+            color: appIcon.shapeColor
+            colSymbol: appIcon.symbolColor
+            shape: MaterialShape.Shape.Cookie9Sided
+        }
+
+        Image {
+            id: launcherIcon
+            anchors.fill: parent
+            source: appIcon.iconPath ? ("file://" + appIcon.iconPath) : ""
+            sourceSize.width: appIcon.implicitWidth * 2
+            sourceSize.height: appIcon.implicitHeight * 2
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            visible: status === Image.Ready
+
+            layer.enabled: visible
+            layer.effect: OpacityMask {
+                maskSource: Rectangle {
+                    width: launcherIcon.width
+                    height: launcherIcon.height
+                    radius: width / 2
+                }
+            }
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 10
@@ -92,11 +165,16 @@ Rectangle {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: PhoneScrcpyService.appModeSupported
-                          ? (PhoneScrcpyService.appsLoading
-                             ? Translation.tr("Loading apps…")
-                             : Translation.tr("%1 apps").arg(String(PhoneScrcpyService.filteredApps.length)))
-                          : Translation.tr("Requires scrcpy 4.0+")
+                    text: {
+                        if (!PhoneScrcpyService.appModeSupported) return Translation.tr("Requires scrcpy 4.0+")
+                        if (PhoneScrcpyService.appsLoading) return Translation.tr("Loading apps…")
+                        if (PhoneAppIconService.fetching) {
+                            return Translation.tr("Fetching icons… %1/%2")
+                                .arg(String(PhoneAppIconService.fetched))
+                                .arg(String(PhoneAppIconService.batchSize))
+                        }
+                        return Translation.tr("%1 apps").arg(String(PhoneScrcpyService.filteredApps.length))
+                    }
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colSubtext
                     opacity: 0.8
@@ -116,9 +194,15 @@ Rectangle {
                     iconSize: 18
                     color: Appearance.colors.colOnLayer3
                 }
-                onClicked: PhoneScrcpyService.refreshApps()
+                onClicked: {
+                    iconHarvest.armed = PhoneAppIconService.enabled
+                    if (iconHarvest.armed) harvestWindow.restart()
+                    PhoneScrcpyService.refreshApps()
+                }
                 StyledToolTip {
-                    text: Translation.tr("Refresh app list")
+                    text: PhoneAppIconService.enabled
+                          ? Translation.tr("Refresh app list and fetch missing icons")
+                          : Translation.tr("Refresh app list")
                 }
             }
         }
@@ -360,15 +444,13 @@ Rectangle {
                                     anchors.rightMargin: 8
                                     spacing: 8
 
-                                    MaterialShapeWrappedMaterialSymbol {
+                                    AppIcon {
                                         Layout.alignment: Qt.AlignVCenter
-                                        text: "android"
-                                        iconSize: 16
-                                        padding: 6
-                                        fill: 1.0
-                                        color: Appearance.colors.colPrimary
-                                        colSymbol: Appearance.colors.colOnPrimary
-                                        shape: MaterialShape.Shape.Cookie9Sided
+                                        packageName: modelData.package
+                                        symbolSize: 16
+                                        symbolPadding: 6
+                                        shapeColor: Appearance.colors.colPrimary
+                                        symbolColor: Appearance.colors.colOnPrimary
                                     }
 
                                     StyledText {
@@ -433,15 +515,11 @@ Rectangle {
                             spacing: 10
 
                             // App Icon / Glyph
-                            MaterialShapeWrappedMaterialSymbol {
+                            AppIcon {
                                 Layout.alignment: Qt.AlignVCenter
-                                text: "android"
-                                iconSize: 20
-                                padding: 8
-                                fill: 1.0
-                                color: appItem.isRunning ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
-                                colSymbol: appItem.isRunning ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                                shape: MaterialShape.Shape.Cookie9Sided
+                                packageName: modelData.package
+                                shapeColor: appItem.isRunning ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+                                symbolColor: appItem.isRunning ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
                             }
 
                             ColumnLayout {

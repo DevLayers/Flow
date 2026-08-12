@@ -207,6 +207,33 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "wallpaper"
+                text: Translation.tr("Show real app icons")
+                checked: Config.options.phone.scrcpy.appMode.showAppIcons
+                enabled: Config.options.phone.scrcpy.appMode.enabled
+                onCheckedChanged: Config.options.phone.scrcpy.appMode.showAppIcons = checked
+
+                StyledToolTip {
+                    text: Translation.tr("Reads each app's launcher icon off the phone when you refresh the app list, then caches it. Apps without a cached icon keep a generic Android glyph.")
+                }
+            }
+
+            RippleButton {
+                Layout.leftMargin: 4
+                padding: 14
+                buttonRadius: Appearance.rounding.full
+                buttonText: Translation.tr("Clear cached icons")
+                enabled: Config.options.phone.scrcpy.appMode.enabled && Config.options.phone.scrcpy.appMode.showAppIcons
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                onClicked: PhoneAppIconService.clearCache()
+
+                StyledToolTip {
+                    text: Translation.tr("Forgets every extracted icon, including the apps that failed, so the next app-list refresh reads them all again.")
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "desktop_windows"
                 text: Translation.tr("Use Virtual Secondary Display (--flex-display)")
                 checked: Config.options.phone.scrcpy.appMode.flexDisplay

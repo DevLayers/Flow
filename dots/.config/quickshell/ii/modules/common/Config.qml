@@ -846,6 +846,7 @@ Singleton {
                     property bool showTerminal: false
                     property JsonObject appMode: JsonObject {
                         property bool enabled: true
+                        property bool showAppIcons: true // Pull each app's launcher icon off the phone over adb
                         property bool flexDisplay: true
                         property int displayWidth: 1280
                         property int displayHeight: 960
