@@ -38,61 +38,83 @@ WindowDialog {
         }
     }
 
-    WindowDialogTitle {
-        text: Translation.tr("Keep awake")
-    }
-
-    WindowDialogParagraph {
+    RowLayout {
         Layout.fillWidth: true
-        text: Translation.tr("Stops the screen from blanking and the system from sleeping. Pick a duration and it turns itself back off when the time is up.")
-    }
+        Layout.leftMargin: 4
+        Layout.rightMargin: 4
+        spacing: 0
 
-    Rectangle {
-        Layout.fillWidth: true
-        implicitHeight: statusRow.implicitHeight + 24
-        radius: Appearance.rounding.normal
-        color: Idle.inhibit ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-
-        Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("Keep awake")
+            font.pixelSize: Appearance.font.pixelSize.larger
+            font.weight: Font.Bold
+            color: Appearance.colors.colOnLayer1
         }
+    }
 
-        RowLayout {
-            id: statusRow
-            anchors {
-                left: parent.left
-                right: parent.right
-                verticalCenter: parent.verticalCenter
-                leftMargin: 14
-                rightMargin: 14
-            }
-            spacing: 10
+    // Current state, with the quick extend right next to it
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 8
 
-            MaterialSymbol {
-                text: Idle.inhibit ? "kettle" : "coffee"
-                iconSize: Appearance.font.pixelSize.hugeass
-                fill: Idle.inhibit ? 1 : 0
-                color: Idle.inhibit ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 56
+            radius: Appearance.rounding.full
+            color: Idle.inhibit ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
             }
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
+            RowLayout {
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    verticalCenter: parent.verticalCenter
+                    leftMargin: 16
+                    rightMargin: 16
+                }
+                spacing: 12
 
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Idle.timed ? Translation.tr("%1 left").arg(Idle.remainingText) : Idle.inhibit ? Translation.tr("On indefinitely") : Translation.tr("Off")
-                    font.pixelSize: Appearance.font.pixelSize.large
+                MaterialSymbol {
+                    text: Idle.inhibit ? "kettle" : "coffee"
+                    iconSize: Appearance.font.pixelSize.hugeass
+                    fill: Idle.inhibit ? 1 : 0
                     color: Idle.inhibit ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
                 }
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: Idle.timed ? Translation.tr("Sleep resumes automatically") : Idle.inhibit ? Translation.tr("Stays awake until you turn it off") : Translation.tr("The system sleeps as usual")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Idle.inhibit ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
-                    wrapMode: Text.Wrap
+                    text: Idle.timed ? Translation.tr("%1 left").arg(Idle.remainingText) : Idle.inhibit ? Translation.tr("On indefinitely") : Translation.tr("Off")
+                    font.pixelSize: Appearance.font.pixelSize.large
+                    elide: Text.ElideRight
+                    color: Idle.inhibit ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
                 }
+            }
+        }
+
+        RippleButton {
+            id: extendButton
+            implicitWidth: 56
+            implicitHeight: 56
+            buttonRadius: Appearance.rounding.full
+            enabled: Idle.timed
+            colBackground: enabled ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+            colBackgroundHover: Appearance.colors.colPrimaryHover
+            colRipple: Appearance.colors.colPrimaryActive
+            onClicked: Idle.extendBy(Idle.extendMinutes)
+
+            contentItem: StyledText {
+                text: Translation.tr("+%1").arg(Idle.extendMinutes)
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.variableAxes: ({
+                        "wght": 700
+                    })
+                color: extendButton.enabled ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3outline
             }
         }
     }
@@ -101,16 +123,15 @@ WindowDialog {
         text: Translation.tr("Duration")
     }
 
-    WindowDialogSeparator {
-        Layout.topMargin: -22
-        Layout.leftMargin: 0
-        Layout.rightMargin: 0
-    }
-
-    FlowButtonGroup {
+    // Recents, centered
+    RowLayout {
         Layout.fillWidth: true
         Layout.topMargin: -12
         spacing: 4
+
+        Item {
+            Layout.fillWidth: true
+        }
 
         Repeater {
             model: Idle.quickDurations
@@ -119,12 +140,38 @@ WindowDialog {
                 required property int index
                 required property var modelData
                 leftmost: index === 0
-                // Indefinite isn't offered here — that's what plain clicking the toggle does
                 rightmost: index === Idle.quickDurations.length - 1
                 buttonText: Idle.formatMinutes(modelData)
                 toggled: Idle.timed && Idle.sessionMinutes === modelData
                 onClicked: Idle.inhibitFor(modelData)
             }
+        }
+
+        Item {
+            Layout.fillWidth: true
+        }
+    }
+
+    // Indefinite gets its own row so it reads as the odd one out that it is
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 0
+
+        Item {
+            Layout.fillWidth: true
+        }
+
+        SelectionGroupButton {
+            leftmost: true
+            rightmost: true
+            buttonIcon: "all_inclusive"
+            buttonText: Translation.tr("Indefinite")
+            toggled: Idle.inhibit && !Idle.timed
+            onClicked: Idle.toggleInhibit(true)
+        }
+
+        Item {
+            Layout.fillWidth: true
         }
     }
 
@@ -174,39 +221,81 @@ WindowDialog {
         }
     }
 
-    WindowDialogParagraph {
+    // Footer actions
+    RowLayout {
         Layout.fillWidth: true
-        Layout.topMargin: 4
+        Layout.topMargin: 8
+        spacing: 12
 
-        readonly property string leadText: Idle.warnLeadSec >= 60 ? Idle.formatMinutes(Math.round(Idle.warnLeadSec / 60)) : Translation.tr("%1 s").arg(Idle.warnLeadSec)
+        RippleButton {
+            id: turnOffButton
+            buttonRadius: Appearance.rounding.full
+            colBackground: "transparent"
+            colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+            colRipple: Appearance.colors.colSurfaceContainerHighestActive
+            implicitHeight: 36
+            implicitWidth: turnOffText.implicitWidth + 32
+            enabled: Idle.inhibit
+            onClicked: Idle.toggleInhibit(false)
 
-        text: Idle.notifyOnExpiry && Idle.warnLeadSec > 0 ? Translation.tr("You'll get a notification %1 before it ends, with a button to add %2.").arg(leadText).arg(Idle.formatMinutes(Idle.extendMinutes)) : Translation.tr("Expiry notifications are off — see Settings › Power.")
-    }
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                border.width: 1
+                border.color: !turnOffButton.enabled ? Appearance.m3colors.m3outline : turnOffButton.hovered ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+                radius: parent.buttonEffectiveRadius
 
-    WindowDialogButtonRow {
-        Layout.fillWidth: true
+                Behavior on border.color {
+                    ColorAnimation {
+                        duration: 150
+                    }
+                }
+            }
 
-        DialogButton {
-            buttonText: Translation.tr("Extend %1").arg(Idle.formatMinutes(Idle.extendMinutes))
-            enabled: Idle.timed
-            colText: enabled ? Appearance.colors.colPrimary : Appearance.m3colors.m3outline
-            onClicked: Idle.extendBy(Idle.extendMinutes)
+            contentItem: StyledText {
+                id: turnOffText
+                text: Translation.tr("Turn off")
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.variableAxes: ({
+                        "wght": 500
+                    })
+                color: !turnOffButton.enabled ? Appearance.m3colors.m3outline : turnOffButton.hovered ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 150
+                    }
+                }
+            }
         }
 
         Item {
             Layout.fillWidth: true
         }
 
-        DialogButton {
-            buttonText: Translation.tr("Turn off")
-            enabled: Idle.inhibit
-            colText: enabled ? Appearance.colors.colPrimary : Appearance.m3colors.m3outline
-            onClicked: Idle.toggleInhibit(false)
-        }
-
-        DialogButton {
-            buttonText: Translation.tr("Done")
+        RippleButton {
+            id: doneButton
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colPrimary
+            colBackgroundHover: Appearance.colors.colPrimaryHover
+            colRipple: Appearance.colors.colPrimaryActive
+            implicitHeight: 36
+            implicitWidth: doneText.implicitWidth + 48
             onClicked: root.dismiss()
+
+            contentItem: StyledText {
+                id: doneText
+                text: Translation.tr("Done")
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.variableAxes: ({
+                        "wght": 700
+                    })
+                color: Appearance.colors.colOnPrimary
+            }
         }
     }
 }
