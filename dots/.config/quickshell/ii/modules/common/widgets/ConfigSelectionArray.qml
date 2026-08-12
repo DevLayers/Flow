@@ -27,14 +27,7 @@ Flow {
     }
 
     function scheduleWidthUpdate() {
-        widthUpdateTimer.restart();
-    }
-
-    Timer {
-        id: widthUpdateTimer
-        interval: 0
-        repeat: false
-        onTriggered: root.updateWidth()
+        root.updateWidth();
     }
 
     Layout.preferredWidth: calculatedWidth

@@ -11,7 +11,6 @@ Item {
     
     required property var modelData
     readonly property var compInfo: BarComponentRegistry.getComponent(modelData.id)
-    readonly property bool hasStyleEditor: wrapper.compInfo?.styleConfigKey !== undefined
 
     property bool alternateColor: visualIndex % 2 == 0
     property color colBackground: alternateColor ? Appearance.colors.colLayer3 : Appearance.colors.colLayer2
@@ -28,6 +27,7 @@ Item {
     }
     height: content.height
     property int visualIndex: DelegateModel.itemsIndex
+
 
     Behavior on y {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -151,9 +151,8 @@ Item {
 
             // ── Inline style picker ──
             Loader {
-                active: wrapper.hasStyleEditor
+                active: wrapper.compInfo?.styleConfigKey !== undefined
                 visible: active
-                asynchronous: true
                 
                 Layout.preferredWidth: item ? (item.calculatedWidth !== undefined ? item.calculatedWidth : item.implicitWidth) : 0
                 Layout.minimumWidth: Layout.preferredWidth
@@ -288,3 +287,4 @@ Item {
         }
     }
 }
+    
