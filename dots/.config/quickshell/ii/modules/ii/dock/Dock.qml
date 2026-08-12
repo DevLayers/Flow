@@ -231,41 +231,58 @@ Scope {
                     onHoveredChanged: dockContent.setMagnificationHovered(hovered)
                 }
 
-                StyledRectangularShadow { target: dockVisualBackground }
+                // Neutral host: the classic surface, DropArea and content are
+                // siblings so hiding the global rectangle never hides items.
+                Item {
+                    id: dockSurfaceHost
+                    anchors.fill: parent
+                    clip: false
 
-                Rectangle {
-                    id: dockVisualBackground
+                    StyledRectangularShadow {
+                        target: dockVisualBackground
+                        visible: !dockContent.islandsStyle
+                    }
 
-                    width: Math.max(1, Math.min(
-                        dockRoot.sizing.backgroundWidth,
-                        dockRoot.sizing.dockWidth - Appearance.sizes.hyprlandGapsOut * 2
-                    ))
-                    height: Math.max(1, Math.min(
-                        dockRoot.sizing.backgroundHeight,
-                        dockRoot.sizing.dockHeight - Appearance.sizes.hyprlandGapsOut * 2
-                    ))
+                    Rectangle {
+                        id: dockVisualBackground
 
-                    color: Appearance.colors.colLayer0
-                    radius: (Config.options?.dock?.dockRadius ?? -1) >= 0 ? Config.options.dock.dockRadius : (Appearance.rounding.windowRounding + 12)
+                        width: Math.max(1, Math.min(
+                            dockRoot.sizing.backgroundWidth,
+                            dockRoot.sizing.dockWidth - Appearance.sizes.hyprlandGapsOut * 2
+                        ))
+                        height: Math.max(1, Math.min(
+                            dockRoot.sizing.backgroundHeight,
+                            dockRoot.sizing.dockHeight - Appearance.sizes.hyprlandGapsOut * 2
+                        ))
 
-                    anchors.horizontalCenter: (!dock.isVertical) ? parent.horizontalCenter : undefined
-                    anchors.verticalCenter: dock.isVertical ? parent.verticalCenter : undefined
+                        color: Appearance.colors.colLayer0
+                        radius: dockContent.dockCornerRadius
+                        opacity: dockContent.islandsStyle ? 0.0 : 1.0
 
-                    anchors.bottom: dock.dockEffectivePosition === "bottom" ? parent.bottom : undefined
-                    anchors.bottomMargin: dock.dockEffectivePosition === "bottom" ? Appearance.sizes.hyprlandGapsOut : 0
+                        anchors.horizontalCenter: (!dock.isVertical) ? parent.horizontalCenter : undefined
+                        anchors.verticalCenter: dock.isVertical ? parent.verticalCenter : undefined
 
-                    anchors.top: dock.dockEffectivePosition === "top" ? parent.top : undefined
-                    anchors.topMargin: dock.dockEffectivePosition === "top" ? Appearance.sizes.hyprlandGapsOut : 0
+                        anchors.bottom: dock.dockEffectivePosition === "bottom" ? parent.bottom : undefined
+                        anchors.bottomMargin: dock.dockEffectivePosition === "bottom" ? Appearance.sizes.hyprlandGapsOut : 0
 
-                    anchors.left: dock.dockEffectivePosition === "left" ? parent.left : undefined
-                    anchors.leftMargin: dock.dockEffectivePosition === "left" ? Appearance.sizes.hyprlandGapsOut : 0
+                        anchors.top: dock.dockEffectivePosition === "top" ? parent.top : undefined
+                        anchors.topMargin: dock.dockEffectivePosition === "top" ? Appearance.sizes.hyprlandGapsOut : 0
 
-                    anchors.right: dock.dockEffectivePosition === "right" ? parent.right : undefined
-                    anchors.rightMargin: dock.dockEffectivePosition === "right" ? Appearance.sizes.hyprlandGapsOut : 0
+                        anchors.left: dock.dockEffectivePosition === "left" ? parent.left : undefined
+                        anchors.leftMargin: dock.dockEffectivePosition === "left" ? Appearance.sizes.hyprlandGapsOut : 0
+
+                        anchors.right: dock.dockEffectivePosition === "right" ? parent.right : undefined
+                        anchors.rightMargin: dock.dockEffectivePosition === "right" ? Appearance.sizes.hyprlandGapsOut : 0
+
+                        Behavior on opacity {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockVisualBackground)
+                        }
+                    }
 
                     DropArea {
                         id: fileDropArea
                         anchors.fill: parent
+                        z: 10
                         keys: ["text/uri-list"]
 
                         // We delay the re-enablement slightly after an internal drag ends
@@ -310,7 +327,8 @@ Scope {
 
                     DockContent {
                         id: dockContent
-                        anchors.fill: parent
+                        anchors.fill: dockVisualBackground
+                        z: 1
                         isPinned: dock.pinned
                         currentScreen: dockRoot.screen
                         onTogglePinRequested: {

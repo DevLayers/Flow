@@ -311,6 +311,33 @@ ContentPage {
             }
         }
 
+        ConfigSwitch {
+            buttonIcon: "view_quilt"
+            text: Translation.tr("Islands style")
+            checked: Config.options.dock.islandsStyle ?? false
+            onCheckedChanged: {
+                Config.options.dock.islandsStyle = checked;
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Separate apps, widgets and utilities into independent dock surfaces. Drag an island by its outer edge to reorder it.")
+            }
+        }
+
+        ConfigSlider {
+            visible: Config.options.dock.islandsStyle ?? false
+            Layout.fillWidth: true
+            text: Translation.tr("Island spacing")
+            value: Config.options.dock.islandSpacing ?? 8
+            from: 4
+            to: 32
+            stepSize: 1
+            usePercentTooltip: false
+            onValueChanged: {
+                Config.options.dock.islandSpacing = value;
+            }
+        }
+
         ConfigSlider {
             Layout.fillWidth: true
             text: Translation.tr("Dock corner radius") + (Config.options.dock.dockRadius < 0 ? " (" + Translation.tr("Auto") + ")" : "")

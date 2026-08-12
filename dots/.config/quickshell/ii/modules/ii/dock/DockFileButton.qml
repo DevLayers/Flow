@@ -257,6 +257,8 @@ DockButton {
             width: root.buttonSize
             height: root.buttonSize
             anchors.centerIn: parent
+            anchors.verticalCenterOffset: !root.isVertical ? (root.dockContent?.dockPos === "top" ? 3 : -3) : 0
+            anchors.horizontalCenterOffset: root.isVertical ? (root.dockContent?.dockPos === "right" ? 3 : -3) : 0
 
             MaterialShape {
                 id: iconMask
@@ -299,11 +301,9 @@ DockButton {
                 color: Appearance.colors.colOnLayer0
             }
 
-            Kirigami.Icon {
-                anchors.centerIn: parent
+            IconImage {
+                anchors.fill: parent
                 visible: !root.isImage && root.resolvedXdgIcon !== ""
-                width: root.width
-                height: root.height
                 source: root.resolvedXdgIcon
             }
 

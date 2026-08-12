@@ -30,6 +30,15 @@ Item {
     readonly property real buttonSlotHeight: Appearance.sizes.dockButtonSize + dotMarginV * 2
     readonly property real sportsWidgetSlots: 4
     readonly property string dockPos: dock.dockEffectivePosition
+    readonly property bool islandsStyle: Config.options?.dock?.islandsStyle ?? false
+    readonly property real islandSpacing: Math.max(0, Config.options?.dock?.islandSpacing ?? 8)
+    readonly property real islandExtraGap: islandsStyle
+        ? Math.max(0, islandSpacing - (Config.options?.dock?.iconSpacing ?? 0))
+        : 0
+    readonly property bool effectiveShowDividers: (Config.options?.dock?.showDividers ?? true) && !islandsStyle
+    readonly property real dockCornerRadius: (Config.options?.dock?.dockRadius ?? -1) >= 0
+        ? Config.options.dock.dockRadius
+        : Appearance.rounding.windowRounding + 12
 
     readonly property real layoutVisualMainExtent: isVertical ? unifiedColumn.height : unifiedRow.width
     readonly property real animatedVisualMainExtent: layoutVisualMainExtent
@@ -100,11 +109,23 @@ Item {
     readonly property bool magnificationInteractionActive: enableMagnification
         && magnificationHovered
         && !dragging
+        && !islandDragging
         && !anyContextMenuOpen
         && !suppressHover
         && !externalDragOver
     readonly property real magnificationPointerContentMain: magnificationPointerMain
         + (isVertical ? scrollArea.contentY : scrollArea.contentX)
+    readonly property string magnificationHoveredIslandId: {
+        if (!islandsStyle || !hoveredSlot)
+            return "";
+        let item = hoveredSlot;
+        for (let depth = 0; item && depth < 8; depth++) {
+            if (typeof item._islandId !== "undefined")
+                return String(item._islandId);
+            item = item.parent;
+        }
+        return "";
+    }
 
     // Stable metrics are based only on the unscaled layout. Animated wrapper
     // widths never feed back into the proximity field.
@@ -114,11 +135,16 @@ Item {
         let cursor = 0;
         const itemCount = root.flattenedItems.length;
         for (let i = 0; i < itemCount; i++) {
-            const mainExtent = root._baseMainExtentForIndex(i);
+            const leadingGap = root._leadingIslandGapForIndex(i);
+            const bodyExtent = root._baseItemMainExtentForIndex(i);
+            const mainExtent = leadingGap + bodyExtent;
             items.push({
                 baseStart: cursor,
-                baseCenter: cursor + mainExtent / 2,
+                bodyStart: cursor + leadingGap,
+                baseCenter: cursor + leadingGap + bodyExtent / 2,
                 baseExtent: mainExtent,
+                bodyExtent: bodyExtent,
+                islandId: root._islandIdForIndex(i),
                 magnifiable: root._isMagnifiableItem(root.flattenedItems[i])
             });
             cursor += mainExtent;
@@ -138,14 +164,15 @@ Item {
             return 0;
 
         let maximum = 0;
-        const candidates = baseMetrics.items
-            .filter(metric => metric.magnifiable)
-            .map(metric => metric.baseCenter);
+        const candidates = baseMetrics.items.filter(metric => metric.magnifiable);
         for (const candidate of candidates) {
             let total = 0;
             for (const metric of baseMetrics.items) {
-                if (metric.magnifiable)
-                    total += root.magnificationSafetyExtraForFactor(root.magnificationFactorForDistance(Math.abs(candidate - metric.baseCenter)));
+                if (!metric.magnifiable)
+                    continue;
+                if (root.islandsStyle && metric.islandId !== candidate.islandId)
+                    continue;
+                total += root.magnificationSafetyExtraForFactor(root.magnificationFactorForDistance(Math.abs(candidate.baseCenter - metric.baseCenter)));
             }
             maximum = Math.max(maximum, total);
         }
@@ -157,6 +184,306 @@ Item {
         : 0
     readonly property bool enableAppGroups: Config.options?.dock?.enableAppGroups ?? true
     readonly property int maxGroupApps: 6
+
+    // Islands are derived from the final flattened order. Keeping this model
+    // independent from the visual surfaces preserves global drag indices.
+    readonly property var islandSegments: root._buildIslandSegments(root.flattenedItems)
+    readonly property var islandByItemIndex: {
+        const lookup = [];
+        for (const segment of root.islandSegments) {
+            for (let i = segment.startIndex; i <= segment.endIndex; i++)
+                lookup[i] = segment;
+        }
+        return lookup;
+    }
+
+    function _islandKind(item) {
+        if (!item)
+            return "single";
+        switch (item.type) {
+        case "app": return "apps";
+        case "action": return "actions";
+        case "appGroup": return "apps";
+        case "runningAppsGroup": return "apps";
+        case "file": return "file";
+        case "media": return "media";
+        case "weather": return "weather";
+        case "sports": return "sports";
+        case "phone": return "phone";
+        default: return "single";
+        }
+    }
+
+    function _isLauncherItem(item) {
+        if (!item)
+            return false;
+        return item.type === "app"
+            || item.type === "appGroup"
+            || item.type === "runningAppsGroup";
+    }
+
+    function _canMergeIslandItems(previous, current) {
+        if (!previous || !current)
+            return false;
+        return (root._isLauncherItem(previous) && root._isLauncherItem(current))
+            || (previous.type === "action" && current.type === "action");
+    }
+
+    function _islandIdForItem(item, index) {
+        if (!item)
+            return "single:" + String(index);
+        switch (item.type) {
+        case "app":
+            return "apps:" + String(item.orderKey ?? item.appId ?? index);
+        case "action":
+            return "actions:" + String(item.actionId ?? index);
+        case "appGroup":
+            return "group:" + String(item.groupId ?? index);
+        case "runningAppsGroup":
+            return "apps:" + String(item.orderKey ?? index);
+        case "file":
+            return "file:" + String(item.path ?? index);
+        case "media":
+            return "widget:media";
+        case "weather":
+            return "widget:weather";
+        case "sports":
+            return "widget:sports";
+        case "phone":
+            return "widget:phone";
+        default:
+            return "single:" + String(item.orderKey ?? index);
+        }
+    }
+
+    function _buildIslandSegments(items) {
+        const segments = [];
+        let current = null;
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (current && root._canMergeIslandItems(items[i - 1], item)) {
+                current.endIndex = i;
+                continue;
+            }
+
+            current = {
+                id: root._islandIdForItem(item, i),
+                kind: root._islandKind(item),
+                startIndex: i,
+                endIndex: i
+            };
+            segments.push(current);
+        }
+        return segments;
+    }
+
+    function _islandMetaForIndex(index) {
+        return root.islandByItemIndex[index] ?? null;
+    }
+
+    function _islandIdForIndex(index) {
+        return root._islandMetaForIndex(index)?.id ?? "";
+    }
+
+    function _islandStartsAt(index) {
+        const meta = root._islandMetaForIndex(index);
+        return !!meta && meta.startIndex === index;
+    }
+
+    function _leadingIslandGapForIndex(index) {
+        return index > 0 && root._islandStartsAt(index) ? root.islandExtraGap : 0;
+    }
+
+    function _islandSegmentIndexForId(islandId) {
+        for (let i = 0; i < root.islandSegments.length; i++) {
+            if (String(root.islandSegments[i].id) === String(islandId))
+                return i;
+        }
+        return -1;
+    }
+
+    function _islandBoundsForSegment(segment) {
+        if (!segment)
+            return null;
+
+        const first = root.getItemWrapper(segment.startIndex);
+        const last = root.getItemWrapper(segment.endIndex);
+        if (!first || !last || !first.parent || !last.parent)
+            return null;
+
+        const firstMain = first.bodyMainStart;
+        const lastMain = last.bodyMainEnd;
+        const firstPoint = first.parent.mapToItem(
+            root,
+            root.isVertical ? first.x : firstMain,
+            root.isVertical ? firstMain : first.y
+        );
+        const lastPoint = last.parent.mapToItem(
+            root,
+            root.isVertical ? last.x : lastMain,
+            root.isVertical ? lastMain : last.y
+        );
+        return {
+            start: root.isVertical ? firstPoint.y : firstPoint.x,
+            end: root.isVertical ? lastPoint.y : lastPoint.x
+        };
+    }
+
+    function _islandMainCoordinateFromScene(scenePosition) {
+        if (!scenePosition)
+            return 0;
+        const point = root.mapFromItem(null, scenePosition.x, scenePosition.y);
+        return root.isVertical ? point.y : point.x;
+    }
+
+    function _orderKeysForIslandItem(item, currentOrder) {
+        if (!item)
+            return [];
+
+        if (item.type === "appGroup") {
+            return (item.appIds ?? []).map(appId => root._orderKeyForAppId(currentOrder, appId));
+        }
+
+        if (item.type === "runningAppsGroup") {
+            return (item.apps ?? []).map(app => root._orderKeyForAppId(currentOrder, app?.appId ?? app));
+        }
+
+        const key = String(item.orderKey ?? "");
+        return key ? [key] : [];
+    }
+
+    function _orderKeysForIsland(segment, currentOrder) {
+        const keys = [];
+        const seen = {};
+        for (let i = segment.startIndex; i <= segment.endIndex; i++) {
+            const itemKeys = root._orderKeysForIslandItem(root.flattenedItems[i], currentOrder);
+            for (const key of itemKeys) {
+                if (!key || seen[key])
+                    continue;
+                seen[key] = true;
+                keys.push(key);
+            }
+        }
+        return keys;
+    }
+
+    function _resetIslandDrag() {
+        root.islandDragging = false;
+        root.islandDragId = "";
+        root.islandDragSourceIndex = -1;
+        root.islandDragTargetIndex = -1;
+        root.islandDragCursorMain = 0;
+    }
+
+    function startIslandDrag(islandId, scenePosition) {
+        if (!root.islandsStyle || root.dragging || root.anyContextMenuOpen)
+            return false;
+
+        const sourceIndex = root._islandSegmentIndexForId(islandId);
+        if (sourceIndex < 0)
+            return false;
+
+        root.islandDragging = true;
+        root.islandDragId = String(islandId);
+        root.islandDragSourceIndex = sourceIndex;
+        root.islandDragTargetIndex = sourceIndex;
+        root.islandDragCursorMain = root._islandMainCoordinateFromScene(scenePosition);
+        root._suppressTranslateAnim = true;
+        root.buttonHovered = false;
+        root.lastHoveredButton = null;
+        return true;
+    }
+
+    function moveIslandDrag(scenePosition) {
+        if (!root.islandDragging)
+            return;
+
+        root.islandDragCursorMain = root._islandMainCoordinateFromScene(scenePosition);
+        let targetIndex = root.islandDragSourceIndex;
+        for (let i = 0; i < root.islandSegments.length; i++) {
+            if (i === root.islandDragSourceIndex)
+                continue;
+            const bounds = root._islandBoundsForSegment(root.islandSegments[i]);
+            if (!bounds)
+                continue;
+            if (root.islandDragCursorMain < (bounds.start + bounds.end) / 2) {
+                targetIndex = i;
+                break;
+            }
+            targetIndex = i;
+        }
+        root.islandDragTargetIndex = targetIndex;
+    }
+
+    function _moveIslandBlock(sourceIndex, targetIndex) {
+        if (sourceIndex < 0 || targetIndex < 0
+                || sourceIndex >= root.islandSegments.length
+                || targetIndex >= root.islandSegments.length
+                || sourceIndex === targetIndex)
+            return false;
+
+        const currentOrder = Array.from(Config.options?.dock?.order ?? []);
+        const sourceKeys = root._orderKeysForIsland(root.islandSegments[sourceIndex], currentOrder);
+        const targetKeys = root._orderKeysForIsland(root.islandSegments[targetIndex], currentOrder);
+        if (sourceKeys.length === 0 || targetKeys.length === 0)
+            return false;
+
+        const sourceSet = {};
+        for (const key of sourceKeys)
+            sourceSet[key] = true;
+        const nextOrder = currentOrder.filter(key => !sourceSet[key]);
+
+        let insertionIndex = -1;
+        if (sourceIndex < targetIndex) {
+            for (const key of targetKeys) {
+                const index = nextOrder.indexOf(key);
+                if (index >= 0)
+                    insertionIndex = Math.max(insertionIndex, index + 1);
+            }
+        } else {
+            for (const key of targetKeys) {
+                const index = nextOrder.indexOf(key);
+                if (index >= 0) {
+                    insertionIndex = index;
+                    break;
+                }
+            }
+        }
+
+        if (insertionIndex < 0)
+            insertionIndex = nextOrder.length;
+        nextOrder.splice(insertionIndex, 0, ...sourceKeys);
+
+        if (nextOrder.length === currentOrder.length
+                && nextOrder.every((entry, index) => entry === currentOrder[index]))
+            return false;
+
+        Config.options.dock.order = nextOrder;
+        TaskbarApps.syncPinnedFileOrder();
+        return true;
+    }
+
+    function endIslandDrag() {
+        if (!root.islandDragging)
+            return;
+
+        const sourceIndex = root.islandDragSourceIndex;
+        const targetIndex = root.islandDragTargetIndex;
+        if (sourceIndex >= 0 && targetIndex >= 0 && sourceIndex !== targetIndex) {
+            root._reordering = true;
+            root._moveIslandBlock(sourceIndex, targetIndex);
+        }
+
+        root._resetIslandDrag();
+        root.buttonHovered = false;
+        root.lastHoveredButton = null;
+        root.suppressHover = true;
+        suppressHoverTimer.restart();
+        Qt.callLater(function () {
+            root._reordering = false;
+            root._suppressTranslateAnim = false;
+        });
+    }
 
     function _isMagnifiableItem(item) {
         if (!item)
@@ -183,7 +510,7 @@ Item {
     }
 
     function _separatorBeforeSpaceFor(index) {
-        if (!(Config.options?.dock?.showDividers ?? true) || index <= 0)
+        if (!root.effectiveShowDividers || index <= 0)
             return 0;
         const item = root.flattenedItems[index];
         const previous = root.flattenedItems[index - 1];
@@ -193,7 +520,7 @@ Item {
     }
 
     function _separatorAfterSpaceFor(index) {
-        if (!(Config.options?.dock?.showDividers ?? true) || index >= root.flattenedItems.length - 1)
+        if (!root.effectiveShowDividers || index >= root.flattenedItems.length - 1)
             return 0;
         if (Config.options?.dock?.smartGrouping)
             return 0;
@@ -205,6 +532,10 @@ Item {
     }
 
     function _baseMainExtentForIndex(index) {
+        return root._leadingIslandGapForIndex(index) + root._baseItemMainExtentForIndex(index);
+    }
+
+    function _baseItemMainExtentForIndex(index) {
         const item = root.flattenedItems[index];
         return root._rawItemMainExtent(item)
             + root._separatorBeforeSpaceFor(index)
@@ -237,6 +568,8 @@ Item {
     function _targetMagScaleForIndex(index) {
         const metric = baseMetrics.items[index];
         if (!metric || !metric.magnifiable || !magnificationInteractionActive)
+            return 1.0;
+        if (root.islandsStyle && (!root.magnificationHoveredIslandId || metric.islandId !== root.magnificationHoveredIslandId))
             return 1.0;
         const factor = magnificationFactorForDistance(Math.abs(magnificationPointerContentMain - metric.baseCenter));
         return 1.0 + (magnificationScale - 1.0) * factor;
@@ -371,6 +704,14 @@ Item {
     property int _groupDropTargetIndex: -1
     property bool _groupDropWillCreate: false
     property bool _groupDropBlocked: false
+
+    // Islands are reordered as contiguous blocks of the existing dock.order.
+    // This keeps item-level ordering and grouping data in one persistent model.
+    property bool islandDragging: false
+    property string islandDragId: ""
+    property int islandDragSourceIndex: -1
+    property int islandDragTargetIndex: -1
+    property real islandDragCursorMain: 0
 
     // ── Helper: get the active Repeater instance ─────────────────────────
     function _getActiveRepeater() {
@@ -936,6 +1277,33 @@ Item {
         return m;
     }
 
+    // Islands mode presents launchers as one continuous app surface. The
+    // persisted order may contain widgets or actions between launcher keys,
+    // so coalesce the derived visual list without changing dock.order. This
+    // also keeps a group whose keys were appended by an older config version
+    // with the other pinned/running launchers.
+    function _coalesceLauncherItems(items) {
+        if (!root.islandsStyle || !items || items.length < 2)
+            return items;
+
+        const launchers = [];
+        let firstLauncherIndex = -1;
+        for (let i = 0; i < items.length; i++) {
+            if (!root._isLauncherItem(items[i]))
+                continue;
+            if (firstLauncherIndex < 0)
+                firstLauncherIndex = i;
+            launchers.push(items[i]);
+        }
+
+        if (launchers.length < 2)
+            return items;
+
+        const result = items.filter(item => !root._isLauncherItem(item));
+        result.splice(firstLauncherIndex, 0, ...launchers);
+        return result;
+    }
+
     readonly property var flattenedItems: {
         var result = [];
         var order = Config.options.dock.order ?? [];
@@ -1254,7 +1622,7 @@ Item {
             });
         }
 
-        return result;
+        return root._coalesceLauncherItems(result);
     }
 
     // ── Separator helpers ──────────────────────────────────────────────────
@@ -1352,6 +1720,147 @@ Item {
             }
         }
 
+        // Island surfaces live in the same content coordinates as the flat
+        // Row/Column, so they scroll together with their delegates.
+        Item {
+            id: islandLayer
+            z: -1
+            width: root.isVertical ? parent.width : unifiedRow.width
+            height: root.isVertical ? unifiedColumn.height : parent.height
+
+            Repeater {
+                model: root.islandSegments
+
+                delegate: DockIslandSurface {
+                    required property var modelData
+
+                    readonly property var activeRepeater: root._getActiveRepeater()
+                    readonly property var firstWrapper: {
+                        const repeater = activeRepeater;
+                        if (!repeater)
+                            return null;
+                        repeater.count;
+                        return root.getItemWrapper(modelData.startIndex);
+                    }
+                    readonly property var lastWrapper: {
+                        const repeater = activeRepeater;
+                        if (!repeater)
+                            return null;
+                        repeater.count;
+                        return root.getItemWrapper(modelData.endIndex);
+                    }
+                    readonly property bool endpointGeometryReady: !!firstWrapper
+                        && !!lastWrapper
+                        && firstWrapper.bodyMainEnd > firstWrapper.bodyMainStart
+                        && lastWrapper.bodyMainEnd > lastWrapper.bodyMainStart
+
+                    active: root.islandsStyle && endpointGeometryReady
+                    islandKind: modelData.kind
+                    dockPosition: root.dockPos
+                    cornerRadius: root.dockCornerRadius
+                    x: root.isVertical ? 0 : (firstWrapper?.bodyMainStart ?? 0)
+                    y: root.isVertical ? (firstWrapper?.bodyMainStart ?? 0) : 0
+                    width: root.isVertical
+                        ? root.buttonSlotSize
+                        : Math.max(0, (lastWrapper?.bodyMainEnd ?? 0) - (firstWrapper?.bodyMainStart ?? 0))
+                    height: root.isVertical
+                        ? Math.max(0, (lastWrapper?.bodyMainEnd ?? 0) - (firstWrapper?.bodyMainStart ?? 0))
+                        : root.buttonSlotHeight
+                }
+            }
+        }
+
+        // Transparent drag handles sit on the outer padding of each island.
+        // Keeping the handle out of the icon hitboxes preserves app clicks,
+        // previews and app-group creation while making the island itself movable.
+        Item {
+            id: islandInteractionLayer
+            z: 2
+            width: root.isVertical ? parent.width : unifiedRow.width
+            height: root.isVertical ? unifiedColumn.height : parent.height
+
+            Repeater {
+                model: root.islandSegments
+
+                delegate: Item {
+                    required property var modelData
+
+                    readonly property var activeRepeater: root._getActiveRepeater()
+                    readonly property var firstWrapper: {
+                        const repeater = activeRepeater;
+                        if (!repeater)
+                            return null;
+                        repeater.count;
+                        return root.getItemWrapper(modelData.startIndex);
+                    }
+                    readonly property var lastWrapper: {
+                        const repeater = activeRepeater;
+                        if (!repeater)
+                            return null;
+                        repeater.count;
+                        return root.getItemWrapper(modelData.endIndex);
+                    }
+                    readonly property bool endpointGeometryReady: !!firstWrapper
+                        && !!lastWrapper
+                        && firstWrapper.bodyMainEnd > firstWrapper.bodyMainStart
+                        && lastWrapper.bodyMainEnd > lastWrapper.bodyMainStart
+
+                    enabled: root.islandsStyle && endpointGeometryReady
+                    x: root.isVertical ? 0 : (firstWrapper?.bodyMainStart ?? 0)
+                    y: root.isVertical ? (firstWrapper?.bodyMainStart ?? 0) : 0
+                    width: root.isVertical
+                        ? root.buttonSlotSize
+                        : Math.max(0, (lastWrapper?.bodyMainEnd ?? 0) - (firstWrapper?.bodyMainStart ?? 0))
+                    height: root.isVertical
+                        ? Math.max(0, (lastWrapper?.bodyMainEnd ?? 0) - (firstWrapper?.bodyMainStart ?? 0))
+                        : root.buttonSlotHeight
+
+                    Item {
+                        id: islandDragStrip
+                        width: root.isVertical
+                            ? Math.max(root.dotMargin, root.sepThickness * 2)
+                            : parent.width
+                        height: root.isVertical
+                            ? parent.height
+                            : Math.max(root.dotMarginV, root.sepThickness * 2)
+
+                        anchors.top: !root.isVertical && root.dockPos === "bottom" ? parent.top : undefined
+                        anchors.bottom: !root.isVertical && root.dockPos === "top" ? parent.bottom : undefined
+                        anchors.left: root.isVertical && root.dockPos === "right" ? parent.left : undefined
+                        anchors.right: root.isVertical && root.dockPos === "left" ? parent.right : undefined
+
+                        HoverHandler {
+                            cursorShape: islandDragHandler.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                        }
+
+                        DragHandler {
+                            id: islandDragHandler
+                            enabled: parent.parent.enabled
+                                && !root.dragging
+                                && !root.anyContextMenuOpen
+                            target: null
+                            acceptedButtons: Qt.LeftButton
+                            grabPermissions: PointerHandler.CanTakeOverFromAnything
+                            xAxis.enabled: !root.isVertical
+                            yAxis.enabled: root.isVertical
+
+                            onActiveChanged: {
+                                if (active)
+                                    root.startIslandDrag(modelData.id, centroid.scenePosition);
+                                else
+                                    root.endIslandDrag();
+                            }
+
+                            onCentroidChanged: {
+                                if (active)
+                                    root.moveIslandDrag(centroid.scenePosition);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Row {
             id: unifiedRow
             visible: !root.isVertical
@@ -1402,13 +1911,28 @@ Item {
             }
             readonly property real itemHeight: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property bool magnifiable: root._isMagnifiableItem(delegateWrapper.itemData)
+            readonly property var islandMeta: root._islandMetaForIndex(delegateIndex)
+            readonly property string islandId: islandMeta?.id ?? ""
+            readonly property bool isIslandStart: islandMeta?.startIndex === delegateIndex
+            readonly property real targetLeadingIslandGap: root._leadingIslandGapForIndex(delegateIndex)
+            property real animatedLeadingIslandGap: targetLeadingIslandGap
+            readonly property real leadingIslandGap: animatedLeadingIslandGap
+            readonly property real baseBodyMainExtent: root._baseItemMainExtentForIndex(delegateIndex)
             readonly property real baseMainExtent: root.baseMetrics.items[delegateIndex]?.baseExtent ?? (root.isVertical ? root.buttonSlotSize : itemWidth)
             readonly property real targetMagScale: root._targetMagScaleForIndex(delegateIndex)
             property real animatedMagScale: targetMagScale
             readonly property real layoutExtra: magnifiable && root.magnificationDynamicSpacing
                 ? root.magnificationLayoutExtraForFactor((animatedMagScale - 1.0) / Math.max(0.001, root.magnificationScale - 1.0))
                 : 0
+            readonly property real bodyMainExtent: baseBodyMainExtent + layoutExtra
+            readonly property real bodyMainStart: (root.isVertical ? y : x) + leadingIslandGap
+            readonly property real bodyMainEnd: bodyMainStart + bodyMainExtent
             readonly property real _magnificationScale: animatedMagScale
+
+            Behavior on animatedLeadingIslandGap {
+                enabled: !root.dragging && !root.islandDragging
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
 
             Behavior on animatedMagScale {
                 enabled: !root.dragging
@@ -1471,7 +1995,7 @@ Item {
                     return false;
                 return root.isSpecialItem(root.flattenedItems[delegateIndex + 1]);
             }
-            readonly property bool _sepDividersOn: Config.options?.dock?.showDividers ?? true
+            readonly property bool _sepDividersOn: root.effectiveShowDividers
             readonly property bool _sepShowBefore: {
                 if (!_sepDividersOn || delegateIndex === 0)
                     return false;
@@ -1496,8 +2020,8 @@ Item {
             readonly property real _separatorAfterSpace: _sepShowAfter ? _separatorSlot : 0
             readonly property real _separatorLineMargin: (_separatorSlot - root.sepThickness) / 2
 
-            width: root.isVertical ? itemHeight : baseMainExtent + layoutExtra
-            height: root.isVertical ? baseMainExtent + layoutExtra : itemHeight
+            width: root.isVertical ? itemHeight : leadingIslandGap + bodyMainExtent
+            height: root.isVertical ? leadingIslandGap + bodyMainExtent : itemHeight
 
             // Horizontal mode: left vertical line
             Rectangle {
@@ -1547,13 +2071,14 @@ Item {
             Loader {
                 id: contentLoader
                 anchors.centerIn: parent
-                anchors.horizontalCenterOffset: root.isVertical ? 0 : (delegateWrapper._separatorBeforeSpace - delegateWrapper._separatorAfterSpace) / 2
-                anchors.verticalCenterOffset: root.isVertical ? (delegateWrapper._separatorBeforeSpace - delegateWrapper._separatorAfterSpace) / 2 : 0
+                anchors.horizontalCenterOffset: root.isVertical ? 0 : delegateWrapper.leadingIslandGap / 2 + (delegateWrapper._separatorBeforeSpace - delegateWrapper._separatorAfterSpace) / 2
+                anchors.verticalCenterOffset: root.isVertical ? delegateWrapper.leadingIslandGap / 2 + (delegateWrapper._separatorBeforeSpace - delegateWrapper._separatorAfterSpace) / 2 : 0
 
                 // Expose delegate data so loaded components can access it via parent
                 readonly property var _itemData: delegateWrapper.itemData
                 readonly property int _index: delegateWrapper.index
                 readonly property real _magnificationScale: delegateWrapper._magnificationScale
+                readonly property string _islandId: delegateWrapper.islandId
 
                 sourceComponent: {
                     switch (itemData.type) {
