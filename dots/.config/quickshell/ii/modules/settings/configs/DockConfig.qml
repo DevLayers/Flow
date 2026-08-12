@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
@@ -9,6 +10,45 @@ ContentPage {
     id: page
 
     forceWidth: false
+
+    function cleanDockFolderPath(path: string): string {
+        let cleanPath = String(path ?? "").trim().replace(/^file:\/\//, "");
+        try {
+            cleanPath = decodeURIComponent(cleanPath);
+        } catch (error) {
+            // Keep the original path if a file manager returns malformed URI data.
+        }
+        if (cleanPath.length > 1)
+            cleanPath = cleanPath.replace(/\/+$/, "");
+        return cleanPath;
+    }
+
+    function addDockFolder(path: string): void {
+        const cleanPath = page.cleanDockFolderPath(path);
+        if (cleanPath)
+            TaskbarApps.addPinnedFile(cleanPath);
+    }
+
+    function removeDockFolder(index: int): void {
+        const folders = Array.from(Config.options.dock.pinnedFiles ?? []);
+        if (index >= 0 && index < folders.length)
+            TaskbarApps.removePinnedFile(folders[index]);
+    }
+
+    function moveDockFolder(index: int, direction: int): void {
+        const folders = Config.options.dock.pinnedFiles ?? [];
+        const targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= folders.length)
+            return;
+        TaskbarApps.reorderPinnedFileByIndex(index, targetIndex);
+    }
+
+    FolderDialog {
+        id: dockFolderDialog
+        title: Translation.tr("Choose a folder for the dock")
+        currentFolder: "file://" + Quickshell.env("HOME")
+        onAccepted: page.addDockFolder(selectedFolder.toString())
+    }
 
     // ── Behavior ──────────────────────────────────────────────────────────
     ContentSection {
@@ -46,6 +86,20 @@ ContentPage {
             checked: Config.options.dock.smartGrouping
             onCheckedChanged: {
                 Config.options.dock.smartGrouping = checked;
+            }
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.dock.enable
+            visible: Config.options.dock.enable
+            buttonIcon: "folder_special"
+            text: Translation.tr("Enable app groups")
+            checked: Config.options.dock.enableAppGroups ?? true
+            onCheckedChanged: {
+                Config.options.dock.enableAppGroups = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Combine up to six apps into dock groups by dragging one app onto another.")
             }
         }
 
@@ -140,6 +194,16 @@ ContentPage {
             checked: Config.options.dock.enableWeatherWidget
             onCheckedChanged: {
                 Config.options.dock.enableWeatherWidget = checked;
+            }
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.dock.enable
+            buttonIcon: "smartphone"
+            text: Translation.tr("Show phone mirror button")
+            checked: Config.options.dock.showPhoneButton ?? true
+            onCheckedChanged: {
+                Config.options.dock.showPhoneButton = checked;
             }
         }
 
@@ -361,6 +425,162 @@ ContentPage {
 
         }
 
+    }
+
+    // ── Dock folders ─────────────────────────────────────────────────────
+    ContentSection {
+        visible: Config.options.dock.enable
+        title: Translation.tr("Dock folders")
+        icon: "folder_special"
+
+        RowLayout {
+            Layout.fillWidth: true
+
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Add folders to the dock and choose their position.")
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.WordWrap
+            }
+
+            RippleButtonWithIcon {
+                mainText: Translation.tr("Add folder")
+                materialIcon: "create_new_folder"
+                colText: Appearance.colors.colOnPrimaryContainer
+                colBackground: Appearance.colors.colPrimaryContainer
+                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                colRipple: Appearance.colors.colPrimaryContainerActive
+                onClicked: dockFolderDialog.open()
+            }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            visible: (Config.options.dock.pinnedFiles ?? []).length === 0
+            implicitHeight: visible ? 110 : 0
+
+            PagePlaceholder {
+                anchors.fill: parent
+                shown: parent.visible
+                icon: "folder_off"
+                title: Translation.tr("No folders in the dock")
+                description: Translation.tr("Use Add folder to place a directory in the dock.")
+                shape: MaterialShape.Shape.Cookie7Sided
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            Repeater {
+                model: Config.options.dock.pinnedFiles ?? []
+
+                delegate: Rectangle {
+                    id: dockFolderRow
+                    required property string modelData
+                    required property int index
+
+                    Layout.fillWidth: true
+                    implicitHeight: 60
+                    radius: Appearance.rounding.normal
+                    color: Appearance.colors.colLayer2
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 8
+                        spacing: 10
+
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: "folder"
+                            iconSize: Appearance.font.pixelSize.large
+                            color: Appearance.colors.colPrimary
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 1
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: {
+                                    const parts = dockFolderRow.modelData.split("/").filter(part => part.length > 0);
+                                    return parts[parts.length - 1] ?? dockFolderRow.modelData;
+                                }
+                                color: Appearance.colors.colOnLayer2
+                                elide: Text.ElideRight
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: dockFolderRow.modelData
+                                color: Appearance.colors.colSubtext
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                elide: Text.ElideMiddle
+                            }
+                        }
+
+                        RippleButtonWithIcon {
+                            mainText: ""
+                            materialIcon: "arrow_upward"
+                            enabled: dockFolderRow.index > 0
+                            opacity: enabled ? 1 : 0.4
+                            Layout.preferredWidth: 36
+                            Layout.preferredHeight: 36
+                            buttonRadius: Appearance.rounding.full
+                            colText: Appearance.colors.colOnLayer2
+                            colBackground: Appearance.colors.colLayer3
+                            colBackgroundHover: Appearance.colors.colLayer3Hover
+                            colRipple: Appearance.colors.colLayer3Active
+                            onClicked: page.moveDockFolder(dockFolderRow.index, -1)
+
+                            StyledToolTip {
+                                text: Translation.tr("Move folder up")
+                            }
+                        }
+
+                        RippleButtonWithIcon {
+                            mainText: ""
+                            materialIcon: "arrow_downward"
+                            enabled: dockFolderRow.index < (Config.options.dock.pinnedFiles ?? []).length - 1
+                            opacity: enabled ? 1 : 0.4
+                            Layout.preferredWidth: 36
+                            Layout.preferredHeight: 36
+                            buttonRadius: Appearance.rounding.full
+                            colText: Appearance.colors.colOnLayer2
+                            colBackground: Appearance.colors.colLayer3
+                            colBackgroundHover: Appearance.colors.colLayer3Hover
+                            colRipple: Appearance.colors.colLayer3Active
+                            onClicked: page.moveDockFolder(dockFolderRow.index, 1)
+
+                            StyledToolTip {
+                                text: Translation.tr("Move folder down")
+                            }
+                        }
+
+                        RippleButtonWithIcon {
+                            mainText: ""
+                            materialIcon: "close"
+                            Layout.preferredWidth: 36
+                            Layout.preferredHeight: 36
+                            buttonRadius: Appearance.rounding.full
+                            colText: Appearance.colors.colOnErrorContainer
+                            colBackground: Appearance.colors.colErrorContainer
+                            colBackgroundHover: Appearance.colors.colErrorContainerHover
+                            colRipple: Appearance.colors.colErrorContainerActive
+                            onClicked: page.removeDockFolder(dockFolderRow.index)
+
+                            StyledToolTip {
+                                text: Translation.tr("Remove folder from dock")
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // ── Position & size ───────────────────────────────────────────────────

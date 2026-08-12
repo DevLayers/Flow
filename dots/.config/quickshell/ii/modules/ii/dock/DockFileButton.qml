@@ -116,7 +116,7 @@ DockButton {
     z: Math.round(magScale * 10)
 
     Behavior on scale {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: Appearance.animation.dockMagnification.numberAnimation.createObject(this)
     }
 
     property bool _pressed: false
@@ -196,6 +196,10 @@ DockButton {
                     fileContextMenu.open();
                     return;
                 }
+                if (root.isDirectory) {
+                    stackPopup.open();
+                    return;
+                }
                 Quickshell.execDetached({
                     command: ["xdg-open", root.filePath]
                 });
@@ -209,6 +213,12 @@ DockButton {
                 }
             }
         }
+    }
+
+    DockStackPopup {
+        id: stackPopup
+        folderPath: root.filePath
+        anchorItem: root
     }
 
     DockFileContextMenu {
@@ -296,8 +306,8 @@ DockButton {
             Kirigami.Icon {
                 anchors.centerIn: parent
                 visible: !root.isImage && root.resolvedXdgIcon !== ""
-                width: root.buttonSize
-                height: root.buttonSize
+                width: root.width
+                height: root.height
                 source: root.resolvedXdgIcon
             }
 

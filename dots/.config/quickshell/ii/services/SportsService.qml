@@ -6,7 +6,10 @@ import qs.modules.common
 Item {
     id: sportsService
 
-    property bool enabled: Config.options.bar.sports.enable
+    // Sports can be consumed by either the bar or the dock. The dock widget
+    // no longer has a separate enable/mock switch, so keep the shared source
+    // active and let the configured league filters determine its data.
+    property bool enabled: true
     property string teamFilter: Config.options.bar.sports.teamFilter
     property int updateInterval: Config.options.bar.sports.updateInterval
 
@@ -52,6 +55,19 @@ Item {
         }
 
         return Qt.formatDateTime(date, "ddd") + ", at " + timePart;
+    }
+
+    function compactMatchStatus(status, state) {
+        const text = String(status ?? "");
+        if (state !== "in")
+            return text;
+
+        const clockMatch = text.match(/(\d{1,3}):\d{2}/);
+        if (clockMatch)
+            return clockMatch[1] + "'";
+
+        const minuteMatch = text.match(/(\d{1,3})\s*'/);
+        return minuteMatch ? minuteMatch[1] + "'" : text;
     }
 
     readonly property var leagueNames: ({
@@ -307,7 +323,11 @@ Item {
                     id: event.id,
                     name: event.name,
                     league: event.leagueName,
-                    status: (comp.status && comp.status.type && comp.status.type.state === "pre") ? formatMatchTime(event.date) : (comp.status ? comp.status.type.detail : (event.status ? event.status.type.detail : "")),
+                    status: (comp.status && comp.status.type && comp.status.type.state === "pre")
+                        ? formatMatchTime(event.date)
+                        : ((comp.status && comp.status.type && comp.status.type.state === "in")
+                            ? compactMatchStatus(comp.status.type.detail, "in")
+                            : (comp.status ? comp.status.type.detail : (event.status ? event.status.type.detail : ""))),
                     state: comp.status ? comp.status.type.state : state,
                     lastPlay: lastPlayText,
                     home: home,
@@ -389,4 +409,5 @@ Item {
                 fetchGames();
         }
     }
+
 }

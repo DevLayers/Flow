@@ -212,8 +212,14 @@ Scope {
                 Rectangle {
                     id: dockVisualBackground
 
-                    width: dockRoot.sizing.backgroundWidth
-                    height: dockRoot.sizing.backgroundHeight
+                    width: Math.max(1, Math.min(
+                        dockRoot.sizing.backgroundWidth,
+                        dockRoot.sizing.dockWidth - Appearance.sizes.hyprlandGapsOut * 2
+                    ))
+                    height: Math.max(1, Math.min(
+                        dockRoot.sizing.backgroundHeight,
+                        dockRoot.sizing.dockHeight - Appearance.sizes.hyprlandGapsOut * 2
+                    ))
 
                     color: Appearance.colors.colLayer0
                     radius: (Config.options?.dock?.dockRadius ?? -1) >= 0 ? Config.options.dock.dockRadius : (Appearance.rounding.windowRounding + 12)

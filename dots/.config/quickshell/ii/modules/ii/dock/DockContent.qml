@@ -28,6 +28,7 @@ Item {
     readonly property real sepThickness: Math.max(3, Math.round(Appearance.sizes.dockButtonSize * 0.06))
     readonly property real buttonSlotSize: Appearance.sizes.dockButtonSize + dotMargin * 2
     readonly property real buttonSlotHeight: Appearance.sizes.dockButtonSize + dotMarginV * 2
+    readonly property real sportsWidgetSlots: 4
 
     readonly property real visualWidth: isVertical ? buttonSlotSize : unifiedRow.width
     readonly property real visualHeight: isVertical ? unifiedColumn.height : buttonSlotHeight
@@ -71,6 +72,8 @@ Item {
 
     readonly property bool enableMagnification: Config.options?.dock?.enableMagnification ?? false
     readonly property real magnificationScale: Config.options?.dock?.magnificationScale ?? 1.5
+    readonly property bool enableAppGroups: Config.options?.dock?.enableAppGroups ?? true
+    readonly property int maxGroupApps: 6
 
     function _getSlotMagScale(targetSlot) {
         if (!enableMagnification || !buttonHovered || !hoveredSlot)
@@ -188,6 +191,10 @@ Item {
     readonly property bool showTrash: Config.options?.dock?.showTrashButton ?? true
     readonly property bool showMedia: (Config.options?.dock?.enableMediaWidget ?? false) && root.showMusicPlayer
     readonly property bool showWeather: Config.options?.dock?.enableWeatherWidget ?? false
+    readonly property bool showSports: !root.isVertical
+        && SportsService.allGames.length > 0
+    readonly property bool showPhone: (Config.options?.dock?.showPhoneButton ?? true)
+        && KdeConnectService.activeReachable
 
     // ── Drag-to-reorder state (dots-hyprland pattern, adapted for variable-width items) ──
     property bool dragging: false
@@ -198,6 +205,9 @@ Item {
     property real dragStartCursorX: 0
     property real slotWidth: 0
     property int _dragTargetIndex: -1
+    property int _groupDropTargetIndex: -1
+    property bool _groupDropWillCreate: false
+    property bool _groupDropBlocked: false
 
     // ── Helper: get the active Repeater instance ─────────────────────────
     function _getActiveRepeater() {
@@ -206,6 +216,34 @@ Item {
     function getItemWrapper(index) {
         var repeater = _getActiveRepeater();
         return repeater ? repeater.itemAt(index) : null;
+    }
+
+    // Return the layout slot without the delegate's temporary drag transform.
+    // Grouping should only lock the order when the pointer is actually over
+    // the target item; crossing the gap between items must still allow normal
+    // reordering to resume.
+    function _getUntransformedSlot(index) {
+        var wrapper = getItemWrapper(index);
+        if (!wrapper)
+            return null;
+
+        var parentItem = wrapper.parent;
+        var mapped = parentItem
+            ? parentItem.mapToItem(root, wrapper.x, wrapper.y)
+            : wrapper.mapToItem(root, 0, 0);
+        var start = root.isVertical ? mapped.y : mapped.x;
+        var size = root.isVertical ? wrapper.height : wrapper.width;
+        return {
+            start: start,
+            end: start + size
+        };
+    }
+
+    function _isPointerOverSlot(index) {
+        var slot = root._getUntransformedSlot(index);
+        if (!slot)
+            return false;
+        return root.dragCursorX >= slot.start && root.dragCursorX <= slot.end;
     }
 
     // ── Helper: estimate item width in the current orientation ───────────
@@ -222,15 +260,299 @@ Item {
         case "media":
         case "weather":
             return root.isVertical ? buttonSlotSize : buttonSlotSize * 3;
+        case "sports":
+            return root.isVertical ? buttonSlotSize : buttonSlotSize * root.sportsWidgetSlots;
         default:
             return buttonSlotSize;
         }
+    }
+
+    function _orderEntryAppId(entry) {
+        const key = String(entry ?? "");
+        if (key.startsWith("app:"))
+            return key.substring(4);
+        if (key.startsWith("runningApp:"))
+            return key.substring(11);
+        return "";
+    }
+
+    function _appDataForId(appId) {
+        return root.pinnedAppMap[appId] || root.runningAppMap[appId] || {
+            appId: appId,
+            pinned: true,
+            toplevels: []
+        };
+    }
+
+    function _makeAppGroupItem(group) {
+        return {
+            type: "appGroup",
+            groupId: group.id,
+            appIds: Array.from(group.apps),
+            apps: group.apps.map(appId => root._appDataForId(appId)),
+            orderKey: "group:" + group.id
+        };
+    }
+
+    function isGroupDropTarget(index) {
+        return root.enableAppGroups && root.dragging && root._groupDropTargetIndex === index;
+    }
+
+    function groupDropIsBlocked(index) {
+        return root.isGroupDropTarget(index) && root._groupDropBlocked;
+    }
+
+    function groupDropWillCreate(index) {
+        return root.isGroupDropTarget(index) && root._groupDropWillCreate && !root._groupDropBlocked;
+    }
+
+    function updateGroupDropTarget() {
+        root._groupDropTargetIndex = -1;
+        root._groupDropWillCreate = false;
+        root._groupDropBlocked = false;
+
+        if (!root.enableAppGroups || !root.dragging)
+            return;
+
+        const source = root.flattenedItems[root.dragSourceIndex];
+        const target = root.flattenedItems[root._dragTargetIndex];
+        if (!source || source.type !== "app" || !target || root.dragSourceIndex === root._dragTargetIndex)
+            return;
+
+        if (target.type === "app") {
+            if (source.appId === target.appId)
+                return;
+            if (!root._isPointerOverSlot(root._dragTargetIndex))
+                return;
+            root._groupDropTargetIndex = root._dragTargetIndex;
+            root._groupDropWillCreate = true;
+            return;
+        }
+
+        if (target.type === "appGroup") {
+            if (!root._isPointerOverSlot(root._dragTargetIndex))
+                return;
+            root._groupDropTargetIndex = root._dragTargetIndex;
+            root._groupDropBlocked = target.appIds.length >= root.maxGroupApps
+                || target.appIds.includes(source.appId);
+        }
+    }
+
+    function _newAppGroupId() {
+        const prefix = "group-" + Date.now().toString(36);
+        let candidate = prefix;
+        let suffix = 1;
+        while (root.appGroupById[candidate])
+            candidate = prefix + "-" + String(suffix++);
+        return candidate;
+    }
+
+    function _reorderAppGroupInOrder(appIds, anchorAppId, preferredKeys) {
+        const currentOrder = Array.from(Config.options?.dock?.order ?? []);
+        const memberIds = {};
+        for (const appId of appIds)
+            memberIds[appId] = true;
+
+        let anchorIndex = -1;
+        for (let i = 0; i < currentOrder.length; i++) {
+            if (root._orderEntryAppId(currentOrder[i]) === anchorAppId) {
+                anchorIndex = i;
+                break;
+            }
+        }
+
+        let insertionIndex = currentOrder.length;
+        if (anchorIndex >= 0) {
+            insertionIndex = 0;
+            for (let i = 0; i < anchorIndex; i++) {
+                if (!memberIds[root._orderEntryAppId(currentOrder[i])])
+                    insertionIndex++;
+            }
+        }
+
+        const groupOrderKeys = appIds.map(appId => {
+            for (const entry of currentOrder) {
+                if (root._orderEntryAppId(entry) === appId)
+                    return entry;
+            }
+            const preferred = preferredKeys?.[appId] ?? "";
+            if (preferred.startsWith("app:") || preferred.startsWith("runningApp:"))
+                return preferred;
+            return root.runningAppMap[appId] ? "runningApp:" + appId : "app:" + appId;
+        });
+
+        const nextOrder = currentOrder.filter(entry => !memberIds[root._orderEntryAppId(entry)]);
+        nextOrder.splice(insertionIndex, 0, ...groupOrderKeys);
+        Config.options.dock.order = nextOrder;
+        TaskbarApps.syncPinnedFileOrder();
+    }
+
+    function completeGroupDrop() {
+        if (!root.enableAppGroups || root._groupDropTargetIndex < 0)
+            return false;
+
+        const source = root.flattenedItems[root.dragSourceIndex];
+        const target = root.flattenedItems[root._groupDropTargetIndex];
+        if (!source || source.type !== "app" || !target || root._groupDropBlocked)
+            return false;
+
+        const sourceId = source.appId;
+        let groupApps = [];
+        let anchorAppId = "";
+        const nextGroups = root.appGroups.map(group => ({
+            id: group.id,
+            apps: Array.from(group.apps)
+        }));
+
+        if (target.type === "appGroup") {
+            const existing = nextGroups.find(group => group.id === target.groupId);
+            if (!existing || existing.apps.length >= root.maxGroupApps || existing.apps.includes(sourceId))
+                return false;
+            existing.apps.push(sourceId);
+            groupApps = existing.apps;
+            anchorAppId = existing.apps[0];
+        } else if (target.type === "app") {
+            const group = {
+                id: root._newAppGroupId(),
+                apps: [target.appId, sourceId]
+            };
+            nextGroups.push(group);
+            groupApps = group.apps;
+            anchorAppId = target.appId;
+        } else {
+            return false;
+        }
+
+        Config.options.dock.appGroups = nextGroups;
+        const preferredKeys = {};
+        preferredKeys[sourceId] = source.orderKey;
+        if (target.type === "app")
+            preferredKeys[target.appId] = target.orderKey;
+        root._reorderAppGroupInOrder(groupApps, anchorAppId, preferredKeys);
+        return true;
+    }
+
+    function removeAppFromGroup(groupId, appId) {
+        const targetId = String(groupId ?? "").trim();
+        const targetAppId = String(appId ?? "").trim();
+        if (!targetId || !targetAppId)
+            return false;
+
+        const currentGroups = Config.options?.dock?.appGroups ?? [];
+        const nextGroups = [];
+        let removed = false;
+
+        for (const rawGroup of currentGroups) {
+            if (!rawGroup)
+                continue;
+
+            const currentId = String(rawGroup.id ?? "").trim();
+            const apps = Array.from(rawGroup.apps ?? []).map(value => String(value ?? "").trim()).filter(value => value !== "");
+            if (currentId !== targetId) {
+                nextGroups.push({ id: currentId, apps: apps });
+                continue;
+            }
+
+            const nextApps = apps.filter(value => value !== targetAppId);
+            removed = nextApps.length !== apps.length;
+            // Keep a one-member group after detaching an app. This makes a
+            // right-click on a popup app remove only that app; the group is
+            // removed explicitly by its own right-click or when its last
+            // member is detached.
+            if (nextApps.length >= 1)
+                nextGroups.push({ id: currentId, apps: nextApps });
+        }
+
+        if (!removed)
+            return false;
+
+        Config.options.dock.appGroups = nextGroups;
+        TaskbarApps.syncPinnedFileOrder();
+        return true;
+    }
+
+    function removeAppGroup(groupId) {
+        const targetId = String(groupId ?? "").trim();
+        if (!targetId)
+            return false;
+
+        const currentGroups = Config.options?.dock?.appGroups ?? [];
+        const nextGroups = currentGroups
+            .filter(group => group && String(group.id ?? "").trim() !== targetId)
+            .map(group => ({
+                id: String(group.id ?? "").trim(),
+                apps: Array.from(group.apps ?? []).map(value => String(value ?? "").trim()).filter(value => value !== "")
+            }));
+
+        if (nextGroups.length === currentGroups.length)
+            return false;
+
+        Config.options.dock.appGroups = nextGroups;
+        TaskbarApps.syncPinnedFileOrder();
+        return true;
+    }
+
+    function _orderKeyForAppId(order, appId) {
+        for (const entry of order) {
+            if (root._orderEntryAppId(entry) === appId)
+                return entry;
+        }
+        return root.runningAppMap[appId] ? "runningApp:" + appId : "app:" + appId;
+    }
+
+    function moveDockItem(sourceItem, targetItem) {
+        if (!sourceItem || !targetItem || sourceItem.orderKey === targetItem.orderKey)
+            return false;
+
+        const currentOrder = Array.from(Config.options?.dock?.order ?? []);
+        const sourceIsGroup = sourceItem.type === "appGroup";
+        const sourceIds = sourceIsGroup ? sourceItem.appIds : [];
+        const sourceKeys = sourceIsGroup
+            ? sourceIds.map(appId => root._orderKeyForAppId(currentOrder, appId))
+            : [sourceItem.orderKey];
+        const sourceKeySet = {};
+        for (const key of sourceKeys)
+            sourceKeySet[key] = true;
+
+        let targetOriginalIndex = -1;
+        if (targetItem.type === "appGroup") {
+            const anchorId = targetItem.appIds[0];
+            targetOriginalIndex = currentOrder.findIndex(entry => root._orderEntryAppId(entry) === anchorId);
+        } else if (targetItem.type === "app") {
+            targetOriginalIndex = currentOrder.findIndex(entry => root._orderEntryAppId(entry) === targetItem.appId);
+        } else {
+            targetOriginalIndex = currentOrder.indexOf(targetItem.orderKey);
+        }
+
+        if (sourceIsGroup && targetItem.type === "appGroup"
+                && sourceItem.groupId === targetItem.groupId)
+            return false;
+
+        let insertionIndex = currentOrder.length;
+        if (targetOriginalIndex >= 0) {
+            insertionIndex = 0;
+            for (let i = 0; i < targetOriginalIndex; i++) {
+                if (!sourceKeySet[currentOrder[i]])
+                    insertionIndex++;
+            }
+        }
+
+        const nextOrder = currentOrder.filter(entry => !sourceKeySet[entry]);
+        nextOrder.splice(insertionIndex, 0, ...sourceKeys);
+        if (nextOrder.length === currentOrder.length
+                && nextOrder.every((entry, index) => entry === currentOrder[index]))
+            return false;
+
+        Config.options.dock.order = nextOrder;
+        TaskbarApps.syncPinnedFileOrder();
+        return true;
     }
 
     // ── Compute drag target by walking through variable-width items ──────
     function recomputeDragTarget() {
         if (!dragging) {
             _dragTargetIndex = dragSourceIndex;
+            root.updateGroupDropTarget();
             return;
         }
         var delta = dragCursorX - dragStartCursorX;
@@ -238,6 +560,7 @@ Item {
         var count = flattenedItems.length;
         if (count <= 1 || Math.abs(delta) < 5) {
             _dragTargetIndex = src;
+            root.updateGroupDropTarget();
             return;
         }
         var spacing = Config.options.dock.iconSpacing;
@@ -258,61 +581,57 @@ Item {
             current = next;
         }
         _dragTargetIndex = current;
+        root.updateGroupDropTarget();
+        // While the cursor is inside a valid group target, keep the layout in
+        // its original order. Leaving the target slot restores the calculated
+        // reorder target, so moving farther continues to behave like a normal
+        // dock reorder gesture.
+        if (root._groupDropTargetIndex >= 0)
+            _dragTargetIndex = src;
+    }
+
+    function _resetDragState() {
+        dragging = false;
+        dragSourceIndex = -1;
+        _dragTargetIndex = -1;
+        _groupDropTargetIndex = -1;
+        _groupDropWillCreate = false;
+        _groupDropBlocked = false;
+        dragCursorX = 0;
+        dragStartCursorX = 0;
     }
 
     function finishDrag() {
         _suppressTranslateAnim = true;
         var src = dragSourceIndex;
         var tgt = _dragTargetIndex;
+
+        if (dragging && _groupDropTargetIndex >= 0 && !_groupDropBlocked) {
+            _reordering = true;
+            if (root.completeGroupDrop()) {
+                root._resetDragState();
+                buttonHovered = false;
+                lastHoveredButton = null;
+                suppressHover = true;
+                suppressHoverTimer.restart();
+                Qt.callLater(function () {
+                    _reordering = false;
+                    _suppressTranslateAnim = false;
+                });
+                return;
+            }
+        }
+
         if (dragging && src !== tgt) {
             _reordering = true;
             if (src >= 0 && src < flattenedItems.length && tgt >= 0 && tgt < flattenedItems.length) {
                 var srcEntry = flattenedItems[src];
                 var tgtEntry = flattenedItems[tgt];
-                if (srcEntry && srcEntry.orderKey && tgtEntry && tgtEntry.orderKey && srcEntry.orderKey !== tgtEntry.orderKey) {
-                    var order = Array.from(Config.options.dock.order);
-                    var orderSrc = order.indexOf(srcEntry.orderKey);
-                    var orderDst = order.indexOf(tgtEntry.orderKey);
-
-                    // Ensure source orderKey exists in the order array
-                    // (needed for dynamic runningApp:* keys)
-                    if (orderSrc === -1) {
-                        var runningMarker = order.indexOf("runningApps");
-                        if (runningMarker !== -1) {
-                            order.splice(runningMarker + 1, 0, srcEntry.orderKey);
-                        } else {
-                            order.push(srcEntry.orderKey);
-                        }
-                    }
-
-                    // Ensure target orderKey exists too
-                    if (orderDst === -1) {
-                        var rm2 = order.indexOf("runningApps");
-                        if (rm2 !== -1) {
-                            order.splice(rm2 + 1, 0, tgtEntry.orderKey);
-                        } else {
-                            order.push(tgtEntry.orderKey);
-                        }
-                    }
-
-                    // Recalculate both after potential inserts
-                    orderSrc = order.indexOf(srcEntry.orderKey);
-                    orderDst = order.indexOf(tgtEntry.orderKey);
-
-                    // Prevent duplicate: only proceed if both keys are at distinct positions
-                    if (orderSrc !== -1 && orderDst !== -1 && orderSrc !== orderDst) {
-                        order.splice(orderSrc, 1);
-                        order.splice(orderDst, 0, srcEntry.orderKey);
-                        Config.options.dock.order = order;
-                    }
-                }
+                if (srcEntry && tgtEntry)
+                    root.moveDockItem(srcEntry, tgtEntry);
             }
         }
-        dragging = false;
-        dragSourceIndex = -1;
-        _dragTargetIndex = -1;
-        dragCursorX = 0;
-        dragStartCursorX = 0;
+        root._resetDragState();
         buttonHovered = false;
         lastHoveredButton = null;
         suppressHover = true;
@@ -325,11 +644,7 @@ Item {
 
     function cancelDrag() {
         _suppressTranslateAnim = true;
-        dragging = false;
-        dragSourceIndex = -1;
-        _dragTargetIndex = -1;
-        dragCursorX = 0;
-        dragStartCursorX = 0;
+        root._resetDragState();
         Qt.callLater(function () {
             _suppressTranslateAnim = false;
         });
@@ -346,6 +661,9 @@ Item {
         // Get the dragged item's actual wrapper for slotWidth
         var wrapper = getItemWrapper(delegateIndex);
         slotWidth = (wrapper ? (isVertical ? wrapper.height : wrapper.width) : buttonSlotSize) + 2;
+        _groupDropTargetIndex = -1;
+        _groupDropWillCreate = false;
+        _groupDropBlocked = false;
         dragging = true;
         buttonHovered = false;
         if (previewPopupLoader.item)
@@ -394,6 +712,57 @@ Item {
         return m;
     }
 
+    // Groups are persisted independently from dock.order. The order keeps
+    // every app key, which means disabling groups can safely reveal members
+    // individually without destroying the user's group definitions.
+    readonly property var appGroups: {
+        const rawGroups = Config.options?.dock?.appGroups ?? [];
+        const groups = [];
+        const seenApps = {};
+
+        for (const rawGroup of rawGroups) {
+            if (!rawGroup)
+                continue;
+            const groupId = String(rawGroup.id ?? "").trim();
+            if (!groupId)
+                continue;
+
+            const apps = [];
+            for (const rawAppId of Array.from(rawGroup.apps ?? [])) {
+                const appId = String(rawAppId ?? "").trim();
+                if (!appId || seenApps[appId] || apps.includes(appId))
+                    continue;
+                apps.push(appId);
+                seenApps[appId] = true;
+                if (apps.length >= root.maxGroupApps)
+                    break;
+            }
+
+            if (apps.length >= 1)
+                groups.push({
+                    id: groupId,
+                    apps: apps
+                });
+        }
+        return groups;
+    }
+
+    readonly property var appGroupByAppId: {
+        const result = {};
+        for (const group of root.appGroups) {
+            for (const appId of group.apps)
+                result[appId] = group;
+        }
+        return result;
+    }
+
+    readonly property var appGroupById: {
+        const result = {};
+        for (const group of root.appGroups)
+            result[group.id] = group;
+        return result;
+    }
+
     readonly property var pinnedFileMap: {
         var m = {};
         var files = Config.options?.dock?.pinnedFiles ?? [];
@@ -414,6 +783,7 @@ Item {
 
         // Track seen orderKeys to avoid duplicates
         var seenOrderKeys = {};
+        var seenGroupIds = {};
 
         // Pre-scan explicit running apps and apps to avoid them being swallowed by "runningApps" marker
         var explicitKeys = {};
@@ -425,6 +795,23 @@ Item {
 
         for (var oi = 0; oi < order.length; oi++) {
             var entry = order[oi];
+
+            if (root.enableAppGroups && (entry.startsWith("app:") || entry.startsWith("runningApp:"))) {
+                const groupedAppId = root._orderEntryAppId(entry);
+                const groupedApp = root.appGroupByAppId[groupedAppId];
+                if (groupedApp) {
+                    if (!seenGroupIds[groupedApp.id]) {
+                        result.push(root._makeAppGroupItem(groupedApp));
+                        seenGroupIds[groupedApp.id] = true;
+                    }
+                    for (const memberId of groupedApp.apps) {
+                        seenOrderKeys["app:" + memberId] = true;
+                        seenOrderKeys["runningApp:" + memberId] = true;
+                    }
+                    continue;
+                }
+            }
+
             if (entry === "pin" && root.showPin) {
                 result.push({
                     type: "action",
@@ -458,6 +845,18 @@ Item {
                     orderKey: "weather"
                 });
                 seenOrderKeys["weather"] = true;
+            } else if (entry === "sports" && root.showSports) {
+                result.push({
+                    type: "sports",
+                    orderKey: "sports"
+                });
+                seenOrderKeys["sports"] = true;
+            } else if (entry === "phone" && root.showPhone) {
+                result.push({
+                    type: "phone",
+                    orderKey: "phone"
+                });
+                seenOrderKeys["phone"] = true;
             } else if (entry === "runningApps") {
                 // The legacy runningApps marker is ignored.
                 // Unpinned apps will be handled by the smart append logic at the end,
@@ -512,6 +911,21 @@ Item {
                         orderKey: fileKey
                     });
                     seenOrderKeys[fileKey] = true;
+                }
+            }
+        }
+
+        // Keep a group visible even if all of its app keys were removed from
+        // dock.order by an older version or a manual config edit.
+        if (root.enableAppGroups) {
+            for (const group of root.appGroups) {
+                if (seenGroupIds[group.id])
+                    continue;
+                result.push(root._makeAppGroupItem(group));
+                seenGroupIds[group.id] = true;
+                for (const memberId of group.apps) {
+                    seenOrderKeys["app:" + memberId] = true;
+                    seenOrderKeys["runningApp:" + memberId] = true;
                 }
             }
         }
@@ -611,6 +1025,54 @@ Item {
             }
         }
 
+        // Existing users may have a dock.order saved before the sports item
+        // existed. Keep the new shortcut discoverable without rewriting their
+        // entire order list; a later drag persists its explicit position.
+        if (root.showSports && !seenOrderKeys["sports"]) {
+            const sportsItem = {
+                type: "sports",
+                orderKey: "sports"
+            };
+            let sportsTargetIndex = result.length;
+            while (sportsTargetIndex > 0) {
+                const item = result[sportsTargetIndex - 1];
+                if (item.type === "action"
+                        && (item.actionId === "trash"
+                            || item.actionId === "overview"
+                            || item.actionId === "pin")) {
+                    sportsTargetIndex--;
+                } else {
+                    break;
+                }
+            }
+            result.splice(sportsTargetIndex, 0, sportsItem);
+            seenOrderKeys["sports"] = true;
+        }
+
+        // Existing users may have a dock.order saved before the phone item
+        // existed. Keep the new shortcut discoverable without rewriting their
+        // entire order list; a later drag persists its explicit position.
+        if (root.showPhone && !seenOrderKeys["phone"]) {
+            const phoneItem = {
+                type: "phone",
+                orderKey: "phone"
+            };
+            let phoneTargetIndex = result.length;
+            while (phoneTargetIndex > 0) {
+                const item = result[phoneTargetIndex - 1];
+                if (item.type === "action"
+                        && (item.actionId === "trash"
+                            || item.actionId === "overview"
+                            || item.actionId === "pin")) {
+                    phoneTargetIndex--;
+                } else {
+                    break;
+                }
+            }
+            result.splice(phoneTargetIndex, 0, phoneItem);
+            seenOrderKeys["phone"] = true;
+        }
+
         if (Config.options?.dock?.smartGrouping) {
             var mapped = result.map(function (el, i) {
                 return {
@@ -637,7 +1099,7 @@ Item {
         if (!item)
             return false;
         var t = item.type;
-        return t === "media" || t === "weather" || t === "action";
+        return t === "media" || t === "weather" || t === "sports" || t === "phone" || t === "action";
     }
 
     function getItemCategory(item) {
@@ -651,6 +1113,15 @@ Item {
             return 2;
         if (t === "weather")
             return 3;
+        if (t === "sports")
+            return 4;
+        if (t === "phone")
+            return 25;
+        if (t === "appGroup" && item.appIds?.length > 0)
+            return root.getItemCategory({
+                type: "app",
+                appId: item.appIds[0]
+            });
 
         var id = "";
         if (t === "app" && item.appId)
@@ -722,6 +1193,7 @@ Item {
             id: unifiedRow
             visible: !root.isVertical
             spacing: Config.options.dock.iconSpacing
+
             Repeater {
                 id: itemRepeater
                 model: root.flattenedItems
@@ -733,6 +1205,7 @@ Item {
             id: unifiedColumn
             visible: root.isVertical
             spacing: Config.options.dock.iconSpacing
+
             Repeater {
                 id: columnItemRepeater
                 model: root.flattenedItems
@@ -758,14 +1231,13 @@ Item {
                 case "media":
                 case "weather":
                     return root.buttonSlotSize * 3;
+                case "sports":
+                    return root.buttonSlotSize * root.sportsWidgetSlots;
                 default:
                     return root.buttonSlotSize;
                 }
             }
             readonly property real itemHeight: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-
-            width: root.isVertical ? itemHeight : itemWidth
-            height: root.isVertical ? itemWidth : itemHeight
 
             // Drag translation (adapted from dots-hyprland, variable-width support)
             readonly property bool isDragged: root.dragging && delegateIndex === root.dragSourceIndex
@@ -835,13 +1307,22 @@ Item {
                 }
                 return _sepIsSpecial && !_sepNextIsSpecial;
             }
-            readonly property real _sepGapCenter: -(root.sepThickness / 2 + 1)
+            // Reserve a real layout slot for each divider. This keeps the line
+            // away from both the current icon and the preceding widget even
+            // when iconSpacing is compact or negative.
+            readonly property real _separatorSlot: Math.max(root.dotMargin, root.sepThickness * 2)
+            readonly property real _separatorBeforeSpace: _sepShowBefore ? _separatorSlot : 0
+            readonly property real _separatorAfterSpace: _sepShowAfter ? _separatorSlot : 0
+            readonly property real _separatorLineMargin: (_separatorSlot - root.sepThickness) / 2
+
+            width: root.isVertical ? itemHeight : itemWidth + _separatorBeforeSpace + _separatorAfterSpace
+            height: root.isVertical ? itemWidth + _separatorBeforeSpace + _separatorAfterSpace : itemHeight
 
             // Horizontal mode: left vertical line
             Rectangle {
                 visible: delegateWrapper._sepShowBefore && !root.isVertical
                 anchors.left: parent.left
-                anchors.leftMargin: delegateWrapper._sepGapCenter
+                anchors.leftMargin: delegateWrapper._separatorLineMargin
                 anchors.verticalCenter: parent.verticalCenter
                 width: root.sepThickness
                 height: parent.height - root.dotMarginV * 2
@@ -852,7 +1333,7 @@ Item {
             Rectangle {
                 visible: delegateWrapper._sepShowAfter && !root.isVertical
                 anchors.right: parent.right
-                anchors.rightMargin: delegateWrapper._sepGapCenter
+                anchors.rightMargin: delegateWrapper._separatorLineMargin
                 anchors.verticalCenter: parent.verticalCenter
                 width: root.sepThickness
                 height: parent.height - root.dotMarginV * 2
@@ -863,7 +1344,7 @@ Item {
             Rectangle {
                 visible: delegateWrapper._sepShowBefore && root.isVertical
                 anchors.top: parent.top
-                anchors.topMargin: delegateWrapper._sepGapCenter
+                anchors.topMargin: delegateWrapper._separatorLineMargin
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width - root.dotMargin * 2
                 height: root.sepThickness
@@ -874,7 +1355,7 @@ Item {
             Rectangle {
                 visible: delegateWrapper._sepShowAfter && root.isVertical
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: delegateWrapper._sepGapCenter
+                anchors.bottomMargin: delegateWrapper._separatorLineMargin
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width - root.dotMargin * 2
                 height: root.sepThickness
@@ -885,6 +1366,8 @@ Item {
             Loader {
                 id: contentLoader
                 anchors.centerIn: parent
+                anchors.horizontalCenterOffset: root.isVertical ? 0 : (delegateWrapper._separatorBeforeSpace - delegateWrapper._separatorAfterSpace) / 2
+                anchors.verticalCenterOffset: root.isVertical ? (delegateWrapper._separatorBeforeSpace - delegateWrapper._separatorAfterSpace) / 2 : 0
 
                 // Expose delegate data so loaded components can access it via parent
                 readonly property var _itemData: delegateWrapper.itemData
@@ -894,6 +1377,8 @@ Item {
                     switch (itemData.type) {
                     case "action":
                         return actionItemComponent;
+                    case "appGroup":
+                        return appGroupItemComponent;
                     case "app":
                         return appItemComponent;
                     case "file":
@@ -902,6 +1387,10 @@ Item {
                         return mediaItemComponent;
                     case "weather":
                         return weatherItemComponent;
+                    case "sports":
+                        return sportsItemComponent;
+                    case "phone":
+                        return phoneItemComponent;
                     case "runningAppsGroup":
                         return runningAppsGroupComponent;
                     default:
@@ -909,10 +1398,70 @@ Item {
                     }
                 }
             }
+
+            Rectangle {
+                visible: root.isGroupDropTarget(delegateWrapper.delegateIndex)
+                anchors.fill: parent
+                z: 5
+                radius: Appearance.rounding.normal
+                color: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
+                    ? Appearance.colors.colErrorContainer
+                    : Appearance.colors.colPrimaryContainer
+                opacity: visible ? 0.28 : 0.0
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+            }
+
+            Rectangle {
+                visible: root.isGroupDropTarget(delegateWrapper.delegateIndex)
+                width: Math.max(Appearance.font.pixelSize.normal, root.buttonSlotSize * 0.3)
+                height: width
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.topMargin: -height * 0.18
+                anchors.rightMargin: -width * 0.18
+                z: 6
+                radius: Appearance.rounding.full
+                color: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
+                    ? Appearance.colors.colError
+                    : Appearance.colors.colPrimary
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
+                        ? "block"
+                        : (root.groupDropWillCreate(delegateWrapper.delegateIndex) ? "create_new_folder" : "group_add")
+                    iconSize: Appearance.font.pixelSize.small
+                    color: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
+                        ? Appearance.colors.colOnError
+                        : Appearance.colors.colOnPrimary
+                }
+            }
         }
     }
 
     // ── Item type components ───────────────────────────────────────────────
+
+    Component {
+        id: appGroupItemComponent
+        Item {
+            id: appGroupItemRoot
+            width: root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            readonly property var _itemData: parent._itemData
+            readonly property int _index: parent._index
+
+            DockAppGroupButton {
+                anchors.centerIn: parent
+                apps: appGroupItemRoot._itemData.apps ?? []
+                dockContent: root
+                groupId: appGroupItemRoot._itemData.groupId ?? ""
+                delegateIndex: appGroupItemRoot._index
+            }
+        }
+    }
 
     Component {
         id: actionItemComponent
@@ -1022,6 +1571,38 @@ Item {
                 isVertical: root.isVertical
                 dockContent: root
                 delegateIndex: weatherItemRoot._index
+            }
+        }
+    }
+
+    Component {
+        id: sportsItemComponent
+        Item {
+            id: sportsItemRoot
+            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            readonly property int _index: parent._index
+            DockSportsWidget {
+                anchors.centerIn: parent
+                isVertical: root.isVertical
+                dockContent: root
+                delegateIndex: sportsItemRoot._index
+            }
+        }
+    }
+
+    Component {
+        id: phoneItemComponent
+        Item {
+            id: phoneItemRoot
+            width: root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            readonly property int _index: parent._index
+            DockPhoneWidget {
+                anchors.centerIn: parent
+                isVertical: root.isVertical
+                dockContent: root
+                delegateIndex: phoneItemRoot._index
             }
         }
     }

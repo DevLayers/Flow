@@ -17,11 +17,15 @@ PopupWindow {
     property var dockRoot: null
     property var appTopLevel: null
     property var dockWindow: null
+    property Item anchorItem: null
+    property bool compactMode: false
 
     readonly property bool isVertical: dockRoot?.isVertical ?? false
-    readonly property string dockPos: dock.dockEffectivePosition
+    readonly property string dockPos: dockRoot?.dockPos ?? dock.dockEffectivePosition
     
     readonly property int maxPreviews: {
+        if (compactMode)
+            return 1
         if (!dockWindow || !dockRoot) return 1
 
         const spacing = 6
@@ -59,30 +63,136 @@ PopupWindow {
     readonly property Item hoveredBtn: dockRoot?.lastHoveredButton ?? null
     readonly property real hoveredMagScale: (hoveredBtn && dockRoot) ? dockRoot._getSlotMagScale(hoveredBtn) : 1.0
     readonly property real hoveredScaleExtra: hoveredBtn ? (hoveredMagScale - 1.0) * (isVertical ? hoveredBtn.width : hoveredBtn.height) : 0
+    // Keep the same small gap used by DockTooltip so both surfaces share the
+    // exact same visual anchor above an app in the group popup.
+    readonly property real compactAnchorGap: Appearance.sizes.elevationMargin
+
+    function updateCompactAnchor() {
+        if (!compactMode || !anchorItem || !dockWindow)
+            return
+
+        // PopupAnchor coordinate mapping is not reactive. Re-anchor after the
+        // group popup has laid out the hovered delegate and after each hover
+        // transition so the preview follows that delegate's real position.
+        anchor.updateAnchor()
+    }
+
+    function requestCompactAnchor() {
+        if (compactMode)
+            compactAnchorTimer.restart()
+    }
+
+    Timer {
+        id: compactAnchorTimer
+        interval: 0
+        repeat: false
+        onTriggered: previewPopup.updateCompactAnchor()
+    }
+
+    onAnchorItemChanged: {
+        if (compactMode)
+            requestCompactAnchor()
+    }
+
+    onShowChanged: {
+        if (show && compactMode)
+            requestCompactAnchor()
+    }
 
     anchor {
-        window: dockWindow
+        // Group previews live inside DockGroupPopup's PopupWindow. The app
+        // tile itself is not guaranteed to expose a QsWindow attached
+        // property, so anchor to the host window supplied by the group.
+        window: compactMode && anchorItem
+            ? (anchorItem.QsWindow?.window ?? dockWindow)
+            : dockWindow
         adjustment: PopupAdjustment.None
+        edges: Edges.Top | Edges.Left
+
+        onAnchoring: {
+            if (!compactMode || !anchorItem)
+                return
+
+            const gap = compactAnchorGap
+            // PopupWindow's implicit size also contains the compact preview's
+            // transparent control/margin budget. Anchor the visible surface
+            // instead; otherwise that unused height moves the preview much
+            // farther away from the hovered app than the tooltip.
+            const surfaceX = popupBackground.x
+            const surfaceY = popupBackground.y
+            const surfaceWidth = popupBackground.width || popupBackground.implicitWidth
+            const surfaceHeight = popupBackground.height || popupBackground.implicitHeight
+            const top = anchorItem.mapToItem(null, anchorItem.width / 2, 0)
+            const bottom = anchorItem.mapToItem(null, anchorItem.width / 2, anchorItem.height)
+
+            if (dockPos === "bottom") {
+                anchor.rect.x = Math.round(top.x - surfaceX - surfaceWidth / 2)
+                anchor.rect.y = Math.round(top.y - surfaceY - surfaceHeight - gap)
+            } else if (dockPos === "top") {
+                anchor.rect.x = Math.round(bottom.x - surfaceX - surfaceWidth / 2)
+                anchor.rect.y = Math.round(bottom.y + gap - surfaceY)
+            } else if (dockPos === "left") {
+                const right = anchorItem.mapToItem(null, anchorItem.width, anchorItem.height / 2)
+                anchor.rect.x = Math.round(right.x + gap - surfaceX)
+                anchor.rect.y = Math.round(right.y - surfaceY - surfaceHeight / 2)
+            } else {
+                const left = anchorItem.mapToItem(null, 0, anchorItem.height / 2)
+                anchor.rect.x = Math.round(left.x - surfaceX - surfaceWidth - gap)
+                anchor.rect.y = Math.round(left.y - surfaceY - surfaceHeight / 2)
+            }
+        }
 
         rect {
-            x: dockPos === "left" ? ((dockWindow?.width ?? 0) - (dockWindow?.magExtra ?? 0) + hoveredScaleExtra) : (dockPos === "right" ? Math.max(0, (dockWindow?.magExtra ?? 0) - hoveredScaleExtra) : 0)
-            y: dockPos === "bottom" ? Math.max(0, (dockWindow?.magExtra ?? 0) - hoveredScaleExtra) : dockPos === "top" ? ((dockWindow?.height ?? 0) - (dockWindow?.magExtra ?? 0) + hoveredScaleExtra) : 0
+            // Compact positions are assigned by onAnchoring. Keeping these
+            // bindings at zero provides a safe initial value before the host
+            // window is mapped for the first time.
+            x: compactMode ? 0 : dockPos === "left" ? ((dockWindow?.width ?? 0) - (dockWindow?.magExtra ?? 0) + hoveredScaleExtra) : (dockPos === "right" ? Math.max(0, (dockWindow?.magExtra ?? 0) - hoveredScaleExtra) : 0)
+            y: compactMode ? 0 : dockPos === "bottom" ? Math.max(0, (dockWindow?.magExtra ?? 0) - hoveredScaleExtra) : dockPos === "top" ? ((dockWindow?.height ?? 0) - (dockWindow?.magExtra ?? 0) + hoveredScaleExtra) : 0
         }
 
         gravity: {
+            if (compactMode)
+                return Edges.Bottom | Edges.Right
             if (dockPos === "left") return Edges.Right | Edges.Bottom
             if (dockPos === "right") return Edges.Left | Edges.Bottom
             if (dockPos === "top") return Edges.Bottom | Edges.Right
             return Edges.Top | Edges.Right
         }
+    }
 
-        edges: Edges.Top | Edges.Left
+    // The group popup can move when the dock loses magnification after
+    // the pointer leaves the dock tile. Recalculate the preview against
+    // the host window instead of leaving it at the old screen position.
+    Connections {
+        target: previewPopup.anchorItem
+        function onScaleChanged() { previewPopup.requestCompactAnchor() }
+        function onXChanged() { previewPopup.requestCompactAnchor() }
+        function onYChanged() { previewPopup.requestCompactAnchor() }
+        function onWidthChanged() { previewPopup.requestCompactAnchor() }
+        function onHeightChanged() { previewPopup.requestCompactAnchor() }
+    }
+
+    Connections {
+        target: previewPopup.dockRoot
+        function onLastHoveredButtonChanged() { previewPopup.requestCompactAnchor() }
+        function onHoveredAppButtonChanged() { previewPopup.requestCompactAnchor() }
+    }
+
+    Connections {
+        target: previewPopup.dockRoot?.dockContent ?? null
+        function onButtonHoveredChanged() { previewPopup.requestCompactAnchor() }
+        function onHoveredSlotChanged() { previewPopup.requestCompactAnchor() }
+        function onLastHoveredButtonChanged() { previewPopup.requestCompactAnchor() }
     }
 
     readonly property int _extra: popupBackground.padding * 2 + popupBackground.margins * 2
 
-    implicitWidth: isVertical ? dockRoot.maxWindowPreviewWidth + dockRoot.windowControlsHeight + _extra - 25 : dockWindow?.width ?? 0
-    implicitHeight: isVertical ? dockWindow?.height ?? 0 : dockRoot.maxWindowPreviewHeight + dockRoot.windowControlsHeight + _extra + 5
+    implicitWidth: compactMode
+        ? dockRoot.maxWindowPreviewWidth + (isVertical ? dockRoot.windowControlsHeight : 0) + _extra
+        : isVertical ? dockRoot.maxWindowPreviewWidth + dockRoot.windowControlsHeight + _extra - 25 : dockWindow?.width ?? 0
+    implicitHeight: compactMode
+        ? dockRoot.maxWindowPreviewHeight + (isVertical ? 0 : dockRoot.windowControlsHeight) + _extra + 5
+        : isVertical ? dockWindow?.height ?? 0 : dockRoot.maxWindowPreviewHeight + dockRoot.windowControlsHeight + _extra + 5
 
     StyledRectangularShadow {
         target: popupBackground
@@ -96,8 +206,16 @@ PopupWindow {
         property real margins: 5
         property real padding: 6
 
-        onImplicitWidthChanged: { dockRoot.popupIsResizing = true; resizeTimer.restart() }
-        onImplicitHeightChanged: { dockRoot.popupIsResizing = true; resizeTimer.restart() }
+        onImplicitWidthChanged: {
+            dockRoot.popupIsResizing = true
+            resizeTimer.restart()
+            previewPopup.requestCompactAnchor()
+        }
+        onImplicitHeightChanged: {
+            dockRoot.popupIsResizing = true
+            resizeTimer.restart()
+            previewPopup.requestCompactAnchor()
+        }
 
         Timer {
             id: resizeTimer
@@ -107,8 +225,8 @@ PopupWindow {
 
         readonly property real _clampedX: Math.max(margins, Math.min(dockRoot.hoveredButtonCenter.x - implicitWidth  / 2, parent.width  - implicitWidth  - margins))
         readonly property real _clampedY: Math.max(margins, Math.min(dockRoot.hoveredButtonCenter.y - implicitHeight / 2, parent.height - implicitHeight - margins))
-        x: isVertical ? (dockPos === "left" ? margins : parent.width - implicitWidth - margins) : _clampedX
-        y: isVertical ? _clampedY : (dockPos === "top" ? margins : parent.height - implicitHeight - margins)
+        x: compactMode ? margins : isVertical ? (dockPos === "left" ? margins : parent.width - implicitWidth - margins) : _clampedX
+        y: compactMode ? margins : isVertical ? _clampedY : (dockPos === "top" ? margins : parent.height - implicitHeight - margins)
 
         opacity: previewPopup.show ? 1 : 0
         scale: previewPopup.show ? 1.0 : 0.90

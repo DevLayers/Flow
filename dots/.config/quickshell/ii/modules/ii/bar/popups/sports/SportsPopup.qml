@@ -460,7 +460,7 @@ StyledPopup {
                                     StyledText {
                                         id: statusLabel
                                         anchors.centerIn: parent
-                                        text: modelData?.status ?? ""
+                                        text: SportsService.compactMatchStatus(modelData?.status ?? "", modelData?.state ?? "")
                                         font.pixelSize: 14
                                         font.weight: Font.Bold
                                         color: previewIndex === 0 ? Appearance.colors.colOnPrimary : root.colOnPill

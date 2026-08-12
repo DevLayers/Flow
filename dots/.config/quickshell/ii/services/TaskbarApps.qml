@@ -71,50 +71,110 @@ Singleton {
     }
 
     // ── Pinned file helpers ───────────────────────────────────────────────
+    function _cleanPinnedFilePath(path) {
+        let cleanPath = String(path ?? "").trim().replace(/^file:\/\//, "")
+        try {
+            cleanPath = decodeURIComponent(cleanPath)
+        } catch (error) {
+            // Keep the original value when an external drag supplies malformed URI data.
+        }
+        if (cleanPath.length > 1)
+            cleanPath = cleanPath.replace(/\/+$/, "")
+        return cleanPath
+    }
+
+    // Keep the visual file slots in dock.order while changing only which
+    // pinned path occupies each slot. This lets Settings reorder folders
+    // without disturbing the positions of apps, actions, or widgets.
+    function _rebuildPinnedFileSlots(files) {
+        const nextFiles = Array.from(files ?? [])
+        const order = Array.from(Config.options?.dock?.order ?? [])
+        const nextOrder = []
+        let fileIndex = 0
+
+        for (const entry of order) {
+            if (String(entry).startsWith("file:")) {
+                if (fileIndex < nextFiles.length)
+                    nextOrder.push("file:" + nextFiles[fileIndex++])
+                continue
+            }
+            nextOrder.push(entry)
+        }
+
+        while (fileIndex < nextFiles.length) {
+            const fileKey = "file:" + nextFiles[fileIndex++]
+            const trashIndex = nextOrder.indexOf("trash")
+            if (trashIndex >= 0)
+                nextOrder.splice(trashIndex, 0, fileKey)
+            else
+                nextOrder.push(fileKey)
+        }
+
+        Config.options.dock.order = nextOrder
+    }
+
     function addPinnedFile(path) {
-        const cleanPath = path.toString().replace(/^file:\/\//, "")
+        const cleanPath = root._cleanPinnedFilePath(path)
+        if (!cleanPath) return
         const current = Config.options?.dock?.pinnedFiles ?? []
         if (current.includes(cleanPath)) return
-        Config.options.dock.pinnedFiles = current.concat([cleanPath])
-
-        // Also add to the order so it appears in the dock
-        const fileKey = "file:" + cleanPath
-        const order = Array.from(Config.options?.dock?.order ?? [])
-        if (!order.includes(fileKey)) {
-            // Insert before "trash" if it exists, otherwise append
-            const trashIdx = order.indexOf("trash")
-            if (trashIdx !== -1) {
-                order.splice(trashIdx, 0, fileKey)
-            } else {
-                order.push(fileKey)
-            }
-            Config.options.dock.order = order
-        }
+        const nextFiles = current.concat([cleanPath])
+        Config.options.dock.pinnedFiles = nextFiles
+        root._rebuildPinnedFileSlots(nextFiles)
     }
 
     function removePinnedFile(path) {
-        const cleanPath = path.toString().replace(/^file:\/\//, "")
+        const cleanPath = root._cleanPinnedFilePath(path)
         const current = Config.options?.dock?.pinnedFiles ?? []
-        Config.options.dock.pinnedFiles = current.filter(p => p !== cleanPath)
-
-        // Also remove from the order
-        const fileKey = "file:" + cleanPath
-        const order = Array.from(Config.options?.dock?.order ?? [])
-        const fileIdx = order.indexOf(fileKey)
-        if (fileIdx !== -1) {
-            order.splice(fileIdx, 1)
-            Config.options.dock.order = order
-        }
+        if (!current.includes(cleanPath)) return
+        const nextFiles = current.filter(p => p !== cleanPath)
+        Config.options.dock.pinnedFiles = nextFiles
+        root._rebuildPinnedFileSlots(nextFiles)
     }
 
     function reorderPinnedFile(fromPath, toPath) {
-        if (!fromPath || !toPath || fromPath === toPath) return
+        const cleanFromPath = root._cleanPinnedFilePath(fromPath)
+        const cleanToPath = root._cleanPinnedFilePath(toPath)
+        if (!cleanFromPath || !cleanToPath || cleanFromPath === cleanToPath) return
         const files = Array.from(Config.options?.dock?.pinnedFiles ?? [])
-        const fromIdx = files.indexOf(fromPath)
-        const toIdx = files.indexOf(toPath)
+        const fromIdx = files.indexOf(cleanFromPath)
+        const toIdx = files.indexOf(cleanToPath)
         if (fromIdx === -1 || toIdx === -1) return
         files.splice(toIdx, 0, files.splice(fromIdx, 1)[0])
         Config.options.dock.pinnedFiles = files
+        root._rebuildPinnedFileSlots(files)
+    }
+
+    function reorderPinnedFileByIndex(fromIndex, toIndex) {
+        if (fromIndex === toIndex) return
+        const files = Array.from(Config.options?.dock?.pinnedFiles ?? [])
+        if (fromIndex < 0 || fromIndex >= files.length || toIndex < 0 || toIndex >= files.length)
+            return
+        files.splice(toIndex, 0, files.splice(fromIndex, 1)[0])
+        Config.options.dock.pinnedFiles = files
+        root._rebuildPinnedFileSlots(files)
+    }
+
+    // The dock drag gesture edits dock.order directly. Reflect its file-slot
+    // order back into pinnedFiles so the Settings list stays truthful.
+    function syncPinnedFileOrder() {
+        const files = Array.from(Config.options?.dock?.pinnedFiles ?? [])
+        const orderedFiles = []
+        const order = Config.options?.dock?.order ?? []
+
+        for (const entry of order) {
+            if (!String(entry).startsWith("file:")) continue
+            const path = String(entry).substring(5)
+            if (files.includes(path) && !orderedFiles.includes(path))
+                orderedFiles.push(path)
+        }
+        for (const path of files) {
+            if (!orderedFiles.includes(path))
+                orderedFiles.push(path)
+        }
+
+        if (orderedFiles.length !== files.length || orderedFiles.some((path, index) => path !== files[index]))
+            Config.options.dock.pinnedFiles = orderedFiles
     }
 
     function reorderPinned(fromIndex, toIndex) {
@@ -131,6 +191,7 @@ Singleton {
         if (fromIndex < 0 || fromIndex >= order.length || toIndex < 0 || toIndex >= order.length) return
         order.splice(toIndex, 0, order.splice(fromIndex, 1)[0])
         Config.options.dock.order = order
+        root.syncPinnedFileOrder()
     }
 
     // ── Icon theme refresh ────────────────────────────────────────────────

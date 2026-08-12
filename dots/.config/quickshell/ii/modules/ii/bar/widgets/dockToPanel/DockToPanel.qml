@@ -47,7 +47,13 @@ Item {
     readonly property real windowControlsHeight: 30
     readonly property bool isVertical: root.vertical
     property Item hoveredSlot: null
+    // ── Magnification Customization Tokens ──
     readonly property bool enableMacOsMagnification: Config.options?.dockToPanel?.enableMacOsMagnification ?? false
+    readonly property real macOsMagnificationScale: Config.options?.dockToPanel?.macOsMagnificationScale ?? 1.6
+    readonly property real magInfluenceRadius: Config.options?.dockToPanel?.magInfluenceRadius ?? 2.5
+    readonly property string magCurveType: Config.options?.dockToPanel?.magCurveType ?? "parabolic"
+    readonly property real magGaussianSigma: 1.1
+
     readonly property int magTransformOrigin: {
         let pos = root.dockEffectivePosition;
         if (pos === "top") return Item.Top;
@@ -57,12 +63,9 @@ Item {
         return Item.Center;
     }
 
-    readonly property real macOsMagnificationScale: Config.options?.dockToPanel?.macOsMagnificationScale ?? 1.6
-
     function _getSlotMagScale(targetSlot) {
         if (!enableMacOsMagnification || !buttonHovered || !hoveredSlot) return 1.0;
         let maxScale = macOsMagnificationScale;
-        if (targetSlot === hoveredSlot) return maxScale;
         let children = [];
         for (let i = 0; i < flow.children.length; i++) {
             let child = flow.children[i];
@@ -71,10 +74,22 @@ Item {
         let myIdx = children.indexOf(targetSlot);
         let hvdIdx = children.indexOf(hoveredSlot);
         if (myIdx < 0 || hvdIdx < 0) return 1.0;
+
         let dist = Math.abs(myIdx - hvdIdx);
-        if (dist === 1) return 1.0 + (maxScale - 1.0) * 0.45;
-        if (dist === 2) return 1.0 + (maxScale - 1.0) * 0.10;
-        return 1.0;
+        let radius = magInfluenceRadius;
+        if (dist >= radius) return 1.0;
+
+        let factor = 0.0;
+        if (magCurveType === "gaussian") {
+            let sigma = magGaussianSigma;
+            let val = Math.exp(-(dist * dist) / (2.0 * sigma * sigma));
+            let cutoff = Math.exp(-(radius * radius) / (2.0 * sigma * sigma));
+            factor = Math.max(0.0, (val - cutoff) / (1.0 - cutoff));
+        } else {
+            factor = 0.5 * (1.0 + Math.cos((Math.PI * dist) / radius));
+        }
+
+        return 1.0 + (maxScale - 1.0) * factor;
     }
 
     Timer {

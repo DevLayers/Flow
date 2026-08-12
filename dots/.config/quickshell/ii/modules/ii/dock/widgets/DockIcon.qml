@@ -49,7 +49,7 @@ Item {
         anchors.fill: parent
         shapeString: Config.options.dock.shapeMask
         visible: Config.options.dock.enableShapeMask && !root.isThemedIcon
-        color: Appearance.colors.colPrimaryContainer
+        color: root.isRunning ? Appearance.colors.colPrimaryContainer : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 0.6)
 
         Behavior on color {
             ColorAnimation {
