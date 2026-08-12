@@ -163,7 +163,6 @@ Item {
                         }];
                     }
                 }
-
             }
 
             ContentSubsectionLabel {
@@ -239,11 +238,11 @@ Item {
                         return opts;
                     }
                 }
-
             }
 
             ContentSubsectionLabel {
                 text: Translation.tr("Dynamic Island behavior")
+                visible: Config.options.bar.cornerStyle === 3
                 Layout.topMargin: 4
             }
 
@@ -298,11 +297,11 @@ Item {
                         "value": 2
                     }]
                 }
-
             }
 
             ContentSubsectionLabel {
                 text: Translation.tr("Group color")
+                visible: Config.options.bar.barGroupStyle !== 2
                 Layout.topMargin: 4
             }
 
@@ -318,7 +317,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Use primary container color for pill/island group backgrounds")
                 }
-
             }
 
             ContentSubsection {
@@ -354,7 +352,6 @@ Item {
                                     "visible": item.visible
                                 });
                             });
-
                         }
                     }
                     options: {
@@ -380,7 +377,6 @@ Item {
                         }];
                     }
                 }
-
             }
 
             ContentSubsectionLabel {
@@ -400,7 +396,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Adds a soft blur and dim gradient under the transparent bar")
                 }
-
             }
 
             ConfigSwitch {
@@ -414,7 +409,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Use expressive solid layer colors")
                 }
-
             }
 
             ConfigSwitch {
@@ -428,7 +422,6 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Shows a soft drop shadow underneath the status bar")
                 }
-
             }
 
             ContentSubsection {
@@ -459,7 +452,6 @@ Item {
                         "value": "surface"
                     }]
                 }
-
             }
 
             ContentSubsection {
@@ -507,7 +499,6 @@ Item {
                         }];
                     }
                 }
-
             }
 
             ConfigSpinBox {
@@ -551,7 +542,6 @@ Item {
                     var val = textField.text.trim();
                     if (val !== "" && textField.activeFocus)
                         Config.options.bar.topLeftIcon = val;
-
                 }
 
                 Connections {
@@ -561,9 +551,7 @@ Item {
 
                     target: Config.options.bar
                 }
-
             }
-
         }
 
         // ── Layout ────────────────────────────────────────────────────────
