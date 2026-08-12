@@ -146,6 +146,8 @@ Singleton {
                 property JsonObject bottomGroup: JsonObject {
                     property bool collapsed: false
                     property int tab: 0
+                    property int todoTab: 0
+                    property int timerTab: 0
                 }
             }
 

@@ -63,6 +63,20 @@ DockContextMenuBase {
         }
 
         DockMenuButton {
+            visible: !!root.appToplevel?.appId
+            Layout.fillWidth: true
+            symbolName: "live_tv"
+            labelText: (Config.options?.dock?.enableLivePreviewWidget ?? false)
+                ? Translation.tr("Set as Live Preview")
+                : Translation.tr("Enable Live Preview")
+            onTriggered: {
+                Config.options.dock.enableLivePreviewWidget = true;
+                DockLivePreviewService.selectApp(root.appToplevel.appId);
+                root.close();
+            }
+        }
+
+        DockMenuButton {
             Layout.fillWidth: true
             symbolName: (root.appToplevel && TaskbarApps.isPinned(root.appToplevel.appId)) ? "keep_off" : "keep"
             labelText: (root.appToplevel && TaskbarApps.isPinned(root.appToplevel.appId)) ? qsTr("Unpin") : qsTr("Pin")

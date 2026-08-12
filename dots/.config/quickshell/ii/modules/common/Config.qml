@@ -2455,6 +2455,13 @@ Singleton {
                 property bool hoverToReveal: true
                 property bool enableMediaWidget: false
                 property bool enableWeatherWidget: false
+                property bool enableSportsWidget: false
+                property bool enableLivePreviewWidget: false
+                property string livePreviewAppId: ""
+                property int livePreviewSlots: 2
+                property bool livePreviewPaintCursor: false
+                property string livePreviewCaptureMode: "visible"
+                property bool livePreviewFollowActiveWindow: true
                 property bool showPhoneButton: false
                 property bool showDividers: true
                 property bool showOverviewButton: true
@@ -2468,7 +2475,7 @@ Singleton {
                 // Each entry is { id: string, apps: list<string> } and is
                 // rendered as one dock item while app groups are enabled.
                 property list<var> appGroups: []
-                property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "sports", "phone", "trash", "overview"]
+                property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "sports", "livePreview", "phone", "trash", "overview"]
             }
 
             property JsonObject dockToPanel: JsonObject {

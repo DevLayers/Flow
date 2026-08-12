@@ -64,6 +64,9 @@ ContentSection {
         if (preset.enableMediaWidget !== undefined) Config.options.dock.enableMediaWidget = preset.enableMediaWidget;
         if (preset.enableWeatherWidget !== undefined) Config.options.dock.enableWeatherWidget = preset.enableWeatherWidget;
         if (preset.enableSportsWidget !== undefined) Config.options.dock.enableSportsWidget = preset.enableSportsWidget;
+        if (preset.enableLivePreviewWidget !== undefined) Config.options.dock.enableLivePreviewWidget = preset.enableLivePreviewWidget;
+        if (preset.livePreviewAppId !== undefined) Config.options.dock.livePreviewAppId = preset.livePreviewAppId;
+        if (preset.livePreviewSlots !== undefined) Config.options.dock.livePreviewSlots = preset.livePreviewSlots;
         if (preset.showPinButton !== undefined) Config.options.dock.showPinButton = preset.showPinButton;
         if (preset.showOverviewButton !== undefined) Config.options.dock.showOverviewButton = preset.showOverviewButton;
         if (preset.showTrashButton !== undefined) Config.options.dock.showTrashButton = preset.showTrashButton;
@@ -79,6 +82,9 @@ ContentSection {
             enableMediaWidget: Config.options.dock.enableMediaWidget,
             enableWeatherWidget: Config.options.dock.enableWeatherWidget,
             enableSportsWidget: Config.options.dock.enableSportsWidget,
+            enableLivePreviewWidget: Config.options.dock.enableLivePreviewWidget,
+            livePreviewAppId: Config.options.dock.livePreviewAppId,
+            livePreviewSlots: Config.options.dock.livePreviewSlots,
             showPinButton: Config.options.dock.showPinButton,
             showOverviewButton: Config.options.dock.showOverviewButton,
             showTrashButton: Config.options.dock.showTrashButton
@@ -350,6 +356,22 @@ ContentSection {
                                     text: "⚽ " + Translation.tr("Sports")
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                     color: Appearance.colors.colOnSecondaryContainer
+                                }
+                            }
+
+                            Rectangle {
+                                visible: modelData.enableLivePreviewWidget ?? false
+                                implicitHeight: 22
+                                implicitWidth: livePreviewTag.implicitWidth + 12
+                                radius: Appearance.rounding.full
+                                color: Appearance.colors.colTertiaryContainer
+
+                                StyledText {
+                                    id: livePreviewTag
+                                    anchors.centerIn: parent
+                                    text: "▣ " + Translation.tr("Live Preview")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colOnTertiaryContainer
                                 }
                             }
 
