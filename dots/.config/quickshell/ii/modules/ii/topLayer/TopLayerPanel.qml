@@ -723,6 +723,14 @@ PanelWindow {
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
         border.width: GlobalStates.connectModeActive ? 0 : 1
         border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
+        readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
+        readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
+        readonly property real defaultRadius: (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+        radius: 0
+        topRightRadius: isConnectDynamicIslandTop ? 0 : defaultRadius
+        topLeftRadius: isConnectDynamicIslandBottom ? 0 : defaultRadius
+        bottomRightRadius: (isConnectDynamicIslandBottom) ? 0 : (GlobalStates.connectModeActive ? 0 : defaultRadius)
+        bottomLeftRadius: isConnectDynamicIslandBottom ? defaultRadius : (GlobalStates.connectModeActive ? 0 : defaultRadius)
         visible: topPanel.rightSidebarActiveOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarActiveOnMonitor) && !GlobalStates.connectSidebarsSeparate
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
