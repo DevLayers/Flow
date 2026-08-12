@@ -120,6 +120,18 @@ Singleton {
             if (opts.bitRate) extraArgs.push("--video-bit-rate=" + opts.bitRate)
             if (opts.maxSize > 0) extraArgs.push("--max-size=" + opts.maxSize)
             if (opts.videoBuffer > 0) extraArgs.push("--display-buffer=" + opts.videoBuffer)
+
+            const appOpts = opts.appMode || {}
+            if (appOpts.flexDisplay) {
+                const w = appOpts.displayWidth || 1280
+                const h = appOpts.displayHeight || 960
+                const density = appOpts.density || 160
+                extraArgs.push("--new-display=" + w + "x" + h + "/" + density)
+                extraArgs.push("--flex-display")
+                if (appOpts.keepActive) {
+                    extraArgs.push("--keep-active")
+                }
+            }
         }
 
         sessionManagerProc.write(JSON.stringify({

@@ -92,8 +92,16 @@ Singleton {
     property int _pendingPort: 4748
 
     // Internal — set to true when stopMic() is called intentionally.
-    // Suppresses the "Connection failed" error in droidcamAudioProc.onExited.
+    // Suppresses the "connection lost" path in the watchdog.
     property bool _userStopped: false
+
+    /** PID of the detached audio session (0 when not running). */
+    property int sessionPid: 0
+    /** Unix timestamp when the current session started (from state file). */
+    property int sessionStartedAt: 0
+
+    readonly property string _sessionScript: Directories.scriptPath + "/phone/droidcam_session.sh"
+    readonly property string _statusScript: Directories.scriptPath + "/phone/droidcam_status.sh"
 
     function _storeOriginalSink(name: string): void {
         Persistent.states.phoneMic.originalDefaultSink = name
@@ -138,6 +146,8 @@ Singleton {
             // restore the saved original sink on startup.
             _checkSwappedSinkProc.running = true
         })
+        // Re-adopt a previously running audio session after a shell restart.
+        Qt.callLater(root._tryAdoptSession)
     }
 
     // Mirror KdeConnectService._enabled: stays dormant when Phone tab is off.
@@ -148,6 +158,7 @@ Singleton {
             detectDistroProc.running = true
             checkAvailProc.running = true
             Qt.callLater(() => { _checkSwappedSinkProc.running = true })
+            Qt.callLater(root._tryAdoptSession)
         } else {
             // Stop all background work. If a mic session is active, stop it
             // so we don't leave a null-sink / scrcpy process running.
@@ -220,6 +231,127 @@ Singleton {
                     }
                 }
             }
+        }
+    }
+
+    // ─── Session state probe (droidcam_session.sh status) ───
+    // Probes both audio sessions (droidcam audio + scrcpy mic) and picks the
+    // alive one. Used for boot adopt and watchdog.
+    Process {
+        id: statusProc
+        running: false
+        property string _target: "droidcam" // "droidcam" | "scrcpy-mic"
+        command: ["bash", root._sessionScript, "status", "droidcam"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = String(this.text).trim()
+                let json = null
+                try { json = JSON.parse(out) } catch (e) { json = null }
+                if (!json) return
+                root._onAudioSessionStatus(json)
+            }
+        }
+    }
+
+    function _probeStatus(target: string): void {
+        statusProc._target = target
+        statusProc.command = ["bash", root._sessionScript, "status", target]
+        statusProc.running = false
+        statusProc.running = true
+    }
+
+    // Boot adopt — if a live audio session exists, claim it.
+    function _tryAdoptSession(): void {
+        if (!root._enabled) return
+        if (root.running || root.connecting) return
+        root._probeStatus("droidcam")
+    }
+
+    function _onAudioSessionStatus(json): void {
+        const alive = json.alive === "true" || json.alive === true
+        const pid = parseInt(json.pid || "0") || 0
+        const session = json.session || ""
+
+        // Watchdog path — we were already running and the session died.
+        if (root.running && !alive) {
+            micWatchdogTimer.stop()
+            if (!root._userStopped) {
+                root._reportMicError("Microphone connection lost — the audio process exited. Check the phone (DroidCam/scrcpy) and reconnection.")
+            } else {
+                root.running = false
+                root.connecting = false
+                root.pulseSource = ""
+                root.sessionPid = 0
+                root.sessionStartedAt = 0
+                root.stateChanged()
+            }
+            return
+        }
+
+        if (alive && pid > 0) {
+            // Live session found.
+            root.sessionPid = pid
+            root.sessionStartedAt = parseInt(json.started || "0") || 0
+            root.activePort = parseInt(json.port || "4748") || 4748
+            root.activeIp = json.ip || ""
+            root._backend = (session === "scrcpy-mic") ? "scrcpy" : "droidcam"
+
+            if (root.sessionStartedAt > 0) {
+                root.elapsedMs = Math.max(0, (Date.now() / 1000 | 0) - root.sessionStartedAt) * 1000
+            }
+
+            if (!root.running && !root.connecting) {
+                // Ensure the null-sink exists (idempotent) and resolve the
+                // monitor source, then claim running.
+                setupProc.running = true
+                root._pendingAdopt = true
+            }
+            return
+        }
+
+        // Not alive — if we were probing scrcpy as fallback, try that.
+        if (statusProc._target === "droidcam") {
+            root._probeStatus("scrcpy-mic")
+            return
+        }
+
+        // No live session. Auto-restart if the user had the mic enabled.
+        if (!root.running && !root.connecting) {
+            const conf = Config.options.phone.microphone
+            if (conf.enabled) {
+                Qt.callLater(root.startMic)
+            }
+        }
+    }
+
+    property bool _pendingAdopt: false
+
+    /** Completes a boot adoption — claims running without re-launching. */
+    function _completeAdopt(): void {
+        root.running = true
+        root.connecting = false
+        root.lastError = ""
+        root.stateChanged()
+        root._applyInitialState()
+        micVerifyTimer.stop()
+        failTimer.stop()
+        // Watchdog keeps the session honest.
+        micWatchdogTimer.restart()
+    }
+
+    // ─── Watchdog — drops running if the audio session/process dies ─────
+    Timer {
+        id: micWatchdogTimer
+        interval: 5000
+        repeat: true
+        running: false
+        onTriggered: {
+            if (!root.running && !root.connecting) {
+                micWatchdogTimer.stop()
+                return
+            }
+            statusProc.running = false
+            statusProc.running = true
         }
     }
 
@@ -308,12 +440,24 @@ Singleton {
                 const src = String(this.text).trim()
                 if (src.length > 0) {
                     root.pulseSource = src
+                    if (root._pendingAdopt) {
+                        // Adoption path — the audio process was already running
+                        // before this shell session. Just claim it.
+                        root._pendingAdopt = false
+                        root._completeAdopt()
+                        return
+                    }
                     // apply persisted state to the new source
                     root._applyInitialState()
                 } else {
                     root.lastError = "Failed to create DroidCam null-sink — pactl may not have permission"
                     root.errorOccurred(root.lastError)
                     root.connecting = false
+                    if (root._pendingAdopt) {
+                        root._pendingAdopt = false
+                        root.running = false
+                        root.stateChanged()
+                    }
                 }
             }
         }
@@ -334,97 +478,10 @@ Singleton {
         }
     }
 
-    // ─── scrcpy audio process (preferred backend) ──────────
-    // Launches scrcpy with `env PULSE_SINK=DroidCam-Mic` so scrcpy's SDL2
-    // audio output opens directly as a sink-input of DroidCam-Mic — no
-    // pw-link post-routing needed. This eliminates the race conditions of
-    // the previous route_scrcpy_mic.sh approach (no_sink, not_found errors).
-    // The null-sink's `.monitor` source becomes the recordable microphone.
-    Process {
-        id: scrcpyAudioProc
-        running: false
-        stdout: SplitParser { /* swallow informational output */ }
-        stderr: SplitParser {
-            onRead: line => {
-                // We DON'T act on stderr lines from scrcpy. scrcpy prints
-                // "WARN" and "ERROR" lines during normal startup that are
-                // not actually fatal. Success/failure is determined by
-                // whether the process stays alive past micVerifyTimer.
-            }
-        }
-        onExited: (code, status) => {
-            // Only report error if the process exited unexpectedly (not
-            // from user stop) AND we were still connecting/running.
-            if (code !== 0 && !root._userStopped && (root.connecting || root.running)) {
-                root.connecting = false
-                root.running = false
-                root.elapsedMs = 0
-                root.lastError = "scrcpy audio process exited — check USB connection"
-                root.errorOccurred(root.lastError)
-                root.stateChanged()
-                micVerifyTimer.stop()
-                failTimer.stop()
-                teardownProc.running = true
-                root.pulseSource = ""
-            }
-            root._userStopped = false
-        }
-    }
-
-    // ─── Teardown: unload null-sink ────────────────────────
-    // stderr uses SplitParser to catch fatal errors. However, droidcam-cli
-    // prints "recv error" and "Connection reset" as part of its connection
-    // retry process — these are NOT always fatal. The process stays alive
-    // and may eventually connect. We only treat "Is the app running?" as
-    // a clear fatal signal (droidcam-cli prints this when the DroidCam app
-    // is definitely not running on the phone).
-    Process {
-        id: droidcamAudioProc
-        running: false
-        stdout: StdioCollector { /* informational */ }
-        stderr: SplitParser {
-            onRead: line => {
-                const s = String(line)
-                // "Is the app running?" is the definitive fatal error —
-                // the DroidCam app is not running or not in Start mode.
-                // "recv error" and "Connection reset" may be transient
-                // during connection negotiation, so we DON'T kill on those.
-                if (s.indexOf("Is the app running") >= 0) {
-                    if (root.connecting || root.running) {
-                        root.connecting = false
-                        root.running = false
-                        root.pulseSource = ""
-                        root.elapsedMs = 0
-                        root.lastError = "DroidCam app is not running on your phone — open it and press Start"
-                        root.errorOccurred(root.lastError)
-                        root.stateChanged()
-                        micVerifyTimer.stop()
-                        failTimer.stop()
-                        droidcamAudioProc.running = false
-                        teardownProc.running = true
-                    }
-                }
-            }
-        }
-        onExited: (code, status) => {
-            if (code !== 0 && !root.running && !root._userStopped) {
-                root.lastError = root.lastError || "Connection failed — check that the DroidCam app is open on your phone and listening on port " + root.activePort
-                root.errorOccurred(root.lastError)
-            }
-            root._userStopped = false
-            root.running = false
-            root.connecting = false
-            root.pulseSource = ""
-            root.stateChanged()
-            // Only tear down the null-sink if we were using the droidcam
-            // backend. If using scrcpy backend, the scrcpyAudioProc.onExited
-            // or stopMic() handles cleanup. This prevents tearing down the
-            // null-sink while the scrcpy routing is still in progress.
-            if (root._backend === "droidcam") {
-                teardownProc.running = true
-            }
-        }
-    }
+    // NOTE: The scrcpy/droidcam audio processes are now launched DETACHED via
+    // `droidcam_session.sh launch {audio|scrcpy-mic}` (setsid + nohup) so they
+    // survive Quickshell restarts. Their lifecycle (kill on error/stop) is
+    // handled by the session script, not by a child Process.
 
     // ─── Teardown: unload null-sink ────────────────────────
     Process {
@@ -439,7 +496,7 @@ Singleton {
     Process { id: defaultProc; running: false }
 
     // ─── Fail timer — surfaces a connection error if neither
-    // setupProc nor droidcamAudioProc have set running=true within 6s.
+    // setupProc nor the mic launch have set running=true within 10s.
     Timer {
         id: failTimer
         interval: 10000
@@ -447,11 +504,12 @@ Singleton {
         onTriggered: {
             if (root.connecting && !root.running) {
                 root.connecting = false
-                root.lastError = "Could not connect within 10s — verify ADB is reachable and the phone is connected"
+                root.lastError = "Could not connect within 10s — verify the phone is reachable and the DroidCam/scrcpy app is open"
                 root.errorOccurred(root.lastError)
                 root.stateChanged()
-                droidcamAudioProc.running = false
-                scrcpyAudioProc.running = false
+                micEvidenceRetryTimer.stop()
+                micSessionStopProc.running = false
+                micSessionStopProc.running = true
                 teardownProc.running = true
             }
         }
@@ -693,16 +751,20 @@ Singleton {
             args.push("--serial=" + root._shellQuote(host))
         }
 
-        scrcpyAudioProc.command = args
         root.activeIp = "(scrcpy)"
         root.activePort = 0
-        scrcpyAudioProc.running = true
+        root._backend = "scrcpy"
+        root._userStopped = false
+
+        // Launch detached (survives Quickshell restarts).
+        micLaunchProc.command = ["bash", root._sessionScript, "launch", "scrcpy-mic"].concat(args)
+        micLaunchProc.running = true
 
         // Backup: after 2s, also try to move any stray scrcpy sink-input
         // onto DroidCam-Mic (in case the default sink swap failed and the
         // sink-input landed on the speakers). This is the routeMicProc.
         routeMicTimer.restart()
-        // micVerifyTimer (5s) checks if scrcpy is still alive → success.
+        // micVerifyTimer (5s) checks the stream evidence → success.
         micVerifyTimer.restart()
         failTimer.restart()
     }
@@ -733,6 +795,8 @@ Singleton {
         root.running = false
         root.pulseSource = ""
         root.elapsedMs = 0
+        root.sessionPid = 0
+        root.sessionStartedAt = 0
         root.lastError = message
         root.errorOccurred(root.lastError)
         root.stateChanged()
@@ -740,6 +804,8 @@ Singleton {
         failTimer.stop()
         routeMicTimer.stop()
         restoreDefaultSinkTimer.stop()
+        micWatchdogTimer.stop()
+        micEvidenceRetryTimer.stop()
         // Restore the original default sink if swapped.
         if (root._originalDefaultSink.length > 0) {
             Quickshell.execDetached(["bash", "-c",
@@ -748,8 +814,9 @@ Singleton {
             root._originalDefaultSink = ""
             root._clearOriginalSink()
         }
-        scrcpyAudioProc.running = false
-        droidcamAudioProc.running = false
+        // Kill any detached session still alive.
+        micSessionStopProc.running = false
+        micSessionStopProc.running = true
         teardownProc.running = true
     }
 
@@ -825,15 +892,18 @@ Singleton {
             args.push(ip, String(port))
         }
 
-        droidcamAudioProc.command = args
         root.activeIp = ip || (useAdbFallback ? "(usb)" : "")
         root.activePort = port
-        droidcamAudioProc.running = true
+        root._backend = "droidcam"
+        root._userStopped = false
 
-        // Don't set running=true immediately. The droidcam-cli audio process
-        // may output errors to stderr if the connection fails. Wait 3s —
-        // if no error appears and the process is still alive, report success.
-        // (Real-time error detection is handled by stderr SplitParser above.)
+        // Launch detached (survives Quickshell restarts). The script prints
+        // the new PID on stdout.
+        micLaunchProc.command = ["bash", root._sessionScript, "launch", "audio"].concat(args)
+        micLaunchProc.running = true
+
+        // Don't set running=true immediately. Validation happens via
+        // micVerifyTimer (process alive + sink-input evidence).
         micVerifyTimer.restart()
     }
 
@@ -843,29 +913,87 @@ Singleton {
         repeat: false
         onTriggered: {
             // Verify success for both backends (scrcpy and droidcam-cli).
-            // If the audio process is still alive 5s after launch with no
-            // fatal stderr error, declare success — the null-sink now has
-            // an active sink-input (scrcpy via PULSE_SINK + routeMicProc
-            // move-sink-input, or droidcam-cli via PULSE_SINK env) and its
-            // `.monitor` source is the mic.
-            const procAlive = (root._backend === "scrcpy")
-                ? scrcpyAudioProc.running
-                : droidcamAudioProc.running
-            if (root.connecting && procAlive) {
-                root.running = true
-                root.connecting = false
-                root.elapsedMs = 0
-                failTimer.stop()
+            // Success requires the process to be alive AND evidence that audio
+            // actually reaches the null-sink (a RUNNING sink-input on
+            // DroidCam-Mic), which the status script reports.
+            if (root.connecting) {
+                micEvidenceProc.running = false
+                micEvidenceProc.running = true
+            }
+        }
+    }
+
+    // ─── Mic launch probe (droidcam_session.sh launch audio/scrcpy-mic) ──
+    Process {
+        id: micLaunchProc
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const pid = parseInt(String(this.text).trim()) || 0
+                if (pid <= 0 && root.connecting) {
+                    root.connecting = false
+                    failTimer.stop()
+                    root.lastError = "Failed to launch the phone microphone process — check the session log"
+                    root.errorOccurred(root.lastError)
+                    root.stateChanged()
+                    return
+                }
+                root.sessionPid = pid
+                root.sessionStartedAt = Date.now() / 1000 | 0
                 root.stateChanged()
-                root._applyInitialState()
-            } else if (root.connecting) {
-                // Process exited — the stderr SplitParser should have
-                // already handled the error. Reset state just in case.
-                root.connecting = false
-                failTimer.stop()
-                root.stateChanged()
-                teardownProc.running = true
-                root.pulseSource = ""
+            }
+        }
+    }
+
+    // ─── Mic stream evidence check (droidcam_status.sh) ───
+    Process {
+        id: micEvidenceProc
+        running: false
+        command: ["bash", root._statusScript]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = String(this.text).trim()
+                let json = null
+                try { json = JSON.parse(out) } catch (e) { json = null }
+                if (!json) return
+                if (root.connecting) {
+                    const procAlive = (root._backend === "scrcpy")
+                        ? json.audio_running === true
+                        : json.audio_running === true
+                    if (procAlive && json.audio_has_sink_input === true) {
+                        // Real audio path confirmed.
+                        root.running = true
+                        root.connecting = false
+                        root.elapsedMs = 0
+                        failTimer.stop()
+                        root.stateChanged()
+                        root._applyInitialState()
+                        micWatchdogTimer.restart()
+                    } else if (procAlive) {
+                        // Process alive but no sink-input yet — retry once.
+                        micEvidenceRetryTimer.restart()
+                    } else {
+                        root.connecting = false
+                        failTimer.stop()
+                        root.lastError = root.lastError || "Phone microphone process exited — check USB/Wi-Fi connection and the DroidCam app"
+                        root.errorOccurred(root.lastError)
+                        root.stateChanged()
+                        teardownProc.running = true
+                        root.pulseSource = ""
+                    }
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: micEvidenceRetryTimer
+        interval: 2000
+        repeat: false
+        onTriggered: {
+            if (root.connecting) {
+                micEvidenceProc.running = false
+                micEvidenceProc.running = true
             }
         }
     }
@@ -892,19 +1020,12 @@ Singleton {
         // Cancel any pending USB probe from startMic case 3.
         usbProbeForStartup._oneShot = false
         usbProbeForStartup.running = false
-        // Mark as intentionally stopped so onExited doesn't show an error.
+        // Kill the detached session(s) via the session script (PID tracked).
         root._userStopped = true
-
-        // Restore default source if we overrode it.
-        if (root.defaultOverridden && root.previousDefaultSource.length > 0) {
-            defaultProc.command = ["bash", "-c",
-                "pactl set-default-source " + root.previousDefaultSource + " 2>/dev/null || true"]
-            defaultProc.running = true
-            root.defaultOverridden = false
-        }
-
-        droidcamAudioProc.running = false
-        scrcpyAudioProc.running = false
+        micWatchdogTimer.stop()
+        micEvidenceRetryTimer.stop()
+        micSessionStopProc.running = false
+        micSessionStopProc.running = true
         // ALWAYS unload any module-loopback — not just when monitorEnabled.
         // This catches leftover loopbacks from a previous shell session where
         // monitor was toggled but the flag was reset on reload.
@@ -918,9 +1039,26 @@ Singleton {
         root.connecting = false
         root.pulseSource = ""
         root.elapsedMs = 0
+        root.sessionPid = 0
+        root.sessionStartedAt = 0
         root.stateChanged()
         // Tear down the null-sink for both backends.
         teardownProc.running = true
+    }
+
+    // ─── Session stop (droidcam_session.sh stop <backend>) ──
+    Process {
+        id: micSessionStopProc
+        running: false
+        property string _target: "audio"
+        command: ["bash", root._sessionScript, "stop", "audio"]
+        onExited: (code, status) => {
+            // Also stop the scrcpy-mic session if it existed.
+            micSessionStopProc._target = "scrcpy-mic"
+            micSessionStopProc.command = ["bash", root._sessionScript, "stop", "scrcpy-mic"]
+            micSessionStopProc.running = false
+            micSessionStopProc.running = true
+        }
     }
 
     function toggleMic(): void {

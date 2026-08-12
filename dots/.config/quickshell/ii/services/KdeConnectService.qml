@@ -1061,8 +1061,6 @@ Singleton {
             const wantIp = useWl ? root._kdeConnectIp(root.activeDeviceId) : ""
             const fallback = useWl ? root._resolveWirelessHost(root.activeDeviceId) : ""
             const fb = fallback ? root._shellQuote(fallback) : "''"
-            // In wireless mode, discover the live ip:port via mDNS, falling
-            // back to the KDE Connect / manual host if avahi finds nothing.
             const resolveIp = useWl
                 ? "IP=$(" + root._mdnsDiscoverSnippet(wantIp) + "); [ -z \"$IP\" ] && IP=" + fb + "; "
                 : "IP=''; "
@@ -1070,9 +1068,17 @@ Singleton {
                 "if command -v adb >/dev/null 2>&1; then " +
                 resolveIp +
                 "  if [ -n \"$IP\" ]; then adb connect \"$IP\" 2>/dev/null; fi; " +
-                "  STATE=$(adb get-state 2>/dev/null); " +
-                "  [ \"$STATE\" = \"device\" ] && exit 0 || exit 1; " +
+                "  SERIAL=$(adb devices | grep -w 'device' | grep -v '192.168' | head -n1 | awk '{print $1}'); " +
+                "  if [ -z \"$SERIAL\" ]; then SERIAL=$(adb devices | grep -w 'device' | head -n1 | awk '{print $1}'); fi; " +
+                "  if [ -n \"$SERIAL\" ]; then echo \"SERIAL:$SERIAL\"; exit 0; else exit 1; fi; " +
                 "else exit 1; fi"]
+        }
+        stdout: SplitParser {
+            onRead: data => {
+                if (data.startsWith("SERIAL:")) {
+                    root.resolvedAdbSerial = data.substring(7).trim()
+                }
+            }
         }
         onExited: (code, status) => {
             const now = (code === 0)
