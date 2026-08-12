@@ -215,10 +215,23 @@ Singleton {
             return substitutions[str.toLowerCase()];
 
         // Handle common variations for user's requested apps
-        if (str.includes("android-studio"))
+        if (str.includes("android-studio") && iconExists("android-studio"))
             return "android-studio";
-        if (str.includes("zen-browser") || str.includes("zen"))
-            return "zen";
+        if (str.includes("zen")) {
+            if (iconExists("zen-browser")) return "zen-browser";
+            if (iconExists("zen")) return "zen";
+        }
+        if (str.includes("prism")) {
+            if (iconExists("prismlauncher")) return "prismlauncher";
+            if (iconExists("prism_launcher")) return "prism_launcher";
+            if (iconExists("org.prismlauncher.PrismLauncher")) return "org.prismlauncher.PrismLauncher";
+        }
+        if (str.includes("helium") && iconExists("helium"))
+            return "helium";
+        if (str.includes("zed")) {
+            if (iconExists("dev.zed.Zed")) return "dev.zed.Zed";
+            if (iconExists("zed")) return "zed";
+        }
 
         // Try to see if there's a themed icon matching the name (for absolute path icons)
         // This is important for apps like Zen Browser where the .desktop has an absolute path
@@ -228,6 +241,10 @@ Singleton {
             nameWithoutExt = str.slice(0, -8);
         if (iconExists(nameWithoutExt))
             return nameWithoutExt;
+
+        const noUnderscores = nameWithoutExt.replace(/_/g, "");
+        if (iconExists(noUnderscores))
+            return noUnderscores;
 
         // Quickshell's desktop entry lookup
         const entry = DesktopEntries.byId(str);

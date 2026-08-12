@@ -17,8 +17,37 @@ Item {
 
     readonly property string iconPath: {
         const _ = TaskbarApps.iconThemeRevision;
-        let iconStr = root.desktopEntry && root.desktopEntry.icon ? root.desktopEntry.icon : TaskbarApps.getCachedIcon(root.appId);
-        return Quickshell.iconPath(iconStr, "image-missing").toString();
+        
+        // 1. Try desktopEntry.icon directly if valid
+        if (root.desktopEntry && root.desktopEntry.icon) {
+            let path = Quickshell.iconPath(root.desktopEntry.icon, "").toString();
+            if (path !== "" && !path.includes("image-missing"))
+                return path;
+        }
+
+        // 2. Try guessIcon on appId
+        if (root.appId) {
+            let guessed = TaskbarApps.getCachedIcon(root.appId);
+            if (guessed && guessed !== "image-missing") {
+                let path = Quickshell.iconPath(guessed, "").toString();
+                if (path !== "" && !path.includes("image-missing"))
+                    return path;
+            }
+        }
+
+        // 3. Try guessIcon on desktopEntry.icon
+        if (root.desktopEntry && root.desktopEntry.icon) {
+            let guessed = AppSearch.guessIcon(root.desktopEntry.icon);
+            if (guessed && guessed !== "image-missing") {
+                let path = Quickshell.iconPath(guessed, "").toString();
+                if (path !== "" && !path.includes("image-missing"))
+                    return path;
+            }
+        }
+
+        // 4. Final fallback
+        let fallbackStr = root.desktopEntry?.icon || root.appId || "image-missing";
+        return Quickshell.iconPath(fallbackStr, "image-missing").toString();
     }
 
     // Detect if the icon is truly from the active system theme dynamically
