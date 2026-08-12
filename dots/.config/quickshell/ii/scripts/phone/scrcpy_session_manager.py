@@ -73,10 +73,12 @@ class ScrcpySessionManager:
                     })
 
             # If scrcpy --list-apps yielded no apps, try fallback adb pm list packages
+            device_ok = True
             if not apps:
                 adb_cmd = ["adb"] + target_args + ["shell", "pm", "list", "packages", "-3"]
                 res_adb = subprocess.run(adb_cmd, capture_output=True, text=True, timeout=8)
-                if res_adb.returncode == 0:
+                device_ok = res_adb.returncode == 0
+                if device_ok:
                     for line in res_adb.stdout.splitlines():
                         line = line.strip()
                         if line.startswith("package:"):
@@ -87,6 +89,16 @@ class ScrcpySessionManager:
                                 "name": name,
                                 "system": False
                             })
+
+            # A phone that dropped off ADB is an error, not an empty catalog.
+            # Reporting it as an empty list would wipe the app list already on
+            # screen and leave the user with a bare "no apps found".
+            if not apps and not device_ok:
+                self.emit({
+                    "event": "apps_error",
+                    "message": "Phone not reachable over ADB"
+                })
+                return
 
             # Deduplicate by package
             seen_pkgs = set()
