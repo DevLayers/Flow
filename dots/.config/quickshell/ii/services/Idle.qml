@@ -212,7 +212,9 @@ Singleton {
     }
 
     function _notifyExpiring() {
-        Quickshell.execDetached(["notify-send", "-a", "Keep awake", "-i", "hourglass_bottom", "-t", String(Math.max(5000, root.warnLeadSec * 1000)), "--hint=boolean:suppress-sound:true", Translation.tr("Keep awake ending"), Translation.tr("Sleep resumes in %1.").arg(root.remainingText)])
+        // Tagged with a hint rather than the icon name: notify-send's -i doesn't survive as
+        // appIcon here, so the shell can't tell this notification apart by icon.
+        Quickshell.execDetached(["notify-send", "-a", "Keep awake", "-i", "hourglass_bottom", "-t", String(Math.max(5000, root.warnLeadSec * 1000)), "--hint=boolean:suppress-sound:true", "--hint=string:x-qs-notif:keepawake-warn", Translation.tr("Keep awake ending"), Translation.tr("Sleep resumes in %1.").arg(root.remainingText)])
     }
 
     // Reset without persisting — used by the startup restore path, which must not write back

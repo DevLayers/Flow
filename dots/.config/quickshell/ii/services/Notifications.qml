@@ -399,10 +399,10 @@ Singleton {
         var isRecording = appName === "Recorder";
 
         // The "Keep awake" timer warns before it expires and offers to push the deadline out.
-        // Matched on the untranslated app name Idle.qml sends, so it survives UI language changes.
-        if (appName === "Keep awake" && appIcon === "hourglass_bottom") {
+        // Matched on a private hint rather than the icon: notify-send's -i doesn't reach appIcon.
+        if (notifObj.notification?.hints?.["x-qs-notif"] === "keepawake-warn") {
             notifObj.customActions = [
-                { "identifier": "__qs_keepawake_extend", "text": Translation.tr("Extend") },
+                { "identifier": "__qs_keepawake_extend", "text": Translation.tr("Extend %1").arg(Idle.formatMinutes(Idle.extendMinutes)) },
                 { "identifier": "__qs_keepawake_off", "text": Translation.tr("Stop") }
             ];
             return;

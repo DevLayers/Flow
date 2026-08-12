@@ -314,8 +314,6 @@ Item { // Notification item area
                                         if (modelData.identifier.startsWith("__qs_")) {
                                             Notifications.executeShellAction(notificationObject, modelData.identifier);
                                             root.destroyWithAnimation();
-                                            Notifications.executeShellAction(notificationObject, modelData.identifier);
-                                            root.destroyWithAnimation();
                                         } else {
                                             Notifications.attemptInvokeAction(notificationObject.notificationId, modelData.identifier);
                                         }

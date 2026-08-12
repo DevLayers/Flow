@@ -119,18 +119,12 @@ WindowDialog {
                 required property int index
                 required property var modelData
                 leftmost: index === 0
+                // Indefinite isn't offered here — that's what plain clicking the toggle does
+                rightmost: index === Idle.quickDurations.length - 1
                 buttonText: Idle.formatMinutes(modelData)
                 toggled: Idle.timed && Idle.sessionMinutes === modelData
                 onClicked: Idle.inhibitFor(modelData)
             }
-        }
-
-        SelectionGroupButton {
-            rightmost: true
-            buttonIcon: "all_inclusive"
-            buttonText: Translation.tr("Indefinite")
-            toggled: Idle.inhibit && !Idle.timed
-            onClicked: Idle.toggleInhibit(true)
         }
     }
 
