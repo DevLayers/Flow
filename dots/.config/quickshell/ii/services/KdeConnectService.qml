@@ -89,6 +89,7 @@ Singleton {
      *  a USB-attached device). Cached for 30s — used to enable ADB-only
      *  quick actions (screenshot, power key, volume, am start). */
     property bool adbReachable: false
+    property string resolvedAdbSerial: ""
 
     /** Live wireless ADB target ("ip:port") the next scrcpy launch will use.
      *  In auto mode this tracks KDE Connect's reported reachable address so
@@ -1460,6 +1461,24 @@ Singleton {
         return (ip.indexOf(":") < 0) ? (ip + ":" + port) : ip
     }
 
+    /**
+     * Shared ADB/scrcpy selector arguments for the PhoneScrcpyService.
+     *
+     * USB mode intentionally leaves the target implicit: adb selects the
+     * connected device, while wireless mode must select KDE Connect's live
+     * ip:port target. The short `-s` form is accepted by both adb and scrcpy.
+     */
+    function adbTargetArgs() {
+        if (root.resolvedAdbSerial)
+            return ["-s", root.resolvedAdbSerial]
+        const scrcpyConfig = Config.options?.phone?.scrcpy
+        if (!scrcpyConfig?.useWireless)
+            return []
+
+        const host = root.resolvedWirelessHost
+        return host ? ["-s", host] : []
+    }
+
     function launchScrcpy(devId, mode, deepLink) {
         if (!devId) return
 
@@ -1568,7 +1587,9 @@ Singleton {
         if (videoBuffer > 0) scrcpyArgs.push("--video-buffer=" + videoBuffer)
 
         let baseCmd = ""
-        if (useWireless) {
+        if (root.resolvedAdbSerial) {
+            scrcpyArgs.push("-s", root._shellQuote(root.resolvedAdbSerial))
+        } else if (useWireless) {
             // Android 11+ wireless debugging uses a RANDOM port that changes
             // on every toggle/reboot, so resolve the live ip:port via mDNS
             // (avahi) at launch time. Fall back to the KDE Connect / manual
@@ -1825,4 +1846,3 @@ Singleton {
         }
     }
 }
-

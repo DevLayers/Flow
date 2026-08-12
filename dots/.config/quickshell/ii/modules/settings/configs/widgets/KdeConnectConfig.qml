@@ -190,5 +190,92 @@ Item {
                 onValueChanged: Config.options.phone.scrcpy.videoBuffer = value
             }
         }
+
+        ContentSection {
+            icon: "apps"
+            title: Translation.tr("Android App Mode (scrcpy 4.0+)")
+
+            ConfigSwitch {
+                buttonIcon: "apps"
+                text: Translation.tr("Enable Android App Mode")
+                checked: Config.options.phone.scrcpy.appMode.enabled
+                onCheckedChanged: Config.options.phone.scrcpy.appMode.enabled = checked
+
+                StyledToolTip {
+                    text: Translation.tr("Allows launching individual Android apps directly from the II Phone panel.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "desktop_windows"
+                text: Translation.tr("Use Virtual Secondary Display (--flex-display)")
+                checked: Config.options.phone.scrcpy.appMode.flexDisplay
+                onCheckedChanged: Config.options.phone.scrcpy.appMode.flexDisplay = checked
+
+                StyledToolTip {
+                    text: Translation.tr("Launches apps in secondary virtual display. On Samsung Galaxy devices, this opens Samsung DeX. Disable to launch directly on main phone screen.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "keep"
+                text: Translation.tr("Keep virtual display active")
+                checked: Config.options.phone.scrcpy.appMode.keepActive
+                enabled: Config.options.phone.scrcpy.appMode.flexDisplay
+                onCheckedChanged: Config.options.phone.scrcpy.appMode.keepActive = checked
+
+                StyledToolTip {
+                    text: Translation.tr("Prevents virtual display from being destroyed when app window closes.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "web_asset"
+                text: Translation.tr("Show Android system decorations")
+                checked: Config.options.phone.scrcpy.appMode.systemDecorations
+                enabled: Config.options.phone.scrcpy.appMode.flexDisplay
+                onCheckedChanged: Config.options.phone.scrcpy.appMode.systemDecorations = checked
+
+                StyledToolTip {
+                    text: Translation.tr("Shows status bar and navigation controls inside the virtual display.")
+                }
+            }
+
+            ConfigSlider {
+                buttonIcon: "desktop_mac"
+                text: Translation.tr("Virtual Display Width")
+                value: Config.options.phone.scrcpy.appMode.displayWidth
+                from: 640
+                to: 2560
+                stepSize: 80
+                usePercentTooltip: false
+                enabled: Config.options.phone.scrcpy.appMode.flexDisplay
+                onValueChanged: Config.options.phone.scrcpy.appMode.displayWidth = value
+            }
+
+            ConfigSlider {
+                buttonIcon: "desktop_mac"
+                text: Translation.tr("Virtual Display Height")
+                value: Config.options.phone.scrcpy.appMode.displayHeight
+                from: 480
+                to: 1920
+                stepSize: 60
+                usePercentTooltip: false
+                enabled: Config.options.phone.scrcpy.appMode.flexDisplay
+                onValueChanged: Config.options.phone.scrcpy.appMode.displayHeight = value
+            }
+
+            ConfigSlider {
+                buttonIcon: "display_settings"
+                text: Translation.tr("Virtual Display Density (DPI)")
+                value: Config.options.phone.scrcpy.appMode.density
+                from: 120
+                to: 480
+                stepSize: 20
+                usePercentTooltip: false
+                enabled: Config.options.phone.scrcpy.appMode.flexDisplay
+                onValueChanged: Config.options.phone.scrcpy.appMode.density = value
+            }
+        }
     }
 }

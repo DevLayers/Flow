@@ -48,6 +48,7 @@ ShellRoot {
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
             PhoneContactsService.available;
+            PhoneScrcpyService.available;
         }
         root.applyOpenRgbIfEnabled();
     }

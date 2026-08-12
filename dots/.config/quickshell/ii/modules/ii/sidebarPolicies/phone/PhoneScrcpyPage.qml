@@ -184,16 +184,20 @@ ContentPage {
 
         // Big primary toggle button
         RippleButton {
+            id: mirrorToggleBtn
+            readonly property bool isRunning: KdeConnectService.scrcpyRunning || PhoneScrcpyService.mirrorRunning
+            readonly property bool isLaunching: KdeConnectService.scrcpyLaunching || PhoneScrcpyService.mirrorLaunching
+
             Layout.fillWidth: true
             Layout.preferredHeight: 56
             buttonRadius: Appearance.rounding.normal
-            colBackground: KdeConnectService.scrcpyRunning
+            colBackground: mirrorToggleBtn.isRunning
                 ? Appearance.colors.colErrorContainer
                 : Appearance.colors.colPrimaryContainer
-            colBackgroundHover: KdeConnectService.scrcpyRunning
+            colBackgroundHover: mirrorToggleBtn.isRunning
                 ? Appearance.colors.colErrorContainerHover
                 : Appearance.colors.colPrimaryContainerHover
-            colRipple: KdeConnectService.scrcpyRunning
+            colRipple: mirrorToggleBtn.isRunning
                 ? Appearance.colors.colErrorContainerActive
                 : Appearance.colors.colPrimaryContainerActive
             enabled: root._ready
@@ -203,31 +207,33 @@ ContentPage {
                 spacing: 10
                 MaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
-                    text: KdeConnectService.scrcpyRunning ? "stop_circle" : "play_circle"
+                    text: mirrorToggleBtn.isLaunching ? "sync" : (mirrorToggleBtn.isRunning ? "stop_circle" : "play_circle")
                     iconSize: 24
-                    color: KdeConnectService.scrcpyRunning
+                    color: mirrorToggleBtn.isRunning
                         ? Appearance.colors.colOnErrorContainer
                         : Appearance.colors.colOnPrimaryContainer
-                    fill: KdeConnectService.scrcpyRunning ? 1.0 : 0.0
+                    fill: mirrorToggleBtn.isRunning ? 1.0 : 0.0
                 }
                 StyledText {
                     Layout.fillWidth: true
-                    text: KdeConnectService.scrcpyRunning
-                        ? Translation.tr("Kill scrcpy")
-                        : Translation.tr("Launch scrcpy")
+                    text: mirrorToggleBtn.isLaunching
+                        ? Translation.tr("Launching scrcpy…")
+                        : (mirrorToggleBtn.isRunning ? Translation.tr("Kill scrcpy") : Translation.tr("Launch scrcpy"))
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
-                    color: KdeConnectService.scrcpyRunning
+                    color: mirrorToggleBtn.isRunning
                         ? Appearance.colors.colOnErrorContainer
                         : Appearance.colors.colOnPrimaryContainer
                 }
             }
 
             onClicked: {
-                if (KdeConnectService.scrcpyRunning)
+                if (KdeConnectService.scrcpyRunning || PhoneScrcpyService.mirrorRunning) {
+                    PhoneScrcpyService.stopMirror()
                     KdeConnectService.killScrcpy()
-                else
-                    KdeConnectService.launchScrcpy(KdeConnectService.activeDeviceId)
+                } else {
+                    PhoneScrcpyService.launchMirror()
+                }
             }
         }
 

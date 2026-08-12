@@ -844,6 +844,16 @@ Singleton {
                     property string wirelessIp: ""
                     property string wirelessPort: "5555"
                     property bool showTerminal: false
+                    property JsonObject appMode: JsonObject {
+                        property bool enabled: true
+                        property bool flexDisplay: true
+                        property int displayWidth: 1280
+                        property int displayHeight: 960
+                        property int density: 160
+                        property bool keepActive: true
+                        property bool systemDecorations: true
+                        property list<string> favoritePackages: []
+                    }
                 }
                 property JsonObject webcam: JsonObject {
                     property bool enabled: false
