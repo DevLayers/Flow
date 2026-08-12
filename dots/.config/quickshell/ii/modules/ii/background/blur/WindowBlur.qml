@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
@@ -49,6 +50,31 @@ Item {
                 anchors.fill: parent
                 color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.4)
             }
+        }
+    }
+
+    // GPU: the MultiEffect's implicit live ShaderEffectSource grab of sourceItem stops
+    // requesting new frames once shouldBlur settles at opacity 1.0, and can end up stuck
+    // on a stale/torn texture after sitting behind an open window for a long stretch.
+    // Force the Loader to tear down and rebuild the MultiEffect on workspace switches so
+    // it re-grabs a fresh frame, instead of relying on a full unblur/reblur cycle to fix it.
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (event.name === "workspace" || event.name === "workspacev2" || event.name === "focusedmon")
+                blurRefreshTimer.restart();
+        }
+    }
+
+    Timer {
+        id: blurRefreshTimer
+        interval: 100
+        repeat: false
+        onTriggered: {
+            if (!blurEffectLoader.active)
+                return;
+            blurEffectLoader.active = false;
+            blurEffectLoader.active = true;
         }
     }
 }
