@@ -27,10 +27,12 @@ Singleton {
     readonly property int warnLeadSec: Config.options?.idle?.warnLeadSec ?? 60
     readonly property int extendMinutes: Config.options?.idle?.extendMinutes ?? 15
     // JsonAdapter hands back a QML list, not a JS array — normalize before anything maps over it
-    readonly property var quickDurations: Array.from(Config.options?.idle?.quickDurations ?? [])
+    // Sliced as well as capped on write: the dialog keeps every chip on one row, so a longer
+    // list left over from an older config would overflow it.
+    readonly property var quickDurations: Array.from(Config.options?.idle?.quickDurations ?? []).slice(0, root.maxRecentDurations)
     // The chip row is a recents list, maintained by _recordDuration() rather than edited by hand
-    readonly property int maxRecentDurations: 5
-    readonly property var defaultDurations: [15, 30, 60, 120]
+    readonly property int maxRecentDurations: 3
+    readonly property var defaultDurations: [15, 30, 60]
 
     // Latched so the pre-expiry warning fires once per timed session
     property bool _warned: false

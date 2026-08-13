@@ -10,7 +10,7 @@ import Quickshell
 
 WindowDialog {
     id: root
-    backgroundWidth: 400
+    backgroundWidth: 330
 
     readonly property var options: Config.options.idle
 
@@ -22,10 +22,10 @@ WindowDialog {
         id: stepButton
         property string buttonIcon
 
-        implicitWidth: 34
-        implicitHeight: 34
+        implicitWidth: 48
+        implicitHeight: 48
         buttonRadius: Appearance.rounding.full
-        colBackground: "transparent"
+        colBackground: Appearance.colors.colLayer2
         colBackgroundHover: Appearance.colors.colLayer2Hover
         colRipple: Appearance.colors.colLayer2Active
 
@@ -123,7 +123,7 @@ WindowDialog {
         text: Translation.tr("Duration")
     }
 
-    // Recents, centered
+    // Recents plus indefinite, all on one row
     RowLayout {
         Layout.fillWidth: true
         Layout.topMargin: -12
@@ -140,32 +140,15 @@ WindowDialog {
                 required property int index
                 required property var modelData
                 leftmost: index === 0
-                rightmost: index === Idle.quickDurations.length - 1
                 buttonText: Idle.formatMinutes(modelData)
                 toggled: Idle.timed && Idle.sessionMinutes === modelData
                 onClicked: Idle.inhibitFor(modelData)
             }
         }
 
-        Item {
-            Layout.fillWidth: true
-        }
-    }
-
-    // Indefinite gets its own row so it reads as the odd one out that it is
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 0
-
-        Item {
-            Layout.fillWidth: true
-        }
-
         SelectionGroupButton {
-            leftmost: true
             rightmost: true
             buttonIcon: "all_inclusive"
-            buttonText: Translation.tr("Indefinite")
             toggled: Idle.inhibit && !Idle.timed
             onClicked: Idle.toggleInhibit(true)
         }
@@ -175,49 +158,62 @@ WindowDialog {
         }
     }
 
+    // Manual timer: step either side of the dialled value, then commit it
     RowLayout {
         Layout.fillWidth: true
         Layout.topMargin: 4
         spacing: 8
 
+        StepButton {
+            buttonIcon: "remove"
+            enabled: root.customMinutes > 5
+            onClicked: root.customMinutes = Idle.stepMinutes(root.customMinutes, -1)
+        }
+
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 40
+            implicitHeight: 48
             radius: Appearance.rounding.full
             color: Appearance.colors.colLayer2
-
-            StepButton {
-                anchors {
-                    left: parent.left
-                    leftMargin: 3
-                    verticalCenter: parent.verticalCenter
-                }
-                buttonIcon: "remove"
-                enabled: root.customMinutes > 5
-                onClicked: root.customMinutes = Idle.stepMinutes(root.customMinutes, -1)
-            }
 
             StyledText {
                 anchors.centerIn: parent
                 text: Idle.formatMinutes(root.customMinutes)
+                font.pixelSize: Appearance.font.pixelSize.large
+                font.variableAxes: ({
+                        "wght": 700
+                    })
                 color: Appearance.colors.colOnLayer2
-            }
-
-            StepButton {
-                anchors {
-                    right: parent.right
-                    rightMargin: 3
-                    verticalCenter: parent.verticalCenter
-                }
-                buttonIcon: "add"
-                enabled: root.customMinutes < 1440
-                onClicked: root.customMinutes = Idle.stepMinutes(root.customMinutes, 1)
             }
         }
 
-        DialogButton {
-            buttonText: Translation.tr("Start")
-            onClicked: Idle.inhibitFor(root.customMinutes)
+        StepButton {
+            buttonIcon: "add"
+            enabled: root.customMinutes < 1440
+            onClicked: root.customMinutes = Idle.stepMinutes(root.customMinutes, 1)
+        }
+    }
+
+    RippleButton {
+        id: startButton
+        Layout.fillWidth: true
+        Layout.topMargin: 4
+        implicitHeight: 48
+        buttonRadius: Appearance.rounding.full
+        colBackground: Appearance.colors.colPrimary
+        colBackgroundHover: Appearance.colors.colPrimaryHover
+        colRipple: Appearance.colors.colPrimaryActive
+        onClicked: Idle.inhibitFor(root.customMinutes)
+
+        contentItem: StyledText {
+            text: Translation.tr("Start")
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font.pixelSize: Appearance.font.pixelSize.large
+            font.variableAxes: ({
+                    "wght": 700
+                })
+            color: Appearance.colors.colOnPrimary
         }
     }
 
