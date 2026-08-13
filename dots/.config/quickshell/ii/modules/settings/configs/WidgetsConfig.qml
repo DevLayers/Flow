@@ -62,10 +62,11 @@ Item {
     property bool resourceExpanded: false
     property bool systemExpanded: false
 
-    // Extension UI is independent from the widget catalog. Keep its cards and
-    // community data out of the initial page construction until requested.
-    property bool extensionsExpanded: true
-    property bool communityExpanded: true
+    // Rich catalog sections are opt-in. This keeps the first page pass limited
+    // to the small Desktop Widgets controls and avoids starting network work.
+    property bool colorSchemeActive: false
+    property bool extensionsExpanded: false
+    property bool communityExpanded: false
 
     property var _previewQueue: []
     property bool _previewStaggerActive: false
@@ -106,6 +107,15 @@ Item {
             }
         }
     }
+
+    Timer {
+        id: colorSchemeLoadTimer
+        interval: 0
+        repeat: false
+        onTriggered: widgetsConfigRoot.colorSchemeActive = true
+    }
+
+    Component.onCompleted: colorSchemeLoadTimer.start()
 
     ContentPage {
         id: page
@@ -191,43 +201,49 @@ Item {
                     }
                 }
 
-                ContentSubsection {
-                    title: Translation.tr("Widget Color Scheme")
-                    icon: "palette"
+                Loader {
                     Layout.fillWidth: true
-
-                    Rectangle {
+                    Layout.preferredHeight: item ? item.implicitHeight : 0
+                    active: widgetsConfigRoot.colorSchemeActive
+                    asynchronous: true
+                    sourceComponent: ContentSubsection {
+                        title: Translation.tr("Widget Color Scheme")
+                        icon: "palette"
                         Layout.fillWidth: true
-                        implicitHeight: schemeGrid.implicitHeight + 24
-                        color: Appearance.colors.colLayer1
-                        radius: Appearance.rounding.normal
-                        border.color: Appearance.colors.colLayer0Border
-                        border.width: 1
 
-                        GridLayout {
-                            id: schemeGrid
-                            anchors.fill: parent
-                            anchors.margins: 12
-                            columns: 3
-                            rowSpacing: 8
-                            columnSpacing: 8
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: schemeGrid.implicitHeight + 24
+                            color: Appearance.colors.colLayer1
+                            radius: Appearance.rounding.normal
+                            border.color: Appearance.colors.colLayer0Border
+                            border.width: 1
 
-                            Repeater {
-                                model: WidgetColorScheme.availableSchemes
+                            GridLayout {
+                                id: schemeGrid
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                columns: 3
+                                rowSpacing: 8
+                                columnSpacing: 8
 
-                                delegate: ColorPreviewButton {
-                                    Layout.fillWidth: true
-                                    isWidgetScheme: true
-                                    colorScheme: modelData
-                                    colorSchemeDisplayName: WidgetColorScheme.schemes[modelData] ? WidgetColorScheme.schemes[modelData].name : modelData
-                                    widgetSchemeToggled: WidgetColorScheme.currentScheme === modelData
-                                    usePreviewColors: true
-                                    previewPrimary: WidgetColorScheme.getCardBgColor(modelData)
-                                    previewSecondary: WidgetColorScheme.getTextColorOnBg(modelData)
-                                    previewTertiary: WidgetColorScheme.getAccentColor(modelData)
+                                Repeater {
+                                    model: WidgetColorScheme.availableSchemes
 
-                                    onClicked: {
-                                        Config.options.background.widgets.colorScheme = modelData;
+                                    delegate: ColorPreviewButton {
+                                        required property var modelData
+
+                                        Layout.fillWidth: true
+                                        isWidgetScheme: true
+                                        colorScheme: modelData
+                                        colorSchemeDisplayName: WidgetColorScheme.schemes[modelData] ? WidgetColorScheme.schemes[modelData].name : modelData
+                                        widgetSchemeToggled: WidgetColorScheme.currentScheme === modelData
+                                        usePreviewColors: true
+                                        previewPrimary: WidgetColorScheme.getCardBgColor(modelData)
+                                        previewSecondary: WidgetColorScheme.getTextColorOnBg(modelData)
+                                        previewTertiary: WidgetColorScheme.getAccentColor(modelData)
+
+                                        onClicked: Config.options.background.widgets.colorScheme = modelData
                                     }
                                 }
                             }

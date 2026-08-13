@@ -49,6 +49,15 @@ Item {
                 ids.push(p.id);
                 subPages.push(sub);
             }
+            // Progressive settings sections live outside the page file, but
+            // are not sub-pages. Index them with an empty subPage so a search
+            // result navigates to the parent page and waits for the section's
+            // own lazy loader instead of trying to open the source as a page.
+            for (let source of (p.searchSources ?? [])) {
+                files.push(basePath + source);
+                ids.push(p.id);
+                subPages.push("");
+            }
         }
 
         pageFile.start(files, ids, subPages);

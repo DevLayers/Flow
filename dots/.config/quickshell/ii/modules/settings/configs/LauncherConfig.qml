@@ -59,7 +59,10 @@ ContentPage {
                 }
             }
 
-            Item { Layout.fillWidth: true; implicitHeight: 8 }
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: 8
+            }
 
             ConfigSlider {
                 buttonIcon: "search"
@@ -265,63 +268,78 @@ ContentPage {
             spacing: 2
 
             Repeater {
-                model: [{
-                    "name": Translation.tr("Action"),
-                    "icon": "bolt",
-                    "prop": "action"
-                }, {
-                    "name": Translation.tr("App"),
-                    "icon": "apps",
-                    "prop": "app"
-                }, {
-                    "name": Translation.tr("Clipboard"),
-                    "icon": "content_paste",
-                    "prop": "clipboard"
-                }, {
-                    "name": Translation.tr("Emojis"),
-                    "icon": "mood",
-                    "prop": "emojis"
-                }, {
-                    "name": Translation.tr("Math"),
-                    "icon": "calculate",
-                    "prop": "math"
-                }, {
-                    "name": Translation.tr("Shell command"),
-                    "icon": "terminal",
-                    "prop": "shellCommand"
-                }, {
-                    "name": Translation.tr("Web search"),
-                    "icon": "public",
-                    "prop": "webSearch"
-                }, {
-                    "name": Translation.tr("Window search"),
-                    "icon": "layers",
-                    "prop": "windowSearch"
-                }, {
-                    "name": Translation.tr("File browser"),
-                    "icon": "folder",
-                    "prop": "fileBrowser"
-                }, {
-                    "name": Translation.tr("File search"),
-                    "icon": "search",
-                    "prop": "fileSearch"
-                }, {
-                    "name": Translation.tr("Bluetooth"),
-                    "icon": "bluetooth",
-                    "prop": "bluetooth"
-                }, {
-                    "name": Translation.tr("Translator"),
-                    "icon": "translate",
-                    "prop": "translator"
-                }, {
-                    "name": Translation.tr("Media Downloader"),
-                    "icon": "download",
-                    "prop": "mediaDownloader"
-                }, {
-                    "name": Translation.tr("Material Symbols"),
-                    "icon": "font_download",
-                    "prop": "materialSymbols"
-                }]
+                model: [
+                    {
+                        "name": Translation.tr("Action"),
+                        "icon": "bolt",
+                        "prop": "action"
+                    },
+                    {
+                        "name": Translation.tr("App"),
+                        "icon": "apps",
+                        "prop": "app"
+                    },
+                    {
+                        "name": Translation.tr("Clipboard"),
+                        "icon": "content_paste",
+                        "prop": "clipboard"
+                    },
+                    {
+                        "name": Translation.tr("Emojis"),
+                        "icon": "mood",
+                        "prop": "emojis"
+                    },
+                    {
+                        "name": Translation.tr("Math"),
+                        "icon": "calculate",
+                        "prop": "math"
+                    },
+                    {
+                        "name": Translation.tr("Shell command"),
+                        "icon": "terminal",
+                        "prop": "shellCommand"
+                    },
+                    {
+                        "name": Translation.tr("Web search"),
+                        "icon": "public",
+                        "prop": "webSearch"
+                    },
+                    {
+                        "name": Translation.tr("Window search"),
+                        "icon": "layers",
+                        "prop": "windowSearch"
+                    },
+                    {
+                        "name": Translation.tr("File browser"),
+                        "icon": "folder",
+                        "prop": "fileBrowser"
+                    },
+                    {
+                        "name": Translation.tr("File search"),
+                        "icon": "search",
+                        "prop": "fileSearch"
+                    },
+                    {
+                        "name": Translation.tr("Bluetooth"),
+                        "icon": "bluetooth",
+                        "prop": "bluetooth"
+                    },
+                    {
+                        "name": Translation.tr("Translator"),
+                        "icon": "translate",
+                        "prop": "translator"
+                    },
+                    {
+                        "name": Translation.tr("Media Downloader"),
+                        "icon": "download",
+                        "prop": "mediaDownloader"
+                    },
+                    {
+                        "name": Translation.tr("Material Symbols"),
+                        "icon": "font_download",
+                        "prop": "materialSymbols"
+                    }
+                ]
 
                 delegate: Rectangle {
                     Layout.fillWidth: true
@@ -332,8 +350,7 @@ ContentPage {
                     bottomLeftRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
                     bottomRightRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
 
-                    ScrollAnimate {
-                    }
+                    ScrollAnimate {}
 
                     RowLayout {
                         anchors.fill: parent
@@ -355,7 +372,6 @@ ContentPage {
                                 iconSize: 18
                                 color: Appearance.colors.colOnSurface
                             }
-
                         }
 
                         StyledText {
@@ -377,17 +393,11 @@ ContentPage {
                                 color: Appearance.colors.colSurfaceContainerHighest
                                 radius: Appearance.rounding.full
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     ContentSection {
@@ -414,8 +424,7 @@ ContentPage {
                     bottomLeftRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
                     bottomRightRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
 
-                    ScrollAnimate {
-                    }
+                    ScrollAnimate {}
 
                     RowLayout {
                         anchors.fill: parent
@@ -441,7 +450,6 @@ ContentPage {
                                     implicitSize: 20
                                     tryCustomIcon: false
                                 }
-
                             }
 
                             Component {
@@ -452,9 +460,7 @@ ContentPage {
                                     text: modelData.type === "folder" ? "folder" : modelData.type === "builtin" ? "explore" : "terminal"
                                     color: modelData.type === "folder" ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnTertiaryContainer
                                 }
-
                             }
-
                         }
 
                         Rectangle {
@@ -486,7 +492,6 @@ ContentPage {
                                 verticalAlignment: Text.AlignVCenter
                                 font.pixelSize: Appearance.font.pixelSize.small
                             }
-
                         }
 
                         StyledText {
@@ -508,7 +513,7 @@ ContentPage {
                                     let newAlias = aliasEditInput.text.trim();
                                     if (newAlias === "") {
                                         aliasDelegate.isEditing = false;
-                                        return ;
+                                        return;
                                     }
                                     let newAliases = Array.from(Config.options.search.aliases || []);
                                     let exists = newAliases.some((a, idx) => {
@@ -534,9 +539,7 @@ ContentPage {
                                     text: aliasDelegate.isEditing ? "check" : "edit"
                                     color: parent.parent.parent.hovered ? (aliasDelegate.isEditing ? Appearance.colors.colOnSuccessContainer : Appearance.colors.colOnPrimaryContainer) : (aliasDelegate.isEditing ? Appearance.colors.colSuccess : Appearance.colors.colPrimary)
                                 }
-
                             }
-
                         }
 
                         RippleButton {
@@ -560,19 +563,12 @@ ContentPage {
                                     text: "delete"
                                     color: parent.parent.parent.hovered ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     ContentSection {
@@ -589,7 +585,7 @@ ContentPage {
                 let list = sortedApps;
                 if (appFilter.trim() !== "") {
                     let f = appFilter.toLowerCase();
-                    let res = list.filter((app) => {
+                    let res = list.filter(app => {
                         return app.name.toLowerCase().includes(f) || app.id.toLowerCase().includes(f);
                     });
                     return res.slice(0, 12);
@@ -613,30 +609,33 @@ ContentPage {
 
                     ConfigSelectionArray {
                         currentValue: addAliasArea.selectedType
-                        onSelected: (newValue) => {
+                        onSelected: newValue => {
                             addAliasArea.selectedType = newValue;
                         }
-                        options: [{
-                            "displayName": Translation.tr("App"),
-                            "icon": "apps",
-                            "value": "app"
-                        }, {
-                            "displayName": Translation.tr("Folder"),
-                            "icon": "folder",
-                            "value": "folder"
-                        }, {
-                            "displayName": Translation.tr("Command"),
-                            "icon": "terminal",
-                            "value": "command"
-                        }, {
-                            "displayName": Translation.tr("Built-in"),
-                            "icon": "explore",
-                            "value": "builtin"
-                        }]
+                        options: [
+                            {
+                                "displayName": Translation.tr("App"),
+                                "icon": "apps",
+                                "value": "app"
+                            },
+                            {
+                                "displayName": Translation.tr("Folder"),
+                                "icon": "folder",
+                                "value": "folder"
+                            },
+                            {
+                                "displayName": Translation.tr("Command"),
+                                "icon": "terminal",
+                                "value": "command"
+                            },
+                            {
+                                "displayName": Translation.tr("Built-in"),
+                                "icon": "explore",
+                                "value": "builtin"
+                            }
+                        ]
                     }
-
                 }
-
             }
 
             RowLayout {
@@ -667,9 +666,7 @@ ContentPage {
                             background: null
                             font.pixelSize: Appearance.font.pixelSize.small
                         }
-
                     }
-
                 }
 
                 Rectangle {
@@ -694,9 +691,7 @@ ContentPage {
                             background: null
                             font.pixelSize: Appearance.font.pixelSize.small
                         }
-
                     }
-
                 }
 
                 RippleButton {
@@ -711,15 +706,15 @@ ContentPage {
                     rippleColor: Appearance.colors.colSecondaryContainerActive
                     onClicked: {
                         if (newAliasInput.text.trim() === "" || newTargetInput.text.trim() === "")
-                            return ;
+                            return;
 
                         let newAliases = Array.from(Config.options.search.aliases || []);
                         // Duplicate alias check
-                        let exists = newAliases.some((a) => {
+                        let exists = newAliases.some(a => {
                             return a.alias === newAliasInput.text.trim();
                         });
                         if (exists)
-                            return ;
+                            return;
 
                         newAliases.push({
                             "alias": newAliasInput.text.trim(),
@@ -740,11 +735,8 @@ ContentPage {
                             iconSize: 24
                             color: Appearance.colors.colOnSecondaryContainer
                         }
-
                     }
-
                 }
-
             }
 
             Item {
@@ -803,9 +795,7 @@ ContentPage {
                                     colText: Appearance.colors.colOnSurfaceVariant
                                     onClicked: appFilterInput.text = ""
                                 }
-
                             }
-
                         }
 
                         Flow {
@@ -841,7 +831,6 @@ ContentPage {
                                             font.bold: chipMouse.containsMouse
                                             color: chipMouse.containsMouse ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
                                         }
-
                                     }
 
                                     MouseArea {
@@ -855,42 +844,45 @@ ContentPage {
                                             addAliasArea.selectedType = "app";
                                         }
                                     }
-
                                 }
-
                             }
-
                         }
-
                     }
 
                     // Builtin suggestion area
                     Flow {
-                        property var builtins: [{
-                            "id": "clipboard",
-                            "name": Translation.tr("Clipboard"),
-                            "icon": "content_paste"
-                        }, {
-                            "id": "emojis",
-                            "name": Translation.tr("Emoji Picker"),
-                            "icon": "mood"
-                        }, {
-                            "id": "math",
-                            "name": Translation.tr("Calculator Mode"),
-                            "icon": "calculate"
-                        }, {
-                            "id": "bluetooth",
-                            "name": Translation.tr("Bluetooth Manager"),
-                            "icon": "bluetooth"
-                        }, {
-                            "id": "translator",
-                            "name": Translation.tr("Translator"),
-                            "icon": "translate"
-                        }, {
-                            "id": "settings",
-                            "name": Translation.tr("Settings"),
-                            "icon": "settings"
-                        }]
+                        property var builtins: [
+                            {
+                                "id": "clipboard",
+                                "name": Translation.tr("Clipboard"),
+                                "icon": "content_paste"
+                            },
+                            {
+                                "id": "emojis",
+                                "name": Translation.tr("Emoji Picker"),
+                                "icon": "mood"
+                            },
+                            {
+                                "id": "math",
+                                "name": Translation.tr("Calculator Mode"),
+                                "icon": "calculate"
+                            },
+                            {
+                                "id": "bluetooth",
+                                "name": Translation.tr("Bluetooth Manager"),
+                                "icon": "bluetooth"
+                            },
+                            {
+                                "id": "translator",
+                                "name": Translation.tr("Translator"),
+                                "icon": "translate"
+                            },
+                            {
+                                "id": "settings",
+                                "name": Translation.tr("Settings"),
+                                "icon": "settings"
+                            }
+                        ]
 
                         Layout.fillWidth: true
                         spacing: 8
@@ -927,7 +919,6 @@ ContentPage {
                                         color: builtinChip.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                                         font.bold: builtinChip.selected
                                     }
-
                                 }
 
                                 MouseArea {
@@ -940,19 +931,12 @@ ContentPage {
                                         newAliasInput.forceActiveFocus();
                                     }
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     ContentSection {
@@ -974,7 +958,6 @@ ContentPage {
                     wrapMode: TextEdit.NoWrap
                     onTextChanged: Config.options.search.engineBaseUrl = text
                 }
-
             }
 
             ContentSubsection {
@@ -988,13 +971,9 @@ ContentPage {
                     wrapMode: TextEdit.NoWrap
                     onTextChanged: Config.options.search.fileSearchDirectory = text
                 }
-
             }
-
         }
-
     }
-
 
     ContentSection {
         icon: "link"

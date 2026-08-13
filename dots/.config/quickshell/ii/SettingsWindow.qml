@@ -239,6 +239,26 @@ FloatingWindow {
         return SettingsPageRegistry.pageIndexById(id);
     }
 
+    function consumePendingSettingsPage() {
+        const pending = GlobalStates.consumePendingSettingsPage();
+        if (!pending || pending === "")
+            return;
+
+        const directIndex = root.pageIndexById(pending);
+        if (directIndex >= 0) {
+            root.currentPage = directIndex;
+            return;
+        }
+
+        // Keep compatibility with older callers that passed a component name.
+        for (let i = 0; i < root.pages.length; i++) {
+            if (root.pages[i].component.indexOf(pending) !== -1) {
+                root.currentPage = i;
+                break;
+            }
+        }
+    }
+
     function cycleNavPage(delta) {
         if (root.currentPage >= root.navPageCount) {
             root.currentPage = delta > 0 ? 0 : root.navPageCount - 1;
@@ -275,22 +295,23 @@ FloatingWindow {
                 root.navigationHistoryActive = false;
                 SearchRegistry.setSettingsActive(true);
                 settingsSearchBar.forceFocus();
-                if (GlobalStates.settingsPendingPageName !== "") {
-                    // Accepts a page id ("tasksAccounts") or a component file name
-                    for (let i = 0; i < root.pages.length; i++) {
-                        if (root.pages[i].id === GlobalStates.settingsPendingPageName || root.pages[i].component.indexOf(GlobalStates.settingsPendingPageName) !== -1) {
-                            root.currentPage = i;
-                            break;
-                        }
-                    }
-                    GlobalStates.settingsPendingPageName = "";
-                }
+                root.consumePendingSettingsPage();
                 Qt.callLater(() => root.beginNavigationSession());
             } else {
                 root.pendingSearchText = "";
                 SearchRegistry.setSettingsActive(false);
                 root.endNavigationSession();
             }
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSettingsNavigationRequestChanged() {
+            if (!GlobalStates.settingsOpen || !root.visible)
+                return;
+            root.consumePendingSettingsPage();
+            settingsSearchBar.forceFocus();
         }
     }
 
@@ -314,6 +335,7 @@ FloatingWindow {
                 GlobalStates.settingsOpen = false;
         } else if (GlobalStates.settingsOpen) {
             SearchRegistry.setSettingsActive(true);
+            Qt.callLater(() => root.ensurePageReady());
         }
     }
 
@@ -366,6 +388,14 @@ FloatingWindow {
         root.activeSearchQuery = text;
         SearchRegistry.currentSearch = text;
         root.currentPage = root.pageIndexById("search");
+    }
+
+    function ensurePageReady() {
+        if (!root.visible || !Config.ready)
+            return;
+        if (pageLoader.status === Loader.Loading || pageLoader.status === Loader.Ready)
+            return;
+        pageLoader.beginGatedLoad(root.pages[root.currentPage].component);
     }
 
     Rectangle {
@@ -491,15 +521,54 @@ FloatingWindow {
                     opacity: 1.0
                     transformOrigin: Item.Left
 
-                    active: Config.ready
+                    active: Config.ready && pageLoadArmed
                     asynchronous: true
+
+                    property bool pageLoadArmed: false
+                    property bool _skeletonGateActive: false
+
                     Component.onCompleted: {
-                        source = root.pages[root.currentPage].component;
+                        Qt.callLater(() => root.ensurePageReady());
                     }
 
                     property bool _waitingForLoad: false
 
+                    function beginGatedLoad(nextSource) {
+                        if (!nextSource || nextSource === "")
+                            return;
+
+                        pageLoadArmed = false;
+                        _skeletonGateActive = true;
+                        _waitingForLoad = true;
+                        pageSkeleton.revealed = true;
+                        skeletonDelayTimer.stop();
+                        source = nextSource;
+                        pageActivationTimer.restart();
+                    }
+
+                    function resetPageSkeleton() {
+                        skeletonDelayTimer.stop();
+                        pageSkeleton.revealed = false;
+                    }
+
+                    function handlePageLoadStarted() {
+                        if (_skeletonGateActive)
+                            return;
+                        pageSkeleton.revealed = false;
+                        skeletonDelayTimer.restart();
+                    }
+
+                    function handlePageLoadFailed() {
+                        _skeletonGateActive = false;
+                        pageLoadArmed = false;
+                        resetPageSkeleton();
+                        _waitingForLoad = false;
+                    }
+
                     onLoaded: {
+                        _skeletonGateActive = false;
+                        skeletonDelayTimer.stop();
+                        pageSkeleton.revealed = false;
                         if (root.pendingSectionHighlight !== "") {
                             pendingHighlightTimer.restart();
                         }
@@ -520,6 +589,29 @@ FloatingWindow {
                         }
                     }
 
+                    onStatusChanged: {
+                        if (status === Loader.Loading) {
+                            handlePageLoadStarted();
+                        } else if (status === Loader.Error) {
+                            handlePageLoadFailed();
+                        }
+                    }
+
+                    onSourceChanged: {
+                        if (source !== "")
+                            handlePageLoadStarted();
+                    }
+
+                    Timer {
+                        id: pageActivationTimer
+                        interval: 48
+                        repeat: false
+                        onTriggered: {
+                            if (root.visible && Config.ready)
+                                pageLoader.pageLoadArmed = true;
+                        }
+                    }
+
                     Timer {
                         id: pendingHighlightTimer
                         interval: 150
@@ -529,6 +621,16 @@ FloatingWindow {
                                 SearchRegistry.currentSearch = root.pendingSectionHighlight;
                                 root.pendingSectionHighlight = "";
                             }
+                        }
+                    }
+
+                    Timer {
+                        id: skeletonDelayTimer
+                        interval: 90
+                        repeat: false
+                        onTriggered: {
+                            if (pageLoader.status === Loader.Loading || pageLoader._waitingForLoad)
+                                pageSkeleton.revealed = true;
                         }
                     }
 
@@ -577,13 +679,8 @@ FloatingWindow {
                             }
                         }
                         onFinished: {
-                            pageLoader.source = root.pages[root.currentPage].component;
                             pageLoader.x = 0;
-                            pageLoader._waitingForLoad = true;
-                            if (pageLoader.status === Loader.Ready) {
-                                pageLoader._waitingForLoad = false;
-                                switchAnimIncoming.start();
-                            }
+                            pageLoader.beginGatedLoad(root.pages[root.currentPage].component);
                         }
                     }
 
@@ -611,6 +708,12 @@ FloatingWindow {
                     }
 
                 } // closes Loader
+
+                SettingsPageSkeleton {
+                    id: pageSkeleton
+                    anchors.fill: parent
+                    z: 1
+                }
             } // closes Rectangle (Content container)
         } // closes RowLayout (Window content)
 
