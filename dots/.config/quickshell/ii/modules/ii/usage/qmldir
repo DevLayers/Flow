@@ -1,0 +1,12 @@
+module qs.modules.ii.usage
+
+Usage 1.0 Usage.qml
+UsageActivityHeatmap 1.0 UsageActivityHeatmap.qml
+UsageAppRow 1.0 UsageAppRow.qml
+UsageBarChart 1.0 UsageBarChart.qml
+UsageBattery 1.0 UsageBattery.qml
+UsageColumnChart 1.0 UsageColumnChart.qml
+UsageContent 1.0 UsageContent.qml
+UsagePeriodBar 1.0 UsagePeriodBar.qml
+UsageSemiDonut 1.0 UsageSemiDonut.qml
+UsageSetup 1.0 UsageSetup.qml

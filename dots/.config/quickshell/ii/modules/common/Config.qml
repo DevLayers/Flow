@@ -1076,8 +1076,8 @@ Singleton {
                 property list<string> customColorSchemes: []
                 property real animationMultiplier: 0.9500000000000001 // 0.25 = fast, 1.0 = default, 2.0 = slow
                 property bool colorfulScrollbar: false
-                property bool scrollAnimations: true
-                property bool scrollFadeMask: true
+                property bool scrollAnimations: false
+                property bool scrollFadeMask: false
                 property JsonObject openrgb: JsonObject {
                     property bool enable: false
                     property bool applyOnStartup: true

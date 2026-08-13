@@ -15,7 +15,7 @@ QtObject {
         "descriptionKey": "Read, organize and send email from the II cheatsheet.",
         "icon": "mail",
         "estimatedMinutes": 8,
-        "settingsPage": "cheatSheet",
+        "usedInKey": "Email / Cheatsheet",
         "contentId": "gmail",
         "detector": "email",
         "videoUrl": ""
@@ -25,7 +25,7 @@ QtObject {
         "descriptionKey": "Keep your sidebar tasks synchronized with TickTick.",
         "icon": "task_alt",
         "estimatedMinutes": 5,
-        "settingsPage": "tasksAccounts",
+        "usedInKey": "Tasks sidebar and task surfaces",
         "contentId": "ticktick",
         "detector": "ticktick",
         "videoUrl": ""
@@ -35,7 +35,7 @@ QtObject {
         "descriptionKey": "Show and manage calendar events through khal and vdirsyncer.",
         "icon": "calendar_month",
         "estimatedMinutes": 10,
-        "settingsPage": "",
+        "usedInKey": "Calendar / agenda surfaces",
         "contentId": "calendar",
         "detector": "calendar",
         "videoUrl": ""
@@ -45,7 +45,7 @@ QtObject {
         "descriptionKey": "Back up II data with rclone and your Google OAuth credentials.",
         "icon": "cloud_sync",
         "estimatedMinutes": 7,
-        "settingsPage": "tasksAccounts",
+        "usedInKey": "Accounts & Backup",
         "contentId": "drive",
         "detector": "googleDrive",
         "videoUrl": ""

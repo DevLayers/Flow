@@ -8,13 +8,26 @@ Item {
     id: root
 
     signal openSettingsPage(string pageId)
-
-    // Exposed for WelcomeFlow's Escape priority: a tutorial is an internal
-    // overlay of the Learn stage, so Escape should return to this catalog
-    // before closing the Welcome window itself.
+    signal openSettingsTarget(string pageId, string subPageId, string sectionId)
 
     property var selectedTutorial: null
     property bool tutorialOpen: false
+    property bool tutorialLoaderEnabled: false
+
+    function usedInFor(tutorial): string {
+        if (!tutorial)
+            return "";
+        return Translation.tr(tutorial.usedInKey || "II integration surfaces");
+    }
+
+    function stateKindFor(tutorial): string {
+        const state = WelcomeTutorialRegistry.stateFor(tutorial);
+        if (state.error)
+            return "attention";
+        if (state.usable)
+            return "ready";
+        return "neutral";
+    }
 
     function openTutorial(tutorialId: string): void {
         const tutorial = WelcomeTutorialRegistry.tutorialFor(tutorialId);
@@ -24,13 +37,14 @@ Item {
         openTutorialAnimation.stop();
         closeTutorialAnimation.stop();
         root.selectedTutorial = tutorial;
+        root.tutorialOpen = true;
         catalogLayer.visible = true;
-        tutorialLayer.visible = true;
         catalogLayer.x = 0;
         catalogLayer.opacity = 1;
+        tutorialLayer.visible = true;
         tutorialLayer.x = root.width;
         tutorialLayer.opacity = 0;
-        root.tutorialOpen = true;
+        root.tutorialLoaderEnabled = true;
         openTutorialAnimation.start();
     }
 
@@ -40,13 +54,13 @@ Item {
 
         openTutorialAnimation.stop();
         closeTutorialAnimation.stop();
+        root.tutorialOpen = false;
         catalogLayer.visible = true;
-        tutorialLayer.visible = true;
         catalogLayer.x = -root.width;
         catalogLayer.opacity = 0;
+        tutorialLayer.visible = true;
         tutorialLayer.x = 0;
         tutorialLayer.opacity = 1;
-        root.tutorialOpen = false;
         closeTutorialAnimation.start();
     }
 
@@ -60,69 +74,56 @@ Item {
     Item {
         id: catalogLayer
         anchors.fill: parent
-        visible: true
         clip: true
 
-        ContentPage {
+        ColumnLayout {
             anchors.fill: parent
-            bottomContentPadding: 28
+            spacing: 16
 
-            ContentSection {
+            ColumnLayout {
                 Layout.fillWidth: true
-                icon: "school"
-                title: Translation.tr("Optional integrations")
+                spacing: 4
 
-                NoticeBox {
+                StyledText {
                     Layout.fillWidth: true
-                    materialIcon: "info"
-                    text: Translation.tr("Pick a guide when you are ready. Welcome only reads each service's current state; setup remains in the existing Settings pages.")
+                    text: Translation.tr("Learn the useful features")
+                    color: Appearance.colors.colOnLayer1
+                    font.pixelSize: Appearance.font.pixelSize.large
+                    font.weight: Font.DemiBold
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Set up only the integrations you plan to use.")
+                    color: Appearance.colors.colOnLayer2
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    wrapMode: Text.WordWrap
                 }
             }
 
-            ContentSection {
+            GridLayout {
                 Layout.fillWidth: true
-                icon: "menu_book"
-                title: Translation.tr("Learn and connect")
+                Layout.fillHeight: true
+                columns: width >= 760 ? 2 : 1
+                columnSpacing: 14
+                rowSpacing: 14
 
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: width >= 820 ? 2 : 1
-                    columnSpacing: 12
-                    rowSpacing: 12
+                Repeater {
+                    model: WelcomeTutorialRegistry.tutorials
 
-                    Repeater {
-                        model: WelcomeTutorialRegistry.tutorials
-                        delegate: WelcomeActionCard {
-                            required property var modelData
-                            Layout.fillWidth: true
-                            implicitHeight: 132
-                            materialIcon: modelData.icon
-                            title: Translation.tr(modelData.titleKey)
-                            description: Translation.tr(modelData.descriptionKey)
-                            statusText: WelcomeTutorialRegistry.estimatedTimeFor(modelData)
-                                + " · " + WelcomeTutorialRegistry.statusTextFor(modelData)
-                                + " · " + WelcomeTutorialRegistry.actionTextFor(modelData)
-                            selected: WelcomeTutorialRegistry.stateFor(modelData).usable
-                            onClicked: root.openTutorial(modelData.id)
-                        }
+                    delegate: WelcomeIntegrationCard {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        materialIcon: modelData.icon
+                        title: Translation.tr(modelData.titleKey)
+                        description: Translation.tr(modelData.descriptionKey)
+                        usedIn: root.usedInFor(modelData)
+                        stateText: WelcomeTutorialRegistry.statusTextFor(modelData)
+                        stateKind: root.stateKindFor(modelData)
+                        onActivated: root.openTutorial(modelData.id)
                     }
                 }
-            }
-
-            RippleButtonWithIcon {
-                Layout.fillWidth: true
-                materialIcon: "settings"
-                mainText: Translation.tr("Open Accounts & feature settings")
-                onClicked: root.openSettingsPage("tasksAccounts")
-            }
-
-            WelcomeActionCard {
-                Layout.fillWidth: true
-                visible: WelcomeProjectLinks.documentationAvailable
-                materialIcon: "help_center"
-                title: Translation.tr("Project documentation")
-                description: Translation.tr("Read the complete reference when you want more detail.")
-                onClicked: Qt.openUrlExternally(WelcomeProjectLinks.documentationUrl)
             }
         }
     }
@@ -133,11 +134,18 @@ Item {
         visible: false
         clip: true
 
-        WelcomeTutorialPage {
+        Loader {
+            id: tutorialLoader
             anchors.fill: parent
-            tutorial: root.selectedTutorial
-            onBackRequested: root.closeTutorial()
-            onOpenSettingsPage: pageId => root.openSettingsPage(pageId)
+            active: root.tutorialLoaderEnabled
+                && (root.tutorialOpen || closeTutorialAnimation.running)
+            sourceComponent: WelcomeTutorialPage {
+                anchors.fill: parent
+                tutorial: root.selectedTutorial
+                onBackRequested: root.closeTutorial()
+                onOpenSettingsTarget: (pageId, subPageId, sectionId) =>
+                    root.openSettingsTarget(pageId, subPageId, sectionId)
+            }
         }
     }
 
@@ -216,6 +224,7 @@ Item {
         }
         onFinished: {
             tutorialLayer.visible = false;
+            root.tutorialLoaderEnabled = false;
             root.selectedTutorial = null;
         }
     }

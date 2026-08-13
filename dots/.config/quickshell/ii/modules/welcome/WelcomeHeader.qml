@@ -10,14 +10,12 @@ Item {
     id: root
 
     property string pageId: "start"
-    property int pageIndex: 0
-    property int pageCount: 6
     signal closeRequested()
 
     readonly property string pageTitle: WelcomePageRegistry.titleFor(root.pageId)
     readonly property string pageSubtitle: WelcomePageRegistry.subtitleFor(root.pageId)
 
-    implicitHeight: Math.max(72, headerRow.implicitHeight)
+    implicitHeight: Math.max(84, headerRow.implicitHeight)
 
     RowLayout {
         id: headerRow

@@ -7,7 +7,7 @@ import qs.modules.common
 import qs.services
 
 /**
- * Active Welcome MVP pages. Page IDs are stable contracts; page order is only
+ * Active Welcome setup pages. Page IDs are stable contracts; page order is
  * presentation metadata and must never be used as identity.
  */
 QtObject {
@@ -15,40 +15,46 @@ QtObject {
 
     readonly property var pages: [{
         "id": "start",
-        "titleKey": "Welcome to illogical-impulse",
-        "subtitleKey": "Connect the essentials first. Everything here is optional.",
+        "titleKey": "Get connected",
+        "subtitleKey": "Connect the essentials before you start. You can change these later.",
         "icon": "waving_hand",
         "component": "WelcomeStartPage.qml"
     }, {
-        "id": "experience",
-        "titleKey": "Choose your shell experience",
-        "subtitleKey": "Pick the layout that feels right for your workflow.",
-        "icon": "dashboard_customize",
-        "component": "WelcomeExperiencePage.qml"
-    }, {
         "id": "personalize",
         "titleKey": "Make it yours",
-        "subtitleKey": "Tune colors, wallpaper and the way your desktop feels.",
+        "subtitleKey": "Choose a wallpaper and a color scheme.",
         "icon": "palette",
         "component": "WelcomePersonalizePage.qml"
     }, {
+        "id": "displays",
+        "titleKey": "Set up your displays",
+        "subtitleKey": "Arrange the screens you use every day.",
+        "icon": "desktop_windows",
+        "component": "WelcomeDisplaysPage.qml"
+    }, {
+        "id": "experience",
+        "titleKey": "Choose how II behaves",
+        "subtitleKey": "Pick a shell mode and the bar placement that fits your workflow.",
+        "icon": "dashboard_customize",
+        "component": "WelcomeExperiencePage.qml"
+    }, {
         "id": "essentials",
         "titleKey": "Keep the essentials close",
-        "subtitleKey": "Shortcuts and useful places for everyday work.",
+        "subtitleKey": "Learn the shortcuts that make II feel fast.",
         "icon": "keyboard",
         "component": "WelcomeEssentialsPage.qml"
     }, {
         "id": "learn",
         "titleKey": "Learn the useful features",
-        "subtitleKey": "Optional guides for the integrations you want to use.",
+        "subtitleKey": "Set up only the integrations you plan to use.",
         "icon": "school",
         "component": "WelcomeLearnPage.qml"
     }, {
-        "id": "diagnostics",
-        "titleKey": "Check that everything is ready",
-        "subtitleKey": "A quick health check before you get started.",
-        "icon": "health_and_safety",
-        "component": "WelcomeDiagnosticsPage.qml"
+        "id": "finish",
+        "titleKey": "All set!",
+        "subtitleKey": "II is ready for you to use.",
+        "icon": "check_circle",
+        "component": "WelcomeFinishPage.qml"
     }]
 
     function pageIndexById(id: string): int {

@@ -13,21 +13,20 @@ Item {
     property string outgoingPageId: ""
     property int transitionDirection: 1
     property bool transitionRunning: false
-    property alias visitedPageIds: flowState.visitedPageIds
+    property real navigationSafeArea: 84
 
     readonly property real transitionOffset: Math.max(72, Math.min(144, width * 0.12))
 
     signal pageChanged(string pageId)
     signal openSettingsPage(string pageId)
+    signal openSettingsTarget(string pageId, string subPageId, string sectionId)
     signal openWifi()
     signal openBluetooth()
     signal openAudioOutput()
+    signal trySidebar()
+    signal trySearch()
 
     clip: true
-
-    WelcomeFlowState {
-        id: flowState
-    }
 
     function pageIndex(pageId) {
         return WelcomePageRegistry.pageIndexById(pageId);
@@ -58,8 +57,6 @@ Item {
         transitionAnimation.stop();
         root.currentPageId = "start";
         root.previousPageId = "";
-        flowState.reset();
-        flowState.markVisited("start");
         Qt.callLater(root.normalizePages);
     }
 
@@ -87,7 +84,6 @@ Item {
         root.outgoingPageId = root.currentPageId;
         root.incomingPageId = pageId;
         root.transitionRunning = true;
-        flowState.markVisited(pageId);
 
         const outgoing = root.loaderForPage(root.outgoingPageId);
         const incoming = root.loaderForPage(root.incomingPageId);
@@ -133,7 +129,8 @@ Item {
     function closeNestedPage(): bool {
         if (root.currentPageId !== "learn")
             return false;
-        const learnPage = root.loaderForPage("learn")?.item;
+        const learnLoader = root.loaderForPage("learn");
+        const learnPage = learnLoader && learnLoader.item ? learnLoader.item : null;
         return learnPage && learnPage.closeNestedPage
             ? learnPage.closeNestedPage()
             : false;
@@ -147,7 +144,8 @@ Item {
             Qt.callLater(() => root.openTutorial(tutorialId));
             return;
         }
-        const learnPage = root.loaderForPage("learn")?.item;
+        const learnLoader = root.loaderForPage("learn");
+        const learnPage = learnLoader && learnLoader.item ? learnLoader.item : null;
         if (learnPage && learnPage.openTutorial)
             learnPage.openTutorial(tutorialId);
     }
@@ -168,12 +166,14 @@ Item {
             property bool visualEnabled: false
 
             width: root.width
-            height: root.height
+            height: Math.max(0, root.height - root.navigationSafeArea)
             x: visualX
             opacity: visualOpacity
             visible: visualVisible
             enabled: visualEnabled
-            active: flowState.hasVisited(pageId) || root.currentPageId === pageId || root.incomingPageId === pageId
+            active: root.currentPageId === pageId
+                || root.incomingPageId === pageId
+                || root.outgoingPageId === pageId
             asynchronous: true
             source: Qt.resolvedUrl(modelData.component)
 
@@ -185,6 +185,10 @@ Item {
 
                 function onOpenSettingsPage(pageId) {
                     root.openSettingsPage(pageId);
+                }
+
+                function onOpenSettingsTarget(pageId, subPageId, sectionId) {
+                    root.openSettingsTarget(pageId, subPageId, sectionId);
                 }
 
                 function onOpenTutorial(tutorialId) {
@@ -201,6 +205,14 @@ Item {
 
                 function onOpenAudioOutput() {
                     root.openAudioOutput();
+                }
+
+                function onTrySidebar() {
+                    root.trySidebar();
+                }
+
+                function onTrySearch() {
+                    root.trySearch();
                 }
             }
         }

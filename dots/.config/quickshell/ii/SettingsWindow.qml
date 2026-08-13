@@ -241,12 +241,21 @@ FloatingWindow {
 
     function consumePendingSettingsPage() {
         const pending = GlobalStates.consumePendingSettingsPage();
+        root.pendingSubPage = GlobalStates.settingsPendingSubPage || "";
+        GlobalStates.settingsPendingSubPage = "";
         if (!pending || pending === "")
             return;
 
         const directIndex = root.pageIndexById(pending);
         if (directIndex >= 0) {
+            const samePage = root.currentPage === directIndex;
             root.currentPage = directIndex;
+            if (samePage && root.pendingSubPage !== ""
+                    && pageLoader.status === Loader.Ready) {
+                const targetSubPage = root.pendingSubPage;
+                root.pendingSubPage = "";
+                Qt.callLater(() => root.restoreSubPagePath(targetSubPage));
+            }
             return;
         }
 

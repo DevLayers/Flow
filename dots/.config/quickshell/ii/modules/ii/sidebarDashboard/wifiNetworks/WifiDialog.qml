@@ -14,6 +14,7 @@ WindowDialog {
     // historical dashboard behaviour as the default, while allowing hosts such
     // as Welcome to opt out of sidebar-specific side effects.
     property bool closeOwningSidebarOnDetails: true
+    property bool showDetailsAction: true
 
     signal detailsRequested()
 
@@ -65,6 +66,7 @@ WindowDialog {
 
         RippleButton {
             id: detailsBtn
+            visible: root.showDetailsAction
             buttonRadius: Appearance.rounding.full
             colBackground: "transparent"
             colBackgroundHover: "transparent"

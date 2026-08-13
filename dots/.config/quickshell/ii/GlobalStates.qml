@@ -311,9 +311,11 @@ Singleton {
         root.settingsOpen = true;
     }
 
-    function openSettingsPage(pageId) {
+    function openSettingsPage(pageId, subPageId, sectionId) {
+        const targetSubPage = subPageId || "";
         if (!pageId || pageId === "") {
             root.settingsPendingPageName = "";
+            root.settingsPendingSubPage = targetSubPage;
             root.settingsOpen = true;
             return;
         }
@@ -322,6 +324,7 @@ Singleton {
             return;
 
         root.settingsPendingPageName = pageId;
+        root.settingsPendingSubPage = targetSubPage;
         root.settingsNavigationRequest += 1;
         root.settingsOpen = true;
     }

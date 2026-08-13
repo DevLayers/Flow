@@ -7,91 +7,141 @@ import qs.services
 Item {
     id: root
 
-    signal openSettingsPage(string pageId)
-
-    ContentPage {
+    RowLayout {
         anchors.fill: parent
-        bottomContentPadding: 28
+        spacing: Appearance.rounding.small
 
-        ContentSection {
+        Rectangle {
             Layout.fillWidth: true
-            icon: "wallpaper"
-            title: Translation.tr("Look & feel")
+            Layout.fillHeight: true
+            Layout.minimumWidth: 430
+            Layout.preferredWidth: 3
+            radius: Appearance.rounding.large
+            color: Appearance.colors.colLayer1
+            clip: true
 
-            GridLayout {
-                Layout.fillWidth: true
-                columns: width >= 820 ? 2 : 1
-                columnSpacing: 14
-                rowSpacing: 14
-
-                ConfigWallpaperSelector {
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: 320
-                    Layout.preferredWidth: 520
-                    Layout.minimumHeight: 220
-                    Layout.preferredHeight: 250
-                    Layout.maximumHeight: 270
-                    text: Translation.tr("Wallpaper")
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignTop
-                    Layout.minimumWidth: 300
-                    Layout.preferredWidth: 360
-                    spacing: 12
-
-                    ConfigLightDarkToggle {
-                        Layout.fillWidth: true
-                        Layout.minimumHeight: 72
-                        Layout.preferredHeight: 76
-                        text: Translation.tr("Light / Dark Theme")
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.minimumHeight: 188
-                        Layout.preferredHeight: 214
-                        radius: Appearance.rounding.normal
-                        color: Appearance.colors.colLayer1
-                        clip: true
-
-                        StyledFlickable {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            contentWidth: width
-                            contentHeight: colorGrid.implicitHeight
-                            clip: true
-
-                            ColorPreviewGrid {
-                                id: colorGrid
-                                width: parent.width
-                                customTheme: false
-                                builtInTheme: false
-                            }
-                        }
-                    }
-                }
+            ConfigWallpaperSelector {
+                anchors.fill: parent
+                anchors.margins: Appearance.rounding.small
+                text: Translation.tr("Wallpaper")
             }
         }
 
-        ContentSection {
+        Rectangle {
             Layout.fillWidth: true
-            icon: "grid_view"
-            title: Translation.tr("Overview")
+            Layout.fillHeight: true
+            Layout.minimumWidth: 360
+            Layout.preferredWidth: 2
+            radius: Appearance.rounding.large
+            color: Appearance.colors.colLayer1
+            clip: true
 
-            ConfigSwitch {
-                Layout.fillWidth: true
-                buttonIcon: "grid_view"
-                text: Translation.tr("Enable Overview")
-                checked: Config.options.overview.enable
-                onCheckedChanged: Config.options.overview.enable = checked
-            }
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: Appearance.rounding.normal
+                spacing: Appearance.rounding.small
 
-            RippleButtonWithIcon {
-                materialIcon: "settings"
-                mainText: Translation.tr("More appearance settings")
-                onClicked: root.openSettingsPage("colors")
+                WelcomeLightDarkToggle {
+                    Layout.fillWidth: true
+                    Layout.minimumHeight: toggleHeight
+                    Layout.preferredHeight: toggleHeight
+                    Layout.maximumHeight: toggleHeight
+                }
+
+                StyledFlickable {
+                    id: colorSchemesFlickable
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    contentWidth: width
+                    contentHeight: colorSchemesContent.implicitHeight
+                    clip: true
+
+                    ColumnLayout {
+                        id: colorSchemesContent
+                        width: colorSchemesFlickable.width
+                        spacing: Appearance.rounding.small
+
+                        ContentSubsectionLabel {
+                            text: Translation.tr("Generated palettes")
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.family: Appearance.font.family.title
+                            font.variableAxes: Appearance.font.variableAxes.titleRounded
+                            font.weight: Font.Bold
+                        }
+
+                        WelcomeColorPreviewGrid {
+                            id: generatedColorGrid
+                            Layout.fillWidth: true
+                            columns: 3
+                            customTheme: false
+                            builtInTheme: false
+                        }
+
+                        ContentSubsectionLabel {
+                            text: Translation.tr("Built-in palettes")
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.family: Appearance.font.family.title
+                            font.variableAxes: Appearance.font.variableAxes.titleRounded
+                            font.weight: Font.Bold
+                        }
+
+                        WelcomeColorPreviewGrid {
+                            id: builtInColorGrid
+                            Layout.fillWidth: true
+                            columns: 3
+                            customTheme: false
+                            builtInTheme: true
+                        }
+
+                        ContentSubsectionLabel {
+                            visible: Config.options.appearance.customColorSchemes.length > 0
+                            text: Translation.tr("Custom palettes")
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.family: Appearance.font.family.title
+                            font.variableAxes: Appearance.font.variableAxes.titleRounded
+                            font.weight: Font.Bold
+                        }
+
+                        WelcomeColorPreviewGrid {
+                            id: customColorGrid
+                            Layout.fillWidth: true
+                            columns: 3
+                            customTheme: true
+                            builtInTheme: false
+                        }
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Appearance.font.pixelSize.larger + Appearance.rounding.small
+
+                    StyledText {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.leftMargin: Appearance.rounding.small
+                        text: generatedColorGrid.hoveredColorSchemeDisplayName
+                            || builtInColorGrid.hoveredColorSchemeDisplayName
+                            || customColorGrid.hoveredColorSchemeDisplayName
+                            || generatedColorGrid.selectedColorSchemeDisplayName
+                            || builtInColorGrid.selectedColorSchemeDisplayName
+                            || customColorGrid.selectedColorSchemeDisplayName
+                        color: Appearance.colors.colOnLayer1
+                        font.family: Appearance.font.family.title
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.weight: Font.Bold
+                        elide: Text.ElideRight
+                        horizontalAlignment: Text.AlignRight
+                        verticalAlignment: Text.AlignVCenter
+                        opacity: text !== "" ? 1 : 0
+
+                        Behavior on opacity {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                    }
+                }
             }
         }
     }

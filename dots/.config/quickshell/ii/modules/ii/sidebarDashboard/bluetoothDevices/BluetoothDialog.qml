@@ -19,6 +19,7 @@ WindowDialog {
     // Dashboard keeps the historical sidebar-close behaviour. Other hosts
     // (for example Welcome) can keep their owner untouched.
     property bool closeOwningSidebarOnDetails: true
+    property bool showDetailsAction: true
 
     signal detailsRequested()
 
@@ -391,6 +392,7 @@ WindowDialog {
         // Details button with only a border and no fill
         RippleButton {
             id: detailsBtn
+            visible: root.showDetailsAction
             buttonRadius: Appearance.rounding.full
             colBackground: "transparent"
             colBackgroundHover: "transparent"

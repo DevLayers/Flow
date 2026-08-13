@@ -7,173 +7,269 @@ import qs.services
 Item {
     id: root
 
-    signal openSettingsPage(string pageId)
+    signal trySidebar()
+    signal trySearch()
 
     readonly property int barPosition: (Config.options.bar.bottom ? 1 : 0)
         | (Config.options.bar.vertical ? 2 : 0)
+    readonly property bool cornerStyleRestricted: Config.options.bar.barBackgroundStyle === 3
+    readonly property bool compactWidth: width < 900
 
-    ContentPage {
+    ColumnLayout {
         anchors.fill: parent
-        bottomContentPadding: 28
+        spacing: Appearance.rounding.normal
 
-        ContentSection {
+        GridLayout {
             Layout.fillWidth: true
-            icon: "dashboard_customize"
-            title: Translation.tr("Shell mode")
+            columns: root.compactWidth ? 1 : 2
+            columnSpacing: Appearance.rounding.normal
+            rowSpacing: Appearance.rounding.small
 
-            NoticeBox {
+            WelcomeShellModeCard {
                 Layout.fillWidth: true
-                materialIcon: ShellModePolicy.connectModeActive ? "phone_android" : "view_sidebar"
-                text: ShellModePolicy.connectModeActive
-                    ? Translation.tr("Connect joins shell surfaces into a more mobile, unified experience.")
-                    : Translation.tr("Default keeps the classic II layout with independent panels and OSD.")
+                Layout.preferredWidth: 0
+                mode: "default"
+                title: Translation.tr("Default")
+                classification: Translation.tr("INDEPENDENT")
+                description: Translation.tr("Classic desktop behavior with independent shell surfaces.")
+                detailOne: Translation.tr("Sidebar and Search stay independent")
+                detailTwo: Translation.tr("Traditional desktop workflow")
+                modeIcon: "view_sidebar"
+                selected: ShellModePolicy.effectiveMode === "default"
+                enabled: ShellModePolicy.canSelectDefault
+                Accessible.name: Translation.tr("Default shell mode")
+                onModeSelected: ShellModePolicy.setMode("default")
+            }
+
+            WelcomeShellModeCard {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 0
+                mode: "connect"
+                title: Translation.tr("Connect")
+                classification: Translation.tr("UNIFIED")
+                description: Translation.tr("Unified shell behavior with connected surfaces.")
+                detailOne: Translation.tr("Search and panels stay near the bar")
+                detailTwo: Translation.tr("Mobile-inspired interaction model")
+                modeIcon: "join_full"
+                selected: ShellModePolicy.effectiveMode === "connect"
+                enabled: ShellModePolicy.canSelectConnect
+                Accessible.name: Translation.tr("Connect shell mode")
+                onModeSelected: ShellModePolicy.setMode("connect")
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Appearance.rounding.small
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Try the selected mode")
+                    color: Appearance.colors.colOnLayer1
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.Bold
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: ShellModePolicy.effectiveMode === "connect"
+                        ? Translation.tr("See how Connect behaves in the real shell.")
+                        : Translation.tr("See how Default behaves in the real shell.")
+                    color: Appearance.colors.colOnLayer2
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    maximumLineCount: 1
+                    elide: Text.ElideRight
+                }
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            RippleButtonWithIcon {
+                implicitWidth: Appearance.rounding.verylarge * 4
+                implicitHeight: Appearance.rounding.verylarge
+                centerContent: true
+                materialIcon: "side_navigation"
+                mainText: Translation.tr("Sidebar")
+                textPixelSize: Appearance.font.pixelSize.smaller
+                iconPixelSize: Appearance.font.pixelSize.normal
+                buttonRadius: Appearance.rounding.full
+                colText: Appearance.colors.colOnSecondaryContainer
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+                colRipple: Appearance.colors.colSecondaryContainerActive
+                onClicked: root.trySidebar()
+            }
+
+            RippleButtonWithIcon {
+                implicitWidth: Appearance.rounding.verylarge * 4
+                implicitHeight: Appearance.rounding.verylarge
+                centerContent: true
+                materialIcon: "search"
+                mainText: Translation.tr("Search")
+                textPixelSize: Appearance.font.pixelSize.smaller
+                iconPixelSize: Appearance.font.pixelSize.normal
+                buttonRadius: Appearance.rounding.full
+                colText: Appearance.colors.colOnSecondaryContainer
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+                colRipple: Appearance.colors.colSecondaryContainerActive
+                onClicked: root.trySearch()
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Appearance.rounding.small
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Quick preferences")
+                    color: Appearance.colors.colOnLayer1
+                    font.family: Appearance.font.family.title
+                    font.pixelSize: Appearance.font.pixelSize.large
+                    font.variableAxes: Appearance.font.variableAxes.titleRounded
+                    font.weight: Font.Bold
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Choose a couple of optional shell surfaces.")
+                    color: Appearance.colors.colOnLayer2
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                }
             }
 
             GridLayout {
                 Layout.fillWidth: true
-                columns: width >= 720 ? 2 : 1
-                columnSpacing: 12
-                rowSpacing: 12
+                columns: root.compactWidth ? 1 : 2
+                columnSpacing: Appearance.rounding.normal
+                rowSpacing: Appearance.rounding.small
 
-                WelcomeActionCard {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    implicitHeight: 132
-                    materialIcon: "view_sidebar"
-                    title: Translation.tr("Default mode")
-                    description: Translation.tr("Classic bar, panels and configurable OSD")
-                    statusText: !ShellModePolicy.canSelectDefault
-                        ? Translation.tr(ShellModePolicy.defaultBlockedReasonKey)
-                        : ""
-                    selected: ShellModePolicy.effectiveMode === "default"
-                    enabled: ShellModePolicy.canSelectDefault
-                    showChevron: false
-                    onClicked: ShellModePolicy.setMode("default")
-                }
+                    Layout.preferredWidth: 0
+                    spacing: Appearance.rounding.verysmall
 
-                WelcomeActionCard {
-                    Layout.fillWidth: true
-                    implicitHeight: 132
-                    materialIcon: "phone_android"
-                    title: Translation.tr("Connect mode")
-                    description: Translation.tr("Unified surfaces with mobile-style drop overlays")
-                    statusText: !ShellModePolicy.canSelectConnect
-                        ? Translation.tr(ShellModePolicy.connectBlockedReasonKey)
-                        : ""
-                    selected: ShellModePolicy.effectiveMode === "connect"
-                    enabled: ShellModePolicy.canSelectConnect
-                    showChevron: false
-                    onClicked: ShellModePolicy.setMode("connect")
-                }
-            }
-        }
-
-        ContentSection {
-            Layout.fillWidth: true
-            icon: "dock"
-            title: Translation.tr("Bar position")
-
-            NoticeBox {
-                Layout.fillWidth: true
-                visible: ShellModePolicy.barPositionLocked
-                materialIcon: "lock"
-                text: Translation.tr(ShellModePolicy.barPositionBlockedReasonKey)
-            }
-
-            ConfigSelectionArray {
-                Layout.fillWidth: true
-                currentValue: root.barPosition
-                onSelected: newValue => ShellModePolicy.setBarPosition(newValue)
-                options: [{
-                    "displayName": Translation.tr("Top"),
-                    "icon": "arrow_upward",
-                    "value": 0
-                }, {
-                    "displayName": Translation.tr("Left"),
-                    "icon": "arrow_back",
-                    "value": 2,
-                    "enabled": !ShellModePolicy.barPositionLocked
-                }, {
-                    "displayName": Translation.tr("Bottom"),
-                    "icon": "arrow_downward",
-                    "value": 1,
-                    "enabled": !ShellModePolicy.barPositionLocked
-                }, {
-                    "displayName": Translation.tr("Right"),
-                    "icon": "arrow_forward",
-                    "value": 3,
-                    "enabled": !ShellModePolicy.barPositionLocked
-                }]
-            }
-        }
-
-        ContentSection {
-            Layout.fillWidth: true
-            icon: "instant_mix"
-            title: Translation.tr("Quick preferences")
-
-            NoticeBox {
-                Layout.fillWidth: true
-                visible: !ShellModePolicy.osdStyleEditable
-                materialIcon: "phone_android"
-                text: Translation.tr("Connect uses its own native OSD styling.")
-            }
-
-            GridLayout {
-                Layout.fillWidth: true
-                columns: width >= 800 ? 2 : 1
-                columnSpacing: 14
-                rowSpacing: 14
-
-                ContentSubsection {
-                    Layout.fillWidth: true
-                    title: Translation.tr("OSD style")
-                    icon: "desktop_windows"
-                    enabled: ShellModePolicy.osdStyleEditable
-                    opacity: enabled ? 1 : 0.4
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Bar position")
+                        color: Appearance.colors.colOnLayer1
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.DemiBold
+                    }
 
                     ConfigSelectionArray {
-                        enabled: parent.enabled
-                        currentValue: Config.options.osd.style ?? "default"
-                        onSelected: newValue => Config.options.osd.style = newValue
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
+                        currentValue: root.barPosition
+                        onSelected: newValue => ShellModePolicy.setBarPosition(newValue)
                         options: [{
-                            "displayName": Translation.tr("Android"),
-                            "icon": "smartphone",
-                            "value": "default"
+                            displayName: Translation.tr("Top"), icon: "arrow_upward", value: 0
                         }, {
-                            "displayName": Translation.tr("Minimal"),
-                            "icon": "horizontal_rule",
-                            "value": "minimalist"
+                            displayName: Translation.tr("Left"), icon: "arrow_back", value: 2,
+                            enabled: !ShellModePolicy.barPositionLocked
+                        }, {
+                            displayName: Translation.tr("Bottom"), icon: "arrow_downward", value: 1,
+                            enabled: !ShellModePolicy.barPositionLocked
+                        }, {
+                            displayName: Translation.tr("Right"), icon: "arrow_forward", value: 3,
+                            enabled: !ShellModePolicy.barPositionLocked
                         }]
                     }
                 }
 
-                ContentSubsection {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    title: Translation.tr("Dashboard controls")
-                    icon: "toggle_on"
+                    Layout.preferredWidth: 0
+                    spacing: Appearance.rounding.verysmall
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Corner style")
+                        color: Appearance.colors.colOnLayer1
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.DemiBold
+                    }
 
                     ConfigSelectionArray {
-                        currentValue: Config.options.sidebar.quickToggles.style
-                        onSelected: newValue => Config.options.sidebar.quickToggles.style = newValue
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
+                        currentValue: Config.options.bar.cornerStyle
+                        onSelected: value => Config.options.bar.cornerStyle = value
                         options: [{
-                            "displayName": Translation.tr("Classic"),
-                            "icon": "grid_view",
-                            "value": "classic"
+                            displayName: Translation.tr("Hug"), icon: "line_curve", value: 0
                         }, {
-                            "displayName": Translation.tr("Android"),
-                            "icon": "view_comfy_alt",
-                            "value": "android"
+                            displayName: Translation.tr("Float"), icon: "open_in_full", value: 1
+                        }, {
+                            displayName: Translation.tr("Rect"), icon: "rectangle", value: 2,
+                            enabled: !root.cornerStyleRestricted,
+                            tooltip: Translation.tr("Unavailable with Islands background")
+                        }, {
+                            displayName: Translation.tr("Dynamic Island"), icon: "water_drop", value: 3,
+                            enabled: !root.cornerStyleRestricted,
+                            tooltip: Translation.tr("Unavailable with Islands background")
                         }]
                     }
                 }
             }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Interface extras")
+                color: Appearance.colors.colOnLayer1
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                font.weight: Font.DemiBold
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.rounding.small
+
+                WelcomeQuickToggle {
+                    Layout.fillWidth: true
+                    toggleIcon: "dock_to_bottom"
+                    label: Translation.tr("Show dock")
+                    checked: Config.options.dock.enable
+                    onToggleRequested: value => Config.options.dock.enable = value
+                }
+
+                WelcomeQuickToggle {
+                    Layout.fillWidth: true
+                    toggleIcon: "search"
+                    label: Translation.tr("Search suggestions")
+                    checked: Config.options.search.suggestions.enable
+                    onToggleRequested: value => Config.options.search.suggestions.enable = value
+                }
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                visible: ShellModePolicy.barPositionLocked || root.cornerStyleRestricted
+                text: ShellModePolicy.barPositionLocked
+                    ? Translation.tr(ShellModePolicy.barPositionLockedReasonKey)
+                    : Translation.tr("Some corner styles are unavailable with the current bar background.")
+                color: Appearance.colors.colOnLayer2
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                maximumLineCount: 2
+                wrapMode: Text.WordWrap
+            }
         }
 
-        RippleButtonWithIcon {
+        Item {
             Layout.fillWidth: true
-            materialIcon: "settings"
-            mainText: Translation.tr("Open full Bar settings")
-            onClicked: root.openSettingsPage("bar")
+            Layout.fillHeight: true
         }
     }
 }

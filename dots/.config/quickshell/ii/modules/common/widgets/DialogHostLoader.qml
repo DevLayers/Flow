@@ -16,6 +16,7 @@ Loader {
     required property string shownPropertyString
     property Item focusTarget: null
     property real dialogRadius: -1
+    property bool closing: false
     property alias dialog: root.sourceComponent
 
     readonly property bool shown: root.owner ? Boolean(root.owner[root.shownPropertyString]) : false
@@ -23,7 +24,7 @@ Loader {
     signal dialogClosed()
 
     anchors.fill: parent
-    active: shown
+    active: shown || closing
 
     function activateDialog() {
         if (!root.item)
@@ -33,10 +34,16 @@ Loader {
     }
 
     function dismissDialog() {
-        if (root.item)
+        if (root.item) {
+            root.closing = true;
             root.item.show = false;
+        }
         if (root.owner)
             root.owner[root.shownPropertyString] = false;
+        Qt.callLater(() => {
+            if (root.item && !root.item.visible && !root.shown)
+                root.closing = false;
+        });
     }
 
     function restoreFocus() {
@@ -45,10 +52,12 @@ Loader {
     }
 
     onActiveChanged: {
-        if (active)
-            root.activateDialog();
-        else
+        if (active) {
+            if (root.shown)
+                root.activateDialog();
+        } else {
             root.restoreFocus();
+        }
     }
 
     onLoaded: root.activateDialog()
@@ -79,6 +88,7 @@ Loader {
         function onVisibleChanged() {
             if (!root.item || root.item.visible || root.shown)
                 return;
+            root.closing = false;
             root.restoreFocus();
             root.dialogClosed();
         }

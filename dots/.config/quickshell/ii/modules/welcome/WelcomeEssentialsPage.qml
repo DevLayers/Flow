@@ -8,124 +8,87 @@ import qs.services
 Item {
     id: root
 
-    signal openSettingsPage(string pageId)
-
-    ContentPage {
+    ColumnLayout {
         anchors.fill: parent
-        bottomContentPadding: 28
+        spacing: 16
 
-        ContentSection {
+        StyledText {
             Layout.fillWidth: true
-            icon: "keyboard"
-            title: Translation.tr("Essential shortcuts")
+            text: Translation.tr("Shortcuts that make II feel fast.")
+            color: Appearance.colors.colOnLayer2
+            font.pixelSize: Appearance.font.pixelSize.large
+            wrapMode: Text.WordWrap
+        }
 
-            GridLayout {
-                Layout.fillWidth: true
-                columns: width >= 880 ? 3 : (width >= 580 ? 2 : 1)
-                columnSpacing: 10
-                rowSpacing: 10
+        GridLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            columns: width >= 780 ? 4 : 2
+            columnSpacing: 10
+            rowSpacing: 10
 
-                Repeater {
-                    model: WelcomeKeybindRegistry.actions
-                    delegate: WelcomeKeybindCard {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        title: Translation.tr(modelData.labelKey)
-                        materialIcon: modelData.icon
-                        keys: WelcomeKeybindRegistry.keysFor(modelData.id)
-                    }
+            Repeater {
+                model: WelcomeKeybindRegistry.actions
+                delegate: WelcomeKeybindCard {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 76
+                    title: Translation.tr(modelData.labelKey)
+                    materialIcon: modelData.icon
+                    keys: WelcomeKeybindRegistry.keysFor(modelData.id)
                 }
             }
         }
 
-        ContentSection {
+        StyledText {
             Layout.fillWidth: true
-            icon: "explore"
-            title: Translation.tr("Useful places")
-
-            GridLayout {
-                Layout.fillWidth: true
-                columns: width >= 780 ? 2 : 1
-                columnSpacing: 12
-                rowSpacing: 12
-
-                WelcomeActionCard {
-                    Layout.fillWidth: true
-                    materialIcon: "menu_book"
-                    title: Translation.tr("Open the complete cheatsheet")
-                    description: Translation.tr("See every shortcut, command and workspace action")
-                    onClicked: Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "cheatsheet", "open"])
-                }
-
-                WelcomeActionCard {
-                    Layout.fillWidth: true
-                    materialIcon: "settings"
-                    title: Translation.tr("Explore Settings")
-                    description: Translation.tr("All II features, grouped by purpose")
-                    onClicked: root.openSettingsPage("")
-                }
-
-                WelcomeActionCard {
-                    Layout.fillWidth: true
-                    materialIcon: "code"
-                    title: Translation.tr("II on GitHub")
-                    description: Translation.tr("Updates, source code and issue tracker")
-                    onClicked: Qt.openUrlExternally(WelcomeProjectLinks.repositoryUrl)
-                }
-
-                WelcomeActionCard {
-                    Layout.fillWidth: true
-                    visible: WelcomeProjectLinks.documentationAvailable
-                    materialIcon: "help_center"
-                    title: Translation.tr("Documentation wiki")
-                    description: Translation.tr("Usage notes and additional guides")
-                    onClicked: Qt.openUrlExternally(WelcomeProjectLinks.documentationUrl)
-                }
-            }
+            text: Translation.tr("Useful places")
+            color: Appearance.colors.colOnLayer1
+            font.pixelSize: Appearance.font.pixelSize.large
+            font.weight: Font.DemiBold
         }
 
-        ContentSection {
+        GridLayout {
             Layout.fillWidth: true
-            icon: "terminal"
-            title: Translation.tr("Useful commands")
+            columns: 2
+            columnSpacing: 12
+            rowSpacing: 12
 
-            StyledText {
+            WelcomeActionCard {
                 Layout.fillWidth: true
-                text: Translation.tr("Keep these small commands nearby when you need to troubleshoot or reopen II surfaces.")
-                color: Appearance.colors.colOnLayer2
-                font.pixelSize: Appearance.font.pixelSize.small
-                wrapMode: Text.WordWrap
+                materialIcon: "menu_book"
+                title: Translation.tr("Cheatsheet")
+                description: Translation.tr("Shortcuts and features")
+                onClicked: GlobalStates.cheatsheetOpen = true
             }
 
-            GridLayout {
+            WelcomeActionCard {
                 Layout.fillWidth: true
-                columns: width >= 860 ? 3 : (width >= 580 ? 2 : 1)
-                columnSpacing: 10
-                rowSpacing: 10
+                enabled: WelcomeProjectLinks.documentationAvailable
+                materialIcon: "help_center"
+                title: Translation.tr("Documentation")
+                description: Translation.tr("Guides and setup help")
+                statusText: WelcomeProjectLinks.documentationAvailable
+                    ? ""
+                    : Translation.tr("Coming soon")
+                onClicked: Qt.openUrlExternally(WelcomeProjectLinks.documentationUrl)
+            }
 
-                HelperCodeBox {
-                    Layout.fillWidth: true
-                    title: Translation.tr("Follow shell logs")
-                    text: Translation.tr("Useful when reporting a problem.")
-                    icon: "receipt_long"
-                    codeSnippet: "qs log -f -c ii"
-                }
+            WelcomeActionCard {
+                Layout.fillWidth: true
+                materialIcon: "code"
+                title: Translation.tr("GitHub")
+                description: Translation.tr("Source and updates")
+                onClicked: Qt.openUrlExternally(WelcomeProjectLinks.repositoryUrl)
+            }
 
-                HelperCodeBox {
-                    Layout.fillWidth: true
-                    title: Translation.tr("Reopen Welcome")
-                    text: Translation.tr("Open the setup flow without changing first-run state.")
-                    icon: "waving_hand"
-                    codeSnippet: "qs -c ii ipc call welcome open"
-                }
-
-                HelperCodeBox {
-                    Layout.fillWidth: true
-                    title: Translation.tr("Open Settings")
-                    text: Translation.tr("Launch Settings directly from a terminal.")
-                    icon: "settings"
-                    codeSnippet: "qs -c ii ipc call settings open"
-                }
+            WelcomeActionCard {
+                Layout.fillWidth: true
+                materialIcon: "forum"
+                title: Translation.tr("Discord")
+                description: Translation.tr("Community and support")
+                onClicked: Qt.openUrlExternally("https://discord.gg/GtdRBXgMwq")
             }
         }
     }

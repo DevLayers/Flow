@@ -13,6 +13,7 @@ WindowDialog {
     id: root
     property bool isSink: true
     property bool closeOwningSidebarOnDetails: true
+    property bool showDetailsAction: true
 
     signal detailsRequested()
 
@@ -31,6 +32,7 @@ WindowDialog {
         // Details button with only a border and no fill
         RippleButton {
             id: detailsBtn
+            visible: root.showDetailsAction
             buttonRadius: Appearance.rounding.full
             colBackground: "transparent"
             colBackgroundHover: "transparent"

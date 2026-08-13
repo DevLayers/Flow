@@ -13,188 +13,148 @@ Item {
     readonly property var integrationState: WelcomeTutorialRegistry.stateFor(root.tutorial)
 
     signal backRequested()
-    signal openSettingsPage(string pageId)
+    signal openSettingsTarget(string pageId, string subPageId, string sectionId)
 
-    ContentPage {
+    ColumnLayout {
         anchors.fill: parent
-        bottomContentPadding: 28
+        spacing: 14
 
-        RippleButtonWithIcon {
+        RowLayout {
             Layout.fillWidth: true
-            materialIcon: "arrow_back"
-            mainText: Translation.tr("Back to tutorials")
-            onClicked: root.backRequested()
-        }
+            spacing: 10
 
-        ContentSection {
-            Layout.fillWidth: true
-            icon: root.tutorial ? root.tutorial.icon : "school"
-            title: root.tutorial ? Translation.tr(root.tutorial.titleKey) : Translation.tr("Tutorial")
+            RippleButton {
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: implicitHeight
+                implicitHeight: 44
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colRipple: Appearance.colors.colSecondaryContainerActive
+                onClicked: root.backRequested()
 
-            NoticeBox {
-                Layout.fillWidth: true
-                materialIcon: root.integrationState.checking
-                    ? "sync"
-                    : (root.integrationState.error ? "error" : (root.integrationState.usable ? "check_circle" : "info"))
-                text: root.tutorial
-                    ? Translation.tr(root.content.intro) + "\n\n" + WelcomeTutorialRegistry.statusTextFor(root.tutorial)
-                    : Translation.tr("Choose a tutorial from the catalog.")
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "arrow_back"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
             }
-        }
 
-        ContentSection {
-            Layout.fillWidth: true
-            visible: root.content.prerequisites && root.content.prerequisites.length > 0
-            icon: "checklist"
-            title: Translation.tr("Before you start")
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 2
 
-            Repeater {
-                model: root.content.prerequisites
-                delegate: StyledText {
-                    required property string modelData
+                StyledText {
                     Layout.fillWidth: true
-                    text: "• " + Translation.tr(modelData)
-                    color: Appearance.colors.colOnLayer2
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    wrapMode: Text.WordWrap
+                    text: root.tutorial ? Translation.tr(root.tutorial.titleKey) : Translation.tr("Tutorial")
+                    color: Appearance.colors.colOnLayer1
+                    font.pixelSize: Appearance.font.pixelSize.large
+                    font.weight: Font.DemiBold
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.tutorial
+                        ? WelcomeTutorialRegistry.statusTextFor(root.tutorial)
+                        : Translation.tr("Choose a tutorial from the catalog.")
+                    color: root.integrationState.error
+                        ? Appearance.colors.colOnErrorContainer
+                        : Appearance.colors.colOnLayer2
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    elide: Text.ElideRight
                 }
             }
         }
 
-        ContentSection {
+        StyledText {
             Layout.fillWidth: true
-            visible: root.content.steps && root.content.steps.length > 0
-            icon: "format_list_numbered"
-            title: Translation.tr("Set it up")
+            text: root.tutorial
+                ? Translation.tr(root.content.intro)
+                : Translation.tr("Choose a tutorial from the catalog.")
+            color: Appearance.colors.colOnLayer2
+            font.pixelSize: Appearance.font.pixelSize.small
+            wrapMode: Text.WordWrap
+            maximumLineCount: 2
+            elide: Text.ElideRight
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            visible: root.content.prerequisites && root.content.prerequisites.length > 0
+            text: Translation.tr("What you need: ") + root.content.prerequisites.join(Translation.tr(" · "))
+            color: Appearance.colors.colOnLayer2
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            wrapMode: Text.WordWrap
+            maximumLineCount: 1
+            elide: Text.ElideRight
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 8
 
             Repeater {
-                model: root.content.steps
-                delegate: ColumnLayout {
+                model: root.content.steps || []
+
+                delegate: RowLayout {
                     required property var modelData
                     required property int index
                     Layout.fillWidth: true
-                    spacing: 8
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 10
 
-                    RowLayout {
+                    MaterialShapeWrappedMaterialSymbol {
+                        Layout.alignment: Qt.AlignTop
+                        text: (["looks_one", "looks_two", "looks_3", "looks_4"][index] || "looks_one")
+                        shape: MaterialShape.Shape.Cookie4Sided
+                        iconSize: Appearance.font.pixelSize.small
+                        padding: 7
+                        color: Appearance.colors.colSecondaryContainer
+                        colSymbol: Appearance.colors.colOnSecondaryContainer
+                    }
+
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 10
+                        spacing: 2
 
-                        MaterialShapeWrappedMaterialSymbol {
-                            Layout.alignment: Qt.AlignTop
-                            text: (["looks_one", "looks_two", "looks_3", "looks_4"][index] || "looks_one")
-                            shape: MaterialShape.Shape.Cookie4Sided
-                            iconSize: Appearance.font.pixelSize.normal
-                            padding: 8
-                            color: Appearance.colors.colPrimary
-                            colSymbol: Appearance.colors.colOnPrimary
-                        }
-
-                        ColumnLayout {
+                        StyledText {
                             Layout.fillWidth: true
-                            spacing: 4
+                            text: Translation.tr(modelData.title)
+                            color: Appearance.colors.colOnLayer1
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.DemiBold
+                            wrapMode: Text.WordWrap
+                        }
 
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: Translation.tr(modelData.title)
-                                color: Appearance.colors.colOnLayer1
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                font.weight: Font.DemiBold
-                                wrapMode: Text.WordWrap
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: Translation.tr(modelData.body)
-                                color: Appearance.colors.colOnLayer2
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                wrapMode: Text.WordWrap
-                            }
-
-                            RippleButtonWithIcon {
-                                Layout.alignment: Qt.AlignLeft
-                                visible: modelData.actionPage && modelData.actionPage.length > 0
-                                materialIcon: "settings"
-                                mainText: modelData.actionLabel ? Translation.tr(modelData.actionLabel) : Translation.tr("Open Settings")
-                                onClicked: root.openSettingsPage(modelData.actionPage)
-                            }
-
-                            HelperCodeBox {
-                                Layout.fillWidth: true
-                                visible: modelData.command && modelData.command.length > 0
-                                title: Translation.tr("Run when ready")
-                                text: Translation.tr("This command is shown for reference; Welcome does not execute it.")
-                                icon: "terminal"
-                                codeSnippet: modelData.command || ""
-                            }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr(modelData.body)
+                            color: Appearance.colors.colOnLayer2
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
                         }
                     }
                 }
             }
-        }
 
-        ContentSection {
-            Layout.fillWidth: true
-            visible: root.content.verification && root.content.verification.length > 0
-            icon: "verified"
-            title: Translation.tr("Verify the result")
+            Item { Layout.fillHeight: true }
 
-            Repeater {
-                model: root.content.verification
-                delegate: StyledText {
-                    required property string modelData
-                    Layout.fillWidth: true
-                    text: "• " + Translation.tr(modelData)
-                    color: Appearance.colors.colOnLayer2
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    wrapMode: Text.WordWrap
-                }
-            }
-        }
-
-        ContentSection {
-            Layout.fillWidth: true
-            icon: "help"
-            title: Translation.tr("Need help?")
-
-            HelperLinkBox {
-                Layout.fillWidth: true
-                title: Translation.tr("Troubleshooting")
-                text: Translation.tr("Common checks for this integration")
-
-                Repeater {
-                    model: root.content.troubleshooting
-                    delegate: StyledText {
-                        required property string modelData
-                        Layout.fillWidth: true
-                        text: "• " + Translation.tr(modelData)
-                        color: Appearance.colors.colOnSecondaryContainer
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        wrapMode: Text.WordWrap
-                    }
-                }
-            }
-        }
-
-        ContentSection {
-            Layout.fillWidth: true
-            icon: "ondemand_video"
-            title: Translation.tr("Watch later")
-
-            NoticeBox {
-                Layout.fillWidth: true
-                materialIcon: root.tutorial && root.tutorial.videoUrl && root.tutorial.videoUrl.length > 0
-                    ? "play_circle"
-                    : "video_library"
-                text: root.tutorial && root.tutorial.videoUrl && root.tutorial.videoUrl.length > 0
-                    ? Translation.tr("A video guide is available when you want a visual walkthrough.")
-                    : Translation.tr("Video guide coming soon. The written steps above are ready now.")
-
-                RippleButtonWithIcon {
-                    visible: root.tutorial && root.tutorial.videoUrl && root.tutorial.videoUrl.length > 0
-                    materialIcon: "open_in_new"
-                    mainText: Translation.tr("Open video")
-                    onClicked: Qt.openUrlExternally(root.tutorial.videoUrl)
-                }
+            RippleButtonWithIcon {
+                Layout.alignment: Qt.AlignLeft
+                visible: root.content.actionPage && root.content.actionPage.length > 0
+                materialIcon: "open_in_new"
+                mainText: root.content.actionLabel
+                    ? Translation.tr(root.content.actionLabel)
+                    : Translation.tr("Open guide")
+                onClicked: root.openSettingsTarget(
+                    root.content.actionPage || "",
+                    root.content.actionSubPage || "",
+                    root.content.actionSection || "")
             }
         }
     }
