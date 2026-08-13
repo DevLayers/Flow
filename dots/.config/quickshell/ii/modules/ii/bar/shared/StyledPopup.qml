@@ -105,6 +105,16 @@ LazyLoader {
         }
     }
 
+    // Dismiss the popup regardless of which mode opened it (click, sticky hover or plain hover).
+    function close() {
+        _clickActive = false;
+        _stickyActive = false;
+        _openDebounced = false;
+        _popupHovered = false;
+        _timers.openDebounce.stop();
+        _timers.grace.stop();
+    }
+
     function _evaluateStickyState() {
         if (!stickyHover)
             return;
