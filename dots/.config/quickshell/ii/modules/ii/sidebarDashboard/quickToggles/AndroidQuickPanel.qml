@@ -43,7 +43,7 @@ AbstractQuickPanel {
     readonly property real baseCellHeight: 56
 
     // Toggles config
-    readonly property list<string> availableToggleTypes: ["network", "bluetooth", "vpn", "tailscale", "dnsOverTls", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "screenRecord", "colorPicker", "videoEditor", "onScreenKeyboard", "mic", "audio", "notifications", "autoDnd", "powerProfile", "musicRecognition", "antiFlashbang", "soundcoreAnc", "systemSounds", "localSend", "mediaWidget", "volumeSlider", "micSlider", "brightnessSlider", "gammaSlider", "keyboardBacklight"]
+    readonly property list<string> availableToggleTypes: ["network", "bluetooth", "vpn", "tailscale", "dnsOverTls", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "screenRecord", "colorPicker", "videoEditor", "onScreenKeyboard", "mic", "audio", "notifications", "autoDnd", "powerProfile", "musicRecognition", "antiFlashbang", "screenShader", "soundcoreAnc", "systemSounds", "localSend", "mediaWidget", "volumeSlider", "micSlider", "brightnessSlider", "gammaSlider", "keyboardBacklight"]
     function isToggleVisible(toggleType) {
         return true
     }
@@ -420,6 +420,7 @@ AbstractQuickPanel {
                     onOpenTailscaleDialog: root.openTailscaleDialog()
                     onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                     onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
+                    onOpenScreenShaderDialog: root.openScreenShaderDialog()
                 }
             }
         }
@@ -570,6 +571,7 @@ AbstractQuickPanel {
                                         onOpenTailscaleDialog: root.openTailscaleDialog()
                                         onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                                         onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
+                                        onOpenScreenShaderDialog: root.openScreenShaderDialog()
                                     }
                                 }
                             }
@@ -808,6 +810,7 @@ AbstractQuickPanel {
                         onOpenTailscaleDialog: root.openTailscaleDialog()
                         onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                         onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
+                        onOpenScreenShaderDialog: root.openScreenShaderDialog()
                     }
                 }
             }

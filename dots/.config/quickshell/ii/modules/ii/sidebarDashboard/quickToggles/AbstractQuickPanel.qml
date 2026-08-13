@@ -18,4 +18,5 @@ Rectangle {
     signal openTailscaleDialog
     signal openDnsOverTlsDialog
     signal openIdleInhibitorDialog
+    signal openScreenShaderDialog
 }

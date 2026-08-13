@@ -976,6 +976,15 @@ Singleton {
                 property bool reapplyOnNetworkChange: true
             }
 
+            property JsonObject screenShader: JsonObject {
+                // Name of the shader a left click on the quick toggle turns on.
+                // Empty means "whatever the picker offers first".
+                property string lastUsed: ""
+                // Extra directories to scan for .glsl/.frag files, on top of the shell's
+                // own assets/shaders and everything hyprshade already looks at.
+                property list<string> extraShaderDirs: []
+            }
+
             property JsonObject ai: JsonObject {
                 property string systemPrompt: "## Style\n- Use casual tone, don't be formal!\n- Always be brief and to the point, unless asked otherwise\n- Don't repeat the user's question\n- Be approachable: Avoid using overly complicated, domain-specific terms and provide analogies when asked to explain a concept\n\n## Context (ignore when irrelevant)\n- You are a helpful and inspiring sidebar assistant on a {DISTRO} Linux system\n- Desktop environment: {DE}\n- Current date & time: {DATETIME}\n- Focused app: {WINDOWCLASS}\n\n## Presentation\n- Use Markdown features in your response: \n  - **Bold** text to **highlight keywords** in your response\n  - **Split long information into small sections** with h2 headers and a relevant emoji at the start of it (for example `## \ud83d\udc27 Linux`). Bullet points are preferred over long paragraphs, unless you're offering writing support or instructed otherwise by the user.\n- Asked to compare different options? You should firstly use a table to compare the main aspects, then elaborate or include relevant comments from online forums *after* the table. Make sure to provide a final recommendation for the user's use case!\n- Use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX '$$' delimiters. NEVER generate LaTeX code in a latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular documents (resumes, letters, essays, CVs, etc.).\n\nThanks!\n"
                 property string tool: "functions" // search, functions, or none
