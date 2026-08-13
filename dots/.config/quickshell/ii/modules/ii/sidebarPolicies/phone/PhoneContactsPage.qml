@@ -89,9 +89,13 @@ Rectangle {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: PhoneContactsService.ready
-                          ? Translation.tr("%1 found").arg(String(PhoneContactsService.filteredContacts.length))
-                          : Translation.tr("Connecting…")
+                    text: {
+                        if (!PhoneContactsService.ready) return Translation.tr("Connecting…")
+                        const shown = String(PhoneContactsService.filteredContacts.length)
+                        if (PhoneContactsService.hiddenCount <= 0) return Translation.tr("%1 found").arg(shown)
+                        return Translation.tr("%1 found · %2 hidden")
+                            .arg(shown).arg(String(PhoneContactsService.hiddenCount))
+                    }
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colSubtext
                     opacity: 0.8

@@ -841,6 +841,9 @@ Singleton {
                     property list<string> favoriteIds: []
                     property bool showAvatars: true
                     property string sortBy: "first" // "first" | "last"
+                    // Android exports every raw contact from every sync adapter, so
+                    // spam lists and SIM imports show up as bare phone numbers
+                    property bool hideUnnamed: true
                 }
                 property JsonObject scrcpy: JsonObject {
                     property bool stayAwake: false  // bare scrcpy default — don't add overhead

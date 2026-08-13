@@ -49,6 +49,30 @@ Item {
                 Config.options.phone.kdeconnectEnabled = checked;
             }
         }
+
+        ContentSubsectionLabel { text: Translation.tr("Contacts") }
+
+        ConfigSwitch {
+            buttonIcon: "contacts"
+            text: Translation.tr("Sync contacts from phone")
+            checked: Config.options.phone.contacts.enabled
+            onCheckedChanged: {
+                Config.options.phone.contacts.enabled = checked;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "filter_alt"
+            text: Translation.tr("Hide contacts without a name")
+            checked: Config.options.phone.contacts.hideUnnamed
+            enabled: Config.options.phone.contacts.enabled
+            onCheckedChanged: {
+                Config.options.phone.contacts.hideUnnamed = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Your phone exports every number known to any app, including spam lists and SIM imports. These arrive with no name and show up as bare numbers. Favorites are never hidden.")
+            }
+        }
     }
 
     ContentSection {
