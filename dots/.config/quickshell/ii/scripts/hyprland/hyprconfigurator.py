@@ -55,6 +55,11 @@ def edit_hyprland_config(file_path, set_args, reset_args, add_lines=None, remove
         if new_lines and not new_lines[-1].endswith('\n'): new_lines[-1] += '\n'
         new_lines.append(line)
 
+    # Replacing the file makes Hyprland reload, which drops every runtime-only
+    # option (border size and colour, gaps, rounding, blur) back to whatever the
+    # Lua config says. Rewriting identical content costs a reload for nothing.
+    if new_lines == lines and os.path.exists(file_path): return
+
     os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
     with tempfile.NamedTemporaryFile(mode='w', dir=os.path.dirname(os.path.abspath(file_path)), delete=False) as tmp:
         tmp.writelines(new_lines)

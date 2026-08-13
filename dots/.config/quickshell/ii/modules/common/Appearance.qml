@@ -328,12 +328,23 @@ Singleton {
     }
 
     property bool _isApplyingRules: false
+    // Border size, border colour, gaps, rounding and blur only exist at runtime:
+    // a config reload throws them away and puts the Lua file's values back. So a
+    // reload arriving mid-cooldown cannot simply be ignored — nothing would ever
+    // push them again, and the window borders would stay wrong for the rest of
+    // the session. Remember it instead and re-apply once the cooldown lapses.
+    property bool _rulesReapplyPending: false
 
     Timer {
         id: hyprlandRuleCooldownTimer
         interval: 3000
         repeat: false
-        onTriggered: root._isApplyingRules = false
+        onTriggered: {
+            root._isApplyingRules = false;
+            if (!root._rulesReapplyPending) return;
+            root._rulesReapplyPending = false;
+            root.applyHyprlandRules();
+        }
     }
 
     function applyHyprlandRules() {
@@ -390,9 +401,11 @@ Singleton {
     Connections {
         target: HyprlandConfig
         function onReloaded() {
-            if (!root._isApplyingRules) {
-                root.applyHyprlandRules();
+            if (root._isApplyingRules) {
+                root._rulesReapplyPending = true;
+                return;
             }
+            root.applyHyprlandRules();
         }
     }
 
