@@ -51,7 +51,12 @@ Item {
             visible: Config.options.bar.utilButtons.showScreenRecord
             sourceComponent: CircleUtilButton {
                 Layout.alignment: Qt.AlignVCenter
-                onClicked: Quickshell.execDetached([Directories.recordScriptPath])
+                onClicked: Quickshell.execDetached(Persistent.states.screenRecord.active
+                    ? [Directories.recordScriptPath]
+                    : [Directories.recordScriptPath, "--fullscreen"])
+                altAction: () => Quickshell.execDetached(Persistent.states.screenRecord.active
+                    ? [Directories.recordScriptPath]
+                    : [Directories.recordScriptPath, "--region"])
                 MaterialSymbol {
                     horizontalAlignment: Qt.AlignHCenter
                     fill: 1

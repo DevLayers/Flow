@@ -131,7 +131,12 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         colBackground: recordingItem.isRecording ? Appearance.colors.colPrimaryContainer : "transparent"
                         buttonRadius: recordingItem.isRecording ? Appearance.rounding.normal : implicitHeight / 2
-                        onClicked: Quickshell.execDetached([Directories.recordScriptPath])
+                        onClicked: Quickshell.execDetached(recordingItem.isRecording
+                            ? [Directories.recordScriptPath]
+                            : [Directories.recordScriptPath, "--fullscreen"])
+                        altAction: () => Quickshell.execDetached(recordingItem.isRecording
+                            ? [Directories.recordScriptPath]
+                            : [Directories.recordScriptPath, "--region"])
 
                         Behavior on colBackground { ColorAnimation { duration: 200 } }
                         Behavior on buttonRadius { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
@@ -173,7 +178,12 @@ Item {
                     vertical: root.vertical
                     iconText: Persistent.states.screenRecord.active ? "stop" : "screen_record"
                     forceHovered: Persistent.states.screenRecord.active
-                    onClicked: Quickshell.execDetached([Directories.recordScriptPath])
+                    onClicked: Quickshell.execDetached(Persistent.states.screenRecord.active
+                        ? [Directories.recordScriptPath]
+                        : [Directories.recordScriptPath, "--fullscreen"])
+                    altAction: () => Quickshell.execDetached(Persistent.states.screenRecord.active
+                        ? [Directories.recordScriptPath]
+                        : [Directories.recordScriptPath, "--region"])
                 }
             }
 

@@ -58,7 +58,8 @@ Item {
     property bool available: toggleModel?.available ?? true
     property bool toggled: toggleModel?.toggled ?? false
     property var mainAction: toggleModel?.mainAction ?? null
-    property var altAction: toggleModel?.hasMenu ? (() => root.openMenu()) : (toggleModel?.altAction ?? null)
+    property bool hasMenu: toggleModel?.hasMenu ?? false
+    property var altAction: root.hasMenu ? (() => root.openMenu()) : (toggleModel?.altAction ?? null)
 
     // Optional custom layout for 2x2 size — set by subclasses to override ios2x2Layout
     property Component wide2x2OverrideComponent: null
@@ -253,7 +254,7 @@ Item {
         horizontalPadding: padding
         verticalPadding: padding
 
-        property bool useLayer2Bg: (root.altAction && root.expandedSize) || (root.isTall && !root.isWide)
+        property bool useLayer2Bg: (root.hasMenu && root.expandedSize) || (root.isTall && !root.isWide)
         colBackground: is3WaySlider ? "transparent" : Appearance.colors.colLayer2
         colBackgroundToggled: is3WaySlider ? "transparent" : (useLayer2Bg ? Appearance.colors.colLayer2 : Appearance.colors.colPrimary)
         colBackgroundToggledHover: is3WaySlider ? "transparent" : (useLayer2Bg ? Appearance.colors.colLayer2Hover : Appearance.colors.colPrimaryHover)
@@ -269,7 +270,7 @@ Item {
 
         onClicked: {
             if (is3WaySlider) return;
-            if ((root.expandedSize || root.isTall) && root.altAction)
+            if ((root.expandedSize || root.isTall) && root.hasMenu)
                 root.altAction();
             else
                 root.mainAction();
