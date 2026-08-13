@@ -6,13 +6,12 @@ import qs.modules.common.widgets
 import qs.modules.common
 
 Loader {
-    sourceComponent: Config.options.osd.material.enable ? materialOsdComp : minimalOsdComp
+    sourceComponent: Config.options.osd.style === "material" ? materialOsdComp : minimalOsdComp
 
     Component {
         id: minimalOsdComp
         OsdValueIndicator {
             id: kbdBrightnessOsd
-            
             icon: "keyboard"
             rotateIcon: false
             scaleIcon: true
@@ -29,6 +28,12 @@ Loader {
             value: KeyboardBacklight.percentage / 100
             icon: "keyboard"
             shape: MaterialShape.Shape.Hexagon
+
+            onMoved: function(newValue) {
+                const max = KeyboardBacklight.maxValue;
+                const level = Math.round(newValue * max);
+                KeyboardBacklight.setValue(level);
+            }
         }
     }
 }

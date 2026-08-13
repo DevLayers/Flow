@@ -5,7 +5,7 @@ import qs.modules.common.widgets
 import qs.modules.common
 
 Loader {
-    sourceComponent: Config.options.osd.material.enable ? materialOsdComp : minimalOsdComp
+    sourceComponent: Config.options.osd.style === "material" ? materialOsdComp : minimalOsdComp
 
     Component {
         id: minimalOsdComp
@@ -25,6 +25,12 @@ Loader {
             value: MprisController.activePlayer?.volume ?? 0
             icon: "music_note"
             shape: MaterialShape.Shape.Cookie4Sided
+
+            onMoved: function(newValue) {
+                if (MprisController.activePlayer) {
+                    MprisController.activePlayer.volume = newValue;
+                }
+            }
         }
     }
 }

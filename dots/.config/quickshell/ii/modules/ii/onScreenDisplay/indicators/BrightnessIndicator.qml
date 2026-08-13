@@ -8,8 +8,7 @@ import qs.modules.common
 
 Loader {
     id: root
-
-    sourceComponent: Config.options.osd.material.enable ? materialOsdComp : minimalOsdComp
+    sourceComponent: Config.options.osd.style === "material" ? materialOsdComp : minimalOsdComp
 
     property var focusedScreen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
     property var brightnessMonitor: Brightness.getMonitorForScreen(focusedScreen)
@@ -18,7 +17,6 @@ Loader {
         id: minimalOsdComp
         OsdValueIndicator {
             id: brightnessOsd
-
             icon: {
                 if (Hyprsunset.temperatureActive) return "routine";
                 const val = brightnessOsd.value;
@@ -47,6 +45,12 @@ Loader {
                 return "brightness_high";
             }
             shape: MaterialShape.Shape.SoftBurst
+
+            onMoved: function(newValue) {
+                if (root.brightnessMonitor) {
+                    root.brightnessMonitor.setBrightness(newValue);
+                }
+            }
         }
     }
 }

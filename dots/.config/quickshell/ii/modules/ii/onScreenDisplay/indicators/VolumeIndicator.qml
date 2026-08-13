@@ -5,7 +5,7 @@ import qs.modules.common.widgets
 import qs.modules.common
 
 Loader {
-    sourceComponent: Config.options.osd.material.enable ? materialOsdComp : minimalOsdComp
+    sourceComponent: Config.options.osd.style === "material" ? materialOsdComp : minimalOsdComp
 
     Component {
         id: minimalOsdComp
@@ -38,10 +38,19 @@ Loader {
                 if (muted) {
                     return "volume_off";
                 }
-                return "volume_up"
+                if (vol <= 0.0) return "volume_mute";
+                if (vol <= 0.33) return "volume_mute";
+                if (vol <= 0.66) return "volume_down";
+                return "volume_up";
             }
             shape: MaterialShape.Shape.Cookie7Sided
-            maxLimit: (Config.options.audio && Config.options.audio.protection) ? Config.options.audio.protection.maxAllowed / 100 : 1.02
+            maxLimit: (Config.options.audio && Config.options.audio.protection) ? Config.options.audio.protection.maxAllowed / 100 : 1.0
+
+            onMoved: function(newValue) {
+                if (Audio.sink && Audio.sink.audio) {
+                    Audio.sink.audio.volume = newValue;
+                }
+            }
         }
     }
 }

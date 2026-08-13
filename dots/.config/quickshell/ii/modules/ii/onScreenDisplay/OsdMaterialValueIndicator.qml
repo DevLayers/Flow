@@ -13,6 +13,10 @@ Item {
     property real maxLimit: 1.0
     property alias from: valueProgressBar.from
     property alias to: valueProgressBar.to
+    property alias minimalFrom: minimalValueProgressBar.from
+    property alias minimalTo: minimalValueProgressBar.to
+
+    signal moved(real newValue)
 
     property bool rotateShape: Config.options.osd.material.rotateShape
     property bool shapedValues: Config.options.osd.material.shapedValues
@@ -24,11 +28,12 @@ Item {
     property real valueIndicatorRightPadding: 10
 
     implicitWidth: Appearance.sizes.osdWidth + 2 * Appearance.sizes.elevationMargin + (root.minimal ? -40 : 40)
-    implicitHeight: valueIndicator.implicitHeight + Appearance.sizes.elevationMargin
-    
+    implicitHeight: valueIndicator.implicitHeight + 2 * Appearance.sizes.elevationMargin + (root.minimal ? -18 : -10)
+
     StyledRectangularShadow {
         target: valueIndicator
     }
+
     Rectangle {
         id: valueIndicator
         anchors {
@@ -39,12 +44,12 @@ Item {
         color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
 
         implicitWidth: root.minimal ? 0 : valueRow.implicitWidth + 2 * 6
-        implicitHeight: root.minimal ? minimalValueProgressBar.implicitHeight + Appearance.sizes.elevationMargin + 2 : valueRow.implicitHeight + 2 * 6
+        implicitHeight: root.minimal ? minimalValueProgressBar.implicitHeight + 2 * Appearance.sizes.elevationMargin + 2 : valueRow.implicitHeight + 2 * 6
 
         RowLayout {
             id: valueRow
             anchors {
-                fill: parent;
+                fill: parent
                 margins: 2
             }
             spacing: 10
@@ -99,7 +104,7 @@ Item {
                 Layout.topMargin: valueIndicatorVerticalPadding
                 Layout.bottomMargin: valueIndicatorVerticalPadding
                 visible: !root.shapedValues
-            
+
                 MaterialSymbol {
                     id: symbol
                     anchors.centerIn: parent
@@ -116,8 +121,9 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 configuration: StyledSlider.Configuration.M
                 stopIndicatorValues: []
-                value: root.value
                 materialSymbol: ""
+                value: root.value
+                onMoved: root.moved(valueProgressBar.value)
             }
 
             Item {
@@ -129,7 +135,7 @@ Item {
                 Layout.topMargin: valueIndicatorVerticalPadding
                 Layout.bottomMargin: valueIndicatorVerticalPadding
                 visible: !root.shapedValues
-            
+
                 StyledText {
                     id: value
                     anchors.centerIn: parent
@@ -197,7 +203,7 @@ Item {
         QuickSlider {
             id: minimalValueProgressBar
             anchors {
-                fill: parent;
+                fill: parent
                 margins: Appearance.sizes.elevationMargin
             }
             materialSymbol: root.icon
@@ -205,49 +211,22 @@ Item {
             handleHeight: 34
             configuration: StyledSlider.Configuration.M
             stopIndicatorValues: []
-            value: root.value
             visible: root.minimal
+            value: root.value
+            onMoved: root.moved(minimalValueProgressBar.value)
         }
     }
 
     component QuickSlider: StyledSlider {
         id: quickSlider
         property string materialSymbol
-        property real targetValue: 0
-        property int sliderIndex: 0
-        property int parentEntranceTrigger: -1
-        property real currentSliderValue: 0
 
-        value: currentSliderValue
         highlightColor: root.value > root.maxLimit ? Appearance.colors.colErrorContainerActive : Appearance.colors.colPrimary
         handleColor: root.value > root.maxLimit ? Appearance.colors.colErrorContainerActive : Appearance.colors.colPrimary
 
-        function animateProgress() {
-            quickSlider.valueAnimationDuration = 0;
-            currentSliderValue = 0;
-            sliderDelayTimer.restart();
-        }
-
-        Timer {
-            id: sliderDelayTimer
-            interval: 180 + sliderIndex * 70
-            repeat: false
-            onTriggered: {
-                quickSlider.valueAnimationDuration = 650;
-                currentSliderValue = targetValue;
-            }
-        }
-
-        onParentEntranceTriggerChanged: animateProgress()
-        Component.onCompleted: animateProgress()
         configuration: StyledSlider.Configuration.M
         stopIndicatorValues: []
         dividerValues: []
-        onMoved: {
-            if (Audio.sink && Audio.sink.audio) {
-                Audio.sink.audio.volume = quickSlider.value;
-            }
-        }
 
         MaterialSymbol {
             id: leftIcon
