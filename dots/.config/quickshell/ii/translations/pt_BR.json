@@ -2088,6 +2088,7 @@
   "Icons": "Ícones",
   "Maximum window count per workspace": "Número máximo de janelas por espaço de trabalho",
   "Register your application to get Client ID and Client Secret.": "Registre seu aplicativo para obter o ID do Cliente e o Segredo do Cliente.",
+  "Register your application to get Client ID and Client Secret. Redirect URL: http://localhost:18321": "Registre seu aplicativo para obter o ID do Cliente e o Segredo do Cliente. URL de Redirecionamento: http://localhost:18321",
   "Disconnect account": "Desconectar conta",
   "Trash": "Lixeira",
   "Usage: /pexels YOUR_API_KEY": "Uso: /pexels SUA_CHAVE_API",

@@ -687,7 +687,7 @@ Item {
         HelperLinkBox {
             Layout.fillWidth: true
             title: Translation.tr("TickTick Developer Center")
-            text: Translation.tr("Register your application to get Client ID and Client Secret.")
+            text: Translation.tr("Register your application to get Client ID and Client Secret. Redirect URL: http://localhost:18321")
             isFirst: true
 
             RippleButtonWithIcon {

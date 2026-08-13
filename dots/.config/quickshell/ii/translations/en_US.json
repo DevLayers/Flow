@@ -2088,6 +2088,7 @@
   "Icons": "Icons",
   "Maximum window count per workspace": "Maximum window count per workspace",
   "Register your application to get Client ID and Client Secret.": "Register your application to get Client ID and Client Secret.",
+  "Register your application to get Client ID and Client Secret. Redirect URL: http://localhost:18321": "Register your application to get Client ID and Client Secret. Redirect URL: http://localhost:18321",
   "Disconnect account": "Disconnect account",
   "Trash": "Trash",
   "Usage: /pexels YOUR_API_KEY": "Usage: /pexels YOUR_API_KEY",
