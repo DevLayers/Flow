@@ -419,6 +419,7 @@ AbstractQuickPanel {
                     onOpenVpnDialog: root.openVpnDialog()
                     onOpenTailscaleDialog: root.openTailscaleDialog()
                     onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
+                    onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                 }
             }
         }
@@ -568,6 +569,7 @@ AbstractQuickPanel {
                                         onOpenVpnDialog: root.openVpnDialog()
                                         onOpenTailscaleDialog: root.openTailscaleDialog()
                                         onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
+                                        onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                                     }
                                 }
                             }
@@ -805,6 +807,7 @@ AbstractQuickPanel {
                         onOpenVpnDialog: root.openVpnDialog()
                         onOpenTailscaleDialog: root.openTailscaleDialog()
                         onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
+                        onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                     }
                 }
             }

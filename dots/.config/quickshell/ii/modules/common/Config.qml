@@ -2482,6 +2482,12 @@ Singleton {
                 // How long the "Keep awake" inhibitor should survive:
                 // "never" (always off at startup), "session" (until logout/reboot), "always"
                 property string persistInhibit: "session"
+                // Durations offered in the "Keep awake" duration picker, in minutes
+                property list<int> quickDurations: [15, 30, 60, 120]
+                // Warn before a timed session ends, and let the notification extend it
+                property bool notifyOnExpiry: true
+                property int warnLeadSec: 60 // 0 disables the warning, keeping only the "ended" notice
+                property int extendMinutes: 15 // How much the notification's "Extend" button adds
             }
 
             property JsonObject interactions: JsonObject {
