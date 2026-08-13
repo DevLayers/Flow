@@ -247,27 +247,29 @@ Singleton {
         return colors.colPrimary;
     }
 
+    function pushBorderColor(): void {
+        let colorStr = root.activeBorderColor.toString();
+        let rgb = "";
+        if (colorStr.startsWith("#")) {
+            let hex = colorStr.substring(1);
+            rgb = hex.length === 8 ? hex.substring(2) : hex;
+        }
+        if (rgb === "") return;
+        let hyprColor = "rgba(" + rgb + "AA)";
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
+    }
+
+    function pushBorderSize(): void {
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (root.borderless ? "0" : root.borderWidth) + " } })"]);
+    }
+
     Timer {
         id: hyprctlBorderTimer
         interval: 100
         repeat: false
         onTriggered: {
             if (!Config.ready) return;
-            let colorStr = activeBorderColor.toString();
-            let rgb = "";
-            if (colorStr.startsWith("#")) {
-                let hex = colorStr.substring(1);
-                if (hex.length === 8) {
-                    rgb = hex.substring(2);
-                } else {
-                    rgb = hex;
-                }
-            }
-
-            if (rgb !== "") {
-                let hyprColor = "rgba(" + rgb + "AA)";
-                Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
-            }
+            root.pushBorderColor();
         }
     }
 
@@ -280,14 +282,14 @@ Singleton {
     property bool borderless: Config.options.appearance.borderless ?? false
     onBorderlessChanged: {
         if (Config.ready) {
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (borderless ? "0" : borderWidth) + " } })"]);
+            root.pushBorderSize();
         }
     }
 
     property int borderWidth: Config.options.appearance.borderWidth ?? 2
     onBorderWidthChanged: {
         if (Config.ready && !borderless) {
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + borderWidth + " } })"]);
+            root.pushBorderSize();
         }
     }
     property int blurSize: Config.options.appearance.blurSize ?? 8
@@ -335,6 +337,37 @@ Singleton {
     // the session. Remember it instead and re-apply once the cooldown lapses.
     property bool _rulesReapplyPending: false
 
+    // The border is the only part of this the user can see, and one write can make
+    // Hyprland reload several times over, so waiting out the rule cooldown leaves
+    // the focus border missing for seconds. Two `hyprctl` calls are cheap enough to
+    // put on their own near-instant cooldown; the rest can take its time.
+    property bool _isApplyingBorder: false
+    property bool _borderReapplyPending: false
+
+    Timer {
+        id: hyprlandBorderCooldownTimer
+        interval: 150
+        repeat: false
+        onTriggered: {
+            root._isApplyingBorder = false;
+            if (!root._borderReapplyPending) return;
+            root._borderReapplyPending = false;
+            root.applyHyprlandBorder();
+        }
+    }
+
+    function applyHyprlandBorder() {
+        if (!Config.ready) return;
+        if (root._isApplyingBorder) {
+            root._borderReapplyPending = true;
+            return;
+        }
+        root._isApplyingBorder = true;
+        hyprlandBorderCooldownTimer.restart();
+        root.pushBorderSize();
+        root.pushBorderColor();
+    }
+
     Timer {
         id: hyprlandRuleCooldownTimer
         interval: 3000
@@ -369,23 +402,7 @@ Singleton {
         bs += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
         Quickshell.execDetached(["hyprctl", "eval", bs]);
 
-        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (root.borderless ? "0" : root.borderWidth) + " } })"]);
-
-        let colorStr = activeBorderColor.toString();
-        let rgb = "";
-        if (colorStr.startsWith("#")) {
-            let hex = colorStr.substring(1);
-            if (hex.length === 8) {
-                rgb = hex.substring(2);
-            } else {
-                rgb = hex;
-            }
-        }
-
-        if (rgb !== "") {
-            let hyprColor = "rgba(" + rgb + "AA)";
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
-        }
+        root.applyHyprlandBorder();
 
         if (Config.options.appearance.gapsIn !== undefined) {
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + Config.options.appearance.gapsIn + "' } })"]);
@@ -401,6 +418,7 @@ Singleton {
     Connections {
         target: HyprlandConfig
         function onReloaded() {
+            root.applyHyprlandBorder();
             if (root._isApplyingRules) {
                 root._rulesReapplyPending = true;
                 return;
