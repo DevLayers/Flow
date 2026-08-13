@@ -101,10 +101,16 @@ Singleton {
         return Tiling.zoneIndexAt(root.zones, root.usable, root.cursorX, root.cursorY);
     }
 
+    // Whether a grabbed window is tiled at all. The keyboard is the other way
+    // in and stands on its own, so turning this off leaves quick-tile, the
+    // layouts and neighbour resizing exactly where they were - a drag simply
+    // goes back to being Hyprland's business.
+    readonly property bool dragTileEnabled: root.enabled && (root.options?.dragQuickTile ?? true)
+
     // The overlay is a move-drag affordance: a resize drag keeps its own
     // neighbours, so painting zone targets over it would only mislead. The
     // keyboard has no drag to hang it on, so it is flashed afterwards instead.
-    readonly property bool overlayVisible: root.enabled && ((root.dragging && root.dragKind === "move" && (root.options?.showOnDragStart ?? true)) || root.flashVisible)
+    readonly property bool overlayVisible: root.enabled && ((root.dragTileEnabled && root.dragging && root.dragKind === "move" && (root.options?.showOnDragStart ?? true)) || root.flashVisible)
 
     // The marker on zones holding more than one window, shown while nothing is
     // being dragged. It steps aside for the overlay rather than being drawn
@@ -426,7 +432,7 @@ Singleton {
     }
 
     function handleDrop(kind, zoneIndex) {
-        if (kind !== "move" || root.mode === "preview") return;
+        if (kind !== "move" || !root.dragTileEnabled || root.mode === "preview") return;
         const address = root.dragAddress;
         if (!address) return;
         const before = root.dragWindowBefore;
@@ -1029,9 +1035,11 @@ Singleton {
     }
 
     // Hyprland's drag binds fire these alongside their own dispatcher, which is
-    // the only exact signal for "the user grabbed a window".
+    // the only exact signal for "the user grabbed a window". Dropped when
+    // tiling by grab is off, so the detector is never woken to follow a move it
+    // has nothing to do with - the bind still runs Hyprland's own drag.
     Loader {
-        active: root.enabled && (root.options?.detection?.useKeybinds ?? true)
+        active: root.dragTileEnabled && (root.options?.detection?.useKeybinds ?? true)
 
         sourceComponent: Item {
             GlobalShortcut {
@@ -1048,7 +1056,16 @@ Singleton {
                     state: "up"
                 })
             }
+        }
+    }
 
+    // Resizing is kept apart from the switch above: pulling a neighbour along
+    // adjusts a layout that is already there rather than putting a window into
+    // it, so it belongs to co-resize and survives drag-to-tile being off.
+    Loader {
+        active: root.enabled && (root.options?.detection?.useKeybinds ?? true)
+
+        sourceComponent: Item {
             GlobalShortcut {
                 name: "tilingDragResize"
                 description: "Reports a window resize drag to the tiling assistant"

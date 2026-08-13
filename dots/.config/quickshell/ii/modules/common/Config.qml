@@ -3113,6 +3113,13 @@ Singleton {
                 // Super + Alt + arrow moves the focused window zone by zone, and
                 // untiles it when it is already against that side of the screen.
                 property bool keyboardQuickTile: true
+                // Super + drag drops a window into the zone under the cursor.
+                // Off leaves the keyboard the only way in, for people who would
+                // rather a grabbed window went exactly where they put it.
+                // Resizing a tiled window still pulls its neighbours along:
+                // that adjusts a layout already there rather than tiling by
+                // grab, and follows coResize below.
+                property bool dragQuickTile: true
 
                 property JsonObject detection: JsonObject {
                     // Companion Hyprland binds on the drag/resize mouse combos.
