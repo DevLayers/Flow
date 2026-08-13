@@ -7,6 +7,7 @@ import Quickshell.Widgets
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 Item {
     id: soundAlertsRoot
@@ -45,6 +46,8 @@ Item {
     ContentSection {
         icon: "volume_up"
         title: Translation.tr("System sounds")
+
+        SoundStatusHeader {}
 
         ConfigSwitch {
             buttonIcon: "music_note"

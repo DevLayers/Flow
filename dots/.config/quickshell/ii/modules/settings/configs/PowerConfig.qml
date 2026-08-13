@@ -7,6 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 ContentPage {
     id: root
@@ -16,6 +17,16 @@ ContentPage {
     ContentSection {
         icon: "battery_android_full"
         title: Translation.tr("Power & Battery Management")
+
+        BatteryOverview {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 16
+        }
+
+        BatteryUsageChart {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 16
+        }
 
         ConfigSpinBox {
             icon: "warning"

@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Quickshell.Widgets
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 import qs.modules.waffle.looks
 import qs.services
 
@@ -62,6 +63,14 @@ ContentPage {
             Item {
                 Layout.fillWidth: true
                 implicitHeight: 8
+            }
+
+            LauncherPreview {
+                Layout.fillWidth: true
+                baseWidth: Config.options.search.baseWidth
+                maxHeight: Config.options.search.baseHeight ?? 500
+                centered: Config.options.search.positionStyle === "center"
+                verticalRatio: Config.options.search.centerVerticalRatio
             }
 
             ConfigSlider {

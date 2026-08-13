@@ -4,6 +4,7 @@ import Quickshell
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 import qs.services
 
 Item {
@@ -61,6 +62,11 @@ Item {
     ContentSection {
         title: Translation.tr("Display Options")
         icon: "monitor"
+
+        WorkspacePreview {
+            Layout.fillWidth: true
+            Layout.bottomMargin: Appearance.font.pixelSize.small
+        }
 
         // Group 1: Map toggles
         ColumnLayout {

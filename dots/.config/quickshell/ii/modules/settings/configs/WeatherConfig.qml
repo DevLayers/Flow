@@ -7,6 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 ContentPage {
     id: root
@@ -17,32 +18,8 @@ ContentPage {
         icon: "cloud"
         title: Translation.tr("Weather Service")
 
-        ConfigSwitch {
-            buttonIcon: "assistant_navigation"
-            text: Translation.tr("Enable GPS location")
-            checked: Config.options.bar.weather.enableGPS
-            onCheckedChanged: {
-                Config.options.bar.weather.enableGPS = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "thermometer"
-            text: Translation.tr("Fahrenheit unit")
-            checked: Config.options.bar.weather.useUSCS
-            onCheckedChanged: {
-                Config.options.bar.weather.useUSCS = checked;
-            }
-        }
-
-        MaterialTextArea {
+        WeatherLocationCard {
             Layout.fillWidth: true
-            placeholderText: Translation.tr("City name")
-            text: Config.options.bar.weather.city
-            wrapMode: TextEdit.Wrap
-            onTextChanged: {
-                Config.options.bar.weather.city = text;
-            }
         }
 
         ConfigSpinBox {

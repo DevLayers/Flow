@@ -7,6 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 // The `contentY` alias lets settings.qml search-scroll still work.
 Item {
@@ -67,6 +68,7 @@ Item {
     ContentSection {
         icon: "language"
         title: Translation.tr("Language & Translation")
+        Layout.bottomMargin: 12
 
         ContentSubsection {
             title: Translation.tr("Interface Language")
@@ -147,38 +149,9 @@ Item {
             tooltip: Translation.tr("Select the default source and target language for both the Search Launcher and the Sidebar Translator panels.")
             Layout.fillWidth: true
 
-            ContentSubsectionLabel {
-                text: Translation.tr("From")
-            }
-            StyledComboBox {
-                id: defaultSourceLangSelector
-                buttonIcon: "language"
-                textRole: "displayName"
-                model: root.languagesModel
-                currentIndex: {
-                    const index = model.findIndex(item => item.value === Config.options.language.translator.defaultSourceLanguage);
-                    return index !== -1 ? index : 0;
-                }
-                onActivated: index => {
-                    Config.options.language.translator.defaultSourceLanguage = model[index].value;
-                }
-            }
-
-            ContentSubsectionLabel {
-                text: Translation.tr("To")
-            }
-            StyledComboBox {
-                id: defaultTargetLangSelector
-                buttonIcon: "translate"
-                textRole: "displayName"
-                model: root.languagesModel
-                currentIndex: {
-                    const index = model.findIndex(item => item.value === Config.options.language.translator.defaultTargetLanguage);
-                    return index !== -1 ? index : 0;
-                }
-                onActivated: index => {
-                    Config.options.language.translator.defaultTargetLanguage = model[index].value;
-                }
+            TranslatorDefaultsPicker {
+                Layout.fillWidth: true
+                languageModel: root.languagesModel
             }
         }
     }
@@ -186,6 +159,11 @@ Item {
     ContentSection {
         icon: "nest_clock_farsight_analog"
         title: Translation.tr("Time & Date Formats")
+
+        TimeDatePreview {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 16
+        }
 
         ConfigSwitch {
             buttonIcon: "pace"
@@ -215,12 +193,14 @@ Item {
 
         }
 
-        ConfigSwitch {
-            buttonIcon: "today"
-            text: Translation.tr("Start week on Monday")
-            checked: Config.options.time.firstDayOfWeek === 0
-            onCheckedChanged: {
-                Config.options.time.firstDayOfWeek = checked ? 0 : 6;
+        ContentSubsection {
+            title: Translation.tr("First day of week")
+            icon: "today"
+            tooltip: Translation.tr("Choose how calendars arrange the seven-day week")
+            Layout.fillWidth: true
+
+            WeekStartPicker {
+                Layout.fillWidth: true
             }
         }
 

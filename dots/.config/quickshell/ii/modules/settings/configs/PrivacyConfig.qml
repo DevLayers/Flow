@@ -7,6 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 Item {
     id: privacyRoot
@@ -48,37 +49,12 @@ Item {
 
         ContentSection {
             icon: "vpn_lock"
-            title: Translation.tr("VPN Settings")
+            title: Translation.tr("Private connections")
 
-            ConfigSwitch {
-                buttonIcon: "power_settings_new"
-                text: Translation.tr("Enable VPN Integration")
-                checked: Config.options.vpn.enabled
-                configPage: Qt.resolvedUrl("widgets/VPNConfig.qml")
-                onCheckedChanged: {
-                    Config.options.vpn.enabled = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Toggle VPN service. Click button text to configure profiles, providers, kill switch, and auto-connect.")
-                }
-            }
-        }
-
-        ContentSection {
-            icon: "hub"
-            title: Translation.tr("Tailscale Mesh Settings")
-
-            ConfigSwitch {
-                buttonIcon: "power_settings_new"
-                text: Translation.tr("Enable Tailscale Integration")
-                checked: Config.options.tailscale.enabled
-                configPage: Qt.resolvedUrl("widgets/TailscaleConfig.qml")
-                onCheckedChanged: {
-                    Config.options.tailscale.enabled = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Toggle Tailscale monitoring. Click button text to configure MagicDNS, SSH, exit nodes, and subnets.")
-                }
+            PrivacyConnectionCards {
+                Layout.fillWidth: true
+                onConfigureVpn: privacyRoot.activeSubPage = Qt.resolvedUrl("widgets/VPNConfig.qml")
+                onConfigureTailscale: privacyRoot.activeSubPage = Qt.resolvedUrl("widgets/TailscaleConfig.qml")
             }
         }
 
