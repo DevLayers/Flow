@@ -106,6 +106,25 @@ getactivemonitor() {
     echo "$active"
 }
 
+# Actually try to encode one frame with the given hardware codec, rather than
+# trusting `ffmpeg -encoders` (which only reflects what ffmpeg was compiled
+# with, not whether the hardware/driver behind it is actually present).
+test_encoder() {
+    local codec="$1"
+    case "$codec" in
+        h264_vaapi|hevc_vaapi)
+            [ -e /dev/dri/renderD128 ] || return 1
+            ffmpeg -y -v error -init_hw_device vaapi=va:/dev/dri/renderD128 -filter_hw_device va \
+                -f lavfi -i testsrc=size=128x128:rate=1 -frames:v 1 -vf format=nv12,hwupload \
+                -c:v "$codec" -f null - &>/dev/null
+            ;;
+        *)
+            ffmpeg -y -v error -f lavfi -i testsrc=size=128x128:rate=1 -frames:v 1 \
+                -c:v "$codec" -f null - &>/dev/null
+            ;;
+    esac
+}
+
 get_best_codec() {
     # If the user explicitly chose a CPU codec:
     if [[ "$REC_CODEC" == "libx264" || "$REC_CODEC" == "libx265" ]]; then
@@ -125,19 +144,19 @@ get_best_codec() {
 
     # If the user explicitly chose a GPU codec:
     if [[ "$REC_CODEC" != "auto" ]]; then
-        # Check if the chosen encoder is compiled in ffmpeg
-        if ffmpeg -encoders 2>/dev/null | grep -q "$REC_CODEC"; then
+        if ffmpeg -encoders 2>/dev/null | grep -q "$REC_CODEC" && test_encoder "$REC_CODEC"; then
             echo "$REC_CODEC"
             return
         fi
     fi
 
-    # If "auto" or the chosen GPU codec is not available, auto-detect:
-    if ffmpeg -encoders 2>/dev/null | grep -q "h264_nvenc"; then
+    # If "auto" or the chosen GPU codec doesn't actually work, auto-detect by
+    # probing each hardware encoder in turn:
+    if ffmpeg -encoders 2>/dev/null | grep -q "h264_nvenc" && test_encoder "h264_nvenc"; then
         echo "h264_nvenc"
-    elif ffmpeg -encoders 2>/dev/null | grep -q "h264_vaapi" && [ -e /dev/dri/renderD128 ]; then
+    elif ffmpeg -encoders 2>/dev/null | grep -q "h264_vaapi" && test_encoder "h264_vaapi"; then
         echo "h264_vaapi"
-    elif ffmpeg -encoders 2>/dev/null | grep -q "h264_amf"; then
+    elif ffmpeg -encoders 2>/dev/null | grep -q "h264_amf" && test_encoder "h264_amf"; then
         echo "h264_amf"
     else
         echo "libx264"
@@ -388,7 +407,11 @@ else
     CODEC_OPTS=("-c" "$CODEC" "-r" "$REC_FRAMERATE" "-p" "b=${REC_BITRATE}M")
     
     if [[ "$CODEC" == "h264_vaapi" || "$CODEC" == "hevc_vaapi" ]]; then
-        CODEC_OPTS+=("-d" "/dev/dri/renderD128" "--pixel-format" "nv12")
+        # Do NOT force --pixel-format nv12 here: it makes wf-recorder insert a
+        # scale_vaapi conversion step that some VAAPI drivers (e.g. Intel Xe/Arc)
+        # refuse with "Failed to configure graph filter: Function not implemented".
+        # Letting wf-recorder auto-negotiate the pixel format works everywhere.
+        CODEC_OPTS+=("-d" "/dev/dri/renderD128")
     elif [[ "$CODEC" == "h264_amf" || "$CODEC" == "hevc_amf" ]]; then
         CODEC_OPTS+=("--pixel-format" "nv12")
     elif [[ "$CODEC" == "h264_nvenc" || "$CODEC" == "hevc_nvenc" ]]; then
