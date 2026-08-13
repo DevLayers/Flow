@@ -187,20 +187,35 @@ updatestate() {
 
 toggle_pause() {
     local current_paused=$(jq -r ".screenRecord.paused" "$STATE_FILE" 2>/dev/null)
-    
+    local target_paused="true"
     if [[ "$current_paused" == "true" ]]; then
-        jq ".screenRecord.paused = false" "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
-        notify-send "Recording Resumed" -a 'Recorder' &
-    else
-        jq ".screenRecord.paused = true" "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
-        notify-send "Recording Paused" -a 'Recorder' &
+        target_paused="false"
     fi
 
-    if pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; then
-        # Try to toggle pause via our new python script
-        python3 "$(dirname "$0")/obs_pause.py" 2>/dev/null
-    elif pgrep wf-recorder > /dev/null; then
-        pkill -USR1 wf-recorder
+    # Act on the recorder FIRST, and only mirror the new state if it worked. A failed
+    # pause that still flips the state file leaves the UI lying about the recording.
+    if [[ "$REC_SERVICE" == "obs" ]] && { pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; }; then
+        python3 "$(dirname "$0")/obs_pause.py" 2>/dev/null || return
+    elif pgrep -x wf-recorder > /dev/null; then
+        # wf-recorder has no pause feature and installs no SIGUSR1 handler, so the
+        # default action applies: SIGUSR1 terminates it. That is why pausing used to
+        # end the recording. Suspending the process instead keeps the encoder and the
+        # output file alive; the paused span shows up as a still frame in the video.
+        if [[ "$target_paused" == "true" ]]; then
+            pkill -STOP -x wf-recorder || return
+        else
+            pkill -CONT -x wf-recorder || return
+        fi
+    else
+        return
+    fi
+
+    if [[ "$target_paused" == "true" ]]; then
+        jq ".screenRecord.paused = true" "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+        notify-send "Recording Paused" -a 'Recorder' &
+    else
+        jq ".screenRecord.paused = false" "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+        notify-send "Recording Resumed" -a 'Recorder' &
     fi
 }
 
@@ -248,6 +263,9 @@ fi
 if pgrep wf-recorder > /dev/null; then
     notify-send "Recording Stopped" "Stopped" -a 'Recorder' &
     updatestate false
+    # A paused recorder is SIGSTOPped: it cannot run its shutdown handler (and would
+    # never flush the file) until it is resumed, so always continue it before killing.
+    pkill -CONT -x wf-recorder 2>/dev/null
     pkill wf-recorder &
     exit 0
 fi
