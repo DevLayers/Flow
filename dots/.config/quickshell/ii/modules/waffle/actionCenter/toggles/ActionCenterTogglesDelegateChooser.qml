@@ -12,6 +12,7 @@ import qs.modules.waffle.looks
 import qs.modules.waffle.actionCenter.bluetooth
 import qs.modules.waffle.actionCenter.idleInhibitor
 import qs.modules.waffle.actionCenter.nightLight
+import qs.modules.waffle.actionCenter.screenShader
 import qs.modules.waffle.actionCenter.volumeControl
 import qs.modules.waffle.actionCenter.wifi
 
@@ -27,6 +28,17 @@ DelegateChooser {
             icon: "flash-off"
             menu: Component {
                 NightLightControl {}
+            }
+        }
+    }
+    DelegateChoice {
+        roleValue: "screenShader"
+        ActionCenterToggleButton {
+            toggleModel: ScreenShaderToggle {}
+            name: toggleModel.statusText
+            icon: "dark-theme"
+            menu: Component {
+                ScreenShaderControl {}
             }
         }
     }

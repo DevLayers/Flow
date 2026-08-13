@@ -26,6 +26,7 @@ import qs.modules.ii.sidebarDashboard.vpn
 import qs.modules.ii.sidebarDashboard.tailscale
 import qs.modules.ii.sidebarDashboard.dnsOverTls
 import qs.modules.ii.sidebarDashboard.idleInhibitor
+import qs.modules.ii.sidebarDashboard.screenShader
 
 Item {
     id: root
@@ -42,7 +43,8 @@ Item {
     property bool showTailscaleDialog: false
     property bool showDnsOverTlsDialog: false
     property bool showIdleInhibitorDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog
+    property bool showScreenShaderDialog: false
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog
     property bool editMode: false
 
     property int entranceTrigger: -1
@@ -80,6 +82,7 @@ Item {
                 root.showTailscaleDialog = false;
                 root.showDnsOverTlsDialog = false;
                 root.showIdleInhibitorDialog = false;
+                root.showScreenShaderDialog = false;
             }
         }
     }
@@ -176,6 +179,7 @@ Item {
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
                     onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
+                    onOpenScreenShaderDialog: root.showScreenShaderDialog = true
                 }
             }
 
@@ -279,6 +283,11 @@ Item {
     ToggleDialog {
         shownPropertyString: "showIdleInhibitorDialog"
         dialog: IdleInhibitorDialog {}
+    }
+
+    ToggleDialog {
+        shownPropertyString: "showScreenShaderDialog"
+        dialog: ScreenShaderDialog {}
     }
 
     component ToggleDialog: Loader {
