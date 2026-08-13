@@ -1,0 +1,24 @@
+module qs.modules.welcome
+
+singleton WelcomeKeybindRegistry 1.0 WelcomeKeybindRegistry.qml
+singleton WelcomePageRegistry 1.0 WelcomePageRegistry.qml
+singleton WelcomeProjectLinks 1.0 WelcomeProjectLinks.qml
+singleton WelcomeTutorialRegistry 1.0 WelcomeTutorialRegistry.qml
+singleton WelcomeTutorialContent 1.0 WelcomeTutorialContent.qml
+
+WelcomeActionCard 1.0 WelcomeActionCard.qml
+WelcomeDiagnosticsPage 1.0 WelcomeDiagnosticsPage.qml
+WelcomeEssentialsPage 1.0 WelcomeEssentialsPage.qml
+WelcomeExperiencePage 1.0 WelcomeExperiencePage.qml
+WelcomeFlow 1.0 WelcomeFlow.qml
+WelcomeFlowState 1.0 WelcomeFlowState.qml
+WelcomeHeader 1.0 WelcomeHeader.qml
+WelcomeKeybindCard 1.0 WelcomeKeybindCard.qml
+WelcomeLearnPage 1.0 WelcomeLearnPage.qml
+WelcomeNavigation 1.0 WelcomeNavigation.qml
+WelcomePersonalizePage 1.0 WelcomePersonalizePage.qml
+WelcomeProgress 1.0 WelcomeProgress.qml
+WelcomeStartPage 1.0 WelcomeStartPage.qml
+WelcomeStatusCard 1.0 WelcomeStatusCard.qml
+WelcomeWindow 1.0 WelcomeWindow.qml
+WelcomeTutorialPage 1.0 tutorials/WelcomeTutorialPage.qml

@@ -212,71 +212,77 @@ Item {
         }
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showAudioOutputDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: VolumeDialog {
             isSink: true
         }
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showAudioInputDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: VolumeDialog {
             isSink: false
         }
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showBluetoothDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: BluetoothDialog {}
-        onShownChanged: {
-            if (!shown) {
-                Bluetooth.defaultAdapter.discovering = false;
-            } else {
-                Bluetooth.defaultAdapter.enabled = true;
-                Bluetooth.defaultAdapter.discovering = true;
-            }
-        }
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showNightLightDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: NightLightDialog {}
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showWifiDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: WifiDialog {}
-        onShownChanged: {
-            if (!shown)
-                return;
-            Network.enableWifi();
-            Network.rescanWifi();
-        }
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showDarkModeDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: DarkModeDialog {}
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showLocalSendDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: LocalSendDialog {}
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showVpnDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: VpnDialog {}
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showTailscaleDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: TailscaleDialog {}
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showDnsOverTlsDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: DnsOverTlsDialog {}
     }
 

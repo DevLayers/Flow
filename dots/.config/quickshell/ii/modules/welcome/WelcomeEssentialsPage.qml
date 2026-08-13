@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.welcome
+import qs.services
 
 Item {
     id: root
@@ -25,47 +25,15 @@ Item {
                 columnSpacing: 10
                 rowSpacing: 10
 
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("Settings")
-                    materialIcon: "settings"
-                    key1: "󰖳"
-                    key2: "I"
-                }
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("Control dashboard")
-                    materialIcon: "side_navigation"
-                    key1: "󰖳"
-                    key2: "N"
-                }
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("AI sidebar")
-                    materialIcon: "neurology"
-                    key1: "󰖳"
-                    key2: "A"
-                }
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("Overview")
-                    materialIcon: "grid_view"
-                    key1: "󰖳"
-                    key2: "Tab"
-                }
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("App launcher")
-                    materialIcon: "search"
-                    key1: "󰖳"
-                    key2: "Space"
-                }
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("Cheatsheet")
-                    materialIcon: "help"
-                    key1: "󰖳"
-                    key2: "/"
+                Repeater {
+                    model: WelcomeKeybindRegistry.actions
+                    delegate: WelcomeKeybindCard {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        title: Translation.tr(modelData.labelKey)
+                        materialIcon: modelData.icon
+                        keys: WelcomeKeybindRegistry.keysFor(modelData.id)
+                    }
                 }
             }
         }
@@ -102,15 +70,61 @@ Item {
                     materialIcon: "code"
                     title: Translation.tr("II on GitHub")
                     description: Translation.tr("Updates, source code and issue tracker")
-                    onClicked: Qt.openUrlExternally("https://github.com/P3DROVFX/ii-p3drovfx")
+                    onClicked: Qt.openUrlExternally(WelcomeProjectLinks.repositoryUrl)
                 }
 
                 WelcomeActionCard {
                     Layout.fillWidth: true
+                    visible: WelcomeProjectLinks.documentationAvailable
                     materialIcon: "help_center"
                     title: Translation.tr("Documentation wiki")
                     description: Translation.tr("Usage notes and additional guides")
-                    onClicked: Qt.openUrlExternally("https://end-4.github.io/dots-hyprland-wiki/en/ii-qs/02usage/")
+                    onClicked: Qt.openUrlExternally(WelcomeProjectLinks.documentationUrl)
+                }
+            }
+        }
+
+        ContentSection {
+            Layout.fillWidth: true
+            icon: "terminal"
+            title: Translation.tr("Useful commands")
+
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Keep these small commands nearby when you need to troubleshoot or reopen II surfaces.")
+                color: Appearance.colors.colOnLayer2
+                font.pixelSize: Appearance.font.pixelSize.small
+                wrapMode: Text.WordWrap
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: width >= 860 ? 3 : (width >= 580 ? 2 : 1)
+                columnSpacing: 10
+                rowSpacing: 10
+
+                HelperCodeBox {
+                    Layout.fillWidth: true
+                    title: Translation.tr("Follow shell logs")
+                    text: Translation.tr("Useful when reporting a problem.")
+                    icon: "receipt_long"
+                    codeSnippet: "qs log -f -c ii"
+                }
+
+                HelperCodeBox {
+                    Layout.fillWidth: true
+                    title: Translation.tr("Reopen Welcome")
+                    text: Translation.tr("Open the setup flow without changing first-run state.")
+                    icon: "waving_hand"
+                    codeSnippet: "qs -c ii ipc call welcome open"
+                }
+
+                HelperCodeBox {
+                    Layout.fillWidth: true
+                    title: Translation.tr("Open Settings")
+                    text: Translation.tr("Launch Settings directly from a terminal.")
+                    icon: "settings"
+                    codeSnippet: "qs -c ii ipc call settings open"
                 }
             }
         }

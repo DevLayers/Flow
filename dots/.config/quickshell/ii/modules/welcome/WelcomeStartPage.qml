@@ -3,10 +3,12 @@ import QtQuick.Layouts
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.welcome
 
 Item {
     id: root
+
+    readonly property string settingsShortcut:
+        WelcomeKeybindRegistry.keysFor("settings").join(" + ")
 
     signal openWifi()
     signal openBluetooth()
@@ -126,7 +128,9 @@ Item {
         NoticeBox {
             Layout.fillWidth: true
             materialIcon: "info"
-            text: Translation.tr("You can revisit every choice later. Super + I opens the complete Settings app.")
+            text: root.settingsShortcut.length > 0
+                ? Translation.tr("You can revisit every choice later. The Settings shortcut is %1.").arg(root.settingsShortcut)
+                : Translation.tr("You can revisit every choice later. Open Settings whenever you need it.")
 
             RippleButtonWithIcon {
                 materialIcon: "settings"

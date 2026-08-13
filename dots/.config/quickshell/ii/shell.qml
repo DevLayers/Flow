@@ -166,6 +166,40 @@ ShellRoot {
         }
     }
 
+    // Welcome runs in-process so it shares Config, GlobalStates and the same
+    // Quickshell lifecycle as Settings. Keep the object warm briefly after a
+    // close, but never instantiate it before the initial config is ready.
+    Loader {
+        id: welcomeLoader
+        property bool loadedOnce: false
+        active: Config.ready && (loadedOnce || GlobalStates.welcomeOpen)
+        asynchronous: true
+        source: "modules/welcome/WelcomeWindow.qml"
+
+        Timer {
+            id: welcomeUnloadTimer
+            interval: 3000
+            repeat: false
+            onTriggered: {
+                if (!GlobalStates.welcomeOpen)
+                    welcomeLoader.loadedOnce = false;
+            }
+        }
+
+        Connections {
+            target: GlobalStates
+            function onWelcomeOpenChanged() {
+                if (GlobalStates.welcomeOpen) {
+                    welcomeUnloadTimer.stop();
+                    if (!welcomeLoader.loadedOnce)
+                        welcomeLoader.loadedOnce = true;
+                } else {
+                    welcomeUnloadTimer.restart();
+                }
+            }
+        }
+    }
+
     // Shortcuts
     IpcHandler {
         target: "panelFamily"
@@ -182,4 +216,3 @@ ShellRoot {
         onPressed: root.cyclePanelFamily()
     }
 }
-

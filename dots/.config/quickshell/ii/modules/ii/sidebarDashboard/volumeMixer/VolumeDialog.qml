@@ -12,6 +12,10 @@ import Quickshell.Services.Pipewire
 WindowDialog {
     id: root
     property bool isSink: true
+    property bool closeOwningSidebarOnDetails: true
+
+    signal detailsRequested()
+
     backgroundHeight: 600
 
     VolumeDialogContent {
@@ -60,7 +64,9 @@ WindowDialog {
             }
             onClicked: {
                 Quickshell.execDetached(["bash", "-c", `${Config.options.apps.volumeMixer}`]);
-                GlobalStates.sidebarRightOpen = false;
+                root.detailsRequested();
+                if (root.closeOwningSidebarOnDetails)
+                    GlobalStates.sidebarRightOpen = false;
             }
         }
 

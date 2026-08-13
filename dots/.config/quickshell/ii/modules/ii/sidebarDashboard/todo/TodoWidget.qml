@@ -167,8 +167,7 @@ Item {
             if (Todo.useTickTick) {
                 Todo.refresh();
             } else {
-                GlobalStates.settingsPendingPageName = "tasksAccounts";
-                GlobalStates.openSettings();
+                GlobalStates.openSettingsPage("tasksAccounts");
             }
         }
 

@@ -1,65 +1,180 @@
+pragma Singleton
+pragma ComponentBehavior: Bound
+
 import QtQuick
+import Quickshell
+import qs.modules.common
+import qs.services
 
 QtObject {
-    readonly property list<var> tutorials: [{
+    id: root
+
+    readonly property var tutorials: [{
         "id": "gmail",
-        "title": "Gmail",
-        "description": "Read, organize and send email from the II cheatsheet.",
+        "titleKey": "Gmail",
+        "descriptionKey": "Read, organize and send email from the II cheatsheet.",
         "icon": "mail",
-        "estimatedTime": "About 8 minutes",
+        "estimatedMinutes": 8,
         "settingsPage": "cheatSheet",
-        "videoUrl": "",
-        "steps": [
-            "Create or select a project in Google Cloud Console.",
-            "Enable the Gmail API and configure the OAuth consent screen.",
-            "Create Desktop App credentials and add yourself as a test user.",
-            "Save the Client ID and Client Secret in the Gmail setup page.",
-            "Authorize II in the browser and verify the connected account."
-        ]
+        "contentId": "gmail",
+        "detector": "email",
+        "videoUrl": ""
     }, {
         "id": "ticktick",
-        "title": "TickTick sync",
-        "description": "Keep your sidebar tasks synchronized with TickTick.",
+        "titleKey": "TickTick sync",
+        "descriptionKey": "Keep your sidebar tasks synchronized with TickTick.",
         "icon": "task_alt",
-        "estimatedTime": "About 5 minutes",
+        "estimatedMinutes": 5,
         "settingsPage": "tasksAccounts",
-        "videoUrl": "",
-        "steps": [
-            "Create an application in the TickTick developer portal.",
-            "Copy the Client ID and Client Secret into Accounts & Backup.",
-            "Start browser authorization from the TickTick section.",
-            "Approve access and return to II after the callback.",
-            "Create a test task and confirm that synchronization works."
-        ]
+        "contentId": "ticktick",
+        "detector": "ticktick",
+        "videoUrl": ""
     }, {
         "id": "calendar",
-        "title": "Google Calendar",
-        "description": "Show and manage calendar events through khal and vdirsyncer.",
+        "titleKey": "Google Calendar",
+        "descriptionKey": "Show and manage calendar events through khal and vdirsyncer.",
         "icon": "calendar_month",
-        "estimatedTime": "About 10 minutes",
-        "settingsPage": "languageTime",
-        "videoUrl": "",
-        "steps": [
-            "Install khal and vdirsyncer using your distribution packages.",
-            "Create the vdirsyncer storage and pair for Google Calendar.",
-            "Run the discovery and synchronization steps once.",
-            "Configure khal to read the synchronized calendar collection.",
-            "Open the II calendar and verify the next events."
-        ]
+        "estimatedMinutes": 10,
+        "settingsPage": "",
+        "contentId": "calendar",
+        "detector": "calendar",
+        "videoUrl": ""
     }, {
         "id": "drive",
-        "title": "Google Drive backup",
-        "description": "Back up II data with rclone and your Google OAuth credentials.",
+        "titleKey": "Google Drive backup",
+        "descriptionKey": "Back up II data with rclone and your Google OAuth credentials.",
         "icon": "cloud_sync",
-        "estimatedTime": "About 7 minutes",
+        "estimatedMinutes": 7,
         "settingsPage": "tasksAccounts",
-        "videoUrl": "",
-        "steps": [
-            "Install rclone from your distribution packages.",
-            "Enable the Google Drive API in the same Google Cloud project.",
-            "Open Accounts & Backup and start Drive authorization.",
-            "Choose the folders and data that should be included.",
-            "Run a manual backup and confirm that the remote folder exists."
-        ]
+        "contentId": "drive",
+        "detector": "googleDrive",
+        "videoUrl": ""
     }]
+
+    function tutorialFor(value): var {
+        const id = typeof value === "string" ? value : (value ? value.id : "");
+        for (let i = 0; i < root.tutorials.length; i++) {
+            if (root.tutorials[i].id === id)
+                return root.tutorials[i];
+        }
+        return null;
+    }
+
+    /**
+     * Integration state is deliberately read-only here.  Opening Welcome must
+     * never start OAuth, a sync, or a dependency check; each service owns its
+     * existing lifecycle and the registry only adapts its public state into a
+     * small semantic contract for the cards.
+     */
+    function stateFor(value): var {
+        const tutorial = root.tutorialFor(value);
+        if (!tutorial)
+            return ({
+                dependencyPresent: false,
+                configured: false,
+                usable: false,
+                checking: false,
+                error: true
+            });
+
+        if (tutorial.id === "gmail") {
+            return ({
+                // Credentials are configuration, not a missing runtime
+                // dependency; keep that distinction visible in the card.
+                dependencyPresent: true,
+                configured: EmailService.credentialsConfigured,
+                usable: EmailService.authenticated,
+                checking: EmailService.checkingCredentials || EmailService.authenticating,
+                error: EmailService.credentialsCheckFailed
+            });
+        }
+
+        if (tutorial.id === "ticktick") {
+            return ({
+                // TickTick is built into II; an absent token is simply an
+                // unconfigured optional integration.
+                dependencyPresent: true,
+                configured: String(TickTickService.accessToken || "").length > 0,
+                usable: TickTickService.available,
+                checking: TickTickService.syncing,
+                error: false
+            });
+        }
+
+        if (tutorial.id === "calendar") {
+            // CalendarService currently exposes the result of its khal probe,
+            // not a separate installed/configured split.  Keep that nuance in
+            // the label rather than pretending it is a complete dependency
+            // detector, and do not invoke the probe from Welcome.
+            const khalProbePassed = CalendarService.khalAvailable === true;
+            return ({
+                // CalendarService exposes a khal usability probe, not package
+                // installation. Keep dependency presence unknown here; the
+                // diagnostics page performs the separate command check.
+                dependencyPresent: undefined,
+                configured: khalProbePassed,
+                usable: khalProbePassed,
+                checking: false,
+                error: false
+            });
+        }
+
+        if (tutorial.id === "drive") {
+            return ({
+                dependencyPresent: GoogleDriveService.rcloneInstalled,
+                configured: GoogleDriveService.configured,
+                usable: GoogleDriveService.configured && !GoogleDriveService.checking,
+                checking: GoogleDriveService.checking,
+                error: String(GoogleDriveService.errorMessage || "").length > 0
+            });
+        }
+
+        return ({
+            dependencyPresent: false,
+            configured: false,
+            usable: false,
+            checking: false,
+            error: false
+        });
+    }
+
+    function statusTextFor(value): string {
+        const state = root.stateFor(value);
+        if (state.checking)
+            return Translation.tr("Checking");
+        if (state.error)
+            return Translation.tr("Needs attention");
+        if (state.dependencyPresent === false)
+            return Translation.tr("Dependency missing");
+        if (state.usable)
+            return Translation.tr("Ready");
+        if (state.configured)
+            return Translation.tr("Configured — verify once");
+        return Translation.tr("Not configured");
+    }
+
+    function actionTextFor(value): string {
+        const state = root.stateFor(value);
+        if (state.usable)
+            return Translation.tr("Review");
+        if (state.dependencyPresent === false)
+            return Translation.tr("Install first");
+        if (state.configured)
+            return Translation.tr("Continue");
+        return Translation.tr("Configure");
+    }
+
+    function titleFor(tutorial): string {
+        return tutorial ? Translation.tr(tutorial.titleKey) : "";
+    }
+
+    function descriptionFor(tutorial): string {
+        return tutorial ? Translation.tr(tutorial.descriptionKey) : "";
+    }
+
+    function estimatedTimeFor(tutorial): string {
+        return tutorial
+            ? Translation.tr("About %1 minutes").arg(String(tutorial.estimatedMinutes))
+            : "";
+    }
 }

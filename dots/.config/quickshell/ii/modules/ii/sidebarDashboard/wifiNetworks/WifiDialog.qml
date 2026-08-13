@@ -10,7 +10,24 @@ import Quickshell
 
 WindowDialog {
     id: root
+    // Dialogs may be hosted by surfaces other than the dashboard. Keep the
+    // historical dashboard behaviour as the default, while allowing hosts such
+    // as Welcome to opt out of sidebar-specific side effects.
+    property bool closeOwningSidebarOnDetails: true
+
+    signal detailsRequested()
+
     backgroundHeight: 600
+
+    function prepareForOpen() {
+        Network.enableWifi();
+        Network.rescanWifi();
+    }
+
+    onShowChanged: {
+        if (show)
+            root.prepareForOpen();
+    }
 
     // ── Header ────────────────────────────────────────────
     RowLayout {
@@ -79,7 +96,9 @@ WindowDialog {
             onClicked: {
                 Quickshell.execDetached(["bash", "-c",
                     `${Network.ethernet ? Config.options.apps.networkEthernet : Config.options.apps.network}`]);
-                GlobalStates.sidebarRightOpen = false;
+                root.detailsRequested();
+                if (root.closeOwningSidebarOnDetails)
+                    GlobalStates.sidebarRightOpen = false;
             }
         }
 

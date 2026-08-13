@@ -2,15 +2,15 @@ import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 Rectangle {
     id: root
 
     required property string title
-    required property string key1
-    property string key2: ""
-    property string key3: ""
+    property var keys: []
     property string materialIcon: "keyboard"
+    property string unassignedText: Translation.tr("Not assigned")
 
     implicitHeight: 82
     radius: Appearance.rounding.normal
@@ -42,30 +42,35 @@ Rectangle {
         }
 
         RowLayout {
+            visible: root.keys.length > 0
             Layout.alignment: Qt.AlignVCenter
             spacing: 4
 
-            KeyboardKey { key: root.key1 }
-            StyledText {
-                visible: root.key2.length > 0
-                text: "+"
-                color: Appearance.colors.colOnLayer3
-                font.pixelSize: Appearance.font.pixelSize.smaller
+            Repeater {
+                model: root.keys
+                delegate: RowLayout {
+                    required property string modelData
+                    required property int index
+                    spacing: 4
+
+                    KeyboardKey { key: modelData }
+                    StyledText {
+                        visible: index < root.keys.length - 1
+                        text: "+"
+                        color: Appearance.colors.colOnLayer3
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                    }
+                }
             }
-            KeyboardKey {
-                visible: root.key2.length > 0
-                key: root.key2
-            }
-            StyledText {
-                visible: root.key3.length > 0
-                text: "+"
-                color: Appearance.colors.colOnLayer3
-                font.pixelSize: Appearance.font.pixelSize.smaller
-            }
-            KeyboardKey {
-                visible: root.key3.length > 0
-                key: root.key3
-            }
+        }
+
+        StyledText {
+            visible: root.keys.length === 0
+            Layout.alignment: Qt.AlignVCenter
+            text: root.unassignedText
+            color: Appearance.colors.colOnLayer2
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.italic: true
         }
     }
 }

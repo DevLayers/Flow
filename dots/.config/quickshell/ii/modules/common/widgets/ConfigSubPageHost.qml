@@ -125,6 +125,7 @@ Item {
             anchors.fill: parent
             source: host.activeSubPage
             active: slider.overlayActive
+            asynchronous: true
             onLoaded: {
                 if (item.hasOwnProperty("showBackButton"))
                     item.showBackButton = true;
