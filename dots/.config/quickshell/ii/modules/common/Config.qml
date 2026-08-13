@@ -3047,6 +3047,7 @@ Singleton {
                 property int bitrate: 8
                 property int framerate: 60
                 property bool showNotifications: true
+                property bool showEditPrompt: true
                 property bool openInLosslessCut: false
             }
 

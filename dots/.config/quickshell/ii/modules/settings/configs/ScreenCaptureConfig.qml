@@ -243,8 +243,22 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "movie_edit"
+            text: Translation.tr("Ask to edit after recording")
+            checked: Config.options.screenRecord.showEditPrompt
+            onCheckedChanged: {
+                Config.options.screenRecord.showEditPrompt = checked;
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Show the \"Recording Finished\" popup with an Edit Video button once a recording is saved.")
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "open_in_new"
             text: Translation.tr("Open recordings in LosslessCut")
+            enabled: Config.options.screenRecord.showEditPrompt
             checked: Config.options.screenRecord.openInLosslessCut
             onCheckedChanged: {
                 Config.options.screenRecord.openInLosslessCut = checked;

@@ -283,6 +283,10 @@ Singleton {
 
     function launchVideoEditor(path) {
         root.videoEditorPath = path;
+        // The "Recording Finished" prompt is opt-out: keep the path around so the
+        // editor can still be opened manually, just don't pop anything up.
+        if (!Config.options.screenRecord.showEditPrompt)
+            return;
         root.videoEditorPopupOpen = true;
     }
 
