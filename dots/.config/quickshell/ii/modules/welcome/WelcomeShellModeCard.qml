@@ -17,7 +17,7 @@ RippleButton {
 
     signal modeSelected()
 
-    implicitHeight: Appearance.rounding.verylarge * 5 + Appearance.rounding.normal
+    implicitHeight: Appearance.rounding.verylarge * 4 + Appearance.rounding.normal
     buttonRadius: Appearance.rounding.large
     opacity: root.enabled ? 1 : 0.48
 
@@ -58,6 +58,11 @@ RippleButton {
                 colSymbol: root.selected
                     ? Appearance.colors.colOnPrimaryContainer
                     : Appearance.colors.colOnSecondaryContainer
+                scale: root.selected ? 1.04 : 1
+
+                Behavior on scale {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
             }
 
             ColumnLayout {
@@ -88,11 +93,19 @@ RippleButton {
             }
 
             MaterialSymbol {
-                visible: root.selected
                 Layout.alignment: Qt.AlignTop
                 text: "check_circle"
                 iconSize: Appearance.font.pixelSize.large
                 color: Appearance.colors.colPrimary
+                opacity: root.selected ? 1 : 0
+                scale: root.selected ? 1 : 0.82
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+                Behavior on scale {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
             }
         }
 
@@ -146,6 +159,44 @@ RippleButton {
                     maximumLineCount: 1
                     elide: Text.ElideRight
                 }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: Appearance.rounding.large
+            spacing: Appearance.rounding.verysmall
+            opacity: root.selected ? 1 : 0.82
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredWidth: root.mode === "connect" ? 2 : 1
+                Layout.fillHeight: true
+                radius: Appearance.rounding.verysmall
+                color: root.selected
+                    ? Appearance.colors.colPrimary
+                    : Appearance.colors.colSecondaryContainer
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredWidth: root.mode === "connect" ? 1 : 2
+                Layout.fillHeight: true
+                radius: Appearance.rounding.verysmall
+                color: root.selected
+                    ? Appearance.colors.colPrimaryContainer
+                    : Appearance.colors.colLayer2
+            }
+
+            Rectangle {
+                Layout.preferredWidth: Appearance.rounding.large
+                Layout.fillHeight: true
+                radius: Appearance.rounding.verysmall
+                color: Appearance.colors.colSecondaryContainer
             }
         }
 

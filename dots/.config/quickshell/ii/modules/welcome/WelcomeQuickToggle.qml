@@ -11,7 +11,7 @@ RippleButton {
 
     signal toggleRequested(bool value)
 
-    implicitHeight: Appearance.rounding.verylarge + Appearance.rounding.small
+    implicitHeight: Appearance.rounding.verylarge + Appearance.rounding.normal
     buttonRadius: Appearance.rounding.full
     colBackground: root.checked
         ? Appearance.colors.colSecondaryContainer
@@ -38,7 +38,7 @@ RippleButton {
             text: root.toggleIcon
             iconSize: Appearance.font.pixelSize.normal
             padding: Appearance.rounding.verysmall
-            fill: 1
+            fill: root.checked ? 1 : 0
             shape: root.checked
                 ? MaterialShape.Shape.Cookie7Sided
                 : MaterialShape.Shape.Clover4Leaf
@@ -48,6 +48,11 @@ RippleButton {
             colSymbol: root.checked
                 ? Appearance.colors.colOnPrimaryContainer
                 : Appearance.colors.colOnLayer3
+            scale: root.checked ? 1.04 : 1
+
+            Behavior on scale {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
         }
 
         StyledText {
@@ -63,7 +68,7 @@ RippleButton {
 
         StyledSwitch {
             Layout.alignment: Qt.AlignVCenter
-            sizeScale: 0.72
+            sizeScale: 0.92
             checked: root.checked
             enabled: false
         }

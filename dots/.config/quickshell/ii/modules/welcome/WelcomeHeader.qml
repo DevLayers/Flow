@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
@@ -9,31 +10,53 @@ import qs.services
 Item {
     id: root
 
-    property string pageId: "start"
+    property string currentPageId: "start"
+    property string outgoingPageId: ""
+    property string incomingPageId: ""
+    property int transitionDirection: 1
+    property bool transitionRunning: false
+    property bool transitionReady: false
+    property bool compactWidth: width < 760
     signal closeRequested()
 
-    readonly property string pageTitle: WelcomePageRegistry.titleFor(root.pageId)
-    readonly property string pageSubtitle: WelcomePageRegistry.subtitleFor(root.pageId)
+    implicitHeight: Math.max(84, headerViewport.implicitHeight)
 
-    implicitHeight: Math.max(84, headerRow.implicitHeight)
+    function accentContainerFor(pageId: string): color {
+        const page = WelcomePageRegistry.pageById(pageId);
+        if (page && page.accentRole === "secondary")
+            return Appearance.colors.colSecondaryContainer;
+        if (page && page.accentRole === "tertiary")
+            return Appearance.colors.colTertiaryContainer;
+        return Appearance.colors.colPrimaryContainer;
+    }
 
-    RowLayout {
-        id: headerRow
-        anchors.fill: parent
+    function accentForegroundFor(pageId: string): color {
+        const page = WelcomePageRegistry.pageById(pageId);
+        if (page && page.accentRole === "secondary")
+            return Appearance.colors.colOnSecondaryContainer;
+        if (page && page.accentRole === "tertiary")
+            return Appearance.colors.colOnTertiaryContainer;
+        return Appearance.colors.colOnPrimaryContainer;
+    }
+
+    component HeaderContent: RowLayout {
+        required property string pageId
+        property bool compactWidth: false
+
         spacing: 14
 
         MaterialShapeWrappedMaterialSymbol {
             Layout.alignment: Qt.AlignVCenter
             text: {
-                const page = WelcomePageRegistry.pageById(root.pageId);
+                const page = WelcomePageRegistry.pageById(parent.pageId);
                 return page ? page.icon : "waving_hand";
             }
-            shape: MaterialShape.Shape.Cookie9Sided
+            shape: WelcomePageRegistry.headerShapeFor(parent.pageId)
             iconSize: Appearance.font.pixelSize.large
-            padding: 13
+            padding: parent.compactWidth ? 11 : 13
             fill: 1
-            color: Appearance.colors.colPrimary
-            colSymbol: Appearance.colors.colOnPrimary
+            color: root.accentContainerFor(parent.pageId)
+            colSymbol: root.accentForegroundFor(parent.pageId)
         }
 
         ColumnLayout {
@@ -43,48 +66,213 @@ Item {
 
             StyledText {
                 Layout.fillWidth: true
-                text: root.pageTitle
+                text: WelcomePageRegistry.titleFor(parent.parent.pageId)
                 color: Appearance.colors.colOnLayer0
                 font.family: Appearance.font.family.title
-                font.pixelSize: Appearance.font.pixelSize.huge
+                font.pixelSize: parent.parent.compactWidth
+                    ? Appearance.font.pixelSize.huge
+                    : Appearance.font.pixelSize.hugeass
                 font.variableAxes: Appearance.font.variableAxes.title
-                font.weight: Font.DemiBold
+                font.weight: Font.Bold
                 wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
             }
 
             StyledText {
                 Layout.fillWidth: true
-                text: root.pageSubtitle
+                text: WelcomePageRegistry.subtitleFor(parent.parent.pageId)
                 color: Appearance.colors.colOnLayer2
-                font.pixelSize: Appearance.font.pixelSize.small
+                font.pixelSize: parent.parent.compactWidth
+                    ? Appearance.font.pixelSize.small
+                    : Appearance.font.pixelSize.normal
+                font.weight: Font.Normal
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
             }
         }
+    }
 
-        ColumnLayout {
-            Layout.alignment: Qt.AlignVCenter
-            spacing: 0
+    RowLayout {
+        anchors.fill: parent
+        spacing: 14
 
-            RippleButton {
-                Layout.alignment: Qt.AlignRight
-                implicitWidth: 48
-                implicitHeight: 48
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colLayer1
-                colBackgroundHover: Appearance.colors.colLayer1Hover
-                colBackgroundActive: Appearance.colors.colLayer1Active
-                colRipple: Appearance.colors.colLayer1Active
+        Item {
+            id: headerViewport
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            implicitHeight: Math.max(outgoingLayer.implicitHeight, incomingLayer.implicitHeight)
+            clip: true
 
-                contentItem: MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "close"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnLayer1
+            HeaderContent {
+                id: outgoingLayer
+                anchors.fill: parent
+                compactWidth: root.compactWidth
+                pageId: root.transitionRunning ? root.outgoingPageId : root.currentPageId
+                x: 0
+                opacity: 1
+                scale: 1
+
+                property real visualBlur: 0
+                layer.enabled: visualBlur > 0.01
+                layer.effect: MultiEffect {
+                    blurEnabled: outgoingLayer.visualBlur > 0.01
+                    blurMax: WelcomeMotion.blurMax
+                    blur: outgoingLayer.visualBlur
                 }
+            }
 
-                onClicked: root.closeRequested()
+            HeaderContent {
+                id: incomingLayer
+                anchors.fill: parent
+                compactWidth: root.compactWidth
+                pageId: root.transitionRunning ? root.incomingPageId : root.currentPageId
+                x: 0
+                opacity: 1
+                scale: 1
+
+                property real visualBlur: 0
+                layer.enabled: visualBlur > 0.01
+                layer.effect: MultiEffect {
+                    blurEnabled: incomingLayer.visualBlur > 0.01
+                    blurMax: WelcomeMotion.blurMax
+                    blur: incomingLayer.visualBlur
+                }
+            }
+        }
+
+        RippleButton {
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: 48
+            implicitHeight: 48
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colLayer1
+            colBackgroundHover: Appearance.colors.colLayer1Hover
+            colBackgroundActive: Appearance.colors.colLayer1Active
+            colRipple: Appearance.colors.colLayer1Active
+
+            contentItem: MaterialSymbol {
+                anchors.centerIn: parent
+                text: "close"
+                iconSize: Appearance.font.pixelSize.large
+                color: Appearance.colors.colOnLayer1
+            }
+
+            onClicked: root.closeRequested()
+        }
+    }
+
+    ParallelAnimation {
+        id: headerTransition
+
+        NumberAnimation {
+            target: outgoingLayer
+            property: "x"
+            to: root.transitionDirection > 0 ? -WelcomeMotion.offsetFor(headerViewport.width) : WelcomeMotion.offsetFor(headerViewport.width)
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+        NumberAnimation {
+            target: outgoingLayer
+            property: "opacity"
+            to: WelcomeMotion.pageOpacityOut
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+        NumberAnimation {
+            target: outgoingLayer
+            property: "visualBlur"
+            to: WelcomeMotion.blurProgress
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+        NumberAnimation {
+            target: outgoingLayer
+            property: "scale"
+            to: WelcomeMotion.pageScale
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+        NumberAnimation {
+            target: incomingLayer
+            property: "x"
+            to: 0
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+        NumberAnimation {
+            target: incomingLayer
+            property: "opacity"
+            to: 1
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+        NumberAnimation {
+            target: incomingLayer
+            property: "visualBlur"
+            to: 0
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+        NumberAnimation {
+            target: incomingLayer
+            property: "scale"
+            to: 1
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+    }
+
+    function prepareTransition(): void {
+        headerTransition.stop();
+        outgoingLayer.x = 0;
+        outgoingLayer.opacity = 1;
+        outgoingLayer.visualBlur = 0;
+        outgoingLayer.scale = 1;
+        incomingLayer.x = root.transitionDirection > 0
+            ? WelcomeMotion.offsetFor(headerViewport.width)
+            : -WelcomeMotion.offsetFor(headerViewport.width);
+        incomingLayer.opacity = WelcomeMotion.pageOpacityIn;
+        incomingLayer.visualBlur = 0;
+        incomingLayer.scale = 1;
+    }
+
+    function normalize(): void {
+        headerTransition.stop();
+        outgoingLayer.x = 0;
+        outgoingLayer.opacity = 0;
+        outgoingLayer.visualBlur = 0;
+        outgoingLayer.scale = 1;
+        incomingLayer.x = 0;
+        incomingLayer.opacity = 1;
+        incomingLayer.visualBlur = 0;
+        incomingLayer.scale = 1;
+    }
+
+    onTransitionRunningChanged: {
+        if (root.transitionRunning)
+            root.prepareTransition();
+        else
+            root.normalize();
+    }
+
+    onTransitionReadyChanged: {
+        if (root.transitionRunning && root.transitionReady) {
+            if (WelcomeMotion.motionEnabled) {
+                incomingLayer.visualBlur = WelcomeMotion.blurProgress;
+                incomingLayer.scale = WelcomeMotion.pageScale;
+                headerTransition.start();
+            } else {
+                root.normalize();
             }
         }
     }
