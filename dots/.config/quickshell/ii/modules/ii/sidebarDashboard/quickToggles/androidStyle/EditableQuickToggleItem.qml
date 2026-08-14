@@ -174,6 +174,15 @@ Item {
             else
                 root.controller.removeToggle(root.target.buttonData.id);
         }
+
+        onCanceled: {
+            if (root.controller && root.controller.active)
+                root.controller.cancel();
+            root.target.isDragging = false;
+            root.target.dragOffsetX = 0;
+            root.target.dragOffsetY = 0;
+            root.cancelResize();
+        }
     }
 
     Rectangle {
@@ -288,5 +297,11 @@ Item {
         extraVisibleCondition: root.target.tooltipText !== ""
                 && (root.target.hovered || root.containsMouse)
         text: root.target.tooltipText
+    }
+
+    Component.onDestruction: {
+        if (root.controller && root.controller.active
+                && root.controller.draggedId === root.target.buttonData.id)
+            root.controller.cancel();
     }
 }
