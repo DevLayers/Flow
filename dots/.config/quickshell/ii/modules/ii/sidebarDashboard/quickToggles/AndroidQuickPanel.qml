@@ -65,6 +65,15 @@ AbstractQuickPanel {
         });
     }
 
+    QuickToggleEditController {
+        id: editController
+        config: Config.options.sidebar.quickToggles.android
+        persistedPages: root.pages
+        columns: root.columns
+    }
+
+    readonly property list<var> displayPages: editController.active ? editController.draftPages : root.pages
+
     // Current page toggles
     readonly property list<var> currentPageToggles: {
         if (currentPage >= 0 && currentPage < pages.length)

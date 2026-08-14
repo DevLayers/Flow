@@ -6,6 +6,19 @@ function integerAtLeastOne(value, fallback) {
         return fallback;
     return Math.max(1, Math.floor(number));
 }
+
+function toArray(value) {
+    if (value === null || value === undefined)
+        return [];
+    if (Array.isArray(value))
+        return value.slice();
+    var result = [];
+    if (typeof value.length === "number") {
+        for (var i = 0; i < value.length; i++)
+            result.push(value[i]);
+    }
+    return result;
+}
 function cloneObject(source) {
     var result = {};
     if (!source || typeof source !== "object")
@@ -84,7 +97,7 @@ function firstFit(occupancy, width, height) {
 }
 
 function pack(items, columns) {
-    var source = Array.isArray(items) ? items : [];
+    var source = toArray(items);
     var occupancy = createOccupancy(columns);
     var result = [];
 
@@ -118,10 +131,9 @@ function rowsUsed(items, columns) {
 }
 
 function findItem(items, id) {
-    if (!Array.isArray(items))
-        return -1;
-    for (var i = 0; i < items.length; i++) {
-        if (items[i] && items[i].id === id)
+    var source = toArray(items);
+    for (var i = 0; i < source.length; i++) {
+        if (source[i] && source[i].id === id)
             return i;
     }
     return -1;
@@ -129,10 +141,9 @@ function findItem(items, id) {
 
 function copyItems(items) {
     var result = [];
-    if (!Array.isArray(items))
-        return result;
-    for (var i = 0; i < items.length; i++)
-        result.push(cloneObject(items[i]));
+    var source = toArray(items);
+    for (var i = 0; i < source.length; i++)
+        result.push(cloneObject(source[i]));
     return result;
 }
 
@@ -191,14 +202,15 @@ function validateNoOverlap(packed, columns) {
 }
 
 function findInsertionIndex(packedItems, row, column, draggedId) {
-    if (!Array.isArray(packedItems) || packedItems.length === 0)
+    var source = toArray(packedItems);
+    if (source.length === 0)
         return 0;
-    for (var i = 0; i < packedItems.length; i++) {
-        var item = packedItems[i];
+    for (var i = 0; i < source.length; i++) {
+        var item = source[i];
         if (!item || item.id === draggedId)
             continue;
         if (row < item.row || (row === item.row && column < item.column))
             return i;
     }
-    return packedItems.length;
+    return source.length;
 }
