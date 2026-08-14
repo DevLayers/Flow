@@ -33,10 +33,51 @@ QtObject {
     }
 
     // ── Reasoning ─────────────────────────────────────────────────────────
+    // How hard a model is asked to think is one setting for the user, and a
+    // different knob on every provider. The level is resolved here; each
+    // strategy turns it into whatever its own API calls that knob.
+
+    readonly property var thinkingBudgets: ({
+            "off": 0,
+            "low": 1024,
+            "medium": 4096,
+            "high": 16384
+        })
+
+    /** "off", "low", "medium" or "high", for what this model can actually do. */
+    function thinkingLevel(model: AiModel): string {
+        if (!model?.thinking)
+            return "off";
+        const requested = Persistent.states?.ai?.thinkingLevel ?? "medium";
+        const level = (thinkingBudgets[requested] === undefined) ? "medium" : requested;
+        // Some models reason no matter what is asked of them. Saying "off" to
+        // one of those is rejected, so it gets the smallest budget instead.
+        if (level === "off" && model.thinkingAlwaysOn)
+            return "low";
+        return level;
+    }
+
+    function thinkingOn(model: AiModel): bool {
+        return thinkingLevel(model) !== "off";
+    }
+
+    /**
+     * Tokens the model may spend reasoning. Drawn from the same allowance as
+     * the answer, so it never takes all of it — a budget that meets the
+     * output cap leaves nothing to answer with, and is refused.
+     */
+    function thinkingBudget(model: AiModel): int {
+        const budget = thinkingBudgets[thinkingLevel(model)] ?? 0;
+        if (budget === 0)
+            return 0;
+        const half = Math.floor(maxOutputTokens(model) / 2);
+        return Math.max(1024, Math.min(budget, half));
+    }
+
     // Every provider streams thought and answer as two interleaved streams and
     // only the wire format differs, so all of them push through here. The
-    // message keeps the thought as a field of its own, and the markdown
-    // <think> block the current renderer keys on is written alongside it.
+    // thought is kept apart from the answer: it is not what the user asked
+    // for, it is not what gets copied, and it is not sent back as text.
 
     property bool thoughtOpen: false
 
@@ -45,13 +86,10 @@ QtObject {
             return;
         if (!thoughtOpen) {
             thoughtOpen = true;
-            const startBlock = "\n\n<think>\n\n";
-            message.content += startBlock;
-            message.rawContent += startBlock;
+            if (message.thoughtStartedAt === 0)
+                message.thoughtStartedAt = Date.now();
         }
         message.thought += text;
-        message.content += text;
-        message.rawContent += text;
     }
 
     function appendAnswer(message: AiMessageData, text: string) {
@@ -66,8 +104,7 @@ QtObject {
         if (!thoughtOpen || !message)
             return;
         thoughtOpen = false;
-        const endBlock = "\n\n</think>\n\n";
-        message.content += endBlock;
-        message.rawContent += endBlock;
+        if (message.thoughtStartedAt > 0)
+            message.thoughtDurationMs = Date.now() - message.thoughtStartedAt;
     }
 }

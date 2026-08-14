@@ -112,6 +112,12 @@ Singleton {
                 property string provider: "google" // AI providers such as google, open router, mistral
                 property string model: "gemini-3.7-flash" // The model of the ai such as 3.7-flash
                 property real temperature: 0.5
+                // How hard the model is asked to think: off, low, medium or
+                // high. Each provider maps it to its own knob.
+                property string thinkingLevel: "medium"
+                // Whether think blocks stay open once the answer starts. Set
+                // by expanding or collapsing one, and remembered from then on.
+                property bool expandThoughts: false
             }
 
             property JsonObject background: JsonObject {

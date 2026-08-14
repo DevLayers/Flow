@@ -64,8 +64,17 @@ Singleton {
     property QtObject tokenCount: QtObject {
         property int input: -1
         property int output: -1
+        // Part of the output that was spent reasoning. -1 when the provider
+        // does not break it out.
+        property int thinking: -1
         property int total: -1
     }
+    readonly property var thinkingLevels: ["off", "low", "medium", "high"]
+    property string thinkingLevel: Persistent.states?.ai?.thinkingLevel ?? "medium"
+    // Whether the current model reasons at all, and whether it can be told
+    // not to. The control bar reads both; nothing here tests provider names.
+    readonly property bool currentModelThinks: root.currentModelEntry?.thinking ?? false
+    readonly property bool currentModelAlwaysThinks: root.currentModelEntry?.thinkingAlwaysOn ?? false
 
     function idForMessage(message) {
         // Generate a unique ID using timestamp and random value
@@ -575,6 +584,17 @@ Singleton {
         root.addMessage(Translation.tr("Temperature set to %1").arg(value), Ai.interfaceRole);
     }
 
+    function setThinkingLevel(level): bool {
+        const value = String(level).trim().toLowerCase();
+        if (root.thinkingLevels.indexOf(value) < 0) {
+            root.addMessage(Translation.tr("Thinking level must be one of:\n- %1").arg(root.thinkingLevels.join("\n- ")), root.interfaceRole);
+            return false;
+        }
+        Persistent.states.ai.thinkingLevel = value;
+        root.thinkingLevel = value;
+        return true;
+    }
+
     function setApiKey(key) {
         const model = root.currentModelEntry;
         if (!model)
@@ -616,6 +636,7 @@ Singleton {
         root.messageByID = ({});
         root.tokenCount.input = -1;
         root.tokenCount.output = -1;
+        root.tokenCount.thinking = -1;
         root.tokenCount.total = -1;
     }
 
@@ -677,6 +698,12 @@ Singleton {
                     root.tokenCount.input = result.tokenUsage.input;
                     root.tokenCount.output = result.tokenUsage.output;
                     root.tokenCount.total = result.tokenUsage.total;
+                    const thinkingTokens = result.tokenUsage.thinking ?? -1;
+                    root.tokenCount.thinking = thinkingTokens;
+                    // Counted per message too: the think block says what this
+                    // answer's reasoning cost, not what the chat has cost.
+                    if (thinkingTokens >= 0)
+                        requester.message.thoughtTokens = thinkingTokens;
                 }
                 if (result.finished)
                     root.markDone(requester.message);
@@ -1000,6 +1027,11 @@ Singleton {
                     "fileUri": message.fileUri,
                     "localFilePath": message.localFilePath,
                     "model": message.model,
+                    "thought": message.thought,
+                    "thoughtSignature": message.thoughtSignature,
+                    "thinkingBlocks": message.thinkingBlocks,
+                    "thoughtDurationMs": message.thoughtDurationMs,
+                    "thoughtTokens": message.thoughtTokens,
                     "thinking": false,
                     "done": true,
                     "annotations": message.annotations,
@@ -1056,6 +1088,11 @@ Singleton {
                     "fileUri": message.fileUri,
                     "localFilePath": message.localFilePath,
                     "model": message.model,
+                    "thought": message.thought ?? "",
+                    "thoughtSignature": message.thoughtSignature ?? "",
+                    "thinkingBlocks": message.thinkingBlocks ?? [],
+                    "thoughtDurationMs": message.thoughtDurationMs ?? 0,
+                    "thoughtTokens": message.thoughtTokens ?? -1,
                     "thinking": message.thinking,
                     "done": message.done,
                     "annotations": message.annotations,

@@ -6,165 +6,242 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Qt5Compat.GraphicalEffects
 
+/**
+ * The model's reasoning, kept out of the answer.
+ *
+ * It writes itself open so the wait is not a blank panel, then folds away the
+ * moment the answer starts — the thinking is interesting while it is the only
+ * thing happening and clutter once it is not. Opening or closing one by hand
+ * is remembered, so whoever wants to read every thought only says so once.
+ */
 Item {
     id: root
-    // These are needed on the parent loader
+
+    // Passed through to the text block, and set by the legacy markdown path.
     property bool editing: false
     property bool renderMarkdown: true
     property bool enableMouseSelection: false
     property var segmentContent: ({})
-    property var messageData: {}
+    property var messageData: null
     property bool done: true
+
+    /** The reasoning itself. */
+    property string thoughtText: (typeof segmentContent === "string") ? segmentContent : ""
+    /** False while the thought is still being written. */
     property bool completed: false
+    property real durationMs: 0
+    property int tokens: -1
 
-    property real thinkBlockBackgroundRounding: Appearance.rounding.small
-    property real thinkBlockHeaderPaddingVertical: 3
-    property real thinkBlockHeaderPaddingHorizontal: 10
-    property real thinkBlockComponentSpacing: 2
+    property real maxContentHeight: 260
+    property real headerPaddingVertical: 3
+    property real headerPaddingHorizontal: 10
+    property real backgroundRounding: Appearance.rounding.small
 
-    property var collapseAnimation: messageTextBlock.implicitHeight > 40 ? Appearance.animation.elementMoveEnter : Appearance.animation.elementMoveFast
-    property bool collapsed: true /* should be root.completed but its kinda buggy rn so nope */
+    component ThinkBlockButton: RippleButton {
+        id: button
+        property string symbol
+        property real iconRotation: 0
+        property bool activated: false
+        property bool parentHovered: false
+        property string tooltipText: ""
+
+        implicitWidth: 22
+        implicitHeight: 22
+        colBackground: button.parentHovered ? Appearance.colors.colLayer2Hover : ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+        colBackgroundHover: Appearance.colors.colLayer2Hover
+        colRipple: Appearance.colors.colLayer2Active
+
+        contentItem: MaterialSymbol {
+            anchors.centerIn: parent
+            text: button.symbol
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            iconSize: Appearance.font.pixelSize.normal
+            color: Appearance.colors.colOnLayer2
+            rotation: button.iconRotation
+
+            Behavior on rotation {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+        }
+
+        StyledToolTip {
+            text: button.tooltipText
+        }
+    }
+
+    readonly property bool sticky: Persistent.states?.ai?.expandThoughts ?? false
+    property bool expanded: true
+
+    onCompletedChanged: root.expanded = root.completed ? root.sticky : true
+    Component.onCompleted: root.expanded = root.completed ? root.sticky : true
+
+    function toggle() {
+        root.expanded = !root.expanded;
+        // Only a deliberate choice is remembered: while the thought is still
+        // being written, opening it is the default, not a preference.
+        if (root.completed && Persistent.states?.ai)
+            Persistent.states.ai.expandThoughts = root.expanded;
+    }
+
+    function summary(): string {
+        if (!root.completed)
+            return Translation.tr("Thinking") + ".".repeat(dotsTimer.dots);
+        let parts = [];
+        if (root.durationMs >= 100)
+            parts.push(Translation.tr("Thought for %1 s").arg((root.durationMs / 1000).toFixed(1)));
+        else
+            parts.push(Translation.tr("Thought"));
+        if (root.tokens > 0)
+            parts.push(Translation.tr("%1 tokens").arg(root.tokens));
+        return parts.join(" · ");
+    }
 
     Layout.fillWidth: true
-    implicitHeight: collapsed ? header.implicitHeight : columnLayout.implicitHeight
+    implicitHeight: header.implicitHeight + content.implicitHeight
     layer.enabled: true
     layer.effect: OpacityMask {
         maskSource: Rectangle {
             width: root.width
             height: root.height
-            radius: thinkBlockBackgroundRounding
+            radius: root.backgroundRounding
         }
     }
 
     Behavior on implicitHeight {
-        enabled: root.completed ?? false
-        NumberAnimation {
-            duration: collapseAnimation.duration
-            easing.type: collapseAnimation.type
-            easing.bezierCurve: collapseAnimation.bezierCurve
-        }
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+    }
+
+    Timer {
+        id: dotsTimer
+        property int dots: 0
+        running: !root.completed
+        repeat: true
+        interval: 400
+        onTriggered: dots = (dots + 1) % 4
     }
 
     ColumnLayout {
-        id: columnLayout
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         spacing: 0
 
-        Rectangle { // Header background
+        Rectangle {
             id: header
             color: Appearance.colors.colSurfaceContainerHighest
             Layout.fillWidth: true
-            implicitHeight: thinkBlockTitleBarRowLayout.implicitHeight + thinkBlockHeaderPaddingVertical * 2
+            implicitHeight: headerRowLayout.implicitHeight + root.headerPaddingVertical * 2
 
-            MouseArea { // Click to reveal
+            MouseArea {
                 id: headerMouseArea
-                enabled: root.completed
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
-                onClicked: {
-                    root.collapsed = !root.collapsed
-                }
+                onClicked: root.toggle()
             }
 
-            RowLayout { // Header content
-                id: thinkBlockTitleBarRowLayout
+            RowLayout {
+                id: headerRowLayout
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin: thinkBlockHeaderPaddingHorizontal
-                anchors.rightMargin: thinkBlockHeaderPaddingHorizontal
+                anchors.leftMargin: root.headerPaddingHorizontal
+                anchors.rightMargin: root.headerPaddingHorizontal
                 spacing: 10
 
                 MaterialSymbol {
-                    Layout.fillWidth: false
                     Layout.topMargin: 7
                     Layout.bottomMargin: 7
                     Layout.leftMargin: 3
-                    text: "linked_services"
+                    text: "neurology"
+                    color: Appearance.colors.colOnLayer2
                 }
-                StyledText {
-                    id: thinkBlockLanguage
-                    Layout.fillWidth: false
-                    Layout.alignment: Qt.AlignLeft
-                    text: root.completed ? Translation.tr("Thought") : (Translation.tr("Thinking") + ".".repeat(Math.random() * 4))
-                }
-                Item { Layout.fillWidth: true }
-                RippleButton { // Expand button
-                    id: expandButton
-                    visible: root.completed
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    colBackground: headerMouseArea.containsMouse ? Appearance.colors.colLayer2Hover
-                        : ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    colRipple: Appearance.colors.colLayer2Active
 
-                    onClicked: { root.collapsed = !root.collapsed }
-                    
-                    contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "keyboard_arrow_down"
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        iconSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnLayer2
-                        rotation: root.collapsed ? 0 : 180
-                        Behavior on rotation {
-                            NumberAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Appearance.animation.elementMoveFast.type
-                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                            }
-                        }
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignLeft
+                    elide: Text.ElideRight
+                    color: Appearance.colors.colOnLayer2
+                    text: root.summary()
+                }
+
+                ThinkBlockButton {
+                    id: copyButton
+                    symbol: activated ? "inventory" : "content_copy"
+                    parentHovered: headerMouseArea.containsMouse
+                    tooltipText: Translation.tr("Copy reasoning")
+                    onClicked: {
+                        Quickshell.clipboardText = root.thoughtText;
+                        copyButton.activated = true;
+                        copyResetTimer.restart();
                     }
 
+                    Timer {
+                        id: copyResetTimer
+                        interval: 1500
+                        onTriggered: copyButton.activated = false
+                    }
                 }
-                
-            }
 
+                ThinkBlockButton {
+                    symbol: "keyboard_arrow_down"
+                    iconRotation: root.expanded ? 180 : 0
+                    parentHovered: headerMouseArea.containsMouse
+                    tooltipText: root.expanded ? Translation.tr("Hide reasoning") : Translation.tr("Show reasoning")
+                    onClicked: root.toggle()
+                }
+            }
         }
 
         Item {
             id: content
             Layout.fillWidth: true
-            implicitHeight: collapsed ? 0 : contentBackground.implicitHeight + thinkBlockComponentSpacing
+            implicitHeight: root.expanded ? Math.min(thoughtFlickable.contentHeight, root.maxContentHeight) : 0
             clip: true
 
             Behavior on implicitHeight {
-                enabled: root.completed ?? false
-                NumberAnimation {
-                    duration: collapseAnimation.duration
-                    easing.type: collapseAnimation.type
-                    easing.bezierCurve: collapseAnimation.bezierCurve
-                }
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
 
             Rectangle {
-                id: contentBackground
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                implicitHeight: messageTextBlock.implicitHeight
+                anchors.fill: parent
                 color: Appearance.colors.colLayer2
+            }
 
-                // Load data for the message at the correct scope
-                property bool editing: root.editing
-                property bool renderMarkdown: root.renderMarkdown
-                property bool enableMouseSelection: root.enableMouseSelection
-                property var messageData: root.messageData
-                property bool done: root.done
+            Flickable {
+                id: thoughtFlickable
+                anchors.fill: parent
+                contentWidth: width
+                contentHeight: thoughtColumn.implicitHeight
+                interactive: contentHeight > height
+                boundsBehavior: Flickable.StopAtBounds
+                clip: true
 
-                MessageTextBlock {
-                    id: messageTextBlock
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    segmentContent: root.segmentContent
+                // While the thought is still arriving, stay at the bottom so
+                // the newest line is the one being read.
+                onContentHeightChanged: {
+                    if (!root.completed)
+                        contentY = Math.max(0, contentHeight - height);
+                }
+
+                Column {
+                    id: thoughtColumn
+                    width: thoughtFlickable.width
+
+                    MessageTextBlock {
+                        width: parent.width
+                        editing: root.editing
+                        renderMarkdown: root.renderMarkdown
+                        enableMouseSelection: root.enableMouseSelection
+                        messageData: root.messageData
+                        done: root.done
+                        segmentContent: root.thoughtText
+                        forceDisableChunkSplitting: true
+                    }
                 }
             }
         }

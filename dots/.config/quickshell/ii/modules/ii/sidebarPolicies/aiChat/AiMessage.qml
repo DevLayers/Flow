@@ -201,7 +201,10 @@ Rectangle {
                         buttonIcon: activated ? "inventory" : "content_copy"
 
                         onClicked: {
-                            Quickshell.clipboardText = root.messageData?.content
+                            // The reasoning is never part of what gets copied.
+                            // Chats saved before it had a field of its own
+                            // still carry it inline, so it is stripped too.
+                            Quickshell.clipboardText = (root.messageData?.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim()
                             copyButton.activated = true
                             copyIconTimer.restart()
                         }
@@ -272,6 +275,25 @@ Rectangle {
             id: messageContentColumnLayout
             spacing: 0
 
+            Loader { // Reasoning, when the model showed its work
+                Layout.fillWidth: true
+                Layout.bottomMargin: active ? root.contentSpacing : 0
+                active: (root.messageData?.thought?.length ?? 0) > 0
+                sourceComponent: MessageThinkBlock {
+                    editing: root.editing
+                    renderMarkdown: root.renderMarkdown
+                    enableMouseSelection: root.enableMouseSelection
+                    messageData: root.messageData
+                    done: root.messageData?.done ?? false
+                    thoughtText: root.messageData?.thought ?? ""
+                    // The answer starting is what makes the thinking over,
+                    // long before the message itself is done.
+                    completed: ((root.messageData?.content?.length ?? 0) > 0) || (root.messageData?.done ?? false)
+                    durationMs: root.messageData?.thoughtDurationMs ?? 0
+                    tokens: root.messageData?.thoughtTokens ?? -1
+                }
+            }
+
             Item {
                 Layout.fillWidth: true
                 implicitHeight: loadingIndicatorLoader.shown ? loadingIndicatorLoader.implicitHeight : 0
@@ -284,7 +306,7 @@ Rectangle {
                 FadeLoader {
                     id: loadingIndicatorLoader
                     anchors.centerIn: parent
-                    shown: (root.messageBlocks.length < 1) && (!root.messageData.done)
+                    shown: (root.messageBlocks.length < 1) && ((root.messageData?.thought?.length ?? 0) === 0) && (!root.messageData.done)
                     sourceComponent: MaterialLoadingIndicator {
                         loading: true
                     }

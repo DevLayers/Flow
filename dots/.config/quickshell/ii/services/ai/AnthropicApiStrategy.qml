@@ -88,15 +88,27 @@ ApiStrategy {
             });
         }
 
+        // Reasoning is paid for out of `max_tokens`, so the cap is raised to
+        // leave room for an answer after the thinking is done.
+        const thinking = model.thinkingKind === "anthropic" && thinkingOn(model);
+        const budget = thinking ? thinkingBudget(model) : 0;
         let baseData = {
             "model": model.model,
             "system": systemPrompt,
             "messages": history,
-            "max_tokens": maxOutputTokens(model),
+            "max_tokens": thinking ? Math.max(maxOutputTokens(model), budget + 1024) : maxOutputTokens(model),
             "stream": true
         };
-        if (model.samplingParams)
+        if (thinking) {
+            baseData.thinking = {
+                "type": "enabled",
+                "budget_tokens": budget
+            };
+        } else if (model.samplingParams) {
+            // Extended thinking fixes the sampler: a temperature sent next to
+            // it is refused, so it is only sent when thinking is off.
             baseData.temperature = temperature;
+        }
         if (tools && tools.length > 0)
             baseData.tools = tools;
         return model.extraParams ? Object.assign({}, baseData, model.extraParams) : baseData;

@@ -111,8 +111,44 @@ ApiStrategy {
         // longer honours them does not get them.
         if (model.samplingParams)
             baseData.generationConfig.temperature = temperature;
+        const thinkingConfig = buildThinkingConfig(model);
+        if (thinkingConfig)
+            baseData.generationConfig.thinkingConfig = thinkingConfig;
         // print("Gemini API call payload:", JSON.stringify(baseData, null, 2));
         return model.extraParams ? Object.assign({}, baseData, model.extraParams) : baseData;
+    }
+
+    /**
+     * How much reasoning to ask for. The 3.x line takes a named level, the
+     * 2.5 line a token budget, and the two are not interchangeable — sending
+     * the wrong one is a 400.
+     *
+     * `includeThoughts` is what makes the summary come back at all; without
+     * it the model still reasons, it just never says what it thought.
+     */
+    function buildThinkingConfig(model: AiModel): var {
+        if (!model?.thinking)
+            return null;
+        const level = thinkingLevel(model);
+        if (model.thinkingKind === "gemini-level") {
+            return {
+                // The 3.x line always reasons; the least it will do is
+                // "minimal", which is what "off" means for these models.
+                "thinkingLevel": level === "off" ? "minimal" : level,
+                "includeThoughts": level !== "off"
+            };
+        }
+        if (model.thinkingKind !== "gemini-budget")
+            return null;
+        if (level === "off")
+            return {
+                "thinkingBudget": 0,
+                "includeThoughts": false
+            };
+        return {
+            "thinkingBudget": thinkingBudget(model),
+            "includeThoughts": true
+        };
     }
 
     function buildAuthorizationHeader(apiKeyEnvVarName: string): string {
@@ -248,6 +284,7 @@ ApiStrategy {
                     tokenUsage: {
                         input: dataJson.usageMetadata.promptTokenCount ?? -1,
                         output: dataJson.usageMetadata.candidatesTokenCount ?? -1,
+                        thinking: dataJson.usageMetadata.thoughtsTokenCount ?? -1,
                         total: dataJson.usageMetadata.totalTokenCount ?? -1
                     },
                     finished: finished

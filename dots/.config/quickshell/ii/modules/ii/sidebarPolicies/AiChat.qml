@@ -157,6 +157,23 @@ Item {
             }
         },
         {
+            name: "think",
+            description: Translation.tr("How hard the model should think: off, low, medium or high. Models that cannot be told to stop reasoning use the smallest budget instead."),
+            execute: args => {
+                if (args.length == 0 || args[0] == "get") {
+                    const model = Ai.currentModelEntry;
+                    if (!model?.thinking) {
+                        Ai.addMessage(Translation.tr("%1 does not think out loud.").arg(model?.name ?? Translation.tr("This model")), Ai.interfaceRole);
+                        return;
+                    }
+                    Ai.addMessage(Translation.tr("Thinking: %1").arg(Ai.thinkingLevel), Ai.interfaceRole);
+                    return;
+                }
+                if (Ai.setThinkingLevel(args[0]))
+                    Ai.addMessage(Translation.tr("Thinking set to %1").arg(Ai.thinkingLevel), Ai.interfaceRole);
+            }
+        },
+        {
             name: "test",
             description: Translation.tr("Markdown test"),
             execute: () => {

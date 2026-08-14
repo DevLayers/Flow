@@ -18,6 +18,11 @@ QtObject {
     property string thought
     property string thoughtSignature
     property var thinkingBlocks: []
+    // How long the model spent reasoning, and how many tokens it cost. Both
+    // are shown on the think block; -1 means the provider never said.
+    property real thoughtStartedAt: 0
+    property real thoughtDurationMs: 0
+    property int thoughtTokens: -1
     property bool thinking: true
     property bool done: false
     property var annotations: []

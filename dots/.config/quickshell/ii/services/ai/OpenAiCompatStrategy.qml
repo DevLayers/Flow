@@ -97,6 +97,11 @@ ApiStrategy {
         baseData[quirk(model, "maxTokensKey", "max_tokens")] = maxOutputTokens(model);
         if (model.samplingParams)
             baseData.temperature = temperature;
+        // Reasoning models take a named effort here. Models that do not
+        // reason reject the key outright, so it is only sent when the model
+        // says that is the knob it has.
+        if (model.thinkingKind === "effort" && thinkingOn(model))
+            baseData[quirk(model, "reasoningKey", "reasoning_effort")] = thinkingLevel(model);
         if (quirk(model, "usageInStream", false))
             baseData.stream_options = {
                 "include_usage": true
@@ -162,6 +167,7 @@ ApiStrategy {
                     tokenUsage: {
                         input: dataJson.usage.prompt_tokens ?? -1,
                         output: dataJson.usage.completion_tokens ?? -1,
+                        thinking: dataJson.usage.completion_tokens_details?.reasoning_tokens ?? -1,
                         total: dataJson.usage.total_tokens ?? -1
                     }
                 };
