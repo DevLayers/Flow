@@ -253,20 +253,24 @@ Item {
         return persist(draftPages);
     }
 
-    function cancelReorder() {
-        if (!active || mode !== "reorder")
+    function cancel() {
+        if (!active)
             return false;
         clearTransaction();
         cancelled();
         return true;
     }
 
+    function cancelReorder() {
+        if (!active || mode !== "reorder")
+            return false;
+        return cancel();
+    }
+
     function cancelResize() {
         if (!active || mode !== "resize")
             return false;
-        clearTransaction();
-        cancelled();
-        return true;
+        return cancel();
     }
 
     function updateOrPersist(mutator) {
@@ -320,5 +324,10 @@ Item {
         if (pageCount <= 1 || pageIndex >= pageCount)
             return false;
         return updateOrPersist(function(pages) { pages.splice(pageIndex, 1); });
+    }
+
+    Component.onDestruction: {
+        if (active)
+            clearTransaction();
     }
 }

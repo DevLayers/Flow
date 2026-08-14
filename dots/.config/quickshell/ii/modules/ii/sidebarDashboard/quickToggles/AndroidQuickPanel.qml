@@ -31,8 +31,21 @@ AbstractQuickPanel {
         function onSidebarRightOpenChanged() {
             if (GlobalStates.sidebarRightOpen) {
                 root.triggerContentEntrance();
+            } else if (editController.active) {
+                editController.cancel();
             }
         }
+    }
+
+    onEditModeChanged: {
+        if (!root.editMode && editController.active)
+            editController.cancel();
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.editMode && editController.active
+        onActivated: editController.cancel()
     }
 
     // Sizes

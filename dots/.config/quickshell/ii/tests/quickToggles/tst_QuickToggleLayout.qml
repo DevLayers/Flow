@@ -92,4 +92,16 @@ TestCase {
         compare(moved.map(function(value) { return value.id; }), ["a", "c", "d", "b"]);
         compare(source.map(function(value) { return value.id; }), ["a", "b", "c", "d"]);
     }
+
+    function test_deterministic_stress_never_overlaps() {
+        var source = [];
+        for (var i = 0; i < 120; i++) {
+            source.push(item("stress-" + i, 1 + (i % 4), 1 + (i % 3)));
+        }
+        for (var run = 0; run < 20; run++) {
+            var packed = Layout.pack(source, 4 + (run % 2));
+            verify(Layout.validateNoOverlap(packed, 4 + (run % 2)));
+            compare(JSON.stringify(packed), JSON.stringify(Layout.pack(source, 4 + (run % 2))));
+        }
+    }
 }
