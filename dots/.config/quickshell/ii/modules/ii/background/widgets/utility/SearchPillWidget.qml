@@ -61,11 +61,12 @@ AbstractBackgroundWidget {
 
     readonly property string activeAiLogo: {
         if (root.aiLogo !== "auto") return root.aiLogo;
-        const provider = String(Ai.currentModelId || "").toLowerCase();
+        const provider = String(Ai.currentProvider || "").toLowerCase();
         if (provider === "google") return "gemini";
         if (provider === "openrouter") return "openrouter";
         if (provider === "deepseek") return "deepseek";
         if (provider === "opencode") return "opencode";
+        if (provider === "ollama") return "ollama";
         return "gemini";
     }
 

@@ -19,7 +19,6 @@ Singleton {
     id: root
 
     property Component aiMessageComponent: AiMessageData {}
-    property Component aiModelComponent: AiModel {}
     property Component geminiApiStrategy: GeminiApiStrategy {}
     property Component openaiApiStrategy: OpenAiApiStrategy {}
     property Component mistralApiStrategy: MistralApiStrategy {}
@@ -44,7 +43,7 @@ Singleton {
     readonly property var apiKeys: KeyringStorage.keyringData?.apiKeys ?? {}
     readonly property var apiKeysLoaded: KeyringStorage.loaded
     readonly property bool currentModelHasApiKey: {
-        const model = models[currentModelId];
+        const model = root.currentModelEntry;
         if (!model || !model.requires_key)
             return true;
         if (!apiKeysLoaded)
@@ -63,10 +62,6 @@ Singleton {
     function idForMessage(message) {
         // Generate a unique ID using timestamp and random value
         return Date.now().toString(36) + Math.random().toString(36).substr(2, 8);
-    }
-
-    function safeModelName(modelName) {
-        return modelName.replace(/:/g, "_").replace(/ /g, "-").replace(/\//g, "-");
     }
 
     property list<var> defaultPrompts: []
@@ -254,193 +249,102 @@ Singleton {
             "none": []
         }
     }
-    property list<var> availableTools: Object.keys(root.tools[models[currentModelId]?.api_format]) ?? []
+    // An unknown API format — or no model at all, which is what an empty
+    // "others" list leaves behind — must not empty the tool selector.
+    property list<var> availableTools: Object.keys(root.tools[root.currentModelEntry?.api_format] ?? root.tools["openai"])
     property var toolDescriptions: {
         "functions": Translation.tr("Commands, edit configs, search.\nTakes an extra turn to switch to search mode if that's needed"),
         "search": Translation.tr("Gives the model search capabilities (immediately)"),
         "none": Translation.tr("Disable tools")
     }
 
-    readonly property string currentModel: Persistent.states.ai.model
-    // Model properties:
-    // - name: Name of the model
-    // - icon: Icon name of the model
-    // - description: Description of the model
-    // - endpoint: Endpoint of the model
-    // - model: Model name of the model
-    // - requires_key: Whether the model requires an API key
-    // - key_id: The identifier of the API key. Use the same identifier for models that can be accessed with the same key.
-    // - key_get_link: Link to get an API key
-    // - key_get_description: Description of pricing and how to get an API key
-    // - api_format: The API format of the model. Can be "openai" or "gemini". Default is "openai".
-    // - extraParams: Extra parameters to be passed to the model. This is a JSON object.
-    property var models: Config.options.policies.ai === 2 ? {} : {
-        "openrouter": aiModelComponent.createObject(this, {
-            "name": `OpenRouter - ${currentModel}`,
-            "icon": "openrouter-symbolic",
-            "description": Translation.tr("Online via %1 | %2's model").arg("OpenRouter").arg("Google/DeepSeek"),
-            "homepage": `https://openrouter.ai`,
-            "endpoint": "https://openrouter.ai/api/v1/chat/completions",
-            "model": `${getModelProvider(Persistent.states.ai.provider, currentModel) ? getModelProvider(Persistent.states.ai.provider, currentModel) + "/" : ""}${currentModel}`,
-            "requires_key": true,
-            "key_id": "openrouter",
-            "key_get_link": "https://openrouter.ai/settings/keys",
-            "key_get_description": Translation.tr("**Pricing**: Pay-as-you-go (token based).\n\n" + "**Instructions**: Log into your OpenRouter account, " + "go to Keys in the top-right menu, and create an API key.")
-        }),
-        "google": aiModelComponent.createObject(this, {
-            "name": `Google - ${currentModel}`,
-            "icon": "google-gemini-symbolic",
-            "description": Translation.tr("Online | Google's model\nNewer model that's slower than its predecessor but should deliver higher quality answers"),
-            "homepage": "https://aistudio.google.com",
-            "endpoint": `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:streamGenerateContent`,
-            "model": `${currentModel}`,
-            "requires_key": true,
-            "key_id": "gemini",
-            "key_get_link": "https://aistudio.google.com/app/apikey",
-            "key_get_description": Translation.tr("**Pricing**: free. Data used for training.\n\n**Instructions**: Log into Google account, allow AI Studio to create Google Cloud project or whatever it asks, go back and click Get API key"),
-            "api_format": "gemini"
-        }),
-        "deepseek": aiModelComponent.createObject(this, {
-            "name": `DeepSeek - ${currentModel}`,
-            "icon": "spark-symbolic",
-            "description": Translation.tr("Online | DeepSeek Official API\nHigh intelligence AI models for coding and general tasks"),
-            "homepage": "https://platform.deepseek.com",
-            "endpoint": "https://api.deepseek.com/chat/completions",
-            "model": `${currentModel}`,
-            "requires_key": true,
-            "key_id": "deepseek",
-            "key_get_link": "https://platform.deepseek.com/api_keys",
-            "key_get_description": Translation.tr("**Pricing**: Pay-as-you-go.\n\n**Instructions**: Log into DeepSeek Platform, go to API Keys and create a key."),
-            "api_format": "openai"
-        }),
-        "opencode": aiModelComponent.createObject(this, {
-            "name": `OpenCode - ${currentModel}`,
-            "icon": "code-symbolic",
-            "description": Translation.tr("Online | OpenCode Zen API\nPowered by DeepSeek V4 Flash"),
-            "homepage": "https://opencode.ai",
-            "endpoint": "https://api.opencode.ai/v1/chat/completions",
-            "model": `${currentModel}`,
-            "requires_key": true,
-            "key_id": "opencode",
-            "key_get_link": "https://opencode.ai",
-            "key_get_description": Translation.tr("**Pricing**: OpenCode subscription or API key.\n\n**Instructions**: Enter your OpenCode API key."),
-            "api_format": "openai"
-        }),
-        "others": (root.otherModels && Persistent.states?.ai?.model && root.otherModels[Persistent.states.ai.model]) ? root.otherModels[Persistent.states.ai.model] : (Object.keys(root.otherModels).length > 0 ? root.otherModels[Object.keys(root.otherModels)[0]] : null)
+    // Providers and models are described once, in the catalog. Nothing here
+    // builds a model object or tests a provider name for substrings.
+    readonly property ModelCatalog catalog: ModelCatalog {
+        ollamaModelNames: root.ollamaModels
     }
+    property var ollamaModels: []
 
-    property var otherModels: {
-        let result = {};
-        const configModels = Config.options.ai.otherModels;
-        for (let i = 0; i < configModels.length; i++) {
-            const modelData = configModels[i];
-            const modelId = modelData.id || modelData.model || modelData.name;
-            result[modelId] = aiModelComponent.createObject(this, modelData);
+    readonly property var providers: root.catalog.providers
+    readonly property var providerIds: root.catalog.providerIds
+
+    // The persisted provider/model pair is validated on read: either half can
+    // be stale (a renamed model, a provider dropped by policy, a config the
+    // user edited), and a half-valid pair points one provider's endpoint at a
+    // model it does not serve.
+    readonly property string currentProvider: {
+        const wanted = Persistent.states?.ai?.provider ?? "";
+        return root.providers[wanted] ? wanted : (root.providerIds[0] ?? "");
+    }
+    readonly property string currentModel: {
+        const provider = root.providers[root.currentProvider];
+        if (!provider)
+            return "";
+        const wanted = Persistent.states?.ai?.model ?? "";
+        return provider.modelFor(wanted) ? wanted : (provider.defaultModel?.value ?? "");
+    }
+    readonly property string currentModelId: `${root.currentProvider}:${root.currentModel}`
+    readonly property AiModel currentModelEntry: root.catalog.models[root.currentModelId] ?? null
+
+    /**
+     * Every model by catalog id, plus one entry per provider id pointing at
+     * that provider's current pick. Chats saved before ids became
+     * "provider:model" stored the bare provider, so both shapes resolve.
+     */
+    readonly property var models: {
+        const result = {};
+        const catalogModels = root.catalog.models;
+        for (const id in catalogModels) {
+            result[id] = catalogModels[id];
+        }
+        const ids = root.providerIds;
+        for (let i = 0; i < ids.length; i++) {
+            const providerId = ids[i];
+            const model = (providerId === root.currentProvider) ? root.currentModelEntry : root.providers[providerId].defaultModel;
+            if (model)
+                result[providerId] = model;
         }
         return result;
     }
     property var modelList: Object.keys(root.models)
-    property var currentModelId: Persistent.states?.ai?.provider || modelList[0]
 
-    property var baseModels: {
-        "openrouter": [
-            {
-                title: "Gemini 2.5 Flash-Lite",
-                value: "gemini-2.5-flash-lite",
-                modelProvider: "google"
-            },
-            {
-                title: "DeepSeek V4 Flash",
-                value: "deepseek-v4-flash",
-                modelProvider: "deepseek"
-            }
-        ],
-        "google": [
-            {
-                title: "Gemini 2.5 Flash-Lite",
-                value: "gemini-2.5-flash-lite"
-            },
-            {
-                title: "Gemini 2.5 Flash",
-                value: "gemini-2.5-flash"
-            },
-            {
-                title: "Gemini 3 Flash Preview",
-                value: "gemini-3-flash-preview"
-            }
-        ],
-        "deepseek": [
-            {
-                title: "DeepSeek V4 Flash",
-                value: "deepseek-v4-flash"
-            },
-            {
-                title: "DeepSeek V4 Pro",
-                value: "deepseek-v4-pro"
-            }
-        ],
-        "opencode": [
-            {
-                title: "DeepSeek V4 Flash (Zen)",
-                value: "deepseek-v4-flash"
-            }
-        ],
-        "others": []
-    }
-
-    property var modelsOfProviders: {
-        let providers = {};
-        for (let key in baseModels) {
-            providers[key] = baseModels[key].slice();
+    /** {providerId: [{title, value, modelProvider}, ...]}, for the pickers. */
+    readonly property var modelsOfProviders: {
+        const result = {};
+        const ids = root.providerIds;
+        for (let i = 0; i < ids.length; i++) {
+            result[ids[i]] = root.catalog.selectionEntries(ids[i]);
         }
-        providers["others"] = Object.keys(root.otherModels).map(key => {
-            return {
-                title: root.otherModels[key].name,
-                value: key
-            };
-        });
-        if (Config.options.ai.models.length > 0) {
-            return mergeModelsFromList(providers, Config.options.ai.models);
-        } else {
-            return providers;
-        }
-    }
-
-    function mergeModelsFromList(base, extraList) {
-        var result = {};
-        for (var provider in base) {
-            result[provider] = base[provider].slice();
-        }
-
-        if (extraList) {
-            for (var i = 0; i < extraList.length; i++) {
-                var item = extraList[i];
-                for (var provider in item) {
-                    if (result[provider]) {
-                        result[provider] = result[provider].concat(item[provider]);
-                    } else {
-                        result[provider] = item[provider].slice();
-                    }
-                }
-            }
-        }
-
         return result;
     }
 
     function getModelProvider(providerKey, modelValue) {
-        if (!modelsOfProviders[providerKey]) {
-            return null;
-        }
+        return root.catalog.resolve(providerKey, modelValue)?.modelProvider || null;
+    }
 
-        var models = modelsOfProviders[providerKey];
-        for (var i = 0; i < models.length; i++) {
-            if (models[i].value === modelValue) {
-                return models[i].modelProvider || null;
-            }
+    /**
+     * Turns whatever the user typed into a catalog id: a full "provider:model"
+     * id, a provider name (its default model), or a bare model name (looked up
+     * in the current provider first, then anywhere).
+     */
+    function resolveModelId(query) {
+        const wanted = String(query ?? "").trim();
+        if (wanted.length === 0)
+            return "";
+        if (root.catalog.models[wanted])
+            return wanted;
+        const provider = root.providers[wanted.toLowerCase()];
+        if (provider)
+            return provider.defaultModel?.id ?? "";
+        const inCurrentProvider = root.catalog.resolve(root.currentProvider, wanted);
+        if (inCurrentProvider)
+            return inCurrentProvider.id;
+        const catalogModels = root.catalog.models;
+        for (const id in catalogModels) {
+            if (catalogModels[id].value === wanted)
+                return id;
         }
-
-        return null;
+        return "";
     }
 
     property var apiStrategies: {
@@ -448,46 +352,13 @@ Singleton {
         "gemini": geminiApiStrategy.createObject(this),
         "mistral": mistralApiStrategy.createObject(this)
     }
-    property ApiStrategy currentApiStrategy: apiStrategies[models[currentModelId]?.api_format || "openai"]
+    property ApiStrategy currentApiStrategy: apiStrategies[root.currentModelEntry?.api_format || "openai"]
 
     property string requestScriptFilePath: `/tmp/quickshell-${SystemInfo.username}/ai/request.sh`
     property string pendingFilePath: ""
 
     Component.onCompleted: {
         setModel(currentModelId, false, false); // Do necessary setup for model
-    }
-
-    function guessModelLogo(model) {
-        if (model.includes("llama"))
-            return "ollama-symbolic";
-        if (model.includes("gemma"))
-            return "google-gemini-symbolic";
-        if (model.includes("deepseek"))
-            return "deepseek-symbolic";
-        if (/^phi\d*:/i.test(model))
-            return "microsoft-symbolic";
-        return "ollama-symbolic";
-    }
-
-    function guessModelName(model) {
-        const replaced = model.replace(/-/g, ' ').replace(/:/g, ' ');
-        let words = replaced.split(' ');
-        words[words.length - 1] = words[words.length - 1].replace(/(\d+)b$/, (_, num) => `${num}B`);
-        words = words.map(word => {
-            return (word.charAt(0).toUpperCase() + word.slice(1));
-        });
-        if (words[words.length - 1] === "Latest")
-            words.pop();
-        else
-            words[words.length - 1] = `(${words[words.length - 1]})`; // Surround the last word with square brackets
-        const result = words.join(' ');
-        return result;
-    }
-
-    function addModel(modelName, data) {
-        root.models = Object.assign({}, root.models, {
-            [modelName]: aiModelComponent.createObject(this, data)
-        });
     }
 
     // Boot-time index: Ollama models + default prompts + user prompts +
@@ -523,24 +394,10 @@ Singleton {
                     return
                 }
 
-                // Ollama models
-                const models = Array.isArray(parsed.ollama_models) ? parsed.ollama_models : []
-                if (models.length > 0) {
-                    root.modelList = [...root.modelList, ...models]
-                    models.forEach(model => {
-                        const safeModelName = root.safeModelName(model)
-                        root.addModel(safeModelName, {
-                            "name": guessModelName(model),
-                            "icon": guessModelLogo(model),
-                            "description": Translation.tr("Local Ollama model | %1").arg(model),
-                            "homepage": `https://ollama.com/library/${model}`,
-                            "endpoint": "http://localhost:11434/v1/chat/completions",
-                            "model": model,
-                            "requires_key": false
-                        })
-                    })
-                    root.modelList = Object.keys(root.models)
-                }
+                // Ollama models: handed to the catalog, which turns them into
+                // the "ollama" provider's model list.
+                if (Array.isArray(parsed.ollama_models))
+                    root.ollamaModels = parsed.ollama_models
 
                 // Prompts + chats (already absolute, filtered by extension)
                 if (Array.isArray(parsed.default_prompts))
@@ -639,38 +496,51 @@ Singleton {
     }
 
     function getModel() {
-        return models[currentModelId];
+        return root.currentModelEntry;
     }
 
+    /**
+     * Selects a model, by catalog id, provider name or bare model name.
+     * Provider and model are always written together: setting one without the
+     * other aims a provider's endpoint at a model it does not serve.
+     */
     function setModel(modelId, feedback = true, setPersistentState = true) {
-        if (!modelId)
-            modelId = "";
-        modelId = modelId.toLowerCase();
-        if (modelList.indexOf(modelId) !== -1) {
-            const model = models[modelId];
-            // See if policy prevents online models
-            if (Config.options.policies.ai === 2 && !model.endpoint.includes("localhost")) {
-                root.addMessage(Translation.tr("Online models disallowed\n\nControlled by `policies.ai` config option"), root.interfaceRole);
-                return;
-            }
-            if (setPersistentState)
-                Persistent.states.ai.model = modelId;
+        const model = root.catalog.models[root.resolveModelId(modelId)] ?? null;
+        if (!model) {
             if (feedback)
-                root.addMessage(Translation.tr("Model set to %1").arg(model.name), root.interfaceRole);
-            if (model.requires_key) {
-                // If key not there show advice
-                if (root.apiKeysLoaded && (!root.apiKeys[model.key_id] || root.apiKeys[model.key_id].length === 0)) {
-                    root.addApiKeyAdvice(model);
-                }
-            }
-        } else {
-            if (feedback)
-                root.addMessage(Translation.tr("Invalid model. Supported: \n```\n") + modelList.join("\n```\n```\n"), Ai.interfaceRole) + "\n```";
+                root.addMessage(Translation.tr("Invalid model. Supported:\n\n- %1").arg(root.catalog.modelIds.join("\n- ")), root.interfaceRole);
+            return false;
         }
+        if (setPersistentState) {
+            Persistent.states.ai.provider = model.providerId;
+            Persistent.states.ai.model = model.value;
+        }
+        if (feedback)
+            root.addMessage(Translation.tr("Model set to %1").arg(model.name), root.interfaceRole);
+        if (model.requires_key && root.apiKeysLoaded && !(root.apiKeys[model.key_id]?.length > 0))
+            root.addApiKeyAdvice(model);
+        return true;
+    }
+
+    /** Switches provider, landing on that provider's first model. */
+    function setProvider(providerId, feedback = true) {
+        const provider = root.providers[String(providerId ?? "").trim().toLowerCase()] ?? null;
+        if (!provider) {
+            if (feedback)
+                root.addMessage(Translation.tr("Invalid provider. Supported:\n\n- %1").arg(root.providerIds.join("\n- ")), root.interfaceRole);
+            return false;
+        }
+        if (!provider.defaultModel) {
+            if (feedback)
+                root.addMessage(Translation.tr("%1 has no models yet. Add one in the AI settings page.").arg(provider.name), root.interfaceRole);
+            return false;
+        }
+        return root.setModel(provider.defaultModel.id, feedback);
     }
 
     function setTool(tool) {
-        if (!root.tools[models[currentModelId]?.api_format] || !(tool in root.tools[models[currentModelId]?.api_format])) {
+        const toolsOfFormat = root.tools[root.currentModelEntry?.api_format];
+        if (!toolsOfFormat || !(tool in toolsOfFormat)) {
             root.addMessage(Translation.tr("Invalid tool. Supported tools:\n- %1").arg(root.availableTools.join("\n- ")), root.interfaceRole);
             return false;
         }
@@ -693,13 +563,14 @@ Singleton {
     }
 
     function setApiKey(key) {
-        const model = models[currentModelId];
+        const model = root.currentModelEntry;
+        if (!model)
+            return;
         if (!model.requires_key) {
             root.addMessage(Translation.tr("%1 does not require an API key").arg(model.name), Ai.interfaceRole);
             return;
         }
         if (!key || key.length === 0) {
-            const model = models[currentModelId];
             root.addApiKeyAdvice(model);
             return;
         }
@@ -708,7 +579,9 @@ Singleton {
     }
 
     function printApiKey() {
-        const model = models[currentModelId];
+        const model = root.currentModelEntry;
+        if (!model)
+            return;
         if (model.requires_key) {
             const key = root.apiKeys[model.key_id];
             if (key) {
@@ -754,7 +627,11 @@ Singleton {
         }
 
         function makeRequest() {
-            const model = models[currentModelId];
+            const model = root.currentModelEntry;
+            if (!model) {
+                root.addMessage(Translation.tr("No model selected. Pick one with %1model MODEL").arg("/"), root.interfaceRole);
+                return;
+            }
 
             // Fetch API keys if needed
             if (model?.requires_key && !KeyringStorage.loaded)
@@ -771,7 +648,11 @@ Singleton {
             const endpoint = root.currentApiStrategy.buildEndpoint(model);
             const messageArray = root.messageIDs.map(id => root.messageByID[id]);
             const filteredMessageArray = messageArray.filter(message => message.role !== Ai.interfaceRole);
-            const tools = (model.endpoint.includes("localhost")) ? null : root.tools[model.api_format][root.currentTool];
+            // Tool support is a property of the model, not of its address. A
+            // local model that can call functions keeps them; a remote one
+            // that cannot does not get them handed over anyway.
+            const toolsOfFormat = root.tools[model.api_format] ?? root.tools["openai"];
+            const tools = model.tools ? (toolsOfFormat[root.currentTool] ?? toolsOfFormat["none"]) : null;
 
             const data = root.currentApiStrategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, tools, root.pendingFilePath);
             // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
@@ -870,7 +751,9 @@ Singleton {
 
             // Handle error responses
             if (requester.message.content.includes("API key not valid")) {
-                root.addApiKeyAdvice(models[requester.message.model]);
+                const model = root.models[requester.message.model];
+                if (model)
+                    root.addApiKeyAdvice(model);
             }
         }
     }

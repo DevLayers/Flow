@@ -19,7 +19,7 @@ ApiStrategy {
         let contents = messages.map(message => {
             // console.log("[AI] Building request data for message:", JSON.stringify(message, null, 2));
             const geminiApiRoleName = (message.role === "assistant") ? "model" : message.role;
-            const usingSearch = tools[0]?.google_search !== undefined;
+            const usingSearch = tools?.[0]?.google_search !== undefined;
             if (!usingSearch && message.functionCall != undefined && message.functionName.length > 0) {
                 return {
                     "role": geminiApiRoleName,
@@ -75,7 +75,7 @@ ApiStrategy {
         }
         let baseData = {
             "contents": contents,
-            "tools": tools,
+            "tools": tools ?? [],
             "system_instruction": {
                 "parts": [
                     {

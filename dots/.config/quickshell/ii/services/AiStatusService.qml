@@ -83,7 +83,7 @@ Singleton {
                 "runtime": runtime,
                 "state": (msg && msg.thinking) ? "thinking" : "streaming",
                 "source": "internal",
-                "model": Ai.currentModelId || "built-in",
+                "model": Ai.currentModelEntry?.title || "built-in",
                 "tokensIn": Ai.tokenCount.input > 0 ? Ai.tokenCount.input : 0,
                 "tokensOut": Ai.tokenCount.output > 0 ? Ai.tokenCount.output : 0
             });

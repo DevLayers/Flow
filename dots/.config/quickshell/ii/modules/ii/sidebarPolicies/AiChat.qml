@@ -63,14 +63,14 @@ Item {
             name: "model",
             description: Translation.tr("Choose model"),
             execute: args => {
-                Persistent.states.ai.model = args[0];
+                Ai.setModel(args.join(" ").trim());
             }
         },
         {
             name: "provider",
             description: Translation.tr("Choose provider"),
             execute: args => {
-                Persistent.states.ai.provider = args[0];
+                Ai.setProvider(args.join(" ").trim());
             }
         },
         {
@@ -626,66 +626,24 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         height: parent.height
                         spacing: 4
 
-                        property string currentValue: Persistent.states.ai.provider
+                        property string currentValue: Ai.currentProvider
 
-                        SelectionGroupButton {
-                            id: providerButton1
-                            leftmost: true
-                            rightmost: false
-                            buttonSymbol: "google-gemini-symbolic"
-                            buttonText: "Google"
-                            toggled: providerSelector.currentValue === "google"
-                            onClicked: {
-                                Persistent.states.ai.provider = "google";
-                                Persistent.states.ai.model = Ai.modelsOfProviders["google"][0].value;
-                            }
-                        }
-                        SelectionGroupButton {
-                            id: providerButton2
-                            leftmost: false
-                            rightmost: false
-                            buttonSymbol: "deepseek-symbolic"
-                            buttonText: "DeepSeek"
-                            toggled: providerSelector.currentValue === "deepseek"
-                            onClicked: {
-                                Persistent.states.ai.provider = "deepseek";
-                                Persistent.states.ai.model = Ai.modelsOfProviders["deepseek"][0].value;
-                            }
-                        }
-                        SelectionGroupButton {
-                            id: providerButton3
-                            leftmost: false
-                            rightmost: false
-                            buttonIcon: "code"
-                            buttonText: "OpenCode"
-                            toggled: providerSelector.currentValue === "opencode"
-                            onClicked: {
-                                Persistent.states.ai.provider = "opencode";
-                                Persistent.states.ai.model = Ai.modelsOfProviders["opencode"][0].value;
-                            }
-                        }
-                        SelectionGroupButton {
-                            id: providerButton4
-                            leftmost: false
-                            rightmost: false
-                            buttonSymbol: "openrouter-symbolic"
-                            buttonText: "OpenRouter"
-                            toggled: providerSelector.currentValue === "openrouter"
-                            onClicked: {
-                                Persistent.states.ai.provider = "openrouter";
-                                Persistent.states.ai.model = Ai.modelsOfProviders["openrouter"][0].value;
-                            }
-                        }
-                        SelectionGroupButton {
-                            id: providerButton5
-                            leftmost: false
-                            rightmost: true
-                            buttonIcon: "more_horiz"
-                            buttonText: Translation.tr("Others")
-                            toggled: providerSelector.currentValue === "others"
-                            onClicked: {
-                                Persistent.states.ai.provider = "others";
-                                Persistent.states.ai.model = Ai.modelsOfProviders["others"][0].value;
+                        // One button per provider in the catalog — the list is
+                        // no longer restated here.
+                        Repeater {
+                            id: providerRepeater
+                            model: Ai.providerIds
+
+                            SelectionGroupButton {
+                                readonly property var provider: Ai.providers[modelData]
+
+                                leftmost: index === 0
+                                rightmost: index === providerRepeater.count - 1
+                                buttonSymbol: provider?.icon ?? ""
+                                buttonIcon: provider?.materialIcon ?? ""
+                                buttonText: provider?.name ?? modelData
+                                toggled: providerSelector.currentValue === modelData
+                                onClicked: Ai.setProvider(modelData)
                             }
                         }
                     }
@@ -697,12 +655,12 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
                     buttonIcon: "wand_stars"
                     textRole: "title"
-                    model: Ai.modelsOfProviders[providerSelector.currentValue]
+                    model: Ai.modelsOfProviders[providerSelector.currentValue] ?? []
                     enabled: true
                     currentIndex: {
-                        const models = Ai.modelsOfProviders[providerSelector.currentValue];
+                        const models = Ai.modelsOfProviders[providerSelector.currentValue] ?? [];
                         for (var i = 0; i < models.length; i++) {
-                            if (models[i].value === Persistent.states.ai.model) {
+                            if (models[i].value === Ai.currentModel) {
                                 return i;
                             }
                         }
@@ -710,7 +668,9 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     }
 
                     function updateModel(index = 0) {
-                        Persistent.states.ai.model = Ai.modelsOfProviders[providerSelector.currentValue][index].value
+                        const entry = (Ai.modelsOfProviders[providerSelector.currentValue] ?? [])[index];
+                        if (entry)
+                            Ai.setModel(`${providerSelector.currentValue}:${entry.value}`, false);
                     }
 
                     onActivated: index => updateModel(index)
@@ -945,22 +905,20 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 id: dropArea
                 anchors.fill: parent
 
-                readonly property string currentProvider: Persistent.states.ai.provider
-
                 onContainsDragChanged: {
-                    if (currentProvider !== "google") return
+                    if (!Ai.currentModelEntry?.attachments) return
                     root.containsDrag = dropArea.containsDrag
                 }
 
                 onPreviewPathChanged: {
-                    if (currentProvider !== "google") return
+                    if (!Ai.currentModelEntry?.attachments) return
                     root.previewPath = dropArea.previewPath
                 }
 
                 property string previewPath: ""
     
                 onEntered: (drag) => {
-                    if (currentProvider !== "google") return
+                    if (!Ai.currentModelEntry?.attachments) return
                     if (drag.hasUrls && drag.urls.length > 0) {
                         previewPath = drag.urls[0]
                     }
@@ -1017,8 +975,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             } else if (messageInputField.text.startsWith(`${root.commandPrefix}provider`)) {
                                 root.suggestionQuery = messageInputField.text.split(" ")[1] ?? "";
                                 
-                                const providers = Object.keys(Ai.models)
-                                
+                                const providers = Ai.providerIds
+
                                 const providerResults = Fuzzy.go(root.suggestionQuery, providers.map(p => ({
                                     name: Fuzzy.prepare(p),
                                     obj: p
@@ -1029,17 +987,17 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                 
                                 root.suggestionList = providerResults.map(result => {
                                     const providerName = result.target;
-                                    const providerInfo = Ai.models[providerName];
+                                    const providerInfo = Ai.providers[providerName];
                                     return {
                                         name: `${messageInputField.text.trim().split(" ").length == 1 ? (root.commandPrefix + "provider ") : ""}${providerName}`,
-                                        displayName: providerInfo.name.split(" -")[0], // Remove " - model name"
-                                        description: providerInfo.description
+                                        displayName: providerInfo?.name ?? providerName,
+                                        description: providerInfo?.description ?? ""
                                     };
                                 });
                             } else if (messageInputField.text.startsWith(`${root.commandPrefix}model`)) {
                                 root.suggestionQuery = messageInputField.text.split(" ")[1] ?? "";
                             
-                                const providerModels = Ai.modelsOfProviders[Persistent.states.ai.provider] || [];
+                                const providerModels = Ai.modelsOfProviders[Ai.currentProvider] ?? [];
                             
                                 const modelList = providerModels.map(model => ({
                                     name: Fuzzy.prepare(model.value),
@@ -1058,7 +1016,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                     return {
                                         name: `${messageInputField.text.trim().split(" ").length == 1 ? (root.commandPrefix + "model ") : ""}${model.value}`,
                                         displayName: model.title,
-                                        description: `Provider: ${model.modelProvider ?? Persistent.states.ai.provider}`
+                                        description: `Provider: ${model.modelProvider || Ai.currentProvider}`
                                     };
                                 });
                             } else if (messageInputField.text.startsWith(`${root.commandPrefix}prompt`)) {
@@ -1279,14 +1237,12 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
                 ApiInputBoxIndicator {
                     // Model indicator
-                    property string currentProvider: Persistent.states.ai.provider
-                    // Take the icon from the model registry instead of restating the
-                    // provider list here — the old ternary only knew two of the five.
-                    property string providerIcon: Ai.models[currentProvider]?.icon ?? "spark-symbolic"
+                    readonly property var currentEntry: Ai.currentModelEntry
 
-                    symbol: providerIcon
-                    text: Persistent.states.ai.model // TODO: add a readable version
-                    tooltipText: Translation.tr("Current model: %1\nSet it with %2model MODEL").arg(Ai.getModel().name).arg(root.commandPrefix)
+                    symbol: currentEntry?.icon ?? ""
+                    icon: currentEntry?.materialIcon ?? "wand_stars"
+                    text: currentEntry?.title ?? Ai.currentModel
+                    tooltipText: Translation.tr("Current model: %1\nSet it with %2model MODEL").arg(currentEntry?.name ?? Translation.tr("none")).arg(root.commandPrefix)
                 }
 
                 ApiInputBoxIndicator {
