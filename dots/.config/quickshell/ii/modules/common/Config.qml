@@ -2673,6 +2673,13 @@ Singleton {
                 property int timeout: 3000
                 property bool showValues: true
                 property bool hideWhenFullscreen: true
+
+                property JsonObject material: JsonObject {
+                    property bool rotateShape: false
+                    property bool minimal: false
+                    property bool shapedValues: true
+                    property bool circledShapes: true
+                }
             }
 
             property JsonObject osk: JsonObject {
