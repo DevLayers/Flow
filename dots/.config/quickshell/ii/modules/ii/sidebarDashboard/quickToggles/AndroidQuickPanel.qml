@@ -76,16 +76,16 @@ AbstractQuickPanel {
 
     // Current page toggles
     readonly property list<var> currentPageToggles: {
-        if (currentPage >= 0 && currentPage < pages.length)
-            return pages[currentPage] || [];
+        if (currentPage >= 0 && currentPage < displayPages.length)
+            return displayPages[currentPage] || [];
         return [];
     }
 
     // All used toggle types across all pages
     readonly property list<string> allUsedTypes: {
         var types = [];
-        for (var p = 0; p < pages.length; p++) {
-            var page = pages[p];
+        for (var p = 0; p < displayPages.length; p++) {
+            var page = displayPages[p];
             if (!page)
                 continue;
             for (var i = 0; i < page.length; i++) {
@@ -106,14 +106,14 @@ AbstractQuickPanel {
     // empty-cell divergence this refactor is removing.
     readonly property list<var> packedPages: {
         var result = [];
-        for (var i = 0; i < pages.length; i++)
-            result.push(QuickToggleLayout.pack(pages[i] || [], root.columns));
+        for (var i = 0; i < displayPages.length; i++)
+            result.push(QuickToggleLayout.pack(displayPages[i] || [], root.columns));
         return result;
     }
 
     // Calculate height for a specific page
     function pageHeight(pageIndex) {
-        if (pageIndex < 0 || pageIndex >= pages.length)
+        if (pageIndex < 0 || pageIndex >= displayPages.length)
             return baseCellHeight + 8;
         var packedPage = packedPages[pageIndex];
         var rows = packedPage ? packedPage.rowsUsed : 0;
@@ -122,7 +122,7 @@ AbstractQuickPanel {
 
     // Dynamic height based on current page + page indicators
     readonly property real currentContentHeight: pageHeight(currentPage) + (editMode ? 14 : 0)
-    readonly property real pageIndicatorHeight: pages.length > 1 ? 20 : 0
+    readonly property real pageIndicatorHeight: displayPages.length > 1 ? 20 : 0
 
     implicitHeight: contentItem.implicitHeight + root.padding * 2
     Behavior on implicitHeight {
@@ -184,7 +184,7 @@ AbstractQuickPanel {
     }
 
     function goToPage(pageIndex) {
-        if (pageIndex < 0 || pageIndex >= pages.length)
+        if (pageIndex < 0 || pageIndex >= displayPages.length)
             return;
         currentPage = pageIndex;
     }
@@ -200,7 +200,7 @@ AbstractQuickPanel {
         interval: 500
         repeat: false
         onTriggered: {
-            if (root.dragScrollPendingPage >= 0 && root.dragScrollPendingPage < root.pages.length) {
+            if (root.dragScrollPendingPage >= 0 && root.dragScrollPendingPage < root.displayPages.length) {
                 root.currentPage = root.dragScrollPendingPage;
                 // Notify all dragging buttons about the new target page
                 root.dragScrollPageChanged(root.dragScrollPendingPage);
@@ -220,7 +220,7 @@ AbstractQuickPanel {
         var newPage = -1;
         if (absX < dragScrollEdgeThreshold && currentPage > 0) {
             newPage = currentPage - 1;
-        } else if (absX > root.width - dragScrollEdgeThreshold && currentPage < pages.length - 1) {
+        } else if (absX > root.width - dragScrollEdgeThreshold && currentPage < displayPages.length - 1) {
             newPage = currentPage + 1;
         }
 
@@ -353,7 +353,7 @@ AbstractQuickPanel {
             Flickable {
                 id: flickable
                 anchors.fill: parent
-                contentWidth: width * root.pages.length
+                contentWidth: width * root.displayPages.length
                 contentHeight: height
                 flickableDirection: Flickable.HorizontalFlick
                 boundsBehavior: Flickable.StopAtBounds
@@ -362,7 +362,7 @@ AbstractQuickPanel {
                 // Snap to page on release
                 onMovementEnded: {
                     var targetPage = Math.round(contentX / width);
-                    targetPage = Math.max(0, Math.min(targetPage, root.pages.length - 1));
+                    targetPage = Math.max(0, Math.min(targetPage, root.displayPages.length - 1));
                     root.currentPage = targetPage;
                     snapAnimation.to = targetPage * width;
                     snapAnimation.start();
@@ -375,14 +375,14 @@ AbstractQuickPanel {
                     onWheel: function (wheelEvent) {
                         if (Math.abs(wheelEvent.angleDelta.x) > Math.abs(wheelEvent.angleDelta.y)) {
                             // Horizontal scroll
-                            if (wheelEvent.angleDelta.x < 0 && root.currentPage < root.pages.length - 1) {
+                            if (wheelEvent.angleDelta.x < 0 && root.currentPage < root.displayPages.length - 1) {
                                 root.goToPage(root.currentPage + 1);
                             } else if (wheelEvent.angleDelta.x > 0 && root.currentPage > 0) {
                                 root.goToPage(root.currentPage - 1);
                             }
                         } else {
                             // Vertical scroll → map to horizontal paging
-                            if (wheelEvent.angleDelta.y < 0 && root.currentPage < root.pages.length - 1) {
+                            if (wheelEvent.angleDelta.y < 0 && root.currentPage < root.displayPages.length - 1) {
                                 root.goToPage(root.currentPage + 1);
                             } else if (wheelEvent.angleDelta.y > 0 && root.currentPage > 0) {
                                 root.goToPage(root.currentPage - 1);
@@ -406,7 +406,7 @@ AbstractQuickPanel {
 
                     Repeater {
                         id: pagesRepeater
-                        model: root.pages.length
+                        model: root.displayPages.length
 
                         Item {
                             id: pageContainer
@@ -416,7 +416,7 @@ AbstractQuickPanel {
 
                             // Show only current page content as visible when current
                             property bool isCurrent: root.currentPage === index
-                            property list<var> pageToggles: root.pages[index] || []
+                            property list<var> pageToggles: root.displayPages[index] || []
                             property var packedPage: root.packedPages[index] || { rowsUsed: 0, items: [] }
 
                             Loader {
@@ -505,10 +505,10 @@ AbstractQuickPanel {
             id: pageIndicators
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 6
-            visible: root.pages.length > 1
+            visible: root.displayPages.length > 1
 
             Repeater {
-                model: root.pages.length
+                model: root.displayPages.length
                 delegate: Rectangle {
                     required property int index
                     width: root.currentPage === index ? 16 : 8
@@ -583,7 +583,7 @@ AbstractQuickPanel {
                             color: Appearance.colors.colPrimary
                         }
                         StyledText {
-                            text: Translation.tr("Page %1 / %2").arg(root.currentPage + 1).arg(root.pages.length)
+                            text: Translation.tr("Page %1 / %2").arg(root.currentPage + 1).arg(root.displayPages.length)
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.weight: Font.Bold
                             color: Appearance.colors.colOnSurface
@@ -595,7 +595,7 @@ AbstractQuickPanel {
                 RippleButton {
                     Layout.preferredWidth: root.baseCellHeight
                     Layout.preferredHeight: root.baseCellHeight * 0.6
-                    visible: root.currentPage < root.pages.length - 1
+                    visible: root.currentPage < root.displayPages.length - 1
                     bottomLeftRadius: Appearance.rounding.full
                     topLeftRadius: Appearance.rounding.full
                     bottomRightRadius: Appearance.rounding.verysmall
@@ -639,7 +639,7 @@ AbstractQuickPanel {
                 RippleButton {
                     Layout.preferredWidth: root.baseCellHeight
                     Layout.preferredHeight: root.baseCellHeight * 0.6
-                    visible: root.pages.length > 1
+                    visible: root.displayPages.length > 1
                     bottomLeftRadius: Appearance.rounding.verysmall
                     topLeftRadius: Appearance.rounding.verysmall
                     bottomRightRadius: Appearance.rounding.full
@@ -749,5 +749,10 @@ AbstractQuickPanel {
         if (currentPage >= pages.length) {
             currentPage = Math.max(0, pages.length - 1);
         }
+    }
+
+    onDisplayPagesChanged: {
+        if (currentPage >= displayPages.length)
+            currentPage = Math.max(0, displayPages.length - 1);
     }
 }
