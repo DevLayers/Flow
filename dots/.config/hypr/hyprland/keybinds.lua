@@ -30,7 +30,7 @@ hl.bind("SUPER + N", hl.dsp.global("quickshell:sidebarRightToggle"), { descripti
 hl.bind("SUPER + Slash", hl.dsp.global("quickshell:cheatsheetToggle"), { description = "Shell: Toggle cheatsheet" })
 hl.bind("SUPER + U", hl.dsp.global("quickshell:usageToggle"), { description = "Shell: Toggle app usage stats" })
 hl.bind("SUPER + K", hl.dsp.global("quickshell:oskToggle"), { description = "Shell: Toggle on-screen keyboard" })
-hl.bind("SUPER + M", hl.dsp.global("quickshell:ControlsToggle"), { description = "Shell: Toggle media controls" })
+hl.bind("SUPER + M", hl.dsp.global("quickshell:mediaControlsToggle"), { description = "Shell: Toggle media controls" })
 hl.bind("SUPER + G", hl.dsp.global("quickshell:overlayToggle"), { description = "Shell: Toggle widget overlay" })
 hl.bind("CTRL + ALT + Delete", hl.dsp.global("quickshell:sessionToggle"), { description = "Shell: Toggle session menu" })
 hl.bind("SUPER + J", hl.dsp.global("quickshell:barToggle"), { description = "Shell: Toggle bar" })
