@@ -81,6 +81,20 @@ Scope {
         GlobalStates.regionSelectorOpen = true
     }
 
+    /** Grabs a region and attaches it to the chat. */
+    function askAi() {
+        root.action = RegionSelection.SnipAction.AskAI
+        root.selectionMode = RegionSelection.SelectionMode.RectCorners
+        GlobalStates.regionSelectorOpen = true
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSnipForAiRequested() {
+            root.askAi();
+        }
+    }
+
     IpcHandler {
         target: "region"
 
@@ -95,6 +109,9 @@ Scope {
         }
         function ocr() {
             root.ocr()
+        }
+        function askAi() {
+            root.askAi()
         }
         function record() {
             root.record()

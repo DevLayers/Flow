@@ -21,7 +21,6 @@ Item {
     property var suggestionList: []
 
     property bool containsDrag: false
-    property string previewPath: ""
 
     /** Whether the list of saved chats is on screen, in either of its hosts. */
     property bool sessionsOpen: false
@@ -62,9 +61,14 @@ Item {
     property var allCommands: [
         {
             name: "attach",
-            description: Translation.tr("Attach a file. Only works with Gemini."),
+            description: Translation.tr("Attach a file to the next message. Also: the paperclip, drag and drop, or Ctrl+V."),
             execute: args => {
-                Ai.attachFile(args.join(" ").trim());
+                const path = args.join(" ").trim();
+                if (path.length === 0) {
+                    filePickerProc.running = true;
+                    return;
+                }
+                Ai.attachFile(path);
             }
         },
         {
@@ -109,10 +113,36 @@ Item {
             }
         },
         {
-            name: "key",
-            description: Translation.tr("Set API key"),
+            name: "persona",
+            description: Translation.tr("Answer as a saved persona: prompt, model, thinking and temperature at once."),
             execute: args => {
-                if (args[0] == "get") {
+                const wanted = args.join(" ").trim();
+                if (wanted.length === 0) {
+                    controlBar.togglePopover("prompt");
+                    return;
+                }
+                if (wanted === "none" || wanted === "off") {
+                    Ai.setPersona("");
+                    return;
+                }
+                const needle = wanted.toLowerCase();
+                const persona = Ai.personas.all.find(entry => entry.id === needle || (entry.name ?? "").toLowerCase() === needle);
+                if (!persona) {
+                    Ai.addMessage(Translation.tr("No persona called %1. Known: %2").arg(wanted).arg(Ai.personas.all.map(entry => entry.id).join(", ")), Ai.interfaceRole);
+                    return;
+                }
+                Ai.setPersona(persona.id);
+            }
+        },
+        {
+            name: "key",
+            description: Translation.tr("API keys. On its own it opens the key panel."),
+            execute: args => {
+                // Never `/key get` into the transcript: a chat is screenshot
+                // and screen-shared, and a secret written into it stays there.
+                if (args.length === 0 || args[0].trim().length === 0) {
+                    controlBar.openKeyManager();
+                } else if (args[0] == "get") {
                     Ai.printApiKey();
                 } else {
                     Ai.setApiKey(args[0]);
@@ -264,6 +294,35 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         messageListView.positionViewAtEnd();
     }
 
+    Connections {
+        // The service says a key is missing; the panel that fixes it lives
+        // here. Nothing in the service knows about this bar.
+        target: Ai
+        function onKeyManagerRequested() {
+            controlBar.openKeyManager();
+        }
+        function onDraftRestored(text) {
+            messageInputField.text = text;
+            messageInputField.cursorPosition = messageInputField.text.length;
+        }
+    }
+
+    Process {
+        // The paperclip. Several files at once, because a message can carry
+        // several.
+        id: filePickerProc
+        running: false
+        command: ["bash", "-c", "if command -v kdialog >/dev/null; then " + "  FILES=$(kdialog --getopenfilename \"$HOME\" \"\" --multiple 2>/dev/null); " + "  if [ -n \"$FILES\" ]; then echo -n \"$FILES\" | tr '\\n' '|'; fi; " + "elif command -v zenity >/dev/null; then " + "  zenity --file-selection --multiple --separator=\"|\" 2>/dev/null; " + "fi"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const picked = this.text.trim();
+                if (picked.length === 0)
+                    return;
+                picked.split("|").map(path => path.trim()).filter(path => path.length > 0).forEach(path => Ai.attachFile(path));
+            }
+        }
+    }
+
     Process {
         id: decodeImageAndAttachProc
         property string imageDecodePath: Directories.cliphistDecode
@@ -282,6 +341,36 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         }
     }
 
+    /** A small round button on the composer's own row. */
+    component ComposerButton: RippleButton {
+        id: composerButton
+
+        property string symbol: ""
+        property string tooltipText: ""
+
+        signal triggered
+
+        implicitWidth: 34
+        implicitHeight: 34
+        buttonRadius: Appearance.rounding.full
+        colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+        colBackgroundHover: Appearance.colors.colLayer2Hover
+        colRipple: Appearance.colors.colLayer2Active
+        onClicked: composerButton.triggered()
+
+        contentItem: MaterialSymbol {
+            anchors.centerIn: parent
+            horizontalAlignment: Text.AlignHCenter
+            text: composerButton.symbol
+            iconSize: 20
+            color: Appearance.colors.colOnLayer2
+        }
+
+        StyledToolTip {
+            text: composerButton.tooltipText
+        }
+    }
+
     component StatusItem: MouseArea {
         id: statusItem
         property string icon
@@ -289,7 +378,15 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         property string description
         property int animIndex: 0
         property var rootRef: null
+        property color tint: Appearance.colors.colSubtext
+        /** Set when clicking it does something, so the cursor says so. */
+        property bool actionable: false
+
+        signal activated
+
         hoverEnabled: true
+        cursorShape: statusItem.actionable ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onClicked: statusItem.activated()
         implicitHeight: statusItemRowLayout.implicitHeight
         implicitWidth: statusItemRowLayout.implicitWidth
 
@@ -343,12 +440,12 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             MaterialSymbol {
                 text: statusItem.icon
                 iconSize: Appearance.font.pixelSize.huge
-                color: Appearance.colors.colSubtext
+                color: statusItem.tint
             }
             StyledText {
                 font.pixelSize: Appearance.font.pixelSize.small
                 text: statusItem.statusText
-                color: Appearance.colors.colSubtext
+                color: statusItem.tint
                 animateChange: true
             }
         }
@@ -476,7 +573,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         animIndex: 0
                         icon: Ai.currentModelHasApiKey ? "key" : "key_off"
                         statusText: ""
-                        description: Ai.currentModelHasApiKey ? Translation.tr("API key is set\nChange with /key YOUR_API_KEY") : Translation.tr("No API key\nSet it with /key YOUR_API_KEY")
+                        actionable: true
+                        tint: Ai.currentModelHasApiKey ? Appearance.colors.colSubtext : Appearance.m3colors.m3error
+                        description: Ai.currentModelHasApiKey ? Translation.tr("API key is set\nClick to open the key panel") : Translation.tr("No API key\nClick to add one")
+                        onActivated: controlBar.openKeyManager()
                     }
                     StatusSeparator {}
                     StatusItem {
@@ -496,6 +596,25 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         icon: "token"
                         statusText: Ai.tokenCount.total
                         description: Translation.tr("Total token count\nInput: %1\nOutput: %2").arg(Ai.tokenCount.input).arg(Ai.tokenCount.output)
+                    }
+                    StatusSeparator {
+                        visible: contextMeter.visible
+                    }
+                    StatusItem {
+                        // How full the window is. A token count on its own
+                        // says nothing until the chat is dropping its own
+                        // beginning; a share of the window says it early.
+                        id: contextMeter
+                        readonly property int window: Ai.currentModelEntry?.contextWindow ?? 0
+                        readonly property real fraction: contextMeter.window > 0 ? Math.min(1, Ai.tokenCount.total / contextMeter.window) : 0
+
+                        rootRef: root
+                        animIndex: 2
+                        visible: contextMeter.window > 0 && Ai.tokenCount.total > 0
+                        icon: contextMeter.fraction >= 0.75 ? "data_alert" : "data_usage"
+                        statusText: `${Math.round(contextMeter.fraction * 100)}%`
+                        tint: contextMeter.fraction >= 0.75 ? Appearance.m3colors.m3tertiary : Appearance.colors.colSubtext
+                        description: Translation.tr("%1 of %2 tokens used in this chat").arg(Ai.tokenCount.total).arg(contextMeter.window)
                     }
                 }
             }
@@ -549,6 +668,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         Ai.messageByID[modelData];
                     }
                     messageInputField: root.inputField
+                    onRegenerateRequested: id => controlBar.openRegenerate(id)
                 }
             }
 
@@ -556,12 +676,126 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 id: emptyStatePlaceholder
                 z: 2
                 shown: Ai.messageIDs.length === 0
-                icon: "neurology"
-                title: Translation.tr("Large language models")
-                description: Translation.tr("Type /key to get started with online models\nCtrl+O to expand sidebar\nCtrl+P to pin sidebar\nCtrl+D to detach sidebar")
+                icon: Ai.currentPersona?.icon ?? "neurology"
+                title: Ai.currentPersona?.name ?? Translation.tr("Large language models")
+                description: Ai.currentPersona?.description ?? Translation.tr("Ask anything, or start with one of these")
                 shape: MaterialShape.Shape.PixelCircle
                 animateIconOnShow: true
                 entranceTrigger: root.entranceTrigger
+            }
+
+            Loader {
+                // The empty chat used to list keyboard shortcuts. What it is
+                // for is a way in: four things worth asking, or the one thing
+                // standing between this chat and an answer.
+                id: emptyStateActionsLoader
+                z: 3
+                anchors {
+                    horizontalCenter: parent.horizontalCenter
+                    bottom: parent.bottom
+                    bottomMargin: 12
+                }
+                width: Math.min(parent.width - 24, 460)
+                active: Ai.messageIDs.length === 0
+                visible: active
+
+                sourceComponent: ColumnLayout {
+                    spacing: 6
+
+                    Loader {
+                        Layout.fillWidth: true
+                        active: !Ai.currentModelHasApiKey
+                        visible: active
+
+                        sourceComponent: Rectangle {
+                            implicitHeight: missingKeyRowLayout.implicitHeight + 10 * 2
+                            radius: Appearance.rounding.small
+                            color: Appearance.colors.colSecondaryContainer
+
+                            RowLayout {
+                                id: missingKeyRowLayout
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 8
+                                spacing: 8
+
+                                MaterialSymbol {
+                                    text: "key_off"
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: Appearance.m3colors.m3onSecondaryContainer
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("%1 needs an API key").arg(Ai.currentModelEntry?.title ?? Translation.tr("This model"))
+                                    wrapMode: Text.Wrap
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.m3colors.m3onSecondaryContainer
+                                }
+
+                                RippleButton {
+                                    leftPadding: 12
+                                    rightPadding: 12
+                                    topPadding: 5
+                                    bottomPadding: 5
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: Appearance.colors.colPrimary
+                                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                                    colRipple: Appearance.colors.colPrimaryActive
+                                    onClicked: controlBar.openKeyManager()
+
+                                    contentItem: StyledText {
+                                        text: Translation.tr("Add a key")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.m3colors.m3onPrimary
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: root.width >= 420 ? 2 : 1
+                        columnSpacing: 6
+                        rowSpacing: 6
+
+                        Repeater {
+                            model: ScriptModel {
+                                values: Ai.starters
+                            }
+
+                            delegate: RippleButton {
+                                id: starterButton
+                                required property var modelData
+
+                                Layout.fillWidth: true
+                                leftPadding: 12
+                                rightPadding: 12
+                                topPadding: 8
+                                bottomPadding: 8
+                                buttonRadius: Appearance.rounding.small
+                                colBackground: Appearance.colors.colLayer2
+                                colBackgroundHover: Appearance.colors.colLayer2Hover
+                                colRipple: Appearance.colors.colLayer2Active
+                                // Put in the composer rather than sent: an
+                                // opening line is a start, not the message.
+                                onClicked: {
+                                    messageInputField.text = starterButton.modelData;
+                                    messageInputField.cursorPosition = messageInputField.text.length;
+                                    messageInputField.forceActiveFocus();
+                                }
+
+                                contentItem: StyledText {
+                                    text: starterButton.modelData
+                                    wrapMode: Text.Wrap
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colOnLayer2
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             ScrollToBottomButton {
@@ -717,27 +951,6 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             }
         }
 
-        AttachedFileIndicator {
-            visible: implicitHeight > 0
-            implicitHeight: root.containsDrag ? contentHeight : 0
-            opacity: root.containsDrag ? 1 : 0
-            highlight: false
-
-            Layout.fillWidth: true
-
-            Behavior on implicitHeight {
-                animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
-            }
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-
-            filePath: root.previewPath
-            
-        }
-
-        
-
         ChatControlBar {
             id: controlBar
             Layout.fillWidth: true
@@ -756,7 +969,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             Layout.fillWidth: true
             radius: Appearance.rounding.normal - root.padding
             color: Appearance.colors.colLayer2
-            implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.bottomMargin + spacing, 45) + (attachedFileIndicator.implicitHeight + spacing + attachedFileIndicator.anchors.topMargin)
+            implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.bottomMargin + spacing, 45) + (attachmentTray.implicitHeight + spacing + attachmentTray.anchors.topMargin)
             clip: true
 
             FastBlur {
@@ -805,55 +1018,41 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
 
-            AttachedFileIndicator {
-                id: attachedFileIndicator
+            AttachmentTray {
+                id: attachmentTray
                 anchors {
                     top: parent.top
                     left: parent.left
                     right: parent.right
                     margins: visible ? 5 : 0
                 }
-                filePath: Ai.pendingFilePath
-                onRemove: Ai.attachFile("")
+                // A drop that will be turned away says so while it is still a
+                // drag, rather than looking like it never registered.
+                dragHint: {
+                    if (!root.containsDrag)
+                        return "";
+                    if (Ai.currentModelTakesFiles)
+                        return Translation.tr("Drop to attach");
+                    return Translation.tr("%1 cannot read files — text ones will still be pasted in").arg(Ai.currentModelEntry?.title ?? Translation.tr("This model"));
+                }
             }
 
             DropArea {
                 id: dropArea
                 anchors.fill: parent
 
-                onContainsDragChanged: {
-                    if (!Ai.currentModelEntry?.attachments) return
-                    root.containsDrag = dropArea.containsDrag
-                }
+                onContainsDragChanged: root.containsDrag = dropArea.containsDrag
 
-                onPreviewPathChanged: {
-                    if (!Ai.currentModelEntry?.attachments) return
-                    root.previewPath = dropArea.previewPath
+                onDropped: drop => {
+                    if (!drop.hasUrls)
+                        return;
+                    // Gating happens per file, in the service: a text file is
+                    // readable by every model, whatever it can otherwise take.
+                    for (let i = 0; i < drop.urls.length; i++)
+                        Ai.attachFile(drop.urls[i]);
+                    drop.accept(Qt.CopyAction);
                 }
-
-                property string previewPath: ""
-    
-                onEntered: (drag) => {
-                    if (!Ai.currentModelEntry?.attachments) return
-                    if (drag.hasUrls && drag.urls.length > 0) {
-                        previewPath = drag.urls[0]
-                    }
-                }
-                
-                onExited: {
-                    previewPath = ""
-                }
-                
-                onDropped: (drop) => {
-                    if (drop.hasUrls) {
-                        for (var i = 0; i < drop.urls.length; i++) {
-                            console.log("[AI Chat] Dropped file:", drop.urls[i])
-                            Ai.attachFile(drop.urls[i])
-                        }
-                        drop.accept(Qt.CopyAction)
-                    }
-                }
-            } 
+            }
 
             RowLayout { // Input field and send button
                 id: inputFieldRowLayout
@@ -864,6 +1063,23 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     bottomMargin: 5
                 }
                 spacing: 0
+
+                ComposerButton {
+                    // Attaching used to be a slash command with a path typed
+                    // by hand, or a drag. Both are still there.
+                    Layout.alignment: Qt.AlignBottom
+                    Layout.leftMargin: 5
+                    symbol: "attach_file"
+                    tooltipText: Translation.tr("Attach files")
+                    onTriggered: filePickerProc.running = true
+                }
+
+                ComposerButton {
+                    Layout.alignment: Qt.AlignBottom
+                    symbol: "screenshot_region"
+                    tooltipText: Translation.tr("Send a part of the screen")
+                    onTriggered: GlobalStates.snipForAiRequested()
+                }
 
                 ScrollView {
                     id: inputScrollView
@@ -883,6 +1099,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         background: null
 
                         onTextChanged: {
+                            // Kept per chat, so switching away and back does
+                            // not throw away a half-written message.
+                            Ai.draft = messageInputField.text;
+
                             // Handle suggestions
                             if (messageInputField.text.length === 0) {
                                 root.suggestionQuery = "";
@@ -1054,9 +1274,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                 }
                                 event.accepted = false; // No image, let text pasting proceed
                             } else if (event.key === Qt.Key_Escape) {
-                                // Esc to detach file
-                                if (Ai.pendingFilePath.length > 0) {
-                                    Ai.attachFile("");
+                                // Esc takes the attachments back off, one row
+                                // at a time, before it closes anything.
+                                if (Ai.attachments.length > 0) {
+                                    Ai.clearAttachments();
                                     event.accepted = true;
                                 } else {
                                     event.accepted = false;

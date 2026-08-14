@@ -31,7 +31,48 @@ ApiStrategy {
         return model.endpoint;
     }
 
-    function buildRequestData(model: AiModel, messages, systemPrompt: string, temperature: real, tools: list<var>, filePath: string) {
+    /**
+     * Turns a plain-text turn into the parts form when it carries files.
+     * Images ride as data URIs; anything else is inlined as text, since this
+     * dialect has no block for a document and a base64 blob in a text field
+     * is worth nothing to the model.
+     */
+    function withAttachments(turn: var, message, model: AiModel): var {
+        const files = attachmentsOf(message, model);
+        if (files.length === 0)
+            return turn;
+        const parts = [];
+        if ((turn.content ?? "").length > 0)
+            parts.push({
+                "type": "text",
+                "text": turn.content
+            });
+        for (const file of files) {
+            if (file.kind === "image" && (model?.vision ?? false)) {
+                parts.push({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": `data:${file.mime};base64,${attachmentMarker(file.path, "b64")}`
+                    }
+                });
+                continue;
+            }
+            if (file.kind !== "text")
+                continue;
+            parts.push({
+                "type": "text",
+                "text": `[[ ${file.name} ]]\n${attachmentMarker(file.path, "text")}`
+            });
+        }
+        if (parts.length === 0)
+            return turn;
+        return Object.assign({}, turn, {
+            "content": parts
+        });
+    }
+
+    function buildRequestData(model: AiModel, messages, systemPrompt: string, temperature: real, tools: list<var>) {
+        beginAttachments();
         const toolMessages = quirk(model, "toolMessages", true);
         let lastCallId = "";
 
@@ -59,10 +100,10 @@ ApiStrategy {
                         ]
                     };
                 }
-                return {
+                return withAttachments({
                     "role": message.role,
                     "content": message.rawContent
-                };
+                }, message, model);
             }
             // The result of a call the model asked for. Pairing it with the id
             // of that call is what lets the model match them up; without one,

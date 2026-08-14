@@ -22,6 +22,12 @@ Rectangle {
 
     property list<var> messageBlocks: StringUtils.splitMarkdownBlocks(root.messageData?.content)
 
+    /** Asks the control bar for a model to redo this answer with. */
+    signal regenerateRequested(string messageId)
+
+    readonly property bool isUser: root.messageData?.role === "user"
+    readonly property var sentFiles: Array.from(root.messageData?.attachments ?? [])
+
     anchors.left: parent?.left
     anchors.right: parent?.right
     implicitHeight: columnLayout.implicitHeight + root.messagePadding * 2
@@ -29,15 +35,15 @@ Rectangle {
     radius: Appearance.rounding.normal
     color: Appearance.colors.colLayer1
 
-    function saveMessage() {
-        if (!root.editing) return;
+    /** What the editor currently holds, back as one piece of markdown. */
+    function composedContent(): string {
         // Get all Loader children (each represents a segment)
         const segments = messageContentColumnLayout.children
             .map(child => child.segment)
             .filter(segment => (segment));
 
         // Reconstruct markdown
-        const newContent = segments.map(segment => {
+        return segments.map(segment => {
             if (segment.type === "code") {
                 const lang = segment.lang ? segment.lang : "";
                 // Remove trailing newlines
@@ -47,9 +53,25 @@ Rectangle {
                 return segment.content;
             }
         }).join("");
+    }
 
+    function saveMessage() {
+        if (!root.editing) return;
+        const newContent = root.composedContent();
         root.editing = false
         root.messageData.content = newContent;
+    }
+
+    /**
+     * Rewrites the question and asks it again. Everything after it is put in a
+     * chat of its own first, so no answer is lost by changing one's mind about
+     * how the question was worded.
+     */
+    function saveAndResend() {
+        if (!root.editing) return;
+        const newContent = root.composedContent();
+        root.editing = false;
+        Ai.editAndResend(root.messageId, newContent);
     }
 
     Keys.onPressed: (event) => {
@@ -197,6 +219,40 @@ Rectangle {
                     }
 
                     AiMessageControlButton {
+                        // Same answer, another model. The old way to compare
+                        // two models was to switch the chat's model and ask
+                        // the question again by hand.
+                        id: regenWithButton
+                        buttonIcon: "swap_horiz"
+                        visible: messageData?.role === 'assistant'
+
+                        onClicked: {
+                            root.regenerateRequested(root.messageId);
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Regenerate with another model")
+                        }
+                    }
+
+                    AiMessageControlButton {
+                        // Only while editing a question: saving alone leaves
+                        // the old answer under a question that no longer asks
+                        // for it.
+                        id: resendButton
+                        buttonIcon: "send"
+                        visible: root.editing && root.isUser
+
+                        onClicked: {
+                            root.saveAndResend();
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Save and ask again")
+                        }
+                    }
+
+                    AiMessageControlButton {
                         id: forkButton
                         buttonIcon: "alt_route"
 
@@ -276,11 +332,75 @@ Rectangle {
         }
 
         Loader {
+            // Chats saved before a message could carry several files.
             Layout.fillWidth: true
-            active: root.messageData?.localFilePath && root.messageData?.localFilePath.length > 0
+            active: root.sentFiles.length === 0 && (root.messageData?.localFilePath?.length ?? 0) > 0
+            visible: active
             sourceComponent: AttachedFileIndicator {
                 filePath: root.messageData?.localFilePath
                 canRemove: false
+            }
+        }
+
+        Flow {
+            // What went out with this message, kept with it: a reopened chat
+            // still shows what the model was actually looking at.
+            visible: root.sentFiles.length > 0
+            spacing: 5
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignLeft
+
+            Repeater {
+                model: ScriptModel {
+                    values: root.sentFiles
+                }
+
+                delegate: Rectangle {
+                    id: sentFile
+                    required property var modelData
+
+                    implicitWidth: sentFileRowLayout.implicitWidth + 10 * 2
+                    implicitHeight: 28
+                    radius: Appearance.rounding.small
+                    color: Appearance.colors.colLayer2
+
+                    RowLayout {
+                        id: sentFileRowLayout
+                        anchors.centerIn: parent
+                        spacing: 6
+
+                        MaterialSymbol {
+                            text: {
+                                const kind = sentFile.modelData.kind ?? "";
+                                if (kind === "image")
+                                    return "image";
+                                if (kind === "pdf")
+                                    return "picture_as_pdf";
+                                if (kind === "audio")
+                                    return "music_note";
+                                if (kind === "video")
+                                    return "movie";
+                                if (kind === "text")
+                                    return "description";
+                                return "file_present";
+                            }
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.maximumWidth: 180
+                            text: sentFile.modelData.name ?? ""
+                            elide: Text.ElideMiddle
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colOnLayer2
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: `${sentFile.modelData.path ?? ""}\n${Ai.humanSize(sentFile.modelData.bytes ?? 0)}`
+                    }
+                }
             }
         }
 
@@ -359,6 +479,166 @@ Rectangle {
                         done: root.messageData?.done ?? false
                         forceDisableChunkSplitting: root.messageData?.content.includes("```") ?? true
                     } }
+                }
+            }
+        }
+
+        Loader {
+            // A failed request used to leave a message that stopped, with the
+            // reason in the log. What went wrong and what to do about it both
+            // belong here, next to a button that tries again.
+            Layout.fillWidth: true
+            active: (root.messageData?.errorKind?.length ?? 0) > 0
+            visible: active
+
+            sourceComponent: Rectangle {
+                implicitHeight: errorColumnLayout.implicitHeight + 10 * 2
+                radius: Appearance.rounding.small
+                color: ColorUtils.transparentize(Appearance.m3colors.m3error, 0.88)
+                border.width: 1
+                border.color: ColorUtils.transparentize(Appearance.m3colors.m3error, 0.7)
+
+                ColumnLayout {
+                    id: errorColumnLayout
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
+                    spacing: 4
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignTop
+                            text: "error"
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.m3colors.m3error
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.messageData?.errorText ?? Translation.tr("The request failed.")
+                                wrapMode: Text.Wrap
+                                color: Appearance.m3colors.m3error
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: text.length > 0
+                                text: Ai.transportErrorAdvice(root.messageData?.errorKind ?? "")
+                                wrapMode: Text.Wrap
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        RippleButton {
+                            visible: (root.messageData?.errorKind ?? "") === "auth"
+                            leftPadding: 12
+                            rightPadding: 12
+                            topPadding: 5
+                            bottomPadding: 5
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                            colBackgroundHover: Appearance.colors.colLayer2Hover
+                            colRipple: Appearance.colors.colLayer2Active
+                            onClicked: Ai.keyManagerRequested()
+
+                            contentItem: StyledText {
+                                text: Translation.tr("Keys")
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colOnLayer2
+                            }
+                        }
+
+                        RippleButton {
+                            leftPadding: 12
+                            rightPadding: 12
+                            topPadding: 5
+                            bottomPadding: 5
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colPrimary
+                            colBackgroundHover: Appearance.colors.colPrimaryHover
+                            colRipple: Appearance.colors.colPrimaryActive
+                            onClicked: Ai.retryMessage(root.messageId)
+
+                            contentItem: RowLayout {
+                                spacing: 5
+
+                                MaterialSymbol {
+                                    text: "refresh"
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: Appearance.m3colors.m3onPrimary
+                                }
+
+                                StyledText {
+                                    text: Translation.tr("Try again")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.m3colors.m3onPrimary
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Loader {
+            // "Set a key with /key VALUE" was the whole of the old advice, and
+            // it meant typing a secret into the transcript.
+            Layout.fillWidth: true
+            active: (root.messageData?.notice ?? "") === "apiKey"
+            visible: active
+
+            sourceComponent: RowLayout {
+                spacing: 6
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                RippleButton {
+                    leftPadding: 12
+                    rightPadding: 12
+                    topPadding: 5
+                    bottomPadding: 5
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colRipple: Appearance.colors.colSecondaryContainerActive
+                    onClicked: Ai.keyManagerRequested()
+
+                    contentItem: RowLayout {
+                        spacing: 5
+
+                        MaterialSymbol {
+                            text: "key"
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.m3colors.m3onSecondaryContainer
+                        }
+
+                        StyledText {
+                            text: Translation.tr("Open the key panel")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.m3colors.m3onSecondaryContainer
+                        }
+                    }
                 }
             }
         }

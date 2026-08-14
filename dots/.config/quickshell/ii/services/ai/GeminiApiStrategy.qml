@@ -1,15 +1,10 @@
 import QtQuick
-import qs.modules.common.functions as CF
 
 ApiStrategy {
     readonly property string apiKeyEnvVarName: "API_KEY"
-    readonly property string fileUriVarName: "file_uri"
-    readonly property string fileMimeTypeVarName: "MIME_TYPE"
-    readonly property string fileUriSubstitutionString: "{{ fileUriVarName }}"
-    readonly property string fileMimeTypeSubstitutionString: "{{ fileMimeTypeVarName }}"
-    // Anything the endpoint sends that is not an SSE frame: an error body, or
-    // the upload step's own output. Kept until the request ends, because an
-    // error body is pretty-printed across many lines.
+    // Anything the endpoint sends that is not an SSE frame: an error body.
+    // Kept until the request ends, because an error body is pretty-printed
+    // across many lines.
     property string strayBuffer: ""
 
     function buildEndpoint(model: AiModel): string {
@@ -34,7 +29,38 @@ ApiStrategy {
         };
     }
 
-    function buildRequestData(model: AiModel, messages, systemPrompt: string, temperature: real, tools: list<var>, filePath: string) {
+    /**
+     * A message's files as Gemini parts. Text and source go in as themselves;
+     * everything else as bytes. `file_data` is still read for chats saved
+     * back when attachments were uploaded to the Files API first.
+     */
+    function attachmentParts(message, model: AiModel): var {
+        const parts = attachmentsOf(message, model).map(file => {
+            if (file.kind === "text") {
+                return {
+                    "text": `\n\n[[ ${file.name} ]]\n${attachmentMarker(file.path, "text")}`
+                };
+            }
+            return {
+                "inline_data": {
+                    "mime_type": file.mime,
+                    "data": attachmentMarker(file.path, "b64")
+                }
+            };
+        });
+        if (message.fileUri && message.fileUri.length > 0) {
+            parts.push({
+                "file_data": {
+                    "mime_type": message.fileMimeType,
+                    "file_uri": message.fileUri
+                }
+            });
+        }
+        return parts;
+    }
+
+    function buildRequestData(model: AiModel, messages, systemPrompt: string, temperature: real, tools: list<var>) {
+        beginAttachments();
         let contents = messages.map(message => {
             // console.log("[AI] Building request data for message:", JSON.stringify(message, null, 2));
             const geminiApiRoleName = (message.role === "assistant") ? "model" : message.role;
@@ -72,26 +98,9 @@ ApiStrategy {
                     Object.assign({
                         text: message.rawContent
                     }, signaturePart(message)),
-                    ...(message.fileUri && message.fileUri.length > 0 ? [
-                            {
-                                "file_data": {
-                                    "mime_type": message.fileMimeType,
-                                    "file_uri": message.fileUri
-                                }
-                            }
-                        ] : [])]
+                    ...attachmentParts(message, model)]
             };
         });
-        if (filePath && filePath.length > 0) {
-            const trimmedFilePath = CF.FileUtils.trimFileProtocol(filePath);
-            // Add file_data part to the last message's parts array
-            contents[contents.length - 1].parts.unshift({
-                file_data: {
-                    mime_type: fileMimeTypeSubstitutionString,
-                    file_uri: fileUriSubstitutionString
-                }
-            });
-        }
         let baseData = {
             "contents": contents,
             "tools": tools ?? [],
@@ -187,13 +196,6 @@ ApiStrategy {
     function parseData(dataJson, message) {
         let finished = false;
         try {
-            // Uploaded file
-            if (dataJson.uploadedFile) {
-                message.fileUri = dataJson.uploadedFile.uri;
-                message.fileMimeType = dataJson.uploadedFile.mimeType;
-                return ({});
-            }
-
             // Error response handling
             if (dataJson.error) {
                 const errorMsg = `**Error ${dataJson.error.code}**: ${dataJson.error.message}`;
@@ -317,41 +319,4 @@ ApiStrategy {
         strayBuffer = "";
     }
 
-    function buildScriptFileSetup(filePath) {
-        const trimmedFilePath = CF.FileUtils.trimFileProtocol(filePath);
-        let content = "";
-
-        // print("file path:", filePath)
-        // print("trimmed file path:", trimmedFilePath)
-        // print("escaped file path:", CF.StringUtils.shellSingleQuoteEscape(trimmedFilePath))
-
-        content += `IMAGE_PATH='${CF.StringUtils.shellSingleQuoteEscape(trimmedFilePath)}'\n`;
-        content += `${fileMimeTypeVarName}=$(file -b --mime-type "$IMAGE_PATH")\n`;
-        content += 'NUM_BYTES=$(wc -c < "${IMAGE_PATH}")\n';
-        content += 'mkdir -p "/tmp/quickshell-$(whoami)/ai"\n';
-        content += 'tmp_header_file="/tmp/quickshell-$(whoami)/ai/upload-header.tmp"\n';
-        content += 'tmp_file_info_file="/tmp/quickshell-$(whoami)/ai/file-info.json.tmp"\n';
-
-        // Initial resumable request defining metadata.
-        // The upload url is in the response headers dump them to a file.
-        content += 'curl "https://generativelanguage.googleapis.com/upload/v1beta/files"' + ` -H "x-goog-api-key: \$${apiKeyEnvVarName}"` + ' -D $tmp_header_file' + ' -H "X-Goog-Upload-Protocol: resumable"' + ' -H "X-Goog-Upload-Command: start"' + ' -H "X-Goog-Upload-Header-Content-Length: ${NUM_BYTES}"' + ` -H "X-Goog-Upload-Header-Content-Type: \${${fileMimeTypeVarName}}"` + ' -H "Content-Type: application/json"' + ` -d "{'file': {'display_name': 'Image'}}" 2> /dev/null` + '\n';
-
-        // Get file upload header
-        content += 'upload_url=$(grep -i "x-goog-upload-url: " "${tmp_header_file}" | cut -d" " -f2 | tr -d "\r")\n';
-        content += 'rm "${tmp_header_file}"\n';
-
-        // Upload the actual file
-        content += 'curl "${upload_url}"' + ` -H "x-goog-api-key: \$${apiKeyEnvVarName}"` + ' -H "Content-Length: ${NUM_BYTES}"' + ' -H "X-Goog-Upload-Offset: 0"' + ' -H "X-Goog-Upload-Command: upload, finalize"' + ' --data-binary "@${IMAGE_PATH}" 2> /dev/null > "${tmp_file_info_file}"' + '\n';
-
-        content += `${fileUriVarName}=$(jq -r ".file.uri" "$tmp_file_info_file")\n`;
-        // Announced as an SSE frame so it goes through the same parser as the
-        // model's own output.
-        content += `printf "data: {\\"uploadedFile\\": {\\"uri\\": \\"$${fileUriVarName}\\", \\"mimeType\\": \\"$${fileMimeTypeVarName}\\"}}\\n"\n`;
-
-        return content;
-    }
-
-    function finalizeScriptContent(scriptContent: string): string {
-        return scriptContent.replace(fileMimeTypeSubstitutionString, `'"\$${fileMimeTypeVarName}"'`).replace(fileUriSubstitutionString, `'"\$${fileUriVarName}"'`);
-    }
 }

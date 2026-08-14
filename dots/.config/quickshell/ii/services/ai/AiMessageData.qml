@@ -10,6 +10,10 @@ QtObject {
     property string fileMimeType
     property string fileUri
     property string localFilePath
+    // Files sent with this message: {path, name, mime, kind, bytes}. A message
+    // carries its own attachments so a reopened chat still shows what was sent
+    // with it, and so the next turn can hand them over again.
+    property var attachments: []
     property string model
     // Reasoning, kept apart from the answer. `thought` is the summary text the
     // model streamed; the other two are what has to be handed back verbatim on
@@ -33,4 +37,13 @@ QtObject {
     property string functionResponse
     property bool functionPending: false
     property bool visibleToUser: true
+    // Why a request came back with nothing, as something the UI can act on
+    // rather than prose in the bubble: "auth", "quota", "notFound", "server",
+    // "network", "timeout" or "unknown". Empty on a message that went fine.
+    property string errorKind: ""
+    property string errorText: ""
+    property int errorStatus: 0
+    // A message the sidebar wrote about its own state, which the transcript
+    // draws as a card instead of as text. Currently only "apiKey".
+    property string notice: ""
 }

@@ -30,12 +30,23 @@ Scope {
     property string apiKey: ""
     property string apiKeyEnvVarName: "API_KEY"
     property string scriptPath: ""
-    property string filePath: "" // Attachment uploaded before the request itself
+    /** Helper that writes attachments into the body. See `buildScript`. */
+    property string attachScriptPath: ""
+
+    /**
+     * The request body is written next to the script and handed to curl as a
+     * file. Nothing large is ever passed as an argument that way — a single
+     * base64 image is already past what one may hold — and the body needs no
+     * shell escaping at all.
+     */
+    readonly property string bodyPath: CF.FileUtils.trimFileProtocol(root.scriptPath) + ".json"
 
     // ── Tunables ──────────────────────────────────────────────────────────
     readonly property int connectTimeout: Math.max(1, Config.options?.ai?.connectTimeout ?? 15)
     readonly property int requestTimeout: Math.max(0, Config.options?.ai?.requestTimeout ?? 300)
-    readonly property int maxRetries: Math.max(0, Config.options?.ai?.maxRetries ?? 2)
+    // Not readonly: a caller whose request is not worth retrying — testing
+    // whether a key works — says so by setting it to zero.
+    property int maxRetries: Math.max(0, Config.options?.ai?.maxRetries ?? 2)
 
     // ── State ─────────────────────────────────────────────────────────────
     readonly property bool running: requestProc.running || retryTimer.running
@@ -94,6 +105,10 @@ Scope {
 
     function launch() {
         const scriptFilePath = CF.FileUtils.trimFileProtocol(root.scriptPath);
+        // Written before the script that reads it, and rewritten on every
+        // attempt: a retry re-runs the attachment step over a fresh body.
+        bodyFile.path = Qt.resolvedUrl(root.bodyPath);
+        bodyFile.setText(JSON.stringify(root.requestData));
         scriptFile.path = Qt.resolvedUrl(scriptFilePath);
         scriptFile.setText(root.buildScript());
         // Rebuilt every launch: a key must never outlive the model it
@@ -118,13 +133,21 @@ Scope {
         const headerString = Object.entries(headers).filter(([k, v]) => v && v.length > 0).map(([k, v]) => `-H '${k}: ${v}'`).join(" ");
         const authHeader = root.strategy.buildAuthorizationHeader(root.apiKeyEnvVarName);
 
+        const quotedBody = `'${CF.StringUtils.shellSingleQuoteEscape(root.bodyPath)}'`;
         let content = "#!/usr/bin/env bash\n";
-        if (root.filePath.length > 0)
-            content += root.strategy.buildScriptFileSetup(root.filePath);
 
-        content += "curl --no-buffer -sS" + ` --connect-timeout ${root.connectTimeout}` + (root.requestTimeout > 0 ? ` --max-time ${root.requestTimeout}` : "") + ` -w '\\n${root.statusMarker}%{http_code}@@\\n'` + ` "${root.endpoint}"` + ` ${headerString}` + (authHeader ? ` ${authHeader}` : "") + ` --data '${CF.StringUtils.shellSingleQuoteEscape(JSON.stringify(root.requestData))}'` + "\n";
+        // Attachments are put into the body here rather than when it was
+        // built: a file is read once, at the last moment, and its bytes never
+        // pass through QML.
+        const injections = root.strategy.attachmentInjections ?? [];
+        if (injections.length > 0 && root.attachScriptPath.length > 0) {
+            const spec = CF.StringUtils.shellSingleQuoteEscape(JSON.stringify(injections));
+            content += `python3 '${CF.StringUtils.shellSingleQuoteEscape(CF.FileUtils.trimFileProtocol(root.attachScriptPath))}' inject ${quotedBody} '${spec}' > /dev/null\n`;
+        }
 
-        return root.strategy.finalizeScriptContent(content);
+        content += "curl --no-buffer -sS" + ` --connect-timeout ${root.connectTimeout}` + (root.requestTimeout > 0 ? ` --max-time ${root.requestTimeout}` : "") + ` -w '\\n${root.statusMarker}%{http_code}@@\\n'` + ` "${root.endpoint}"` + ` ${headerString}` + (authHeader ? ` ${authHeader}` : "") + ` --data-binary @${quotedBody}` + "\n";
+
+        return content;
     }
 
     function retryable(): bool {
@@ -147,6 +170,10 @@ Scope {
 
     FileView {
         id: scriptFile
+    }
+
+    FileView {
+        id: bodyFile
     }
 
     Timer {

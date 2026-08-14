@@ -1016,6 +1016,16 @@ Singleton {
                 property int requestTimeout: 300
                 // Extra attempts after a rate limit or a server error.
                 property int maxRetries: 2
+                // Biggest file that may be sent, in MiB, and how many may go
+                // with one message. Both are about what a request can carry:
+                // providers refuse bodies past roughly 20 MiB, and every file
+                // is sent again with every following turn.
+                property int maxAttachmentMib: 8
+                property int maxAttachments: 6
+                // Personas the user wrote: {id, name, icon, description,
+                // systemPrompt, modelId, thinking, temperature, starters[]}.
+                // The ones that ship with the shell are not in here.
+                property list<var> personas: []
                 property list<var> models: [
                         {
                             "openrouter": [

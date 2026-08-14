@@ -35,7 +35,42 @@ ApiStrategy {
         return `-H "x-api-key: \$\{${apiKeyEnvVarName}\}" -H "anthropic-version: ${apiVersion}"`;
     }
 
-    function buildRequestData(model: AiModel, messages, systemPrompt: string, temperature: real, tools: list<var>, filePath: string) {
+    /**
+     * A message's files as content blocks. Images and PDFs have blocks of
+     * their own; anything else the model would only see as bytes goes in as
+     * text, which is what source and plain text are worth reading as anyway.
+     */
+    function attachmentBlocks(message, model: AiModel): var {
+        return attachmentsOf(message, model).map(file => {
+            if (file.kind === "image") {
+                return {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": file.mime,
+                        "data": attachmentMarker(file.path, "b64")
+                    }
+                };
+            }
+            if (file.kind === "pdf") {
+                return {
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": attachmentMarker(file.path, "b64")
+                    }
+                };
+            }
+            return {
+                "type": "text",
+                "text": `[[ ${file.name} ]]\n${attachmentMarker(file.path, "text")}`
+            };
+        });
+    }
+
+    function buildRequestData(model: AiModel, messages, systemPrompt: string, temperature: real, tools: list<var>) {
+        beginAttachments();
         let lastCallId = "";
         const history = [];
 
@@ -66,6 +101,7 @@ ApiStrategy {
             let blocks = [];
             if (message.role === "assistant" && message.thinkingBlocks?.length > 0)
                 blocks = blocks.concat(message.thinkingBlocks);
+            blocks = blocks.concat(attachmentBlocks(message, model));
             if (message.rawContent?.length > 0)
                 blocks.push({
                     "type": "text",

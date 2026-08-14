@@ -38,12 +38,25 @@ Item {
 
     property string activePopover: ""
 
+    /** Set while the regenerate picker is open, so it knows what to redo. */
+    property string regenerateMessageId: ""
+
     function togglePopover(name: string) {
         root.activePopover = (root.activePopover === name) ? "" : name;
     }
 
     function closePopover() {
         root.activePopover = "";
+    }
+
+    function openKeyManager() {
+        root.activePopover = "keys";
+    }
+
+    /** Opens the model list for one answer only, without changing the chat's. */
+    function openRegenerate(messageId: string) {
+        root.regenerateMessageId = messageId;
+        root.activePopover = "regenerate";
     }
 
     readonly property var currentModel: Ai.currentModelEntry
@@ -346,17 +359,50 @@ Item {
                 }
 
                 ControlChip {
-                    // System prompt. Becomes the persona chip once personas exist.
-                    symbol: "assignment"
-                    label: Ai.currentPromptFile.length > 0 ? root.promptName(Ai.currentPromptFile) : Translation.tr("Default")
-                    available: Ai.promptFiles.length > 0
-                    opened: root.activePopover === "prompt"
-                    tooltipText: Ai.promptFiles.length > 0 ? Translation.tr("System prompt\nAlso %1prompt PATH").arg(root.commandPrefix) : Translation.tr("No prompt files found in the prompts folder")
-                    onClicked: {
-                        if (!available)
-                            return;
-                        root.togglePopover("prompt");
+                    // Persona: prompt, model, thinking and temperature saved
+                    // together. The old chip named a prompt file, which said
+                    // nothing about what the file would do.
+                    symbol: Ai.currentPersona?.icon ?? "assignment"
+                    label: {
+                        if (Ai.promptOverride.length > 0)
+                            return Translation.tr("This chat");
+                        if (Ai.currentPersona)
+                            return Ai.currentPersona.name;
+                        return Translation.tr("Default");
                     }
+                    opened: root.activePopover === "prompt"
+                    tooltipText: {
+                        if (Ai.promptOverride.length > 0)
+                            return Translation.tr("This chat has its own prompt");
+                        if (Ai.currentPersona)
+                            return Ai.personaModified ? Translation.tr("Persona: %1 — settings changed since").arg(Ai.currentPersona.name) : Translation.tr("Persona: %1").arg(Ai.currentPersona.name);
+                        return Translation.tr("How it should answer\nAlso %1persona NAME").arg(root.commandPrefix);
+                    }
+                    onClicked: root.togglePopover("prompt")
+
+                    Rectangle {
+                        // A persona whose model or thinking was changed by hand
+                        // is no longer quite that persona; the dot says so.
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 5
+                        visible: Ai.personaModified && Ai.promptOverride.length === 0
+                        implicitWidth: 6
+                        implicitHeight: 6
+                        radius: width / 2
+                        color: Appearance.m3colors.m3tertiary
+                    }
+                }
+
+                ControlChip {
+                    // Keys. Nothing else says whether the model in use can be
+                    // reached at all until a message fails.
+                    symbol: Ai.currentModelHasApiKey ? "key" : "key_off"
+                    label: Ai.currentModelHasApiKey ? Translation.tr("Key") : Translation.tr("No key")
+                    showCaret: false
+                    opened: root.activePopover === "keys"
+                    tooltipText: Ai.currentModelHasApiKey ? Translation.tr("API keys\nAlso %1key").arg(root.commandPrefix) : Translation.tr("%1 needs an API key").arg(root.currentModel?.title ?? Translation.tr("This model"))
+                    onClicked: root.togglePopover("keys")
                 }
 
                 ControlChip {
@@ -473,12 +519,16 @@ Item {
                     sourceComponent: {
                         if (root.activePopover === "model")
                             return modelPickerComponent;
+                        if (root.activePopover === "regenerate")
+                            return regenerateComponent;
                         if (root.activePopover === "thinking")
                             return thinkingComponent;
                         if (root.activePopover === "tools")
                             return toolsComponent;
                         if (root.activePopover === "prompt")
                             return promptComponent;
+                        if (root.activePopover === "keys")
+                            return keysComponent;
                         return advancedComponent;
                     }
                 }
@@ -532,20 +582,27 @@ Item {
     }
 
     Component {
-        id: promptComponent
-        OptionList {
-            title: Translation.tr("System prompt")
-            footnote: Translation.tr("Loading one replaces the prompt in settings.")
-            options: Ai.promptFiles.map(path => ({
-                        key: path,
-                        label: root.promptName(path),
-                        symbol: "description",
-                        selected: Ai.currentPromptFile === path
-                    }))
-            onChosen: key => {
-                Ai.loadPrompt(key, false);
+        id: regenerateComponent
+        ModelPickerPopover {
+            onPicked: modelId => {
+                Ai.regenerateWith(root.regenerateMessageId, modelId);
+                root.regenerateMessageId = "";
                 root.closePopover();
             }
+        }
+    }
+
+    Component {
+        id: promptComponent
+        PersonaLibrary {
+            onClosed: root.closePopover()
+        }
+    }
+
+    Component {
+        id: keysComponent
+        ApiKeyManager {
+            onClosed: root.closePopover()
         }
     }
 

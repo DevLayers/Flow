@@ -86,6 +86,10 @@ Singleton {
     // Ripple signal: emitted by LockSurface on click, received by Background.qml
     // (WlSessionLock and WlrLayershell panels can't directly share children)
     signal lockScreenRipple(x: real, y: real)
+    // Asked for by the AI composer's screenshot button, answered by the region
+    // selector. The composer has no way of reaching it otherwise: it is a
+    // Scope in the shell tree, not a singleton.
+    signal snipForAiRequested
     property bool sessionOpen: false
     property bool superDown: false
     property bool usageOpen: false

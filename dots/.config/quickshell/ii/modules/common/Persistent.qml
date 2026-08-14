@@ -121,6 +121,9 @@ Singleton {
                 // Catalog ids of the last few models picked, newest first, so
                 // the picker can offer them without scrolling the whole list.
                 property list<string> recentModels: []
+                // Which persona new chats open with. Empty means the system
+                // prompt from the settings, as before personas existed.
+                property string personaId: ""
             }
 
             property JsonObject background: JsonObject {

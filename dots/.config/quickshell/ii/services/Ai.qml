@@ -36,10 +36,31 @@ Singleton {
     // streaming. Sent as soon as it ends.
     property bool followUpQueued: false
 
-    property string systemPrompt: {
-        let prompt = Config.options?.ai?.systemPrompt ?? "";
+    /**
+     * What the model is told before anything else, with the values filled in.
+     *
+     * Three places can hold a prompt and the nearest one wins: what this chat
+     * was given, then the persona in force, then the one in the settings. A
+     * chat that was opened with a prompt keeps answering the way it did, even
+     * if the persona has moved on since.
+     */
+    readonly property string systemPrompt: root.substituted(root.basePrompt)
+
+    readonly property string basePrompt: {
+        if (root.promptOverride.length > 0)
+            return root.promptOverride;
+        const persona = root.personas.current;
+        if (persona?.systemPrompt?.length > 0)
+            return persona.systemPrompt;
+        return Config.options?.ai?.systemPrompt ?? "";
+    }
+
+    /** This chat's own prompt. Saved with it, and empty for most chats. */
+    property string promptOverride: ""
+
+    function substituted(text: string): string {
+        let prompt = String(text ?? "");
         for (let key in root.promptSubstitutions) {
-            // prompt = prompt.replaceAll(key, root.promptSubstitutions[key]);
             // QML/JS doesn't support replaceAll, so use split/join
             prompt = prompt.split(key).join(root.promptSubstitutions[key]);
         }
@@ -383,7 +404,6 @@ Singleton {
     property ApiStrategy currentApiStrategy: apiStrategies[root.currentModelEntry?.api_format || "openai"]
 
     property string requestScriptFilePath: `/tmp/quickshell-${SystemInfo.username}/ai/request.sh`
-    property string pendingFilePath: ""
 
     Component.onCompleted: {
         setModel(currentModelId, false, false); // Do necessary setup for model
@@ -444,14 +464,18 @@ Singleton {
         onLoadedChanged: {
             if (!promptLoader.loaded)
                 return;
-            Config.options.ai.systemPrompt = promptLoader.text();
+            // Loading a prompt gives it to this chat, not to every chat. The
+            // one in the settings is what a chat falls back to, and it is not
+            // rewritten from here any more.
+            root.promptOverride = promptLoader.text();
+            root.sessions.scheduleSave();
             if (promptLoader.announce)
-                root.addMessage(Translation.tr("Loaded the following system prompt\n\n---\n\n%1").arg(Config.options.ai.systemPrompt), root.interfaceRole);
+                root.addMessage(Translation.tr("This chat now uses the prompt in %1.").arg(root.currentPromptFile), root.interfaceRole);
         }
     }
 
     function printPrompt() {
-        root.addMessage(Translation.tr("The current system prompt is\n\n---\n\n%1").arg(Config.options.ai.systemPrompt), root.interfaceRole);
+        root.addMessage(Translation.tr("The current system prompt is\n\n---\n\n%1").arg(root.systemPrompt), root.interfaceRole);
     }
 
     function loadPrompt(filePath, feedback = true) {
@@ -462,16 +486,16 @@ Singleton {
         promptLoader.reload();
     }
 
-    function addMessage(message, role) {
+    function addMessage(message, role, extra = null) {
         if (message.length === 0)
             return;
-        const aiMessage = aiMessageComponent.createObject(root, {
+        const aiMessage = aiMessageComponent.createObject(root, Object.assign({
             "role": role,
             "content": message,
             "rawContent": message,
             "thinking": false,
             "done": true
-        });
+        }, extra ?? ({})));
         const id = idForMessage(aiMessage);
         root.messageIDs = [...root.messageIDs, id];
         root.messageByID[id] = aiMessage;
@@ -485,8 +509,14 @@ Singleton {
         root.sessions.scheduleSave();
     }
 
+    /**
+     * Says a key is missing, as a card with a button rather than as a wall of
+     * instructions. Nobody reads a paragraph telling them to type a command.
+     */
     function addApiKeyAdvice(model) {
-        root.addMessage(Translation.tr('To set an API key, pass it with the %4 command\n\nTo view the key, pass "get" with the command<br/>\n\n### For %1:\n\n**Link**: %2\n\n%3').arg(model.name).arg(model.key_get_link).arg(model.key_get_description ?? Translation.tr("<i>No further instruction provided</i>")).arg("/key"), Ai.interfaceRole);
+        root.addMessage(Translation.tr("%1 needs an API key.").arg(model.name), root.interfaceRole, {
+            "notice": "apiKey"
+        });
     }
 
     function getModel() {
@@ -604,19 +634,119 @@ Singleton {
         root.addMessage(Translation.tr("API key set for %1").arg(model.name), Ai.interfaceRole);
     }
 
+    /**
+     * Says whether a key is set. It never prints one: the chat is a visible,
+     * screenshot-able, screen-shared surface, and a secret written into it
+     * stays there.
+     */
     function printApiKey() {
         const model = root.currentModelEntry;
         if (!model)
             return;
-        if (model.requires_key) {
-            const key = root.apiKeys[model.key_id];
-            if (key) {
-                root.addMessage(Translation.tr("API key:\n\n```txt\n%1\n```").arg(key), Ai.interfaceRole);
-            } else {
-                root.addMessage(Translation.tr("No API key set for %1").arg(model.name), Ai.interfaceRole);
+        if (!model.requires_key) {
+            root.addMessage(Translation.tr("%1 does not require an API key").arg(model.name), root.interfaceRole);
+            return;
+        }
+        const key = root.apiKeys[model.key_id];
+        if (!key) {
+            root.addApiKeyAdvice(model);
+            return;
+        }
+        root.addMessage(Translation.tr("A key is set for %1 (ending %2). Open the key panel to see or change it.").arg(model.name).arg(key.slice(-4)), root.interfaceRole, {
+            "notice": "apiKey"
+        });
+    }
+
+    /** Whether a provider has a key on file, for the key panel's state dots. */
+    function hasApiKey(keyId: string): bool {
+        return (root.apiKeys?.[keyId]?.length ?? 0) > 0;
+    }
+
+    function setApiKeyFor(keyId: string, key: string) {
+        if (!keyId || keyId.length === 0)
+            return;
+        KeyringStorage.setNestedField(["apiKeys", keyId], String(key ?? "").trim());
+    }
+
+    // ── Does this key work? ───────────────────────────────────────────────
+    // One very small request, whose answer nobody reads. The only thing worth
+    // knowing is what the endpoint says about the key, in words rather than
+    // as an HTTP number.
+
+    property string keyTestId: ""
+    /** "", "running", "ok" or "failed". */
+    property string keyTestState: ""
+    property string keyTestMessage: ""
+    property AiMessageData keyTestMessageData: AiMessageData {}
+
+    function testApiKey(keyId: string) {
+        if (keyTester.running)
+            return;
+        const model = root.catalog.modelIds.map(id => root.catalog.models[id]).find(entry => entry.key_id === keyId && entry.requires_key);
+        if (!model) {
+            root.keyTestId = keyId;
+            root.keyTestState = "failed";
+            root.keyTestMessage = Translation.tr("No model uses this key.");
+            return;
+        }
+        const key = root.apiKeys?.[keyId] ?? "";
+        if (key.length === 0) {
+            root.keyTestId = keyId;
+            root.keyTestState = "failed";
+            root.keyTestMessage = Translation.tr("No key to test.");
+            return;
+        }
+        const strategy = root.titleStrategyFor(model.api_format || "openai");
+        const prompt = root.aiMessageComponent.createObject(root, {
+            "role": "user",
+            "content": "Hi",
+            "rawContent": "Hi",
+            "thinking": false,
+            "done": true
+        });
+        strategy.thinkingOverride = "off";
+        strategy.outputOverride = 16;
+        const data = strategy.buildRequestData(model, [prompt], "Reply with one word.", 0, null);
+        strategy.thinkingOverride = "";
+        strategy.outputOverride = 0;
+        prompt.destroy();
+
+        root.keyTestId = keyId;
+        root.keyTestState = "running";
+        root.keyTestMessage = "";
+        keyTester.model = model;
+        keyTester.strategy = strategy;
+        keyTester.message = root.keyTestMessageData;
+        keyTester.endpoint = strategy.buildEndpoint(model);
+        keyTester.requestData = data;
+        keyTester.apiKey = key;
+        keyTester.start();
+    }
+
+    AiRequest {
+        id: keyTester
+        apiKeyEnvVarName: root.apiKeyEnvVarName
+        scriptPath: `/tmp/quickshell-${SystemInfo.username}/ai/keytest.sh`
+        // One attempt: a key that is refused is refused, and waiting through
+        // two backoffs to be told so is not a test.
+        maxRetries: 0
+
+        onFinished: (reason, status, code) => {
+            if (reason === "done") {
+                root.keyTestState = "ok";
+                root.keyTestMessage = Translation.tr("The key works.");
+                return;
             }
-        } else {
-            root.addMessage(Translation.tr("%1 does not require an API key").arg(model.name), Ai.interfaceRole);
+            root.keyTestState = "failed";
+            const kind = root.transportErrorKind(status, code);
+            if (kind === "auth")
+                root.keyTestMessage = Translation.tr("Refused: the key is wrong, or not allowed to use this model.");
+            else if (kind === "quota")
+                root.keyTestMessage = Translation.tr("The key is valid but out of quota for now.");
+            else if (kind === "network" || kind === "timeout")
+                root.keyTestMessage = Translation.tr("Could not reach the provider.");
+            else
+                root.keyTestMessage = Translation.tr("The provider answered with HTTP %1.").arg(status);
         }
     }
 
@@ -650,6 +780,62 @@ Singleton {
     }
 
     /**
+     * What went wrong, as something the transcript can act on rather than as
+     * prose in the bubble: a 429 and an answer used to look the same.
+     */
+    function transportErrorKind(status: int, code: int): string {
+        if (status === 401 || status === 403)
+            return "auth";
+        if (status === 404)
+            return "notFound";
+        if (status === 429)
+            return "quota";
+        if (status >= 500)
+            return "server";
+        if (status >= 400)
+            return "request";
+        if (code === 28)
+            return "timeout";
+        if (code === 6 || code === 7)
+            return "network";
+        return "unknown";
+    }
+
+    /** What to try next, in one line, for the error card's second row. */
+    function transportErrorAdvice(kind: string): string {
+        const model = root.currentModelEntry;
+        if (kind === "auth")
+            return Translation.tr("Check the key for %1.").arg(model?.name ?? Translation.tr("this provider"));
+        if (kind === "quota")
+            return Translation.tr("Wait a moment, or use a model with room left.");
+        if (kind === "notFound")
+            return Translation.tr("The model name or endpoint is wrong. Pick another model.");
+        if (kind === "server")
+            return Translation.tr("The provider is having trouble. Sending it again usually works.");
+        if (kind === "network")
+            return Translation.tr("Nothing answered. Check the connection, or whether the local server is up.");
+        if (kind === "timeout")
+            return Translation.tr("No answer in time. A shorter question, or a longer timeout in settings.");
+        return "";
+    }
+
+    /**
+     * Sends the failed turn again. Nothing is forked: an answer that never
+     * arrived is not a branch worth keeping.
+     */
+    function retryMessage(messageId: string) {
+        const message = root.messageByID[messageId];
+        if (!message || requester.running)
+            return;
+        const at = root.messageIDs.indexOf(messageId);
+        if (at < 0)
+            return;
+        root.messageIDs = root.messageIDs.filter(id => id !== messageId);
+        delete root.messageByID[messageId];
+        root.makeRequest();
+    }
+
+    /**
      * Human-readable reason a request came back with nothing to show.
      */
     function transportErrorText(status: int, code: int): string {
@@ -674,6 +860,7 @@ Singleton {
         id: requester
         apiKeyEnvVarName: root.apiKeyEnvVarName
         scriptPath: root.requestScriptFilePath
+        attachScriptPath: Directories.aiAttachScriptPath
 
         onLine: data => {
             if (requester.message.thinking)
@@ -728,12 +915,13 @@ Singleton {
                 message.content += note;
             } else {
                 requester.strategy.onRequestFinished(message);
-                // An error the strategy could not describe itself — a body it
-                // never saw, or no body at all — still has to be visible.
-                if (reason === "error" && message.content.length === 0) {
-                    const note = root.transportErrorText(status, code);
-                    message.rawContent += note;
-                    message.content += note;
+                // An error is put on the message as an error, not as text: the
+                // transcript draws it as a card with a way to send it again.
+                // Whatever the provider said about it stays as the body.
+                if (reason === "error") {
+                    message.errorKind = root.transportErrorKind(status, code);
+                    message.errorStatus = status;
+                    message.errorText = root.transportErrorText(status, code);
                 }
             }
 
@@ -782,9 +970,8 @@ Singleton {
         // that cannot does not get them handed over anyway.
         const toolsOfFormat = root.tools[model.api_format] ?? root.tools["openai"];
         const tools = model.tools ? (toolsOfFormat[root.currentTool] ?? toolsOfFormat["none"]) : null;
-        const attachedFilePath = root.pendingFilePath;
 
-        const data = strategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, tools, attachedFilePath);
+        const data = strategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, tools);
         // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
 
         /* Create local message object */
@@ -796,10 +983,6 @@ Singleton {
             "thinking": true,
             "done": false
         });
-        if (attachedFilePath.length > 0) {
-            message.localFilePath = attachedFilePath;
-            root.pendingFilePath = "";
-        }
         const id = idForMessage(message);
         root.messageIDs = [...root.messageIDs, id];
         root.messageByID[id] = message;
@@ -809,7 +992,6 @@ Singleton {
         requester.message = message;
         requester.endpoint = strategy.buildEndpoint(model);
         requester.requestData = data;
-        requester.filePath = attachedFilePath;
         requester.apiKey = model.requires_key ? (root.apiKeys?.[model.key_id] ?? "") : "";
         requester.start();
     }
@@ -836,9 +1018,16 @@ Singleton {
     }
 
     function sendUserMessage(message) {
-        if (message.length === 0)
+        const files = root.attachments;
+        if (message.length === 0 && files.length === 0)
             return;
-        root.addMessage(message, "user");
+        // The files go with the question, not with the answer: that is where
+        // they belong when the chat is reopened, and it is what lets the next
+        // turn hand them over again.
+        root.addMessage(message.length > 0 ? message : Translation.tr("(see attached)"), "user", files.length > 0 ? ({
+                "attachments": files
+            }) : null);
+        root.clearAttachments();
         // Written before the answer comes back, so a question survives a reply
         // that never arrives.
         root.sessions.scheduleSave();
@@ -887,8 +1076,121 @@ Singleton {
         }
     }
 
+    // ── Attachments ───────────────────────────────────────────────────────
+    // Files waiting to go out with the next message. Each one is looked at
+    // before it reaches the tray: what it is decides whether the model can
+    // read it at all, and how big it is decides whether it may be sent.
+    // Nothing is rejected silently — the old drop area simply ignored files
+    // on any provider that was not Google, which reads as the drop not
+    // registering.
+
+    property var attachments: []
+    /** Why the last file was turned away. The composer shows it and clears it. */
+    property string attachmentNotice: ""
+
+    readonly property int maxAttachments: Math.max(1, Config.options?.ai?.maxAttachments ?? 6)
+    readonly property int maxAttachmentBytes: Math.max(1, Config.options?.ai?.maxAttachmentMib ?? 8) * 1024 * 1024
+    // Text goes in as text, so the limit is about the context window rather
+    // than about what the request can carry.
+    readonly property int maxTextAttachmentBytes: 256 * 1024
+
+    /** Whether the model in use can take files at all, kinds aside. */
+    readonly property bool currentModelTakesFiles: root.currentModelEntry?.attachments ?? false
+
+    function humanSize(bytes: int): string {
+        if (bytes >= 1024 * 1024)
+            return Translation.tr("%1 MB").arg((bytes / (1024 * 1024)).toFixed(1));
+        if (bytes >= 1024)
+            return Translation.tr("%1 kB").arg(Math.round(bytes / 1024));
+        return Translation.tr("%1 B").arg(bytes);
+    }
+
+    /** Empty when the file may be sent, otherwise the reason it may not. */
+    function attachmentRejection(file: var): string {
+        const modelName = root.currentModelEntry?.title ?? Translation.tr("This model");
+        if (file.kind === "text") {
+            if (file.bytes > root.maxTextAttachmentBytes)
+                return Translation.tr("%1 is %2 of text — too much to put in one message.").arg(file.name).arg(root.humanSize(file.bytes));
+            return "";
+        }
+        if (!root.currentModelTakesFiles)
+            return Translation.tr("%1 cannot read files. Pick a model that can, or paste the text in.").arg(modelName);
+        if (file.kind === "image" && !(root.currentModelEntry?.vision ?? false))
+            return Translation.tr("%1 cannot look at images.").arg(modelName);
+        if (file.bytes > root.maxAttachmentBytes)
+            return Translation.tr("%1 is %2. The limit is %3.").arg(file.name).arg(root.humanSize(file.bytes)).arg(root.humanSize(root.maxAttachmentBytes));
+        return "";
+    }
+
+    /**
+     * Adds a file to the next message. An empty path detaches everything,
+     * which is what Escape in the composer and `/attach` with no argument
+     * have always meant.
+     */
     function attachFile(filePath: string) {
-        root.pendingFilePath = CF.FileUtils.trimFileProtocol(filePath);
+        const path = CF.FileUtils.trimFileProtocol(String(filePath ?? "")).trim();
+        if (path.length === 0) {
+            root.clearAttachments();
+            return;
+        }
+        if (root.attachments.some(file => file.path === path))
+            return;
+        if (root.attachments.length >= root.maxAttachments) {
+            root.attachmentNotice = Translation.tr("%1 files is as many as one message takes.").arg(root.maxAttachments);
+            return;
+        }
+        root.probeQueue.push(path);
+        root.runProbe();
+    }
+
+    function removeAttachment(index: int) {
+        if (index < 0 || index >= root.attachments.length)
+            return;
+        root.attachments = root.attachments.filter((file, at) => at !== index);
+    }
+
+    function clearAttachments() {
+        root.attachments = [];
+        root.attachmentNotice = "";
+    }
+
+    property var probeQueue: []
+
+    function runProbe() {
+        if (probeProc.running || root.probeQueue.length === 0)
+            return;
+        probeProc.command = ["python3", Directories.aiAttachScriptPath, "probe", root.probeQueue.shift()];
+        probeProc.running = true;
+    }
+
+    function acceptProbed(raw: string) {
+        let file;
+        try {
+            file = JSON.parse(raw.trim());
+        } catch (e) {
+            root.attachmentNotice = Translation.tr("Could not read that file.");
+            return;
+        }
+        if (file.error) {
+            root.attachmentNotice = file.error;
+            return;
+        }
+        const rejection = root.attachmentRejection(file);
+        if (rejection.length > 0) {
+            root.attachmentNotice = rejection;
+            return;
+        }
+        root.attachmentNotice = "";
+        root.attachments = [...root.attachments, file];
+    }
+
+    Process {
+        id: probeProc
+        stdout: StdioCollector {
+            id: probeCollector
+            onStreamFinished: root.acceptProbed(probeCollector.text)
+        }
+        onExited: Qt.callLater(root.runProbe)
     }
 
     /**
@@ -900,6 +1202,35 @@ Singleton {
             return;
         if (!root.forkFrom(messageId, false))
             return;
+        root.makeRequest();
+    }
+
+    /**
+     * Asks again, with another model. The natural next move after a weak
+     * answer, and one that used to take four steps.
+     */
+    function regenerateWith(messageId: string, modelId: string) {
+        if (!root.setModel(modelId, false))
+            return;
+        root.regenerate(messageId);
+    }
+
+    /**
+     * Rewrites a question and asks it again. Everything that followed it
+     * belonged to the old wording, so it stays behind in its own chat.
+     */
+    function editAndResend(messageId: string, content: string) {
+        const message = root.messageByID[messageId];
+        if (!message || message.role !== "user")
+            return;
+        const text = String(content ?? "").trim();
+        if (text.length === 0)
+            return;
+        if (!root.forkFrom(messageId, true))
+            return;
+        message.content = text;
+        message.rawContent = text;
+        root.commitSession();
         root.makeRequest();
     }
 
@@ -1027,6 +1358,87 @@ Singleton {
         onCurrentDropped: root.newChat()
     }
 
+    // ── Personas ──────────────────────────────────────────────────────────
+    // A persona is a prompt and the settings that go with it. Picking one
+    // sets all of them; a chat remembers which one it was held with.
+
+    readonly property AiPersonas personas: AiPersonas {}
+    readonly property var currentPersona: root.personas.current
+    readonly property bool personaModified: root.personas.modified(root.currentPersona, root.currentModelId, root.thinkingLevel, root.temperature)
+
+    /**
+     * Puts a persona in force. Everything it names is applied at once — that
+     * is the whole point of it being one thing instead of four settings.
+     */
+    function setPersona(personaId: string, feedback = true) {
+        const persona = root.personas.byId(personaId);
+        if (!persona && personaId.length > 0) {
+            if (feedback)
+                root.addMessage(Translation.tr("No persona called “%1”").arg(personaId), root.interfaceRole);
+            return false;
+        }
+        Persistent.states.ai.personaId = persona?.id ?? "";
+        // A chat's own prompt was written for this chat, not for the persona
+        // that happens to be picked now, so it goes when the persona changes.
+        root.promptOverride = "";
+        root.currentPromptFile = "";
+        if (persona?.modelId && root.catalog.models[persona.modelId])
+            root.setModel(persona.modelId, false);
+        if (persona?.thinking && root.thinkingLevels.indexOf(persona.thinking) >= 0)
+            root.setThinkingLevel(persona.thinking);
+        if (typeof persona?.temperature === "number")
+            root.setTemperature(persona.temperature, false);
+        if (feedback)
+            root.addMessage(persona ? Translation.tr("Persona: %1").arg(persona.name) : Translation.tr("Persona cleared"), root.interfaceRole);
+        root.sessions.scheduleSave();
+        return true;
+    }
+
+    /** Opening lines offered on an empty chat, from the persona in force. */
+    readonly property var starters: {
+        const own = root.currentPersona?.starters;
+        if (own?.length > 0)
+            return Array.from(own);
+        return [Translation.tr("Explain what this command does"), Translation.tr("Summarise this in three points"), Translation.tr("What is wrong with this code?"), Translation.tr("Help me word this")];
+    }
+
+    /** Sets this chat's own prompt, leaving every other chat alone. */
+    function setPromptOverride(text: string, feedback = true) {
+        root.promptOverride = String(text ?? "").trim();
+        if (root.promptOverride.length === 0)
+            root.currentPromptFile = "";
+        root.sessions.scheduleSave();
+        if (feedback)
+            root.addMessage(root.promptOverride.length > 0 ? Translation.tr("This chat now has a prompt of its own.") : Translation.tr("Back to the usual prompt."), root.interfaceRole);
+    }
+
+    // ── The composer's draft ──────────────────────────────────────────────
+    // Half-typed text belongs to the chat it was being typed into, not to the
+    // sidebar, so switching chats does not throw it away.
+
+    property var drafts: ({})
+    property string draft: ""
+    signal draftRestored(string text)
+
+    function keepDraft() {
+        const id = root.sessions.currentId;
+        if (id.length === 0)
+            return;
+        if (root.draft.trim().length > 0)
+            root.drafts[id] = root.draft;
+        else
+            delete root.drafts[id];
+    }
+
+    function restoreDraft() {
+        const id = root.sessions.currentId;
+        root.draft = (id.length > 0 ? root.drafts[id] : "") ?? "";
+        root.draftRestored(root.draft);
+    }
+
+    /** The key panel was asked for, from a command or from a card in the chat. */
+    signal keyManagerRequested
+
     readonly property int sessionSchema: 1
     /** Name of the conversation on screen. Empty until it earns one. */
     property string sessionTitle: ""
@@ -1043,6 +1455,7 @@ Singleton {
                 "fileMimeType": message.fileMimeType,
                 "fileUri": message.fileUri,
                 "localFilePath": message.localFilePath,
+                "attachments": message.attachments,
                 "model": message.model,
                 "thought": message.thought,
                 "thoughtSignature": message.thoughtSignature,
@@ -1056,7 +1469,11 @@ Singleton {
                 "functionName": message.functionName,
                 "functionCall": message.functionCall,
                 "functionResponse": message.functionResponse,
-                "visibleToUser": message.visibleToUser
+                "visibleToUser": message.visibleToUser,
+                "errorKind": message.errorKind,
+                "errorText": message.errorText,
+                "errorStatus": message.errorStatus,
+                "notice": message.notice
             });
     }
 
@@ -1072,6 +1489,7 @@ Singleton {
             "fileMimeType": data.fileMimeType,
             "fileUri": data.fileUri,
             "localFilePath": data.localFilePath,
+            "attachments": data.attachments ?? [],
             "model": data.model,
             "thought": data.thought ?? "",
             "thoughtSignature": data.thoughtSignature ?? "",
@@ -1085,7 +1503,11 @@ Singleton {
             "functionName": data.functionName ?? "",
             "functionCall": data.functionCall,
             "functionResponse": data.functionResponse ?? "",
-            "visibleToUser": data.visibleToUser ?? true
+            "visibleToUser": data.visibleToUser ?? true,
+            "errorKind": data.errorKind ?? "",
+            "errorText": data.errorText ?? "",
+            "errorStatus": data.errorStatus ?? 0,
+            "notice": data.notice ?? ""
         });
     }
 
@@ -1101,6 +1523,8 @@ Singleton {
                 "thinking": root.thinkingLevel,
                 "temperature": root.temperature,
                 "promptFile": root.currentPromptFile,
+                "personaId": root.personas.currentId,
+                "promptOverride": root.promptOverride,
                 "messages": root.chatToJson()
             });
     }
@@ -1122,11 +1546,16 @@ Singleton {
     /** Puts the conversation away and starts an empty one. */
     function newChat() {
         root.commitSession();
+        root.keepDraft();
         root.clearMessages();
+        root.clearAttachments();
         root.sessions.currentId = "";
         root.sessionTitle = "";
         root.sessionCreatedAt = 0;
         root.sessionTitleAsked = false;
+        root.promptOverride = "";
+        root.currentPromptFile = "";
+        root.restoreDraft();
         root.sessions.ensureLoaded();
     }
 
@@ -1134,6 +1563,7 @@ Singleton {
         if (sessionId.length === 0 || sessionId === root.sessions.currentId)
             return;
         root.commitSession(); // Whatever is on screen keeps its own file
+        root.keepDraft();
         root.sessions.openSession(sessionId);
     }
 
@@ -1166,6 +1596,11 @@ Singleton {
         if (typeof session.temperature === "number")
             root.setTemperature(session.temperature, false);
         root.currentPromptFile = session.promptFile ?? "";
+        root.promptOverride = session.promptOverride ?? "";
+        if (session.personaId !== undefined && session.personaId !== root.personas.currentId)
+            Persistent.states.ai.personaId = session.personaId;
+        root.clearAttachments();
+        root.restoreDraft();
     }
 
     /**
@@ -1283,7 +1718,7 @@ Singleton {
             "done": true
         });
         strategy.thinkingOverride = "off";
-        const data = strategy.buildRequestData(model, [prompt], root.titleInstruction, 0.2, null, "");
+        const data = strategy.buildRequestData(model, [prompt], root.titleInstruction, 0.2, null);
         strategy.thinkingOverride = "";
         prompt.destroy();
 
