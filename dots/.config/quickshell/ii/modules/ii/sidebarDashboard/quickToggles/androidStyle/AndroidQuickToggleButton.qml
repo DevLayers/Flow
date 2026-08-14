@@ -5,6 +5,7 @@ import qs.modules.common
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import "QuickToggleCatalog.js" as QuickToggleCatalog
 
 Item {
     id: root
@@ -17,22 +18,24 @@ Item {
     required property real cellSpacing
     required property int cellSize
 
+    readonly property var catalogSize: QuickToggleCatalog.normalizeSize(root.buttonData.type, root.buttonData.sizeW, root.buttonData.sizeH, root.gridColumns)
+
     // Effective sizes for live preview during resize
     readonly property int effectiveSizeW: {
         if (root.editMode && visualButton.editingRight) {
             var delta = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
-            var w = (root.buttonData.sizeW ?? root.buttonData.size ?? 1) + delta;
+            var w = root.catalogSize[0] + delta;
             return Math.max(1, Math.min(8, w));
         }
-        return root.buttonData.sizeW ?? root.buttonData.size ?? 1;
+        return root.catalogSize[0];
     }
     readonly property int effectiveSizeH: {
         if (root.editMode && visualButton.editingBottom) {
             var delta = root.baseCellHeight > 0 ? Math.round(visualButton.editDragY / root.baseCellHeight) : 0;
-            var h = (root.buttonData.sizeH ?? 1) + delta;
+            var h = root.catalogSize[1] + delta;
             return Math.max(1, Math.min(8, h));
         }
-        return root.buttonData.sizeH ?? 1;
+        return root.catalogSize[1];
     }
 
     readonly property bool isWide: effectiveSizeW > 1
@@ -689,7 +692,7 @@ Item {
                     }
                     if (existingIdx === -1) {
                         // Not in this page — add it
-                        page.push({ type: buttonType, sizeW: 1, sizeH: 1, size: 1 });
+                        page.push(QuickToggleCatalog.item(buttonType, buttonType, undefined, undefined, root.gridColumns));
                     } else {
                         // Already in this page — remove it
                         page.splice(existingIdx, 1);
@@ -866,20 +869,20 @@ Item {
                     onPositionChanged: event => {
                         var absPos = visualButton.mapFromItem(rightDragHandle, event.x, event.y);
                         var dx = absPos.x - pressAbsX;
-                        var currentW = root.buttonData.sizeW ?? 4;
+                        var currentW = root.catalogSize[0];
                         visualButton.editDragX = Math.max(-root.baseCellWidth * (currentW - 1), Math.min(dx, root.baseCellWidth * (8 - currentW)));
                     }
                     onReleased: event => {
                         visualButton.editingRight = false;
-                        var currentW = root.buttonData.sizeW ?? 4;
+                        var currentW = root.catalogSize[0];
                         var deltaColumns = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
                         var newSizeW = currentW + deltaColumns;
                         if (isNaN(newSizeW)) newSizeW = currentW;
                         newSizeW = Math.max(1, Math.min(8, newSizeW));
                         
                         visualButton.editDragX = 0;
-                        if (newSizeW !== (root.buttonData.sizeW ?? root.buttonData.size ?? 1)) {
-                            editModeInteraction.setSize(newSizeW, root.buttonData.sizeH ?? 1);
+                        if (newSizeW !== (root.catalogSize[0])) {
+                            editModeInteraction.setSize(newSizeW, root.catalogSize[1]);
                             editModeInteraction.resolveLayoutConflicts();
                         }
                     }
@@ -911,20 +914,20 @@ Item {
                     onPositionChanged: event => {
                         var absPos = visualButton.mapFromItem(bottomDragHandle, event.x, event.y);
                         var dy = absPos.y - pressAbsY;
-                        var currentH = root.buttonData.sizeH ?? 1;
+                        var currentH = root.catalogSize[1];
                         visualButton.editDragY = Math.max(-root.baseCellHeight * (currentH - 1), Math.min(dy, root.baseCellHeight * (8 - currentH)));
                     }
                     onReleased: event => {
                         visualButton.editingBottom = false;
-                        var currentH = root.buttonData.sizeH ?? 1;
+                        var currentH = root.catalogSize[1];
                         var deltaRows = root.baseCellHeight > 0 ? Math.round(visualButton.editDragY / root.baseCellHeight) : 0;
                         var newSizeH = currentH + deltaRows;
                         if (isNaN(newSizeH)) newSizeH = currentH;
                         newSizeH = Math.max(1, Math.min(8, newSizeH));
                         
                         visualButton.editDragY = 0;
-                        if (newSizeH !== (root.buttonData.sizeH ?? 1)) {
-                            editModeInteraction.setSize(root.buttonData.sizeW ?? root.buttonData.size ?? 1, newSizeH);
+                        if (newSizeH !== (root.catalogSize[1])) {
+                            editModeInteraction.setSize(root.catalogSize[0], newSizeH);
                             editModeInteraction.resolveLayoutConflicts();
                         }
                     }

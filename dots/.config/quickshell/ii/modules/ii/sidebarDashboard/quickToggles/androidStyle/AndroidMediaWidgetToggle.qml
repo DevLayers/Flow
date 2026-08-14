@@ -6,6 +6,7 @@ import qs.modules.common
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import "QuickToggleCatalog.js" as QuickToggleCatalog
 import Quickshell.Services.Mpris
 import Quickshell.Io
 import "../../../mediaControls" as MediaCtrl
@@ -20,6 +21,8 @@ Item {
     required property real baseCellHeight
     required property real cellSpacing
     required property int cellSize
+
+    readonly property var catalogSize: QuickToggleCatalog.normalizeSize(root.buttonData.type, root.buttonData.sizeW, root.buttonData.sizeH, root.gridColumns)
 
     property bool editMode: false
     property bool isUnused: false
@@ -81,18 +84,18 @@ Item {
     readonly property int effectiveSizeW: {
         if (root.editMode && visualButton.editingRight) {
             var delta = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
-            var w = (root.buttonData.sizeW ?? 2) + delta;
+            var w = root.catalogSize[0] + delta;
             return Math.max(1, Math.min(8, w));
         }
-        return root.buttonData.sizeW ?? 2;
+        return root.catalogSize[0];
     }
     readonly property int effectiveSizeH: {
         if (root.editMode && visualButton.editingBottom) {
             var delta = root.baseCellHeight > 0 ? Math.round(visualButton.editDragY / root.baseCellHeight) : 0;
-            var h = (root.buttonData.sizeH ?? 2) + delta;
+            var h = root.catalogSize[1] + delta;
             return Math.max(1, Math.min(8, h));
         }
-        return root.buttonData.sizeH ?? 2;
+        return root.catalogSize[1];
     }
 
     property bool hovered: hoverHandler.hovered || (root.editMode && editModeInteraction.containsMouse)
@@ -555,12 +558,7 @@ Item {
                         }
                     }
                     if (existingIdx === -1) {
-                        page.push({
-                            type: buttonType,
-                            sizeW: 2,
-                            sizeH: 2,
-                            size: 2
-                        });
+                        page.push(QuickToggleCatalog.item(buttonType, buttonType, undefined, undefined, root.gridColumns));
                     } else {
                         page.splice(existingIdx, 1);
                     }
@@ -732,7 +730,7 @@ Item {
                     onReleased: event => {
                         visualButton.editingRight = false;
                         var threshold = root.baseCellWidth / 2;
-                        var newSizeW = root.buttonData.sizeW ?? 2;
+                        var newSizeW = root.catalogSize[0];
                         if (visualButton.editDragX > threshold)
                             newSizeW = 4;
                         else if (visualButton.editDragX < -threshold)
@@ -742,9 +740,9 @@ Item {
                             newSizeW = 2; // snap to 2 or 4
 
                         visualButton.editDragX = 0;
-                        if (newSizeW !== (root.buttonData.sizeW ?? 2)) {
+                        if (newSizeW !== (root.catalogSize[0])) {
                             // Automatically adjust height if switching to 4x (4x1 is not supported, 4x2 instead)
-                            var currentH = root.buttonData.sizeH ?? 2;
+                            var currentH = root.catalogSize[1];
                             if (newSizeW == 4 && currentH == 1)
                                 currentH = 2;
                             editModeInteraction.setSize(newSizeW, currentH);
@@ -763,7 +761,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: -height / 2
-                visible: !root.isUnused && (root.buttonData.sizeW ?? 2) <= 2 // Only allow height resize for 2x width
+                visible: !root.isUnused && (root.catalogSize[0]) <= 2 // Only allow height resize for 2x width
 
                 MouseArea {
                     anchors.fill: parent
@@ -784,7 +782,7 @@ Item {
                     }
                     onReleased: event => {
                         visualButton.editingBottom = false;
-                        var currentH = root.buttonData.sizeH ?? 2;
+                        var currentH = root.catalogSize[1];
                         var deltaRows = root.baseCellHeight > 0 ? Math.round(visualButton.editDragY / root.baseCellHeight) : 0;
                         var newSizeH = currentH + deltaRows;
                         if (isNaN(newSizeH))
@@ -793,7 +791,7 @@ Item {
 
                         visualButton.editDragY = 0;
                         if (newSizeH !== currentH) {
-                            editModeInteraction.setSize(root.buttonData.sizeW ?? 2, newSizeH);
+                            editModeInteraction.setSize(root.catalogSize[0], newSizeH);
                             editModeInteraction.resolveLayoutConflicts();
                         }
                     }

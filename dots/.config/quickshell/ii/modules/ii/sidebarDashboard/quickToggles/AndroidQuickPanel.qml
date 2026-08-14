@@ -8,6 +8,7 @@ import Quickshell
 import Quickshell.Bluetooth
 
 import qs.modules.ii.sidebarDashboard.quickToggles.androidStyle
+import "androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 
 AbstractQuickPanel {
     id: root
@@ -43,45 +44,24 @@ AbstractQuickPanel {
     readonly property real baseCellHeight: 56
 
     // Toggles config
-    readonly property list<string> availableToggleTypes: ["network", "bluetooth", "vpn", "tailscale", "dnsOverTls", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "screenRecord", "colorPicker", "videoEditor", "onScreenKeyboard", "mic", "audio", "notifications", "autoDnd", "powerProfile", "musicRecognition", "antiFlashbang", "screenShader", "soundcoreAnc", "systemSounds", "localSend", "mediaWidget", "volumeSlider", "micSlider", "brightnessSlider", "gammaSlider", "keyboardBacklight"]
+    readonly property list<string> availableToggleTypes: QuickToggleCatalog.allTypes()
     function isToggleVisible(toggleType) {
         return true
     }
     readonly property int columns: Config.options.sidebar.quickToggles.android.columns
 
-    // Pages data — reads from Config.
-    // The stored format is: pages = [[toggle, toggle, ...], [toggle, ...], ...]
-    // Each inner array is one page. Each toggle is {type: string, size: int}.
+    // Pages data — reads from Config and exposes the canonical in-memory shape.
+    // The legacy `size` field is read only by the catalog normalizer and is not
+    // returned to delegates.
     readonly property list<var> pages: {
         const cfg = Config.options.sidebar.quickToggles.android;
         if (!Config.ready)
             return [[]];
         if (!cfg.pages || cfg.pages.length === 0)
             return [[]];
-
-        var rawPages = cfg.pages;
-        const first = rawPages[0];
-        // Detect format: if first element has a `type` property, it's the old flat
-        // toggle list (legacy `toggles` renamed to `pages`). Wrap in a single page.
-        // Otherwise it's the new pages-of-arrays format.
-        if (first && typeof first === "object" && first.type !== undefined) {
-            // Old flat format — wrap in single page
-            rawPages = [cfg.pages];
-        }
-
-        return rawPages.map(page => (page || [])
-            .filter(toggle => toggle && root.isToggleVisible(toggle.type))
-            .map(toggle => {
-                var t = Object.assign({}, toggle);
-                var defaultH = (t.type === "mediaWidget") ? 2 : 1;
-                var defaultW = (t.type === "mediaWidget") ? 2 : 1;
-                var w = t.sizeW ?? t.size ?? defaultW;
-                t.sizeW = Math.max(1, Math.min(w, root.columns));
-                t.sizeH = Math.max(1, t.sizeH ?? defaultH);
-                t.size = t.sizeW;
-                return t;
-            })
-        );
+        return QuickToggleCatalog.normalizePages(cfg.pages, root.columns, {
+            warn: function(message) { console.warn(message); }
+        });
     }
 
     // Current page toggles
@@ -108,14 +88,7 @@ AbstractQuickPanel {
 
     readonly property list<var> unusedToggles: {
         const types = availableToggleTypes.filter(type => root.isToggleVisible(type) && !allUsedTypes.includes(type));
-        return types.map(type => {
-            return {
-                type: type,
-                size: (type === "mediaWidget") ? 2 : 1,
-                sizeW: (type === "mediaWidget") ? 2 : 1,
-                sizeH: (type === "mediaWidget") ? 2 : 1
-            };
-        });
+        return types.map(type => QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
     }
 
     function getGridRowsNeeded(togglesList) {
@@ -365,33 +338,13 @@ AbstractQuickPanel {
                         const cfg = Config.options.sidebar.quickSliders;
                         if (cfg.enable) {
                             if (cfg.showBrightness)
-                                list.push({
-                                    type: "brightnessSlider",
-                                    sizeW: root.columns,
-                                    sizeH: 1,
-                                    size: root.columns
-                                });
+                                list.push(QuickToggleCatalog.item("brightnessSlider", "brightnessSlider", root.columns, 1, root.columns));
                             if (cfg.showGamma)
-                                list.push({
-                                    type: "gammaSlider",
-                                    sizeW: root.columns,
-                                    sizeH: 1,
-                                    size: root.columns
-                                });
+                                list.push(QuickToggleCatalog.item("gammaSlider", "gammaSlider", root.columns, 1, root.columns));
                             if (cfg.showVolume)
-                                list.push({
-                                    type: "volumeSlider",
-                                    sizeW: root.columns,
-                                    sizeH: 1,
-                                    size: root.columns
-                                });
+                                list.push(QuickToggleCatalog.item("volumeSlider", "volumeSlider", root.columns, 1, root.columns));
                             if (cfg.showMic)
-                                list.push({
-                                    type: "micSlider",
-                                    sizeW: root.columns,
-                                    sizeH: 1,
-                                    size: root.columns
-                                });
+                                list.push(QuickToggleCatalog.item("micSlider", "micSlider", root.columns, 1, root.columns));
                         }
                         return list;
                     }

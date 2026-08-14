@@ -6,6 +6,7 @@ import qs.modules.common
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import "QuickToggleCatalog.js" as QuickToggleCatalog
 
 Item {
     id: root
@@ -16,6 +17,8 @@ Item {
     required property real baseCellHeight
     required property real cellSpacing
     required property int cellSize
+
+    readonly property var catalogSize: QuickToggleCatalog.normalizeSize(root.buttonData.type, root.buttonData.sizeW, root.buttonData.sizeH, root.gridColumns)
 
     property bool editMode: false
     property bool isUnused: false
@@ -125,18 +128,18 @@ Item {
     readonly property int effectiveSizeW: {
         if (root.editMode && visualButton.editingRight) {
             var delta = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
-            var w = (root.buttonData.sizeW ?? root.buttonData.size ?? 4) + delta;
+            var w = root.catalogSize[0] + delta;
             return Math.max(1, Math.min(8, w));
         }
-        return root.buttonData.sizeW ?? root.buttonData.size ?? 4;
+        return root.catalogSize[0];
     }
     readonly property int effectiveSizeH: {
         if (root.editMode && visualButton.editingBottom) {
             var delta = root.baseCellHeight > 0 ? Math.round(visualButton.editDragY / root.baseCellHeight) : 0;
-            var h = (root.buttonData.sizeH ?? 1) + delta;
+            var h = root.catalogSize[1] + delta;
             return Math.max(1, Math.min(8, h));
         }
-        return root.buttonData.sizeH ?? 1;
+        return root.catalogSize[1];
     }
 
     property bool hovered: hoverHandler.hovered || (root.editMode && editModeInteraction.containsMouse)
@@ -346,7 +349,7 @@ Item {
                         if (page[i].type === buttonType) { existingIdx = i; break; }
                     }
                     if (existingIdx === -1) {
-                        page.push({ type: buttonType, sizeW: 4, sizeH: 1, size: 4 });
+                        page.push(QuickToggleCatalog.item(buttonType, buttonType, undefined, undefined, root.gridColumns));
                     } else {
                         page.splice(existingIdx, 1);
                     }
@@ -508,12 +511,12 @@ Item {
                     onPositionChanged: event => {
                         var absPos = visualButton.mapFromItem(rightDragHandle, event.x, event.y);
                         var dx = absPos.x - pressAbsX;
-                        var currentW = root.buttonData.sizeW ?? 4;
+                        var currentW = root.catalogSize[0];
                         visualButton.editDragX = Math.max(-root.baseCellWidth * (currentW - 1), Math.min(dx, root.baseCellWidth * (8 - currentW)));
                     }
                     onReleased: event => {
                         visualButton.editingRight = false;
-                        var currentW = root.buttonData.sizeW ?? 4;
+                        var currentW = root.catalogSize[0];
                         var deltaColumns = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
                         var newSizeW = currentW + deltaColumns;
                         if (isNaN(newSizeW)) newSizeW = currentW;
@@ -521,7 +524,7 @@ Item {
                         
                         visualButton.editDragX = 0;
                         if (newSizeW !== currentW) {
-                            var currentH = root.buttonData.sizeH ?? 1;
+                            var currentH = root.catalogSize[1];
                             editModeInteraction.setSize(newSizeW, currentH);
                             editModeInteraction.resolveLayoutConflicts();
                         }
