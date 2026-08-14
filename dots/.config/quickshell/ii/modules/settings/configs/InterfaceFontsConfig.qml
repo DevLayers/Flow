@@ -98,18 +98,23 @@ Item {
                 Layout.fillWidth: true
                 tooltip: Translation.tr("Select the base icon theme to be recolored by Matugen.\nRequires generating colors again to apply.")
 
-                ConfigSelectionArray {
-                    currentValue: Config.options.appearance.iconTheme
-                    onSelected: (newValue) => {
-                        Config.options.appearance.iconTheme = newValue;
-                    }
-                    options: IconThemes.availableThemes.map((theme) => {
-                        return ({
+                StyledComboBox {
+                    buttonIcon: "category"
+                    textRole: "displayName"
+                    model: IconThemes.availableThemes.map((theme) => {
+                        return {
                             "displayName": theme,
                             "value": theme,
                             "icon": "category"
-                        });
+                        };
                     })
+                    currentIndex: {
+                        const index = model.findIndex(item => item.value === Config.options.appearance.iconTheme);
+                        return index !== -1 ? index : 0;
+                    }
+                    onActivated: index => {
+                        Config.options.appearance.iconTheme = model[index].value;
+                    }
                 }
             }
 
@@ -117,8 +122,10 @@ Item {
                 visible: Config.options.appearance.icons.enableThemed
                 materialIcon: "magic_button"
                 mainText: Translation.tr("Apply Theme")
-                useDynamicRadius: true
-                implicitHeight: 48
+                centerContent: true
+                buttonRadius: Appearance.rounding.normal
+                useDynamicRadius: false
+                implicitHeight: 44
                 Layout.fillWidth: true
                 colBackground: Appearance.colors.colPrimaryContainer
                 colBackgroundHover: Appearance.colors.colPrimaryContainerHover

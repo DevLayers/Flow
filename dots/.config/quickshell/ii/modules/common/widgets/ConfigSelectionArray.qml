@@ -13,6 +13,7 @@ Flow {
 
     property int clickIndex: -1
     property real calculatedWidth: 0
+    property bool _widthUpdateScheduled: false
 
     function updateWidth() {
         if (!repeater) return;
@@ -27,7 +28,12 @@ Flow {
     }
 
     function scheduleWidthUpdate() {
-        root.updateWidth();
+        if (root._widthUpdateScheduled) return;
+        root._widthUpdateScheduled = true;
+        Qt.callLater(() => {
+            root._widthUpdateScheduled = false;
+            root.updateWidth();
+        });
     }
 
     Layout.preferredWidth: calculatedWidth
@@ -73,7 +79,6 @@ Flow {
             
             onImplicitWidthChanged: root.scheduleWidthUpdate()
             Component.onCompleted: root.scheduleWidthUpdate()
-            Component.onDestruction: root.scheduleWidthUpdate()
             
             color: isOptionEnabled ? (toggled ? 
                 (down ? colBackgroundToggledActive : 
@@ -118,13 +123,12 @@ Flow {
                 }
             }
 
-            // A tooltip watches its own parent's hover state, so it has to hang off the button
-            // itself. Loading it through a Loader made the Loader its parent instead, and a Loader
-            // has no hover state to read - which the tooltip took as "always hovered" and showed
-            // itself the moment the page opened.
-            StyledToolTip {
-                extraVisibleCondition: paletteButton.modelData.tooltip !== undefined && paletteButton.modelData.tooltip !== ""
-                text: paletteButton.modelData.tooltip ?? ""
+            Loader {
+                active: paletteButton.modelData.tooltip !== undefined && paletteButton.modelData.tooltip !== ""
+                sourceComponent: StyledToolTip {
+                    parent: paletteButton
+                    text: paletteButton.modelData.tooltip ?? ""
+                }
             }
         }
     }

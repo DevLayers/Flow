@@ -10,7 +10,9 @@ Item {
     property real baseWidth: 600
     property bool forceWidth: false
     property real bottomContentPadding: 100
+    readonly property bool scrollFadeEnabled: Config.options?.appearance?.scrollFadeMask ?? true
     readonly property bool settingsPerformanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
+    readonly property bool allowScrollFade: root.scrollFadeEnabled && !root.settingsPerformanceMode
 
     property alias contentY: flickable.contentY
     property alias atYBeginning: flickable.atYBeginning
@@ -38,12 +40,12 @@ Item {
 
         // Performance Mode leaves the entire mask subtree unloaded, including
         // the offscreen layer texture. Normal Mode retains the existing fade.
-        layer.enabled: fadeMaskLoader.active && flickable.contentHeight > flickable.height
+        layer.enabled: root.allowScrollFade && flickable.contentHeight > flickable.height
         layer.effect: fadeMaskLoader.item
 
         Loader {
             id: fadeMaskLoader
-            active: !root.settingsPerformanceMode
+            active: root.allowScrollFade
             sourceComponent: fadeMaskComponent
         }
 
@@ -56,7 +58,7 @@ Item {
                     width: flickable.width
                     height: flickable.height
 
-                    property bool fadeEnabled: !root.settingsPerformanceMode
+                    property bool fadeEnabled: root.allowScrollFade
                     property color topFadeColor: (fadeEnabled && !flickable.atYBeginning) ? "transparent" : "white"
                     property color bottomFadeColor: (fadeEnabled && !flickable.atYEnd) ? "transparent" : "white"
 

@@ -15,6 +15,13 @@ Item {
     property real padding: 20
     property var previewPositions: ({})
     property bool dragHasOverlap: false
+    property bool expressive: false
+    property bool draggingActive: false
+    property int snapPulseToken: 0
+    property int invalidDropToken: 0
+    property int invalidDropIndex: -1
+    property point nudgeOffset: Qt.point(0, 0)
+    property int nudgeToken: 0
 
     implicitHeight: 220
 
@@ -202,6 +209,11 @@ Item {
         property real startMouseY: 0
         property real startX: 0
         property real startY: 0
+        property bool expressive: false
+        property int invalidDropToken: 0
+        property int invalidDropIndex: -1
+        property point nudgeOffset: Qt.point(0, 0)
+        property int nudgeToken: 0
 
         property int logW: monitor && typeof monitor.width === "number" && typeof monitor.height === "number"
             ? monitorConfig.logicalWidth(monitor) : 1920
@@ -214,6 +226,18 @@ Item {
         height: logH * scaleFactor
         radius: Appearance.rounding.small
         z: isDragging ? 100 : isSelected ? 2 : 1
+        scale: expressive
+            ? (isDragging ? 1.02 : (isSelected ? 1.012 : 1))
+            : 1
+
+        transform: [
+            Translate {
+                id: invalidShakeTransform
+            },
+            Translate {
+                id: nudgeTransform
+            }
+        ]
 
         color: {
             if (monitor && monitor.disabled)
@@ -249,7 +273,89 @@ Item {
             NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
         }
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(rectRoot)
+        }
+        Behavior on scale {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(rectRoot)
+        }
+
+        SequentialAnimation {
+            id: invalidShakeAnimation
+
+            NumberAnimation {
+                target: invalidShakeTransform
+                property: "x"
+                to: Appearance.rounding.verysmall
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+            NumberAnimation {
+                target: invalidShakeTransform
+                property: "x"
+                to: -Appearance.rounding.verysmall
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+            NumberAnimation {
+                target: invalidShakeTransform
+                property: "x"
+                to: 0
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+
+        SequentialAnimation {
+            id: nudgeAnimation
+
+            ParallelAnimation {
+                NumberAnimation {
+                    target: nudgeTransform
+                    property: "x"
+                    to: rectRoot.nudgeOffset.x * Appearance.rounding.verysmall
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+                NumberAnimation {
+                    target: nudgeTransform
+                    property: "y"
+                    to: rectRoot.nudgeOffset.y * Appearance.rounding.verysmall
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+            ParallelAnimation {
+                NumberAnimation {
+                    target: nudgeTransform
+                    property: "x"
+                    to: 0
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+                NumberAnimation {
+                    target: nudgeTransform
+                    property: "y"
+                    to: 0
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+        }
+
+        onInvalidDropTokenChanged: {
+            if (rectRoot.expressive && rectRoot.invalidDropIndex === rectRoot.monitorIndex)
+                invalidShakeAnimation.restart();
+        }
+        onNudgeTokenChanged: {
+            if (rectRoot.expressive && rectRoot.isSelected)
+                nudgeAnimation.restart();
         }
 
         DashedBorder {
@@ -357,6 +463,10 @@ Item {
                 rectRoot.snappedY = monitor.y;
                 if (monitor && !monitor.disabled)
                     rectRoot.isDragging = true;
+                if (monitor && !monitor.disabled) {
+                    root.draggingActive = true;
+                    root.snapPulseToken += 1;
+                }
             }
 
             onPositionChanged: event => {
@@ -375,6 +485,7 @@ Item {
 
             onReleased: {
                 rectRoot.isDragging = false;
+                root.draggingActive = false;
                 if (rectRoot.snappedX === monitor.x && rectRoot.snappedY === monitor.y) {
                     rectRoot.monitorClicked(rectRoot.monitorIndex);
                     return;
@@ -408,6 +519,11 @@ Item {
                     isSelected: index === root.selectedIndex
                     previewPositions: root.previewPositions
                     hasOverlap: root.dragHasOverlap && isDragging
+                    expressive: root.expressive
+                    invalidDropToken: root.invalidDropToken
+                    invalidDropIndex: root.invalidDropIndex
+                    nudgeOffset: root.nudgeOffset
+                    nudgeToken: root.nudgeToken
 
                     onMonitorClicked: index => {
                         root.selectedIndex = index;
@@ -418,6 +534,10 @@ Item {
                         const hadOverlap = root.dragHasOverlap;
                         root.previewPositions = {};
                         root.dragHasOverlap = false;
+                        if (hadOverlap) {
+                            root.invalidDropIndex = index;
+                            root.invalidDropToken += 1;
+                        }
                         if (!hadOverlap)
                             root.commitPosition(index, x, y);
                     }
@@ -428,7 +548,9 @@ Item {
                 model: root.snapPoints
 
                 delegate: Rectangle {
+                    id: snapPoint
                     required property var modelData
+                    property int pulseToken: root.snapPulseToken
                     x: modelData.x * root.scaleFactor + root.offset.x - width / 2
                     y: modelData.y * root.scaleFactor + root.offset.y - height / 2
                     width: 14
@@ -438,6 +560,33 @@ Item {
                     border.width: 1.5
                     border.color: Appearance.colors.colOnPrimary
                     z: 10
+
+                    onPulseTokenChanged: {
+                        if (root.draggingActive)
+                            snapPulseAnimation.restart();
+                    }
+
+                    SequentialAnimation {
+                        id: snapPulseAnimation
+
+                        NumberAnimation {
+                            target: snapPoint
+                            property: "scale"
+                            from: 0.82
+                            to: 1.12
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                        NumberAnimation {
+                            target: snapPoint
+                            property: "scale"
+                            to: 1
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
 
                     MaterialSymbol {
                         anchors.centerIn: parent

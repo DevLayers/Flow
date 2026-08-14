@@ -109,6 +109,7 @@ ComboBox {
     delegate: ItemDelegate {
         id: itemDelegate
         width: ListView.view ? ListView.view.width : root.width
+        height: 40
         implicitHeight: 40
 
         required property var model
@@ -190,6 +191,12 @@ ComboBox {
         width: root.popupWidth > 0 ? root.popupWidth : root.width
         height: Math.min(listView.contentHeight + topPadding + bottomPadding, 300)
         padding: 8
+
+        onOpened: {
+            if (root.currentIndex >= 0 && listView) {
+                listView.positionViewAtIndex(root.currentIndex, ListView.Center);
+            }
+        }
 
         transformOrigin: Item.Top
 
@@ -273,51 +280,8 @@ ComboBox {
             spacing: 2
             model: root.popup.visible ? root.delegateModel : null
             currentIndex: root.highlightedIndex
-
-            add: Transition {
-                ParallelAnimation {
-                    NumberAnimation {
-                        property: "opacity"
-                        from: 0
-                        to: 1
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.OutCubic
-                    }
-                    NumberAnimation {
-                        property: "y"
-                        from: -10
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.OutCubic
-                    }
-                }
-            }
-
-            remove: Transition {
-                ParallelAnimation {
-                    NumberAnimation {
-                        property: "opacity"
-                        from: 1
-                        to: 0
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.InCubic
-                    }
-                    NumberAnimation {
-                        property: "y"
-                        to: 10
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.InCubic
-                    }
-                }
-            }
-
-            displaced: Transition {
-                NumberAnimation {
-                    properties: "x,y"
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.standardDecel
-                }
-            }
+            animatePopulate: false
+            animateAppearance: false
         }
     }
 }
