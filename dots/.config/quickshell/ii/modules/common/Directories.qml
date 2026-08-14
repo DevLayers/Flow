@@ -76,6 +76,11 @@ Singleton {
     property string userAiPrompts: FileUtils.trimFileProtocol(`${Directories.shellConfig}/ai/prompts`)
     property string userActions: FileUtils.trimFileProtocol(`${Directories.shellConfig}/actions`)
     property string aiChats: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/chats`)
+    // One file per conversation, plus the index that lists them. The flat
+    // chats above are what came before, and are imported once.
+    property string aiSessions: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/sessions`)
+    property string aiExports: FileUtils.trimFileProtocol(`${Directories.documents}/ai-chats`)
+    property string aiSessionsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/ai/ai_sessions.py`)
     property string aiTranslationScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/ai/gemini-translate.sh`)
     property string recordScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/videos/record.sh`)
     property string processVideoScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/videos/compress_video.py`)

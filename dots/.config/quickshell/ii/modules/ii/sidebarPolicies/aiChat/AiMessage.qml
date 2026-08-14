@@ -9,7 +9,7 @@ import Quickshell
 
 Rectangle {
     id: root
-    property int messageIndex
+    property string messageId
     property var messageData
     property var messageInputField
 
@@ -188,11 +188,24 @@ Rectangle {
                         visible: messageData?.role === 'assistant'
 
                         onClicked: {
-                            Ai.regenerate(root.messageIndex)
+                            Ai.regenerate(root.messageId)
                         }
-                        
+
                         StyledToolTip {
-                            text: Translation.tr("Regenerate")
+                            text: Translation.tr("Regenerate. The answer being replaced stays in its own chat")
+                        }
+                    }
+
+                    AiMessageControlButton {
+                        id: forkButton
+                        buttonIcon: "alt_route"
+
+                        onClicked: {
+                            Ai.forkFrom(root.messageId)
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Branch off here into a new chat")
                         }
                     }
 
@@ -252,7 +265,7 @@ Rectangle {
                         id: deleteButton
                         buttonIcon: "close"
                         onClicked: {
-                            Ai.removeMessage(root.messageIndex)
+                            Ai.removeMessage(root.messageId)
                         }
                         StyledToolTip {
                             text: Translation.tr("Delete")

@@ -44,11 +44,17 @@ QtObject {
             "high": 16384
         })
 
+    /**
+     * Forces the level for one build, whatever the user picked. Set around a
+     * housekeeping call — naming a chat — so it does not pay for reasoning.
+     */
+    property string thinkingOverride: ""
+
     /** "off", "low", "medium" or "high", for what this model can actually do. */
     function thinkingLevel(model: AiModel): string {
         if (!model?.thinking)
             return "off";
-        const requested = Persistent.states?.ai?.thinkingLevel ?? "medium";
+        const requested = thinkingOverride.length > 0 ? thinkingOverride : (Persistent.states?.ai?.thinkingLevel ?? "medium");
         const level = (thinkingBudgets[requested] === undefined) ? "medium" : requested;
         // Some models reason no matter what is asked of them. Saying "off" to
         // one of those is rejected, so it gets the smallest budget instead.

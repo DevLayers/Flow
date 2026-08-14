@@ -28,6 +28,10 @@ Item {
     property var inputField: null
 
     signal newChatRequested
+    signal sessionsRequested
+
+    /** Whether the chat list is on screen, so its chip can say so. */
+    property bool sessionsOpen: false
 
     /** Below this the chips drop their labels and keep icons and values. */
     readonly property bool compact: root.width < 360
@@ -289,6 +293,17 @@ Item {
                 id: chipsRowLayout
                 height: parent.height
                 spacing: 4
+
+                ControlChip {
+                    // Saved chats. Doubles as the name of the one on screen,
+                    // which is otherwise nowhere to be seen.
+                    symbol: "forum"
+                    label: Ai.sessionTitle.length > 0 ? Ai.sessionTitle : Translation.tr("New chat")
+                    showCaret: false
+                    opened: root.sessionsOpen
+                    tooltipText: Translation.tr("Saved chats\nAlso %1load NAME").arg(root.commandPrefix)
+                    onClicked: root.sessionsRequested()
+                }
 
                 ControlChip {
                     // Model. The one chip that keeps its label at every width:

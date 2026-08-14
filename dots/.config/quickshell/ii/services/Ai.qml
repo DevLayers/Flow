@@ -76,9 +76,14 @@ Singleton {
     readonly property bool currentModelThinks: root.currentModelEntry?.thinking ?? false
     readonly property bool currentModelAlwaysThinks: root.currentModelEntry?.thinkingAlwaysOn ?? false
 
+    /**
+     * Ids are handed out once and kept: they are written to the session file
+     * and read back with it, so a chat that has been reopened is still keyed
+     * the way it was written. Everything that points at a message — deleting,
+     * regenerating, forking — points at one of these.
+     */
     function idForMessage(message) {
-        // Generate a unique ID using timestamp and random value
-        return Date.now().toString(36) + Math.random().toString(36).substr(2, 8);
+        return root.sessions.newId();
     }
 
     property list<var> defaultPrompts: []
@@ -86,7 +91,6 @@ Singleton {
     property list<var> promptFiles: [...defaultPrompts, ...userPrompts]
     /** Path of the prompt file last loaded, so the picker can show which one won. */
     property string currentPromptFile: ""
-    property list<var> savedChats: []
 
     property var promptSubstitutions: {
         "{DISTRO}": SystemInfo.distroName,
@@ -385,8 +389,8 @@ Singleton {
         setModel(currentModelId, false, false); // Do necessary setup for model
     }
 
-    // Boot-time index: Ollama models + default prompts + user prompts +
-    // saved chats — all in ONE Process spawn. Replaces four parallel
+    // Boot-time index: Ollama models + default prompts + user prompts —
+    // all in ONE Process spawn. Replaces four parallel
     // `Process { running: true }` invocations that fired on every boot
     // even if the user had never opened the AI panel.
     // Gated by Config.options.ai.enable: when false, no fork happens
@@ -401,8 +405,7 @@ Singleton {
             "python3",
             Directories.scriptPath + "/ai/ai_index.py".replace(/file:\/\//, ""),
             Directories.defaultAiPrompts.toString().replace(/file:\/\//, ""),
-            Directories.userAiPrompts.toString().replace(/file:\/\//, ""),
-            Directories.aiChats.toString().replace(/file:\/\//, "")
+            Directories.userAiPrompts.toString().replace(/file:\/\//, "")
         ]
         stdout: StdioCollector {
             id: aiIndexCollector
@@ -423,51 +426,13 @@ Singleton {
                 if (Array.isArray(parsed.ollama_models))
                     root.ollamaModels = parsed.ollama_models
 
-                // Prompts + chats (already absolute, filtered by extension)
+                // Prompts (already absolute, filtered by extension)
                 if (Array.isArray(parsed.default_prompts))
                     root.defaultPrompts = parsed.default_prompts
                 if (Array.isArray(parsed.user_prompts))
                     root.userPrompts = parsed.user_prompts
-                if (Array.isArray(parsed.saved_chats))
-                    root.savedChats = parsed.saved_chats
             }
         }
-    }
-
-    // Re-lists saved chats only, after a save or load. Deliberately not
-    // aiIndexProc: re-running the boot index would probe ollama again and
-    // re-append its models to modelList on every single save.
-    Process {
-        id: savedChatsProc
-        command: [
-            "python3",
-            Directories.scriptPath + "/ai/ai_index.py".replace(/file:\/\//, ""),
-            "--chats-only",
-            Directories.aiChats.toString().replace(/file:\/\//, "")
-        ]
-        stdout: StdioCollector {
-            id: savedChatsCollector
-            onStreamFinished: {
-                const raw = savedChatsCollector.text.trim()
-                if (raw.length === 0)
-                    return
-                try {
-                    const parsed = JSON.parse(raw)
-                    if (Array.isArray(parsed.saved_chats))
-                        root.savedChats = parsed.saved_chats
-                } catch (e) {
-                    console.log("[AI] Saved chats parse error:", e)
-                }
-            }
-        }
-    }
-
-    /**
-     * Re-reads the saved chat directory into `savedChats`.
-     */
-    function refreshSavedChats() {
-        savedChatsProc.running = false;
-        savedChatsProc.running = true;
     }
 
     FileView {
@@ -512,13 +477,12 @@ Singleton {
         root.messageByID[id] = aiMessage;
     }
 
-    function removeMessage(index) {
-        if (index < 0 || index >= messageIDs.length)
+    function removeMessage(messageId: string) {
+        if (!root.messageByID[messageId])
             return;
-        const id = root.messageIDs[index];
-        root.messageIDs.splice(index, 1);
-        root.messageIDs = [...root.messageIDs];
-        delete root.messageByID[id];
+        root.messageIDs = root.messageIDs.filter(id => id !== messageId);
+        delete root.messageByID[messageId];
+        root.sessions.scheduleSave();
     }
 
     function addApiKeyAdvice(model) {
@@ -680,7 +644,8 @@ Singleton {
             root.postResponseHook();
             root.postResponseHook = null; // Reset hook after use
         }
-        root.saveChat("lastSession");
+        root.autoTitle(); // Names it first, so the write below carries the name
+        root.commitSession();
         root.responseFinished();
     }
 
@@ -874,6 +839,9 @@ Singleton {
         if (message.length === 0)
             return;
         root.addMessage(message, "user");
+        // Written before the answer comes back, so a question survives a reply
+        // that never arrives.
+        root.sessions.scheduleSave();
         root.makeRequest();
     }
 
@@ -923,17 +891,15 @@ Singleton {
         root.pendingFilePath = CF.FileUtils.trimFileProtocol(filePath);
     }
 
-    function regenerate(messageIndex) {
-        if (messageIndex < 0 || messageIndex >= messageIDs.length)
+    /**
+     * Asks again for an answer. The old one is not thrown away: the chat is
+     * forked first, so the branch that held it stays in the list.
+     */
+    function regenerate(messageId: string) {
+        if (root.messageByID[messageId]?.role !== "assistant")
             return;
-        const id = root.messageIDs[messageIndex];
-        const message = root.messageByID[id];
-        if (message.role !== "assistant")
+        if (!root.forkFrom(messageId, false))
             return;
-        // Remove all messages after this one
-        for (let i = root.messageIDs.length - 1; i >= messageIndex; i--) {
-            root.removeMessage(i);
-        }
         root.makeRequest();
     }
 
@@ -1046,96 +1012,316 @@ Singleton {
             root.addMessage(Translation.tr("Unknown function call: %1").arg(name), "assistant");
     }
 
+    // ── Sessions ──────────────────────────────────────────────────────────
+    // A conversation is a file, and the one on screen is one of them. The
+    // store does the disk work; what lives here is the shape of a session,
+    // how it becomes messages, and when it is worth writing.
+
+    readonly property AiSessions sessions: AiSessions {
+        dir: Directories.aiSessions
+        legacyDir: Directories.aiChats
+        scriptPath: Directories.aiSessionsScriptPath
+        exportDir: Directories.aiExports
+        onSaveRequested: root.commitSession()
+        onSessionOpened: session => root.applySession(session)
+        onCurrentDropped: root.newChat()
+    }
+
+    readonly property int sessionSchema: 1
+    /** Name of the conversation on screen. Empty until it earns one. */
+    property string sessionTitle: ""
+    property real sessionCreatedAt: 0
+    /** Whether the model has already been asked to name this one. */
+    property bool sessionTitleAsked: false
+
+    function messageToJson(id: string): var {
+        const message = root.messageByID[id];
+        return ({
+                "id": id,
+                "role": message.role,
+                "rawContent": message.rawContent,
+                "fileMimeType": message.fileMimeType,
+                "fileUri": message.fileUri,
+                "localFilePath": message.localFilePath,
+                "model": message.model,
+                "thought": message.thought,
+                "thoughtSignature": message.thoughtSignature,
+                "thinkingBlocks": message.thinkingBlocks,
+                "thoughtDurationMs": message.thoughtDurationMs,
+                "thoughtTokens": message.thoughtTokens,
+                "thinking": false,
+                "done": true,
+                "annotations": message.annotations,
+                "annotationSources": message.annotationSources,
+                "functionName": message.functionName,
+                "functionCall": message.functionCall,
+                "functionResponse": message.functionResponse,
+                "visibleToUser": message.visibleToUser
+            });
+    }
+
     function chatToJson() {
-        return root.messageIDs.map(id => {
-            const message = root.messageByID[id];
-            return ({
-                    "role": message.role,
-                    "rawContent": message.rawContent,
-                    "fileMimeType": message.fileMimeType,
-                    "fileUri": message.fileUri,
-                    "localFilePath": message.localFilePath,
-                    "model": message.model,
-                    "thought": message.thought,
-                    "thoughtSignature": message.thoughtSignature,
-                    "thinkingBlocks": message.thinkingBlocks,
-                    "thoughtDurationMs": message.thoughtDurationMs,
-                    "thoughtTokens": message.thoughtTokens,
-                    "thinking": false,
-                    "done": true,
-                    "annotations": message.annotations,
-                    "annotationSources": message.annotationSources,
-                    "functionName": message.functionName,
-                    "functionCall": message.functionCall,
-                    "functionResponse": message.functionResponse,
-                    "visibleToUser": message.visibleToUser
-                });
+        return root.messageIDs.map(id => root.messageToJson(id));
+    }
+
+    function messageFromJson(data: var): AiMessageData {
+        return root.aiMessageComponent.createObject(root, {
+            "role": data.role,
+            "rawContent": data.rawContent,
+            "content": data.rawContent,
+            "fileMimeType": data.fileMimeType,
+            "fileUri": data.fileUri,
+            "localFilePath": data.localFilePath,
+            "model": data.model,
+            "thought": data.thought ?? "",
+            "thoughtSignature": data.thoughtSignature ?? "",
+            "thinkingBlocks": data.thinkingBlocks ?? [],
+            "thoughtDurationMs": data.thoughtDurationMs ?? 0,
+            "thoughtTokens": data.thoughtTokens ?? -1,
+            "thinking": data.thinking ?? false,
+            "done": data.done ?? true,
+            "annotations": data.annotations ?? [],
+            "annotationSources": data.annotationSources ?? [],
+            "functionName": data.functionName ?? "",
+            "functionCall": data.functionCall,
+            "functionResponse": data.functionResponse ?? "",
+            "visibleToUser": data.visibleToUser ?? true
         });
     }
 
-    FileView {
-        id: chatSaveFile
-        property string chatName: ""
-        path: chatName.length > 0 ? `${Directories.aiChats}/${chatName}.json` : ""
-        blockLoading: true // Prevent race conditions
-    }
-
-    /**
-     * Saves chat to a JSON list of message objects.
-     * @param chatName name of the chat
-     */
-    function saveChat(chatName) {
-        chatSaveFile.chatName = chatName.trim();
-        const saveContent = JSON.stringify(root.chatToJson());
-        chatSaveFile.setText(saveContent);
-        root.refreshSavedChats();
-    }
-
-    /**
-     * Loads chat from a JSON list of message objects.
-     * @param chatName name of the chat
-     */
-    function loadChat(chatName) {
-        try {
-            chatSaveFile.chatName = chatName.trim();
-            chatSaveFile.reload();
-            const saveContent = chatSaveFile.text();
-            // console.log(saveContent)
-            const saveData = JSON.parse(saveContent);
-            root.clearMessages();
-            root.messageIDs = saveData.map((_, i) => {
-                return i;
+    function sessionToJson(): var {
+        return ({
+                "schema": root.sessionSchema,
+                "id": root.sessions.currentId,
+                "title": root.sessionTitle,
+                "createdAt": root.sessionCreatedAt > 0 ? root.sessionCreatedAt : Date.now(),
+                "updatedAt": Date.now(),
+                "pinned": root.sessions.currentEntry?.pinned ?? false,
+                "modelId": root.currentModelId,
+                "thinking": root.thinkingLevel,
+                "temperature": root.temperature,
+                "promptFile": root.currentPromptFile,
+                "messages": root.chatToJson()
             });
-            // console.log(JSON.stringify(messageIDs))
-            for (let i = 0; i < saveData.length; i++) {
-                const message = saveData[i];
-                root.messageByID[i] = root.aiMessageComponent.createObject(root, {
-                    "role": message.role,
-                    "rawContent": message.rawContent,
-                    "content": message.rawContent,
-                    "fileMimeType": message.fileMimeType,
-                    "fileUri": message.fileUri,
-                    "localFilePath": message.localFilePath,
-                    "model": message.model,
-                    "thought": message.thought ?? "",
-                    "thoughtSignature": message.thoughtSignature ?? "",
-                    "thinkingBlocks": message.thinkingBlocks ?? [],
-                    "thoughtDurationMs": message.thoughtDurationMs ?? 0,
-                    "thoughtTokens": message.thoughtTokens ?? -1,
-                    "thinking": message.thinking,
-                    "done": message.done,
-                    "annotations": message.annotations,
-                    "annotationSources": message.annotationSources,
-                    "functionName": message.functionName,
-                    "functionCall": message.functionCall,
-                    "functionResponse": message.functionResponse,
-                    "visibleToUser": message.visibleToUser
-                });
+    }
+
+    /**
+     * Writes the conversation on screen. An empty chat is not a session: one
+     * is only started once there is something in it.
+     */
+    function commitSession() {
+        if (root.messageIDs.length === 0)
+            return;
+        if (root.sessions.currentId.length === 0) {
+            root.sessions.currentId = root.sessions.newId();
+            root.sessionCreatedAt = Date.now();
+        }
+        root.sessions.commit(root.sessionToJson());
+    }
+
+    /** Puts the conversation away and starts an empty one. */
+    function newChat() {
+        root.commitSession();
+        root.clearMessages();
+        root.sessions.currentId = "";
+        root.sessionTitle = "";
+        root.sessionCreatedAt = 0;
+        root.sessionTitleAsked = false;
+        root.sessions.ensureLoaded();
+    }
+
+    function openSession(sessionId: string) {
+        if (sessionId.length === 0 || sessionId === root.sessions.currentId)
+            return;
+        root.commitSession(); // Whatever is on screen keeps its own file
+        root.sessions.openSession(sessionId);
+    }
+
+    /**
+     * Replaces the conversation with one read from disk, settings included:
+     * a chat is remembered as it was held, not as the sidebar happens to be
+     * set right now.
+     */
+    function applySession(session: var) {
+        root.stopGeneration();
+        root.clearMessages();
+        const ids = [];
+        const byId = ({});
+        const messages = session.messages ?? [];
+        for (let i = 0; i < messages.length; i++) {
+            const data = messages[i];
+            const id = (data.id && String(data.id).length > 0) ? String(data.id) : root.sessions.newId();
+            byId[id] = root.messageFromJson(data);
+            ids.push(id);
+        }
+        root.messageByID = byId;
+        root.messageIDs = ids;
+        root.sessionTitle = session.title ?? "";
+        root.sessionCreatedAt = session.createdAt ?? Date.now();
+        root.sessionTitleAsked = root.sessionTitle.length > 0;
+        if (session.modelId && root.catalog.models[session.modelId])
+            root.setModel(session.modelId, false);
+        if (session.thinking && root.thinkingLevels.indexOf(session.thinking) >= 0)
+            root.setThinkingLevel(session.thinking);
+        if (typeof session.temperature === "number")
+            root.setTemperature(session.temperature, false);
+        root.currentPromptFile = session.promptFile ?? "";
+    }
+
+    /**
+     * Splits the conversation at a message. What came before becomes a new
+     * chat and stays on screen; the chat it was split off keeps every message
+     * it had, in its own file.
+     */
+    function forkFrom(messageId: string, keepMessage = true): bool {
+        const cut = root.messageIDs.indexOf(messageId);
+        if (cut < 0)
+            return false;
+        root.commitSession();
+        const kept = root.messageIDs.slice(0, keepMessage ? cut + 1 : cut);
+        for (let i = kept.length; i < root.messageIDs.length; i++) {
+            delete root.messageByID[root.messageIDs[i]];
+        }
+        root.messageIDs = kept;
+        root.sessions.currentId = root.sessions.newId();
+        root.sessionCreatedAt = Date.now();
+        if (root.sessionTitle.length > 0)
+            root.sessionTitle = Translation.tr("%1 (fork)").arg(root.sessionTitle);
+        root.sessionTitleAsked = root.sessionTitle.length > 0;
+        root.commitSession();
+        return true;
+    }
+
+    /** Renames the conversation on screen, starting a session if there is none. */
+    function nameCurrentChat(title: string) {
+        const trimmed = String(title ?? "").trim();
+        if (trimmed.length === 0)
+            return;
+        root.sessionTitle = trimmed;
+        root.sessionTitleAsked = true;
+        if (root.messageIDs.length === 0) {
+            root.addMessage(Translation.tr("Nothing to name yet — this chat is empty."), root.interfaceRole);
+            return;
+        }
+        root.commitSession();
+        root.addMessage(Translation.tr("Chat named “%1”").arg(trimmed), root.interfaceRole);
+    }
+
+    /** Opens a saved chat by title, for the %1load command. */
+    function openChatByName(title: string): bool {
+        const wanted = String(title ?? "").trim().toLowerCase();
+        if (wanted.length === 0)
+            return false;
+        const match = root.sessions.index.find(entry => entry.title.toLowerCase() === wanted) ?? root.sessions.index.find(entry => entry.title.toLowerCase().includes(wanted));
+        if (!match) {
+            root.addMessage(Translation.tr("No saved chat called “%1”").arg(title), root.interfaceRole);
+            return false;
+        }
+        root.openSession(match.id);
+        return true;
+    }
+
+    // ── Naming a chat ─────────────────────────────────────────────────────
+    // The first answer is followed by one small call asking the model what to
+    // call the conversation. A truncation of the first message is written
+    // first, so a chat is never nameless; the model's answer only replaces it
+    // if one arrives. Nothing waits for either.
+
+    property AiMessageData titleMessage: AiMessageData {}
+    property var titleStrategies: ({})
+
+    function titleStrategyFor(format: string): ApiStrategy {
+        if (!root.titleStrategies[format]) {
+            // Its own instance: strategies carry per-request state, and this
+            // call must never be able to disturb an answer being streamed.
+            const component = (format === "gemini") ? root.geminiApiStrategy : ((format === "anthropic") ? root.anthropicApiStrategy : root.openAiCompatStrategy);
+            root.titleStrategies[format] = component.createObject(root);
+        }
+        return root.titleStrategies[format];
+    }
+
+    function shortTitle(text: string): string {
+        const oneLine = String(text ?? "").replace(/[\r\n]+/g, " ").replace(/["'#*`_>]/g, "").replace(/\s+/g, " ").trim();
+        if (oneLine.length <= 42)
+            return oneLine;
+        return oneLine.slice(0, 41).trim() + "…";
+    }
+
+    function firstTextOfRole(role: string): string {
+        for (let i = 0; i < root.messageIDs.length; i++) {
+            const message = root.messageByID[root.messageIDs[i]];
+            if (message?.role === role)
+                return String(message.rawContent ?? "").trim();
+        }
+        return "";
+    }
+
+    function autoTitle() {
+        if (root.sessionTitleAsked || root.sessionTitle.length > 0)
+            return;
+        const opening = root.firstTextOfRole("user");
+        if (opening.length === 0)
+            return;
+        root.sessionTitleAsked = true;
+        root.sessionTitle = root.shortTitle(opening);
+        root.requestTitle(opening);
+    }
+
+    function requestTitle(opening: string) {
+        const model = root.currentModelEntry;
+        if (!model || titleRequester.running)
+            return;
+        if (model.requires_key && !(root.apiKeys?.[model.key_id]?.length > 0))
+            return;
+        const strategy = root.titleStrategyFor(model.api_format || "openai");
+        const answer = root.firstTextOfRole("assistant");
+        const prompt = root.aiMessageComponent.createObject(root, {
+            "role": "user",
+            "content": `${opening.slice(0, 600)}\n\n---\n\n${answer.slice(0, 400)}`,
+            "rawContent": "",
+            "thinking": false,
+            "done": true
+        });
+        strategy.thinkingOverride = "off";
+        const data = strategy.buildRequestData(model, [prompt], root.titleInstruction, 0.2, null, "");
+        strategy.thinkingOverride = "";
+        prompt.destroy();
+
+        root.titleMessage.content = "";
+        root.titleMessage.rawContent = "";
+        root.titleMessage.thought = "";
+        titleRequester.model = model;
+        titleRequester.strategy = strategy;
+        titleRequester.message = root.titleMessage;
+        titleRequester.endpoint = strategy.buildEndpoint(model);
+        titleRequester.requestData = data;
+        titleRequester.apiKey = model.requires_key ? (root.apiKeys?.[model.key_id] ?? "") : "";
+        titleRequester.start();
+    }
+
+    readonly property string titleInstruction: "Name this conversation in at most six words. Answer with the name only: no quotes, no trailing punctuation, no explanation."
+
+    AiRequest {
+        id: titleRequester
+        apiKeyEnvVarName: root.apiKeyEnvVarName
+        scriptPath: `/tmp/quickshell-${SystemInfo.username}/ai/title.sh`
+
+        onLine: data => {
+            try {
+                titleRequester.strategy.parseResponseLine(data, root.titleMessage);
+            } catch (e) {
+                // A name is not worth a message in the chat.
             }
-        } catch (e) {
-            console.log("[AI] Could not load chat: ", e);
-        } finally {
-            root.refreshSavedChats();
+        }
+
+        onFinished: reason => {
+            if (reason !== "done")
+                return;
+            const suggested = root.shortTitle(root.titleMessage.content);
+            if (suggested.length === 0 || suggested.length > 60)
+                return;
+            root.sessionTitle = suggested;
+            root.commitSession();
         }
     }
 }

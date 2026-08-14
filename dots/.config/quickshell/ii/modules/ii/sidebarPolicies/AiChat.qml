@@ -23,6 +23,10 @@ Item {
     property bool containsDrag: false
     property string previewPath: ""
 
+    /** Whether the list of saved chats is on screen, in either of its hosts. */
+    property bool sessionsOpen: false
+    readonly property bool wideEnoughForPane: root.width >= 640
+
     property int entranceTrigger: -1
 
     function triggerContentEntrance() {
@@ -46,8 +50,12 @@ Item {
                 event.accepted = true;
             }
         }
+        if (event.key === Qt.Key_Escape && root.sessionsOpen) {
+            root.sessionsOpen = false;
+            event.accepted = true;
+        }
         if ((event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier) && event.key === Qt.Key_O) {
-            Ai.clearMessages();
+            Ai.newChat();
         }
     }
 
@@ -113,34 +121,40 @@ Item {
         },
         {
             name: "save",
-            description: Translation.tr("Save chat"),
+            description: Translation.tr("Name this chat. Chats are kept whether they are named or not."),
             execute: args => {
                 const joinedArgs = args.join(" ");
                 if (joinedArgs.trim().length == 0) {
                     Ai.addMessage(Translation.tr("Usage: %1save CHAT_NAME").arg(root.commandPrefix), Ai.interfaceRole);
                     return;
                 }
-                Ai.saveChat(joinedArgs);
+                Ai.nameCurrentChat(joinedArgs);
             }
         },
         {
             name: "load",
-            description: Translation.tr("Load chat"),
+            description: Translation.tr("Open a saved chat by name"),
             execute: args => {
                 const joinedArgs = args.join(" ");
                 if (joinedArgs.trim().length == 0) {
                     Ai.addMessage(Translation.tr("Usage: %1load CHAT_NAME").arg(root.commandPrefix), Ai.interfaceRole);
                     return;
                 }
-                Ai.loadChat(joinedArgs);
+                Ai.openChatByName(joinedArgs);
+            }
+        },
+        {
+            name: "chats",
+            description: Translation.tr("Show the list of saved chats"),
+            execute: () => {
+                root.sessionsOpen = true;
             }
         },
         {
             name: "clear",
-            description: Translation.tr("Clear chat history"),
+            description: Translation.tr("Put this chat away and start an empty one"),
             execute: () => {
-
-                Ai.clearMessages();
+                Ai.newChat();
             }
         },
         {
@@ -353,11 +367,32 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         color: Appearance.colors.colOutlineVariant
     }
 
+    Loader {
+        // The chat list as a pane, once there is room for it beside the
+        // conversation. Below that width the drawer at the bottom of this file
+        // shows the same list over it instead.
+        id: sessionPaneLoader
+        anchors {
+            left: parent.left
+            top: parent.top
+            bottom: parent.bottom
+            margins: root.padding
+        }
+        width: 260
+        active: root.sessionsOpen && root.wideEnoughForPane
+        visible: active
+
+        sourceComponent: SessionList {
+            onCloseRequested: root.sessionsOpen = false
+        }
+    }
+
     ColumnLayout {
         id: columnLayout
         anchors {
             fill: parent
             margins: root.padding
+            leftMargin: root.padding + (sessionPaneLoader.active ? sessionPaneLoader.width + root.padding : 0)
         }
         spacing: root.padding
 
@@ -507,8 +542,9 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 }
                 delegate: AiMessage {
                     required property var modelData
-                    required property int index
-                    messageIndex: index
+                    // The id, not the row: this list hides messages the model
+                    // sends itself, so a row number points at the wrong one.
+                    messageId: modelData
                     messageData: {
                         Ai.messageByID[modelData];
                     }
@@ -709,7 +745,9 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             overlayParent: messagesArea
             commandPrefix: root.commandPrefix
             inputField: messageInputField
-            onNewChatRequested: Ai.clearMessages()
+            sessionsOpen: root.sessionsOpen
+            onNewChatRequested: Ai.newChat()
+            onSessionsRequested: root.sessionsOpen = !root.sessionsOpen
         }
 
         Rectangle { // Input area
@@ -915,42 +953,23 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                         description: Translation.tr("Load prompt from %1").arg(file.target)
                                     };
                                 });
-                            } else if (messageInputField.text.startsWith(`${root.commandPrefix}save`)) {
-                                root.suggestionQuery = messageInputField.text.split(" ")[1] ?? "";
-                                const promptFileResults = Fuzzy.go(root.suggestionQuery, Ai.savedChats.map(file => {
-                                    return {
-                                        name: Fuzzy.prepare(file),
-                                        obj: file
-                                    };
-                                }), {
-                                    all: true,
-                                    key: "name"
-                                });
-                                root.suggestionList = promptFileResults.map(file => {
-                                    const chatName = FileUtils.trimFileExt(FileUtils.fileNameForPath(file.target)).trim();
-                                    return {
-                                        name: `${messageInputField.text.trim().split(" ").length == 1 ? (root.commandPrefix + "save ") : ""}${chatName}`,
-                                        displayName: `${chatName}`,
-                                        description: Translation.tr("Save chat to %1").arg(chatName)
-                                    };
-                                });
                             } else if (messageInputField.text.startsWith(`${root.commandPrefix}load`)) {
                                 root.suggestionQuery = messageInputField.text.split(" ")[1] ?? "";
-                                const promptFileResults = Fuzzy.go(root.suggestionQuery, Ai.savedChats.map(file => {
+                                const chatResults = Fuzzy.go(root.suggestionQuery, Ai.sessions.index.map(entry => {
                                     return {
-                                        name: Fuzzy.prepare(file),
-                                        obj: file
+                                        name: Fuzzy.prepare(entry.title),
+                                        obj: entry
                                     };
                                 }), {
                                     all: true,
                                     key: "name"
                                 });
-                                root.suggestionList = promptFileResults.map(file => {
-                                    const chatName = FileUtils.trimFileExt(FileUtils.fileNameForPath(file.target)).trim();
+                                root.suggestionList = chatResults.map(result => {
+                                    const chatName = result.obj.title;
                                     return {
                                         name: `${messageInputField.text.trim().split(" ").length == 1 ? (root.commandPrefix + "load ") : ""}${chatName}`,
                                         displayName: `${chatName}`,
-                                        description: Translation.tr(`Load chat from %1`).arg(file.target)
+                                        description: result.obj.preview
                                     };
                                 });
                             } else if (messageInputField.text.startsWith(`${root.commandPrefix}tool`)) {
@@ -1101,5 +1120,12 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 }
             }
         }
+    }
+
+    SessionDrawer {
+        anchors.fill: parent
+        anchors.margins: root.padding
+        shown: root.sessionsOpen && !root.wideEnoughForPane
+        onClosed: root.sessionsOpen = false
     }
 }

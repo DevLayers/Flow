@@ -6,18 +6,18 @@ Returns a single JSON document combining:
   - installed local Ollama models (if `ollama` is reachable)
   - default prompt file names (.md/.txt) under the repo's defaults/ai/prompts
   - user prompt file names (.md/.txt) under the user's ai/prompts
-  - saved AI chats (.json) under the state's user/ai/chats
+
+Chats are not listed here any more: they live in the session store, which
+`ai_sessions.py` owns.
 
 Usage:
-    ai_index.py DEFAULT_PROMPTS_DIR USER_PROMPTS_DIR AI_CHATS_DIR
-    ai_index.py --chats-only AI_CHATS_DIR   (saved_chats only, no subprocesses)
+    ai_index.py DEFAULT_PROMPTS_DIR USER_PROMPTS_DIR
 
 Output (one JSON object on stdout):
     {
         "ollama_models": ["llama3.1:8b", "qwen:7b", ...],
         "default_prompts": ["/abs/path/p1.md", ...],
-        "user_prompts":    ["/abs/path/u1.md", ...],
-        "saved_chats":     ["/abs/path/c1.json", ...]
+        "user_prompts":    ["/abs/path/u1.md", ...]
     }
 """
 
@@ -88,32 +88,23 @@ def list_ollama_models() -> list[str]:
 def main() -> int:
     argv = sys.argv[1:]
 
-    # `--chats-only CHATS_DIR` skips the ollama probe and the prompt scan.
-    # Used to refresh the saved-chat list after a save or load.
-    if argv and argv[0] == "--chats-only":
-        chats_dir = argv[1] if len(argv) > 1 else ""
-        print(json.dumps({"saved_chats": list_files(chats_dir, (".json",))}))
-        return 0
-
-    if len(argv) < 3:
+    if len(argv) < 2:
         print(
             json.dumps(
                 {
                     "ollama_models": [],
                     "default_prompts": [],
                     "user_prompts": [],
-                    "saved_chats": [],
                 }
             )
         )
         return 0
 
-    default_dir, user_dir, chats_dir = argv[0], argv[1], argv[2]
+    default_dir, user_dir = argv[0], argv[1]
     payload = {
         "ollama_models": list_ollama_models(),
         "default_prompts": list_files(default_dir, (".md", ".txt")),
         "user_prompts": list_files(user_dir, (".md", ".txt")),
-        "saved_chats": list_files(chats_dir, (".json",)),
     }
     print(json.dumps(payload))
     return 0
