@@ -360,6 +360,12 @@ Singleton {
         var edge = (root.opts && root.opts.edgeWidth) ? root.opts.edgeWidth : 24;
         var corner = (root.opts && root.opts.cornerSize) ? root.opts.cornerSize : 72;
 
+        if (px <= corner && py <= corner)
+            return "topLeftCorner";
+
+        if (px >= width - corner && py <= corner)
+            return "topRightCorner";
+
         if (px <= corner && py >= height - corner)
             return "bottomLeftCorner";
 
@@ -390,6 +396,8 @@ Singleton {
         case "rightEdge": return bindings.rightEdge ? bindings.rightEdge : "none";
         case "topEdge": return bindings.topEdge ? bindings.topEdge : "none";
         case "bottomEdge": return bindings.bottomEdge ? bindings.bottomEdge : "none";
+        case "topLeftCorner": return bindings.topLeftCorner ? bindings.topLeftCorner : "none";
+        case "topRightCorner": return bindings.topRightCorner ? bindings.topRightCorner : "none";
         case "bottomLeftCorner": return bindings.bottomLeftCorner ? bindings.bottomLeftCorner : "none";
         case "bottomRightCorner": return bindings.bottomRightCorner ? bindings.bottomRightCorner : "none";
         default: return "none";
@@ -406,6 +414,8 @@ Singleton {
         case "rightEdge":
             return { primary: -dx, offAxis: Math.abs(dy) };
         case "topEdge":
+        case "topLeftCorner":
+        case "topRightCorner":
             return { primary: dy, offAxis: Math.abs(dx) };
         case "bottomEdge":
         case "bottomLeftCorner":

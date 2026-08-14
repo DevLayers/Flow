@@ -2564,6 +2564,8 @@ Singleton {
                         property string rightEdge: "sidebarRight"
                         property string topEdge: "cheatsheet"
                         property string bottomEdge: "overview"
+                        property string topLeftCorner: "none"
+                        property string topRightCorner: "none"
                         property string bottomLeftCorner: "none"
                         property string bottomRightCorner: "osk"
                     }

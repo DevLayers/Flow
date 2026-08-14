@@ -255,6 +255,32 @@ ContentPage {
                 }
 
                 TouchGestureBindingCard {
+                    title: Translation.tr("Top-Left Corner")
+                    description: Translation.tr("Swipe downward from the top-left corner")
+                    directionIcon: "south_east"
+                    origin: "topLeftCorner"
+                    actionId: (root.opts && root.opts.bindings && root.opts.bindings.topLeftCorner) ? root.opts.bindings.topLeftCorner : "none"
+                    isHighlighted: root.previewOrigin === "topLeftCorner"
+                    onCardHovered: function(orig) { root.previewOrigin = orig; }
+                    onActionSelected: function(act) {
+                        if (Config.ready && root.opts && root.opts.bindings) root.opts.bindings.topLeftCorner = act;
+                    }
+                }
+
+                TouchGestureBindingCard {
+                    title: Translation.tr("Top-Right Corner")
+                    description: Translation.tr("Swipe downward from the top-right corner")
+                    directionIcon: "south_west"
+                    origin: "topRightCorner"
+                    actionId: (root.opts && root.opts.bindings && root.opts.bindings.topRightCorner) ? root.opts.bindings.topRightCorner : "none"
+                    isHighlighted: root.previewOrigin === "topRightCorner"
+                    onCardHovered: function(orig) { root.previewOrigin = orig; }
+                    onActionSelected: function(act) {
+                        if (Config.ready && root.opts && root.opts.bindings) root.opts.bindings.topRightCorner = act;
+                    }
+                }
+
+                TouchGestureBindingCard {
                     title: Translation.tr("Bottom-Left Corner")
                     description: Translation.tr("Swipe upward from the bottom-left corner")
                     directionIcon: "north_east"
@@ -520,6 +546,8 @@ ContentPage {
                             root.opts.bindings.rightEdge = "sidebarRight";
                             root.opts.bindings.topEdge = "cheatsheet";
                             root.opts.bindings.bottomEdge = "overview";
+                            root.opts.bindings.topLeftCorner = "none";
+                            root.opts.bindings.topRightCorner = "none";
                             root.opts.bindings.bottomLeftCorner = "none";
                             root.opts.bindings.bottomRightCorner = "osk";
                         }

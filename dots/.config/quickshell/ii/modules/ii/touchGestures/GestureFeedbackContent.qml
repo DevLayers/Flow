@@ -299,8 +299,10 @@ Item {
                     return currentOffset + 12;
                 case "rightEdge":
                     return root.width - width - currentOffset - 12;
+                case "topLeftCorner":
                 case "bottomLeftCorner":
                     return currentOffset + 16;
+                case "topRightCorner":
                 case "bottomRightCorner":
                     return root.width - width - currentOffset - 16;
                 case "topEdge":
@@ -316,6 +318,9 @@ Item {
                     return currentOffset + 12;
                 case "bottomEdge":
                     return root.height - height - currentOffset - 12;
+                case "topLeftCorner":
+                case "topRightCorner":
+                    return currentOffset + 16;
                 case "bottomLeftCorner":
                 case "bottomRightCorner":
                     return root.height - height - currentOffset - 16;

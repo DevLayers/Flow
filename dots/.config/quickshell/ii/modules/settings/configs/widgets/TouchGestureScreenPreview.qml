@@ -119,6 +119,34 @@ Rectangle {
                 Behavior on color { ColorAnimation { duration: 150 } }
             }
 
+            // Top-Left Corner Indicator
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                width: 24
+                height: 24
+                radius: Appearance.rounding.small
+                color: root.highlightedOrigin === "topLeftCorner"
+                    ? Appearance.m3colors.m3primary
+                    : Appearance.colors.colLayer3
+
+                Behavior on color { ColorAnimation { duration: 150 } }
+            }
+
+            // Top-Right Corner Indicator
+            Rectangle {
+                anchors.top: parent.top
+                anchors.right: parent.right
+                width: 24
+                height: 24
+                radius: Appearance.rounding.small
+                color: root.highlightedOrigin === "topRightCorner"
+                    ? Appearance.m3colors.m3primary
+                    : Appearance.colors.colLayer3
+
+                Behavior on color { ColorAnimation { duration: 150 } }
+            }
+
             // Bottom-Left Corner Indicator
             Rectangle {
                 anchors.bottom: parent.bottom
