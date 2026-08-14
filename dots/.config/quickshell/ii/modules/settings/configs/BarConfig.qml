@@ -15,18 +15,6 @@ Item {
     property alias contentY: page.contentY
     // ── Active sub-page URL ("" = none) ───────────────────────────────────
     property alias activeSubPage: subPageOverlay.activeSubPage
-    property int loadStage: 0
-
-    function advanceStage(nextStage) {
-        if (barConfigRoot.loadStage >= nextStage)
-            return;
-        Qt.callLater(() => {
-            if (barConfigRoot.loadStage < nextStage)
-                barConfigRoot.loadStage = nextStage;
-        });
-    }
-
-    Component.onCompleted: Qt.callLater(() => barConfigRoot.loadStage = 1)
 
     function openWidgetPage(componentId) {
         page.openWidgetPage(componentId);
@@ -565,28 +553,29 @@ Item {
         }
 
         ProgressiveSectionLoader {
+            id: layoutSectionLoader
             source: Qt.resolvedUrl("sections/BarLayoutSection.qml")
-            active: barConfigRoot.loadStage >= 1
+            active: false
             estimatedHeight: 620
             sectionTitle: Translation.tr("Layout")
             prioritizeOnViewport: true
             prioritizeOnSearch: true
-            onLoaded: barConfigRoot.advanceStage(2)
         }
 
         ProgressiveSectionLoader {
+            id: behaviorSectionLoader
             source: Qt.resolvedUrl("sections/BarBehaviorSection.qml")
-            active: barConfigRoot.loadStage >= 2
+            active: false
             estimatedHeight: 270
             sectionTitle: Translation.tr("Behavior")
             prioritizeOnViewport: true
             prioritizeOnSearch: true
-            onLoaded: barConfigRoot.advanceStage(3)
         }
 
         ProgressiveSectionLoader {
+            id: monitorsSectionLoader
             source: Qt.resolvedUrl("sections/BarMonitorsSection.qml")
-            active: barConfigRoot.loadStage >= 3
+            active: false
             estimatedHeight: 210
             sectionTitle: Translation.tr("Monitors")
             prioritizeOnViewport: true

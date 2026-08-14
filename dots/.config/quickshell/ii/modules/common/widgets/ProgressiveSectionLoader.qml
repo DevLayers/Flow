@@ -31,6 +31,9 @@ Item {
         && root.sectionTitle !== ""
         && SearchRegistry.currentSearch.toLowerCase() === root.sectionTitle.toLowerCase()
     readonly property bool nearViewport: {
+        if (root.ready || root.priorityRequested)
+            return true;
+
         const viewport = root.findViewport(root.parent);
         if (!viewport || viewport.height <= 0)
             return false;
@@ -100,7 +103,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        visible: root.active && !root.ready && root.showSkeleton
+        visible: (root.active || root.priorityRequested) && !root.ready && root.showSkeleton
         color: Appearance.colors.colLayer1
         radius: Appearance.rounding.large
 

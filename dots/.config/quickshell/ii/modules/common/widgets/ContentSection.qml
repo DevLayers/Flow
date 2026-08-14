@@ -21,6 +21,7 @@ ColumnLayout {
     property string subPage: ""
     property bool collapsible: false
     property bool expanded: true
+    readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
 
     function navigateToPage() {
         if (!root.pageId || root.pageId === "")
@@ -275,6 +276,7 @@ ColumnLayout {
 
                 Behavior on implicitHeight {
                     id: sectionContentAnim
+                    enabled: !root.performanceMode
                     NumberAnimation {
                         duration: Appearance.animation.elementMove.duration
                         easing.type: Appearance.animation.elementMove.type
@@ -290,6 +292,7 @@ ColumnLayout {
                     spacing: 4
 
                     Behavior on opacity {
+                        enabled: !root.performanceMode
                         NumberAnimation {
                             duration: root.expanded
                                 ? Appearance.animation.elementMove.duration

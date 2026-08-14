@@ -7,8 +7,27 @@ import qs.modules.common.widgets
 import qs.services
 
 ContentSection {
+    id: barLayoutSection
+
     icon: "view_stream"
     title: Translation.tr("Layout")
+
+    readonly property var usedIds: {
+        const ids = [];
+        const lists = [
+            Config.options.bar.layouts.left,
+            Config.options.bar.layouts.center,
+            Config.options.bar.layouts.right
+        ];
+        for (const list of lists) {
+            for (const item of list) {
+                ids.push(item.id);
+            }
+        }
+        return ids;
+    }
+
+    readonly property var availableComponents: BarComponentRegistry.getAvailableComponents(usedIds)
 
     ContentSubsection {
         title: Translation.tr("Left layout widgets")
@@ -18,6 +37,7 @@ ContentSection {
         ConfigListView {
             barSection: 0
             listModel: Config.options.bar.layouts.left
+            availableComponents: barLayoutSection.availableComponents
             onUpdated: (newList) => {
                 Config.options.bar.layouts.left = newList;
             }
@@ -46,6 +66,7 @@ ContentSection {
         ConfigListView {
             barSection: 1
             listModel: Config.options.bar.layouts.center
+            availableComponents: barLayoutSection.availableComponents
             enabled: !ShellModePolicy.barPositionLocked
             opacity: ShellModePolicy.barPositionLocked ? 0.4 : 1
             onUpdated: (newList) => {
@@ -62,6 +83,7 @@ ContentSection {
         ConfigListView {
             barSection: 2
             listModel: Config.options.bar.layouts.right
+            availableComponents: barLayoutSection.availableComponents
             onUpdated: (newList) => {
                 Config.options.bar.layouts.right = newList;
             }

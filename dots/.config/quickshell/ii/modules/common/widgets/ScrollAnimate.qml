@@ -9,7 +9,9 @@ Item {
     // target can opt in explicitly without paying for the animation engine in
     // Settings Performance Mode.
     property Item targetItem: parent
-    property bool active: !(Config.options?.appearance?.settingsPerformanceMode ?? false)
+    readonly property bool scrollAnimationsEnabled: Config.options?.appearance?.scrollAnimations ?? true
+    readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
+    property bool active: root.scrollAnimationsEnabled && !root.performanceMode
 
     Loader {
         active: root.active && root.targetItem !== null
@@ -34,6 +36,11 @@ Item {
                 yScale: animation.animatedScale
             }
 
+            Translate {
+                id: scrollTranslateTransform
+                y: animation.animatedTranslateY
+            }
+
             Timer {
                 id: retryTimer
                 interval: 50
@@ -48,8 +55,11 @@ Item {
                 const transforms = targetItem.transform;
                 if (transforms.indexOf(scrollScaleTransform) === -1) {
                     transforms.push(scrollScaleTransform);
-                    targetItem.transform = transforms;
                 }
+                if (transforms.indexOf(scrollTranslateTransform) === -1) {
+                    transforms.push(scrollTranslateTransform);
+                }
+                targetItem.transform = transforms;
                 attachedTarget = targetItem;
                 targetOpacityBindingEnabled = true;
             }
@@ -60,11 +70,15 @@ Item {
 
                 targetOpacityBindingEnabled = false;
                 const transforms = attachedTarget.transform;
-                const transformIndex = transforms.indexOf(scrollScaleTransform);
-                if (transformIndex !== -1) {
-                    transforms.splice(transformIndex, 1);
-                    attachedTarget.transform = transforms;
+                const scaleIdx = transforms.indexOf(scrollScaleTransform);
+                if (scaleIdx !== -1) {
+                    transforms.splice(scaleIdx, 1);
                 }
+                const transIdx = transforms.indexOf(scrollTranslateTransform);
+                if (transIdx !== -1) {
+                    transforms.splice(transIdx, 1);
+                }
+                attachedTarget.transform = transforms;
                 if (attachedTarget.opacity < 0.999)
                     attachedTarget.opacity = 1.0;
                 attachedTarget = null;
@@ -108,8 +122,10 @@ Item {
 
             readonly property real targetOpacity: isVisible ? 1.0 : 0.0
             readonly property real targetScale: isVisible ? 1.0 : 0.92
+            readonly property real targetTranslateY: isVisible ? 0 : 20
             property real animatedOpacity: 0.0
             property real animatedScale: 0.92
+            property real animatedTranslateY: 20
 
             Binding {
                 target: animation
@@ -123,6 +139,12 @@ Item {
                 value: animation.targetScale
             }
 
+            Binding {
+                target: animation
+                property: "animatedTranslateY"
+                value: animation.targetTranslateY
+            }
+
             Behavior on animatedOpacity {
                 NumberAnimation {
                     duration: Appearance.animation.elementMoveFast.duration
@@ -132,6 +154,14 @@ Item {
             }
 
             Behavior on animatedScale {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Appearance.animation.elementMove.type
+                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                }
+            }
+
+            Behavior on animatedTranslateY {
                 NumberAnimation {
                     duration: Appearance.animation.elementMove.duration
                     easing.type: Appearance.animation.elementMove.type
