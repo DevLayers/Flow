@@ -11,7 +11,7 @@ GridLayout {
 
     property var languageModel: []
 
-    columns: width >= 520 ? 3 : 1
+    columns: (width > 0 ? width >= 520 : true) ? 3 : 1
     columnSpacing: 12
     rowSpacing: 10
 

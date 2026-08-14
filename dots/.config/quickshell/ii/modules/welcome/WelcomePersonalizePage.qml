@@ -117,6 +117,7 @@ Item {
                     Layout.preferredHeight: Appearance.font.pixelSize.larger + Appearance.rounding.small
 
                     StyledText {
+                        id: paletteLabel
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
@@ -136,8 +137,12 @@ Item {
                         horizontalAlignment: Text.AlignRight
                         verticalAlignment: Text.AlignVCenter
                         opacity: text !== "" ? 1 : 0
+                        y: text !== "" ? 0 : Appearance.rounding.verysmall
 
                         Behavior on opacity {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                        Behavior on y {
                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
                     }

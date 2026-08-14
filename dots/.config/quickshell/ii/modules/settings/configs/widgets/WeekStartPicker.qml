@@ -25,7 +25,7 @@ GridLayout {
         }
     ]
 
-    columns: width >= 480 ? 2 : 1
+    columns: (width > 0 ? width >= 480 : true) ? 2 : 1
     columnSpacing: 10
     rowSpacing: 10
 

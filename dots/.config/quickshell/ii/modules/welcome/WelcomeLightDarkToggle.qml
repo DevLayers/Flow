@@ -78,11 +78,17 @@ RowLayout {
                 spacing: Appearance.rounding.small
 
                 MaterialSymbol {
+                    id: themeModeIcon
                     Layout.alignment: Qt.AlignVCenter
                     iconSize: root.toggleIconSize
                     text: dark ? "dark_mode" : "light_mode"
                     fill: toggled ? 1 : 0
                     color: button.colText
+                    rotation: toggled ? (dark ? -4 : 4) : 0
+
+                    Behavior on rotation {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
                 }
 
                 StyledText {
