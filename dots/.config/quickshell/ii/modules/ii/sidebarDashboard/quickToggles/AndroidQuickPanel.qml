@@ -299,7 +299,7 @@ AbstractQuickPanel {
                         }
                         return list;
                     }
-                    objectProp: "type"
+                    objectProp: "id"
                 }
                 delegate: AndroidToggleDelegateChooser {
                     editMode: false // Force false so they can't be dragged
@@ -450,7 +450,7 @@ AbstractQuickPanel {
                                         id: gridRepeater
                                     model: ScriptModel {
                                         values: pageContainer.packedPage.items
-                                        objectProp: "type"
+                                        objectProp: "id"
                                     }
                                     delegate: AndroidToggleDelegateChooser {
 
@@ -694,7 +694,7 @@ AbstractQuickPanel {
                 Repeater {
                     model: ScriptModel {
                         values: root.unusedToggles
-                        objectProp: "type"
+                        objectProp: "id"
                     }
                     delegate: AndroidToggleDelegateChooser {
 

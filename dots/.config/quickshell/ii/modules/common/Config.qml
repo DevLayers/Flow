@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import qs.services
 import qs.modules.common.functions
+import "../ii/sidebarDashboard/quickToggles/androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 
 Singleton {
     id: root
@@ -296,7 +297,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 5
+    readonly property int currentConfigVersion: 6
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -406,6 +407,19 @@ Singleton {
             raw.appearance.settingsPerformanceMode = raw.appearance.scrollAnimations === false
                     || raw.appearance.scrollFadeMask === false;
             console.log(`[Config] Migrated Settings performance mode to ${raw.appearance.settingsPerformanceMode}`);
+        }
+
+        // v5 -> v6: quick-toggle pages become canonical records with stable
+        // identity and explicit dimensions. The normalizer is shared with the
+        // sidebar so migration and runtime cannot disagree about defaults,
+        // duplicate handling, or allowed sizes.
+        if (from < 6 && raw.sidebar?.quickToggles?.android !== undefined) {
+            const android = raw.sidebar.quickToggles.android;
+            android.pages = QuickToggleCatalog.normalizePages(android.pages, android.columns, {
+                warn: function(message) { console.warn(message); }
+            });
+            android.layoutVersion = 2;
+            console.log("[Config] Migrated sidebar.quickToggles.android to canonical layout records");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -3002,52 +3016,53 @@ Singleton {
                     property bool useThreeWaySliders: true
                     property JsonObject android: JsonObject {
                         property int columns: 4
+                        property int layoutVersion: 2
                         property list<var> pages: [
                                 [
                                     {
-                                        "size": 4,
+                                        "id": "brightnessSlider",
                                         "sizeH": 1,
                                         "sizeW": 4,
                                         "type": "brightnessSlider"
                                     },
                                     {
-                                        "size": 4,
+                                        "id": "volumeSlider",
                                         "sizeH": 1,
                                         "sizeW": 4,
                                         "type": "volumeSlider"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "network",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "network"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "bluetooth",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "bluetooth"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "mic",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "mic"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "audio",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "audio"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "nightLight",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "nightLight"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "darkMode",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "darkMode"
