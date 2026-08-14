@@ -116,10 +116,15 @@ Rectangle {
                             CustomIcon {
                                 id: modelIcon
                                 anchors.centerIn: parent
-                                visible: messageData?.role == 'assistant' && Ai.models[messageData?.model].icon
+                                // The model may be gone from the registry: renamed, removed
+                                // from otherModels, or saved on another machine. Never deref
+                                // the model object without a guard.
+                                readonly property var messageModel: Ai.models[messageData?.model] ?? null
+
+                                visible: messageData?.role == 'assistant' && !!messageModel?.icon
                                 width: Appearance.font.pixelSize.large
                                 height: Appearance.font.pixelSize.large
-                                source: messageData?.role == 'assistant' ? Ai.models[messageData?.model].icon :
+                                source: messageData?.role == 'assistant' ? (messageModel?.icon ?? "") :
                                     messageData?.role == 'user' ? 'linux-symbolic' : 'desktop-symbolic'
 
                                 colorize: true
@@ -146,7 +151,7 @@ Rectangle {
                             elide: Text.ElideRight
                             font.pixelSize: Appearance.font.pixelSize.normal
                             color: Appearance.m3colors.m3onSecondaryContainer
-                            text: messageData?.role == 'assistant' ? Ai.models[messageData?.model].name :
+                            text: messageData?.role == 'assistant' ? (Ai.models[messageData?.model]?.name ?? messageData?.model ?? Translation.tr("Assistant")) :
                                 (messageData?.role == 'user' && SystemInfo.username) ? SystemInfo.username :
                                 Translation.tr("Interface")
                         }

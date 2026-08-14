@@ -10,6 +10,7 @@ Returns a single JSON document combining:
 
 Usage:
     ai_index.py DEFAULT_PROMPTS_DIR USER_PROMPTS_DIR AI_CHATS_DIR
+    ai_index.py --chats-only AI_CHATS_DIR   (saved_chats only, no subprocesses)
 
 Output (one JSON object on stdout):
     {
@@ -85,7 +86,16 @@ def list_ollama_models() -> list[str]:
 
 
 def main() -> int:
-    if len(sys.argv) < 4:
+    argv = sys.argv[1:]
+
+    # `--chats-only CHATS_DIR` skips the ollama probe and the prompt scan.
+    # Used to refresh the saved-chat list after a save or load.
+    if argv and argv[0] == "--chats-only":
+        chats_dir = argv[1] if len(argv) > 1 else ""
+        print(json.dumps({"saved_chats": list_files(chats_dir, (".json",))}))
+        return 0
+
+    if len(argv) < 3:
         print(
             json.dumps(
                 {
@@ -98,7 +108,7 @@ def main() -> int:
         )
         return 0
 
-    default_dir, user_dir, chats_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+    default_dir, user_dir, chats_dir = argv[0], argv[1], argv[2]
     payload = {
         "ollama_models": list_ollama_models(),
         "default_prompts": list_files(default_dir, (".md", ".txt")),

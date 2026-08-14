@@ -1058,7 +1058,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                     return {
                                         name: `${messageInputField.text.trim().split(" ").length == 1 ? (root.commandPrefix + "model ") : ""}${model.value}`,
                                         displayName: model.title,
-                                        description: model.modelProvider ? `Provider: ${model.modelProvider}` : `${Ai.currentProvider} model`
+                                        description: `Provider: ${model.modelProvider ?? Persistent.states.ai.provider}`
                                     };
                                 });
                             } else if (messageInputField.text.startsWith(`${root.commandPrefix}prompt`)) {
@@ -1280,7 +1280,9 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 ApiInputBoxIndicator {
                     // Model indicator
                     property string currentProvider: Persistent.states.ai.provider
-                    property string providerIcon: currentProvider === "openrouter" ? "openrouter-symbolic" : currentProvider === "google" ? "spark-symbolic" : "mistral-symbolic"
+                    // Take the icon from the model registry instead of restating the
+                    // provider list here — the old ternary only knew two of the five.
+                    property string providerIcon: Ai.models[currentProvider]?.icon ?? "spark-symbolic"
 
                     symbol: providerIcon
                     text: Persistent.states.ai.model // TODO: add a readable version

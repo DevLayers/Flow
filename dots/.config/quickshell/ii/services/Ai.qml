@@ -553,6 +553,42 @@ Singleton {
         }
     }
 
+    // Re-lists saved chats only, after a save or load. Deliberately not
+    // aiIndexProc: re-running the boot index would probe ollama again and
+    // re-append its models to modelList on every single save.
+    Process {
+        id: savedChatsProc
+        command: [
+            "python3",
+            Directories.scriptPath + "/ai/ai_index.py".replace(/file:\/\//, ""),
+            "--chats-only",
+            Directories.aiChats.toString().replace(/file:\/\//, "")
+        ]
+        stdout: StdioCollector {
+            id: savedChatsCollector
+            onStreamFinished: {
+                const raw = savedChatsCollector.text.trim()
+                if (raw.length === 0)
+                    return
+                try {
+                    const parsed = JSON.parse(raw)
+                    if (Array.isArray(parsed.saved_chats))
+                        root.savedChats = parsed.saved_chats
+                } catch (e) {
+                    console.log("[AI] Saved chats parse error:", e)
+                }
+            }
+        }
+    }
+
+    /**
+     * Re-reads the saved chat directory into `savedChats`.
+     */
+    function refreshSavedChats() {
+        savedChatsProc.running = false;
+        savedChatsProc.running = true;
+    }
+
     FileView {
         id: promptLoader
         watchChanges: false
@@ -1052,7 +1088,7 @@ Singleton {
         chatSaveFile.chatName = chatName.trim();
         const saveContent = JSON.stringify(root.chatToJson());
         chatSaveFile.setText(saveContent);
-        getSavedChats.running = true;
+        root.refreshSavedChats();
     }
 
     /**
@@ -1094,7 +1130,7 @@ Singleton {
         } catch (e) {
             console.log("[AI] Could not load chat: ", e);
         } finally {
-            getSavedChats.running = true;
+            root.refreshSavedChats();
         }
     }
 }

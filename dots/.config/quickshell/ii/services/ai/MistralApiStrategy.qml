@@ -120,7 +120,7 @@ ApiStrategy {
                 };
             }
 
-            if (`dataJson`.done) {
+            if (dataJson.done) {
                 return { finished: true };
             }
             
