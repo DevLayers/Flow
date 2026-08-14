@@ -11,6 +11,13 @@ QtObject {
     property string fileUri
     property string localFilePath
     property string model
+    // Reasoning, kept apart from the answer. `thought` is the summary text the
+    // model streamed; the other two are what has to be handed back verbatim on
+    // the next turn or multi-step reasoning loses its thread — Gemini's part
+    // signature, and Anthropic's signed thinking blocks.
+    property string thought
+    property string thoughtSignature
+    property var thinkingBlocks: []
     property bool thinking: true
     property bool done: false
     property var annotations: []

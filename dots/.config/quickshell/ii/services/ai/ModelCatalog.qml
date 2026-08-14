@@ -28,7 +28,7 @@ QtObject {
     property var ollamaModelNames: []
 
     /** Keys accepted from a user-defined `ai.otherModels` entry. */
-    readonly property var customModelKeys: ["name", "title", "icon", "description", "homepage", "endpoint", "model", "value", "requires_key", "key_id", "key_get_link", "key_get_description", "api_format", "extraParams", "modelProvider", "thinking", "thinkingKind", "attachments", "vision", "tools", "builtinSearch", "samplingParams", "contextWindow", "maxOutput"]
+    readonly property var customModelKeys: ["name", "title", "icon", "description", "homepage", "endpoint", "model", "value", "requires_key", "key_id", "key_get_link", "key_get_description", "api_format", "extraParams", "modelProvider", "thinking", "thinkingKind", "thinkingAlwaysOn", "quirks", "attachments", "vision", "tools", "builtinSearch", "samplingParams", "contextWindow", "maxOutput"]
 
     readonly property var providerDefs: [
         {
@@ -50,25 +50,97 @@ QtObject {
                 contextWindow: 1048576,
                 maxOutput: 65536
             },
+            // Newest first: the head of the list is what a fresh install and
+            // any chat with a model that no longer exists both fall back to.
+            // The older entries stay so a saved chat from any era still
+            // resolves to something.
             models: [
                 {
-                    value: "gemini-2.5-flash-lite",
-                    title: "Gemini 2.5 Flash-Lite",
+                    value: "gemini-3.7-flash",
+                    title: "Gemini 3.7 Flash",
                     thinking: true,
-                    thinkingKind: "gemini"
+                    thinkingKind: "gemini-level",
+                    samplingParams: false
                 },
                 {
-                    value: "gemini-2.5-flash",
-                    title: "Gemini 2.5 Flash",
+                    value: "gemini-3.6-flash",
+                    title: "Gemini 3.6 Flash",
                     thinking: true,
-                    thinkingKind: "gemini"
+                    thinkingKind: "gemini-level",
+                    samplingParams: false
+                },
+                {
+                    value: "gemini-3-pro",
+                    title: "Gemini 3 Pro",
+                    thinking: true,
+                    thinkingKind: "gemini-level",
+                    samplingParams: false
                 },
                 {
                     value: "gemini-3-flash-preview",
                     title: "Gemini 3 Flash Preview",
                     thinking: true,
-                    thinkingKind: "gemini",
+                    thinkingKind: "gemini-level",
                     samplingParams: false
+                },
+                {
+                    value: "gemini-2.5-pro",
+                    title: "Gemini 2.5 Pro",
+                    thinking: true,
+                    thinkingKind: "gemini-budget",
+                    // The only model here whose reasoning cannot be turned off.
+                    thinkingAlwaysOn: true
+                },
+                {
+                    value: "gemini-2.5-flash",
+                    title: "Gemini 2.5 Flash",
+                    thinking: true,
+                    thinkingKind: "gemini-budget",
+                    maxOutput: 8192
+                },
+                {
+                    value: "gemini-2.5-flash-lite",
+                    title: "Gemini 2.5 Flash-Lite",
+                    thinking: true,
+                    thinkingKind: "gemini-budget",
+                    maxOutput: 8192
+                }
+            ]
+        },
+        {
+            id: "anthropic",
+            name: "Anthropic",
+            icon: "bootstrap_claude.svg",
+            description: Translation.tr("Online | Claude models, from Anthropic directly"),
+            homepage: "https://console.anthropic.com",
+            endpoint: "https://api.anthropic.com/v1/messages",
+            api_format: "anthropic",
+            key_id: "anthropic",
+            key_get_link: "https://console.anthropic.com/settings/keys",
+            key_get_description: Translation.tr("**Pricing**: Pay-as-you-go (token based).\n\n**Instructions**: Log into the Anthropic Console, open Settings → API keys, and create a key."),
+            capabilities: {
+                thinking: true,
+                thinkingKind: "anthropic",
+                attachments: true,
+                vision: true,
+                tools: true,
+                builtinSearch: true,
+                contextWindow: 200000,
+                maxOutput: 64000
+            },
+            models: [
+                {
+                    value: "claude-sonnet-5",
+                    title: "Claude Sonnet 5"
+                },
+                {
+                    value: "claude-opus-5",
+                    title: "Claude Opus 5",
+                    maxOutput: 32000
+                },
+                {
+                    value: "claude-haiku-4-5-20251001",
+                    title: "Claude Haiku 4.5"
                 }
             ]
         },
@@ -84,6 +156,10 @@ QtObject {
             key_get_description: Translation.tr("**Pricing**: Pay-as-you-go (token based).\n\n" + "**Instructions**: Log into your OpenRouter account, " + "go to Keys in the top-right menu, and create an API key."),
             capabilities: {
                 tools: true
+            },
+            // Token counts are only sent if asked for.
+            quirks: {
+                usageInStream: true
             },
             models: [
                 {
@@ -112,6 +188,9 @@ QtObject {
             key_get_description: Translation.tr("**Pricing**: Pay-as-you-go.\n\n**Instructions**: Log into DeepSeek Platform, go to API Keys and create a key."),
             capabilities: {
                 tools: true
+            },
+            quirks: {
+                usageInStream: true
             },
             models: [
                 {
@@ -157,6 +236,11 @@ QtObject {
                 // Plenty of local models do handle function calling, but the
                 // daemon does not tell us which. Off unless the user opts in.
                 tools: false
+            },
+            // The daemon accepts tool turns but not the usage option, and it
+            // has no window of its own to report.
+            quirks: {
+                usageInStream: false
             },
             models: []
         },
@@ -338,13 +422,17 @@ QtObject {
             extraParams: entry.extraParams ?? ({}),
             thinking: pick("thinking", false),
             thinkingKind: pick("thinkingKind", ""),
+            thinkingAlwaysOn: pick("thinkingAlwaysOn", false),
             attachments: pick("attachments", false),
             vision: pick("vision", false),
             tools: pick("tools", true),
             builtinSearch: pick("builtinSearch", false),
             samplingParams: pick("samplingParams", true),
             contextWindow: pick("contextWindow", 0),
-            maxOutput: pick("maxOutput", 0)
+            maxOutput: pick("maxOutput", 0),
+            // Merged, not picked: a model overrides single quirks without
+            // having to restate the ones its provider already declared.
+            quirks: Object.assign({}, def.quirks ?? ({}), entry.quirks ?? ({}))
         });
     }
 

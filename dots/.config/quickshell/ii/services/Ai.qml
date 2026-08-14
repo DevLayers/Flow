@@ -10,18 +10,20 @@ import QtQuick
 import qs.services.ai
 
 /**
- * Basic service to handle LLM chats. Supports Google's and OpenAI's API formats.
- * Supports Gemini and OpenAI models.
- * Limitations:
- * - For now functions only work with Gemini API format
+ * Handles LLM chats: the conversation, the tools, and which model answers.
+ *
+ * Three wire formats are spoken, one strategy each: Google's Gemini API,
+ * Anthropic's /v1/messages, and the OpenAI-compatible /v1/chat/completions
+ * that OpenRouter, DeepSeek, Mistral and Ollama all serve. Which one a model
+ * uses is its own `api_format`; nothing here tests provider names.
  */
 Singleton {
     id: root
 
     property Component aiMessageComponent: AiMessageData {}
     property Component geminiApiStrategy: GeminiApiStrategy {}
-    property Component openaiApiStrategy: OpenAiApiStrategy {}
-    property Component mistralApiStrategy: MistralApiStrategy {}
+    property Component openAiCompatStrategy: OpenAiCompatStrategy {}
+    property Component anthropicApiStrategy: AnthropicApiStrategy {}
     readonly property string interfaceRole: "interface"
     readonly property string apiKeyEnvVarName: "API_KEY"
 
@@ -30,6 +32,9 @@ Singleton {
     // Set while a failed request waits to be sent again, so the UI can say so
     // instead of looking stuck.
     property string retryNotice: ""
+    // A tool exchange asked for another turn while the current one was still
+    // streaming. Sent as soon as it ends.
+    property bool followUpQueued: false
 
     property string systemPrompt: {
         let prompt = Config.options?.ai?.systemPrompt ?? "";
@@ -199,56 +204,55 @@ Singleton {
             "search": [],
             "none": []
         },
-        "mistral": {
+        "anthropic": {
             "functions": [
                 {
-                    "type": "function",
-                    "function": {
-                        "name": "get_shell_config",
-                        "description": "Get the desktop shell config file contents",
-                        "parameters": {}
+                    "name": "get_shell_config",
+                    "description": "Get the desktop shell config file contents",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {}
                     }
                 },
                 {
-                    "type": "function",
-                    "function": {
-                        "name": "set_shell_config",
-                        "description": "Set a field in the desktop graphical shell config file. Must only be used after `get_shell_config`.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "key": {
-                                    "type": "string",
-                                    "description": "The key to set, e.g. `bar.borderless`. MUST NOT BE GUESSED, use `get_shell_config` to see what keys are available before setting."
-                                },
-                                "value": {
-                                    "type": "string",
-                                    "description": "The value to set, e.g. `true`"
-                                }
+                    "name": "set_shell_config",
+                    "description": "Set a field in the desktop graphical shell config file. Must only be used after `get_shell_config`.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "key": {
+                                "type": "string",
+                                "description": "The key to set, e.g. `bar.borderless`. MUST NOT BE GUESSED, use `get_shell_config` to see what keys are available before setting."
                             },
-                            "required": ["key", "value"]
-                        }
+                            "value": {
+                                "type": "string",
+                                "description": "The value to set, e.g. `true`"
+                            }
+                        },
+                        "required": ["key", "value"]
                     }
                 },
                 {
-                    "type": "function",
-                    "function": {
-                        "name": "run_shell_command",
-                        "description": "Run a shell command in bash and get its output. Use this only for quick commands that don't require user interaction. For commands that require interaction, ask the user to run manually instead.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "command": {
-                                    "type": "string",
-                                    "description": "The bash command to run"
-                                }
-                            },
-                            "required": ["command"]
-                        }
+                    "name": "run_shell_command",
+                    "description": "Run a shell command in bash and get its output. Use this only for quick commands that don't require user interaction. For commands that require interaction, ask the user to run manually instead.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The bash command to run"
+                            }
+                        },
+                        "required": ["command"]
                     }
                 },
             ],
-            "search": [],
+            "search": [
+                {
+                    "type": "web_search_20250305",
+                    "name": "web_search"
+                }
+            ],
             "none": []
         }
     }
@@ -351,9 +355,15 @@ Singleton {
     }
 
     property var apiStrategies: {
-        "openai": openaiApiStrategy.createObject(this),
-        "gemini": geminiApiStrategy.createObject(this),
-        "mistral": mistralApiStrategy.createObject(this)
+        const openAiCompat = openAiCompatStrategy.createObject(this);
+        return {
+            "openai": openAiCompat,
+            // Mistral speaks the same dialect. The name is kept because user
+            // configs (and the shipped default) still ask for it.
+            "mistral": openAiCompat,
+            "gemini": geminiApiStrategy.createObject(this),
+            "anthropic": anthropicApiStrategy.createObject(this)
+        };
     }
     property ApiStrategy currentApiStrategy: apiStrategies[root.currentModelEntry?.api_format || "openai"]
 
@@ -542,7 +552,7 @@ Singleton {
     }
 
     function setTool(tool) {
-        const toolsOfFormat = root.tools[root.currentModelEntry?.api_format];
+        const toolsOfFormat = root.tools[root.currentModelEntry?.api_format] ?? root.tools["openai"];
         if (!toolsOfFormat || !(tool in toolsOfFormat)) {
             root.addMessage(Translation.tr("Invalid tool. Supported tools:\n- %1").arg(root.availableTools.join("\n- ")), root.interfaceRole);
             return false;
@@ -610,7 +620,10 @@ Singleton {
     }
 
     function markDone(message: AiMessageData) {
-        if (!message)
+        // A stream can say it is over more than once — a finish reason, then a
+        // trailing usage frame, then the process exiting. The chat is only
+        // saved, and the hook only run, for the first of them.
+        if (!message || message.done)
             return;
         message.done = true;
         if (root.postResponseHook) {
@@ -688,6 +701,7 @@ Singleton {
                 return;
 
             if (reason === "aborted") {
+                root.followUpQueued = false;
                 const note = Translation.tr("\n\n*[Stopped]*");
                 message.rawContent += note;
                 message.content += note;
@@ -710,6 +724,13 @@ Singleton {
                 const model = root.models[message.model];
                 if (model)
                     root.addApiKeyAdvice(model);
+            }
+
+            if (root.followUpQueued && reason === "done") {
+                root.followUpQueued = false;
+                root.makeRequest();
+            } else {
+                root.followUpQueued = false;
             }
         }
     }
@@ -776,7 +797,21 @@ Singleton {
      * Stops the answer being written, keeping whatever arrived so far.
      */
     function stopGeneration(): bool {
+        root.followUpQueued = false;
         return requester.abort();
+    }
+
+    /**
+     * Sends the next turn of a tool exchange. The call that asks for it is
+     * answered from inside the stream that is still running, and a request
+     * never replaces one in flight, so it waits for that stream to end.
+     */
+    function requestFollowUp() {
+        if (requester.running) {
+            root.followUpQueued = true;
+            return;
+        }
+        root.makeRequest();
     }
 
     function sendUserMessage(message) {
@@ -905,7 +940,7 @@ Singleton {
         }
         onExited: (exitCode, exitStatus) => {
             commandExecutionProc.message.functionResponse += `[[ Command exited with code ${exitCode} (${exitStatus}) ]]\n`;
-            root.makeRequest(); // Continue
+            root.requestFollowUp(); // Continue
         }
     }
 
@@ -917,11 +952,11 @@ Singleton {
                 root.currentTool = "functions";
             };
             addFunctionOutputMessage(name, Translation.tr("Switched to search mode. Continue with the user's request."));
-            root.makeRequest();
+            root.requestFollowUp();
         } else if (name === "get_shell_config") {
             const configJson = CF.ObjectUtils.toPlainObject(Config.options);
             addFunctionOutputMessage(name, JSON.stringify(configJson));
-            root.makeRequest();
+            root.requestFollowUp();
         } else if (name === "set_shell_config") {
             if (!args.changes || !Array.isArray(args.changes)) {
                 addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `changes` array."));
@@ -941,7 +976,7 @@ Singleton {
                 }
             }
             addFunctionOutputMessage(name, results.join("\n"));
-            root.makeRequest();
+            root.requestFollowUp();
         } else if (name === "run_shell_command") {
             if (!args.command || args.command.length === 0) {
                 addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `command`."));

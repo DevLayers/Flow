@@ -21,6 +21,19 @@ ApiStrategy {
         return result;
     }
 
+    /**
+     * The signature Gemini attached to the part it produced. It has to come
+     * back untouched on the next turn, or a multi-step answer loses the
+     * reasoning it was built on.
+     */
+    function signaturePart(message): var {
+        if (message.role !== "assistant" || !message.thoughtSignature || message.thoughtSignature.length === 0)
+            return ({});
+        return {
+            thoughtSignature: message.thoughtSignature
+        };
+    }
+
     function buildRequestData(model: AiModel, messages, systemPrompt: string, temperature: real, tools: list<var>, filePath: string) {
         let contents = messages.map(message => {
             // console.log("[AI] Building request data for message:", JSON.stringify(message, null, 2));
@@ -30,11 +43,11 @@ ApiStrategy {
                 return {
                     "role": geminiApiRoleName,
                     "parts": [
-                        {
+                        Object.assign({
                             functionCall: {
                                 "name": message.functionName
                             }
-                        }
+                        }, signaturePart(message))
                     ]
                 };
             }
@@ -56,9 +69,9 @@ ApiStrategy {
             return {
                 "role": geminiApiRoleName,
                 "parts": [
-                    {
+                    Object.assign({
                         text: message.rawContent
-                    },
+                    }, signaturePart(message)),
                     ...(message.fileUri && message.fileUri.length > 0 ? [
                             {
                                 "file_data": {
@@ -90,10 +103,14 @@ ApiStrategy {
                 ]
             },
             "generationConfig": {
-                "temperature": temperature,
                 "maxOutputTokens": maxOutputTokens(model)
             }
         };
+        // Gemini 3.x asks callers to leave temperature/top_p/top_k out
+        // entirely rather than send the defaults, so a model that says it no
+        // longer honours them does not get them.
+        if (model.samplingParams)
+            baseData.generationConfig.temperature = temperature;
         // print("Gemini API call payload:", JSON.stringify(baseData, null, 2));
         return model.extraParams ? Object.assign({}, baseData, model.extraParams) : baseData;
     }
@@ -160,27 +177,47 @@ ApiStrategy {
                 finished = true;
             }
 
-            // Function call handling
-            if (dataJson.candidates[0]?.content?.parts[0]?.functionCall) {
-                const functionCall = dataJson.candidates[0]?.content?.parts[0]?.functionCall;
-                message.functionName = functionCall.name;
-                message.functionCall = functionCall.name;
-                const newContent = `\n\n[[ Function: ${functionCall.name}(${JSON.stringify(functionCall.args, null, 2)}) ]]\n`;
-                message.rawContent += newContent;
-                message.content += newContent;
+            // Every part, in order. A chunk can hold a thought summary and the
+            // start of the answer at once, and reading only the first one
+            // drops whichever came second.
+            let functionCall = null;
+            const parts = dataJson.candidates[0]?.content?.parts ?? [];
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                if (part.thoughtSignature)
+                    message.thoughtSignature = part.thoughtSignature;
+
+                if (part.functionCall) {
+                    const newContent = `\n\n[[ Function: ${part.functionCall.name}(${JSON.stringify(part.functionCall.args, null, 2)}) ]]\n`;
+                    closeThought(message);
+                    message.rawContent += newContent;
+                    message.content += newContent;
+                    message.functionName = part.functionCall.name;
+                    message.functionCall = part.functionCall.name;
+                    // Gemini can ask for several calls at once. Only the first
+                    // is run: the caller answers one call per turn.
+                    if (!functionCall)
+                        functionCall = {
+                            name: part.functionCall.name,
+                            args: part.functionCall.args
+                        };
+                    continue;
+                }
+
+                if (!part.text)
+                    continue;
+                if (part.thought)
+                    appendThought(message, part.text);
+                else
+                    appendAnswer(message, part.text);
+            }
+            if (functionCall)
                 return {
-                    functionCall: {
-                        name: functionCall.name,
-                        args: functionCall.args
-                    },
+                    functionCall: functionCall,
                     finished: finished
                 };
-            }
-
-            // Normal text response
-            const responseContent = dataJson.candidates[0]?.content?.parts[0]?.text;
-            message.rawContent += responseContent;
-            message.content += responseContent;
+            if (finished)
+                closeThought(message);
 
             // Handle annotations and metadata
             const annotationSources = dataJson.candidates[0]?.groundingMetadata?.groundingChunks?.map(chunk => {
@@ -225,6 +262,7 @@ ApiStrategy {
     }
 
     function onRequestFinished(message) {
+        closeThought(message);
         if (strayBuffer.length === 0)
             return {};
         const raw = strayBuffer;
@@ -238,7 +276,7 @@ ApiStrategy {
         return {};
     }
 
-    function reset() {
+    function resetState() {
         strayBuffer = "";
     }
 

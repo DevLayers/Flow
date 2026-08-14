@@ -23,7 +23,9 @@ import QtQuick;
  * lives here, so no part of the shell has to test endpoints or provider names
  * for substrings.
  * - thinking: Model can produce reasoning/thought output
- * - thinkingKind: Which knob turns it on — "gemini", "anthropic" or "effort"
+ * - thinkingKind: Which knob turns it on — "gemini-level" (3.x), a
+ *   "gemini-budget" (2.5), "anthropic" or "effort"
+ * - thinkingAlwaysOn: Reasoning cannot be turned off for this model
  * - attachments: Model accepts file uploads
  * - vision: Model can read images
  * - tools: Model supports function calling / built-in tools
@@ -31,6 +33,10 @@ import QtQuick;
  * - samplingParams: Model still honours temperature/top_p. Newer reasoning
  *   models ignore or reject them.
  * - contextWindow / maxOutput: Token limits, 0 when unknown
+ *
+ * Quirks. Deviations from the dialect a model otherwise speaks, so one
+ * strategy can serve every OpenAI-compatible provider without knowing their
+ * names. Read as `model.quirks.<key>`, always with a default.
  */
 
 QtObject {
@@ -56,6 +62,7 @@ QtObject {
 
     property bool thinking: false
     property string thinkingKind: ""
+    property bool thinkingAlwaysOn: false
     property bool attachments: false
     property bool vision: false
     property bool tools: true
@@ -63,4 +70,5 @@ QtObject {
     property bool samplingParams: true
     property int contextWindow: 0
     property int maxOutput: 0
+    property var quirks: ({})
 }
