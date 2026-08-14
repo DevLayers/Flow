@@ -107,11 +107,11 @@ Scope {
         component: NotificationPopup {}
     }
     PanelLoader {
-        extraCondition: !(Config.ready && Config.options.osd.style === "minimalist")
+        extraCondition: !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
         component: OnScreenDisplay {}
     }
     PanelLoader {
-        extraCondition: Config.ready && Config.options.osd.style === "minimalist"
+        extraCondition: (Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
         component: MinimalistOsd {}
     }
     PanelLoader {
