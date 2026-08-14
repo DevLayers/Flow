@@ -132,7 +132,8 @@ Item {
             root.target.dragOffsetY = dy;
             var centerX = dx + root.target.width / 2;
             var centerY = dy + root.target.height / 2;
-            if (!root.isUnused && root.controller) {
+            if (!root.isUnused && root.controller
+                    && root.controller.targetPage === root.target.pageIndex) {
                 var gridPos = root.target.parent.mapFromItem(root.target, centerX, centerY);
                 root.controller.previewReorderAt(
                     root.target.pageIndex,
@@ -151,11 +152,7 @@ Item {
 
         onReleased: event => {
             if (root.target.isDragging) {
-                var targetPage = root.target.panel && root.target.panel.currentPage !== undefined
-                        ? root.target.panel.currentPage : root.target.pageIndex;
                 if (root.controller) {
-                    if (targetPage !== root.target.pageIndex)
-                        root.controller.moveToPage(targetPage);
                     root.controller.commitReorder();
                 }
                 if (root.target.panel && root.target.panel.cancelDragScroll)

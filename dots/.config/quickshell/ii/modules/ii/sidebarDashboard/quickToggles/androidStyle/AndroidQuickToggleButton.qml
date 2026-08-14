@@ -131,16 +131,10 @@ Item {
         PropertyAction { target: root; property: "_entranceDone"; value: true }
     }
 
-    // Cross-page drag: tracks which page the drag is currently hovering over
-    property int dragTargetPage: root.pageIndex
-
     property real pageScale: 1.0
 
     Connections {
         target: root.panel
-        function onDragScrollPageChanged(newPage) {
-            // Drag scroll handler
-        }
         function onCurrentPageChanged() {
             if (root.panel && root.panel.currentPage === root.pageIndex && root.pageIndex !== -1) {
                 pageEntranceAnimation.restart();

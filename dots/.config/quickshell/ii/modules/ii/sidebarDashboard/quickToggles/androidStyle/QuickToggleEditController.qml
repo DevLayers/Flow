@@ -139,6 +139,13 @@ Item {
         return previewReorder(pageIndex, index === undefined ? (draftPages[pageIndex] || []).length : index);
     }
 
+    function setTargetPage(pageIndex) {
+        if (!active || mode !== "reorder" || pageIndex < 0 || pageIndex >= draftPages.length)
+            return false;
+        targetPage = pageIndex;
+        return true;
+    }
+
     function beginResize(id, pageIndex) {
         if (!beginReorder(id, pageIndex))
             return false;
@@ -232,6 +239,11 @@ Item {
     function commitReorder() {
         if (!active || mode !== "reorder")
             return false;
+        if (targetPage >= 0 && targetPage !== sourcePage) {
+            var location = findItemInPages(draftPages, draggedId);
+            if (location.page !== targetPage)
+                moveToPage(targetPage);
+        }
         return persist(draftPages);
     }
 

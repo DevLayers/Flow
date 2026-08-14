@@ -204,14 +204,12 @@ AbstractQuickPanel {
         onTriggered: {
             if (root.dragScrollPendingPage >= 0 && root.dragScrollPendingPage < root.displayPages.length) {
                 root.currentPage = root.dragScrollPendingPage;
-                // Notify all dragging buttons about the new target page
-                root.dragScrollPageChanged(root.dragScrollPendingPage);
+                if (root.editController.active)
+                    root.editController.setTargetPage(root.dragScrollPendingPage);
             }
             root.dragScrollPendingPage = -1;
         }
     }
-
-    signal dragScrollPageChanged(int newPage)
 
     function cancelDragScroll() {
         dragScrollTimer.stop();
@@ -229,52 +227,11 @@ AbstractQuickPanel {
         if (newPage >= 0 && newPage !== dragScrollPendingPage) {
             dragScrollPendingPage = newPage;
             dragScrollTimer.restart();
-            // Update dragTargetPage on the button immediately for visual feedback
-            if (dragButton && dragButton.hasOwnProperty("dragTargetPage")) {
-                dragButton.dragTargetPage = newPage;
-            }
         } else if (newPage < 0) {
             // Back in safe zone — reset pending
             dragScrollPendingPage = -1;
             dragScrollTimer.stop();
-            if (dragButton && dragButton.hasOwnProperty("dragTargetPage")) {
-                dragButton.dragTargetPage = dragButton.pageIndex;
-            }
         }
-    }
-
-    // Move a toggle from one page to another at the drop position
-    function moveToggleToPage(buttonType, fromPage, toPage, dropAbsX, dropAbsY) {
-        if (fromPage === toPage)
-            return;
-        if (toPage < 0 || toPage >= pages.length)
-            return;
-
-        mutatePages(function (pages) {
-            if (fromPage < 0 || fromPage >= pages.length)
-                return;
-            var sourcePage = pages[fromPage];
-            if (!sourcePage)
-                return;
-
-            // Find and remove the toggle from the source page
-            var toggleData = null;
-            for (var i = 0; i < sourcePage.length; i++) {
-                if (sourcePage[i].type === buttonType) {
-                    toggleData = JSON.parse(JSON.stringify(sourcePage[i]));
-                    sourcePage.splice(i, 1);
-                    break;
-                }
-            }
-            if (!toggleData)
-                return;
-
-            // Append to the target page (position at end, layout engine will sort)
-            var targetPage = pages[toPage];
-            if (!targetPage)
-                pages[toPage] = [];
-            pages[toPage].push(toggleData);
-        });
     }
 
     Column {

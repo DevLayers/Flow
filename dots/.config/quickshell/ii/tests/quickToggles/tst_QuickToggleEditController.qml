@@ -55,6 +55,20 @@ TestCase {
         verify(controller.cancelReorder());
     }
 
+    function test_cross_page_reorder_commits_from_controller_target() {
+        var pages = [
+            [{ id: "a", type: "network", sizeW: 1, sizeH: 1 }, { id: "b", type: "bluetooth", sizeW: 1, sizeH: 1 }],
+            [{ id: "c", type: "vpn", sizeW: 1, sizeH: 1 }]
+        ];
+        fakeConfig.pages = pages;
+        controller.persistedPages = pages;
+        verify(controller.beginReorder("b", 0));
+        verify(controller.setTargetPage(1));
+        verify(controller.commitReorder());
+        compare(ids(fakeConfig.pages[0]), ["a"]);
+        compare(ids(fakeConfig.pages[1]), ["c", "b"]);
+    }
+
     function test_resize_changes_only_target_item() {
         controller.persistedPages = [[
             { id: "a", type: "network", sizeW: 1, sizeH: 1 },
