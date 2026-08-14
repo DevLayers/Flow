@@ -45,6 +45,16 @@ TestCase {
         compare(ids(fakeConfig.pages[0]), ["a", "b", "c"]);
     }
 
+    function test_pointer_reorder_uses_packed_row_major_position() {
+        fakeConfig.pages = sourcePages;
+        controller.persistedPages = sourcePages;
+        verify(controller.beginReorder("b", 0));
+        verify(controller.previewReorderAt(0, 0, 100, 50, 56, 6));
+        compare(ids(controller.draftPages[0]), ["a", "c", "b"]);
+        compare(ids(fakeConfig.pages[0]), ["a", "b", "c"]);
+        verify(controller.cancelReorder());
+    }
+
     function test_resize_changes_only_target_item() {
         controller.persistedPages = [[
             { id: "a", type: "network", sizeW: 1, sizeH: 1 },

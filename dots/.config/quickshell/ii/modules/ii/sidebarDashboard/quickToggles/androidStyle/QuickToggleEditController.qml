@@ -117,6 +117,24 @@ Item {
         return true;
     }
 
+    // Convert the pointer position into a row-major insertion point using the
+    // same packed draft that renders the grid. The controller owns the draft;
+    // delegates only provide pointer geometry.
+    function previewReorderAt(pageIndex, pointerX, pointerY, cellWidth, cellHeight, spacing) {
+        if (!active || mode !== "reorder")
+            return false;
+        if (pageIndex < 0 || pageIndex >= draftPages.length)
+            return false;
+
+        var stepX = Math.max(1, Number(cellWidth) + Number(spacing));
+        var stepY = Math.max(1, Number(cellHeight) + Number(spacing));
+        var column = Math.max(0, Math.floor(Number(pointerX) / stepX));
+        var row = Math.max(0, Math.floor(Number(pointerY) / stepY));
+        var packed = QuickToggleLayout.pack(draftPages[pageIndex] || [], root.columns);
+        var index = QuickToggleLayout.findInsertionIndex(packed.items, row, column, draggedId);
+        return previewReorder(pageIndex, index);
+    }
+
     function moveToPage(pageIndex, index) {
         return previewReorder(pageIndex, index === undefined ? (draftPages[pageIndex] || []).length : index);
     }

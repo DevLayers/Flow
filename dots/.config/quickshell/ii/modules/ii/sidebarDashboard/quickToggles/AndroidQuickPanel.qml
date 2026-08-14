@@ -72,6 +72,8 @@ AbstractQuickPanel {
         columns: root.columns
     }
 
+    property alias editController: editController
+
     readonly property list<var> displayPages: editController.active ? editController.draftPages : root.pages
 
     // Current page toggles

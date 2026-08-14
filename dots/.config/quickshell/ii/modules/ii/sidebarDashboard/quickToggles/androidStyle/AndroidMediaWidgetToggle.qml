@@ -589,47 +589,12 @@ Item {
                 }
             }
 
-            function checkForSwap(gridX, gridY) {
-                if (!root.parent)
-                    return;
-                var layout = root.parent;
-                for (var i = 0; i < layout.children.length; i++) {
-                    var sibling = layout.children[i];
-                    if (sibling === root || !sibling.visible)
-                        continue;
-
-                    if (gridX >= sibling.x && gridX < sibling.x + sibling.width && gridY >= sibling.y && gridY < sibling.y + sibling.height) {
-                        if (sibling.buttonData && sibling.buttonData.type) {
-                            var targetType = sibling.buttonData.type;
-                            var myType = root.buttonData.type;
-
-                            mutatePages(function (pages) {
-                                var page = pages[root.pageIndex];
-                                if (!page)
-                                    return;
-
-                                var myIdx = -1;
-                                var targetIdx = -1;
-                                for (var j = 0; j < page.length; j++) {
-                                    if (page[j].type === myType)
-                                        myIdx = j;
-                                    if (page[j].type === targetType)
-                                        targetIdx = j;
-                                }
-
-                                if (myIdx !== -1 && targetIdx !== -1 && myIdx !== targetIdx) {
-                                    var temp = page[myIdx];
-                                    page[myIdx] = page[targetIdx];
-                                    page[targetIdx] = temp;
-                                }
-                            });
-                            break;
-                        }
-                    }
-                }
-            }
-
             onPressed: event => {
+                if (!root.isUnused) {
+                    if (!root.panel || !root.panel.editController
+                            || !root.panel.editController.beginReorder(root.buttonData.id, root.pageIndex))
+                        return;
+                }
                 var absPos = visualButton.parent.mapFromItem(editModeInteraction, event.x, event.y);
                 pressAbsX = absPos.x;
                 pressAbsY = absPos.y;
@@ -645,7 +610,8 @@ Item {
                     var dy = absPos.y - pressAbsY;
 
                     if (!root.isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-                        root.isDragging = true;
+                        root.isDragging = root.isUnused || (root.panel && root.panel.editController
+                                                             && root.panel.editController.active);
                     }
 
                     if (root.isDragging) {
@@ -656,15 +622,33 @@ Item {
                         var centerY = root.dragAbsY + visualButton.height / 2;
 
                         var gridPos = root.parent.mapFromItem(visualButton.parent, centerX, centerY);
-                        checkForSwap(gridPos.x, gridPos.y);
+                        if (!root.isUnused && root.panel && root.panel.editController) {
+                            root.panel.editController.previewReorderAt(
+                                root.pageIndex,
+                                gridPos.x,
+                                gridPos.y,
+                                root.baseCellWidth,
+                                root.baseCellHeight,
+                                root.cellSpacing
+                            );
+                        }
                     }
                 }
             }
 
             onReleased: event => {
                 if (root.isDragging) {
+                    var targetPage = (root.panel && root.panel.currentPage !== undefined)
+                                     ? root.panel.currentPage : root.pageIndex;
+                    if (root.panel && root.panel.editController) {
+                        if (targetPage !== root.pageIndex)
+                            root.panel.editController.moveToPage(targetPage);
+                        root.panel.editController.commitReorder();
+                    }
                     root.isDragging = false;
                 } else {
+                    if (root.panel && root.panel.editController && root.panel.editController.active)
+                        root.panel.editController.cancelReorder();
                     if (!visualButton.editingRight && !visualButton.editingBottom)
                         toggleEnabled();
                 }
