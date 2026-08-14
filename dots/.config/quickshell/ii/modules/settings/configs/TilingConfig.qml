@@ -124,7 +124,17 @@ ContentPage {
             }
 
             ConfigSwitch {
-                enabled: Config.options.tiling.enable
+                enabled: Config.options.tiling.enable && Config.options.tiling.mode !== "preview"
+                buttonIcon: "back_hand"
+                text: Translation.tr("Tile by dragging a window with Super held")
+                checked: Config.options.tiling.dragQuickTile
+                onCheckedChanged: {
+                    Config.options.tiling.dragQuickTile = checked;
+                }
+            }
+
+            ConfigSwitch {
+                enabled: Config.options.tiling.enable && Config.options.tiling.dragQuickTile
                 buttonIcon: "drag_pan"
                 text: Translation.tr("Show zones when a window drag starts")
                 checked: Config.options.tiling.showOnDragStart

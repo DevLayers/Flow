@@ -111,6 +111,7 @@ Item {
             // ── Header ───────────────────────────────────────────────────────
             RowLayout {
                 Layout.fillWidth: true
+                Layout.rightMargin: 44
                 spacing: 14
 
                 Rectangle {
@@ -142,21 +143,6 @@ Item {
                         text: `${root.aa?.three ?? ""} · ${root.klass?.name ?? ""} · ${root.essentialText}`
                         color: Appearance.colors.colSubtext
                         font.pixelSize: Appearance.font.pixelSize.small
-                    }
-                }
-
-                RippleButton {
-                    implicitWidth: 36
-                    implicitHeight: 36
-                    buttonRadius: Appearance.rounding.full
-                    onClicked: root.closeRequested()
-
-                    contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
-                        horizontalAlignment: Text.AlignHCenter
-                        text: "close"
-                        iconSize: 22
-                        color: Appearance.colors.colOnLayer1
                     }
                 }
             }
@@ -291,6 +277,29 @@ Item {
                 wrapMode: Text.WordWrap
                 color: Appearance.colors.colOnLayer1
                 font.pixelSize: Appearance.font.pixelSize.small
+            }
+        }
+
+        RippleButton {
+            id: closeButton
+            z: 1
+            anchors {
+                top: card.top
+                right: card.right
+                topMargin: 14
+                rightMargin: 14
+            }
+            implicitWidth: 36
+            implicitHeight: 36
+            buttonRadius: Appearance.rounding.full
+            onClicked: root.closeRequested()
+
+            contentItem: MaterialSymbol {
+                anchors.centerIn: parent
+                horizontalAlignment: Text.AlignHCenter
+                text: "close"
+                iconSize: 22
+                color: Appearance.colors.colOnLayer1
             }
         }
     }

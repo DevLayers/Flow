@@ -11,19 +11,32 @@ Item {
 
     property int entranceTrigger: -1
 
-    property var tabButtonList: [{
-        "icon": "checklist",
-        "name": Translation.tr("Unfinished")
-    }, {
-        "name": Translation.tr("Done"),
-        "icon": "check_circle"
-    }]
+    property var tabButtonList: [
+        {
+            "icon": "checklist",
+            "name": Translation.tr("Unfinished")
+        },
+        {
+            "name": Translation.tr("Done"),
+            "icon": "check_circle"
+        }
+    ]
+    property int selectedTab: Math.max(0, Math.min(root.tabButtonList.length - 1,
+        Persistent.states.sidebar.bottomGroup.todoTab))
     property bool showAddDialog: false
     property int dialogMargins: 20
     property int fabSize: 48
     property int fabMargins: 14
 
-    Keys.onPressed: (event) => {
+    function selectTab(index) {
+        if (index < 0 || index >= root.tabButtonList.length || root.selectedTab === index)
+            return;
+
+        root.selectedTab = index;
+        Persistent.states.sidebar.bottomGroup.todoTab = index;
+    }
+
+    Keys.onPressed: event => {
         // Open add dialog on "N" (any modifiers)
         // Close dialog on Esc if open
 
@@ -48,75 +61,95 @@ Item {
 
         Toolbar {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredHeight: 48
+            Layout.preferredHeight: 52
             enableShadow: false
             colBackground: Appearance.colors.colSurfaceContainer
             ToolbarTabBar {
                 id: tabBar
                 tabButtonList: root.tabButtonList
-                currentIndex: swipeView.currentIndex
-                onCurrentIndexChanged: {
-                    if (currentIndex >= 0 && currentIndex < root.tabButtonList.length)
-                        swipeView.currentIndex = currentIndex;
-                }
+                requestOnly: true
+                currentIndex: root.selectedTab
+                onIndexSelected: root.selectTab(index)
             }
         }
 
         SwipeView {
             id: swipeView
+            property bool initialized: false
 
             Layout.topMargin: 10
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 10
             clip: true
-            currentIndex: tabBar.currentIndex
+            currentIndex: root.selectedTab
+            Component.onCompleted: initialized = true
+            onCurrentIndexChanged: {
+                if (initialized && currentIndex !== root.selectedTab)
+                    root.selectTab(currentIndex);
+            }
 
             // To Do tab
             Loader {
-                active: swipeView.currentIndex === 0
+                active: root.selectedTab === 0
                 asynchronous: true
                 sourceComponent: TaskList {
                     listBottomPadding: root.fabSize + root.fabMargins * 2
                     emptyPlaceholderIcon: "check_circle"
                     emptyPlaceholderText: Translation.tr("Nothing here!")
                     entranceTrigger: root.entranceTrigger
-                    taskList: Todo.list.map(function(item, i) {
-                        return Object.assign({}, item, { "originalIndex": i });
-                    }).filter(function(item) {
+                    taskList: Todo.list.map(function (item, i) {
+                        return Object.assign({}, item, {
+                            "originalIndex": i
+                        });
+                    }).filter(function (item) {
                         return !item.done;
-                    }).sort(function(a, b) {
-                        if (a.hasDate && !b.hasDate) return -1;
-                        if (!a.hasDate && b.hasDate) return 1;
-                        if (a.hasDate && b.hasDate) return a.date - b.date;
+                    }).sort(function (a, b) {
+                        if (a.hasDate && !b.hasDate)
+                            return -1;
+                        if (!a.hasDate && b.hasDate)
+                            return 1;
+                        if (a.hasDate && b.hasDate)
+                            return a.date - b.date;
                         return b.originalIndex - a.originalIndex;
                     })
                 }
             }
 
             Loader {
-                active: swipeView.currentIndex === 1
+                active: root.selectedTab === 1
                 asynchronous: true
                 sourceComponent: TaskList {
                     listBottomPadding: root.fabSize + root.fabMargins * 2
                     emptyPlaceholderIcon: "checklist"
                     emptyPlaceholderText: Translation.tr("Finished tasks will go here")
                     entranceTrigger: root.entranceTrigger
-                    taskList: Todo.list.map(function(item, i) {
-                        return Object.assign({}, item, { "originalIndex": i });
-                    }).filter(function(item) {
+                    taskList: Todo.list.map(function (item, i) {
+                        return Object.assign({}, item, {
+                            "originalIndex": i
+                        });
+                    }).filter(function (item) {
                         return item.done;
-                    }).sort(function(a, b) {
-                        if (a.hasDate && !b.hasDate) return -1;
-                        if (!a.hasDate && b.hasDate) return 1;
-                        if (a.hasDate && b.hasDate) return b.date - a.date;
+                    }).sort(function (a, b) {
+                        if (a.hasDate && !b.hasDate)
+                            return -1;
+                        if (!a.hasDate && b.hasDate)
+                            return 1;
+                        if (a.hasDate && b.hasDate)
+                            return b.date - a.date;
                         return b.originalIndex - a.originalIndex;
                     })
                 }
             }
-
         }
+    }
 
+    Connections {
+        target: root
+        function onSelectedTabChanged() {
+            if (swipeView.currentIndex !== root.selectedTab)
+                swipeView.currentIndex = root.selectedTab;
+        }
     }
 
     // TickTick sync indicator
@@ -134,8 +167,7 @@ Item {
             if (Todo.useTickTick) {
                 Todo.refresh();
             } else {
-                GlobalStates.settingsPendingPageName = "tasksAccounts";
-                GlobalStates.openSettings();
+                GlobalStates.openSettingsPage("tasksAccounts");
             }
         }
 
@@ -221,7 +253,6 @@ Item {
                 preventStealing: true
                 propagateComposedEvents: false
             }
-
         }
 
         // The dialog
@@ -291,7 +322,6 @@ Item {
                         color: todoInput.activeFocus ? Appearance.colors.colPrimary : "transparent"
                         radius: 1
                     }
-
                 }
 
                 RowLayout {
@@ -311,11 +341,8 @@ Item {
                         enabled: todoInput.text.length > 0
                         onClicked: dialog.addTask()
                     }
-
                 }
-
             }
-
         }
 
         Behavior on opacity {
@@ -324,9 +351,6 @@ Item {
                 easing.type: Appearance.animation.elementMoveFast.type
                 easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
-
         }
-
     }
-
 }

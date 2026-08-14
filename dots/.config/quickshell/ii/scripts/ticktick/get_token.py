@@ -18,7 +18,7 @@ def main():
     scope = "tasks:read tasks:write"
 
     # Step 1: Open browser for authorization
-    auth_url = f"https://ticktick.com/oauth/authorize?scope={urllib.parse.quote(scope)}&client_id={urllib.parse.quote(client_id)}&response_type=code&redirect_uri={urllib.parse.quote(redirect_uri)}&state=quickshell"
+    auth_url = f"https://ticktick.com/oauth/authorize?scope={urllib.parse.quote(scope, safe='')}&client_id={urllib.parse.quote(client_id, safe='')}&response_type=code&redirect_uri={urllib.parse.quote(redirect_uri, safe='')}&state=quickshell"
 
     webbrowser.open(auth_url)
 

@@ -157,8 +157,32 @@ Scope { // Scope
             exclusiveZone: root.pin ? sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin : 0
             implicitWidth: sidebarWidth
             WlrLayershell.namespace: root.isOnLeft ? "quickshell:sidebarLeft" : "quickshell:sidebarRight"
-            // Hyprland 0.49: OnDemand is Exclusive, Exclusive just breaks click-outside-to-close
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+            // Hyprland hands pointer focus to any layer surface that maps asking for keyboard
+            // interactivity, no matter where the cursor really is, and only re-evaluates it on the
+            // next pointer event — so the click meant to close the sidebar again gets spent
+            // restoring focus instead. Mapping exclusive and downgrading to on-demand right after
+            // makes Hyprland re-evaluate pointer focus itself, handing it back to whatever is
+            // actually under the cursor, while the sidebar keeps its keyboard focus.
+            // The downgrade has to happen after the surface is mapped, so it's driven by
+            // Hyprland's own openlayer event; the timer is only a fallback if that never arrives.
+            property bool keyboardExclusive: true
+            WlrLayershell.keyboardFocus: panelWindow.keyboardExclusive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
+
+            Connections {
+                target: Hyprland
+                function onRawEvent(event) {
+                    if (!panelWindow.keyboardExclusive) return;
+                    if (event.name !== "openlayer") return;
+                    if (event.data !== panelWindow.WlrLayershell.namespace) return;
+                    panelWindow.keyboardExclusive = false;
+                }
+            }
+
+            Timer {
+                id: keyboardFocusDowngrade
+                interval: 200
+                onTriggered: panelWindow.keyboardExclusive = false
+            }
             color: "transparent"
 
             anchors {
@@ -174,8 +198,11 @@ Scope { // Scope
 
             onVisibleChanged: {
                 if (visible) {
+                    keyboardFocusDowngrade.restart();
                     GlobalFocusGrab.addDismissable(panelWindow);
                 } else {
+                    keyboardFocusDowngrade.stop();
+                    panelWindow.keyboardExclusive = true;
                     GlobalFocusGrab.removeDismissable(panelWindow);
                 }
             }

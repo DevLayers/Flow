@@ -29,6 +29,11 @@ Singleton {
     property var filteredContacts: []
 
     readonly property int count: contacts ? contacts.length : 0
+    // Contacts dropped by the nameless filter, so the UI can say why the list is short
+    property int hiddenCount: 0
+
+    readonly property bool hideUnnamed: Config.options?.phone?.contacts?.hideUnnamed ?? true
+    onHideUnnamedChanged: root._updateFilteredContacts()
 
     function refresh(): void {
         if (monitorProcess.running) {
@@ -117,18 +122,30 @@ Singleton {
         return favs.indexOf(contactId) >= 0
     }
 
+    // A contact is nameless when the vCard had no name, organization, or any
+    // other human-readable field — only a number. Favorites are always kept:
+    // starring one is an explicit statement that it matters.
+    function _isNameless(contact: var): bool {
+        if (!contact || contact.nameless !== true) return false
+        return !root.isFavorite(contact.id)
+    }
+
     function _updateFilteredContacts(): void {
         if (!contacts) {
             filteredContacts = []
+            root.hiddenCount = 0
             return
         }
+        const base = root.hideUnnamed ? contacts.filter(c => !root._isNameless(c)) : contacts
+        root.hiddenCount = contacts.length - base.length
+
         const q = searchQuery.trim().toLowerCase()
         if (!q) {
-            filteredContacts = contacts
+            filteredContacts = base
             return
         }
         const cleanQ = q.replace(/[\s\-\(\)\.]/g, "")
-        filteredContacts = contacts.filter(c => {
+        filteredContacts = base.filter(c => {
             if (!c) return false
             if (c.displayName && c.displayName.toLowerCase().includes(q)) return true
             if (c.organization && c.organization.toLowerCase().includes(q)) return true

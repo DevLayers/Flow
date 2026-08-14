@@ -17,4 +17,6 @@ Rectangle {
     signal openVpnDialog
     signal openTailscaleDialog
     signal openDnsOverTlsDialog
+    signal openIdleInhibitorDialog
+    signal openScreenShaderDialog
 }

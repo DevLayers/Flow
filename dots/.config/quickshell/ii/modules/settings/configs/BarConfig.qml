@@ -15,6 +15,18 @@ Item {
     property alias contentY: page.contentY
     // ── Active sub-page URL ("" = none) ───────────────────────────────────
     property alias activeSubPage: subPageOverlay.activeSubPage
+    property int loadStage: 0
+
+    function advanceStage(nextStage) {
+        if (barConfigRoot.loadStage >= nextStage)
+            return;
+        Qt.callLater(() => {
+            if (barConfigRoot.loadStage < nextStage)
+                barConfigRoot.loadStage = nextStage;
+        });
+    }
+
+    Component.onCompleted: Qt.callLater(() => barConfigRoot.loadStage = 1)
 
     function openWidgetPage(componentId) {
         page.openWidgetPage(componentId);
@@ -59,7 +71,7 @@ Item {
                 // Locked to Default when centerInBar active
                 NoticeBox {
                     Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.centerInBar
+                    visible: ShellModePolicy.barPositionLocked
                     materialIcon: "lock"
                     text: Translation.tr("Shell mode is locked to Default while 'Dynamic Island in bar center' is active. The search runs independently of the Dynamic Island in this mode.")
                 }
@@ -69,10 +81,9 @@ Item {
 
                     currentValue: Config.options.sidebar.sidebarStyle
                     onSelected: (newValue) => {
-                        Config.options.sidebar.sidebarStyle = newValue;
+                        ShellModePolicy.setMode(newValue);
                     }
                     options: {
-                        const centerLocked = Config.options.bar.floatingNotch.centerInBar;
                         var opts = [{
                             "displayName": Translation.tr("Default"),
                             "icon": "view_sidebar",
@@ -81,10 +92,9 @@ Item {
                             "displayName": Translation.tr("Connect"),
                             "icon": "phone_android",
                             "value": "connect",
-                            "enabled": !centerLocked
+                            "enabled": ShellModePolicy.canSelectConnect
                         }];
-                        if (Config.options.bar.floatingNotch.enable && Config.options.sidebar.sidebarStyle === "connect")
-                            opts[0].enabled = false;
+                        opts[0].enabled = ShellModePolicy.canSelectDefault;
 
                         return opts;
                     }
@@ -94,9 +104,9 @@ Item {
 
             NoticeBox {
                 Layout.fillWidth: true
-                visible: Config.options.bar.floatingNotch.enable && Config.options.sidebar.sidebarStyle === "connect"
+                visible: ShellModePolicy.defaultBlockedReasonKey.length > 0
                 materialIcon: "water_drop"
-                text: Translation.tr("Default shell mode is not available while the Floating Dynamic Island is active. Disable it first to switch back.")
+                text: Translation.tr(ShellModePolicy.defaultBlockedReasonKey)
 
                 ShortcutBox {
                     targetPageId: "dynamicIsland"
@@ -128,7 +138,7 @@ Item {
                 // Locked when centerInBar: must be Top
                 NoticeBox {
                     Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.centerInBar
+                    visible: ShellModePolicy.barPositionLocked
                     materialIcon: "lock"
                     text: Translation.tr("Bar position is locked to Top while 'Dynamic Island in bar center' is active. Disable that feature first to change position.")
                 }
@@ -140,7 +150,7 @@ Item {
                         Config.options.bar.vertical = (newValue & 2) !== 0;
                     }
                     options: {
-                        const locked = Config.options.bar.floatingNotch.centerInBar;
+                        const locked = ShellModePolicy.barPositionLocked;
                         return [{
                             "displayName": Translation.tr("Top"),
                             "icon": "arrow_upward",
@@ -327,7 +337,7 @@ Item {
                 // Locked when centerInBar: only Transparent(0) or Islands(3) allowed
                 NoticeBox {
                     Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.centerInBar
+                    visible: ShellModePolicy.barPositionLocked
                     materialIcon: "lock"
                     text: Translation.tr("Bar background is locked to Transparent or Islands while 'Dynamic Island in bar center' is active. Visible and Adaptive options are unavailable.")
                 }
@@ -355,7 +365,7 @@ Item {
                         }
                     }
                     options: {
-                        const locked = Config.options.bar.floatingNotch.centerInBar;
+                        const locked = ShellModePolicy.barPositionLocked;
                         return [{
                             "displayName": Translation.tr("Visible"),
                             "icon": "visibility",
@@ -462,7 +472,7 @@ Item {
                 // Locked when centerInBar: Wrapped(3)/Edge(4) break the visual
                 NoticeBox {
                     Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.centerInBar
+                    visible: ShellModePolicy.barPositionLocked
                     materialIcon: "lock"
                     text: Translation.tr("Wrapped Frame and Edge modes are locked while 'Dynamic Island in bar center' is active. They would render floating above the island, causing visual conflicts.")
                 }
@@ -473,7 +483,7 @@ Item {
                         Config.options.appearance.fakeScreenRounding = newValue;
                     }
                     options: {
-                        const locked = Config.options.bar.floatingNotch.centerInBar;
+                        const locked = ShellModePolicy.barPositionLocked;
                         return [{
                             "displayName": Translation.tr("No"),
                             "icon": "close",
@@ -554,178 +564,33 @@ Item {
             }
         }
 
-        // ── Layout ────────────────────────────────────────────────────────
-        ContentSection {
-            icon: "view_stream"
-            title: Translation.tr("Layout")
-
-            ContentSubsection {
-                title: Translation.tr("Left layout widgets")
-                icon: "align_horizontal_left"
-                tooltip: Translation.tr("Top layout in vertical mode")
-
-                ConfigListView {
-                    barSection: 0
-                    listModel: Config.options.bar.layouts.left
-                    onUpdated: (newList) => {
-                        Config.options.bar.layouts.left = newList;
-                    }
-                }
-
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Center layout widgets")
-                icon: "align_horizontal_center"
-                tooltip: Translation.tr("Center the component with the button")
-
-                NoticeBox {
-                    Layout.fillWidth: true
-                    visible: Config.options.bar.barBackgroundStyle === 3
-                    materialIcon: "grid_view"
-                    text: Translation.tr("Widget centering is disabled when Islands bar background is active. All center widgets follow the island layout automatically.")
-                }
-
-                // CenterInBar lock: center widgets must be hidden
-                NoticeBox {
-                    Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.centerInBar
-                    materialIcon: "lock"
-                    text: Translation.tr("Center widgets are locked while 'Dynamic Island in bar center' is active. The Dynamic Island occupies the center of the bar — adding visible widgets here would conflict with it.")
-                }
-
-                ConfigListView {
-                    barSection: 1
-                    listModel: Config.options.bar.layouts.center
-                    // Disable editing center when centerInBar is active
-                    enabled: !Config.options.bar.floatingNotch.centerInBar
-                    opacity: Config.options.bar.floatingNotch.centerInBar ? 0.4 : 1
-                    onUpdated: (newList) => {
-                        Config.options.bar.layouts.center = newList;
-                    }
-                }
-
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Right layout widgets")
-                icon: "align_horizontal_right"
-                tooltip: Translation.tr("Bottom layout in vertical mode")
-
-                ConfigListView {
-                    barSection: 2
-                    listModel: Config.options.bar.layouts.right
-                    onUpdated: (newList) => {
-                        Config.options.bar.layouts.right = newList;
-                    }
-                }
-
-            }
-
+        ProgressiveSectionLoader {
+            source: Qt.resolvedUrl("sections/BarLayoutSection.qml")
+            active: barConfigRoot.loadStage >= 1
+            estimatedHeight: 620
+            sectionTitle: Translation.tr("Layout")
+            prioritizeOnViewport: true
+            prioritizeOnSearch: true
+            onLoaded: barConfigRoot.advanceStage(2)
         }
 
-        // ── Behavior ──────────────────────────────────────────────────────
-        ContentSection {
-            icon: "tune"
-            title: Translation.tr("Behavior")
-
-            ConfigSwitch {
-                buttonIcon: "visibility_off"
-                text: Translation.tr("Automatically hide")
-                checked: Config.options.bar.autoHide.enable
-                // Locked when centerInBar: DI would lose its anchor if bar auto-hides
-                enabled: !Config.options.bar.floatingNotch.centerInBar
-                onCheckedChanged: {
-                    Config.options.bar.autoHide.enable = checked;
-                }
-
-                StyledToolTip {
-                    text: Config.options.bar.floatingNotch.centerInBar ? Translation.tr("Auto-hide is locked while 'Dynamic Island in bar center' is active.") : Translation.tr("Automatically hide the bar when not in use")
-                }
-
-            }
-
-            ConfigSwitch {
-                buttonIcon: "swap_vert"
-                text: Translation.tr("Scroll actions")
-                checked: Config.options.bar.enableVolumeScroll || Config.options.bar.enableBrightnessScroll
-                configPage: Qt.resolvedUrl("widgets/BarScrollActionsConfig.qml")
-                property bool readyForToggle: false
-                Component.onCompleted: readyForToggle = true
-                onCheckedChanged: {
-                    if (!readyForToggle)
-                        return;
-                    Config.options.bar.enableVolumeScroll = checked;
-                    Config.options.bar.enableBrightnessScroll = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "tooltip"
-                text: Translation.tr("Enable tooltips")
-                checked: Config.options.bar.tooltips.enableTooltips
-                configPage: Qt.resolvedUrl("widgets/BarTooltipsConfig.qml")
-                property bool readyForToggle: false
-                Component.onCompleted: readyForToggle = true
-                onCheckedChanged: {
-                    if (!readyForToggle || !Config.ready)
-                        return;
-                    Config.options.bar.tooltips.enableTooltips = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "open_in_new"
-                text: Translation.tr("Enable popups")
-                checked: Config.options.bar.tooltips.enablePopups
-                configPage: Qt.resolvedUrl("widgets/BarPopupsConfig.qml")
-                property bool readyForToggle: false
-                Component.onCompleted: readyForToggle = true
-                onCheckedChanged: {
-                    if (!readyForToggle || !Config.ready)
-                        return;
-                    Config.options.bar.tooltips.enablePopups = checked;
-                }
-            }
-
+        ProgressiveSectionLoader {
+            source: Qt.resolvedUrl("sections/BarBehaviorSection.qml")
+            active: barConfigRoot.loadStage >= 2
+            estimatedHeight: 270
+            sectionTitle: Translation.tr("Behavior")
+            prioritizeOnViewport: true
+            prioritizeOnSearch: true
+            onLoaded: barConfigRoot.advanceStage(3)
         }
 
-        // ── Monitors ──────────────────────────────────────────────────────
-        ContentSection {
-            icon: "monitor"
-            title: Translation.tr("Monitors")
-
-            ConfigSwitch {
-                buttonIcon: "desktop_windows"
-                text: Translation.tr("Only show bar on single monitor")
-                checked: Config.options.bar.onlyShowOnSingleMonitor
-                onCheckedChanged: {
-                    Config.options.bar.onlyShowOnSingleMonitor = checked;
-                    if (checked && Config.options.bar.singleMonitorName === "" && Quickshell.screens.length > 0)
-                        Config.options.bar.singleMonitorName = Quickshell.screens[0].name;
-
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Display the bar on only one chosen monitor instead of all monitors")
-                }
-
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Selected Monitor")
-                icon: "settings_input_hdmi"
-                visible: Config.options.bar.onlyShowOnSingleMonitor
-
-                MonitorPicker {
-                    currentValue: Config.options.bar.singleMonitorName
-                    onSelected: (newValue) => {
-                        Config.options.bar.singleMonitorName = newValue;
-                    }
-                }
-
-            }
-
+        ProgressiveSectionLoader {
+            source: Qt.resolvedUrl("sections/BarMonitorsSection.qml")
+            active: barConfigRoot.loadStage >= 3
+            estimatedHeight: 210
+            sectionTitle: Translation.tr("Monitors")
+            prioritizeOnViewport: true
+            prioritizeOnSearch: true
         }
 
         // ── Widgets & Waffle Sub-Page ─────────────────────────────────────────

@@ -461,7 +461,7 @@ MouseArea {
         }
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
-        visible: batteryButton.visible || capsLockPill.visible || nextAlarmButton.visible || weatherButton.visible || layoutSwitcherButton.visible
+        visible: batteryButton.visible || capsLockPill.visible || nextAlarmButton.visible || weatherButton.visible || layoutSwitcherButton.visible || keepAwakeButton.visible
 
         ToolbarButton {
             id: batteryButton
@@ -791,6 +791,46 @@ MouseArea {
             
             onClicked: {
                 layoutDialog.toggle();
+            }
+        }
+
+        ToolbarButton {
+            id: keepAwakeButton
+            Layout.fillHeight: true
+            Layout.preferredWidth: Idle.inhibit ? (keepAwakeRow.implicitWidth + 24) : 0
+            visible: Layout.preferredWidth > 0
+            clip: true
+            pointingHandCursor: false
+
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+
+            Behavior on Layout.preferredWidth {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            contentItem: RowLayout {
+                id: keepAwakeRow
+                anchors.centerIn: parent
+                spacing: 6
+
+                MaterialSymbol {
+                    text: Idle.timed ? "hourglass_top" : "coffee"
+                    iconSize: 18
+                    color: Appearance.colors.colOnSecondaryContainer
+                    fill: 1
+                }
+
+                StyledText {
+                    text: Idle.timed ? Idle.remainingText : Translation.tr("Awake")
+                    font.weight: Font.Medium
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
             }
         }
     }

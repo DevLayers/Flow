@@ -1309,6 +1309,41 @@ Item {
             when: widgetLoader.status == Loader.Ready
         }
 
+        Binding {
+            target: widgetLoader.item
+            property: "screenWidth"
+            value: delegateRoot.screenWidth
+            when: widgetLoader.status == Loader.Ready && delegateRoot.widgetId.startsWith("ext:")
+        }
+        
+        Binding {
+            target: widgetLoader.item
+            property: "screenHeight"
+            value: delegateRoot.screenHeight
+            when: widgetLoader.status == Loader.Ready && delegateRoot.widgetId.startsWith("ext:")
+        }
+        
+        Binding {
+            target: widgetLoader.item
+            property: "scaledScreenWidth"
+            value: delegateRoot.screenWidth
+            when: widgetLoader.status == Loader.Ready && delegateRoot.widgetId.startsWith("ext:")
+        }
+        
+        Binding {
+            target: widgetLoader.item
+            property: "scaledScreenHeight"
+            value: delegateRoot.screenHeight
+            when: widgetLoader.status == Loader.Ready && delegateRoot.widgetId.startsWith("ext:")
+        }
+        
+        Binding {
+            target: widgetLoader.item
+            property: "wallpaperScale"
+            value: delegateRoot.wallpaperScale
+            when: widgetLoader.status == Loader.Ready && delegateRoot.widgetId.startsWith("ext:")
+        }
+
     }
 
     MissingWidgetPlaceholder {

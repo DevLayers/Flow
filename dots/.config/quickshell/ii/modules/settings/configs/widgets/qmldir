@@ -1,0 +1,14 @@
+module qs.modules.settings.configs.widgets
+
+BatteryOverview 1.0 BatteryOverview.qml
+BatteryUsageChart 1.0 BatteryUsageChart.qml
+LauncherPreview 1.0 LauncherPreview.qml
+NotificationPositionPicker 1.0 NotificationPositionPicker.qml
+OverviewGridPreview 1.0 OverviewGridPreview.qml
+OverviewPreviewButton 1.0 OverviewPreviewButton.qml
+PrivacyConnectionCards 1.0 PrivacyConnectionCards.qml
+TimeDatePreview 1.0 TimeDatePreview.qml
+SoundStatusHeader 1.0 SoundStatusHeader.qml
+TranslatorDefaultsPicker 1.0 TranslatorDefaultsPicker.qml
+WeekStartPicker 1.0 WeekStartPicker.qml
+WeatherLocationCard 1.0 WeatherLocationCard.qml

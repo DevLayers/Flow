@@ -166,6 +166,16 @@ ShellRoot {
         }
     }
 
+    // Welcome runs in-process so it shares Config, GlobalStates and the same
+    // Quickshell lifecycle as Settings. Unlike Settings, the onboarding is
+    // destroyed as soon as it closes so costly page trees do not stay warm.
+    Loader {
+        id: welcomeLoader
+        active: Config.ready && GlobalStates.welcomeOpen
+        asynchronous: true
+        source: "modules/welcome/WelcomeWindow.qml"
+    }
+
     // Shortcuts
     IpcHandler {
         target: "panelFamily"
@@ -182,4 +192,3 @@ ShellRoot {
         onPressed: root.cyclePanelFamily()
     }
 }
-

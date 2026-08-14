@@ -7,6 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 ContentPage {
     id: root
@@ -16,6 +17,16 @@ ContentPage {
     ContentSection {
         icon: "battery_android_full"
         title: Translation.tr("Power & Battery Management")
+
+        BatteryOverview {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 16
+        }
+
+        BatteryUsageChart {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 16
+        }
 
         ConfigSpinBox {
             icon: "warning"
@@ -106,6 +117,67 @@ ContentPage {
                         "value": "always"
                     }
                 ]
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Keep awake timers")
+            icon: "hourglass_top"
+            tooltip: Translation.tr("Right-clicking the Keep awake toggle offers these durations, and a timed session turns itself off when the time is up. The list keeps itself up to date: dial a duration the toggle doesn't offer yet and it takes the place of the oldest one.")
+            Layout.fillWidth: true
+
+            ConfigRow {
+                Layout.fillWidth: true
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Offered durations: %1").arg(Idle.quickDurations.map(minutes => Idle.formatMinutes(minutes)).join(", "))
+                    color: Appearance.colors.colSubtext
+                    wrapMode: Text.Wrap
+                }
+
+                RippleButtonWithIcon {
+                    materialIcon: "restart_alt"
+                    mainText: Translation.tr("Reset")
+                    onClicked: Idle.resetDurations()
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "notifications_active"
+                text: Translation.tr("Warn before a timer ends")
+                checked: Config.options.idle.notifyOnExpiry
+                onCheckedChanged: {
+                    Config.options.idle.notifyOnExpiry = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Sends a notification shortly before the system is allowed to sleep again, with a button to add more time")
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.idle.notifyOnExpiry
+                icon: "timer"
+                text: Translation.tr("Warn this long before (s)")
+                value: Config.options.idle.warnLeadSec
+                from: 0
+                to: 600
+                stepSize: 15
+                onValueChanged: {
+                    Config.options.idle.warnLeadSec = value;
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "more_time"
+                text: Translation.tr("Extend button adds (min)")
+                value: Config.options.idle.extendMinutes
+                from: 1
+                to: 120
+                stepSize: 5
+                onValueChanged: {
+                    Config.options.idle.extendMinutes = value;
+                }
             }
         }
     }

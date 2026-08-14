@@ -1,0 +1,7 @@
+module qs.modules.ii.background.widgets
+
+AbstractBackgroundWidget 1.0 AbstractBackgroundWidget.qml
+MissingWidgetPlaceholder 1.0 MissingWidgetPlaceholder.qml
+WidgetDelegate 1.0 WidgetDelegate.qml
+singleton WidgetsRegistry 1.0 WidgetsRegistry.qml
+WidgetStateManager 1.0 WidgetStateManager.qml

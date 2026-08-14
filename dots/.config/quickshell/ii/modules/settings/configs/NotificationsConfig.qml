@@ -4,6 +4,7 @@ import Quickshell
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 ContentPage {
     id: page
@@ -86,21 +87,60 @@ ContentPage {
             }
         }
 
-        ContentSubsection {
-            title: Translation.tr("Notification position")
-            icon: "place"
+        Rectangle {
+            id: positionCard
 
-            ConfigSelectionArray {
-                currentValue: Config.options.notifications.position
-                onSelected: newValue => { Config.options.notifications.position = newValue; }
-                options: [
-                    { displayName: Translation.tr("Top Left"),     icon: "north_west", value: "top_left" },
-                    { displayName: Translation.tr("Top Right"),    icon: "north_east", value: "top_right" },
-                    { displayName: Translation.tr("Bottom Left"),  icon: "south_west", value: "bottom_left" },
-                    { displayName: Translation.tr("Bottom Right"), icon: "south_east", value: "bottom_right" }
-                ]
+            Layout.fillWidth: true
+            implicitHeight: positionLayout.implicitHeight + Appearance.font.pixelSize.large
+            radius: Appearance.rounding.normal
+            color: Appearance.colors.colLayer1
+
+            ColumnLayout {
+                id: positionLayout
+
+                anchors.fill: parent
+                anchors.margins: Appearance.font.pixelSize.small
+                spacing: Appearance.font.pixelSize.small
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Appearance.font.pixelSize.smallest
+
+                    MaterialSymbol {
+                        text: "place"
+                        iconSize: Appearance.font.pixelSize.huge
+                        color: Appearance.colors.colPrimary
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Appearance.font.pixelSize.smallest
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Notification position")
+                            font.pixelSize: Appearance.font.pixelSize.huge
+                            font.weight: Font.DemiBold
+                            font.variableAxes: Appearance.font.variableAxes.titleRounded
+                            color: Appearance.colors.colOnLayer1
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Choose the corner where new notifications will appear.")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+
+                NotificationPositionPicker {
+                    Layout.fillWidth: true
+                }
             }
         }
+
     }
 
     ContentSection {

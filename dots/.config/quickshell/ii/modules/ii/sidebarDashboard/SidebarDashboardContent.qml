@@ -25,6 +25,8 @@ import qs.modules.ii.sidebarDashboard.localSend
 import qs.modules.ii.sidebarDashboard.vpn
 import qs.modules.ii.sidebarDashboard.tailscale
 import qs.modules.ii.sidebarDashboard.dnsOverTls
+import qs.modules.ii.sidebarDashboard.idleInhibitor
+import qs.modules.ii.sidebarDashboard.screenShader
 
 Item {
     id: root
@@ -40,7 +42,9 @@ Item {
     property bool showVpnDialog: false
     property bool showTailscaleDialog: false
     property bool showDnsOverTlsDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog
+    property bool showIdleInhibitorDialog: false
+    property bool showScreenShaderDialog: false
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog
     property bool editMode: false
 
     property int entranceTrigger: -1
@@ -77,6 +81,8 @@ Item {
                 root.showVpnDialog = false;
                 root.showTailscaleDialog = false;
                 root.showDnsOverTlsDialog = false;
+                root.showIdleInhibitorDialog = false;
+                root.showScreenShaderDialog = false;
             }
         }
     }
@@ -173,6 +179,7 @@ Item {
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
                     onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
+                    onOpenScreenShaderDialog: root.showScreenShaderDialog = true
                 }
             }
 
@@ -205,72 +212,88 @@ Item {
         }
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showAudioOutputDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: VolumeDialog {
             isSink: true
         }
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showAudioInputDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: VolumeDialog {
             isSink: false
         }
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showBluetoothDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: BluetoothDialog {}
-        onShownChanged: {
-            if (!shown) {
-                Bluetooth.defaultAdapter.discovering = false;
-            } else {
-                Bluetooth.defaultAdapter.enabled = true;
-                Bluetooth.defaultAdapter.discovering = true;
-            }
-        }
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showNightLightDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: NightLightDialog {}
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showWifiDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: WifiDialog {}
-        onShownChanged: {
-            if (!shown)
-                return;
-            Network.enableWifi();
-            Network.rescanWifi();
-        }
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showDarkModeDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: DarkModeDialog {}
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showLocalSendDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: LocalSendDialog {}
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showVpnDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: VpnDialog {}
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showTailscaleDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: TailscaleDialog {}
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showDnsOverTlsDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
         dialog: DnsOverTlsDialog {}
+    }
+
+    ToggleDialog {
+        shownPropertyString: "showIdleInhibitorDialog"
+        dialog: IdleInhibitorDialog {}
+    }
+
+    ToggleDialog {
+        shownPropertyString: "showScreenShaderDialog"
+        dialog: ScreenShaderDialog {}
     }
 
     component ToggleDialog: Loader {
@@ -336,6 +359,9 @@ Item {
             }
             function onOpenLocalSendDialog() {
                 root.showLocalSendDialog = true;
+            }
+            function onOpenIdleInhibitorDialog() {
+                root.showIdleInhibitorDialog = true;
             }
         }
     }

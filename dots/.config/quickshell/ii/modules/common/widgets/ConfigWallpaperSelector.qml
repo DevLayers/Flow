@@ -46,8 +46,8 @@ Item {
         layer.enabled: true
         layer.effect: OpacityMask {
             maskSource: Rectangle {
-                width: 360
-                height: 200
+                width: wallpaperPreview.width
+                height: wallpaperPreview.height
                 radius: Appearance.rounding.normal
             }
         }

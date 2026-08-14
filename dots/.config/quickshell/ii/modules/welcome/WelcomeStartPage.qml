@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
-import qs.modules.welcome
 
 Item {
     id: root
@@ -11,127 +11,359 @@ Item {
     signal openWifi()
     signal openBluetooth()
     signal openAudioOutput()
-    signal openSettingsPage(string pageId)
 
-    ContentPage {
+    readonly property string wifiName: Network.networkName
+        || (Network.active ? Network.active.ssid : "")
+        || Translation.tr("No network selected")
+    readonly property string bluetoothName: BluetoothStatus.firstActiveDevice
+        ? BluetoothStatus.firstActiveDevice.name
+        : Translation.tr("No device connected")
+    readonly property var bluetoothDevice: BluetoothStatus.firstActiveDevice
+    readonly property string bluetoothDeviceIcon: root.bluetoothDevice
+        ? Icons.getBluetoothDeviceMaterialSymbol(root.bluetoothDevice.icon || "")
+        : "bluetooth"
+    readonly property bool bluetoothBatteryAvailable: (root.bluetoothDevice && root.bluetoothDevice.batteryAvailable) ? true : false
+    readonly property string bluetoothBattery: root.bluetoothBatteryAvailable
+        ? String(Math.round(((root.bluetoothDevice && root.bluetoothDevice.battery !== undefined) ? root.bluetoothDevice.battery : 0) * 100)) + "%"
+        : Translation.tr("Battery unavailable")
+    readonly property string audioName: Audio.sink ? Audio.friendlyDeviceName(Audio.sink) : Translation.tr("No output detected")
+    readonly property bool wifiConnected: Network.wifiStatus === "connected"
+
+    ColumnLayout {
         anchors.fill: parent
-        bottomContentPadding: 24
+        spacing: Appearance.rounding.small
 
-        Rectangle {
+        StyledText {
             Layout.fillWidth: true
-            implicitHeight: heroLayout.implicitHeight + 48
-            radius: Appearance.rounding.large
-            color: Appearance.colors.colPrimaryContainer
+            text: Translation.tr("Connect the essentials before you start.")
+            color: Appearance.colors.colOnLayer2
+            font.pixelSize: Appearance.font.pixelSize.larger
+            font.family: Appearance.font.family.title
+            font.variableAxes: Appearance.font.variableAxes.titleRounded
+            font.weight: Font.DemiBold
+            wrapMode: Text.WordWrap
+        }
 
-            RowLayout {
-                id: heroLayout
-                anchors.fill: parent
-                anchors.margins: 24
-                spacing: 22
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: Appearance.rounding.small
 
-                MaterialShapeWrappedMaterialSymbol {
-                    Layout.alignment: Qt.AlignVCenter
-                    text: "waving_hand"
-                    shape: MaterialShape.Shape.Cookie9Sided
-                    iconSize: Appearance.font.pixelSize.huge
-                    padding: 18
-                    fill: 1
-                    color: Appearance.colors.colPrimary
-                    colSymbol: Appearance.colors.colOnPrimary
-                }
+            Rectangle {
+                id: wifiCard
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumWidth: 420
+                Layout.preferredWidth: 2
+                radius: Appearance.rounding.large
+                color: root.wifiConnected
+                    ? Appearance.colors.colPrimaryContainer
+                    : Appearance.colors.colErrorContainer
 
                 ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
+                    anchors.fill: parent
+                    anchors.margins: Appearance.rounding.large
+                    spacing: Appearance.rounding.small
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Appearance.rounding.small
+
+                        MaterialShapeWrappedMaterialSymbol {
+                            text: root.wifiConnected ? "wifi" : "wifi_off"
+                            shape: wifiButton.hovered
+                                ? MaterialShape.Shape.Sunny
+                                : MaterialShape.Shape.Cookie9Sided
+                            iconSize: Appearance.font.pixelSize.huge
+                            padding: Appearance.rounding.normal
+                            fill: 1
+                            rotation: wifiButton.hovered ? 8 : 0
+                            color: root.wifiConnected ? Appearance.colors.colPrimary : Appearance.colors.colError
+                            colSymbol: root.wifiConnected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            text: Translation.tr("Wi-Fi")
+                            color: root.wifiConnected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer
+                            font.family: Appearance.font.family.title
+                            font.variableAxes: Appearance.font.variableAxes.titleRounded
+                            font.pixelSize: Appearance.font.pixelSize.hugeass
+                            font.weight: Font.Bold
+                            elide: Text.ElideRight
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Pill {
+                            id: wifiStatusChip
+                            Layout.alignment: Qt.AlignVCenter
+                            implicitWidth: wifiStatusChipContent.implicitWidth + Appearance.rounding.normal * 2
+                            implicitHeight: Appearance.font.pixelSize.huge + Appearance.rounding.small
+                            color: root.wifiConnected
+                                ? Appearance.colors.colPrimary
+                                : Appearance.colors.colError
+
+                            Behavior on color {
+                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                            }
+
+                            RowLayout {
+                                id: wifiStatusChipContent
+                                anchors.fill: parent
+                                anchors.leftMargin: Appearance.rounding.small
+                                anchors.rightMargin: Appearance.rounding.small
+                                spacing: Appearance.rounding.verysmall
+
+                                MaterialSymbol {
+                                    text: root.wifiConnected ? "check" : "error"
+                                    iconSize: Appearance.font.pixelSize.small
+                                    color: root.wifiConnected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
+                                }
+
+                                StyledText {
+                                    text: root.wifiConnected
+                                        ? Translation.tr("Connected")
+                                        : Translation.tr("Not connected")
+                                    color: root.wifiConnected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.weight: Font.Bold
+                                }
+                            }
+                        }
+                    }
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: Translation.tr("Welcome to illogical-impulse")
-                        color: Appearance.colors.colOnPrimaryContainer
+                        text: root.wifiName
+                        color: root.wifiConnected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer
                         font.family: Appearance.font.family.title
-                        font.pixelSize: Appearance.font.pixelSize.huge
-                        font.variableAxes: Appearance.font.variableAxes.title
-                        wrapMode: Text.WordWrap
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.weight: Font.Bold
+                        elide: Text.ElideRight
                     }
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: Translation.tr("Take a quick tour, connect the essentials and make II feel like yours. Every step is optional.")
-                        color: Appearance.colors.colOnPrimaryContainer
-                        font.pixelSize: Appearance.font.pixelSize.normal
+                        text: Network.wifiStatus === "connected"
+                            ? Translation.tr("Wireless connection is active.")
+                            : Translation.tr("Choose a network to bring your desktop online.")
+                        color: root.wifiConnected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer
+                        font.family: Appearance.font.family.main
+                        font.variableAxes: Appearance.font.variableAxes.rounded
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.weight: Font.DemiBold
                         wrapMode: Text.WordWrap
+                    }
+
+                    Item { Layout.fillHeight: true }
+
+                    RippleButtonWithIcon {
+                        id: wifiButton
+                        Layout.alignment: Qt.AlignLeft
+                        Layout.fillWidth: true
+                        implicitHeight: 60
+                        hoverEnabled: true
+                        buttonRadius: Appearance.rounding.full
+                        horizontalPadding: Appearance.rounding.large
+                        materialIcon: "router"
+                        mainText: Translation.tr("Set up Wi-Fi")
+                        mainTextWeight: Font.Bold
+                        mainTextFontFamily: Appearance.font.family.title
+                        mainTextVariableAxes: Appearance.font.variableAxes.titleRounded
+                        centerContent: true
+                        iconPixelSize: Appearance.font.pixelSize.huge
+                        textPixelSize: Appearance.font.pixelSize.larger
+                        contentSpacing: Appearance.rounding.small
+                        colText: root.wifiConnected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
+                        colBackground: root.wifiConnected ? Appearance.colors.colPrimary : Appearance.colors.colError
+                        colBackgroundHover: root.wifiConnected ? Appearance.colors.colPrimaryHover : Appearance.colors.colErrorHover
+                        colBackgroundActive: root.wifiConnected ? Appearance.colors.colPrimaryActive : Appearance.colors.colErrorActive
+                        colRipple: root.wifiConnected ? Appearance.colors.colPrimaryActive : Appearance.colors.colErrorContainerActive
+                        onClicked: root.openWifi()
                     }
                 }
             }
-        }
 
-        ContentSection {
-            Layout.fillWidth: true
-            icon: "tune"
-            title: Translation.tr("Get connected")
-
-            StyledText {
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: Translation.tr("These are the same quick controls available in the dashboard.")
-                color: Appearance.colors.colOnLayer2
-                font.pixelSize: Appearance.font.pixelSize.small
-                wrapMode: Text.WordWrap
-            }
+                Layout.fillHeight: true
+                Layout.minimumWidth: 300
+                Layout.preferredWidth: 1
+                spacing: Appearance.rounding.small
 
-            GridLayout {
-                Layout.fillWidth: true
-                columns: width >= 860 ? 3 : 1
-                columnSpacing: 12
-                rowSpacing: 12
-
-                WelcomeActionCard {
+                Rectangle {
+                    id: bluetoothCard
                     Layout.fillWidth: true
-                    materialIcon: Network.materialSymbol
-                    title: Translation.tr("Wi-Fi")
-                    description: Network.wifiStatus === "connected"
-                        ? Translation.tr("Connected and ready")
-                        : Translation.tr("Choose a wireless network")
-                    statusText: Network.wifiStatus === "connected"
-                        ? (Network.networkName || Network.active?.ssid || Translation.tr("Connected"))
-                        : Translation.tr("Not connected")
-                    onClicked: root.openWifi()
+                    Layout.fillHeight: true
+                    radius: Appearance.rounding.large
+                    color: Appearance.colors.colLayer1
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: Appearance.rounding.normal
+                        spacing: Appearance.rounding.small
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Appearance.rounding.small
+                            MaterialShapeWrappedMaterialSymbol {
+                                text: BluetoothStatus.connected ? "bluetooth_connected" : "bluetooth"
+                                shape: bluetoothButton.hovered
+                                    ? MaterialShape.Shape.Burst
+                                    : MaterialShape.Shape.Cookie7Sided
+                                iconSize: Appearance.font.pixelSize.huge
+                                padding: Appearance.rounding.small
+                                rotation: bluetoothButton.hovered ? -8 : 0
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Bluetooth")
+                                color: Appearance.colors.colOnLayer1
+                                font.family: Appearance.font.family.title
+                                font.variableAxes: Appearance.font.variableAxes.titleRounded
+                                font.pixelSize: Appearance.font.pixelSize.huge
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Appearance.rounding.verysmall
+
+                            MaterialSymbol {
+                                text: root.bluetoothDeviceIcon
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: Appearance.colors.colOnLayer2
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.bluetoothName
+                                color: Appearance.colors.colOnLayer2
+                                font.family: Appearance.font.family.main
+                                font.variableAxes: Appearance.font.variableAxes.rounded
+                                font.pixelSize: Appearance.font.pixelSize.larger
+                                font.weight: Font.Bold
+                                elide: Text.ElideRight
+                            }
+
+                            StyledText {
+                                visible: root.bluetoothBatteryAvailable
+                                text: root.bluetoothBattery
+                                color: Appearance.colors.colOnLayer2
+                                font.family: Appearance.font.family.title
+                                font.variableAxes: Appearance.font.variableAxes.titleRounded
+                                font.pixelSize: Appearance.font.pixelSize.larger
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        Item { Layout.fillHeight: true }
+
+                        RippleButtonWithIcon {
+                            id: bluetoothButton
+                            Layout.fillWidth: true
+                            implicitHeight: 58
+                            hoverEnabled: true
+                            buttonRadius: Appearance.rounding.full
+                            horizontalPadding: Appearance.rounding.large
+                            materialIcon: "bluetooth"
+                            mainText: Translation.tr("Set up")
+                            mainTextWeight: Font.Bold
+                            mainTextFontFamily: Appearance.font.family.title
+                            mainTextVariableAxes: Appearance.font.variableAxes.titleRounded
+                            centerContent: true
+                            iconPixelSize: Appearance.font.pixelSize.huge
+                            textPixelSize: Appearance.font.pixelSize.larger
+                            contentSpacing: Appearance.rounding.small
+                            colText: Appearance.colors.colOnSecondaryContainer
+                            colBackground: Appearance.colors.colSecondaryContainer
+                            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                            colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+                            colRipple: Appearance.colors.colSecondaryContainerActive
+                            onClicked: root.openBluetooth()
+                        }
+                    }
                 }
 
-                WelcomeActionCard {
+                Rectangle {
+                    id: audioCard
                     Layout.fillWidth: true
-                    materialIcon: BluetoothStatus.connected ? "bluetooth_connected" : "bluetooth"
-                    title: Translation.tr("Bluetooth")
-                    description: BluetoothStatus.connected
-                        ? Translation.tr("Manage connected devices")
-                        : Translation.tr("Pair headphones and accessories")
-                    statusText: BluetoothStatus.connected
-                        ? (BluetoothStatus.firstActiveDevice?.name || Translation.tr("Device connected"))
-                        : (BluetoothStatus.enabled ? Translation.tr("On") : Translation.tr("Off"))
-                    onClicked: root.openBluetooth()
+                    Layout.fillHeight: true
+                    radius: Appearance.rounding.large
+                    color: Appearance.colors.colLayer1
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: Appearance.rounding.normal
+                        spacing: Appearance.rounding.small
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Appearance.rounding.small
+                            MaterialShapeWrappedMaterialSymbol {
+                                text: Audio.muted ? "volume_off" : "volume_up"
+                                shape: audioButton.hovered
+                                    ? MaterialShape.Shape.SoftBurst
+                                    : MaterialShape.Shape.Cookie7Sided
+                                iconSize: Appearance.font.pixelSize.huge
+                                padding: Appearance.rounding.small
+                                rotation: audioButton.hovered ? 8 : 0
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Audio")
+                                color: Appearance.colors.colOnLayer1
+                                font.family: Appearance.font.family.title
+                                font.variableAxes: Appearance.font.variableAxes.titleRounded
+                                font.pixelSize: Appearance.font.pixelSize.huge
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Audio.sink
+                                ? Translation.tr("%1 · %2%").arg(root.audioName).arg(String(Math.round(Audio.value * 100)))
+                                : root.audioName
+                            color: Appearance.colors.colOnLayer2
+                            font.family: Appearance.font.family.main
+                            font.variableAxes: Appearance.font.variableAxes.rounded
+                            font.pixelSize: Appearance.font.pixelSize.larger
+                            font.weight: Font.Bold
+                            elide: Text.ElideRight
+                        }
+
+                        Item { Layout.fillHeight: true }
+
+                        RippleButtonWithIcon {
+                            id: audioButton
+                            Layout.fillWidth: true
+                            implicitHeight: 58
+                            hoverEnabled: true
+                            buttonRadius: Appearance.rounding.full
+                            horizontalPadding: Appearance.rounding.large
+                            materialIcon: "tune"
+                            mainText: Translation.tr("Choose output")
+                            mainTextWeight: Font.Bold
+                            mainTextFontFamily: Appearance.font.family.title
+                            mainTextVariableAxes: Appearance.font.variableAxes.titleRounded
+                            centerContent: true
+                            iconPixelSize: Appearance.font.pixelSize.huge
+                            textPixelSize: Appearance.font.pixelSize.larger
+                            contentSpacing: Appearance.rounding.small
+                            colText: Appearance.colors.colOnSecondaryContainer
+                            colBackground: Appearance.colors.colSecondaryContainer
+                            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                            colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+                            colRipple: Appearance.colors.colSecondaryContainerActive
+                            onClicked: root.openAudioOutput()
+                        }
+                    }
                 }
-
-                WelcomeActionCard {
-                    Layout.fillWidth: true
-                    materialIcon: Audio.muted ? "volume_off" : "volume_up"
-                    title: Translation.tr("Audio output")
-                    description: Translation.tr("Choose speakers and adjust apps")
-                    statusText: Audio.sink
-                        ? Translation.tr("%1 · %2%").arg(Audio.friendlyDeviceName(Audio.sink)).arg(String(Math.round(Audio.value * 100)))
-                        : Translation.tr("No output detected")
-                    onClicked: root.openAudioOutput()
-                }
-            }
-        }
-
-        NoticeBox {
-            Layout.fillWidth: true
-            materialIcon: "info"
-            text: Translation.tr("You can revisit every choice later. Super + I opens the complete Settings app.")
-
-            RippleButtonWithIcon {
-                materialIcon: "settings"
-                mainText: Translation.tr("Open Settings")
-                onClicked: root.openSettingsPage("")
             }
         }
     }

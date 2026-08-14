@@ -16,7 +16,35 @@ import "../../bar/shared/cards"
 
 WindowDialog {
     id: root
+    // Dashboard keeps the historical sidebar-close behaviour. Other hosts
+    // (for example Welcome) can keep their owner untouched.
+    property bool closeOwningSidebarOnDetails: true
+    property bool showDetailsAction: true
+
+    signal detailsRequested()
+
     backgroundHeight: 600
+
+    function prepareForOpen() {
+        if (!Bluetooth.defaultAdapter)
+            return;
+        Bluetooth.defaultAdapter.enabled = true;
+        Bluetooth.defaultAdapter.startDiscovery();
+    }
+
+    function cleanupAfterClose() {
+        if (Bluetooth.defaultAdapter?.discovering)
+            Bluetooth.defaultAdapter.stopDiscovery();
+    }
+
+    onShowChanged: {
+        if (show)
+            root.prepareForOpen();
+        else
+            root.cleanupAfterClose();
+    }
+
+    Component.onDestruction: root.cleanupAfterClose()
 
     readonly property var connectedDevices: BluetoothStatus.friendlyDeviceList.filter(d => d.connected)
     readonly property var savedDevices: BluetoothStatus.friendlyDeviceList.filter(d => d.paired && !d.connected)
@@ -364,6 +392,7 @@ WindowDialog {
         // Details button with only a border and no fill
         RippleButton {
             id: detailsBtn
+            visible: root.showDetailsAction
             buttonRadius: Appearance.rounding.full
             colBackground: "transparent"
             colBackgroundHover: "transparent"
@@ -397,7 +426,9 @@ WindowDialog {
             }
             onClicked: {
                 Quickshell.execDetached(["bash", "-c", `${Config.options.apps.bluetooth}`]);
-                GlobalStates.sidebarRightOpen = false;
+                root.detailsRequested();
+                if (root.closeOwningSidebarOnDetails)
+                    GlobalStates.sidebarRightOpen = false;
             }
         }
 

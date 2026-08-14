@@ -16,8 +16,10 @@ DockButton {
     property int lastFocused: -1
 
     readonly property real dockHeight: Config.options?.dock.height ?? 60
-    property int dotMargin: Math.round(dockHeight * 0.2) - 2
-    property int dotMarginV: Math.round(dockHeight * 0.12) - 2
+    // The delegate wrapper owns the dock geometry. Keep the button on that
+    // same slot so its indicator can sit outside the icon without shifting it.
+    readonly property real slotWidth: root.dockContent?.buttonSlotSize ?? root.buttonSize
+    readonly property real slotHeight: root.dockContent ? (root.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight) : root.buttonSize
 
     readonly property var desktopEntry: appToplevel ? TaskbarApps.getCachedDesktopEntry(appToplevel.appId) : null
     property bool isVertical: dockContent?.isVertical ?? false
@@ -60,8 +62,10 @@ DockButton {
     readonly property string dockPos: dockContent?.dockPos ?? "bottom"
 
     readonly property real effectiveBounceOffset: {
-        if (root.dockPos === "top") return -root.launchBounceY;
-        if (root.dockPos === "left") return -root.launchBounceY;
+        if (root.dockPos === "top")
+            return -root.launchBounceY;
+        if (root.dockPos === "left")
+            return -root.launchBounceY;
         return root.launchBounceY;
     }
 
@@ -93,7 +97,8 @@ DockButton {
     }
 
     function triggerLaunchBounce() {
-        if (!enableLaunchBounce) return;
+        if (!enableLaunchBounce)
+            return;
         launchBounceAnim.stop();
         launchBounceY = 0;
         launchBounceAnim.start();
@@ -107,6 +112,8 @@ DockButton {
 
     scale: (_pressed ? 0.88 : 1.0) * magScale
     z: magScale > 1.01 ? Math.round(magScale * 100) : 1
+    width: root.slotWidth
+    height: root.slotHeight
 
     // Hover-only MouseArea for running apps (shows preview popup)
     Loader {
@@ -241,7 +248,8 @@ DockButton {
     Connections {
         target: Notifications
         function onNotification(notif) {
-            if (!notif) return;
+            if (!notif)
+                return;
             var targetName = (root.desktopEntry?.name ?? root.appToplevel?.appId ?? "").toLowerCase();
             var appName = (notif.appName || "").toLowerCase();
             if (targetName !== "" && appName !== "" && (appName === targetName || targetName.includes(appName) || appName.includes(targetName))) {
@@ -262,8 +270,6 @@ DockButton {
     DockAppIcon {
         z: 0
         anchors.centerIn: parent
-        anchors.verticalCenterOffset: !root.isVertical ? (root.dockPos === "top" ? 3 : -3) : 0
-        anchors.horizontalCenterOffset: root.isVertical ? (root.dockPos === "right" ? 3 : -3) : 0
     }
 
     DockTooltip {

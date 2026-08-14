@@ -49,7 +49,21 @@ GridLayout {
         }
     }
 
+    Timer {
+        id: loadTimer
+        interval: 20
+        repeat: true
+        running: false
+
+        onTriggered: {
+            root.loadedCount += 1;
+
+            if (root.loadedCount >= root.colorSchemes.length)
+                loadTimer.stop();
+        }
+    }
+
     Component.onCompleted: {
-        root.loadedCount = root.colorSchemes.length;
+        Qt.callLater(() => loadTimer.start());
     }
 }

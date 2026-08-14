@@ -4,9 +4,9 @@ import QtQuick
 import QtQuick.Layouts
 import QtQml.Models
 
+import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.services
 
 Rectangle {
     id: root
@@ -49,32 +49,12 @@ Rectangle {
     */
     function initilizateLayout(list) {
         const source = list || [];
-        const initializedLayout = source.map(comp => initilizateComponent(comp));
-
-        // Config layouts are already normalized in the normal case. Avoid
-        // assigning a fresh list back to Config during page construction:
-        // list<var> emits a change even when the values are equivalent, which
-        // otherwise retriggers all bar layout consumers and schedules a disk
-        // write for each of the three editors.
-        let needsNormalization = source.length !== initializedLayout.length;
-        if (!needsNormalization) {
-            for (let i = 0; i < source.length; ++i) {
-                const original = source[i];
-                const normalized = initializedLayout[i];
-                const keys = original ? Object.keys(original) : [];
-                const hasOnlyLayoutFields = keys.length === 3 &&
-                        keys.indexOf("id") !== -1 &&
-                        keys.indexOf("centered") !== -1 &&
-                        keys.indexOf("visible") !== -1;
-                if (!original || !hasOnlyLayoutFields || original.id !== normalized.id ||
-                        original.centered !== normalized.centered ||
-                        original.visible !== normalized.visible) {
-                    needsNormalization = true;
-                    break;
-                }
-            }
-        }
-
+        let needsNormalization = false;
+        const initializedLayout = source.map(comp => {
+            if (comp.centered === undefined || comp.visible === undefined)
+                needsNormalization = true;
+            return initilizateComponent(comp);
+        });
         if (needsNormalization)
             root.updated(initializedLayout);
     }
@@ -131,7 +111,9 @@ Rectangle {
         model: visualModel
 
         spacing: 4
-        cacheBuffer: 50
+        cacheBuffer: 0
+        animateAppearance: !Config.options?.appearance?.settingsPerformanceMode
+        animateMovement: !Config.options?.appearance?.settingsPerformanceMode
     }
 
     RowLayout {
@@ -145,10 +127,14 @@ Rectangle {
 
         spacing: 4
 
-        StyledComboBox {
-            id: componentSelector
+            StyledComboBox {
+                id: componentSelector
 
-            topRightRadius: Appearance.rounding.verysmall
+                // Let the selector yield width to the action button on narrow
+                // Settings windows instead of pushing the row past its clip.
+                Layout.minimumWidth: 0
+
+                topRightRadius: Appearance.rounding.verysmall
             bottomRightRadius: Appearance.rounding.verysmall
 
             buttonIcon: "box"

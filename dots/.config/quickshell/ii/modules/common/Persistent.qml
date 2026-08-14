@@ -146,6 +146,8 @@ Singleton {
                 property JsonObject bottomGroup: JsonObject {
                     property bool collapsed: false
                     property int tab: 0
+                    property int todoTab: 0
+                    property int timerTab: 0
                 }
             }
 
@@ -160,6 +162,8 @@ Singleton {
 
             property JsonObject idle: JsonObject {
                 property bool inhibit: false
+                property real expiresAt: 0 // Epoch ms; 0 means indefinite. Must be real, not int
+                property real durationMinutes: 0 // Preset the timed session started from, 0 if none
                 property string sessionId: ""
             }
 

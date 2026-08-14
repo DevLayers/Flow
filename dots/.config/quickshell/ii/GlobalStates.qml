@@ -109,6 +109,12 @@ Singleton {
     property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""
     property string settingsPendingPageName: ""
+    // Welcome is an in-process window. Keep its lifecycle in the shared state
+    // graph so first-run, keybinds and Settings deep links all use one owner.
+    property bool welcomeOpen: false
+    // A serial makes repeated requests observable even when the same page is
+    // requested twice while Settings is already visible.
+    property int settingsNavigationRequest: 0
     property string activeLeftSidebarMonitor: ""
     property string activeRightSidebarMonitor: ""
 
@@ -283,6 +289,10 @@ Singleton {
 
     function launchVideoEditor(path) {
         root.videoEditorPath = path;
+        // The "Recording Finished" prompt is opt-out: keep the path around so the
+        // editor can still be opened manually, just don't pop anything up.
+        if (!Config.options.screenRecord.showEditPrompt)
+            return;
         root.videoEditorPopupOpen = true;
     }
 
@@ -301,6 +311,57 @@ Singleton {
         root.settingsOpen = true;
     }
 
+    function openSettingsPage(pageId, subPageId, sectionId) {
+        const targetSubPage = subPageId || "";
+        if (!pageId || pageId === "") {
+            root.settingsPendingPageName = "";
+            root.settingsPendingSubPage = targetSubPage;
+            root.settingsOpen = true;
+            return;
+        }
+
+        if (SettingsPageRegistry.pageIndexById(pageId) < 0)
+            return;
+
+        root.settingsPendingPageName = pageId;
+        root.settingsPendingSubPage = targetSubPage;
+        root.settingsNavigationRequest += 1;
+        root.settingsOpen = true;
+    }
+
+    function consumePendingSettingsPage() {
+        const pending = root.settingsPendingPageName;
+        root.settingsPendingPageName = "";
+        return pending;
+    }
+
+    function toggleWelcome() {
+        root.welcomeOpen = !root.welcomeOpen;
+    }
+
+    function openWelcome() {
+        root.welcomeOpen = true;
+    }
+
+    function closeWelcome() {
+        root.welcomeOpen = false;
+    }
+
+    function toggleCheatsheet() {
+        root.cheatsheetOpen = !root.cheatsheetOpen;
+    }
+
+    function openCheatsheet() {
+        if (root.cheatsheetOpen) {
+            root.cheatsheetOpen = false;
+        }
+        root.cheatsheetOpen = true;
+    }
+
+    function closeCheatsheet() {
+        root.cheatsheetOpen = false;
+    }
+
     IpcHandler {
         target: "settings"
 
@@ -311,6 +372,43 @@ Singleton {
         function open(): void {
             root.openSettings();
         }
+
+        function openPage(pageId: string): void {
+            root.openSettingsPage(pageId);
+        }
+
+    }
+
+    IpcHandler {
+        target: "welcome"
+
+        function toggle(): void {
+            root.toggleWelcome();
+        }
+
+        function open(): void {
+            root.openWelcome();
+        }
+
+        function close(): void {
+            root.closeWelcome();
+        }
+    }
+
+    IpcHandler {
+        target: "cheatsheet"
+
+        function toggle(): void {
+            root.toggleCheatsheet();
+        }
+
+        function open(): void {
+            root.openCheatsheet();
+        }
+
+        function close(): void {
+            root.closeCheatsheet();
+        }
     }
 
     GlobalShortcut {
@@ -319,24 +417,7 @@ Singleton {
         onPressed: root.toggleSettings()
     }
 
-    readonly property bool connectModeActive: {
-        if (!Config.ready)
-            return false;
-        const style = Config.options.sidebar.sidebarStyle || "default";
-        if (style !== "connect")
-            return false;
-
-        // Connect style is disabled if the bar background style is Transparent
-        if (Config.options.bar.barBackgroundStyle === 0)
-            return false;
-
-        // Works in all rounding modes except Edge (4)
-        if (Config.options.appearance.fakeScreenRounding === 4)
-            return false;
-
-        // All corner styles now supported: 0 (Hug), 1 (Float), 2 (Rect), 3 (Dynamic Island)
-        return true;
-    }
+    readonly property bool connectModeActive: ShellModePolicy.connectModeActive
 
     // In Float mode (cornerStyle 1), sidebars remain as separate PanelWindows
     // rather than being embedded in the TopLayer. Only search/OSD are integrated.
@@ -373,7 +454,7 @@ Singleton {
     function enforceSidebarStyle() {
         if (!Config.ready)
             return;
-        if (Config.options.bar.barBackgroundStyle === 0 && Config.options.sidebar.sidebarStyle === "connect") {
+        if (ShellModePolicy.shouldForceDefault) {
             Config.options.sidebar.sidebarStyle = "default";
         }
     }

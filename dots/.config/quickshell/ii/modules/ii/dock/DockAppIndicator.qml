@@ -22,6 +22,7 @@ Item {
     readonly property real dotSpacing: 3
     readonly property real pitchX: root.isVertical ? 0 : (baseDotW + dotSpacing)
     readonly property real pitchY: root.isVertical ? (baseDotH + dotSpacing) : 0
+    readonly property real indicatorMargin: Math.max(1, (root.dockContent?.dotMarginV ?? 1) * 0.35)
 
     readonly property int windowStart: {
         if (totalCount <= maxVisibleDots) return 0
@@ -43,10 +44,10 @@ Item {
     anchors.left: root.isVertical && root.dockPos === "right" ? parent.left : undefined
     anchors.right: root.isVertical && root.dockPos !== "right" ? parent.right : undefined
 
-    anchors.bottomMargin: 1
-    anchors.topMargin: 1
-    anchors.leftMargin: 1
-    anchors.rightMargin: 1
+    anchors.bottomMargin: indicatorMargin
+    anchors.topMargin: indicatorMargin
+    anchors.leftMargin: indicatorMargin
+    anchors.rightMargin: indicatorMargin
 
     Repeater {
         model: indicatorContainer.visibleCount

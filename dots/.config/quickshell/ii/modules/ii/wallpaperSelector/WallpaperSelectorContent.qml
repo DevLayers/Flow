@@ -182,7 +182,6 @@ MouseArea {
         function onDirectoryChanged() {
             wallpaperSelectorContent.favMode = false;
             wallpaperSelectorContent.browserMode = false;
-            wallpaperSelectorContent.updateThumbnails();
             grid.currentIndex = -1;
             grid.keyboardNavigationActive = false;
         }
@@ -1073,7 +1072,6 @@ function moveToTrashFile(modelData) {
 
                         Component.onCompleted: {
                             Qt.callLater(() => loadTimer.start())
-                            wallpaperSelectorContent.updateThumbnails()
                         }
 
                         function moveSelection(delta) {

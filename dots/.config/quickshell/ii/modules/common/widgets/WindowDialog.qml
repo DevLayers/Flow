@@ -13,6 +13,9 @@ Rectangle {
     default property alias contentData: contentColumn.data
     readonly property real contentHeight: contentColumn.implicitHeight + dialogBackground.radius * 2
     property real backgroundHeight: contentHeight
+    // An owner can opt into a wider dialog without changing existing
+    // backgroundWidth overrides used by other hosts.
+    property real preferredDialogWidth: 0
     property real backgroundWidth: 350
     property real backgroundAnimationMovementDistance: 60
     
@@ -51,7 +54,7 @@ Rectangle {
         scale: root.show ? 1.0 : 0.88
         opacity: root.show ? 1.0 : 0.0
 
-        implicitWidth: root.backgroundWidth
+        implicitWidth: root.preferredDialogWidth > 0 ? root.preferredDialogWidth : root.backgroundWidth
         implicitHeight: root.backgroundHeight
 
         Behavior on y {

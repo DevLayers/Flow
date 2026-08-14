@@ -19,7 +19,12 @@ MouseArea {
     readonly property bool isPaused: (Persistent.states.screenRecord && Persistent.states.screenRecord.paused) || false
     readonly property int elapsedSeconds: (Persistent.states.screenRecord && Persistent.states.screenRecord.seconds) || 0
     Layout.fillHeight: vertical
-    hoverEnabled: true
+    // With click-to-show popups the popup opens off containsMouse turning true on press,
+    // so hover must stay off — otherwise the popup shows on hover like every other mode.
+    readonly property bool clickToShowPopup: Config.options.bar.tooltips.clickToShow
+    // containsMouse still flips on press with hover off, so keep the stop-morph out of that mode.
+    readonly property bool showHoverState: containsMouse && !clickToShowPopup
+    hoverEnabled: !clickToShowPopup
     cursorShape: Qt.PointingHandCursor
 
     // Size calculation (dynamic and perfectly padded to prevent any overlapping)
@@ -77,8 +82,8 @@ MouseArea {
             height: 32
             shape: MaterialShape.Shape.Cookie9Sided
             color: indicator.isLoading 
-                ? (indicator.containsMouse ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
-                : (indicator.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
+                ? (indicator.showHoverState ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
+                : (indicator.showHoverState ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
 
             Behavior on color {
                 ColorAnimation { duration: 150 }
@@ -88,8 +93,8 @@ MouseArea {
                 anchors.centerIn: parent
                 text: indicator.isLoading 
                     ? "progress_activity" 
-                    : (indicator.containsMouse ? "stop" : "fiber_manual_record")
-                iconSize: indicator.isLoading ? 16 : (indicator.containsMouse ? 14 : 12)
+                    : (indicator.showHoverState ? "stop" : "fiber_manual_record")
+                iconSize: indicator.isLoading ? 16 : (indicator.showHoverState ? 14 : 12)
                 color: indicator.isLoading 
                     ? Appearance.colors.colOnSecondaryContainer 
                     : Appearance.colors.colOnErrorContainer
@@ -110,9 +115,9 @@ MouseArea {
             implicitWidth: timerLayoutHoriz.implicitWidth + 16
             radius: height / 2
             color: indicator.isLoading 
-                ? (indicator.containsMouse ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
-                : (indicator.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
-            opacity: (indicator.isPaused && !indicator.containsMouse) ? 0.6 : 1.0
+                ? (indicator.showHoverState ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
+                : (indicator.showHoverState ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
+            opacity: (indicator.isPaused && !indicator.showHoverState) ? 0.6 : 1.0
 
             Behavior on color {
                 ColorAnimation { duration: 150 }
@@ -159,8 +164,8 @@ MouseArea {
             height: 32
             shape: MaterialShape.Shape.Cookie9Sided
             color: indicator.isLoading 
-                ? (indicator.containsMouse ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
-                : (indicator.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
+                ? (indicator.showHoverState ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
+                : (indicator.showHoverState ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
             Layout.alignment: Qt.AlignHCenter
 
             Behavior on color {
@@ -171,8 +176,8 @@ MouseArea {
                 anchors.centerIn: parent
                 text: indicator.isLoading 
                     ? "progress_activity" 
-                    : (indicator.containsMouse ? "stop" : "fiber_manual_record")
-                iconSize: indicator.isLoading ? 16 : (indicator.containsMouse ? 14 : 12)
+                    : (indicator.showHoverState ? "stop" : "fiber_manual_record")
+                iconSize: indicator.isLoading ? 16 : (indicator.showHoverState ? 14 : 12)
                 color: indicator.isLoading 
                     ? Appearance.colors.colOnSecondaryContainer 
                     : Appearance.colors.colOnErrorContainer
@@ -193,10 +198,10 @@ MouseArea {
             implicitHeight: timerLayoutVert.implicitHeight + 12
             radius: width / 2
             color: indicator.isLoading 
-                ? (indicator.containsMouse ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
-                : (indicator.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
+                ? (indicator.showHoverState ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
+                : (indicator.showHoverState ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
             Layout.alignment: Qt.AlignHCenter
-            opacity: (indicator.isPaused && !indicator.containsMouse) ? 0.6 : 1.0
+            opacity: (indicator.isPaused && !indicator.showHoverState) ? 0.6 : 1.0
 
             Behavior on color {
                 ColorAnimation { duration: 150 }
@@ -263,13 +268,13 @@ MouseArea {
     }
 
     // ── Click Action (Stop recording on click) ───────────────────────────────
+    // In click-to-show mode the click belongs to the popup; stopping is done from its Stop button.
     onClicked: (mouse) => {
-        if (mouse.button === Qt.LeftButton) {
-            if (activelyRecording) {
-                Quickshell.execDetached(["bash", Directories.recordScriptPath])
-                controlsPopup.close()
-            }
-        }
+        if (mouse.button !== Qt.LeftButton) return
+        if (indicator.clickToShowPopup) return
+        if (!activelyRecording) return
+        Quickshell.execDetached(["bash", Directories.recordScriptPath])
+        controlsPopup.close()
     }
 
     // ── Premium Recording Controls Popup ─────────────────────────────────────

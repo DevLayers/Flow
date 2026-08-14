@@ -67,6 +67,14 @@ def normalize_phone(phone_str):
     cleaned = re.sub(r'[\s\-\(\)\.]', '', phone_str)
     return cleaned
 
+def looks_like_number(text):
+    # True when the text carries no actual name, just a dialable number.
+    # Android hands us the raw number as DISPLAY_NAME for raw contacts that
+    # never had a structured name (SIM imports, messaging sync adapters,
+    # call-blocker lists), so those arrive as FN/N fields full of digits.
+    stripped = re.sub(r'[\s\-\(\)\.\/]', '', text)
+    return bool(re.fullmatch(r'\+?\d+', stripped))
+
 def parse_vcard_file(file_path, source_id):
     try:
         content = file_path.read_text(encoding='utf-8', errors='replace')
@@ -208,6 +216,14 @@ def parse_vcard_file(file_path, source_id):
     if display_name == "Unnamed Contact" and not phones and not emails:
         return None
 
+    # Flag contacts that carry no human-readable identity at all, so the shell
+    # can optionally hide them. Reported in the wild as ~1000 bare numbers from
+    # anti-spam / carrier apps that write into Android's contacts provider.
+    nameless = not any(
+        part and not looks_like_number(part)
+        for part in (fn, given_name, family_name, org)
+    )
+
     if not uid:
         # Fallback UID: hash of filename + display_name
         uid_str = f"{file_path.name}_{display_name}_{phones[0]['value'] if phones else ''}"
@@ -237,6 +253,7 @@ def parse_vcard_file(file_path, source_id):
         "emails": emails,
         "avatarPath": avatar_path,
         "source": source_id,
+        "nameless": nameless,
         "mtime": mtime
     }
 

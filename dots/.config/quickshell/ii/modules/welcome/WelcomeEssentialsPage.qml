@@ -3,116 +3,127 @@ import QtQuick.Layouts
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.welcome
+import qs.services
 
 Item {
     id: root
 
-    signal openSettingsPage(string pageId)
+    signal openSettingsTarget(string pageId, string subPageId, string sectionId)
 
-    ContentPage {
+    ColumnLayout {
         anchors.fill: parent
-        bottomContentPadding: 28
+        spacing: 10
 
-        ContentSection {
+        StyledText {
             Layout.fillWidth: true
-            icon: "keyboard"
-            title: Translation.tr("Essential shortcuts")
+            text: Translation.tr("Everyday")
+            color: Appearance.colors.colOnLayer2
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.weight: Font.DemiBold
+        }
 
-            GridLayout {
-                Layout.fillWidth: true
-                columns: width >= 880 ? 3 : (width >= 580 ? 2 : 1)
-                columnSpacing: 10
-                rowSpacing: 10
+        GridLayout {
+            Layout.fillWidth: true
+            columns: width >= 780 ? 4 : 2
+            columnSpacing: 8
+            rowSpacing: 8
 
-                WelcomeKeybindCard {
+            Repeater {
+                model: WelcomeKeybindRegistry.everydayActions
+                delegate: WelcomeKeybindCard {
+                    required property var modelData
                     Layout.fillWidth: true
-                    title: Translation.tr("Settings")
-                    materialIcon: "settings"
-                    key1: "󰖳"
-                    key2: "I"
-                }
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("Control dashboard")
-                    materialIcon: "side_navigation"
-                    key1: "󰖳"
-                    key2: "N"
-                }
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("AI sidebar")
-                    materialIcon: "neurology"
-                    key1: "󰖳"
-                    key2: "A"
-                }
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("Overview")
-                    materialIcon: "grid_view"
-                    key1: "󰖳"
-                    key2: "Tab"
-                }
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("App launcher")
-                    materialIcon: "search"
-                    key1: "󰖳"
-                    key2: "Space"
-                }
-                WelcomeKeybindCard {
-                    Layout.fillWidth: true
-                    title: Translation.tr("Cheatsheet")
-                    materialIcon: "help"
-                    key1: "󰖳"
-                    key2: "/"
+                    Layout.preferredWidth: 1
+                    title: Translation.tr(modelData.labelKey)
+                    materialIcon: modelData.icon
+                    keys: WelcomeKeybindRegistry.keysFor(modelData.id)
                 }
             }
         }
 
-        ContentSection {
+        StyledText {
             Layout.fillWidth: true
-            icon: "explore"
-            title: Translation.tr("Useful places")
+            Layout.topMargin: 2
+            text: Translation.tr("Explore")
+            color: Appearance.colors.colOnLayer2
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.weight: Font.DemiBold
+        }
 
-            GridLayout {
-                Layout.fillWidth: true
-                columns: width >= 780 ? 2 : 1
-                columnSpacing: 12
-                rowSpacing: 12
+        GridLayout {
+            Layout.fillWidth: true
+            columns: width >= 780 ? 4 : 2
+            columnSpacing: 8
+            rowSpacing: 8
 
-                WelcomeActionCard {
+            Repeater {
+                model: WelcomeKeybindRegistry.exploreActions
+                delegate: WelcomeKeybindCard {
+                    required property var modelData
                     Layout.fillWidth: true
-                    materialIcon: "menu_book"
-                    title: Translation.tr("Open the complete cheatsheet")
-                    description: Translation.tr("See every shortcut, command and workspace action")
-                    onClicked: Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "cheatsheet", "open"])
-                }
-
-                WelcomeActionCard {
-                    Layout.fillWidth: true
-                    materialIcon: "settings"
-                    title: Translation.tr("Explore Settings")
-                    description: Translation.tr("All II features, grouped by purpose")
-                    onClicked: root.openSettingsPage("")
-                }
-
-                WelcomeActionCard {
-                    Layout.fillWidth: true
-                    materialIcon: "code"
-                    title: Translation.tr("II on GitHub")
-                    description: Translation.tr("Updates, source code and issue tracker")
-                    onClicked: Qt.openUrlExternally("https://github.com/P3DROVFX/ii-p3drovfx")
-                }
-
-                WelcomeActionCard {
-                    Layout.fillWidth: true
-                    materialIcon: "help_center"
-                    title: Translation.tr("Documentation wiki")
-                    description: Translation.tr("Usage notes and additional guides")
-                    onClicked: Qt.openUrlExternally("https://end-4.github.io/dots-hyprland-wiki/en/ii-qs/02usage/")
+                    Layout.preferredWidth: 1
+                    title: Translation.tr(modelData.labelKey)
+                    materialIcon: modelData.icon
+                    keys: WelcomeKeybindRegistry.keysFor(modelData.id)
                 }
             }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            text: Translation.tr("Useful places")
+            color: Appearance.colors.colOnLayer1
+            font.pixelSize: Appearance.font.pixelSize.normal
+            font.weight: Font.DemiBold
+        }
+
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            columnSpacing: 10
+            rowSpacing: 10
+
+            WelcomeActionCard {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                materialIcon: "menu_book"
+                title: Translation.tr("Cheatsheet")
+                description: Translation.tr("All shortcuts and shell actions")
+                onClicked: root.openSettingsTarget("cheatSheet", "", "keyboard")
+            }
+
+            WelcomeActionCard {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                materialIcon: "description"
+                title: Translation.tr("Documentation")
+                description: Translation.tr("Setup guides and feature documentation")
+                onClicked: Qt.openUrlExternally(WelcomeProjectLinks.documentationUrl)
+            }
+
+            WelcomeActionCard {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                materialIcon: "code"
+                title: Translation.tr("GitHub")
+                description: Translation.tr("Source code, releases and issues")
+                onClicked: Qt.openUrlExternally(WelcomeProjectLinks.repositoryUrl)
+            }
+
+            WelcomeActionCard {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                materialIcon: "forum"
+                title: Translation.tr("Discord")
+                description: Translation.tr("Community and support")
+                onClicked: Qt.openUrlExternally(WelcomeProjectLinks.discordUrl)
+            }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
     }
 }

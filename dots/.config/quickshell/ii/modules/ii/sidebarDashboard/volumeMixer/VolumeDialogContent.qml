@@ -496,9 +496,12 @@ StyledFlickable {
                 cursorShape: devEntry.isBlocked ? Qt.ArrowCursor : Qt.PointingHandCursor
                 enabled: !devEntry.isBlocked
 
+                property bool wasActiveOnPress: false
+
                 onPressed: mouse => {
                     root.interactive = false;
-                    if (devEntry.isActive) {
+                    wasActiveOnPress = devEntry.isActive;
+                    if (wasActiveOnPress) {
                         updateVolume(mouse.x);
                     } else {
                         devEntry.activateDevice();
@@ -514,7 +517,7 @@ StyledFlickable {
                 }
 
                 onPositionChanged: mouse => {
-                    if (devEntry.isActive) {
+                    if (wasActiveOnPress && devEntry.isActive) {
                         updateVolume(mouse.x);
                     }
                 }

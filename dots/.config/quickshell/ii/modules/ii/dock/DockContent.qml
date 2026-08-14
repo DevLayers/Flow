@@ -20,6 +20,8 @@ Item {
 
     property var currentScreen: null
     property bool isPinned: false
+    property bool dockRevealed: false
+    property bool dockWindowVisible: true
 
     readonly property real dockPadding: 0
     readonly property bool isVertical: dock.isVertical
@@ -29,6 +31,7 @@ Item {
     readonly property real buttonSlotSize: Appearance.sizes.dockButtonSize + dotMargin * 2
     readonly property real buttonSlotHeight: Appearance.sizes.dockButtonSize + dotMarginV * 2
     readonly property real sportsWidgetSlots: 4
+    readonly property real livePreviewWidgetSlots: Math.max(2, Math.min(6, Config.options?.dock?.livePreviewSlots ?? 2))
     readonly property string dockPos: dock.dockEffectivePosition
     readonly property bool islandsStyle: Config.options?.dock?.islandsStyle ?? false
     readonly property real islandSpacing: Math.max(0, Config.options?.dock?.islandSpacing ?? 8)
@@ -184,6 +187,44 @@ Item {
         : 0
     readonly property bool enableAppGroups: Config.options?.dock?.enableAppGroups ?? true
     readonly property int maxGroupApps: 6
+    readonly property int groupAnimationDuration: Appearance.animation.elementMoveFast.duration
+
+    // Group changes replace Repeater delegates. Keep the old surface alive for
+    // one animation cycle before committing the persistent model so apps can
+    // visibly leave a group instead of disappearing synchronously.
+    property bool groupMutationPending: false
+    property int groupMutationRevision: 0
+    property string groupMutationKind: ""
+    property string groupMutationGroupId: ""
+    property var groupMutationAppIds: []
+    property var pendingGroupMutationGroups: []
+    property var pendingGroupOrderRequest: null
+
+    // This second state describes the delegates created by the committed
+    // mutation. It is intentionally transient and never persisted.
+    property int groupTransitionRevision: 0
+    property string groupTransitionKind: ""
+    property string groupTransitionGroupId: ""
+    property var groupTransitionAppIds: []
+
+    Timer {
+        id: groupMutationTimer
+        interval: root.groupAnimationDuration
+        repeat: false
+        onTriggered: root._commitGroupMutation()
+    }
+
+    Timer {
+        id: groupTransitionClearTimer
+        interval: root.groupAnimationDuration * 2
+        repeat: false
+        onTriggered: {
+            root.groupTransitionKind = ""
+            root.groupTransitionGroupId = ""
+            root.groupTransitionAppIds = []
+            root.groupTransitionRevision++
+        }
+    }
 
     // Islands are derived from the final flattened order. Keeping this model
     // independent from the visual surfaces preserves global drag indices.
@@ -209,6 +250,7 @@ Item {
         case "media": return "media";
         case "weather": return "weather";
         case "sports": return "sports";
+        case "livePreview": return "livePreview";
         case "phone": return "phone";
         default: return "single";
         }
@@ -249,6 +291,8 @@ Item {
             return "widget:weather";
         case "sports":
             return "widget:sports";
+        case "livePreview":
+            return "widget:livePreview";
         case "phone":
             return "widget:phone";
         default:
@@ -504,6 +548,8 @@ Item {
             return buttonSlotSize * 3;
         case "sports":
             return buttonSlotSize * sportsWidgetSlots;
+        case "livePreview":
+            return buttonSlotSize * livePreviewWidgetSlots;
         default:
             return buttonSlotSize;
         }
@@ -632,7 +678,16 @@ Item {
         if (!item)
             return;
         const mapped = item.mapToItem(root, x, y);
-        root.magnificationPointerMain = root.isVertical ? mapped.y : mapped.x;
+        // The visible tray is centered inside a stable PanelWindow and grows
+        // as wrappers animate. Mapping directly into `root` therefore makes
+        // the same physical cursor position move in content coordinates on
+        // every animation frame. Keep the proximity field anchored to the
+        // unscaled layout instead of feeding that recentering back into it.
+        const visualExtra = root.isVertical
+            ? Math.max(0, root.visualHeight - root.baseVisualHeight)
+            : Math.max(0, root.visualWidth - root.baseVisualWidth);
+        const pointerMain = root.isVertical ? mapped.y : mapped.x;
+        root.magnificationPointerMain = pointerMain - visualExtra / 2;
     }
 
     readonly property var activePlayer: MprisController.activePlayer
@@ -687,8 +742,9 @@ Item {
     readonly property bool showTrash: Config.options?.dock?.showTrashButton ?? true
     readonly property bool showMedia: (Config.options?.dock?.enableMediaWidget ?? false) && root.showMusicPlayer
     readonly property bool showWeather: Config.options?.dock?.enableWeatherWidget ?? false
-    readonly property bool showSports: !root.isVertical
+    readonly property bool showSports: (Config.options?.dock?.enableSportsWidget ?? true) && !root.isVertical
         && SportsService.allGames.length > 0
+    readonly property bool showLivePreview: Config.options?.dock?.enableLivePreviewWidget ?? false
     readonly property bool showPhone: (Config.options?.dock?.showPhoneButton ?? true)
         && KdeConnectService.activeReachable
 
@@ -766,6 +822,8 @@ Item {
             return root.isVertical ? buttonSlotSize : buttonSlotSize * 3;
         case "sports":
             return root.isVertical ? buttonSlotSize : buttonSlotSize * root.sportsWidgetSlots;
+        case "livePreview":
+            return root.isVertical ? buttonSlotSize : buttonSlotSize * root.livePreviewWidgetSlots;
         default:
             return buttonSlotSize;
         }
@@ -891,6 +949,83 @@ Item {
         TaskbarApps.syncPinnedFileOrder();
     }
 
+    function isGroupAppExiting(appId) {
+        return root.groupMutationPending
+            && (root.groupMutationKind === "create" || root.groupMutationKind === "add")
+            && root.groupMutationAppIds.includes(String(appId ?? ""));
+    }
+
+    function isGroupExiting(groupId) {
+        return root.groupMutationPending
+            && root.groupMutationKind === "dissolve"
+            && root.groupMutationGroupId === String(groupId ?? "");
+    }
+
+    function isGroupEntryTransition(groupId) {
+        return root.groupTransitionGroupId === String(groupId ?? "")
+            && (root.groupTransitionKind === "create" || root.groupTransitionKind === "add");
+    }
+
+    function shouldAnimateGroupAppReturn(appId) {
+        return root.groupTransitionKind === "dissolve"
+            && root.groupTransitionAppIds.includes(String(appId ?? ""));
+    }
+
+    function _startGroupTransition(kind, groupId, appIds) {
+        root.groupTransitionKind = kind;
+        root.groupTransitionGroupId = String(groupId ?? "");
+        root.groupTransitionAppIds = Array.from(appIds ?? []).map(value => String(value ?? ""));
+        root.groupTransitionRevision++;
+        groupTransitionClearTimer.restart();
+    }
+
+    function _queueGroupMutation(nextGroups, kind, groupId, appIds, orderRequest) {
+        if (root.groupMutationPending)
+            return false;
+
+        root.groupMutationPending = true;
+        root.groupMutationKind = kind;
+        root.groupMutationGroupId = String(groupId ?? "");
+        root.groupMutationAppIds = Array.from(appIds ?? []).map(value => String(value ?? ""));
+        root.pendingGroupMutationGroups = nextGroups;
+        root.pendingGroupOrderRequest = orderRequest;
+        root.groupMutationRevision++;
+        groupMutationTimer.restart();
+        return true;
+    }
+
+    function _commitGroupMutation() {
+        if (!root.groupMutationPending)
+            return;
+
+        const nextGroups = root.pendingGroupMutationGroups;
+        const orderRequest = root.pendingGroupOrderRequest;
+        const mutationKind = root.groupMutationKind;
+        const mutationGroupId = root.groupMutationGroupId;
+        const mutationAppIds = root.groupMutationAppIds;
+
+        // Set the post-commit state before changing Config so newly created
+        // delegates can read it during their first evaluation.
+        const transitionKind = mutationKind === "dissolve"
+            ? "dissolve"
+            : (mutationKind === "create" ? "create" : "add");
+        root._startGroupTransition(transitionKind, mutationGroupId, mutationAppIds);
+
+        Config.options.dock.appGroups = nextGroups;
+        if (orderRequest)
+            root._reorderAppGroupInOrder(orderRequest.appIds, orderRequest.anchorAppId, orderRequest.preferredKeys);
+        else
+            TaskbarApps.syncPinnedFileOrder();
+
+        root.groupMutationPending = false;
+        root.groupMutationKind = "";
+        root.groupMutationGroupId = "";
+        root.groupMutationAppIds = [];
+        root.pendingGroupMutationGroups = [];
+        root.pendingGroupOrderRequest = null;
+        root.groupMutationRevision++;
+    }
+
     function completeGroupDrop() {
         if (!root.enableAppGroups || root._groupDropTargetIndex < 0)
             return false;
@@ -927,13 +1062,24 @@ Item {
             return false;
         }
 
-        Config.options.dock.appGroups = nextGroups;
         const preferredKeys = {};
         preferredKeys[sourceId] = source.orderKey;
         if (target.type === "app")
             preferredKeys[target.appId] = target.orderKey;
-        root._reorderAppGroupInOrder(groupApps, anchorAppId, preferredKeys);
-        return true;
+        const transitionAppIds = target.type === "appGroup"
+            ? [sourceId]
+            : [target.appId, sourceId];
+        return root._queueGroupMutation(
+            nextGroups,
+            target.type === "appGroup" ? "add" : "create",
+            target.type === "appGroup" ? target.groupId : nextGroups[nextGroups.length - 1].id,
+            transitionAppIds,
+            {
+                appIds: groupApps,
+                anchorAppId: anchorAppId,
+                preferredKeys: preferredKeys
+            }
+        );
     }
 
     function removeAppFromGroup(groupId, appId) {
@@ -944,6 +1090,7 @@ Item {
 
         const currentGroups = Config.options?.dock?.appGroups ?? [];
         const nextGroups = [];
+        let removedGroup = null;
         let removed = false;
 
         for (const rawGroup of currentGroups) {
@@ -957,6 +1104,7 @@ Item {
                 continue;
             }
 
+            removedGroup = { id: currentId, apps: apps };
             const nextApps = apps.filter(value => value !== targetAppId);
             removed = nextApps.length !== apps.length;
             // Keep a one-member group after detaching an app. This makes a
@@ -970,6 +1118,11 @@ Item {
         if (!removed)
             return false;
 
+        if (removedGroup && removedGroup.apps.length === 1) {
+            return root._queueGroupMutation(nextGroups, "dissolve", targetId, removedGroup.apps, null);
+        }
+
+        root._startGroupTransition("remove", targetId, [targetAppId]);
         Config.options.dock.appGroups = nextGroups;
         TaskbarApps.syncPinnedFileOrder();
         return true;
@@ -981,6 +1134,10 @@ Item {
             return false;
 
         const currentGroups = Config.options?.dock?.appGroups ?? [];
+        const groupToRemove = currentGroups.find(group => group && String(group.id ?? "").trim() === targetId);
+        if (!groupToRemove)
+            return false;
+
         const nextGroups = currentGroups
             .filter(group => group && String(group.id ?? "").trim() !== targetId)
             .map(group => ({
@@ -988,12 +1145,13 @@ Item {
                 apps: Array.from(group.apps ?? []).map(value => String(value ?? "").trim()).filter(value => value !== "")
             }));
 
-        if (nextGroups.length === currentGroups.length)
-            return false;
-
-        Config.options.dock.appGroups = nextGroups;
-        TaskbarApps.syncPinnedFileOrder();
-        return true;
+        return root._queueGroupMutation(
+            nextGroups,
+            "dissolve",
+            targetId,
+            Array.from(groupToRemove.apps ?? []),
+            null
+        );
     }
 
     function _orderKeyForAppId(order, appId) {
@@ -1382,6 +1540,12 @@ Item {
                     orderKey: "sports"
                 });
                 seenOrderKeys["sports"] = true;
+            } else if (entry === "livePreview" && root.showLivePreview) {
+                result.push({
+                    type: "livePreview",
+                    orderKey: "livePreview"
+                });
+                seenOrderKeys["livePreview"] = true;
             } else if (entry === "phone" && root.showPhone) {
                 result.push({
                     type: "phone",
@@ -1604,6 +1768,35 @@ Item {
             seenOrderKeys["phone"] = true;
         }
 
+        // Existing users may have a dock.order saved before the live preview
+        // item existed. Add it to the derived model near sports/phone without
+        // rewriting the persisted order list.
+        if (root.showLivePreview && !seenOrderKeys["livePreview"]) {
+            const livePreviewItem = {
+                type: "livePreview",
+                orderKey: "livePreview"
+            };
+            let livePreviewTargetIndex = result.length;
+            const phoneIndex = result.findIndex(item => item.type === "phone");
+            if (phoneIndex >= 0) {
+                livePreviewTargetIndex = phoneIndex;
+            } else {
+                while (livePreviewTargetIndex > 0) {
+                    const item = result[livePreviewTargetIndex - 1];
+                    if (item.type === "action"
+                            && (item.actionId === "trash"
+                                || item.actionId === "overview"
+                                || item.actionId === "pin")) {
+                        livePreviewTargetIndex--;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            result.splice(livePreviewTargetIndex, 0, livePreviewItem);
+            seenOrderKeys["livePreview"] = true;
+        }
+
         if (Config.options?.dock?.smartGrouping) {
             var mapped = result.map(function (el, i) {
                 return {
@@ -1630,7 +1823,7 @@ Item {
         if (!item)
             return false;
         var t = item.type;
-        return t === "media" || t === "weather" || t === "sports" || t === "phone" || t === "action";
+        return t === "media" || t === "weather" || t === "sports" || t === "livePreview" || t === "phone" || t === "action";
     }
 
     function getItemCategory(item) {
@@ -1646,6 +1839,8 @@ Item {
             return 3;
         if (t === "sports")
             return 4;
+        if (t === "livePreview")
+            return 5;
         if (t === "phone")
             return 25;
         if (t === "appGroup" && item.appIds?.length > 0)
@@ -1905,6 +2100,8 @@ Item {
                     return root.buttonSlotSize * 3;
                 case "sports":
                     return root.buttonSlotSize * root.sportsWidgetSlots;
+                case "livePreview":
+                    return root.buttonSlotSize * root.livePreviewWidgetSlots;
                 default:
                     return root.buttonSlotSize;
                 }
@@ -2096,6 +2293,8 @@ Item {
                         return weatherItemComponent;
                     case "sports":
                         return sportsItemComponent;
+                    case "livePreview":
+                        return livePreviewItemComponent;
                     case "phone":
                         return phoneItemComponent;
                     case "runningAppsGroup":
@@ -2224,6 +2423,61 @@ Item {
             height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property var _itemData: parent._itemData
             readonly property int _index: parent._index
+            readonly property string _appId: _itemData?.appId ?? ""
+            readonly property bool _groupReturnRequested: root.shouldAnimateGroupAppReturn(_appId)
+            readonly property bool _groupExitRequested: root.isGroupAppExiting(_appId)
+            property real _groupTransitionOpacity: 1.0
+            property real _groupTransitionScale: 1.0
+
+            function playGroupReturnAnimation() {
+                _groupTransitionOpacity = 0.0;
+                _groupTransitionScale = 0.72;
+                Qt.callLater(function () {
+                    if (!appItemRoot)
+                        return;
+                    appItemRoot._groupTransitionOpacity = 1.0;
+                    appItemRoot._groupTransitionScale = 1.0;
+                });
+            }
+
+            function playGroupExitAnimation() {
+                _groupTransitionOpacity = 0.0;
+                _groupTransitionScale = 0.72;
+            }
+
+            Component.onCompleted: {
+                if (_groupReturnRequested)
+                    playGroupReturnAnimation();
+                else if (_groupExitRequested)
+                    playGroupExitAnimation();
+            }
+
+            Connections {
+                target: root
+                function onGroupMutationRevisionChanged() {
+                    if (appItemRoot._groupExitRequested)
+                        appItemRoot.playGroupExitAnimation();
+                }
+                function onGroupTransitionRevisionChanged() {
+                    if (appItemRoot._groupReturnRequested)
+                        appItemRoot.playGroupReturnAnimation();
+                }
+            }
+
+            readonly property bool _isDragged: root.dragging && _index === root.dragSourceIndex
+            opacity: (_isDragged ? 0.85 : 1.0) * _groupTransitionOpacity
+            scale: (_isDragged ? 1.05 : 1.0) * _groupTransitionScale
+
+            Behavior on opacity {
+                enabled: !root._suppressTranslateAnim
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            Behavior on scale {
+                enabled: !root._suppressTranslateAnim
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
             DockAppButton {
                 anchors.centerIn: parent
                 appToplevel: appItemRoot._itemData.appData
@@ -2255,7 +2509,7 @@ Item {
         Item {
             id: mediaItemRoot
             width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
             DockMediaWidget {
                 anchors.centerIn: parent
@@ -2271,7 +2525,7 @@ Item {
         Item {
             id: weatherItemRoot
             width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
             DockWeatherWidget {
                 anchors.centerIn: parent
@@ -2294,6 +2548,27 @@ Item {
                 isVertical: root.isVertical
                 dockContent: root
                 delegateIndex: sportsItemRoot._index
+            }
+        }
+    }
+
+    Component {
+        id: livePreviewItemComponent
+        Item {
+            id: livePreviewItemRoot
+            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * root.livePreviewWidgetSlots
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            readonly property int _index: parent._index
+            DockLivePreviewWidget {
+                anchors.centerIn: parent
+                isVertical: root.isVertical
+                dockContent: root
+                dockRevealed: root.dockRevealed
+                dockWindowVisible: root.dockWindowVisible
+                delegateIndex: livePreviewItemRoot._index
+                onPickerRequested: {
+                    // Picker wiring belongs to the following live-preview phase.
+                }
             }
         }
     }

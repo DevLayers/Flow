@@ -225,6 +225,16 @@ LockScreen {
             font.weight: Looks.font.weight.strong
             text: DateTime.collapsedCalendarFormat
         }
+
+        WText {
+            id: keepAwakeLabel
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: Idle.inhibit
+            topPadding: 10
+            color: Looks.darkColors.inactiveIcon
+            font.pixelSize: 18
+            text: Idle.timed ? Translation.tr("Staying awake · %1 left").arg(Idle.remainingText) : Translation.tr("Staying awake")
+        }
     }
 
     component PasswordGroup: ColumnLayout {

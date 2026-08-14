@@ -35,7 +35,7 @@ hl.bind("SUPER + G", hl.dsp.global("quickshell:overlayToggle"), { description = 
 hl.bind("CTRL + ALT + Delete", hl.dsp.global("quickshell:sessionToggle"), { description = "Shell: Toggle session menu" })
 hl.bind("SUPER + J", hl.dsp.global("quickshell:barToggle"), { description = "Shell: Toggle bar" })
 hl.bind("CTRL + ALT + Delete", hl.dsp.exec_cmd(qsIsAlive .. " || pkill wlogout || wlogout -p layer-shell"))
-hl.bind("SHIFT + SUPER + ALT + Slash", hl.dsp.exec_cmd("qs -p $HOME/.config/quickshell/$qsConfig/welcome.qml"))
+hl.bind("SHIFT + SUPER + ALT + Slash", hl.dsp.exec_cmd("qs -c ii ipc call welcome toggle"), { description = "Shell: Toggle welcome" })
 
 -- Toggle keyboard layout safely without triggering search release
 hl.bind("SUPER + Space", hl.dsp.exec_cmd("hyprctl switchxkblayout all next"), { description = "Switch keyboard layout" })

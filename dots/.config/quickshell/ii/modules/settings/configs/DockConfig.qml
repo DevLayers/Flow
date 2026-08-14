@@ -199,6 +199,108 @@ ContentPage {
 
         ConfigSwitch {
             enabled: Config.options.dock.enable
+            buttonIcon: "sports_soccer"
+            text: Translation.tr("Enable sports widget")
+            checked: Config.options.dock.enableSportsWidget ?? true
+            onCheckedChanged: {
+                Config.options.dock.enableSportsWidget = checked;
+            }
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.dock.enable
+            buttonIcon: "live_tv"
+            text: Translation.tr("Enable Live Preview widget")
+            checked: Config.options.dock.enableLivePreviewWidget ?? false
+            onCheckedChanged: {
+                Config.options.dock.enableLivePreviewWidget = checked;
+            }
+        }
+
+        ContentSubsection {
+            visible: Config.options.dock.enable && (Config.options.dock.enableLivePreviewWidget ?? false)
+            title: Translation.tr("Live Preview")
+            icon: "live_tv"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.dock.livePreviewAppId ?? ""
+                onSelected: newValue => {
+                    DockLivePreviewService.selectApp(newValue);
+                }
+                options: {
+                    const options = [{
+                        displayName: Translation.tr("No application selected"),
+                        icon: "block",
+                        value: ""
+                    }];
+                    const selected = Config.options.dock.livePreviewAppId ?? "";
+                    if (selected !== "") {
+                        options.push({
+                            displayName: TaskbarApps.getCachedDesktopEntry(selected)?.name ?? selected,
+                            icon: "live_tv",
+                            value: selected
+                        });
+                    }
+                    for (const app of (TaskbarApps.apps ?? [])) {
+                        const appId = app?.appId ?? "";
+                        if (!appId || options.some(option => TaskbarApps.normalizeAppId(option.value) === TaskbarApps.normalizeAppId(appId)))
+                            continue;
+                        options.push({
+                            displayName: TaskbarApps.getCachedDesktopEntry(appId)?.name ?? appId,
+                            icon: "apps",
+                            value: appId
+                        });
+                    }
+                    return options;
+                }
+            }
+
+            ConfigSpinBox {
+                Layout.fillWidth: true
+                icon: "width"
+                text: Translation.tr("Preview width (slots)")
+                value: Config.options.dock.livePreviewSlots ?? 2
+                from: 2
+                to: 6
+                stepSize: 1
+                onValueChanged: Config.options.dock.livePreviewSlots = value
+            }
+
+            ConfigSelectionArray {
+                currentValue: Config.options.dock.livePreviewCaptureMode ?? "visible"
+                onSelected: newValue => Config.options.dock.livePreviewCaptureMode = newValue
+                options: [
+                    {
+                        displayName: Translation.tr("While visible"),
+                        icon: "visibility",
+                        value: "visible"
+                    },
+                    {
+                        displayName: Translation.tr("While hovered"),
+                        icon: "touch_app",
+                        value: "hover"
+                    }
+                ]
+            }
+
+            ConfigSwitch {
+                buttonIcon: "mouse"
+                text: Translation.tr("Show captured cursor")
+                checked: Config.options.dock.livePreviewPaintCursor ?? false
+                onCheckedChanged: Config.options.dock.livePreviewPaintCursor = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "sync"
+                text: Translation.tr("Follow active window")
+                checked: Config.options.dock.livePreviewFollowActiveWindow ?? true
+                onCheckedChanged: Config.options.dock.livePreviewFollowActiveWindow = checked
+            }
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.dock.enable
             buttonIcon: "smartphone"
             text: Translation.tr("Show phone mirror button")
             checked: Config.options.dock.showPhoneButton ?? true

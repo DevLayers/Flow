@@ -296,7 +296,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 4
+    readonly property int currentConfigVersion: 5
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -393,6 +393,19 @@ Singleton {
         if (from < 4 && typeof raw.osk?.layout === "string" && raw.osk.layout !== "auto") {
             console.log(`[Config] Migrated osk.layout "${raw.osk.layout}" -> "auto"`);
             raw.osk.layout = "auto";
+        }
+
+        // v4 -> v5: Settings now has one performance switch instead of two
+        // independent rendering switches. Preserve the low-overhead experience
+        // for anyone who had either legacy switch disabled.
+        if (from < 5 && raw.appearance !== undefined
+                && raw.appearance !== null
+                && typeof raw.appearance === "object"
+                && !Array.isArray(raw.appearance)
+                && raw.appearance.settingsPerformanceMode === undefined) {
+            raw.appearance.settingsPerformanceMode = raw.appearance.scrollAnimations === false
+                    || raw.appearance.scrollFadeMask === false;
+            console.log(`[Config] Migrated Settings performance mode to ${raw.appearance.settingsPerformanceMode}`);
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -976,6 +989,15 @@ Singleton {
                 property bool reapplyOnNetworkChange: true
             }
 
+            property JsonObject screenShader: JsonObject {
+                // Name of the shader a left click on the quick toggle turns on.
+                // Empty means "whatever the picker offers first".
+                property string lastUsed: ""
+                // Extra directories to scan for .glsl/.frag files, on top of the shell's
+                // own assets/shaders and everything hyprshade already looks at.
+                property list<string> extraShaderDirs: []
+            }
+
             property JsonObject ai: JsonObject {
                 property string systemPrompt: "## Style\n- Use casual tone, don't be formal!\n- Always be brief and to the point, unless asked otherwise\n- Don't repeat the user's question\n- Be approachable: Avoid using overly complicated, domain-specific terms and provide analogies when asked to explain a concept\n\n## Context (ignore when irrelevant)\n- You are a helpful and inspiring sidebar assistant on a {DISTRO} Linux system\n- Desktop environment: {DE}\n- Current date & time: {DATETIME}\n- Focused app: {WINDOWCLASS}\n\n## Presentation\n- Use Markdown features in your response: \n  - **Bold** text to **highlight keywords** in your response\n  - **Split long information into small sections** with h2 headers and a relevant emoji at the start of it (for example `## \ud83d\udc27 Linux`). Bullet points are preferred over long paragraphs, unless you're offering writing support or instructed otherwise by the user.\n- Asked to compare different options? You should firstly use a table to compare the main aspects, then elaborate or include relevant comments from online forums *after* the table. Make sure to provide a final recommendation for the user's use case!\n- Use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX '$$' delimiters. NEVER generate LaTeX code in a latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular documents (resumes, letters, essays, CVs, etc.).\n\nThanks!\n"
                 property string tool: "functions" // search, functions, or none
@@ -1067,8 +1089,9 @@ Singleton {
                 property list<string> customColorSchemes: []
                 property real animationMultiplier: 0.9500000000000001 // 0.25 = fast, 1.0 = default, 2.0 = slow
                 property bool colorfulScrollbar: false
-                property bool scrollAnimations: true
-                property bool scrollFadeMask: true
+                property bool scrollAnimations: false
+                property bool scrollFadeMask: false
+                property bool settingsPerformanceMode: false
                 property JsonObject openrgb: JsonObject {
                     property bool enable: false
                     property bool applyOnStartup: true
@@ -2446,7 +2469,14 @@ Singleton {
                 property bool hoverToReveal: true
                 property bool enableMediaWidget: false
                 property bool enableWeatherWidget: false
-                property bool showPhoneButton: true
+                property bool enableSportsWidget: false
+                property bool enableLivePreviewWidget: false
+                property string livePreviewAppId: ""
+                property int livePreviewSlots: 2
+                property bool livePreviewPaintCursor: false
+                property string livePreviewCaptureMode: "visible"
+                property bool livePreviewFollowActiveWindow: true
+                property bool showPhoneButton: false
                 property bool showDividers: true
                 property bool showOverviewButton: true
                 property bool showPinButton: true
@@ -2459,7 +2489,7 @@ Singleton {
                 // Each entry is { id: string, apps: list<string> } and is
                 // rendered as one dock item while app groups are enabled.
                 property list<var> appGroups: []
-                property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "sports", "phone", "trash", "overview"]
+                property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "sports", "livePreview", "phone", "trash", "overview"]
             }
 
             property JsonObject dockToPanel: JsonObject {
@@ -3045,6 +3075,7 @@ Singleton {
                 property int bitrate: 8
                 property int framerate: 60
                 property bool showNotifications: true
+                property bool showEditPrompt: true
                 property bool openInLosslessCut: false
             }
 
@@ -3110,6 +3141,13 @@ Singleton {
                 // Super + Alt + arrow moves the focused window zone by zone, and
                 // untiles it when it is already against that side of the screen.
                 property bool keyboardQuickTile: true
+                // Super + drag drops a window into the zone under the cursor.
+                // Off leaves the keyboard the only way in, for people who would
+                // rather a grabbed window went exactly where they put it.
+                // Resizing a tiled window still pulls its neighbours along:
+                // that adjusts a layout already there rather than tiling by
+                // grab, and follows coResize below.
+                property bool dragQuickTile: true
 
                 property JsonObject detection: JsonObject {
                     // Companion Hyprland binds on the drag/resize mouse combos.

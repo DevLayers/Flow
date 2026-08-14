@@ -331,6 +331,8 @@ Scope {
                         z: 1
                         isPinned: dock.pinned
                         currentScreen: dockRoot.screen
+                        dockRevealed: dockRoot.reveal
+                        dockWindowVisible: dockRoot.visible
                         onTogglePinRequested: {
                             dock.pinned = !dock.pinned
                         }

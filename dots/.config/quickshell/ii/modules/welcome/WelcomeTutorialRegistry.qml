@@ -1,65 +1,128 @@
+pragma Singleton
+pragma ComponentBehavior: Bound
+
 import QtQuick
+import Quickshell
+import qs.modules.common
+import qs.services
 
 QtObject {
-    readonly property list<var> tutorials: [{
+    id: root
+
+    readonly property var tutorials: [{
         "id": "gmail",
-        "title": "Gmail",
-        "description": "Read, organize and send email from the II cheatsheet.",
+        "titleKey": "Gmail",
+        "descriptionKey": "Read, organize and send email from II.",
         "icon": "mail",
-        "estimatedTime": "About 8 minutes",
-        "settingsPage": "cheatSheet",
-        "videoUrl": "",
-        "steps": [
-            "Create or select a project in Google Cloud Console.",
-            "Enable the Gmail API and configure the OAuth consent screen.",
-            "Create Desktop App credentials and add yourself as a test user.",
-            "Save the Client ID and Client Secret in the Gmail setup page.",
-            "Authorize II in the browser and verify the connected account."
-        ]
+        "estimatedMinutes": 8,
+        "usedInChips": ["Email", "Cheatsheet"],
+        "component": Qt.resolvedUrl("tutorials/WelcomeGmailTutorial.qml")
     }, {
         "id": "ticktick",
-        "title": "TickTick sync",
-        "description": "Keep your sidebar tasks synchronized with TickTick.",
+        "titleKey": "TickTick",
+        "descriptionKey": "Keep your tasks synchronized across II.",
         "icon": "task_alt",
-        "estimatedTime": "About 5 minutes",
-        "settingsPage": "tasksAccounts",
-        "videoUrl": "",
-        "steps": [
-            "Create an application in the TickTick developer portal.",
-            "Copy the Client ID and Client Secret into Accounts & Backup.",
-            "Start browser authorization from the TickTick section.",
-            "Approve access and return to II after the callback.",
-            "Create a test task and confirm that synchronization works."
-        ]
+        "estimatedMinutes": 5,
+        "usedInChips": ["Tasks sidebar", "Tasks"],
+        "component": Qt.resolvedUrl("tutorials/WelcomeTickTickTutorial.qml")
     }, {
         "id": "calendar",
-        "title": "Google Calendar",
-        "description": "Show and manage calendar events through khal and vdirsyncer.",
+        "titleKey": "Google Calendar",
+        "descriptionKey": "Bring your calendars and upcoming events into II.",
         "icon": "calendar_month",
-        "estimatedTime": "About 10 minutes",
-        "settingsPage": "languageTime",
-        "videoUrl": "",
-        "steps": [
-            "Install khal and vdirsyncer using your distribution packages.",
-            "Create the vdirsyncer storage and pair for Google Calendar.",
-            "Run the discovery and synchronization steps once.",
-            "Configure khal to read the synchronized calendar collection.",
-            "Open the II calendar and verify the next events."
-        ]
+        "estimatedMinutes": 10,
+        "usedInChips": ["Calendar", "Agenda"],
+        "component": Qt.resolvedUrl("tutorials/WelcomeCalendarTutorial.qml")
     }, {
         "id": "drive",
-        "title": "Google Drive backup",
-        "description": "Back up II data with rclone and your Google OAuth credentials.",
+        "titleKey": "Google Drive",
+        "descriptionKey": "Back up II settings and selected folders.",
         "icon": "cloud_sync",
-        "estimatedTime": "About 7 minutes",
-        "settingsPage": "tasksAccounts",
-        "videoUrl": "",
-        "steps": [
-            "Install rclone from your distribution packages.",
-            "Enable the Google Drive API in the same Google Cloud project.",
-            "Open Accounts & Backup and start Drive authorization.",
-            "Choose the folders and data that should be included.",
-            "Run a manual backup and confirm that the remote folder exists."
-        ]
+        "estimatedMinutes": 7,
+        "usedInChips": ["Accounts & Backup", "Backup"],
+        "component": Qt.resolvedUrl("tutorials/WelcomeDriveTutorial.qml")
     }]
+
+    function tutorialFor(value): var {
+        const id = typeof value === "string" ? value : (value ? value.id : "");
+        for (let i = 0; i < root.tutorials.length; i++) {
+            if (root.tutorials[i].id === id)
+                return root.tutorials[i];
+        }
+        return null;
+    }
+
+    function stateFor(value): var {
+        const tutorial = root.tutorialFor(value);
+        if (!tutorial)
+            return ({
+                state: "neutral",
+                text: Translation.tr("Not configured")
+            });
+
+        if (tutorial.id === "gmail") {
+            if (EmailService.checkingCredentials || EmailService.authenticating)
+                return { state: "neutral", text: Translation.tr("Connecting…") };
+            if (EmailService.authenticated)
+                return { state: "ready", text: Translation.tr("Connected") };
+            if (EmailService.credentialsConfigured)
+                return { state: "configured", text: Translation.tr("Credentials saved") };
+            return { state: "neutral", text: Translation.tr("Setup required") };
+        }
+
+        if (tutorial.id === "ticktick") {
+            if (TickTickService.syncing)
+                return { state: "neutral", text: Translation.tr("Syncing…") };
+            if (TickTickService.available)
+                return { state: "ready", text: Translation.tr("Connected") };
+            if (String(TickTickService.accessToken || "").length > 0)
+                return { state: "configured", text: Translation.tr("Credentials saved") };
+            return { state: "neutral", text: Translation.tr("Setup required") };
+        }
+
+        if (tutorial.id === "calendar") {
+            if (CalendarService.khalAvailable === true)
+                return { state: "ready", text: Translation.tr("Ready") };
+            if (CalendarService.khalAvailable === false)
+                return { state: "attention", text: Translation.tr("Tools missing") };
+            return { state: "neutral", text: Translation.tr("Setup required") };
+        }
+
+        if (tutorial.id === "drive") {
+            if (!GoogleDriveService.rcloneInstalled)
+                return { state: "attention", text: Translation.tr("rclone missing") };
+            if (GoogleDriveService.checking)
+                return { state: "neutral", text: Translation.tr("Checking…") };
+            if (GoogleDriveService.configured)
+                return { state: "ready", text: Translation.tr("Configured") };
+            return { state: "neutral", text: Translation.tr("Setup required") };
+        }
+
+        return {
+            state: "neutral",
+            text: Translation.tr("Setup required")
+        };
+    }
+
+    function statusTextFor(value): string {
+        return root.stateFor(value).text;
+    }
+
+    function stateKindFor(value): string {
+        return root.stateFor(value).state;
+    }
+
+    function titleFor(tutorial): string {
+        return tutorial ? Translation.tr(tutorial.titleKey) : "";
+    }
+
+    function descriptionFor(tutorial): string {
+        return tutorial ? Translation.tr(tutorial.descriptionKey) : "";
+    }
+
+    function estimatedTimeFor(tutorial): string {
+        return tutorial
+            ? Translation.tr("About %1 minutes").arg(String(tutorial.estimatedMinutes))
+            : "";
+    }
 }
