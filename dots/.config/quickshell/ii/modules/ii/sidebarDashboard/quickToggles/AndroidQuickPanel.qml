@@ -9,6 +9,7 @@ import Quickshell.Bluetooth
 
 import qs.modules.ii.sidebarDashboard.quickToggles.androidStyle
 import "androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
+import "androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 
 AbstractQuickPanel {
     id: root
@@ -91,72 +92,22 @@ AbstractQuickPanel {
         return types.map(type => QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
     }
 
-    function getGridRowsNeeded(togglesList) {
-        if (!togglesList || togglesList.length === 0)
-            return 0;
-        var cols = Math.max(1, columns);
-        var grid = [];
-
-        function isFree(r, c, w, h) {
-            if (c + w > cols) return false;
-            for (var dr = 0; dr < h; dr++) {
-                var rowArr = grid[r + dr];
-                if (rowArr) {
-                    for (var dc = 0; dc < w; dc++) {
-                        if (rowArr[c + dc]) return false;
-                    }
-                }
-            }
-            return true;
-        }
-
-        function markOccupied(r, c, w, h) {
-            for (var dr = 0; dr < h; dr++) {
-                var rowIdx = r + dr;
-                while (grid.length <= rowIdx) {
-                    grid.push(new Array(cols).fill(false));
-                }
-                for (var dc = 0; dc < w; dc++) {
-                    grid[rowIdx][c + dc] = true;
-                }
-            }
-        }
-
-        var maxRow = 0;
-        for (var i = 0; i < togglesList.length; i++) {
-            if (!togglesList[i])
-                continue;
-            var t = togglesList[i];
-            var defaultH = (t.type === "mediaWidget") ? 2 : 1;
-            var defaultW = (t.type === "mediaWidget") ? 2 : 1;
-            var w = Math.max(1, Math.min(t.sizeW ?? t.size ?? defaultW, cols));
-            var h = Math.max(1, t.sizeH ?? defaultH);
-
-            var r = 0;
-            var placed = false;
-            while (!placed) {
-                for (var c = 0; c <= cols - w; c++) {
-                    if (isFree(r, c, w, h)) {
-                        markOccupied(r, c, w, h);
-                        maxRow = Math.max(maxRow, r + h);
-                        placed = true;
-                        break;
-                    }
-                }
-                if (!placed) r++;
-            }
-        }
-        return maxRow;
+    // The same packed result drives both the GridLayout and page height. Do
+    // not add a second geometry simulation here: it would reintroduce the
+    // empty-cell divergence this refactor is removing.
+    readonly property list<var> packedPages: {
+        var result = [];
+        for (var i = 0; i < pages.length; i++)
+            result.push(QuickToggleLayout.pack(pages[i] || [], root.columns));
+        return result;
     }
-
-
 
     // Calculate height for a specific page
     function pageHeight(pageIndex) {
         if (pageIndex < 0 || pageIndex >= pages.length)
             return baseCellHeight + 8;
-        var pageToggles = pages[pageIndex] || [];
-        var rows = getGridRowsNeeded(pageToggles);
+        var packedPage = packedPages[pageIndex];
+        var rows = packedPage ? packedPage.rowsUsed : 0;
         return Math.max(baseCellHeight, rows * (baseCellHeight + spacing) - spacing) + 8;
     }
 
@@ -457,6 +408,7 @@ AbstractQuickPanel {
                             // Show only current page content as visible when current
                             property bool isCurrent: root.currentPage === index
                             property list<var> pageToggles: root.pages[index] || []
+                            property var packedPage: root.packedPages[index] || { rowsUsed: 0, items: [] }
 
                             Loader {
                                 id: pageContentLoader
@@ -497,7 +449,7 @@ AbstractQuickPanel {
                                     Repeater {
                                         id: gridRepeater
                                     model: ScriptModel {
-                                        values: pageContainer.pageToggles
+                                        values: pageContainer.packedPage.items
                                         objectProp: "type"
                                     }
                                     delegate: AndroidToggleDelegateChooser {
@@ -509,6 +461,10 @@ AbstractQuickPanel {
                                         isUnused: false
                                         pageIndex: pageContainer.index
                                         gridColumns: root.columns
+                                        layoutRow: modelData.row
+                                        layoutColumn: modelData.column
+                                        layoutRowSpan: modelData.rowSpan
+                                        layoutColumnSpan: modelData.columnSpan
                                         panel: root
                                         gridRef: pageContentGrid
                                         entranceTrigger: root.entranceTrigger
