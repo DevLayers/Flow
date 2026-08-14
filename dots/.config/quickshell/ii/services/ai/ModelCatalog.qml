@@ -28,7 +28,7 @@ QtObject {
     property var ollamaModelNames: []
 
     /** Keys accepted from a user-defined `ai.otherModels` entry. */
-    readonly property var customModelKeys: ["name", "title", "icon", "description", "homepage", "endpoint", "model", "value", "requires_key", "key_id", "key_get_link", "key_get_description", "api_format", "extraParams", "modelProvider", "thinking", "thinkingKind", "thinkingAlwaysOn", "quirks", "attachments", "vision", "tools", "builtinSearch", "samplingParams", "contextWindow", "maxOutput"]
+    readonly property var customModelKeys: ["name", "title", "icon", "description", "homepage", "endpoint", "model", "value", "requires_key", "key_id", "key_get_link", "key_get_description", "api_format", "extraParams", "modelProvider", "thinking", "thinkingKind", "thinkingAlwaysOn", "quirks", "attachments", "vision", "tools", "builtinSearch", "samplingParams", "maxTemperature", "contextWindow", "maxOutput"]
 
     readonly property var providerDefs: [
         {
@@ -125,6 +125,8 @@ QtObject {
                 vision: true,
                 tools: true,
                 builtinSearch: true,
+                // Anthropic rejects anything above 1.
+                maxTemperature: 1.0,
                 contextWindow: 200000,
                 maxOutput: 64000
             },
@@ -428,6 +430,7 @@ QtObject {
             tools: pick("tools", true),
             builtinSearch: pick("builtinSearch", false),
             samplingParams: pick("samplingParams", true),
+            maxTemperature: pick("maxTemperature", 2.0),
             contextWindow: pick("contextWindow", 0),
             maxOutput: pick("maxOutput", 0),
             // Merged, not picked: a model overrides single quirks without

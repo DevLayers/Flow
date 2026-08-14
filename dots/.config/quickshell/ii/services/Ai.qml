@@ -84,6 +84,8 @@ Singleton {
     property list<var> defaultPrompts: []
     property list<var> userPrompts: []
     property list<var> promptFiles: [...defaultPrompts, ...userPrompts]
+    /** Path of the prompt file last loaded, so the picker can show which one won. */
+    property string currentPromptFile: ""
     property list<var> savedChats: []
 
     property var promptSubstitutions: {
@@ -471,11 +473,15 @@ Singleton {
     FileView {
         id: promptLoader
         watchChanges: false
+        // The command prints the prompt it loaded; picking one from the
+        // control bar does not, since the chip already shows which is active.
+        property bool announce: true
         onLoadedChanged: {
             if (!promptLoader.loaded)
                 return;
             Config.options.ai.systemPrompt = promptLoader.text();
-            root.addMessage(Translation.tr("Loaded the following system prompt\n\n---\n\n%1").arg(Config.options.ai.systemPrompt), root.interfaceRole);
+            if (promptLoader.announce)
+                root.addMessage(Translation.tr("Loaded the following system prompt\n\n---\n\n%1").arg(Config.options.ai.systemPrompt), root.interfaceRole);
         }
     }
 
@@ -483,7 +489,9 @@ Singleton {
         root.addMessage(Translation.tr("The current system prompt is\n\n---\n\n%1").arg(Config.options.ai.systemPrompt), root.interfaceRole);
     }
 
-    function loadPrompt(filePath) {
+    function loadPrompt(filePath, feedback = true) {
+        promptLoader.announce = feedback;
+        root.currentPromptFile = filePath;
         promptLoader.path = ""; // Unload
         promptLoader.path = filePath; // Load
         promptLoader.reload();
@@ -536,12 +544,27 @@ Singleton {
         if (setPersistentState) {
             Persistent.states.ai.provider = model.providerId;
             Persistent.states.ai.model = model.value;
+            root.rememberModel(model.id);
         }
         if (feedback)
             root.addMessage(Translation.tr("Model set to %1").arg(model.name), root.interfaceRole);
         if (model.requires_key && root.apiKeysLoaded && !(root.apiKeys[model.key_id]?.length > 0))
             root.addApiKeyAdvice(model);
         return true;
+    }
+
+    /** Ids of models picked before, newest first, minus the one in use. */
+    readonly property var recentModelIds: {
+        const remembered = Array.from(Persistent.states?.ai?.recentModels ?? []);
+        return remembered.filter(id => id !== root.currentModelId && root.catalog.models[id]);
+    }
+
+    function rememberModel(modelId: string) {
+        if (!Persistent.states?.ai)
+            return;
+        const remembered = Array.from(Persistent.states.ai.recentModels ?? []).filter(id => id !== modelId);
+        remembered.unshift(modelId);
+        Persistent.states.ai.recentModels = remembered.slice(0, 6);
     }
 
     /** Switches provider, landing on that provider's first model. */
@@ -574,14 +597,20 @@ Singleton {
         return root.temperature;
     }
 
-    function setTemperature(value) {
-        if (value == NaN || value < 0 || value > 2) {
-            root.addMessage(Translation.tr("Temperature must be between 0 and 2"), Ai.interfaceRole);
+    /** Top of the range the model in use accepts. Anthropic stops at 1. */
+    readonly property real maxTemperature: root.currentModelEntry?.maxTemperature ?? 2.0
+
+    function setTemperature(value, feedback = true) {
+        const limit = root.maxTemperature;
+        if (isNaN(value) || value < 0 || value > limit) {
+            if (feedback)
+                root.addMessage(Translation.tr("Temperature must be between 0 and %1").arg(limit), Ai.interfaceRole);
             return;
         }
         Persistent.states.ai.temperature = value;
         root.temperature = value;
-        root.addMessage(Translation.tr("Temperature set to %1").arg(value), Ai.interfaceRole);
+        if (feedback)
+            root.addMessage(Translation.tr("Temperature set to %1").arg(value), Ai.interfaceRole);
     }
 
     function setThinkingLevel(level): bool {

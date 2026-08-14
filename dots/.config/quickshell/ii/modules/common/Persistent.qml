@@ -118,6 +118,9 @@ Singleton {
                 // Whether think blocks stay open once the answer starts. Set
                 // by expanding or collapsing one, and remembered from then on.
                 property bool expandThoughts: false
+                // Catalog ids of the last few models picked, newest first, so
+                // the picker can offer them without scrolling the whole list.
+                property list<string> recentModels: []
             }
 
             property JsonObject background: JsonObject {

@@ -571,155 +571,6 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             }
         }
 
-        Loader {
-            id: modelAndProviderLoader
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignHCenter
-
-            active: Config.options.sidebar.ai.showProviderAndModelButtons && Ai.messageIDs.length === 0
-            visible: active
-
-            opacity: 0.0
-            scale: 0.85
-            transform: Translate {
-                id: modelProviderTransform
-                y: 25
-            }
-
-            Connections {
-                target: root
-                function onEntranceTriggerChanged() {
-                    if (root.entranceTrigger >= 0 && modelAndProviderLoader.active) {
-                        modelAndProviderLoader.opacity = 0.0;
-                        modelAndProviderLoader.scale = 0.85;
-                        modelProviderTransform.y = 25;
-                        Qt.callLater(function() {
-                            modelProviderAnim.start();
-                        });
-                    }
-                }
-            }
-
-            SequentialAnimation {
-                id: modelProviderAnim
-                PauseAnimation { duration: 220 }
-                ParallelAnimation {
-                    NumberAnimation { target: modelAndProviderLoader; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                    NumberAnimation { target: modelAndProviderLoader; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
-                    NumberAnimation { target: modelProviderTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
-                }
-            }
-
-            sourceComponent: ColumnLayout {
-                id: contentLayout
-                width: modelAndProviderLoader.width
-
-                Connections {
-                    target: root
-                    function onEntranceTriggerChanged() {
-                        if (root.entranceTrigger >= 0 && modelAndProviderLoader.active) {
-                            modelSelector.opacity = 0.0;
-                            modelSelectorScale.xScale = 0.8;
-                            modelSelectorTransform.y = 0;
-                            
-                            Qt.callLater(function() {
-                                modelSelectorAnim.start();
-                            });
-                        }
-                    }
-                }
-
-                Flickable {
-                    id: providerFlickable
-                    Layout.fillWidth: true
-                    implicitHeight: providerSelector.implicitHeight + 4
-                    contentWidth: providerSelector.implicitWidth
-                    boundsBehavior: Flickable.StopAtBounds
-                    flickableDirection: Flickable.HorizontalFlick
-                    clip: true
-
-                    RowLayout {
-                        id: providerSelector
-                        height: parent.height
-                        spacing: 4
-
-                        property string currentValue: Ai.currentProvider
-
-                        // One button per provider in the catalog — the list is
-                        // no longer restated here.
-                        Repeater {
-                            id: providerRepeater
-                            model: Ai.providerIds
-
-                            SelectionGroupButton {
-                                readonly property var provider: Ai.providers[modelData]
-
-                                leftmost: index === 0
-                                rightmost: index === providerRepeater.count - 1
-                                buttonSymbol: provider?.icon ?? ""
-                                buttonIcon: provider?.materialIcon ?? ""
-                                buttonText: provider?.name ?? modelData
-                                toggled: providerSelector.currentValue === modelData
-                                onClicked: Ai.setProvider(modelData)
-                            }
-                        }
-                    }
-                }
-
-                StyledComboBox {
-                    id: modelSelector
-                    Layout.fillWidth: true
-
-                    buttonIcon: "wand_stars"
-                    textRole: "title"
-                    model: Ai.modelsOfProviders[providerSelector.currentValue] ?? []
-                    enabled: true
-                    currentIndex: {
-                        const models = Ai.modelsOfProviders[providerSelector.currentValue] ?? [];
-                        for (var i = 0; i < models.length; i++) {
-                            if (models[i].value === Ai.currentModel) {
-                                return i;
-                            }
-                        }
-                        return 0;
-                    }
-
-                    function updateModel(index = 0) {
-                        const entry = (Ai.modelsOfProviders[providerSelector.currentValue] ?? [])[index];
-                        if (entry)
-                            Ai.setModel(`${providerSelector.currentValue}:${entry.value}`, false);
-                    }
-
-                    onActivated: index => updateModel(index)
-                    
-                    opacity: 0.0
-                    transform: [
-                        Translate {
-                            id: modelSelectorTransform
-                            y: 0
-                        },
-                        Scale {
-                            id: modelSelectorScale
-                            origin.x: modelSelector.width / 2
-                            origin.y: modelSelector.height / 2
-                            xScale: 0.8
-                            yScale: 1.0
-                        }
-                    ]
-                    
-                    SequentialAnimation {
-                        id: modelSelectorAnim
-                        PauseAnimation { duration: 220 + 3 * 60 }
-                        ParallelAnimation {
-                            NumberAnimation { target: modelSelector; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                            NumberAnimation { target: modelSelectorScale; property: "xScale"; from: 0.8; to: 1.0; duration: 380; easing.type: Easing.OutBack }
-                        }
-                    }
-                }
-            }
-        }
-        
-        
 
         FlowButtonGroup { // Suggestions
             id: suggestions
@@ -851,13 +702,23 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
         
 
+        ChatControlBar {
+            id: controlBar
+            Layout.fillWidth: true
+            Layout.bottomMargin: 4
+            overlayParent: messagesArea
+            commandPrefix: root.commandPrefix
+            inputField: messageInputField
+            onNewChatRequested: Ai.clearMessages()
+        }
+
         Rectangle { // Input area
             id: inputWrapper
             property real spacing: 5
             Layout.fillWidth: true
             radius: Appearance.rounding.normal - root.padding
             color: Appearance.colors.colLayer2
-            implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.topMargin + commandButtonsRow.implicitHeight + commandButtonsRow.anchors.bottomMargin + spacing, 45) + (attachedFileIndicator.implicitHeight + spacing + attachedFileIndicator.anchors.topMargin)
+            implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.bottomMargin + spacing, 45) + (attachedFileIndicator.implicitHeight + spacing + attachedFileIndicator.anchors.topMargin)
             clip: true
 
             FastBlur {
@@ -959,7 +820,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             RowLayout { // Input field and send button
                 id: inputFieldRowLayout
                 anchors {
-                    bottom: commandButtonsRow.top
+                    bottom: parent.bottom
                     left: parent.left
                     right: parent.right
                     bottomMargin: 5
@@ -1187,14 +1048,16 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 }
                     
                 
-                RippleButton { // Send button
+                RippleButton { // Send button, or Stop while a reply is coming in
                     id: sendButton
+                    readonly property bool stopping: Ai.isGenerating
+
                     Layout.alignment: Qt.AlignBottom
                     Layout.rightMargin: 5
                     implicitWidth: 40
                     implicitHeight: 40
                     buttonRadius: Appearance.rounding.small
-                    enabled: messageInputField.text.length > 0
+                    enabled: sendButton.stopping || messageInputField.text.length > 0
                     toggled: enabled
 
                     Behavior on enabled {
@@ -1214,6 +1077,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         anchors.fill: parent
                         cursorShape: sendButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: {
+                            if (sendButton.stopping) {
+                                Ai.stopGeneration();
+                                return;
+                            }
                             const inputText = messageInputField.text;
                             root.handleInput(inputText);
                             messageInputField.clear();
@@ -1225,77 +1092,11 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         horizontalAlignment: Text.AlignHCenter
                         iconSize: 22
                         color: sendButton.enabled ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2Disabled
-                        text: "arrow_upward"
+                        text: sendButton.stopping ? "stop" : "arrow_upward"
                     }
-                }
-            }
 
-            RowLayout { // Controls
-                id: commandButtonsRow
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 5
-                anchors.leftMargin: 10
-                anchors.rightMargin: 5
-                spacing: 4
-
-                property var commandsShown: [
-                    {
-                        name: "",
-                        sendDirectly: false,
-                        dontAddSpace: true
-                    },
-                    {
-                        name: "clear",
-                        sendDirectly: true
-                    },
-                ]
-
-                ApiInputBoxIndicator {
-                    // Model indicator
-                    readonly property var currentEntry: Ai.currentModelEntry
-
-                    symbol: currentEntry?.icon ?? ""
-                    icon: currentEntry?.materialIcon ?? "wand_stars"
-                    text: currentEntry?.title ?? Ai.currentModel
-                    tooltipText: Translation.tr("Current model: %1\nSet it with %2model MODEL").arg(currentEntry?.name ?? Translation.tr("none")).arg(root.commandPrefix)
-                }
-
-                ApiInputBoxIndicator {
-                    // Tool indicator
-                    icon: "service_toolbox"
-                    text: Ai.currentTool.charAt(0).toUpperCase() + Ai.currentTool.slice(1)
-                    tooltipText: Translation.tr("Current tool: %1\nSet it with %2tool TOOL").arg(Ai.currentTool).arg(root.commandPrefix)
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                ButtonGroup {
-                    // Command buttons
-                    padding: 0
-
-                    Repeater {
-                        // Command buttons
-                        model: commandButtonsRow.commandsShown
-                        delegate: ApiCommandButton {
-                            property string commandRepresentation: `${root.commandPrefix}${modelData.name}`
-                            buttonText: commandRepresentation
-                            downAction: () => {
-                                if (modelData.sendDirectly) {
-                                    root.handleInput(commandRepresentation);
-                                } else {
-                                    messageInputField.text = commandRepresentation + (modelData.dontAddSpace ? "" : " ");
-                                    messageInputField.cursorPosition = messageInputField.text.length;
-                                    messageInputField.forceActiveFocus();
-                                }
-                                if (modelData.name === "clear") {
-                                    messageInputField.text = "";
-                                }
-                            }
-                        }
+                    StyledToolTip {
+                        text: sendButton.stopping ? Translation.tr("Stop") : Translation.tr("Send")
                     }
                 }
             }

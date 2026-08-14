@@ -32,6 +32,7 @@ import QtQuick;
  * - builtinSearch: Provider offers a server-side web search tool
  * - samplingParams: Model still honours temperature/top_p. Newer reasoning
  *   models ignore or reject them.
+ * - maxTemperature: Top of the temperature range this API accepts
  * - contextWindow / maxOutput: Token limits, 0 when unknown
  *
  * Quirks. Deviations from the dialect a model otherwise speaks, so one
@@ -68,6 +69,7 @@ QtObject {
     property bool tools: true
     property bool builtinSearch: false
     property bool samplingParams: true
+    property real maxTemperature: 2.0
     property int contextWindow: 0
     property int maxOutput: 0
     property var quirks: ({})
