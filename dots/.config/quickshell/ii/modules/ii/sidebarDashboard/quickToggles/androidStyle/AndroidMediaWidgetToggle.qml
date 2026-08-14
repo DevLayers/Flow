@@ -27,8 +27,8 @@ Item {
     property bool editMode: false
     property bool isUnused: false
     property bool isDragging: false
-    property real dragAbsX: 0
-    property real dragAbsY: 0
+    property real dragOffsetX: 0
+    property real dragOffsetY: 0
     property int pageIndex: 0
     property int gridColumns: 4
     property var panel: null
@@ -131,19 +131,8 @@ Item {
     Item {
         id: visualButton
 
-        parent: root.pageIndex === -1 ? root : (root.parent ? root.parent.parent : root)
-
-        x: root.isDragging ? dragAbsX : (root.pageIndex === -1 ? 0 : (root.parent ? root.parent.x + root.x : root.x))
-        y: root.isDragging ? dragAbsY : (root.pageIndex === -1 ? 0 : (root.parent ? root.parent.y + root.y : root.y))
-
-        Behavior on x {
-            enabled: !root.isDragging
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
-        }
-        Behavior on y {
-            enabled: !root.isDragging
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
-        }
+        x: 0
+        y: 0
         
         Behavior on width {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
@@ -169,7 +158,8 @@ Item {
         z: root.isDragging ? 99 : 1
 
         transform: Translate {
-            y: root._entranceDone ? 0 : root._entranceTranslateY
+            x: root.isDragging ? root.dragOffsetX : 0
+            y: (root.isDragging ? root.dragOffsetY : 0) + (root._entranceDone ? 0 : root._entranceTranslateY)
         }
 
         Behavior on scale {
@@ -595,19 +585,19 @@ Item {
                             || !root.panel.editController.beginReorder(root.buttonData.id, root.pageIndex))
                         return;
                 }
-                var absPos = visualButton.parent.mapFromItem(editModeInteraction, event.x, event.y);
-                pressAbsX = absPos.x;
-                pressAbsY = absPos.y;
-                initialVisualX = visualButton.x;
-                initialVisualY = visualButton.y;
+                pressAbsX = event.x;
+                pressAbsY = event.y;
+                initialVisualX = 0;
+                initialVisualY = 0;
+                root.dragOffsetX = 0;
+                root.dragOffsetY = 0;
                 root.isDragging = false;
             }
 
             onPositionChanged: event => {
                 if (pressed) {
-                    var absPos = visualButton.parent.mapFromItem(editModeInteraction, event.x, event.y);
-                    var dx = absPos.x - pressAbsX;
-                    var dy = absPos.y - pressAbsY;
+                    var dx = event.x - pressAbsX;
+                    var dy = event.y - pressAbsY;
 
                     if (!root.isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
                         root.isDragging = root.isUnused || (root.panel && root.panel.editController
@@ -615,13 +605,13 @@ Item {
                     }
 
                     if (root.isDragging) {
-                        root.dragAbsX = initialVisualX + dx;
-                        root.dragAbsY = initialVisualY + dy;
+                        root.dragOffsetX = initialVisualX + dx;
+                        root.dragOffsetY = initialVisualY + dy;
 
-                        var centerX = root.dragAbsX + visualButton.width / 2;
-                        var centerY = root.dragAbsY + visualButton.height / 2;
+                        var centerX = root.dragOffsetX + root.width / 2;
+                        var centerY = root.dragOffsetY + root.height / 2;
 
-                        var gridPos = root.parent.mapFromItem(visualButton.parent, centerX, centerY);
+                        var gridPos = root.parent.mapFromItem(root, centerX, centerY);
                         if (!root.isUnused && root.panel && root.panel.editController) {
                             root.panel.editController.previewReorderAt(
                                 root.pageIndex,

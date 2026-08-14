@@ -44,8 +44,8 @@ Item {
     readonly property bool is3Way: (root.buttonData.type === "soundcoreAnc" || root.buttonData.type === "powerProfile" || root.buttonData.type === "keyboardBacklight")
     readonly property bool is3WaySlider: is3Way && effectiveSizeW === 2 && effectiveSizeH === 1 && (Config.options.sidebar.quickToggles.useThreeWaySliders ?? false)
 
-    // visualButton is reparented — use its native hovered (Button.hovered) so the
-    // tooltip fires from the actual rendered widget, not the invisible grid placeholder
+    // Use the rendered widget's hover state while keeping it in this delegate's
+    // local scene graph. The grid delegate remains the only layout owner.
     property bool hovered: (visualButton.hovered || visualButton.mouseArea.containsMouse)
                            || (root.editMode && editModeInteraction.containsMouse)
 
@@ -77,8 +77,8 @@ Item {
     property bool editMode: false
     property bool isUnused: false // injected by delegate chooser
     property bool isDragging: false
-    property real dragAbsX: 0
-    property real dragAbsY: 0
+    property real dragOffsetX: 0
+    property real dragOffsetY: 0
     property int pageIndex: 0
     property int gridColumns: 4
     property var panel: null
@@ -200,20 +200,9 @@ Item {
 
     GroupButton {
         id: visualButton
-        
-        parent: root.pageIndex === -1 ? root : (root.parent ? root.parent.parent : root)
 
-        x: root.isDragging ? dragAbsX : (root.pageIndex === -1 ? 0 : (root.parent ? root.parent.x + root.x : root.x))
-        y: root.isDragging ? dragAbsY : (root.pageIndex === -1 ? 0 : (root.parent ? root.parent.y + root.y : root.y))
-        
-        Behavior on x {
-            enabled: !root.isDragging && !entranceAnim.running
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
-        }
-        Behavior on y {
-            enabled: !root.isDragging && !entranceAnim.running
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
-        }
+        x: 0
+        y: 0
         
         Behavior on width {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
@@ -236,8 +225,8 @@ Item {
         z: root.isDragging ? 99 : 1
 
         transform: Translate {
-            x: root._entranceDone ? 0 : root._entranceOffsetX
-            y: root._entranceDone ? 0 : root._entranceOffsetY
+            x: (root.isDragging ? root.dragOffsetX : 0) + (root._entranceDone ? 0 : root._entranceOffsetX)
+            y: (root.isDragging ? root.dragOffsetY : 0) + (root._entranceDone ? 0 : root._entranceOffsetY)
         }
         
         Behavior on scale {
@@ -723,20 +712,20 @@ Item {
                             || !root.panel.editController.beginReorder(root.buttonData.id, root.pageIndex))
                         return;
                 }
-                var absPos = visualButton.parent.mapFromItem(editModeInteraction, event.x, event.y);
-                pressAbsX = absPos.x;
-                pressAbsY = absPos.y;
-                initialVisualX = visualButton.x;
-                initialVisualY = visualButton.y;
+                pressAbsX = event.x;
+                pressAbsY = event.y;
+                initialVisualX = 0;
+                initialVisualY = 0;
+                root.dragOffsetX = 0;
+                root.dragOffsetY = 0;
                 root.isDragging = false;
                 root.dragTargetPage = root.pageIndex;
             }
             
             onPositionChanged: event => {
                 if (pressed) {
-                    var absPos = visualButton.parent.mapFromItem(editModeInteraction, event.x, event.y);
-                    var dx = absPos.x - pressAbsX;
-                    var dy = absPos.y - pressAbsY;
+                    var dx = event.x - pressAbsX;
+                    var dy = event.y - pressAbsY;
                     
                     if (!root.isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
                         root.isDragging = root.isUnused || (root.panel && root.panel.editController
@@ -744,13 +733,13 @@ Item {
                     }
                     
                     if (root.isDragging) {
-                        root.dragAbsX = initialVisualX + dx;
-                        root.dragAbsY = initialVisualY + dy;
+                        root.dragOffsetX = initialVisualX + dx;
+                        root.dragOffsetY = initialVisualY + dy;
                         
-                        var centerX = root.dragAbsX + visualButton.width / 2;
-                        var centerY = root.dragAbsY + visualButton.height / 2;
+                        var centerX = root.dragOffsetX + root.width / 2;
+                        var centerY = root.dragOffsetY + root.height / 2;
                         
-                        var gridPos = root.parent.mapFromItem(visualButton.parent, centerX, centerY);
+                        var gridPos = root.parent.mapFromItem(root, centerX, centerY);
                         if (!root.isUnused && root.panel && root.panel.editController) {
                             root.panel.editController.previewReorderAt(
                                 root.pageIndex,
@@ -764,7 +753,7 @@ Item {
 
                         // Cross-page drag: ask panel to scroll if near horizontal edges
                         if (root.panel && root.panel.handleDragScrollRequest) {
-                            var panelPos = root.panel.mapFromItem(visualButton.parent, centerX, centerY);
+                            var panelPos = root.panel.mapFromItem(root, centerX, centerY);
                             root.panel.handleDragScrollRequest(panelPos.x, root);
                         }
                     }
@@ -914,17 +903,16 @@ Item {
         }
     }
 
-    // addBadge is reparented to the same parent as visualButton so it renders above it
     Rectangle {
         id: addBadge
-        parent: root.pageIndex === -1 ? root : (root.parent ? root.parent.parent : root)
         width: 20
         height: 20
         radius: 10
         color: Appearance.m3colors.m3success
-        // Position aligned to top-right corner of visualButton
-        x: visualButton.x + visualButton.width - width + 6
-        y: visualButton.y - height + 6
+        anchors.right: root.right
+        anchors.top: root.top
+        anchors.rightMargin: -6
+        anchors.topMargin: -14
         visible: root.isUnused
         z: visualButton.z + 10
         
