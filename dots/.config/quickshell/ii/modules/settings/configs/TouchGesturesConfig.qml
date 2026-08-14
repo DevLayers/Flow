@@ -20,6 +20,10 @@ ContentPage {
 
     property string previewOrigin: "leftEdge"
 
+    Component.onCompleted: {
+        TouchGestureService.checkBinary();
+    }
+
     // ── SECTION 1: MASTER & STATUS ──────────────────────────────────────────
     ContentSection {
         icon: "touch_app"
@@ -27,7 +31,7 @@ ContentPage {
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: 4
 
             TouchGestureStatusCard {
                 Layout.fillWidth: true
@@ -56,15 +60,17 @@ ContentPage {
             }
 
             HelperCodeBox {
+                visible: !TouchGestureService.binaryExists
                 Layout.fillWidth: true
                 icon: "terminal"
                 title: Translation.tr("Compile Rust Helper Daemon")
-                text: Translation.tr("To compile and install the native touch listener daemon, run this command in your terminal (requires Rust toolchain and cargo):")
+                text: Translation.tr("To compile and install the native touch listener daemon, run this command in your terminal (requires Rust toolchain and cargo). After compiling, restart Quickshell to start the daemon:")
                 codeSnippet: "cd " + Directories.scriptPath + "/touchGestures/touch_gestures_src && cargo build --release && cp target/release/touch_gestures ../touch_gestures"
                 snippetWrapMode: Text.Wrap
             }
 
             HelperCodeBox {
+                visible: !TouchGestureService.binaryExists
                 Layout.fillWidth: true
                 icon: "vpn_key"
                 title: Translation.tr("Linux Input Group Permissions")
@@ -568,6 +574,17 @@ ContentPage {
                             root.opts.directionTolerance = 35;
                             root.opts.cooldownMs = 250;
                         }
+                    }
+                }
+
+                RippleButtonWithIcon {
+                    visible: TouchGestureService.binaryExists
+                    buttonRadius: Appearance.rounding.small
+                    materialIcon: "delete"
+                    colText: Appearance.colors.colError
+                    mainText: Translation.tr("Delete compiled binary")
+                    onClicked: {
+                        TouchGestureService.deleteBinary();
                     }
                 }
             }

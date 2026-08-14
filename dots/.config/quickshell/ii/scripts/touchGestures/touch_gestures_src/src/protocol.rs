@@ -4,6 +4,7 @@ use std::sync::Mutex;
 
 static STDOUT_LOCK: Mutex<()> = Mutex::new(());
 
+#[allow(dead_code)]
 #[derive(Serialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum OutEvent {
@@ -18,6 +19,8 @@ pub enum OutEvent {
         path: String,
         /// "touch" for fingers, "pen" for stylus/digitizer devices.
         kind: String,
+        #[serde(rename = "isDesktopMapped", default)]
+        is_desktop_mapped: bool,
     },
 
     #[serde(rename = "device_removed")]

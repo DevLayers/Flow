@@ -12,18 +12,25 @@ pub fn is_touchscreen(dev: &Device) -> bool {
     let name_lower = dev.name().unwrap_or("").to_ascii_lowercase();
 
     // Explicitly reject touchpads
-    if name_lower.contains("touchpad")
-        || (dev.properties().contains(PropType::POINTER)
-            && !name_lower.contains("mouse passthrough (absolute)")
-            && !name_lower.contains("sunshine")
-            && !name_lower.contains("moonlight"))
+    if name_lower.contains("touchpad") {
+        return false;
+    }
+
+    // Pointer-only devices without DIRECT property (like laptop touchpads or mice)
+    if dev.properties().contains(PropType::POINTER)
+        && !dev.properties().contains(PropType::DIRECT)
+        && !name_lower.contains("mouse passthrough (absolute)")
+        && !name_lower.contains("sunshine")
+        && !name_lower.contains("moonlight")
     {
         return false;
     }
 
     if let Some(keys) = dev.supported_keys() {
-        // Direct physical touchscreen
-        if keys.contains(KeyCode::BTN_TOUCH) && dev.properties().contains(PropType::DIRECT) {
+        // Direct physical touchscreen or tablet (e.g. BTN_TOUCH or BTN_TOOL_PEN with DIRECT prop)
+        if (keys.contains(KeyCode::BTN_TOUCH) || keys.contains(KeyCode::BTN_TOOL_PEN))
+            && dev.properties().contains(PropType::DIRECT)
+        {
             return true;
         }
 
@@ -59,9 +66,35 @@ pub fn is_touchscreen(dev: &Device) -> bool {
 /// `is_touchscreen`. They are reported separately so the shell can decide whether pen
 /// input should drive gestures (a pen is also a pointer, so it drags windows too).
 pub fn is_stylus(dev: &Device) -> bool {
+    let name_lower = dev.name().unwrap_or("").to_ascii_lowercase();
+    if name_lower.contains("tablet") || name_lower.contains("stylus") || name_lower.contains("pen") {
+        return true;
+    }
     dev.supported_keys().is_some_and(|keys| {
-        keys.contains(KeyCode::BTN_TOOL_PEN) || keys.contains(KeyCode::BTN_STYLUS)
+        keys.contains(KeyCode::BTN_TOOL_PEN)
+            || keys.contains(KeyCode::BTN_STYLUS)
+            || keys.contains(KeyCode::BTN_STYLUS2)
+            || keys.contains(KeyCode::BTN_TOOL_RUBBER)
     })
+}
+
+pub fn is_desktop_mapped(dev: &Device) -> bool {
+    let name_lower = dev.name().unwrap_or("").to_ascii_lowercase();
+    if name_lower.contains("opentabletdriver")
+        || name_lower.contains("sunshine")
+        || name_lower.contains("moonlight")
+        || name_lower.contains("mouse passthrough (absolute)")
+    {
+        return true;
+    }
+    if let Ok(mut iter) = dev.get_absinfo() {
+        if let Some((_, info)) = iter.find(|(c, _)| *c == AbsoluteAxisCode::ABS_X) {
+            if info.maximum() > 100000 {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 pub fn is_virtual(name: &str) -> bool {
@@ -201,6 +234,7 @@ impl DeviceManager {
                             name: name.to_string(),
                             path: path.to_string_lossy().to_string(),
                             kind: if is_stylus(&dev) { "pen" } else { "touch" }.to_string(),
+                            is_desktop_mapped: is_desktop_mapped(&dev),
                         });
 
                         let active_clone = Arc::clone(&active);
@@ -282,7 +316,6 @@ fn watch_device(path: &Path, device_id: &str) -> std::io::Result<()> {
 
     let mut slots: Vec<SlotState> = vec![SlotState::default(); max_slots];
     let mut current_slot = 0usize;
-    let mut last_event_time = SystemTime::now();
 
     // Single touch fallback state initialized to current coordinates
     let mut st_down = false;
@@ -306,7 +339,7 @@ fn watch_device(path: &Path, device_id: &str) -> std::io::Result<()> {
 
     loop {
         for event in dev.fetch_events()? {
-            last_event_time = event.timestamp();
+            let event_time = event.timestamp();
 
             match event.destructure() {
                 EventSummary::AbsoluteAxis(_, AbsoluteAxisCode::ABS_MT_SLOT, slot) => {
@@ -358,7 +391,7 @@ fn watch_device(path: &Path, device_id: &str) -> std::io::Result<()> {
                     if code == KeyCode::BTN_TOUCH || code == KeyCode::BTN_LEFT =>
                 {
                     if !is_multitouch {
-                        let now = current_time_ms(Some(last_event_time));
+                        let now = current_time_ms(Some(event_time));
                         if val == 1 {
                             st_down = true;
                             emit_event(&OutEvent::TouchDown {
@@ -382,7 +415,7 @@ fn watch_device(path: &Path, device_id: &str) -> std::io::Result<()> {
                 }
 
                 EventSummary::Synchronization(_, evdev::SynchronizationCode::SYN_REPORT, _) => {
-                    let now = current_time_ms(Some(last_event_time));
+                    let now = current_time_ms(Some(event_time));
 
                     if is_multitouch {
                         for (idx, slot) in slots.iter_mut().enumerate() {

@@ -82,6 +82,7 @@ Singleton {
     }
 
     Component.onCompleted: {
+        root.checkBinary();
         console.log("[TouchGestures] Service initialized. enabled:", root.enabled);
     }
 
@@ -138,6 +139,45 @@ Singleton {
         waitForAllContactsUp = false;
     }
 
+    property bool binaryExists: false
+
+    Process {
+        id: checkBinaryProcess
+        command: ["test", "-f", Directories.scriptPath + "/touchGestures/touch_gestures"]
+        onExited: (code) => {
+            root.binaryExists = (code === 0);
+        }
+    }
+
+    function checkBinary() {
+        if (Directories.scriptPath.length > 0) {
+            checkBinaryProcess.running = false;
+            Qt.callLater(() => {
+                checkBinaryProcess.running = true;
+            });
+        }
+    }
+
+    Process {
+        id: deleteBinaryProcess
+        command: ["rm", "-f", Directories.scriptPath + "/touchGestures/touch_gestures"]
+        onExited: (code) => {
+            root.binaryExists = false;
+            root.cancelActiveGesture("binary-deleted");
+            root.forgetContacts();
+            root.devices = [];
+            root.helperStatus = "stopped";
+            console.log("[TouchGestures] Binary deleted.");
+        }
+    }
+
+    function deleteBinary() {
+        deleteBinaryProcess.running = false;
+        Qt.callLater(() => {
+            deleteBinaryProcess.running = true;
+        });
+    }
+
     Process {
         id: helperProcess
 
@@ -148,6 +188,7 @@ Singleton {
         ]
 
         onStarted: {
+            root.binaryExists = true;
             console.log("[TouchGestures] Process started:", command[0]);
         }
 
@@ -167,6 +208,7 @@ Singleton {
             if (root.helperStatus !== "error") {
                 root.helperStatus = "stopped";
             }
+            root.checkBinary();
         }
     }
 
@@ -241,7 +283,8 @@ Singleton {
             deviceId: event.deviceId,
             name: event.name,
             path: event.path,
-            kind: event.kind ? event.kind : "touch"
+            kind: event.kind ? event.kind : "touch",
+            isDesktopMapped: Boolean(event.isDesktopMapped)
         };
         if (existingIdx >= 0) {
             list[existingIdx] = entry;
@@ -250,7 +293,7 @@ Singleton {
         }
         devices = list;
         helperStatus = "ready";
-        console.log("[TouchGestures] Device registered:", event.name, "(" + event.path + ")");
+        console.log("[TouchGestures] Device registered:", event.name, "(" + event.path + ") isDesktopMapped:", entry.isDesktopMapped);
     }
 
     function removeDevice(deviceId) {
@@ -356,6 +399,131 @@ Singleton {
         }
     }
 
+    function isDeviceDesktopMapped(deviceId) {
+        for (var i = 0; i < devices.length; ++i) {
+            if (devices[i].deviceId === deviceId)
+                return Boolean(devices[i].isDesktopMapped);
+        }
+        return false;
+    }
+
+    function getDesktopBounds() {
+        var monitors = (HyprlandData && HyprlandData.monitors && HyprlandData.monitors.length > 0)
+            ? HyprlandData.monitors
+            : Quickshell.screens;
+
+        if (!monitors || monitors.length === 0) {
+            return { minX: 0, minY: 0, maxX: 1920, maxY: 1080, width: 1920, height: 1080 };
+        }
+
+        var minX = monitors[0].x;
+        var minY = monitors[0].y;
+        var maxX = monitors[0].x + monitors[0].width;
+        var maxY = monitors[0].y + monitors[0].height;
+
+        for (var i = 1; i < monitors.length; ++i) {
+            var m = monitors[i];
+            minX = Math.min(minX, m.x);
+            minY = Math.min(minY, m.y);
+            maxX = Math.max(maxX, m.x + m.width);
+            maxY = Math.max(maxY, m.y + m.height);
+        }
+
+        return {
+            minX: minX,
+            minY: minY,
+            maxX: maxX,
+            maxY: maxY,
+            width: Math.max(1, maxX - minX),
+            height: Math.max(1, maxY - minY)
+        };
+    }
+
+    function resolveScreenAndCoords(deviceId, normX, normY) {
+        var isDesktop = isDeviceDesktopMapped(deviceId);
+        var explicitTarget = (root.opts && root.opts.targetMonitor && root.opts.targetMonitor !== "auto")
+            ? root.opts.targetMonitor
+            : "";
+
+        var monitors = (HyprlandData && HyprlandData.monitors && HyprlandData.monitors.length > 0)
+            ? HyprlandData.monitors
+            : Quickshell.screens;
+
+        if (!isDesktop || monitors.length <= 1) {
+            var fallbackScreenName = explicitTarget ? explicitTarget : resolveScreenName();
+            var fallbackScreen = screenByName(fallbackScreenName);
+            if (!fallbackScreen) return null;
+            var singlePt = transformPoint(normX, normY, fallbackScreenName);
+            return {
+                screenName: fallbackScreenName,
+                screen: fallbackScreen,
+                px: singlePt.x * fallbackScreen.width,
+                py: singlePt.y * fallbackScreen.height
+            };
+        }
+
+        // Multi-monitor desktop mapped space (e.g. OpenTabletDriver, virtual absolute digitizers)
+        var bounds = getDesktopBounds();
+        var globalX = bounds.minX + normX * bounds.width;
+        var globalY = bounds.minY + normY * bounds.height;
+
+        var targetMon = null;
+        if (explicitTarget) {
+            for (var i = 0; i < monitors.length; ++i) {
+                if (monitors[i].name === explicitTarget) {
+                    targetMon = monitors[i];
+                    break;
+                }
+            }
+        }
+
+        if (!targetMon) {
+            // Find which monitor contains (globalX, globalY)
+            for (var j = 0; j < monitors.length; ++j) {
+                var monCandidate = monitors[j];
+                if (globalX >= monCandidate.x && globalX <= (monCandidate.x + monCandidate.width)
+                    && globalY >= monCandidate.y && globalY <= (monCandidate.y + monCandidate.height)) {
+                    targetMon = monCandidate;
+                    break;
+                }
+            }
+        }
+
+        if (!targetMon) {
+            // Fallback: closest monitor by center distance
+            var bestDist = Infinity;
+            for (var k = 0; k < monitors.length; ++k) {
+                var mon = monitors[k];
+                var monCenterX = mon.x + mon.width / 2;
+                var monCenterY = mon.y + mon.height / 2;
+                var dist = Math.hypot(globalX - monCenterX, globalY - monCenterY);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    targetMon = mon;
+                }
+            }
+        }
+
+        if (!targetMon) return null;
+
+        var chosenScreen = screenByName(targetMon.name);
+        if (!chosenScreen) return null;
+
+        var localX = Math.max(0, Math.min(chosenScreen.width, globalX - targetMon.x));
+        var localY = Math.max(0, Math.min(chosenScreen.height, globalY - targetMon.y));
+
+        var normLocalX = localX / chosenScreen.width;
+        var normLocalY = localY / chosenScreen.height;
+        var transformedPt = transformPoint(normLocalX, normLocalY, targetMon.name);
+
+        return {
+            screenName: targetMon.name,
+            screen: chosenScreen,
+            px: transformedPt.x * chosenScreen.width,
+            py: transformedPt.y * chosenScreen.height
+        };
+    }
+
     function classifyOrigin(px, py, width, height) {
         var edge = (root.opts && root.opts.edgeWidth) ? root.opts.edgeWidth : 24;
         var corner = (root.opts && root.opts.cornerSize) ? root.opts.cornerSize : 72;
@@ -407,6 +575,7 @@ Singleton {
     function calculateTravel(px, py) {
         var dx = px - startX;
         var dy = py - startY;
+        var invSqrt2 = 0.7071067811865475;
 
         switch (activeOrigin) {
         case "leftEdge":
@@ -414,12 +583,29 @@ Singleton {
         case "rightEdge":
             return { primary: -dx, offAxis: Math.abs(dy) };
         case "topEdge":
-        case "topLeftCorner":
-        case "topRightCorner":
             return { primary: dy, offAxis: Math.abs(dx) };
         case "bottomEdge":
+            return { primary: -dy, offAxis: Math.abs(dx) };
+        case "topLeftCorner":
+            return {
+                primary: (dx + dy) * invSqrt2,
+                offAxis: Math.abs(dx - dy) * invSqrt2
+            };
+        case "topRightCorner":
+            return {
+                primary: (-dx + dy) * invSqrt2,
+                offAxis: Math.abs(dx + dy) * invSqrt2
+            };
         case "bottomLeftCorner":
+            return {
+                primary: (dx - dy) * invSqrt2,
+                offAxis: Math.abs(dx + dy) * invSqrt2
+            };
         case "bottomRightCorner":
+            return {
+                primary: (-dx - dy) * invSqrt2,
+                offAxis: Math.abs(dx - dy) * invSqrt2
+            };
         default:
             return { primary: -dy, offAxis: Math.abs(dx) };
         }
@@ -458,14 +644,14 @@ Singleton {
         if (!enabled || gestureState !== root.stateIdle || waitForAllContactsUp)
             return;
 
-        var screenName = resolveScreenName();
-        var screen = screenByName(screenName);
-        if (!screen)
+        var resolved = resolveScreenAndCoords(event.deviceId, event.x, event.y);
+        if (!resolved)
             return;
 
-        var pt = transformPoint(event.x, event.y, screenName);
-        var px = pt.x * screen.width;
-        var py = pt.y * screen.height;
+        var screenName = resolved.screenName;
+        var screen = resolved.screen;
+        var px = resolved.px;
+        var py = resolved.py;
 
         var origin = classifyOrigin(px, py, screen.width, screen.height);
         if (origin === "") {
@@ -502,7 +688,7 @@ Singleton {
 
         gestureState = root.stateTracking;
 
-        console.log("[TouchGestures] Gesture START:", origin, "action:", actionId, "startX:", px.toFixed(0), "startY:", py.toFixed(0));
+        console.log("[TouchGestures] Gesture START on", screenName, ":", origin, "action:", actionId, "startX:", px.toFixed(0), "startY:", py.toFixed(0));
         gestureStarted(screenName, origin, actionId, px, py);
     }
 
@@ -513,13 +699,12 @@ Singleton {
         if (gestureState !== root.stateTracking)
             return;
 
-        var screen = screenByName(activeScreenName);
-        if (!screen)
+        var resolved = resolveScreenAndCoords(event.deviceId, event.x, event.y);
+        if (!resolved)
             return;
 
-        var pt = transformPoint(event.x, event.y, activeScreenName);
-        var px = pt.x * screen.width;
-        var py = pt.y * screen.height;
+        var px = resolved.px;
+        var py = resolved.py;
 
         currentX = px;
         currentY = py;
@@ -642,5 +827,32 @@ Singleton {
         offAxisTravel = 0;
         progress = 0;
         velocitySamples = [];
+    }
+
+    IpcHandler {
+        target: "touchGestures"
+
+        function trigger(actionId: string, screenName: string): void {
+            var targetScreen = screenName ? screenName : resolveScreenName();
+            TouchGestureActionRegistry.trigger(actionId, targetScreen);
+        }
+
+        function triggerAction(actionId: string): void {
+            TouchGestureActionRegistry.trigger(actionId, resolveScreenName());
+        }
+
+        function triggerOrigin(origin: string): void {
+            var targetScreen = resolveScreenName();
+            var actionId = actionForOrigin(origin);
+            if (actionId && actionId !== "none") {
+                TouchGestureActionRegistry.trigger(actionId, targetScreen);
+            }
+        }
+
+        function toggle(): void {
+            if (root.opts) {
+                root.opts.enable = !root.opts.enable;
+            }
+        }
     }
 }
