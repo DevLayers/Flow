@@ -68,4 +68,24 @@ TestCase {
         compare(controller.draftPages[0][1].sizeH, 1);
         verify(controller.cancelResize());
     }
+
+    function test_add_and_remove_use_stable_ids() {
+        fakeConfig.pages = sourcePages;
+        controller.persistedPages = sourcePages;
+        verify(controller.addToggle("mediaWidget", 0));
+        compare(ids(fakeConfig.pages[0]), ["a", "b", "c", "mediaWidget"]);
+        verify(controller.removeToggle("mediaWidget"));
+        compare(ids(fakeConfig.pages[0]), ["a", "b", "c"]);
+    }
+
+    function test_resize_respects_catalog_constraints() {
+        var pages = [[{ id: "volume", type: "volumeSlider", sizeW: 4, sizeH: 1 }]];
+        fakeConfig.pages = pages;
+        controller.persistedPages = pages;
+        verify(controller.beginResize("volume", 0));
+        verify(!controller.previewResize(4, 2));
+        compare(controller.draftPages[0][0].sizeW, 4);
+        compare(controller.draftPages[0][0].sizeH, 1);
+        verify(controller.cancelResize());
+    }
 }

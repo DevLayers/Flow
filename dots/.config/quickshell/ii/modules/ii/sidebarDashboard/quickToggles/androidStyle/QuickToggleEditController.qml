@@ -212,7 +212,8 @@ Item {
             rejected("refusing to persist invalid quick-toggle pages");
             return false;
         }
-        var current = normalizedPages(root.persistedPages);
+        var currentSource = root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages;
+        var current = normalizedPages(currentSource);
         if (samePages(current, normalized)) {
             clearTransaction();
             return true;
@@ -257,7 +258,8 @@ Item {
     }
 
     function updateOrPersist(mutator) {
-        var pages = active ? clonePages(draftPages) : clonePages(persistedPages);
+        var source = root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages;
+        var pages = active ? clonePages(draftPages) : clonePages(source);
         mutator(pages);
         if (active) {
             draftPages = normalizedPages(pages);
