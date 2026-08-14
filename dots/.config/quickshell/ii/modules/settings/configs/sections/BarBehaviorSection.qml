@@ -23,7 +23,7 @@ ContentSection {
         buttonIcon: "swap_vert"
         text: Translation.tr("Scroll actions")
         checked: Config.options.bar.enableVolumeScroll || Config.options.bar.enableBrightnessScroll
-        configPage: Qt.resolvedUrl("widgets/BarScrollActionsConfig.qml")
+        configPage: Qt.resolvedUrl("../widgets/BarScrollActionsConfig.qml")
         property bool readyForToggle: false
         Component.onCompleted: readyForToggle = true
         onCheckedChanged: {
@@ -38,7 +38,7 @@ ContentSection {
         buttonIcon: "tooltip"
         text: Translation.tr("Enable tooltips")
         checked: Config.options.bar.tooltips.enableTooltips
-        configPage: Qt.resolvedUrl("widgets/BarTooltipsConfig.qml")
+        configPage: Qt.resolvedUrl("../widgets/BarTooltipsConfig.qml")
         property bool readyForToggle: false
         Component.onCompleted: readyForToggle = true
         onCheckedChanged: {
@@ -52,7 +52,7 @@ ContentSection {
         buttonIcon: "open_in_new"
         text: Translation.tr("Enable popups")
         checked: Config.options.bar.tooltips.enablePopups
-        configPage: Qt.resolvedUrl("widgets/BarPopupsConfig.qml")
+        configPage: Qt.resolvedUrl("../widgets/BarPopupsConfig.qml")
         property bool readyForToggle: false
         Component.onCompleted: readyForToggle = true
         onCheckedChanged: {

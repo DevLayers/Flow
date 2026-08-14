@@ -22,9 +22,9 @@ Item {
     readonly property string bluetoothDeviceIcon: root.bluetoothDevice
         ? Icons.getBluetoothDeviceMaterialSymbol(root.bluetoothDevice.icon || "")
         : "bluetooth"
-    readonly property bool bluetoothBatteryAvailable: root.bluetoothDevice?.batteryAvailable ?? false
+    readonly property bool bluetoothBatteryAvailable: (root.bluetoothDevice && root.bluetoothDevice.batteryAvailable) ? true : false
     readonly property string bluetoothBattery: root.bluetoothBatteryAvailable
-        ? String(Math.round((root.bluetoothDevice.battery ?? 0) * 100)) + "%"
+        ? String(Math.round(((root.bluetoothDevice && root.bluetoothDevice.battery !== undefined) ? root.bluetoothDevice.battery : 0) * 100)) + "%"
         : Translation.tr("Battery unavailable")
     readonly property string audioName: Audio.sink ? Audio.friendlyDeviceName(Audio.sink) : Translation.tr("No output detected")
     readonly property bool wifiConnected: Network.wifiStatus === "connected"

@@ -10,7 +10,6 @@ RippleButton {
     required property string mode
     required property string title
     required property string classification
-    required property string description
     required property string detailOne
     required property string detailTwo
     required property string modeIcon
@@ -18,7 +17,7 @@ RippleButton {
 
     signal modeSelected()
 
-    implicitHeight: Appearance.rounding.verylarge * 6 + Appearance.rounding.small
+    implicitHeight: Appearance.rounding.verylarge * 5 + Appearance.rounding.normal
     buttonRadius: Appearance.rounding.large
     opacity: root.enabled ? 1 : 0.48
 
@@ -44,13 +43,21 @@ RippleButton {
             Layout.fillWidth: true
             spacing: Appearance.rounding.small
 
-            MaterialSymbol {
+            MaterialShapeWrappedMaterialSymbol {
                 Layout.alignment: Qt.AlignVCenter
                 text: root.modeIcon
+                shape: root.selected
+                    ? MaterialShape.Shape.Cookie9Sided
+                    : MaterialShape.Shape.Clover4Leaf
                 iconSize: Appearance.font.pixelSize.large
+                padding: Appearance.rounding.small
+                fill: 1
                 color: root.selected
-                    ? Appearance.colors.colPrimary
-                    : Appearance.colors.colOnLayer1
+                    ? Appearance.colors.colPrimaryContainer
+                    : Appearance.colors.colSecondaryContainer
+                colSymbol: root.selected
+                    ? Appearance.colors.colOnPrimaryContainer
+                    : Appearance.colors.colOnSecondaryContainer
             }
 
             ColumnLayout {
@@ -74,7 +81,7 @@ RippleButton {
                     text: root.title
                     color: Appearance.colors.colOnLayer1
                     font.family: Appearance.font.family.title
-                    font.pixelSize: Appearance.font.pixelSize.large
+                    font.pixelSize: Appearance.font.pixelSize.larger
                     font.variableAxes: Appearance.font.variableAxes.titleRounded
                     font.weight: Font.Bold
                 }
@@ -87,16 +94,6 @@ RippleButton {
                 iconSize: Appearance.font.pixelSize.large
                 color: Appearance.colors.colPrimary
             }
-        }
-
-        StyledText {
-            Layout.fillWidth: true
-            text: root.description
-            color: Appearance.colors.colOnLayer1
-            font.pixelSize: Appearance.font.pixelSize.normal
-            font.weight: Font.Medium
-            maximumLineCount: 2
-            wrapMode: Text.WordWrap
         }
 
         ColumnLayout {
@@ -121,6 +118,7 @@ RippleButton {
                     Layout.fillWidth: true
                     text: root.detailOne
                     color: Appearance.colors.colOnLayer2
+                    opacity: 0.82
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     maximumLineCount: 1
                     elide: Text.ElideRight

@@ -26,3 +26,9 @@ WelcomeProgress 1.0 WelcomeProgress.qml
 WelcomeStartPage 1.0 WelcomeStartPage.qml
 WelcomeWindow 1.0 WelcomeWindow.qml
 WelcomeTutorialPage 1.0 tutorials/WelcomeTutorialPage.qml
+WelcomeIntegrationTutorial 1.0 tutorials/WelcomeIntegrationTutorial.qml
+WelcomeTutorialStep 1.0 tutorials/WelcomeTutorialStep.qml
+WelcomeGmailTutorial 1.0 tutorials/WelcomeGmailTutorial.qml
+WelcomeTickTickTutorial 1.0 tutorials/WelcomeTickTickTutorial.qml
+WelcomeCalendarTutorial 1.0 tutorials/WelcomeCalendarTutorial.qml
+WelcomeDriveTutorial 1.0 tutorials/WelcomeDriveTutorial.qml

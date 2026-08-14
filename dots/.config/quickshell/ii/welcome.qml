@@ -10,7 +10,6 @@ import Quickshell
 // requests the shared window and exits its helper process.
 QtObject {
     Component.onCompleted: {
-        Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "welcome", "open"]);
-        Qt.quit();
+        Quickshell.execDetached(["bash", "-c", "qs -c ii ipc call welcome toggle; sleep 0.1; pkill -9 -f 'welcome\\.qml'"]);
     }
 }

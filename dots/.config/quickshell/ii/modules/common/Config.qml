@@ -296,7 +296,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 4
+    readonly property int currentConfigVersion: 5
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -393,6 +393,19 @@ Singleton {
         if (from < 4 && typeof raw.osk?.layout === "string" && raw.osk.layout !== "auto") {
             console.log(`[Config] Migrated osk.layout "${raw.osk.layout}" -> "auto"`);
             raw.osk.layout = "auto";
+        }
+
+        // v4 -> v5: Settings now has one performance switch instead of two
+        // independent rendering switches. Preserve the low-overhead experience
+        // for anyone who had either legacy switch disabled.
+        if (from < 5 && raw.appearance !== undefined
+                && raw.appearance !== null
+                && typeof raw.appearance === "object"
+                && !Array.isArray(raw.appearance)
+                && raw.appearance.settingsPerformanceMode === undefined) {
+            raw.appearance.settingsPerformanceMode = raw.appearance.scrollAnimations === false
+                    || raw.appearance.scrollFadeMask === false;
+            console.log(`[Config] Migrated Settings performance mode to ${raw.appearance.settingsPerformanceMode}`);
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -1078,6 +1091,7 @@ Singleton {
                 property bool colorfulScrollbar: false
                 property bool scrollAnimations: false
                 property bool scrollFadeMask: false
+                property bool settingsPerformanceMode: false
                 property JsonObject openrgb: JsonObject {
                     property bool enable: false
                     property bool applyOnStartup: true

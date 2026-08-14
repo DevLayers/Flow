@@ -63,11 +63,6 @@ Item {
         title: Translation.tr("Display Options")
         icon: "monitor"
 
-        WorkspacePreview {
-            Layout.fillWidth: true
-            Layout.bottomMargin: Appearance.font.pixelSize.small
-        }
-
         // Group 1: Map toggles
         ColumnLayout {
             Layout.fillWidth: true

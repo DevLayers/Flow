@@ -14,22 +14,7 @@ Item {
     property bool tutorialOpen: false
     property bool tutorialLoaderEnabled: false
 
-    function usedInFor(tutorial): string {
-        if (!tutorial)
-            return "";
-        return Translation.tr(tutorial.usedInKey || "II integration surfaces");
-    }
-
-    function stateKindFor(tutorial): string {
-        const state = WelcomeTutorialRegistry.stateFor(tutorial);
-        if (state.error)
-            return "attention";
-        if (state.usable)
-            return "ready";
-        return "neutral";
-    }
-
-    function openTutorial(tutorialId: string): void {
+    function openTutorial(tutorialId) {
         const tutorial = WelcomeTutorialRegistry.tutorialFor(tutorialId);
         if (!tutorial)
             return;
@@ -48,7 +33,7 @@ Item {
         openTutorialAnimation.start();
     }
 
-    function closeTutorial(): void {
+    function closeTutorial() {
         if (!root.tutorialOpen)
             return;
 
@@ -64,13 +49,14 @@ Item {
         closeTutorialAnimation.start();
     }
 
-    function closeNestedPage(): bool {
+    function closeNestedPage() {
         if (!root.tutorialOpen)
             return false;
         root.closeTutorial();
         return true;
     }
 
+    // Main Catalog View (Compact 2x2 Grid)
     Item {
         id: catalogLayer
         anchors.fill: parent
@@ -78,35 +64,13 @@ Item {
 
         ColumnLayout {
             anchors.fill: parent
-            spacing: 16
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Learn the useful features")
-                    color: Appearance.colors.colOnLayer1
-                    font.pixelSize: Appearance.font.pixelSize.large
-                    font.weight: Font.DemiBold
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Set up only the integrations you plan to use.")
-                    color: Appearance.colors.colOnLayer2
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    wrapMode: Text.WordWrap
-                }
-            }
+            spacing: 12
 
             GridLayout {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
                 columns: width >= 760 ? 2 : 1
-                columnSpacing: 14
-                rowSpacing: 14
+                columnSpacing: 12
+                rowSpacing: 12
 
                 Repeater {
                     model: WelcomeTutorialRegistry.tutorials
@@ -114,20 +78,22 @@ Item {
                     delegate: WelcomeIntegrationCard {
                         required property var modelData
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
                         materialIcon: modelData.icon
                         title: Translation.tr(modelData.titleKey)
                         description: Translation.tr(modelData.descriptionKey)
-                        usedIn: root.usedInFor(modelData)
+                        usedInChips: modelData.usedInChips
                         stateText: WelcomeTutorialRegistry.statusTextFor(modelData)
-                        stateKind: root.stateKindFor(modelData)
+                        stateKind: WelcomeTutorialRegistry.stateKindFor(modelData)
                         onActivated: root.openTutorial(modelData.id)
                     }
                 }
             }
+
+            Item { Layout.fillHeight: true }
         }
     }
 
+    // Active Tutorial Subpage View
     Item {
         id: tutorialLayer
         anchors.fill: parent
@@ -139,12 +105,19 @@ Item {
             anchors.fill: parent
             active: root.tutorialLoaderEnabled
                 && (root.tutorialOpen || closeTutorialAnimation.running)
-            sourceComponent: WelcomeTutorialPage {
-                anchors.fill: parent
-                tutorial: root.selectedTutorial
-                onBackRequested: root.closeTutorial()
-                onOpenSettingsTarget: (pageId, subPageId, sectionId) =>
-                    root.openSettingsTarget(pageId, subPageId, sectionId)
+            source: root.selectedTutorial ? root.selectedTutorial.component : ""
+
+            Connections {
+                target: tutorialLoader.item
+                ignoreUnknownSignals: true
+
+                function onBackRequested() {
+                    root.closeTutorial();
+                }
+
+                function onOpenSettingsTarget(pageId, subPageId, sectionId) {
+                    root.openSettingsTarget(pageId, subPageId, sectionId);
+                }
             }
         }
     }

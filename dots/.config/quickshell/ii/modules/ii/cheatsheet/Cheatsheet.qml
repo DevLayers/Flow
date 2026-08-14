@@ -63,9 +63,9 @@ Scope {
     Connections {
         target: GlobalStates
         function onCheatsheetOpenChanged() {
-            if (GlobalStates.cheatsheetOpen && !root.activeState) {
+            if (GlobalStates.cheatsheetOpen) {
                 root.requestOpen();
-            } else if (!GlobalStates.cheatsheetOpen && root.activeState) {
+            } else {
                 root.requestClose();
             }
         }
@@ -85,12 +85,16 @@ Scope {
     function requestOpen() {
         closeTimer.stop();
         root.activeState = true;
-        GlobalStates.cheatsheetOpen = true;
+        if (!GlobalStates.cheatsheetOpen) {
+            GlobalStates.cheatsheetOpen = true;
+        }
     }
 
     function requestClose() {
-        GlobalStates.cheatsheetOpen = false;
-        closeTimer.start();
+        if (GlobalStates.cheatsheetOpen) {
+            GlobalStates.cheatsheetOpen = false;
+        }
+        closeTimer.restart();
     }
 
     function requestToggle() {
@@ -494,19 +498,6 @@ Scope {
                 }
             }
             }
-        }
-    }
-
-    IpcHandler {
-        target: "cheatsheet"
-        function toggle(): void {
-            root.requestToggle();
-        }
-        function close(): void {
-            root.requestClose();
-        }
-        function open(): void {
-            root.requestOpen();
         }
     }
 

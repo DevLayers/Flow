@@ -32,14 +32,22 @@ RippleButton {
         anchors.rightMargin: Appearance.rounding.small
         spacing: Appearance.rounding.small
 
-        MaterialSymbol {
+        MaterialShapeWrappedMaterialSymbol {
             visible: root.toggleIcon.length > 0
             Layout.alignment: Qt.AlignVCenter
             text: root.toggleIcon
             iconSize: Appearance.font.pixelSize.normal
+            padding: Appearance.rounding.verysmall
+            fill: 1
+            shape: root.checked
+                ? MaterialShape.Shape.Cookie7Sided
+                : MaterialShape.Shape.Clover4Leaf
             color: root.checked
-                ? Appearance.colors.colOnSecondaryContainer
-                : Appearance.colors.colOnLayer2
+                ? Appearance.colors.colPrimaryContainer
+                : Appearance.colors.colLayer3
+            colSymbol: root.checked
+                ? Appearance.colors.colOnPrimaryContainer
+                : Appearance.colors.colOnLayer3
         }
 
         StyledText {
@@ -48,8 +56,8 @@ RippleButton {
             color: root.checked
                 ? Appearance.colors.colOnSecondaryContainer
                 : Appearance.colors.colOnLayer2
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.weight: Font.DemiBold
+            font.pixelSize: Appearance.font.pixelSize.normal
+            font.weight: Font.Bold
             elide: Text.ElideRight
         }
 

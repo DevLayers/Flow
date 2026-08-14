@@ -10,13 +10,13 @@ RippleButton {
     property string materialIcon: "extension"
     property string title: ""
     property string description: ""
-    property string usedIn: ""
+    property var usedInChips: []
     property string stateText: ""
     property string stateKind: "neutral"
 
     signal activated()
 
-    implicitHeight: 150
+    implicitHeight: 114
     buttonRadius: Appearance.rounding.large
     buttonRadiusPressed: Appearance.rounding.full
     colBackground: Appearance.colors.colLayer1
@@ -25,84 +25,122 @@ RippleButton {
     colRipple: Appearance.colors.colLayer1Active
     onClicked: root.activated()
 
-    readonly property color stateColor: {
+    readonly property color stateBgColor: {
         if (root.stateKind === "ready")
-            return Appearance.m3colors.m3onSuccessContainer;
+            return Appearance.colors.colPrimaryContainer;
+        if (root.stateKind === "attention")
+            return Appearance.colors.colErrorContainer;
+        if (root.stateKind === "configured")
+            return Appearance.colors.colSecondaryContainer;
+        return Appearance.colors.colLayer2;
+    }
+
+    readonly property color stateFgColor: {
+        if (root.stateKind === "ready")
+            return Appearance.colors.colOnPrimaryContainer;
         if (root.stateKind === "attention")
             return Appearance.colors.colOnErrorContainer;
-        return Appearance.colors.colOnSecondaryContainer;
+        if (root.stateKind === "configured")
+            return Appearance.colors.colOnSecondaryContainer;
+        return Appearance.colors.colOnLayer2;
     }
 
     contentItem: ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 18
-        spacing: 8
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        anchors.topMargin: 14
+        anchors.bottomMargin: 14
+        spacing: 6
 
+        // Top Row: Icon + Title + Status Pill + Arrow
         RowLayout {
             Layout.fillWidth: true
-            spacing: 12
+            spacing: 10
 
             MaterialShapeWrappedMaterialSymbol {
                 Layout.alignment: Qt.AlignVCenter
                 text: root.materialIcon
                 shape: MaterialShape.Shape.Cookie7Sided
-                iconSize: Appearance.font.pixelSize.large
-                padding: 10
+                iconSize: Appearance.font.pixelSize.normal
+                padding: 8
                 color: Appearance.colors.colSecondaryContainer
                 colSymbol: Appearance.colors.colOnSecondaryContainer
             }
 
             StyledText {
-                Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 text: root.title
                 color: Appearance.colors.colOnLayer1
                 font.pixelSize: Appearance.font.pixelSize.normal
                 font.weight: Font.DemiBold
-                wrapMode: Text.WordWrap
-                maximumLineCount: 2
                 elide: Text.ElideRight
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Rectangle {
+                Layout.alignment: Qt.AlignVCenter
+                visible: root.stateText.length > 0
+                radius: Appearance.rounding.full
+                implicitHeight: 22
+                implicitWidth: statusTextItem.implicitWidth + 14
+                color: root.stateBgColor
+
+                StyledText {
+                    id: statusTextItem
+                    anchors.centerIn: parent
+                    text: root.stateText
+                    color: root.stateFgColor
+                    font.pixelSize: Appearance.font.pixelSize.smaller - 1
+                    font.weight: Font.DemiBold
+                }
             }
 
             MaterialSymbol {
                 Layout.alignment: Qt.AlignVCenter
                 text: "arrow_forward"
-                iconSize: Appearance.font.pixelSize.normal
+                iconSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnLayer2
             }
         }
 
+        // Description
         StyledText {
             Layout.fillWidth: true
             text: root.description
             color: Appearance.colors.colOnLayer2
-            font.pixelSize: Appearance.font.pixelSize.small
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            maximumLineCount: 1
             elide: Text.ElideRight
         }
 
         Item { Layout.fillHeight: true }
 
-        StyledText {
+        // Bottom Row: Used In Chips
+        RowLayout {
             Layout.fillWidth: true
-            visible: root.usedIn.length > 0
-            text: Translation.tr("Used in: ") + root.usedIn
-            color: Appearance.colors.colOnLayer2
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
-        }
+            spacing: 6
 
-        StyledText {
-            Layout.fillWidth: true
-            visible: root.stateText.length > 0
-            text: root.stateText
-            color: root.stateColor
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            font.weight: Font.DemiBold
-            elide: Text.ElideRight
+            Repeater {
+                model: root.usedInChips
+
+                delegate: Rectangle {
+                    required property string modelData
+                    radius: Appearance.rounding.small
+                    implicitHeight: 20
+                    implicitWidth: chipLabel.implicitWidth + 10
+                    color: Appearance.colors.colLayer2
+
+                    StyledText {
+                        id: chipLabel
+                        anchors.centerIn: parent
+                        text: Translation.tr(modelData)
+                        color: Appearance.colors.colOnLayer2
+                        font.pixelSize: Appearance.font.pixelSize.smaller - 1
+                    }
+                }
+            }
         }
     }
 }

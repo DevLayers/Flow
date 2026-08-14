@@ -841,7 +841,6 @@
   "Not running": "Not running",
   "Untitled window": "Untitled window",
   "Follow active window": "Follow active window",
-  "Clear": "Clear",
   "No running applications": "No running applications",
   "Set as Live Preview": "Set as Live Preview",
   "Enable Live Preview": "Enable Live Preview",
@@ -3825,5 +3824,12 @@
   "Toggle the workspaces notch notification on workspace changes": "Toggle the workspaces notch notification on workspace changes",
   "Please drop a valid wallhaven image named like **wallhaven-######.png**": "Please drop a valid wallhaven image named like **wallhaven-######.png**",
   "High quality photos from Unsplash": "High quality photos from Unsplash",
-  "Reset config.json to defaults (prevents crashes on switch)": "Reset config.json to defaults (prevents crashes on switch)"
+  "Reset config.json to defaults (prevents crashes on switch)": "Reset config.json to defaults (prevents crashes on switch)",
+  "Workspace layout preview": "Workspace layout preview",
+  "Preview animation": "Preview animation",
+  "Preview selected style": "Preview selected style",
+  "Auto scale: %1%": "Auto scale: %1%",
+  "Enable Zoom animation to preview this style.": "Enable Zoom animation to preview this style.",
+  "Open the Overview to preview the animation in real time": "Open the Overview to preview the animation in real time",
+  "Open the Overview to preview the selected zoom style": "Open the Overview to preview the selected zoom style"
 }

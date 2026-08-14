@@ -17,7 +17,7 @@ RippleButton {
     property color selectedForeground: Appearance.colors.colOnPrimaryContainer
 
     toggled: selected
-    implicitHeight: 116
+    implicitHeight: 74
     buttonRadius: Appearance.rounding.large
     buttonRadiusPressed: Appearance.rounding.full
     colBackground: Appearance.colors.colLayer1
@@ -30,15 +30,15 @@ RippleButton {
     colRippleToggled: Appearance.colors.colPrimaryContainerActive
 
     contentItem: RowLayout {
-        spacing: 16
+        spacing: 12
 
         MaterialShapeWrappedMaterialSymbol {
-            Layout.leftMargin: 18
+            Layout.leftMargin: 12
             Layout.alignment: Qt.AlignVCenter
             text: root.materialIcon
             shape: root.iconShape
-            iconSize: Appearance.font.pixelSize.large
-            padding: 12
+            iconSize: Appearance.font.pixelSize.large - 2
+            padding: 9
             fill: root.selected ? 1 : 0
             color: root.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
             colSymbol: root.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
@@ -47,7 +47,7 @@ RippleButton {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
-            spacing: 4
+            spacing: 2
 
             StyledText {
                 Layout.fillWidth: true
@@ -55,7 +55,7 @@ RippleButton {
                 color: root.selected ? root.selectedForeground : Appearance.colors.colOnLayer1
                 font.pixelSize: Appearance.font.pixelSize.normal
                 font.weight: Font.DemiBold
-                wrapMode: Text.WordWrap
+                elide: Text.ElideRight
             }
 
             StyledText {
@@ -63,10 +63,9 @@ RippleButton {
                 visible: root.description.length > 0
                 text: root.description
                 color: root.selected ? root.selectedForeground : Appearance.colors.colOnLayer2
-                font.pixelSize: Appearance.font.pixelSize.small
-                wrapMode: Text.WordWrap
-                maximumLineCount: 2
+                font.pixelSize: Appearance.font.pixelSize.smaller
                 elide: Text.ElideRight
+                maximumLineCount: 1
             }
 
             StyledText {
@@ -81,11 +80,11 @@ RippleButton {
         }
 
         MaterialSymbol {
-            Layout.rightMargin: 18
+            Layout.rightMargin: 14
             Layout.alignment: Qt.AlignVCenter
             visible: root.showChevron
             text: "arrow_forward"
-            iconSize: Appearance.font.pixelSize.normal
+            iconSize: Appearance.font.pixelSize.small
             color: root.selected ? root.selectedForeground : Appearance.colors.colOnLayer2
         }
     }

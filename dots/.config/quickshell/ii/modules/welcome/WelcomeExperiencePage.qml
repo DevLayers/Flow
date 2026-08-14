@@ -31,7 +31,6 @@ Item {
                 mode: "default"
                 title: Translation.tr("Default")
                 classification: Translation.tr("INDEPENDENT")
-                description: Translation.tr("Classic desktop behavior with independent shell surfaces.")
                 detailOne: Translation.tr("Sidebar and Search stay independent")
                 detailTwo: Translation.tr("Traditional desktop workflow")
                 modeIcon: "view_sidebar"
@@ -47,7 +46,6 @@ Item {
                 mode: "connect"
                 title: Translation.tr("Connect")
                 classification: Translation.tr("UNIFIED")
-                description: Translation.tr("Unified shell behavior with connected surfaces.")
                 detailOne: Translation.tr("Search and panels stay near the bar")
                 detailTwo: Translation.tr("Mobile-inspired interaction model")
                 modeIcon: "join_full"
@@ -70,20 +68,10 @@ Item {
                     Layout.fillWidth: true
                     text: Translation.tr("Try the selected mode")
                     color: Appearance.colors.colOnLayer1
-                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.pixelSize: Appearance.font.pixelSize.large
                     font.weight: Font.Bold
                 }
 
-                StyledText {
-                    Layout.fillWidth: true
-                    text: ShellModePolicy.effectiveMode === "connect"
-                        ? Translation.tr("See how Connect behaves in the real shell.")
-                        : Translation.tr("See how Default behaves in the real shell.")
-                    color: Appearance.colors.colOnLayer2
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    maximumLineCount: 1
-                    elide: Text.ElideRight
-                }
             }
 
             Item {
@@ -129,25 +117,34 @@ Item {
             Layout.fillWidth: true
             spacing: Appearance.rounding.small
 
-            ColumnLayout {
+            RowLayout {
                 Layout.fillWidth: true
-                spacing: 1
+                spacing: Appearance.rounding.small
 
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Quick preferences")
-                    color: Appearance.colors.colOnLayer1
-                    font.family: Appearance.font.family.title
-                    font.pixelSize: Appearance.font.pixelSize.large
-                    font.variableAxes: Appearance.font.variableAxes.titleRounded
-                    font.weight: Font.Bold
+                MaterialShapeWrappedMaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: "tune"
+                    shape: MaterialShape.Shape.Cookie7Sided
+                    iconSize: Appearance.font.pixelSize.large
+                    padding: Appearance.rounding.verysmall
+                    fill: 1
+                    color: Appearance.colors.colSecondaryContainer
+                    colSymbol: Appearance.colors.colOnSecondaryContainer
                 }
 
-                StyledText {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    text: Translation.tr("Choose a couple of optional shell surfaces.")
-                    color: Appearance.colors.colOnLayer2
-                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    spacing: 1
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Quick preferences")
+                        color: Appearance.colors.colOnLayer1
+                        font.family: Appearance.font.family.title
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        font.weight: Font.Bold
+                    }
                 }
             }
 
@@ -239,6 +236,10 @@ Item {
 
                 WelcomeQuickToggle {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.preferredWidth: 0
+                    Layout.minimumHeight: Appearance.rounding.verylarge + Appearance.rounding.small
+                    Layout.preferredHeight: Appearance.rounding.verylarge + Appearance.rounding.small
                     toggleIcon: "dock_to_bottom"
                     label: Translation.tr("Show dock")
                     checked: Config.options.dock.enable
@@ -247,6 +248,10 @@ Item {
 
                 WelcomeQuickToggle {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.preferredWidth: 0
+                    Layout.minimumHeight: Appearance.rounding.verylarge + Appearance.rounding.small
+                    Layout.preferredHeight: Appearance.rounding.verylarge + Appearance.rounding.small
                     toggleIcon: "search"
                     label: Translation.tr("Search suggestions")
                     checked: Config.options.search.suggestions.enable

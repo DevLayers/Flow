@@ -18,6 +18,7 @@ Item {
     property color colActive: alternateColor ? Appearance.colors.colLayer3Active : Appearance.colors.colLayer2Active
 
     property color colTitle: Appearance.colors.colOnLayer0
+    readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
 
     property int barSection
 
@@ -30,6 +31,7 @@ Item {
 
 
     Behavior on y {
+        enabled: !wrapper.performanceMode
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
@@ -63,13 +65,15 @@ Item {
             verticalCenter: parent.verticalCenter
         }
 
-        scale: dragArea.held ? 1.02 : 1
-        opacity: dragArea.held ? 0.8 : 1
+        scale: wrapper.performanceMode ? 1 : (dragArea.held ? 1.02 : 1)
+        opacity: wrapper.performanceMode ? 1 : (dragArea.held ? 0.8 : 1)
 
         Behavior on scale {
+            enabled: !wrapper.performanceMode
             animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
         }
         Behavior on opacity {
+            enabled: !wrapper.performanceMode
             animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
         }
         
@@ -82,6 +86,7 @@ Item {
 
         color: dragArea.held ? colActive : colBackground
         Behavior on color {
+            enabled: !wrapper.performanceMode
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
@@ -154,17 +159,18 @@ Item {
                 active: wrapper.compInfo?.styleConfigKey !== undefined
                 visible: active
                 
-                Layout.preferredWidth: item ? (item.calculatedWidth !== undefined ? item.calculatedWidth : item.implicitWidth) : 0
-                Layout.minimumWidth: Layout.preferredWidth
+                Layout.preferredWidth: item ? item.implicitWidth : 0
+                Layout.minimumWidth: 0
 
-                sourceComponent: ConfigSelectionArray {
+                sourceComponent: BarWidgetStyleSelector {
                     readonly property string styleKey: wrapper.compInfo?.styleConfigKey ?? ""
+                    styleConfigKey: styleKey
+                    styleOptions: wrapper.compInfo?.styleOptions ?? []
                     currentValue: styleKey !== "" ? (Config.options.bar.styles[styleKey] ?? "default") : "default"
                     onSelected: newValue => {
                         if (styleKey !== "")
                             Config.options.bar.styles[styleKey] = newValue
                     }
-                    options: wrapper.compInfo?.styleOptions ?? []
                 }
             }
 

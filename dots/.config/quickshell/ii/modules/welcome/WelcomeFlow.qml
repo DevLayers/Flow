@@ -17,6 +17,13 @@ Item {
 
     readonly property real transitionOffset: Math.max(72, Math.min(144, width * 0.12))
 
+    readonly property bool nestedPageOpen: {
+        if (root.currentPageId !== "learn")
+            return false;
+        const learnLoader = root.loaderForPage("learn");
+        return (learnLoader && learnLoader.item && learnLoader.item.tutorialOpen) === true;
+    }
+
     signal pageChanged(string pageId)
     signal openSettingsPage(string pageId)
     signal openSettingsTarget(string pageId, string subPageId, string sectionId)
@@ -166,7 +173,7 @@ Item {
             property bool visualEnabled: false
 
             width: root.width
-            height: Math.max(0, root.height - root.navigationSafeArea)
+            height: Math.max(0, root.height - (root.nestedPageOpen ? 0 : root.navigationSafeArea))
             x: visualX
             opacity: visualOpacity
             visible: visualVisible

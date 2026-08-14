@@ -75,6 +75,7 @@ FloatingWindow {
 
         WelcomeNavigation {
             id: navigation
+            visible: !flow.nestedPageOpen
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
@@ -134,7 +135,7 @@ FloatingWindow {
         const index = icons.indexOf(sectionId);
         if (index >= 0)
             Persistent.states.cheatsheet.tabIndex = index;
-        GlobalStates.cheatsheetOpen = true;
+        GlobalStates.openCheatsheet();
     }
 
     function openSettingsTarget(pageId: string, subPageId: string, sectionId: string): void {

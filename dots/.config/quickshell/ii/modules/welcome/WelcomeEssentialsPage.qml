@@ -8,32 +8,32 @@ import qs.services
 Item {
     id: root
 
+    signal openSettingsTarget(string pageId, string subPageId, string sectionId)
+
     ColumnLayout {
         anchors.fill: parent
-        spacing: 16
+        spacing: 10
 
         StyledText {
             Layout.fillWidth: true
-            text: Translation.tr("Shortcuts that make II feel fast.")
+            text: Translation.tr("Everyday")
             color: Appearance.colors.colOnLayer2
-            font.pixelSize: Appearance.font.pixelSize.large
-            wrapMode: Text.WordWrap
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.weight: Font.DemiBold
         }
 
         GridLayout {
             Layout.fillWidth: true
-            Layout.fillHeight: true
             columns: width >= 780 ? 4 : 2
-            columnSpacing: 10
-            rowSpacing: 10
+            columnSpacing: 8
+            rowSpacing: 8
 
             Repeater {
-                model: WelcomeKeybindRegistry.actions
+                model: WelcomeKeybindRegistry.everydayActions
                 delegate: WelcomeKeybindCard {
                     required property var modelData
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.minimumHeight: 76
+                    Layout.preferredWidth: 1
                     title: Translation.tr(modelData.labelKey)
                     materialIcon: modelData.icon
                     keys: WelcomeKeybindRegistry.keysFor(modelData.id)
@@ -43,53 +43,87 @@ Item {
 
         StyledText {
             Layout.fillWidth: true
+            Layout.topMargin: 2
+            text: Translation.tr("Explore")
+            color: Appearance.colors.colOnLayer2
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.weight: Font.DemiBold
+        }
+
+        GridLayout {
+            Layout.fillWidth: true
+            columns: width >= 780 ? 4 : 2
+            columnSpacing: 8
+            rowSpacing: 8
+
+            Repeater {
+                model: WelcomeKeybindRegistry.exploreActions
+                delegate: WelcomeKeybindCard {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    title: Translation.tr(modelData.labelKey)
+                    materialIcon: modelData.icon
+                    keys: WelcomeKeybindRegistry.keysFor(modelData.id)
+                }
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            Layout.topMargin: 4
             text: Translation.tr("Useful places")
             color: Appearance.colors.colOnLayer1
-            font.pixelSize: Appearance.font.pixelSize.large
+            font.pixelSize: Appearance.font.pixelSize.normal
             font.weight: Font.DemiBold
         }
 
         GridLayout {
             Layout.fillWidth: true
             columns: 2
-            columnSpacing: 12
-            rowSpacing: 12
+            columnSpacing: 10
+            rowSpacing: 10
 
             WelcomeActionCard {
                 Layout.fillWidth: true
+                Layout.preferredWidth: 1
                 materialIcon: "menu_book"
                 title: Translation.tr("Cheatsheet")
-                description: Translation.tr("Shortcuts and features")
-                onClicked: GlobalStates.cheatsheetOpen = true
+                description: Translation.tr("All shortcuts and shell actions")
+                onClicked: root.openSettingsTarget("cheatSheet", "", "keyboard")
             }
 
             WelcomeActionCard {
                 Layout.fillWidth: true
-                enabled: WelcomeProjectLinks.documentationAvailable
-                materialIcon: "help_center"
+                Layout.preferredWidth: 1
+                materialIcon: "description"
                 title: Translation.tr("Documentation")
-                description: Translation.tr("Guides and setup help")
-                statusText: WelcomeProjectLinks.documentationAvailable
-                    ? ""
-                    : Translation.tr("Coming soon")
+                description: Translation.tr("Setup guides and feature documentation")
                 onClicked: Qt.openUrlExternally(WelcomeProjectLinks.documentationUrl)
             }
 
             WelcomeActionCard {
                 Layout.fillWidth: true
+                Layout.preferredWidth: 1
                 materialIcon: "code"
                 title: Translation.tr("GitHub")
-                description: Translation.tr("Source and updates")
+                description: Translation.tr("Source code, releases and issues")
                 onClicked: Qt.openUrlExternally(WelcomeProjectLinks.repositoryUrl)
             }
 
             WelcomeActionCard {
                 Layout.fillWidth: true
+                Layout.preferredWidth: 1
                 materialIcon: "forum"
                 title: Translation.tr("Discord")
                 description: Translation.tr("Community and support")
-                onClicked: Qt.openUrlExternally("https://discord.gg/GtdRBXgMwq")
+                onClicked: Qt.openUrlExternally(WelcomeProjectLinks.discordUrl)
             }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
     }
 }

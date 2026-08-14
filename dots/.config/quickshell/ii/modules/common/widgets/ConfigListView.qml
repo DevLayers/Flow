@@ -111,7 +111,9 @@ Rectangle {
         model: visualModel
 
         spacing: 4
-        cacheBuffer: 50
+        cacheBuffer: 0
+        animateAppearance: !Config.options?.appearance?.settingsPerformanceMode
+        animateMovement: !Config.options?.appearance?.settingsPerformanceMode
     }
 
     RowLayout {
@@ -125,10 +127,14 @@ Rectangle {
 
         spacing: 4
 
-        StyledComboBox {
-            id: componentSelector
+            StyledComboBox {
+                id: componentSelector
 
-            topRightRadius: Appearance.rounding.verysmall
+                // Let the selector yield width to the action button on narrow
+                // Settings windows instead of pushing the row past its clip.
+                Layout.minimumWidth: 0
+
+                topRightRadius: Appearance.rounding.verysmall
             bottomRightRadius: Appearance.rounding.verysmall
 
             buttonIcon: "box"

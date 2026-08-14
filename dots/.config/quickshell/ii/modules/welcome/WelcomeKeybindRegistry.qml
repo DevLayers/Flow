@@ -13,36 +13,38 @@ import qs.services
 QtObject {
     id: root
 
-    readonly property var actions: [{
-        "id": "settings",
-        "labelKey": "Settings",
-        "icon": "settings",
-        "matcher": "App: Settings app"
+    readonly property var everydayActions: [{
+        "id": "launcher",
+        "labelKey": "Search",
+        "icon": "search",
+        "matcher": "Shell: Open search only"
     }, {
         "id": "dashboard",
         "labelKey": "Control dashboard",
         "icon": "side_navigation",
         "matcher": "Shell: Toggle right sidebar"
     }, {
-        "id": "ai",
-        "labelKey": "AI sidebar",
-        "icon": "neurology",
-        "matcher": "Shell: Toggle left sidebar"
-    }, {
-        "id": "overview",
-        "labelKey": "Overview",
-        "icon": "grid_view",
-        "matcher": "Shell: Toggle overview"
-    }, {
-        "id": "launcher",
-        "labelKey": "App launcher",
-        "icon": "search",
-        "matcher": "Shell: Open search only"
+        "id": "settings",
+        "labelKey": "Settings",
+        "icon": "settings",
+        "matcher": "App: Settings app"
     }, {
         "id": "cheatsheet",
         "labelKey": "Cheatsheet",
         "icon": "help",
         "matcher": "Shell: Toggle cheatsheet"
+    }]
+
+    readonly property var exploreActions: [{
+        "id": "overview",
+        "labelKey": "Overview",
+        "icon": "grid_view",
+        "matcher": "Shell: Toggle overview"
+    }, {
+        "id": "ai",
+        "labelKey": "AI sidebar",
+        "icon": "neurology",
+        "matcher": "Shell: Toggle left sidebar"
     }, {
         "id": "wallpaper",
         "labelKey": "Wallpaper picker",
@@ -54,6 +56,8 @@ QtObject {
         "icon": "waving_hand",
         "matcher": "Shell: Toggle welcome"
     }]
+
+    readonly property var actions: [...everydayActions, ...exploreActions]
 
     function flatten(nodes, output): void {
         for (const node of nodes ?? []) {

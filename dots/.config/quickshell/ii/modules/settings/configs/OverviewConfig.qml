@@ -4,6 +4,7 @@ import Quickshell
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 ContentPage {
     id: page
@@ -121,16 +122,29 @@ ContentPage {
                 icon: "animation"
                 Layout.fillWidth: true
 
-                ConfigSelectionArray {
-                    currentValue: Config.options.overview.animationStyle ?? "bounce"
-                    onSelected: newValue => {
-                        Config.options.overview.animationStyle = newValue;
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Appearance.rounding.verysmall
+
+                    ConfigSelectionArray {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        currentValue: Config.options.overview.animationStyle ?? "bounce"
+                        onSelected: newValue => {
+                            Config.options.overview.animationStyle = newValue;
+                        }
+                        options: [
+                            { displayName: Translation.tr("Slide + Bounce"), icon: "animation", value: "bounce" },
+                            { displayName: Translation.tr("Smooth Slide"), icon: "swipe", value: "smooth" },
+                            { displayName: Translation.tr("Zoom In"), icon: "zoom_in", value: "zoom" }
+                        ]
                     }
-                    options: [
-                        { displayName: Translation.tr("Slide + Bounce"), icon: "animation", value: "bounce" },
-                        { displayName: Translation.tr("Smooth Slide"), icon: "swipe", value: "smooth" },
-                        { displayName: Translation.tr("Zoom In"), icon: "zoom_in", value: "zoom" }
-                    ]
+
+                    OverviewPreviewButton {
+                        Layout.alignment: Qt.AlignVCenter
+                        enabled: Config.options.overview.enable
+                        tooltipText: Translation.tr("Open the Overview to preview the animation in real time")
+                    }
                 }
             }
 
@@ -152,65 +166,110 @@ ContentPage {
         icon: "grid_view"
 
         ColumnLayout {
+            id: classicLayout
             Layout.fillWidth: true
-            spacing: 4
+            spacing: Appearance.rounding.small
 
-            ConfigSpinBox {
-                icon: "view_agenda"
-                text: Translation.tr("Rows")
-                value: Config.options.overview.rows
-                from: 1
-                to: 10
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.overview.rows = value;
-                }
-            }
-
-            ConfigSpinBox {
-                icon: "view_column"
-                text: Translation.tr("Columns")
-                value: Config.options.overview.columns
-                from: 1
-                to: 10
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.overview.columns = value;
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Horizontal direction")
-                icon: "swap_horiz"
+            GridLayout {
+                id: classicControls
                 Layout.fillWidth: true
+                columns: width >= Appearance.font.pixelSize.hugeass * 32 ? 2 : 1
+                columnSpacing: Appearance.rounding.verysmall
+                rowSpacing: Appearance.rounding.verysmall
 
-                ConfigSelectionArray {
-                    currentValue: Config.options.overview.orderRightLeft
-                    onSelected: newValue => {
-                        Config.options.overview.orderRightLeft = newValue;
+                ConfigSpinBox {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    icon: "view_agenda"
+                    text: Translation.tr("Rows")
+                    value: Config.options.overview.rows
+                    from: 1
+                    to: 10
+                    stepSize: 1
+                    topLeftRadius: Appearance.rounding.large
+                    topRightRadius: Appearance.rounding.verysmall
+                    bottomLeftRadius: Appearance.rounding.verysmall
+                    bottomRightRadius: Appearance.rounding.verysmall
+                    onValueChanged: {
+                        Config.options.overview.rows = value;
                     }
-                    options: [
-                        { displayName: Translation.tr("Left to right"), icon: "arrow_forward", value: false },
-                        { displayName: Translation.tr("Right to left"), icon: "arrow_back", value: true }
-                    ]
+                }
+
+                ConfigSpinBox {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    icon: "view_column"
+                    text: Translation.tr("Columns")
+                    value: Config.options.overview.columns
+                    from: 1
+                    to: 10
+                    stepSize: 1
+                    topLeftRadius: Appearance.rounding.verysmall
+                    topRightRadius: Appearance.rounding.large
+                    bottomLeftRadius: Appearance.rounding.verysmall
+                    bottomRightRadius: Appearance.rounding.verysmall
+                    onValueChanged: {
+                        Config.options.overview.columns = value;
+                    }
+                }
+
+                ContentSubsection {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    title: Translation.tr("Horizontal direction")
+                    icon: "swap_horiz"
+                    topLeftRadius: Appearance.rounding.verysmall
+                    topRightRadius: Appearance.rounding.verysmall
+                    bottomLeftRadius: Appearance.rounding.large
+                    bottomRightRadius: Appearance.rounding.verysmall
+
+                    ConfigSelectionArray {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        currentValue: Config.options.overview.orderRightLeft
+                        onSelected: newValue => {
+                            Config.options.overview.orderRightLeft = newValue;
+                        }
+                        options: [
+                            { displayName: Translation.tr("Left to right"), icon: "arrow_forward", value: false },
+                            { displayName: Translation.tr("Right to left"), icon: "arrow_back", value: true }
+                        ]
+                    }
+                }
+
+                ContentSubsection {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    title: Translation.tr("Vertical direction")
+                    icon: "swap_vert"
+                    topLeftRadius: Appearance.rounding.verysmall
+                    topRightRadius: Appearance.rounding.verysmall
+                    bottomLeftRadius: Appearance.rounding.verysmall
+                    bottomRightRadius: Appearance.rounding.large
+
+                    ConfigSelectionArray {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        currentValue: Config.options.overview.orderBottomUp
+                        onSelected: newValue => {
+                            Config.options.overview.orderBottomUp = newValue;
+                        }
+                        options: [
+                            { displayName: Translation.tr("Top-down"), icon: "arrow_downward", value: false },
+                            { displayName: Translation.tr("Bottom-up"), icon: "arrow_upward", value: true }
+                        ]
+                    }
                 }
             }
 
-            ContentSubsection {
-                title: Translation.tr("Vertical direction")
-                icon: "swap_vert"
+            OverviewGridPreview {
+                id: overviewPreview
                 Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.overview.orderBottomUp
-                    onSelected: newValue => {
-                        Config.options.overview.orderBottomUp = newValue;
-                    }
-                    options: [
-                        { displayName: Translation.tr("Top-down"), icon: "arrow_downward", value: false },
-                        { displayName: Translation.tr("Bottom-up"), icon: "arrow_upward", value: true }
-                    ]
-                }
+                rows: Config.options.overview.rows
+                columns: Config.options.overview.columns
+                rightToLeft: Config.options.overview.orderRightLeft
+                bottomUp: Config.options.overview.orderBottomUp
+                autoScaleFactor: Config.options.overview.autoScaleFactor ?? 1.0
             }
         }
     }
@@ -242,14 +301,29 @@ ContentPage {
             icon: "style"
             Layout.fillWidth: true
 
-            ConfigSelectionArray {
-                currentValue: Config.options.background.zoomOutStyle
-                onSelected: newValue => Config.options.background.zoomOutStyle = newValue
-                options: [
-                    { displayName: Translation.tr("Gnome Like"), icon: "blur_on", enabled: !page.videoWallpaper, value: 0 },
-                    { displayName: Translation.tr("Default"), icon: "grid_view", value: 1 },
-                    { displayName: Translation.tr("Zoom In"), icon: "zoom_in", enabled: !page.videoWallpaper, value: 2 }
-                ]
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.rounding.verysmall
+
+                ConfigSelectionArray {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    currentValue: Config.options.background.zoomOutStyle
+                    onSelected: newValue => Config.options.background.zoomOutStyle = newValue
+                    options: [
+                        { displayName: Translation.tr("Gnome Like"), icon: "blur_on", enabled: !page.videoWallpaper, value: 0 },
+                        { displayName: Translation.tr("Default"), icon: "grid_view", value: 1 },
+                        { displayName: Translation.tr("Zoom In"), icon: "zoom_in", enabled: !page.videoWallpaper, value: 2 }
+                    ]
+                }
+
+                OverviewPreviewButton {
+                    Layout.alignment: Qt.AlignVCenter
+                    enabled: Config.options.background.zoomOutEnabled && (!page.videoWallpaper || Config.options.background.zoomOutStyle === 1)
+                    tooltipText: !Config.options.background.zoomOutEnabled
+                        ? Translation.tr("Enable Zoom animation to preview this style.")
+                        : Translation.tr("Open the Overview to preview the selected zoom style")
+                }
             }
         }
 

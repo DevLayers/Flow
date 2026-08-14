@@ -6,11 +6,13 @@ Item {
     id: root
 
     property bool revealed: false
+    readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
 
     opacity: revealed ? 1 : 0
     visible: opacity > 0
 
     Behavior on opacity {
+        enabled: !root.performanceMode
         NumberAnimation {
             duration: Appearance.animation.elementMoveFast.duration
             easing.type: Appearance.animation.elementMoveFast.type

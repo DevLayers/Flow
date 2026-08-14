@@ -347,6 +347,21 @@ Singleton {
         root.welcomeOpen = false;
     }
 
+    function toggleCheatsheet() {
+        root.cheatsheetOpen = !root.cheatsheetOpen;
+    }
+
+    function openCheatsheet() {
+        if (root.cheatsheetOpen) {
+            root.cheatsheetOpen = false;
+        }
+        root.cheatsheetOpen = true;
+    }
+
+    function closeCheatsheet() {
+        root.cheatsheetOpen = false;
+    }
+
     IpcHandler {
         target: "settings"
 
@@ -377,6 +392,22 @@ Singleton {
 
         function close(): void {
             root.closeWelcome();
+        }
+    }
+
+    IpcHandler {
+        target: "cheatsheet"
+
+        function toggle(): void {
+            root.toggleCheatsheet();
+        }
+
+        function open(): void {
+            root.openCheatsheet();
+        }
+
+        function close(): void {
+            root.closeCheatsheet();
         }
     }
 
