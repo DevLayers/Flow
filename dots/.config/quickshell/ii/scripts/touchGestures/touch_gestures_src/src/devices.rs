@@ -55,6 +55,15 @@ pub fn is_touchscreen(dev: &Device) -> bool {
     false
 }
 
+/// Stylus/digitizer devices also report BTN_TOUCH + INPUT_PROP_DIRECT, so they pass
+/// `is_touchscreen`. They are reported separately so the shell can decide whether pen
+/// input should drive gestures (a pen is also a pointer, so it drags windows too).
+pub fn is_stylus(dev: &Device) -> bool {
+    dev.supported_keys().is_some_and(|keys| {
+        keys.contains(KeyCode::BTN_TOOL_PEN) || keys.contains(KeyCode::BTN_STYLUS)
+    })
+}
+
 pub fn is_virtual(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     name.contains("ydotool")
@@ -191,6 +200,7 @@ impl DeviceManager {
                             device_id: dev_id.clone(),
                             name: name.to_string(),
                             path: path.to_string_lossy().to_string(),
+                            kind: if is_stylus(&dev) { "pen" } else { "touch" }.to_string(),
                         });
 
                         let active_clone = Arc::clone(&active);
@@ -381,11 +391,11 @@ fn watch_device(path: &Path, device_id: &str) -> std::io::Result<()> {
                             }
                             slot.dirty = false;
 
-                            let contact_id = if slot.tracking_id >= 0 {
-                                slot.tracking_id
-                            } else {
-                                idx as i32
-                            };
+                            // The slot index is the contact identity in MT protocol B.
+                            // ABS_MT_TRACKING_ID is cleared to -1 before the SYN_REPORT that
+                            // ends a contact, so keying on it would emit touch_up under a
+                            // different id than the matching touch_down.
+                            let contact_id = idx as i32;
 
                             if slot.active && !slot.was_active {
                                 // Touch Down

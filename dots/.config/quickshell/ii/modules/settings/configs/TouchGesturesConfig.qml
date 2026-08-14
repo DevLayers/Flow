@@ -105,13 +105,29 @@ ContentPage {
                                 var dev = TouchGestureService.devices[i];
                                 list.push({
                                     displayName: dev.name ? dev.name : dev.deviceId,
-                                    icon: "touch_app",
+                                    icon: dev.kind === "pen" ? "stylus" : "touch_app",
                                     value: dev.deviceId
                                 });
                             }
                         }
                         return list;
                     }
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "stylus"
+                text: Translation.tr("Let the stylus trigger gestures")
+                checked: (root.opts && root.opts.includeStylus) ? true : false
+                enabled: !root.opts || root.opts.deviceId === "auto"
+                onCheckedChanged: {
+                    if (Config.ready && root.opts && checked !== root.opts.includeStylus) {
+                        root.opts.includeStylus = checked;
+                    }
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("A pen also moves the pointer, so an edge swipe with it can drag or resize the window underneath at the same time. Ignored when a device is picked explicitly above.")
                 }
             }
 

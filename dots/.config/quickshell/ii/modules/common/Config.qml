@@ -2540,6 +2540,9 @@ Singleton {
                     property string deviceId: "auto"
                     property string targetMonitor: "auto"
                     property string transform: "auto"
+                    // A stylus is also a pointer, so pen gestures drag/resize windows at the
+                    // same time. Off unless the device is picked explicitly above.
+                    property bool includeStylus: false
 
                     // Recognition geometry
                     property int edgeWidth: 24

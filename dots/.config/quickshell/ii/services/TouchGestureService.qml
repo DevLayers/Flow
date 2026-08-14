@@ -81,26 +81,8 @@ Singleton {
         calibrationValue = 0;
     }
 
-    function updateHelperRunning() {
-        if (!helperProcess) return;
-        var shouldRun = root.enabled && !GlobalStates.screenLocked;
-        if (helperProcess.running !== shouldRun) {
-            helperProcess.running = shouldRun;
-        }
-    }
-
-    onEnabledChanged: root.updateHelperRunning()
-
-    Connections {
-        target: GlobalStates
-        function onScreenLockedChanged() {
-            root.updateHelperRunning();
-        }
-    }
-
     Component.onCompleted: {
         console.log("[TouchGestures] Service initialized. enabled:", root.enabled);
-        root.updateHelperRunning();
     }
 
     // Fullscreen / Context detection
@@ -134,6 +116,28 @@ Singleton {
         onTriggered: root.resetGestureState()
     }
 
+    // Safety net: a touch_up that never arrives (or arrives for a contact we are not
+    // tracking) would otherwise pin the recognizer in "tracking" forever, leaving the
+    // feedback indicator on screen and rejecting every later gesture.
+    Timer {
+        id: watchdogTimer
+        interval: 4000
+        repeat: false
+        running: root.gestureState === root.stateTracking
+        onTriggered: {
+            console.warn("[TouchGestures] Watchdog: no touch up after", interval, "ms — forcing reset");
+            root.cancelActiveGesture("watchdog-timeout");
+            root.forgetContacts();
+        }
+    }
+
+    // Contact bookkeeping lives outside the gesture state machine, so it needs an
+    // explicit reset whenever the event stream is no longer trustworthy.
+    function forgetContacts() {
+        activeContactCount = 0;
+        waitForAllContactsUp = false;
+    }
+
     Process {
         id: helperProcess
 
@@ -158,6 +162,8 @@ Singleton {
         onExited: (code, status) => {
             console.log("[TouchGestures] Process exited. code:", code, "status:", status);
             root.cancelActiveGesture("helper-stopped");
+            root.forgetContacts();
+            root.devices = [];
             if (root.helperStatus !== "error") {
                 root.helperStatus = "stopped";
             }
@@ -234,7 +240,8 @@ Singleton {
         var entry = {
             deviceId: event.deviceId,
             name: event.name,
-            path: event.path
+            path: event.path,
+            kind: event.kind ? event.kind : "touch"
         };
         if (existingIdx >= 0) {
             list[existingIdx] = entry;
@@ -257,13 +264,32 @@ Singleton {
         if (devices.length === 0) {
             helperStatus = "no_touchscreen";
         }
+        if (deviceId === activeDeviceId) {
+            cancelActiveGesture("device-removed");
+            forgetContacts();
+        }
         console.log("[TouchGestures] Device removed:", deviceId);
     }
 
+    function deviceKind(deviceId) {
+        for (var i = 0; i < devices.length; ++i) {
+            if (devices[i].deviceId === deviceId)
+                return devices[i].kind ? devices[i].kind : "touch";
+        }
+        return "touch";
+    }
+
     function deviceAllowed(deviceId) {
-        if (!root.opts || !root.opts.deviceId || root.opts.deviceId === "auto")
-            return true;
-        return root.opts.deviceId === deviceId;
+        // An explicitly picked device always wins, stylus included.
+        if (root.opts && root.opts.deviceId && root.opts.deviceId !== "auto")
+            return root.opts.deviceId === deviceId;
+
+        // A pen is a pointer as well, so it drags and resizes windows while it swipes.
+        // Keep it out of the recognizer unless the user asked for it.
+        if (deviceKind(deviceId) === "pen")
+            return Boolean(root.opts && root.opts.includeStylus);
+
+        return true;
     }
 
     function screenByName(name) {
@@ -404,6 +430,11 @@ Singleton {
     }
 
     function onTouchDown(event) {
+        // Filtered devices must not reach the contact counter either, or their unpaired
+        // ups and downs would drift it away from the real number of fingers down.
+        if (!deviceAllowed(event.deviceId))
+            return;
+
         activeContactCount++;
 
         if (activeContactCount > 1) {
@@ -415,9 +446,6 @@ Singleton {
         }
 
         if (!enabled || gestureState !== root.stateIdle || waitForAllContactsUp)
-            return;
-
-        if (!deviceAllowed(event.deviceId))
             return;
 
         var screenName = resolveScreenName();
@@ -518,6 +546,9 @@ Singleton {
     }
 
     function onTouchUp(event) {
+        if (!deviceAllowed(event.deviceId))
+            return;
+
         activeContactCount = Math.max(0, activeContactCount - 1);
         if (activeContactCount === 0) {
             waitForAllContactsUp = false;
@@ -545,6 +576,9 @@ Singleton {
     }
 
     function onTouchCancel(event) {
+        if (!deviceAllowed(event.deviceId))
+            return;
+
         activeContactCount = Math.max(0, activeContactCount - 1);
         if (activeContactCount === 0) {
             waitForAllContactsUp = false;

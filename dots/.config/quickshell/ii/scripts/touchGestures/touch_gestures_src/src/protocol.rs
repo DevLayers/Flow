@@ -16,6 +16,8 @@ pub enum OutEvent {
         device_id: String,
         name: String,
         path: String,
+        /// "touch" for fingers, "pen" for stylus/digitizer devices.
+        kind: String,
     },
 
     #[serde(rename = "device_removed")]
