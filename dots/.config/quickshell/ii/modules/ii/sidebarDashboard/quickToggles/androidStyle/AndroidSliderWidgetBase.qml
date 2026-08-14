@@ -125,22 +125,8 @@ Item {
     signal openMenu
 
     // Effective sizes for live preview during resize
-    readonly property int effectiveSizeW: {
-        if (root.editMode && editableItem.editingRight) {
-            var delta = root.baseCellWidth > 0 ? Math.round(editableItem.editDragX / root.baseCellWidth) : 0;
-            var w = root.catalogSize[0] + delta;
-            return Math.max(1, Math.min(8, w));
-        }
-        return root.catalogSize[0];
-    }
-    readonly property int effectiveSizeH: {
-        if (root.editMode && editableItem.editingBottom) {
-            var delta = root.baseCellHeight > 0 ? Math.round(editableItem.editDragY / root.baseCellHeight) : 0;
-            var h = root.catalogSize[1] + delta;
-            return Math.max(1, Math.min(8, h));
-        }
-        return root.catalogSize[1];
-    }
+    readonly property int effectiveSizeW: root.catalogSize[0]
+    readonly property int effectiveSizeH: root.catalogSize[1]
 
     property bool hovered: hoverHandler.hovered || (root.editMode && editableItem.containsMouse)
 

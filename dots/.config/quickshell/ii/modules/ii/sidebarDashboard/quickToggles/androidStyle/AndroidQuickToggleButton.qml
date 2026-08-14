@@ -21,22 +21,10 @@ Item {
     readonly property var catalogSize: QuickToggleCatalog.normalizeSize(root.buttonData.type, root.buttonData.sizeW, root.buttonData.sizeH, root.gridColumns)
 
     // Effective sizes for live preview during resize
-    readonly property int effectiveSizeW: {
-        if (root.editMode && editableItem.editingRight) {
-            var delta = root.baseCellWidth > 0 ? Math.round(editableItem.editDragX / root.baseCellWidth) : 0;
-            var w = root.catalogSize[0] + delta;
-            return Math.max(1, Math.min(8, w));
-        }
-        return root.catalogSize[0];
-    }
-    readonly property int effectiveSizeH: {
-        if (root.editMode && editableItem.editingBottom) {
-            var delta = root.baseCellHeight > 0 ? Math.round(editableItem.editDragY / root.baseCellHeight) : 0;
-            var h = root.catalogSize[1] + delta;
-            return Math.max(1, Math.min(8, h));
-        }
-        return root.catalogSize[1];
-    }
+    // The controller updates the draft during resize; rendering reads that
+    // canonical size directly instead of applying a second local geometry.
+    readonly property int effectiveSizeW: root.catalogSize[0]
+    readonly property int effectiveSizeH: root.catalogSize[1]
 
     readonly property bool isWide: effectiveSizeW > 1
     readonly property bool isTall: effectiveSizeH > 1
