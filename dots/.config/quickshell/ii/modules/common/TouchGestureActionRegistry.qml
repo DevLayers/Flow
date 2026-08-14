@@ -53,35 +53,51 @@ Singleton {
             ?? actions[0];
     }
 
+    // Repeating a gesture on a target that is already open closes it again. Targets
+    // that live on one monitor at a time are moved to the swiped screen instead of
+    // closing when they are open somewhere else, so the gesture is never a no-op on
+    // the screen it was made on.
+    function shouldCloseOnScreen(isOpen, activeMonitor, screenName) {
+        if (!isOpen)
+            return false;
+        if (!screenName || !activeMonitor)
+            return true;
+        return activeMonitor === screenName;
+    }
+
     function trigger(actionId, screenName) {
         switch (actionId) {
         case "overview":
-            if (!GlobalStates.overviewOpen)
+            if (shouldCloseOnScreen(GlobalStates.overviewOpen, GlobalStates.activeSearchMonitor, screenName))
+                GlobalStates.overviewOpen = false;
+            else
                 GlobalStates.openSearch(screenName);
             break;
 
         case "sidebarLeft":
-            if (!GlobalStates.sidebarLeftOpen)
+            if (shouldCloseOnScreen(GlobalStates.sidebarLeftOpen, GlobalStates.activeLeftSidebarMonitor, screenName))
+                GlobalStates.sidebarLeftOpen = false;
+            else
                 GlobalStates.openLeftSidebar(screenName);
             break;
 
         case "sidebarRight":
-            if (!GlobalStates.sidebarRightOpen)
+            if (shouldCloseOnScreen(GlobalStates.sidebarRightOpen, GlobalStates.activeRightSidebarMonitor, screenName))
+                GlobalStates.sidebarRightOpen = false;
+            else
                 GlobalStates.openRightSidebar(screenName);
             break;
 
         case "cheatsheet":
-            if (!GlobalStates.cheatsheetOpen)
-                GlobalStates.openCheatsheet();
+            GlobalStates.toggleCheatsheet();
             break;
 
         case "osk":
-            GlobalStates.oskOpen = true;
+            GlobalStates.oskOpen = !GlobalStates.oskOpen;
             break;
 
         case "settings":
-            if (!GlobalStates.settingsOpen)
-                GlobalStates.openSettings();
+            GlobalStates.toggleSettings();
             break;
 
         case "none":
