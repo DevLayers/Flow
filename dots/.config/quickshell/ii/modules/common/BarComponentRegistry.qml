@@ -268,8 +268,16 @@ Singleton {
     // registry scan and allocate a new model expression.
     readonly property var configurableComponents: allComponents.filter(c => c.configPage || c.pageId)
 
+    readonly property var componentById: {
+        const map = {};
+        for (const component of allComponents) {
+            map[component.id] = component;
+        }
+        return map;
+    }
+
     function getComponent(id) {
-        return allComponents.find(c => c.id === id) || null;
+        return componentById[id] ?? null;
     }
 
     function getAvailableComponents(usedIds) {

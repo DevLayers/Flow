@@ -2530,6 +2530,41 @@ Singleton {
                 property JsonObject deadPixelWorkaround: JsonObject { // Hyprland leaves out 1 pixel on the right for interactions
                     property bool enable: false
                 }
+                property JsonObject touchGestures: JsonObject {
+                    property bool enable: true
+
+                    // Visual
+                    property bool visualFeedback: true
+
+                    // Device/output
+                    property string deviceId: "auto"
+                    property string targetMonitor: "auto"
+                    property string transform: "auto"
+
+                    // Recognition geometry
+                    property int edgeWidth: 24
+                    property int cornerSize: 72
+
+                    // Recognition thresholds
+                    property int minDistance: 44
+                    property int commitDistance: 110
+                    property int velocityThreshold: 650
+                    property int directionTolerance: 35
+                    property int cooldownMs: 250
+
+                    // Safety / context
+                    property bool disableInFullscreen: false
+                    property bool disableInMediaMode: true
+
+                    property JsonObject bindings: JsonObject {
+                        property string leftEdge: "sidebarLeft"
+                        property string rightEdge: "sidebarRight"
+                        property string topEdge: "cheatsheet"
+                        property string bottomEdge: "overview"
+                        property string bottomLeftCorner: "none"
+                        property string bottomRightCorner: "osk"
+                    }
+                }
             }
 
             property JsonObject language: JsonObject {

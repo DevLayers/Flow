@@ -195,6 +195,14 @@ Singleton {
             "aliases": ["Monitors", "hyprmon", "Resolution", "Refresh rate", "Scale", "OLED Saver", "Blackout"]
         },
         {
+            "id": "touchGestures",
+            "name": "Touch & Gestures",
+            "icon": "touch_app",
+            "component": "modules/settings/configs/TouchGesturesConfig.qml",
+            "subPages": [],
+            "aliases": ["Touchscreen", "Touch", "Swipe", "Gestures", "Edge gestures", "Tablet"]
+        },
+        {
             "id": "mediaMusic",
             "name": "Media & Music",
             "icon": "album",
@@ -340,7 +348,7 @@ Singleton {
         {
             "id": "system",
             "name": "System",
-            "pageIds": ["displays", "soundAlerts", "power", "usageStats", "devicesPhone", "privacy", "about"]
+            "pageIds": ["displays", "touchGestures", "soundAlerts", "power", "usageStats", "devicesPhone", "privacy", "about"]
         }
     ]
 
