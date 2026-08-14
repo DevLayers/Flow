@@ -22,16 +22,16 @@ Item {
 
     // Effective sizes for live preview during resize
     readonly property int effectiveSizeW: {
-        if (root.editMode && visualButton.editingRight) {
-            var delta = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
+        if (root.editMode && editableItem.editingRight) {
+            var delta = root.baseCellWidth > 0 ? Math.round(editableItem.editDragX / root.baseCellWidth) : 0;
             var w = root.catalogSize[0] + delta;
             return Math.max(1, Math.min(8, w));
         }
         return root.catalogSize[0];
     }
     readonly property int effectiveSizeH: {
-        if (root.editMode && visualButton.editingBottom) {
-            var delta = root.baseCellHeight > 0 ? Math.round(visualButton.editDragY / root.baseCellHeight) : 0;
+        if (root.editMode && editableItem.editingBottom) {
+            var delta = root.baseCellHeight > 0 ? Math.round(editableItem.editDragY / root.baseCellHeight) : 0;
             var h = root.catalogSize[1] + delta;
             return Math.max(1, Math.min(8, h));
         }
@@ -47,7 +47,7 @@ Item {
     // Use the rendered widget's hover state while keeping it in this delegate's
     // local scene graph. The grid delegate remains the only layout owner.
     property bool hovered: (visualButton.hovered || visualButton.mouseArea.containsMouse)
-                           || (root.editMode && editModeInteraction.containsMouse)
+                           || (root.editMode && editableItem.containsMouse)
 
     // Signals
     signal openMenu
@@ -633,300 +633,11 @@ Item {
         }
     }
 
-        // Expose drag state to edit border
-        property real editDragX: 0
-        property real editDragY: 0
-        property bool editingRight: false
-        property bool editingBottom: false
-
-        MouseArea { // Blocking MouseArea for edit interactions
-            id: editModeInteraction
-            visible: root.editMode
-            anchors.fill: parent
-            cursorShape: root.isDragging ? Qt.ClosedHandCursor : (root.isUnused ? Qt.PointingHandCursor : Qt.OpenHandCursor)
-            hoverEnabled: true
-            acceptedButtons: Qt.LeftButton
-            
-            property real pressAbsX: 0
-            property real pressAbsY: 0
-            property real initialVisualX: 0
-            property real initialVisualY: 0
-
-            function mutatePages(mutatorFn) {
-                if (root.panel && root.panel.mutatePages) {
-                    root.panel.mutatePages(mutatorFn);
-                } else {
-                    var cloned = JSON.parse(JSON.stringify(Config.options.sidebar.quickToggles.android.pages));
-                    mutatorFn(cloned);
-                    Config.options.sidebar.quickToggles.android.pages = cloned;
-                }
-            }
-            
-            function resolveLayoutConflicts() {
-                if (root.panel && root.panel.resolveLayoutConflicts) {
-                    root.panel.resolveLayoutConflicts(root.pageIndex, root.gridColumns);
-                }
-            }
-
-            function toggleEnabled() {
-                const buttonType = root.buttonData.type;
-                const pi = root.pageIndex;
-
-                mutatePages(function(pages) {
-                    if (pi < 0 || pi >= pages.length) return;
-                    var page = pages[pi];
-                    var existingIdx = -1;
-                    for (var i = 0; i < page.length; i++) {
-                        if (page[i].type === buttonType) { existingIdx = i; break; }
-                    }
-                    if (existingIdx === -1) {
-                        // Not in this page — add it
-                        page.push(QuickToggleCatalog.item(buttonType, buttonType, undefined, undefined, root.gridColumns));
-                    } else {
-                        // Already in this page — remove it
-                        page.splice(existingIdx, 1);
-                    }
-                });
-            }
-
-            function setSize(newW, newH) {
-                const buttonType = root.buttonData.type;
-                const pi = root.pageIndex;
-                mutatePages(function(pages) {
-                    if (pi < 0 || pi >= pages.length) return;
-                    var page = pages[pi];
-                    for (var i = 0; i < page.length; i++) {
-                        if (page[i].type === buttonType) {
-                            page[i].sizeW = newW;
-                            page[i].sizeH = newH;
-                            page[i].size = newW; // legacy compatibility
-                            return;
-                        }
-                    }
-                });
-            }
-            
-            onPressed: event => {
-                if (!root.isUnused) {
-                    if (!root.panel || !root.panel.editController
-                            || !root.panel.editController.beginReorder(root.buttonData.id, root.pageIndex))
-                        return;
-                }
-                pressAbsX = event.x;
-                pressAbsY = event.y;
-                initialVisualX = 0;
-                initialVisualY = 0;
-                root.dragOffsetX = 0;
-                root.dragOffsetY = 0;
-                root.isDragging = false;
-                root.dragTargetPage = root.pageIndex;
-            }
-            
-            onPositionChanged: event => {
-                if (pressed) {
-                    var dx = event.x - pressAbsX;
-                    var dy = event.y - pressAbsY;
-                    
-                    if (!root.isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-                        root.isDragging = root.isUnused || (root.panel && root.panel.editController
-                                                             && root.panel.editController.active);
-                    }
-                    
-                    if (root.isDragging) {
-                        root.dragOffsetX = initialVisualX + dx;
-                        root.dragOffsetY = initialVisualY + dy;
-                        
-                        var centerX = root.dragOffsetX + root.width / 2;
-                        var centerY = root.dragOffsetY + root.height / 2;
-                        
-                        var gridPos = root.parent.mapFromItem(root, centerX, centerY);
-                        if (!root.isUnused && root.panel && root.panel.editController) {
-                            root.panel.editController.previewReorderAt(
-                                root.pageIndex,
-                                gridPos.x,
-                                gridPos.y,
-                                root.baseCellWidth,
-                                root.baseCellHeight,
-                                root.cellSpacing
-                            );
-                        }
-
-                        // Cross-page drag: ask panel to scroll if near horizontal edges
-                        if (root.panel && root.panel.handleDragScrollRequest) {
-                            var panelPos = root.panel.mapFromItem(root, centerX, centerY);
-                            root.panel.handleDragScrollRequest(panelPos.x, root);
-                        }
-                    }
-                }
-            }
-
-            onReleased: event => {
-                if (root.isDragging) {
-                    // Use panel's CURRENT page at release time — correct regardless of edge state
-                    var targetPage = (root.panel && root.panel.currentPage !== undefined)
-                                     ? root.panel.currentPage : root.pageIndex;
-                    if (root.panel && root.panel.editController) {
-                        if (targetPage !== root.pageIndex)
-                            root.panel.editController.moveToPage(targetPage);
-                        root.panel.editController.commitReorder();
-                    }
-                    // Stop any pending drag-scroll timer
-                    if (root.panel && root.panel.cancelDragScroll)
-                        root.panel.cancelDragScroll();
-                    root.isDragging = false;
-                } else {
-                    if (root.panel && root.panel.editController && root.panel.editController.active)
-                        root.panel.editController.cancelReorder();
-                    if (!visualButton.editingRight && !visualButton.editingBottom)
-                        toggleEnabled();
-                }
-            }
-        }
-
-        Rectangle {
-            id: editBorder
-            anchors.fill: parent
-            visible: root.editMode && !root.isDragging
-            color: "transparent"
-            border.width: 2
-            radius: visualButton.radius
-            
-            border.color: {
-                if (root.isUnused) {
-                    return root.hovered ? Appearance.colors.colPrimary : "transparent";
-                } else {
-                    return root.hovered ? Appearance.colors.colPrimary : ColorUtils.transparentize(Appearance.colors.colPrimary, 0.7);
-                }
-            }
-            
-            Behavior on border.color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(editBorder)
-            }
-            
-            MouseArea {
-                id: editBorderMouseArea
-                anchors.fill: parent
-                visible: root.isUnused
-                hoverEnabled: true
-                acceptedButtons: Qt.NoButton // don't swallow clicks — let them reach editModeInteraction
-            }
-
-            Rectangle {
-                id: rightDragHandle
-                width: 8
-                height: 24
-                radius: 4
-                color: Appearance.colors.colPrimary
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.right: parent.right
-                anchors.rightMargin: -width / 2
-                visible: !root.isUnused
-
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -12
-                    cursorShape: Qt.SizeHorCursor
-                    preventStealing: true
-                    property real pressAbsX: 0
-                    onPressed: event => {
-                        var absPos = visualButton.mapFromItem(rightDragHandle, event.x, event.y);
-                        pressAbsX = absPos.x;
-                        visualButton.editingRight = true;
-                    }
-                    onPositionChanged: event => {
-                        var absPos = visualButton.mapFromItem(rightDragHandle, event.x, event.y);
-                        var dx = absPos.x - pressAbsX;
-                        var currentW = root.catalogSize[0];
-                        visualButton.editDragX = Math.max(-root.baseCellWidth * (currentW - 1), Math.min(dx, root.baseCellWidth * (8 - currentW)));
-                    }
-                    onReleased: event => {
-                        visualButton.editingRight = false;
-                        var currentW = root.catalogSize[0];
-                        var deltaColumns = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
-                        var newSizeW = currentW + deltaColumns;
-                        if (isNaN(newSizeW)) newSizeW = currentW;
-                        newSizeW = Math.max(1, Math.min(8, newSizeW));
-                        
-                        visualButton.editDragX = 0;
-                        if (newSizeW !== (root.catalogSize[0])) {
-                            editModeInteraction.setSize(newSizeW, root.catalogSize[1]);
-                            editModeInteraction.resolveLayoutConflicts();
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                id: bottomDragHandle
-                height: 8
-                width: 24
-                radius: 4
-                color: Appearance.colors.colPrimary
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: -height / 2
-                visible: !root.isUnused
-
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -12
-                    cursorShape: Qt.SizeVerCursor
-                    preventStealing: true
-                    property real pressAbsY: 0
-                    onPressed: event => {
-                        var absPos = visualButton.mapFromItem(bottomDragHandle, event.x, event.y);
-                        pressAbsY = absPos.y;
-                        visualButton.editingBottom = true;
-                    }
-                    onPositionChanged: event => {
-                        var absPos = visualButton.mapFromItem(bottomDragHandle, event.x, event.y);
-                        var dy = absPos.y - pressAbsY;
-                        var currentH = root.catalogSize[1];
-                        visualButton.editDragY = Math.max(-root.baseCellHeight * (currentH - 1), Math.min(dy, root.baseCellHeight * (8 - currentH)));
-                    }
-                    onReleased: event => {
-                        visualButton.editingBottom = false;
-                        var currentH = root.catalogSize[1];
-                        var deltaRows = root.baseCellHeight > 0 ? Math.round(visualButton.editDragY / root.baseCellHeight) : 0;
-                        var newSizeH = currentH + deltaRows;
-                        if (isNaN(newSizeH)) newSizeH = currentH;
-                        newSizeH = Math.max(1, Math.min(8, newSizeH));
-                        
-                        visualButton.editDragY = 0;
-                        if (newSizeH !== (root.catalogSize[1])) {
-                            editModeInteraction.setSize(root.catalogSize[0], newSizeH);
-                            editModeInteraction.resolveLayoutConflicts();
-                        }
-                    }
-                }
-            }
-        }
     }
 
-    Rectangle {
-        id: addBadge
-        width: 20
-        height: 20
-        radius: 10
-        color: Appearance.m3colors.m3success
-        anchors.right: root.right
-        anchors.top: root.top
-        anchors.rightMargin: -6
-        anchors.topMargin: -14
-        visible: root.isUnused
-        z: visualButton.z + 10
-        
-        MaterialSymbol {
-            anchors.centerIn: parent
-            text: "add"
-            iconSize: 14
-            color: Appearance.m3colors.m3onSuccess
-        }
-    }
-
-    StyledToolTip {
-        parent: root
-        extraVisibleCondition: root.tooltipText !== "" && (root.hovered || (root.editMode && editModeInteraction.containsMouse))
-        text: root.tooltipText
+    EditableQuickToggleItem {
+        id: editableItem
+        target: root
+        visualItem: visualButton
     }
 }
