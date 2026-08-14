@@ -1005,6 +1005,17 @@ Singleton {
                 // stay off for them until the user says their models can
                 // handle function calling.
                 property bool localModelTools: false
+                // Longest answer to ask for, in tokens. 0 uses whatever the
+                // model itself supports, which is what most people want;
+                // a positive value caps it and is clamped to the model's own
+                // limit.
+                property int maxOutputTokens: 0
+                // Seconds before giving up on reaching the endpoint, and
+                // before abandoning a reply that is still being written.
+                property int connectTimeout: 15
+                property int requestTimeout: 300
+                // Extra attempts after a rate limit or a server error.
+                property int maxRetries: 2
                 property list<var> models: [
                         {
                             "openrouter": [

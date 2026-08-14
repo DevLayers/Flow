@@ -1,0 +1,206 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import qs.modules.common
+import qs.modules.common.functions as CF
+
+/**
+ * One request to a model endpoint, from script generation to exit.
+ *
+ * The caller fills in the inputs (model, strategy, message, endpoint,
+ * payload), calls `start()`, and listens to `line`/`finished`. Everything
+ * about the transport itself lives here: the generated bash script, the
+ * process, the HTTP status, the timeout, the retries and the cancellation.
+ *
+ * The HTTP status is not otherwise observable — curl writes the body to
+ * stdout and nothing else — so the script asks for it with `-w` and it
+ * arrives as a trailing marker line, which is stripped before `line` fires.
+ */
+Scope {
+    id: root
+
+    // ── Inputs ────────────────────────────────────────────────────────────
+    property AiModel model
+    property ApiStrategy strategy
+    property AiMessageData message
+    property string endpoint: ""
+    property var requestData: ({})
+    property string apiKey: ""
+    property string apiKeyEnvVarName: "API_KEY"
+    property string scriptPath: ""
+    property string filePath: "" // Attachment uploaded before the request itself
+
+    // ── Tunables ──────────────────────────────────────────────────────────
+    readonly property int connectTimeout: Math.max(1, Config.options?.ai?.connectTimeout ?? 15)
+    readonly property int requestTimeout: Math.max(0, Config.options?.ai?.requestTimeout ?? 300)
+    readonly property int maxRetries: Math.max(0, Config.options?.ai?.maxRetries ?? 2)
+
+    // ── State ─────────────────────────────────────────────────────────────
+    readonly property bool running: requestProc.running || retryTimer.running
+    readonly property string statusMarker: "@@II_HTTP_STATUS:"
+    property int attempt: 0
+    property int httpStatus: 0
+    property int exitCode: 0
+    property bool aborted: false
+
+    // Where the message stood when the current attempt started, so a retry
+    // can drop whatever the failed attempt wrote before trying again.
+    property int contentMark: 0
+    property int rawContentMark: 0
+
+    signal line(string data)
+    signal retrying(int attempt, int delaySeconds, int status)
+    /** reason: "done" | "error" | "aborted" */
+    signal finished(string reason, int status, int code)
+
+    /**
+     * Starts the request. Returns false when one is already in flight —
+     * a second send never silently replaces the first.
+     */
+    function start(): bool {
+        if (root.running)
+            return false;
+        if (!root.strategy || !root.model)
+            return false;
+        root.aborted = false;
+        root.attempt = 0;
+        root.httpStatus = 0;
+        root.exitCode = 0;
+        root.contentMark = root.message?.content.length ?? 0;
+        root.rawContentMark = root.message?.rawContent.length ?? 0;
+        root.strategy.reset();
+        root.launch();
+        return true;
+    }
+
+    /**
+     * Cancels the request, whether it is streaming or waiting to retry.
+     */
+    function abort(): bool {
+        if (!root.running)
+            return false;
+        root.aborted = true;
+        retryTimer.stop();
+        watchdog.stop();
+        if (requestProc.running) {
+            requestProc.running = false; // onExited reports it
+            return true;
+        }
+        root.finished("aborted", root.httpStatus, root.exitCode);
+        return true;
+    }
+
+    function launch() {
+        const scriptFilePath = CF.FileUtils.trimFileProtocol(root.scriptPath);
+        scriptFile.path = Qt.resolvedUrl(scriptFilePath);
+        scriptFile.setText(root.buildScript());
+        // Rebuilt every launch: a key must never outlive the model it
+        // belongs to, and an unused variable must not linger either.
+        requestProc.environment = root.model.requires_key ? ({
+                [root.apiKeyEnvVarName]: root.apiKey
+            }) : ({});
+        requestProc.command = ["bash", scriptFilePath];
+        requestProc.running = true;
+        if (root.requestTimeout > 0) {
+            // curl bounds itself with --max-time; this only catches the case
+            // where curl or the shell around it stops responding entirely.
+            watchdog.interval = (root.requestTimeout + 15) * 1000;
+            watchdog.restart();
+        }
+    }
+
+    function buildScript(): string {
+        const headers = {
+            "Content-Type": "application/json"
+        };
+        const headerString = Object.entries(headers).filter(([k, v]) => v && v.length > 0).map(([k, v]) => `-H '${k}: ${v}'`).join(" ");
+        const authHeader = root.strategy.buildAuthorizationHeader(root.apiKeyEnvVarName);
+
+        let content = "#!/usr/bin/env bash\n";
+        if (root.filePath.length > 0)
+            content += root.strategy.buildScriptFileSetup(root.filePath);
+
+        content += "curl --no-buffer -sS" + ` --connect-timeout ${root.connectTimeout}` + (root.requestTimeout > 0 ? ` --max-time ${root.requestTimeout}` : "") + ` -w '\\n${root.statusMarker}%{http_code}@@\\n'` + ` "${root.endpoint}"` + ` ${headerString}` + (authHeader ? ` ${authHeader}` : "") + ` --data '${CF.StringUtils.shellSingleQuoteEscape(JSON.stringify(root.requestData))}'` + "\n";
+
+        return root.strategy.finalizeScriptContent(content);
+    }
+
+    function retryable(): bool {
+        if (root.aborted || root.attempt >= root.maxRetries)
+            return false;
+        if (root.httpStatus === 429 || root.httpStatus >= 500)
+            return true;
+        // No status at all means curl never got a reply: DNS, connection
+        // refused, TLS, or its own timeout.
+        return root.httpStatus === 0 && root.exitCode !== 0;
+    }
+
+    function rollbackMessage() {
+        if (!root.message)
+            return;
+        root.message.content = root.message.content.slice(0, root.contentMark);
+        root.message.rawContent = root.message.rawContent.slice(0, root.rawContentMark);
+        root.message.thinking = true;
+    }
+
+    FileView {
+        id: scriptFile
+    }
+
+    Timer {
+        id: retryTimer
+        onTriggered: root.launch()
+    }
+
+    Timer {
+        id: watchdog
+        onTriggered: {
+            if (!requestProc.running)
+                return;
+            console.log("[AiRequest] No answer within the timeout, killing the request");
+            root.httpStatus = 0;
+            requestProc.running = false;
+        }
+    }
+
+    Process {
+        id: requestProc
+
+        stdout: SplitParser {
+            onRead: data => {
+                if (data.startsWith(root.statusMarker)) {
+                    root.httpStatus = parseInt(data.slice(root.statusMarker.length)) || 0;
+                    return;
+                }
+                if (data.length === 0)
+                    return;
+                if (root.requestTimeout > 0)
+                    watchdog.restart();
+                root.line(data);
+            }
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            watchdog.stop();
+            root.exitCode = exitCode;
+
+            if (root.aborted) {
+                root.finished("aborted", root.httpStatus, exitCode);
+                return;
+            }
+            if (root.retryable()) {
+                root.attempt += 1;
+                const delay = Math.min(8, Math.pow(2, root.attempt - 1));
+                root.rollbackMessage();
+                root.retrying(root.attempt, delay, root.httpStatus);
+                retryTimer.interval = delay * 1000;
+                retryTimer.restart();
+                return;
+            }
+            const ok = exitCode === 0 && (root.httpStatus === 0 || (root.httpStatus >= 200 && root.httpStatus < 300));
+            root.finished(ok ? "done" : "error", root.httpStatus, exitCode);
+        }
+    }
+}

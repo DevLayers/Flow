@@ -27,6 +27,9 @@ Singleton {
 
     signal responseFinished
     readonly property bool isGenerating: requester.running
+    // Set while a failed request waits to be sent again, so the UI can say so
+    // instead of looking stuck.
+    property string retryNotice: ""
 
     property string systemPrompt: {
         let prompt = Config.options?.ai?.systemPrompt ?? "";
@@ -606,163 +609,181 @@ Singleton {
         root.tokenCount.total = -1;
     }
 
-    FileView {
-        id: requesterScriptFile
+    function markDone(message: AiMessageData) {
+        if (!message)
+            return;
+        message.done = true;
+        if (root.postResponseHook) {
+            root.postResponseHook();
+            root.postResponseHook = null; // Reset hook after use
+        }
+        root.saveChat("lastSession");
+        root.responseFinished();
     }
 
-    Process {
+    /**
+     * Human-readable reason a request came back with nothing to show.
+     */
+    function transportErrorText(status: int, code: int): string {
+        if (status === 401 || status === 403)
+            return Translation.tr("**Request rejected** (HTTP %1). The API key is missing, wrong, or not allowed to use this model.").arg(status);
+        if (status === 404)
+            return Translation.tr("**Not found** (HTTP 404). The model name or the endpoint is wrong.");
+        if (status === 429)
+            return Translation.tr("**Rate limited** (HTTP 429). Too many requests, or the quota for this key is used up.");
+        if (status >= 500)
+            return Translation.tr("**The provider failed** (HTTP %1). Nothing to do but try again.").arg(status);
+        if (status >= 400)
+            return Translation.tr("**Request failed** (HTTP %1).").arg(status);
+        if (code === 28)
+            return Translation.tr("**Timed out.** No answer within %1 s.").arg(requester.requestTimeout);
+        if (code === 6 || code === 7)
+            return Translation.tr("**Could not reach the endpoint.** Check the connection, or whether the local server is running.");
+        return Translation.tr("**Request failed** (exit code %1).").arg(code);
+    }
+
+    AiRequest {
         id: requester
-        property list<string> baseCommand: ["bash"]
-        property AiMessageData message
-        property ApiStrategy currentStrategy
+        apiKeyEnvVarName: root.apiKeyEnvVarName
+        scriptPath: root.requestScriptFilePath
 
-        function markDone() {
-            requester.message.done = true;
-            if (root.postResponseHook) {
-                root.postResponseHook();
-                root.postResponseHook = null; // Reset hook after use
+        onLine: data => {
+            if (requester.message.thinking)
+                requester.message.thinking = false;
+            // console.log("[Ai] Raw response line: ", data);
+
+            try {
+                const result = requester.strategy.parseResponseLine(data, requester.message);
+                // console.log("[Ai] Parsed response result: ", JSON.stringify(result, null, 2));
+
+                if (result.functionCall) {
+                    requester.message.functionCall = result.functionCall;
+                    root.handleFunctionCall(result.functionCall.name, result.functionCall.args, requester.message);
+                }
+                if (result.tokenUsage) {
+                    root.tokenCount.input = result.tokenUsage.input;
+                    root.tokenCount.output = result.tokenUsage.output;
+                    root.tokenCount.total = result.tokenUsage.total;
+                }
+                if (result.finished)
+                    root.markDone(requester.message);
+            } catch (e) {
+                console.log("[AI] Could not parse response: ", e);
+                requester.message.rawContent += data;
+                requester.message.content += data;
             }
-            root.saveChat("lastSession");
-            root.responseFinished();
         }
 
-        function makeRequest() {
-            const model = root.currentModelEntry;
-            if (!model) {
-                root.addMessage(Translation.tr("No model selected. Pick one with %1model MODEL").arg("/"), root.interfaceRole);
+        onRetrying: (attempt, delaySeconds, status) => {
+            // Whatever the failed attempt wrote has already been rolled back,
+            // so the message goes back to looking like it is being thought
+            // about — which it is.
+            root.retryNotice = Translation.tr("Retrying in %1 s (%2/%3)").arg(delaySeconds).arg(attempt).arg(requester.maxRetries);
+        }
+
+        onFinished: (reason, status, code) => {
+            const message = requester.message;
+            root.retryNotice = "";
+            if (!message)
                 return;
-            }
 
-            // Fetch API keys if needed
-            if (model?.requires_key && !KeyringStorage.loaded)
-                KeyringStorage.fetchKeyringData();
-
-            requester.currentStrategy = root.currentApiStrategy;
-            requester.currentStrategy.reset(); // Reset strategy state
-
-            /* Put API key in environment variable */
-            if (model.requires_key)
-                requester.environment[`${root.apiKeyEnvVarName}`] = root.apiKeys ? (root.apiKeys[model.key_id] ?? "") : "";
-
-            /* Build endpoint, request data */
-            const endpoint = root.currentApiStrategy.buildEndpoint(model);
-            const messageArray = root.messageIDs.map(id => root.messageByID[id]);
-            const filteredMessageArray = messageArray.filter(message => message.role !== Ai.interfaceRole);
-            // Tool support is a property of the model, not of its address. A
-            // local model that can call functions keeps them; a remote one
-            // that cannot does not get them handed over anyway.
-            const toolsOfFormat = root.tools[model.api_format] ?? root.tools["openai"];
-            const tools = model.tools ? (toolsOfFormat[root.currentTool] ?? toolsOfFormat["none"]) : null;
-
-            const data = root.currentApiStrategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, tools, root.pendingFilePath);
-            // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
-
-            let requestHeaders = {
-                "Content-Type": "application/json"
-            };
-
-            /* Create local message object */
-            requester.message = root.aiMessageComponent.createObject(root, {
-                "role": "assistant",
-                "model": currentModelId,
-                "content": "",
-                "rawContent": "",
-                "thinking": true,
-                "done": false
-            });
-            const id = idForMessage(requester.message);
-            root.messageIDs = [...root.messageIDs, id];
-            root.messageByID[id] = requester.message;
-
-            /* Build header string for curl */
-            let headerString = Object.entries(requestHeaders).filter(([k, v]) => v && v.length > 0).map(([k, v]) => `-H '${k}: ${v}'`).join(' ');
-
-            // console.log("Request headers: ", JSON.stringify(requestHeaders));
-            // console.log("Header string: ", headerString);
-
-            /* Get authorization header from strategy */
-            const authHeader = requester.currentStrategy.buildAuthorizationHeader(root.apiKeyEnvVarName);
-
-            /* Script shebang */
-            const scriptShebang = "#!/usr/bin/env bash\n";
-
-            /* Create extra setup when there's an attached file */
-            let scriptFileSetupContent = "";
-            if (root.pendingFilePath && root.pendingFilePath.length > 0) {
-                requester.message.localFilePath = root.pendingFilePath;
-                scriptFileSetupContent = requester.currentStrategy.buildScriptFileSetup(root.pendingFilePath);
-                root.pendingFilePath = "";
-            }
-
-            /* Create command string */
-            let scriptRequestContent = "";
-            scriptRequestContent += `curl --no-buffer "${endpoint}"` + ` ${headerString}` + (authHeader ? ` ${authHeader}` : "") + ` --data '${CF.StringUtils.shellSingleQuoteEscape(JSON.stringify(data))}'` + "\n";
-
-            /* Send the request */
-            const scriptContent = requester.currentStrategy.finalizeScriptContent(scriptShebang + scriptFileSetupContent + scriptRequestContent);
-            const shellScriptPath = CF.FileUtils.trimFileProtocol(root.requestScriptFilePath);
-            requesterScriptFile.path = Qt.resolvedUrl(shellScriptPath);
-            requesterScriptFile.setText(scriptContent);
-            requester.command = baseCommand.concat([shellScriptPath]);
-            requester.running = true;
-        }
-
-        stdout: SplitParser {
-            onRead: data => {
-                if (data.length === 0)
-                    return;
-                if (requester.message.thinking)
-                    requester.message.thinking = false;
-                // console.log("[Ai] Raw response line: ", data);
-
-                // Handle response line
-                try {
-                    const result = requester.currentStrategy.parseResponseLine(data, requester.message);
-                    // console.log("[Ai] Parsed response result: ", JSON.stringify(result, null, 2));
-
-                    if (result.functionCall) {
-                        requester.message.functionCall = result.functionCall;
-                        root.handleFunctionCall(result.functionCall.name, result.functionCall.args, requester.message);
-                    }
-                    if (result.tokenUsage) {
-                        root.tokenCount.input = result.tokenUsage.input;
-                        root.tokenCount.output = result.tokenUsage.output;
-                        root.tokenCount.total = result.tokenUsage.total;
-                    }
-                    if (result.finished) {
-                        requester.markDone();
-                    }
-                } catch (e) {
-                    console.log("[AI] Could not parse response: ", e);
-                    requester.message.rawContent += data;
-                    requester.message.content += data;
+            if (reason === "aborted") {
+                const note = Translation.tr("\n\n*[Stopped]*");
+                message.rawContent += note;
+                message.content += note;
+            } else {
+                requester.strategy.onRequestFinished(message);
+                // An error the strategy could not describe itself — a body it
+                // never saw, or no body at all — still has to be visible.
+                if (reason === "error" && message.content.length === 0) {
+                    const note = root.transportErrorText(status, code);
+                    message.rawContent += note;
+                    message.content += note;
                 }
             }
-        }
 
-        onExited: (exitCode, exitStatus) => {
-            const result = requester.currentStrategy.onRequestFinished(requester.message);
+            message.thinking = false;
+            if (!message.done)
+                root.markDone(message);
 
-            if (result.finished) {
-                requester.markDone();
-            } else if (!requester.message.done) {
-                requester.markDone();
-            }
-
-            // Handle error responses
-            if (requester.message.content.includes("API key not valid")) {
-                const model = root.models[requester.message.model];
+            if (message.content.includes("API key not valid") || status === 401 || status === 403) {
+                const model = root.models[message.model];
                 if (model)
                     root.addApiKeyAdvice(model);
             }
         }
     }
 
+    /**
+     * Builds and sends a request for the conversation as it currently stands.
+     */
+    function makeRequest() {
+        const model = root.currentModelEntry;
+        if (!model) {
+            root.addMessage(Translation.tr("No model selected. Pick one with %1model MODEL").arg("/"), root.interfaceRole);
+            return;
+        }
+        if (requester.running) {
+            root.addMessage(Translation.tr("Still answering. Stop the current response before sending another."), root.interfaceRole);
+            return;
+        }
+
+        // Fetch API keys if needed
+        if (model.requires_key && !KeyringStorage.loaded)
+            KeyringStorage.fetchKeyringData();
+
+        const strategy = root.currentApiStrategy;
+        const messageArray = root.messageIDs.map(id => root.messageByID[id]);
+        const filteredMessageArray = messageArray.filter(message => message.role !== root.interfaceRole);
+        // Tool support is a property of the model, not of its address. A
+        // local model that can call functions keeps them; a remote one
+        // that cannot does not get them handed over anyway.
+        const toolsOfFormat = root.tools[model.api_format] ?? root.tools["openai"];
+        const tools = model.tools ? (toolsOfFormat[root.currentTool] ?? toolsOfFormat["none"]) : null;
+        const attachedFilePath = root.pendingFilePath;
+
+        const data = strategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, tools, attachedFilePath);
+        // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
+
+        /* Create local message object */
+        const message = root.aiMessageComponent.createObject(root, {
+            "role": "assistant",
+            "model": root.currentModelId,
+            "content": "",
+            "rawContent": "",
+            "thinking": true,
+            "done": false
+        });
+        if (attachedFilePath.length > 0) {
+            message.localFilePath = attachedFilePath;
+            root.pendingFilePath = "";
+        }
+        const id = idForMessage(message);
+        root.messageIDs = [...root.messageIDs, id];
+        root.messageByID[id] = message;
+
+        requester.model = model;
+        requester.strategy = strategy;
+        requester.message = message;
+        requester.endpoint = strategy.buildEndpoint(model);
+        requester.requestData = data;
+        requester.filePath = attachedFilePath;
+        requester.apiKey = model.requires_key ? (root.apiKeys?.[model.key_id] ?? "") : "";
+        requester.start();
+    }
+
+    /**
+     * Stops the answer being written, keeping whatever arrived so far.
+     */
+    function stopGeneration(): bool {
+        return requester.abort();
+    }
+
     function sendUserMessage(message) {
         if (message.length === 0)
             return;
         root.addMessage(message, "user");
-        requester.makeRequest();
+        root.makeRequest();
     }
 
     Process {
@@ -822,7 +843,7 @@ Singleton {
         for (let i = root.messageIDs.length - 1; i >= messageIndex; i--) {
             root.removeMessage(i);
         }
-        requester.makeRequest();
+        root.makeRequest();
     }
 
     function createFunctionOutputMessage(name, output, includeOutputInChat = true) {
@@ -884,7 +905,7 @@ Singleton {
         }
         onExited: (exitCode, exitStatus) => {
             commandExecutionProc.message.functionResponse += `[[ Command exited with code ${exitCode} (${exitStatus}) ]]\n`;
-            requester.makeRequest(); // Continue
+            root.makeRequest(); // Continue
         }
     }
 
@@ -896,11 +917,11 @@ Singleton {
                 root.currentTool = "functions";
             };
             addFunctionOutputMessage(name, Translation.tr("Switched to search mode. Continue with the user's request."));
-            requester.makeRequest();
+            root.makeRequest();
         } else if (name === "get_shell_config") {
             const configJson = CF.ObjectUtils.toPlainObject(Config.options);
             addFunctionOutputMessage(name, JSON.stringify(configJson));
-            requester.makeRequest();
+            root.makeRequest();
         } else if (name === "set_shell_config") {
             if (!args.changes || !Array.isArray(args.changes)) {
                 addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `changes` array."));
@@ -920,7 +941,7 @@ Singleton {
                 }
             }
             addFunctionOutputMessage(name, results.join("\n"));
-            requester.makeRequest();
+            root.makeRequest();
         } else if (name === "run_shell_command") {
             if (!args.command || args.command.length === 0) {
                 addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `command`."));

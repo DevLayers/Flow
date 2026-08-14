@@ -7,10 +7,16 @@ ApiStrategy {
     readonly property string fileMimeTypeVarName: "MIME_TYPE"
     readonly property string fileUriSubstitutionString: "{{ fileUriVarName }}"
     readonly property string fileMimeTypeSubstitutionString: "{{ fileMimeTypeVarName }}"
-    property string buffer: ""
+    // Anything the endpoint sends that is not an SSE frame: an error body, or
+    // the upload step's own output. Kept until the request ends, because an
+    // error body is pretty-printed across many lines.
+    property string strayBuffer: ""
 
     function buildEndpoint(model: AiModel): string {
-        const result = model.endpoint + `?key=\$\{${root.apiKeyEnvVarName}\}`;
+        // alt=sse makes the stream a sequence of `data: {...}` lines instead
+        // of a pretty-printed JSON array, so it is framed like every other
+        // provider and no reassembly is needed.
+        const result = model.endpoint + `?alt=sse&key=\$\{${apiKeyEnvVarName}\}`;
         // console.log("[AI] Endpoint: " + result);
         return result;
     }
@@ -85,7 +91,7 @@ ApiStrategy {
             },
             "generationConfig": {
                 "temperature": temperature,
-                "maxOutputTokens": 2048
+                "maxOutputTokens": maxOutputTokens(model)
             }
         };
         // print("Gemini API call payload:", JSON.stringify(baseData, null, 2));
@@ -98,27 +104,36 @@ ApiStrategy {
     }
 
     function parseResponseLine(line, message) {
-        if (line.startsWith("[")) {
-            buffer += line.slice(1).trim();
-        } else if (line === "]") {
-            buffer += line.slice(0, -1).trim();
-            return parseBuffer(message);
-        } else if (line.startsWith(",")) {
-            return parseBuffer(message);
-        } else {
-            buffer += line.trim();
+        const trimmed = line.trim();
+        if (trimmed.length === 0)
+            return {};
+
+        if (!trimmed.startsWith("data:")) {
+            strayBuffer += trimmed;
+            return {};
+        }
+
+        const payload = trimmed.slice(5).trim();
+        if (payload.length === 0)
+            return {};
+        if (payload === "[DONE]")
+            return {
+                finished: true
+            };
+
+        try {
+            return parseData(JSON.parse(payload), message);
+        } catch (e) {
+            console.log("[AI] Gemini: Could not parse frame: ", e);
+            message.rawContent += payload;
+            message.content += payload;
         }
         return {};
     }
 
-    function parseBuffer(message) {
-        // console.log("[Ai] Gemini buffer: ", buffer);
+    function parseData(dataJson, message) {
         let finished = false;
         try {
-            if (buffer.length === 0)
-                return {};
-            const dataJson = JSON.parse(buffer);
-
             // Uploaded file
             if (dataJson.uploadedFile) {
                 message.fileUri = dataJson.uploadedFile.uri;
@@ -202,11 +217,7 @@ ApiStrategy {
                 };
             }
         } catch (e) {
-            console.log("[AI] Gemini: Could not parse buffer: ", e);
-            message.rawContent += buffer;
-            message.content += buffer;
-        } finally {
-            buffer = "";
+            console.log("[AI] Gemini: Could not read frame: ", e);
         }
         return {
             finished: finished
@@ -214,11 +225,21 @@ ApiStrategy {
     }
 
     function onRequestFinished(message) {
-        return parseBuffer(message);
+        if (strayBuffer.length === 0)
+            return {};
+        const raw = strayBuffer;
+        strayBuffer = "";
+        try {
+            return parseData(JSON.parse(raw), message);
+        } catch (e) {
+            message.rawContent += raw;
+            message.content += raw;
+        }
+        return {};
     }
 
     function reset() {
-        buffer = "";
+        strayBuffer = "";
     }
 
     function buildScriptFileSetup(filePath) {
@@ -248,7 +269,9 @@ ApiStrategy {
         content += 'curl "${upload_url}"' + ` -H "x-goog-api-key: \$${apiKeyEnvVarName}"` + ' -H "Content-Length: ${NUM_BYTES}"' + ' -H "X-Goog-Upload-Offset: 0"' + ' -H "X-Goog-Upload-Command: upload, finalize"' + ' --data-binary "@${IMAGE_PATH}" 2> /dev/null > "${tmp_file_info_file}"' + '\n';
 
         content += `${fileUriVarName}=$(jq -r ".file.uri" "$tmp_file_info_file")\n`;
-        content += `printf "{\\"uploadedFile\\": {\\"uri\\": \\"$${fileUriVarName}\\", \\"mimeType\\": \\"$${fileMimeTypeVarName}\\"}}\\n,\\n"\n`;
+        // Announced as an SSE frame so it goes through the same parser as the
+        // model's own output.
+        content += `printf "data: {\\"uploadedFile\\": {\\"uri\\": \\"$${fileUriVarName}\\", \\"mimeType\\": \\"$${fileMimeTypeVarName}\\"}}\\n"\n`;
 
         return content;
     }

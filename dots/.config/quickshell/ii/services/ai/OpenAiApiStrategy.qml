@@ -21,10 +21,13 @@ ApiStrategy {
                 }),
             ],
             "stream": true,
-            "tools": tools,
             "temperature": temperature,
-            "max_tokens": 1024, // TODO, we should add an option for it and an indicator to token popup 
+            "max_tokens": maxOutputTokens(model),
         };
+        // A null tools list is not the same as an empty one: some endpoints
+        // reject the key outright when the model cannot call functions.
+        if (tools)
+            baseData.tools = tools;
         return model.extraParams ? Object.assign({}, baseData, model.extraParams) : baseData;
     }
 

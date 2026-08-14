@@ -32,8 +32,10 @@ ApiStrategy {
             ],
             "stream": true,
             "temperature": temperature,
-            "tools": tools,
+            "max_tokens": maxOutputTokens(model),
         };
+        if (tools)
+            baseData.tools = tools;
         // console.log("[AI] Request data: ", JSON.stringify(baseData, null, 2));
         return model.extraParams ? Object.assign({}, baseData, model.extraParams) : baseData;
     }
