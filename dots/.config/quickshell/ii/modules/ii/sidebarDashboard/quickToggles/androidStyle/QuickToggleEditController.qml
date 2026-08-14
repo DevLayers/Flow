@@ -305,15 +305,18 @@ Item {
 
     function addPage() {
         var result = updateOrPersist(function(pages) { pages.push([]); });
-        if (result)
-            targetPage = (active ? draftPages : persistedPages).length - 1;
+        if (result) {
+            var pages = active ? draftPages : (root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages);
+            targetPage = pages.length - 1;
+        }
         return result;
     }
 
     function removePage(pageIndex) {
         if (pageIndex < 0)
             return false;
-        var pageCount = active ? draftPages.length : persistedPages.length;
+        var sourcePages = root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages;
+        var pageCount = active ? draftPages.length : sourcePages.length;
         if (pageCount <= 1 || pageIndex >= pageCount)
             return false;
         return updateOrPersist(function(pages) { pages.splice(pageIndex, 1); });

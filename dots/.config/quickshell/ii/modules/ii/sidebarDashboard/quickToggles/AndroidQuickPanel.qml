@@ -131,58 +131,17 @@ AbstractQuickPanel {
         animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
     }
 
-    // Helper: deep-clone pages, run mutator, reassign to Config
-    // This is REQUIRED because list<var> returns a copy, not a reference.
-    function mutatePages(mutatorFn) {
-        var cloned = JSON.parse(JSON.stringify(Config.options.sidebar.quickToggles.android.pages));
-        mutatorFn(cloned);
-        Config.options.sidebar.quickToggles.android.pages = cloned;
-    }
-
-    function resolveLayoutConflicts(pageIndex, gridColumns) {
-        var cols = Math.max(1, gridColumns);
-        mutatePages(function (pages) {
-            if (pageIndex < 0 || pageIndex >= pages.length)
-                return;
-            var page = pages[pageIndex];
-            if (!page || page.length === 0)
-                return;
-
-            for (var i = 0; i < page.length; i++) {
-                if (!page[i]) continue;
-                var w = page[i].sizeW ?? page[i].size ?? 1;
-                var h = page[i].sizeH ?? 1;
-                w = Math.max(1, Math.min(w, cols));
-                h = Math.max(1, h);
-                page[i].sizeW = w;
-                page[i].sizeH = h;
-                page[i].size = w;
-            }
-        });
-    }
-
     // Page management functions
     function addPage() {
-        var targetPage;
-        mutatePages(function (p) {
-            p.push([]);
-            targetPage = p.length - 1;
-        });
-        currentPage = targetPage;
+        if (editController.addPage())
+            currentPage = editController.targetPage;
     }
 
     function removePage(pageIndex) {
-        if (pages.length <= 1)
-            return; // Never remove last page
-        if (pageIndex < 0 || pageIndex >= pages.length)
+        if (!editController.removePage(pageIndex))
             return;
-
-        mutatePages(function (p) {
-            p.splice(pageIndex, 1);
-        });
-
-        if (currentPage >= pages.length)
-            currentPage = Math.max(0, pages.length - 1);
+        var remaining = Config.options.sidebar.quickToggles.android.pages.length;
+        currentPage = Math.min(currentPage, Math.max(0, remaining - 1));
     }
 
     function goToPage(pageIndex) {

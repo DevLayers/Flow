@@ -102,4 +102,14 @@ TestCase {
         compare(controller.draftPages[0][0].sizeH, 1);
         verify(controller.cancelResize());
     }
+
+    function test_page_management_uses_single_persist_boundary() {
+        fakeConfig.pages = sourcePages;
+        controller.persistedPages = sourcePages;
+        verify(controller.addPage());
+        compare(fakeConfig.pages.length, 2);
+        compare(fakeConfig.pages[1].length, 0);
+        verify(controller.removePage(1));
+        compare(fakeConfig.pages.length, 1);
+    }
 }
