@@ -347,7 +347,7 @@ Item {
                 ControlChip {
                     // Tools.
                     symbol: "service_toolbox"
-                    label: Ai.currentTool.charAt(0).toUpperCase() + Ai.currentTool.slice(1)
+                    label: Ai.toolbox.modeLabels[Ai.currentTool] ?? Ai.currentTool
                     available: root.toolsUsable
                     opened: root.activePopover === "tools"
                     tooltipText: root.toolsUsable ? Translation.tr("Tools: %1\nAlso %2tool TOOL").arg(Ai.currentTool).arg(root.commandPrefix) : Translation.tr("%1 has no tool support").arg(root.currentModel?.title ?? Translation.tr("This model"))
@@ -566,18 +566,8 @@ Item {
 
     Component {
         id: toolsComponent
-        OptionList {
-            title: Translation.tr("What may it reach for?")
-            options: Ai.availableTools.map(tool => ({
-                        key: tool,
-                        label: tool.charAt(0).toUpperCase() + tool.slice(1),
-                        description: Ai.toolDescriptions[tool] ?? "",
-                        selected: Ai.currentTool === tool
-                    }))
-            onChosen: key => {
-                Ai.setTool(key);
-                root.closePopover();
-            }
+        ToolsPopover {
+            onClosed: root.closePopover()
         }
     }
 

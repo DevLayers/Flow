@@ -36,6 +36,12 @@ QtObject {
     property var functionCall
     property string functionResponse
     property bool functionPending: false
+    // Settings the model wants to write, as {key, current, proposed}, held
+    // until the user has seen them next to what they would replace.
+    property var pendingChanges: []
+    // Handle of this call's entry in the tool log, so the user's answer
+    // closes the same entry the call opened. -1 when nothing was logged.
+    property int toolCallSerial: -1
     property bool visibleToUser: true
     // Why a request came back with nothing, as something the UI can act on
     // rather than prose in the bubble: "auth", "quota", "notFound", "server",

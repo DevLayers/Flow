@@ -29,6 +29,27 @@ Singleton {
     onReadyChanged: {
         root.previousHyprlandInstanceSignature = root.states.hyprlandInstanceSignature;
         root.states.hyprlandInstanceSignature = Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || "";
+        root.migrateAiModelId();
+    }
+
+    /**
+     * The AI provider and model used to be two keys, and half a pair aimed one
+     * provider's endpoint at a model it did not serve. They are one id now.
+     *
+     * states.json has no raw pass the way config.json does — nothing reads it
+     * except the adapter — so the only way to read a retired key is to keep it
+     * declared. Both are emptied here once their value has been folded in, and
+     * an empty pair is what tells this it has already run.
+     */
+    function migrateAiModelId() {
+        const legacyProvider = root.states.ai.provider;
+        const legacyModel = root.states.ai.model;
+        if (legacyProvider.length === 0 || legacyModel.length === 0)
+            return;
+        root.states.ai.modelId = `${legacyProvider}:${legacyModel}`;
+        root.states.ai.provider = "";
+        root.states.ai.model = "";
+        console.log(`[Persistent] Migrated states.ai to modelId ${root.states.ai.modelId}`);
     }
 
     Timer {
@@ -109,8 +130,12 @@ Singleton {
             property string hyprlandInstanceSignature: ""
 
             property JsonObject ai: JsonObject {
-                property string provider: "google" // AI providers such as google, open router, mistral
-                property string model: "gemini-3.7-flash" // The model of the ai such as 3.7-flash
+                // Catalog id of the model that answers, "provider:model".
+                property string modelId: "google:gemini-3.7-flash"
+                // Retired in favour of modelId, kept declared only so an old
+                // file can be read once. See migrateAiModelId().
+                property string provider: ""
+                property string model: ""
                 property real temperature: 0.5
                 // How hard the model is asked to think: off, low, medium or
                 // high. Each provider maps it to its own knob.

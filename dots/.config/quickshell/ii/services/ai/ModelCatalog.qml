@@ -9,8 +9,8 @@ import qs.modules.common
  * display name and capabilities — is assembled here, from three inputs:
  *
  *   1. the built-in provider definitions below
- *   2. the user's config (`ai.models` adds models to a provider,
- *      `ai.otherModels` defines standalone custom models)
+ *   2. the user's config (`ai.customModels`, where an entry naming a
+ *      `provider` is added to it and any other entry stands on its own)
  *   3. models discovered on the local Ollama daemon
  *
  * Consumers look models up by id, which is always "provider:value". Nothing
@@ -27,7 +27,7 @@ QtObject {
     /** Model names reported by the local Ollama daemon. Set by the Ai service. */
     property var ollamaModelNames: []
 
-    /** Keys accepted from a user-defined `ai.otherModels` entry. */
+    /** Keys accepted from a standalone `ai.customModels` entry. */
     readonly property var customModelKeys: ["name", "title", "icon", "description", "homepage", "endpoint", "model", "value", "requires_key", "key_id", "key_get_link", "key_get_description", "api_format", "extraParams", "modelProvider", "thinking", "thinkingKind", "thinkingAlwaysOn", "quirks", "attachments", "vision", "tools", "builtinSearch", "samplingParams", "maxTemperature", "contextWindow", "maxOutput"]
 
     readonly property var providerDefs: [
@@ -293,24 +293,26 @@ QtObject {
 
     readonly property var modelIds: Object.keys(catalog.models)
 
-    /** `ai.models` config entries, flattened to {providerId: [modelDef, ...]}. */
+    /** Every user-defined model, in config order. */
+    readonly property var configuredModels: Array.from(Config.options?.ai?.customModels ?? [])
+
+    /**
+     * User models that name a built-in provider, as {providerId: [modelDef]}.
+     * "others" is not one of them: an entry landing there stands on its own.
+     */
     readonly property var extraModelsByProvider: {
         const result = {};
-        const configList = Config.options?.ai?.models;
-        if (!configList)
-            return result;
-        for (let i = 0; i < configList.length; i++) {
-            const item = configList[i];
-            for (const providerId in item) {
-                const entries = item[providerId];
-                if (!entries || entries.length === 0)
-                    continue;
-                const collected = result[providerId] ?? [];
-                for (let j = 0; j < entries.length; j++) {
-                    collected.push(entries[j]);
-                }
-                result[providerId] = collected;
-            }
+        const entries = catalog.configuredModels;
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i];
+            if (!entry)
+                continue;
+            const providerId = entry.provider ?? "";
+            if (providerId.length === 0 || providerId === "others")
+                continue;
+            const collected = result[providerId] ?? [];
+            collected.push(entry);
+            result[providerId] = collected;
         }
         return result;
     }
@@ -318,7 +320,7 @@ QtObject {
     /** Discovered Ollama models, as model definitions. */
     readonly property var ollamaEntries: {
         const names = catalog.ollamaModelNames ?? [];
-        const toolsAllowed = Config.options?.ai?.localModelTools ?? false;
+        const toolsAllowed = Config.options?.ai?.tools?.localModels ?? false;
         const result = [];
         for (let i = 0; i < names.length; i++) {
             result.push({
@@ -333,14 +335,18 @@ QtObject {
         return result;
     }
 
-    /** `ai.otherModels` config entries, sanitised into model definitions. */
+    /** Standalone user models, sanitised into model definitions. */
     readonly property var customEntries: {
-        const configList = Config.options?.ai?.otherModels;
+        const entries = catalog.configuredModels;
         const result = [];
-        if (!configList)
-            return result;
-        for (let i = 0; i < configList.length; i++) {
-            const entry = catalog.sanitizeCustomModel(configList[i]);
+        for (let i = 0; i < entries.length; i++) {
+            const raw = entries[i];
+            if (!raw)
+                continue;
+            const providerId = raw.provider ?? "";
+            if (providerId.length > 0 && providerId !== "others")
+                continue;
+            const entry = catalog.sanitizeCustomModel(raw);
             if (entry)
                 result.push(entry);
         }

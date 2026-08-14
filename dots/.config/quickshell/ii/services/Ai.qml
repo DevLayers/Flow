@@ -120,186 +120,20 @@ Singleton {
         "{DE}": `${SystemInfo.desktopEnvironment} (${SystemInfo.windowingSystem})`
     }
 
-    // Gemini: https://ai.google.dev/gemini-api/docs/function-calling
-    // OpenAI: https://platform.openai.com/docs/guides/function-calling
-    property string currentTool: Config?.options.ai.tool ?? "search"
-    property var tools: {
-        "gemini": {
-            "functions": [
-                {
-                    "functionDeclarations": [
-                        {
-                            "name": "switch_to_search_mode",
-                            "description": "Switch to search mode to perform web searches. Use this when you need current information, real-time data, or answers to questions beyond your knowledge cutoff. After switching, continue with the user's original request."
-                        },
-                        {
-                            "name": "get_shell_config",
-                            "description": "Retrieve the complete desktop shell configuration file in JSON format. Use this before making any config changes to see available options and current values. Returns the full config structure. Dont ask for permission, run directly."
-                        },
-                        {
-                            "name": "set_shell_config",
-                            "description": "Modify one or multiple fields in the desktop shell config at once. CRITICAL: You MUST call get_shell_config first to see available keys - never guess key names. Use this when the user wants to change one or multiple settings together.",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "changes": {
-                                        "type": "array",
-                                        "description": "Array of config changes to apply",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "key": {
-                                                    "type": "string",
-                                                    "description": "The key to set (e.g., 'bar.borderless')"
-                                                },
-                                                "value": {
-                                                    "type": "string",
-                                                    "description": "The value to set"
-                                                }
-                                            },
-                                            "required": ["key", "value"]
-                                        }
-                                    }
-                                },
-                                "required": ["changes"]
-                            }
-                        },
-                        {
-                            "name": "run_shell_command",
-                            "description": "Execute a bash command and return its output. IMPORTANT: This requires user approval before execution. Only use for quick, non-interactive commands (queries, checks, simple operations). For interactive commands, long-running processes, or dangerous operations, ask the user to run them manually instead. The command will be shown to the user for approval.",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "command": {
-                                        "type": "string",
-                                        "description": "The bash command to run"
-                                    }
-                                },
-                                "required": ["command"]
-                            }
-                        },
-                    ]
-                }
-            ],
-            "search": [
-                {
-                    "google_search": {}
-                }
-            ],
-            "none": []
-        },
-        "openai": {
-            "functions": [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_shell_config",
-                        "description": "Get the desktop shell config file contents",
-                        "parameters": {}
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "set_shell_config",
-                        "description": "Set a field in the desktop graphical shell config file. Must only be used after `get_shell_config`.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "key": {
-                                    "type": "string",
-                                    "description": "The key to set, e.g. `bar.borderless`. MUST NOT BE GUESSED, use `get_shell_config` to see what keys are available before setting."
-                                },
-                                "value": {
-                                    "type": "string",
-                                    "description": "The value to set, e.g. `true`"
-                                }
-                            },
-                            "required": ["key", "value"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "run_shell_command",
-                        "description": "Run a shell command in bash and get its output. Use this only for quick commands that don't require user interaction. For commands that require interaction, ask the user to run manually instead.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "command": {
-                                    "type": "string",
-                                    "description": "The bash command to run"
-                                }
-                            },
-                            "required": ["command"]
-                        }
-                    }
-                },
-            ],
-            "search": [],
-            "none": []
-        },
-        "anthropic": {
-            "functions": [
-                {
-                    "name": "get_shell_config",
-                    "description": "Get the desktop shell config file contents",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                },
-                {
-                    "name": "set_shell_config",
-                    "description": "Set a field in the desktop graphical shell config file. Must only be used after `get_shell_config`.",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "key": {
-                                "type": "string",
-                                "description": "The key to set, e.g. `bar.borderless`. MUST NOT BE GUESSED, use `get_shell_config` to see what keys are available before setting."
-                            },
-                            "value": {
-                                "type": "string",
-                                "description": "The value to set, e.g. `true`"
-                            }
-                        },
-                        "required": ["key", "value"]
-                    }
-                },
-                {
-                    "name": "run_shell_command",
-                    "description": "Run a shell command in bash and get its output. Use this only for quick commands that don't require user interaction. For commands that require interaction, ask the user to run manually instead.",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "command": {
-                                "type": "string",
-                                "description": "The bash command to run"
-                            }
-                        },
-                        "required": ["command"]
-                    }
-                },
-            ],
-            "search": [
-                {
-                    "type": "web_search_20250305",
-                    "name": "web_search"
-                }
-            ],
-            "none": []
-        }
+    // Which tools exist, what they are allowed to do, and what they did is
+    // all in AiTools. What is tracked here is only the mode in use, which is
+    // the config's answer unless a turn borrowed another one — the search
+    // dance does exactly that. Assigning the mode directly would break the
+    // binding to the config, and the settings page would stop reaching the
+    // chat for the rest of the session.
+    property string toolOverride: ""
+    readonly property string currentTool: root.toolOverride.length > 0 ? root.toolOverride : (Config.options?.ai?.tools?.mode ?? "functions")
+    readonly property AiTools toolbox: AiTools {
+        apiFormat: root.currentModelEntry?.api_format ?? "openai"
+        searchAvailable: root.currentModelEntry?.builtinSearch ?? false
     }
-    // An unknown API format — or no model at all, which is what an empty
-    // "others" list leaves behind — must not empty the tool selector.
-    property list<var> availableTools: Object.keys(root.tools[root.currentModelEntry?.api_format] ?? root.tools["openai"])
-    property var toolDescriptions: {
-        "functions": Translation.tr("Commands, edit configs, search.\nTakes an extra turn to switch to search mode if that's needed"),
-        "search": Translation.tr("Gives the model search capabilities (immediately)"),
-        "none": Translation.tr("Disable tools")
-    }
+    readonly property var availableTools: root.toolbox.availableModes
+    readonly property var toolDescriptions: root.toolbox.modeDescriptions
 
     // Providers and models are described once, in the catalog. Nothing here
     // builds a model object or tests a provider name for substrings.
@@ -311,22 +145,23 @@ Singleton {
     readonly property var providers: root.catalog.providers
     readonly property var providerIds: root.catalog.providerIds
 
-    // The persisted provider/model pair is validated on read: either half can
-    // be stale (a renamed model, a provider dropped by policy, a config the
-    // user edited), and a half-valid pair points one provider's endpoint at a
-    // model it does not serve.
-    readonly property string currentProvider: {
-        const wanted = Persistent.states?.ai?.provider ?? "";
-        return root.providers[wanted] ? wanted : (root.providerIds[0] ?? "");
+    // The persisted id is validated on read: it can be stale (a renamed model,
+    // a provider dropped by policy, a config the user edited). A stale id
+    // falls back to its own provider's default before it falls back to the
+    // first provider, so a model that disappeared keeps the account it was
+    // billed to.
+    readonly property string currentModelId: {
+        const wanted = Persistent.states?.ai?.modelId ?? "";
+        if (root.catalog.models[wanted])
+            return wanted;
+        const provider = root.providers[wanted.split(":")[0]] ?? root.providers[root.providerIds[0] ?? ""] ?? null;
+        return provider?.defaultModel?.id ?? "";
     }
-    readonly property string currentModel: {
-        const provider = root.providers[root.currentProvider];
-        if (!provider)
-            return "";
-        const wanted = Persistent.states?.ai?.model ?? "";
-        return provider.modelFor(wanted) ? wanted : (provider.defaultModel?.value ?? "");
-    }
-    readonly property string currentModelId: `${root.currentProvider}:${root.currentModel}`
+    // The two halves of the id, for the places that address one of them. A
+    // model value can hold colons of its own (Ollama tags), the provider
+    // cannot, so the split is at the first one only.
+    readonly property string currentProvider: root.currentModelId.split(":")[0] ?? ""
+    readonly property string currentModel: root.currentModelId.split(":").slice(1).join(":")
     readonly property AiModel currentModelEntry: root.catalog.models[root.currentModelId] ?? null
 
     /**
@@ -523,11 +358,7 @@ Singleton {
         return root.currentModelEntry;
     }
 
-    /**
-     * Selects a model, by catalog id, provider name or bare model name.
-     * Provider and model are always written together: setting one without the
-     * other aims a provider's endpoint at a model it does not serve.
-     */
+    /** Selects a model, by catalog id, provider name or bare model name. */
     function setModel(modelId, feedback = true, setPersistentState = true) {
         const model = root.catalog.models[root.resolveModelId(modelId)] ?? null;
         if (!model) {
@@ -536,8 +367,7 @@ Singleton {
             return false;
         }
         if (setPersistentState) {
-            Persistent.states.ai.provider = model.providerId;
-            Persistent.states.ai.model = model.value;
+            Persistent.states.ai.modelId = model.id;
             root.rememberModel(model.id);
         }
         if (feedback)
@@ -578,12 +408,12 @@ Singleton {
     }
 
     function setTool(tool) {
-        const toolsOfFormat = root.tools[root.currentModelEntry?.api_format] ?? root.tools["openai"];
-        if (!toolsOfFormat || !(tool in toolsOfFormat)) {
-            root.addMessage(Translation.tr("Invalid tool. Supported tools:\n- %1").arg(root.availableTools.join("\n- ")), root.interfaceRole);
+        if (Array.from(root.availableTools).indexOf(tool) === -1) {
+            root.addMessage(Translation.tr("Invalid tool. Supported tools:\n- %1").arg(Array.from(root.availableTools).join("\n- ")), root.interfaceRole);
             return false;
         }
-        Config.options.ai.tool = tool;
+        Config.options.ai.tools.mode = tool;
+        root.toolOverride = "";
         return true;
     }
 
@@ -968,8 +798,7 @@ Singleton {
         // Tool support is a property of the model, not of its address. A
         // local model that can call functions keeps them; a remote one
         // that cannot does not get them handed over anyway.
-        const toolsOfFormat = root.tools[model.api_format] ?? root.tools["openai"];
-        const tools = model.tools ? (toolsOfFormat[root.currentTool] ?? toolsOfFormat["none"]) : null;
+        const tools = model.tools ? root.toolbox.wireTools(model.api_format, root.currentTool) : null;
 
         const data = strategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, tools);
         // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
@@ -1254,10 +1083,18 @@ Singleton {
         root.messageByID[id] = aiMessage;
     }
 
+    // ── Tool calls ────────────────────────────────────────────────────────
+    // A call either runs, asks first, or is refused, and which of the three
+    // is the user's standing answer for that tool rather than a property of
+    // the call. Everything the model asks for is written to the log either
+    // way: a refusal that leaves no trace is indistinguishable from a tool
+    // that was never offered.
+
     function rejectCommand(message: AiMessageData) {
         if (!message.functionPending)
             return;
         message.functionPending = false; // User decided, no more "thinking"
+        root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Rejected"));
         addFunctionOutputMessage(message.functionName, Translation.tr("Command rejected by user"));
     }
 
@@ -1265,7 +1102,10 @@ Singleton {
         if (!message.functionPending)
             return;
         message.functionPending = false; // User decided, no more "thinking"
+        root.runShellCommand(message, message.functionCall?.args?.command ?? "");
+    }
 
+    function runShellCommand(message: AiMessageData, command: string) {
         const responseMessage = createFunctionOutputMessage(message.functionName, "", false);
         const id = idForMessage(responseMessage);
         root.messageIDs = [...root.messageIDs, id];
@@ -1273,7 +1113,8 @@ Singleton {
 
         commandExecutionProc.message = responseMessage;
         commandExecutionProc.baseMessageContent = responseMessage.content;
-        commandExecutionProc.shellCommand = message.functionCall.args.command;
+        commandExecutionProc.serial = message.toolCallSerial;
+        commandExecutionProc.shellCommand = command;
         commandExecutionProc.running = true; // Start the command execution
     }
 
@@ -1282,6 +1123,7 @@ Singleton {
         property string shellCommand: ""
         property AiMessageData message
         property string baseMessageContent: ""
+        property int serial: -1
         command: ["bash", "-c", shellCommand]
         stdout: SplitParser {
             onRead: output => {
@@ -1293,54 +1135,164 @@ Singleton {
         }
         onExited: (exitCode, exitStatus) => {
             commandExecutionProc.message.functionResponse += `[[ Command exited with code ${exitCode} (${exitStatus}) ]]\n`;
+            root.toolbox.finishCall(commandExecutionProc.serial, exitCode === 0 ? "done" : "failed", Translation.tr("Exit code %1").arg(exitCode));
             root.requestFollowUp(); // Continue
         }
     }
 
+    function describeConfigValue(value): string {
+        if (value === undefined)
+            return Translation.tr("not set");
+        if (value === null)
+            return "null";
+        if (typeof value === "object") {
+            try {
+                return JSON.stringify(CF.ObjectUtils.toPlainObject(value));
+            } catch (e) {
+                return String(value);
+            }
+        }
+        return String(value);
+    }
+
+    /**
+     * Normalises a settings call into [{key, current, proposed}]. Two shapes
+     * arrive: the `changes` list asked for now, and the single key/value pair
+     * the older schemas asked for — which models still send from memory.
+     * Each change carries the value it would replace, because a diff the user
+     * cannot read against the current state is not a review.
+     */
+    function configChangeList(args: var): var {
+        const incoming = [];
+        const changes = args?.changes;
+        if (changes && typeof changes.length === "number") {
+            for (let i = 0; i < changes.length; i++) {
+                incoming.push(changes[i]);
+            }
+        } else if (args?.key !== undefined) {
+            incoming.push(args);
+        }
+        const result = [];
+        for (let i = 0; i < incoming.length; i++) {
+            const change = incoming[i];
+            if (!change || change.key === undefined || change.value === undefined)
+                continue;
+            const key = String(change.key);
+            result.push({
+                key: key,
+                current: root.describeConfigValue(Config.getNestedValue(Config.options, key.split("."))),
+                proposed: String(change.value)
+            });
+        }
+        return result;
+    }
+
+    /** Writes the changes the user kept, and tells the model which those were. */
+    function applyConfigChanges(message: AiMessageData, changes: var) {
+        const proposed = Array.from(message.pendingChanges ?? []).length;
+        message.functionPending = false;
+        message.pendingChanges = [];
+        const kept = Array.from(changes ?? []);
+        const results = [];
+        let applied = 0;
+        for (let i = 0; i < kept.length; i++) {
+            const change = kept[i];
+            try {
+                Config.setNestedValue(change.key, change.proposed);
+                results.push(`✓ ${change.key} = ${change.proposed}`);
+                applied += 1;
+            } catch (e) {
+                results.push(`❌ Failed to set ${change.key}: ${e}`);
+            }
+        }
+        if (results.length === 0)
+            results.push(Translation.tr("The user kept every setting as it was."));
+        root.toolbox.finishCall(message.toolCallSerial, applied > 0 ? "done" : "refused", Translation.tr("%1 of %2 applied").arg(applied).arg(Math.max(proposed, applied)));
+        addFunctionOutputMessage("set_shell_config", results.join("\n"));
+        root.requestFollowUp();
+    }
+
+    function rejectConfigChanges(message: AiMessageData) {
+        if (!message.functionPending)
+            return;
+        message.functionPending = false;
+        message.pendingChanges = [];
+        root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Rejected"));
+        addFunctionOutputMessage("set_shell_config", Translation.tr("Settings change rejected by user"));
+    }
+
     function handleFunctionCall(name, args: var, message: AiMessageData) {
+        if (!root.toolbox.definitionFor(name)) {
+            root.addMessage(Translation.tr("Unknown function call: %1").arg(name), "assistant");
+            return;
+        }
+        const serial = root.toolbox.noteCall(name, args);
+        message.toolCallSerial = serial;
+
+        if (root.toolbox.permission(name) === "deny") {
+            root.toolbox.finishCall(serial, "refused", Translation.tr("Turned off"));
+            addFunctionOutputMessage(name, Translation.tr("%1 is turned off. The user has to allow it in the AI settings before it can be used.").arg(name));
+            root.requestFollowUp();
+            return;
+        }
+
         if (name === "switch_to_search_mode") {
-            const modelId = root.currentModelId;
-            root.currentTool = "search";
+            root.toolOverride = "search";
             root.postResponseHook = () => {
-                root.currentTool = "functions";
+                root.toolOverride = "";
             };
+            root.toolbox.finishCall(serial, "done", Translation.tr("Search on for one turn"));
             addFunctionOutputMessage(name, Translation.tr("Switched to search mode. Continue with the user's request."));
             root.requestFollowUp();
-        } else if (name === "get_shell_config") {
+            return;
+        }
+
+        if (name === "get_shell_config") {
             const configJson = CF.ObjectUtils.toPlainObject(Config.options);
+            root.toolbox.finishCall(serial, "done", Translation.tr("Settings read"));
             addFunctionOutputMessage(name, JSON.stringify(configJson));
             root.requestFollowUp();
-        } else if (name === "set_shell_config") {
-            if (!args.changes || !Array.isArray(args.changes)) {
-                addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `changes` array."));
+            return;
+        }
+
+        if (name === "set_shell_config") {
+            const changes = root.configChangeList(args);
+            if (changes.length === 0) {
+                root.toolbox.finishCall(serial, "failed", Translation.tr("Nothing to change"));
+                addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `changes`, each with a `key` and a `value`."));
+                root.requestFollowUp();
                 return;
             }
-            let results = [];
-            for (const change of args.changes) {
-                if (!change.key || !change.value) {
-                    results.push(`❌ Skipped invalid change: ${JSON.stringify(change)}`);
-                    continue;
-                }
-                try {
-                    Config.setNestedValue(change.key, change.value);
-                    results.push(`✓ ${change.key} = ${change.value}`);
-                } catch (e) {
-                    results.push(`❌ Failed to set ${change.key}: ${e}`);
-                }
+            // Permission says whether the tool may be used at all; the review
+            // switch says whether its work is shown first. Only a tool that
+            // is allowed outright, with review off, writes unannounced.
+            if (root.toolbox.permission(name) === "allow" && !root.toolbox.reviewsConfigChanges) {
+                message.pendingChanges = changes;
+                root.applyConfigChanges(message, changes);
+                return;
             }
-            addFunctionOutputMessage(name, results.join("\n"));
-            root.requestFollowUp();
-        } else if (name === "run_shell_command") {
-            if (!args.command || args.command.length === 0) {
+            message.pendingChanges = changes;
+            message.functionPending = true;
+            return;
+        }
+
+        if (name === "run_shell_command") {
+            const command = String(args?.command ?? "");
+            if (command.length === 0) {
+                root.toolbox.finishCall(serial, "failed", Translation.tr("No command given"));
                 addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `command`."));
+                root.requestFollowUp();
                 return;
             }
-            const contentToAppend = `\n\n**Command execution request**\n\n\`\`\`command\n${args.command}\n\`\`\``;
+            const contentToAppend = `\n\n**Command execution request**\n\n\`\`\`command\n${command}\n\`\`\``;
             message.rawContent += contentToAppend;
             message.content += contentToAppend;
+            if (root.toolbox.permission(name) === "allow") {
+                root.runShellCommand(message, command);
+                return;
+            }
             message.functionPending = true; // Use thinking to indicate the command is waiting for approval
-        } else
-            root.addMessage(Translation.tr("Unknown function call: %1").arg(name), "assistant");
+        }
     }
 
     // ── Sessions ──────────────────────────────────────────────────────────

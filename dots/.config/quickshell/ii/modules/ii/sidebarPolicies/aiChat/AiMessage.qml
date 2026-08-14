@@ -484,6 +484,18 @@ Rectangle {
         }
 
         Loader {
+            // Settings the model wants to write, shown against what they
+            // would replace. Only ever loaded while an answer is waiting.
+            Layout.fillWidth: true
+            active: (root.messageData?.pendingChanges?.length ?? 0) > 0 && (root.messageData?.functionPending ?? false)
+            visible: active
+
+            sourceComponent: ConfigDiffCard {
+                messageData: root.messageData
+            }
+        }
+
+        Loader {
             // A failed request used to leave a message that stopped, with the
             // reason in the log. What went wrong and what to do about it both
             // belong here, next to a button that tries again.

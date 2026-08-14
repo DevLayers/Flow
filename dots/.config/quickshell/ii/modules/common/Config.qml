@@ -296,7 +296,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 5
+    readonly property int currentConfigVersion: 6
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -408,6 +408,61 @@ Singleton {
             console.log(`[Config] Migrated Settings performance mode to ${raw.appearance.settingsPerformanceMode}`);
         }
 
+        // v5 -> v6: the AI panel's settings were reorganised (Aug 2026). Three
+        // keys move at once, each of them one that had outgrown its shape:
+        // `ai.tool` was a bare mode string with no room for the per-tool
+        // permissions that now exist; `ai.models` and `ai.otherModels` were
+        // two lists doing the same job in two different shapes, one nested
+        // under a provider and one flat; and the sidebar switch that hid the
+        // provider and model buttons outlived the buttons themselves.
+        if (from < 6) {
+            const ai = raw.ai;
+            if (ai !== undefined && ai !== null && typeof ai === "object" && !Array.isArray(ai)) {
+                if (typeof ai.tool === "string" || typeof ai.localModelTools === "boolean") {
+                    const tools = (ai.tools !== undefined && ai.tools !== null && typeof ai.tools === "object" && !Array.isArray(ai.tools)) ? ai.tools : {};
+                    if (typeof ai.tool === "string" && tools.mode === undefined)
+                        tools.mode = ai.tool;
+                    if (typeof ai.localModelTools === "boolean" && tools.localModels === undefined)
+                        tools.localModels = ai.localModelTools;
+                    ai.tools = tools;
+                    console.log(`[Config] Migrated ai.tool "${ai.tool}" -> ai.tools.mode`);
+                }
+                delete ai.tool;
+                delete ai.localModelTools;
+
+                if (ai.customModels === undefined && (Array.isArray(ai.models) || Array.isArray(ai.otherModels))) {
+                    const merged = [];
+                    for (const group of (ai.models ?? [])) {
+                        if (group === null || typeof group !== "object")
+                            continue;
+                        for (const providerId in group) {
+                            const entries = group[providerId];
+                            if (!Array.isArray(entries))
+                                continue;
+                            for (const entry of entries) {
+                                if (entry === null || typeof entry !== "object")
+                                    continue;
+                                const moved = Object.assign({}, entry);
+                                moved.provider = providerId;
+                                merged.push(moved);
+                            }
+                        }
+                    }
+                    for (const entry of (ai.otherModels ?? [])) {
+                        if (entry === null || typeof entry !== "object")
+                            continue;
+                        merged.push(entry);
+                    }
+                    ai.customModels = merged;
+                    console.log(`[Config] Merged ${merged.length} custom AI model(s) into ai.customModels`);
+                }
+                delete ai.models;
+                delete ai.otherModels;
+            }
+            if (raw.sidebar?.ai !== undefined && raw.sidebar.ai !== null)
+                delete raw.sidebar.ai.showProviderAndModelButtons;
+        }
+
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
         return true;
@@ -509,6 +564,7 @@ Singleton {
     // aliases) is left out on purpose.
     readonly property var enumConstraints: ({
             "panelFamily": ["ii", "waffle"],
+            "ai.tools.mode": ["functions", "search", "none"],
             "policies.ai": [0, 1, 2],
             "policies.weeb": [0, 1, 2],
             "policies.wallpapers": [0, 1],
@@ -1000,11 +1056,26 @@ Singleton {
 
             property JsonObject ai: JsonObject {
                 property string systemPrompt: "## Style\n- Use casual tone, don't be formal!\n- Always be brief and to the point, unless asked otherwise\n- Don't repeat the user's question\n- Be approachable: Avoid using overly complicated, domain-specific terms and provide analogies when asked to explain a concept\n\n## Context (ignore when irrelevant)\n- You are a helpful and inspiring sidebar assistant on a {DISTRO} Linux system\n- Desktop environment: {DE}\n- Current date & time: {DATETIME}\n- Focused app: {WINDOWCLASS}\n\n## Presentation\n- Use Markdown features in your response: \n  - **Bold** text to **highlight keywords** in your response\n  - **Split long information into small sections** with h2 headers and a relevant emoji at the start of it (for example `## \ud83d\udc27 Linux`). Bullet points are preferred over long paragraphs, unless you're offering writing support or instructed otherwise by the user.\n- Asked to compare different options? You should firstly use a table to compare the main aspects, then elaborate or include relevant comments from online forums *after* the table. Make sure to provide a final recommendation for the user's use case!\n- Use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX '$$' delimiters. NEVER generate LaTeX code in a latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular documents (resumes, letters, essays, CVs, etc.).\n\nThanks!\n"
-                property string tool: "functions" // search, functions, or none
-                // Locally served models advertise no capabilities, so tools
-                // stay off for them until the user says their models can
-                // handle function calling.
-                property bool localModelTools: false
+                property JsonObject tools: JsonObject {
+                    // What the assistant may reach for: "functions" (settings,
+                    // commands, a hop to search), "search" (the provider's own
+                    // web search) or "none".
+                    property string mode: "functions"
+                    // Locally served models advertise no capabilities, so tools
+                    // stay off for them until the user says their models can
+                    // handle function calling.
+                    property bool localModels: false
+                    // Permission per tool, by tool id. A tool named in neither
+                    // list asks before it runs, which is the default for
+                    // anything that writes.
+                    property list<string> alwaysAllow: ["get_shell_config", "switch_to_search_mode"]
+                    property list<string> alwaysDeny: []
+                    // Show every proposed settings change next to its current
+                    // value before writing any of them.
+                    property bool reviewConfigChanges: true
+                    // How many tool calls the log remembers. 0 keeps none.
+                    property int logSize: 50
+                }
                 // Longest answer to ask for, in tokens. 0 uses whatever the
                 // model itself supports, which is what most people want;
                 // a positive value caps it and is clamped to the model's own
@@ -1026,21 +1097,17 @@ Singleton {
                 // systemPrompt, modelId, thinking, temperature, starters[]}.
                 // The ones that ship with the shell are not in here.
                 property list<var> personas: []
-                property list<var> models: [
+                // Models the user added, in one flat list. An entry with a
+                // `provider` naming a built-in provider is added to it;
+                // anything else stands on its own under "Others" and brings
+                // its own endpoint, dialect and key id.
+                property list<var> customModels: [
                         {
-                            "openrouter": [
-                                {
-                                    "modelProvider": "google",
-                                    "title": "Gemini 2.5 Flash",
-                                    "value": "gemini-2.5-flash"
-                                }
-                            ]
+                            "modelProvider": "google",
+                            "provider": "openrouter",
+                            "title": "Gemini 2.5 Flash",
+                            "value": "gemini-2.5-flash"
                         },
-                        {
-                            "google": []
-                        }
-                ]
-                property list<var> otherModels: [
                         {
                             "api_format": "mistral",
                             "endpoint": "https://api.mistral.ai/v1/chat/completions",
@@ -2987,7 +3054,6 @@ Singleton {
                 }
                 property JsonObject ai: JsonObject {
                     property bool textFadeIn: false
-                    property bool showProviderAndModelButtons: true
                     // When false, the Ai service never spawns its index
                     // probe at boot (saves one Python fork + ollama
                     // listing). The panel itself still loads on demand
