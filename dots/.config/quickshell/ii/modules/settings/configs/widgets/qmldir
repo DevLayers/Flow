@@ -12,3 +12,6 @@ SoundStatusHeader 1.0 SoundStatusHeader.qml
 TranslatorDefaultsPicker 1.0 TranslatorDefaultsPicker.qml
 WeekStartPicker 1.0 WeekStartPicker.qml
 WeatherLocationCard 1.0 WeatherLocationCard.qml
+TouchGestureStatusCard 1.0 TouchGestureStatusCard.qml
+TouchGestureBindingCard 1.0 TouchGestureBindingCard.qml
+TouchGestureScreenPreview 1.0 TouchGestureScreenPreview.qml

@@ -151,6 +151,7 @@ PROTECTED_PATTERNS=(
     "scripts/hyprland/workspace_profile_manager"
     "scripts/osk/osk_autoshow"
     "scripts/appStats/app_stats"
+    "scripts/touchGestures/touch_gestures"
 )
 
 # ── The fork's Hyprland config ───────────────────────────────────────────────
