@@ -27,7 +27,7 @@ Item {
         // Keep the frame reservers mapped through lock entry. Removing their
         // exclusive zones by destroying the PanelWindows at the same time as
         // the bar causes a visible compositor reflow under the lock animation.
-        active: Config.options.appearance.fakeScreenRounding == 3 && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical)
+        active: Config.options.appearance.fakeScreenRounding == 3
         sourceComponent: Variants {
             id: wrappedFrameVariant
             property var variantModel: Quickshell.screens

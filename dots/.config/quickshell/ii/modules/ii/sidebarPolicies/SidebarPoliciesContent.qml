@@ -169,6 +169,22 @@ Item {
         }
     }
 
+    // Nothing in the focus chain hands focus down to the tab contents, so the AI chat
+    // input never gets it on its own. Focus it explicitly when the sidebar opens on that
+    // tab, when the user switches to it, and when its Loader finishes activating.
+    function focusAiInput() {
+        if (!GlobalStates.sidebarLeftOpen) return;
+        if (root.activeTabs[swipeView.currentIndex]?.icon !== "neurology") return;
+        swipeView.currentItem?.item?.forceActiveFocus();
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSidebarLeftOpenChanged() {
+            if (GlobalStates.sidebarLeftOpen) Qt.callLater(root.focusAiInput);
+        }
+    }
+
     Keys.onPressed: event => {
         if (event.modifiers === Qt.ControlModifier) {
             if (event.key === Qt.Key_PageDown) {
@@ -279,6 +295,8 @@ Item {
                     if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.triggerContentEntrance === "function") {
                         swipeView.currentItem.item.triggerContentEntrance();
                     }
+
+                    Qt.callLater(root.focusAiInput);
                 }
 
                 Component.onCompleted: {
@@ -325,6 +343,7 @@ Item {
                                             tabDelegate.item.triggerContentEntrance();
                                         }
                                     });
+                                    Qt.callLater(root.focusAiInput);
                                 }
                             }
                         }

@@ -43,7 +43,7 @@ import qs.modules.ii.touchGestures
 
 Scope {
     property bool barExtraCondition: true
-    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical)
+    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3
     readonly property bool barBot: Config.options.bar.bottom
     readonly property bool barVert: Config.options.bar.vertical
 
@@ -102,17 +102,15 @@ Scope {
         component: LocalSendPopup {}
     }
     PanelLoader {
-        extraCondition: !(Config.ready
-                && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
-                && !Config.options.bar.floatingNotch.disableNotification)
+        extraCondition: !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableNotification)
         component: NotificationPopup {}
     }
     PanelLoader {
-        extraCondition: !(Config.ready && Config.options.osd.style === "minimalist")
+        extraCondition: !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
         component: OnScreenDisplay {}
     }
     PanelLoader {
-        extraCondition: Config.ready && Config.options.osd.style === "minimalist"
+        extraCondition: (Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
         component: MinimalistOsd {}
     }
     PanelLoader {

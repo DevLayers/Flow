@@ -31,12 +31,10 @@ PanelWindow {
         right: true
     }
 
-    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && !(Config.options.bar.cornerStyle === 3 && !topPanel.barVertical) && hasBarOnThisMonitor
+    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && hasBarOnThisMonitor
     readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
     readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
-    readonly property real lockSlideDistance: topPanel.barVertical
-        ? Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding
-        : Appearance.sizes.barHeight + Appearance.rounding.screenRounding
+    readonly property real lockSlideDistance: topPanel.barVertical ? Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding : Appearance.sizes.barHeight + Appearance.rounding.screenRounding
     readonly property real lockSlideOffsetX: topPanel.barVertical ? (topPanel.barOnLeft ? -lockSlideDistance : lockSlideDistance) : 0
     readonly property real lockSlideOffsetY: topPanel.barVertical ? 0 : (topPanel.barBottom ? lockSlideDistance : -lockSlideDistance)
     readonly property real lockVisualOpacity: topPanel.usingWrappedFrame ? 1.0 - lockTransitionProgress : 1.0
@@ -139,7 +137,7 @@ PanelWindow {
         return Qt.rgba(base.r * (1 - scrim.a) + scrim.r * scrim.a, base.g * (1 - scrim.a) + scrim.g * scrim.a, base.b * (1 - scrim.a) + scrim.b * scrim.a, base.a);
     }
     readonly property bool searchOpenOnMonitor: (GlobalStates.overviewOpen || (searchDropLoader.item && searchDropLoader.item.openProgress > 0.001)) && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !(Config.ready && Config.options.bar.floatingNotch.enable && (!Config.options.bar.floatingNotch.onlyShowOnSingleMonitor || screen.name === Config.options.bar.floatingNotch.singleMonitorName))
-    readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && !(Config.ready && Config.options.osd.style === "minimalist") && !(Config.ready && Config.options.bar.cornerStyle === 3) && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
+    readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && Config.options.bar.cornerStyle === 3) && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
 
     readonly property bool hasFullscreenWindowOnMonitor: {
         const monitorData = HyprlandData.monitors.find(m => m.name === topPanel.screen.name);
@@ -1007,7 +1005,7 @@ PanelWindow {
     Loader {
         id: osdDropLoader
         z: 11
-        active: GlobalStates.osdConnectActive && !GlobalStates.screenLocked && !(Config.ready && Config.options.osd.style === "minimalist") && !(Config.ready && Config.options.bar.cornerStyle === 3) && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
+        active: GlobalStates.osdConnectActive && !GlobalStates.screenLocked && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && Config.options.bar.cornerStyle === 3) && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
         sourceComponent: Component {
             OsdConnect.OsdDrop {
                 screen: topPanel.screen

@@ -34,7 +34,7 @@ Scope {
     // State bindings
     // centerInBar: DI never handles search — overviewOpen is handled by the default floating search panel
     readonly property bool searchActive: GlobalStates.overviewOpen && !Config.options.bar.floatingNotch.centerInBar && (win.screen ? win.screen.name === GlobalStates.activeSearchMonitor : false)
-    readonly property bool osdActive: GlobalStates.osdVolumeOpen && !(Config.ready && Config.options.osd.style === "minimalist")
+    readonly property bool osdActive: GlobalStates.osdVolumeOpen && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
     readonly property bool notificationActive: Notifications.popupList.length > 0
     readonly property bool recordingActive: (Persistent.states.screenRecord && Persistent.states.screenRecord.active) || false
     readonly property bool pomodoroActive: TimerService.pomodoroRunning
@@ -67,7 +67,6 @@ Scope {
         else if (autoHideActive)
             activityRevealTimer.restart();
     }
-
 
     function revealForActivity(duration) {
         if (!autoHideActive)
@@ -102,7 +101,7 @@ Scope {
 
     readonly property bool isOverviewVisible: root.searchActive && LauncherSearch.query === "" && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config && Config.options && Config.options.overview && Config.options.overview.enable !== undefined ? Config.options.overview.enable : true)
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
-    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) && (!Config.options.bar.onlyShowOnSingleMonitor || hasBarOnThisMonitor)
+    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && (!Config.options.bar.onlyShowOnSingleMonitor || hasBarOnThisMonitor)
     readonly property bool hasBarOnThisMonitor: GlobalStates.isScreenAllowedForBar(win.screen)
     readonly property bool hasTopBar: GlobalStates.barOpen && !Config.options.bar.vertical && !Config.options.bar.bottom && hasBarOnThisMonitor
 

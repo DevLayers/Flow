@@ -10,15 +10,13 @@ QtObject {
 
     // Inputs — set by BarComponent
     required property int barSection        // 0:left 1:center 2:right
-    required property var list              // section metadata from BarComponent
-    required property int originalIndex     // position in the section metadata
+    required property var list              // section list (for neighbor checks)
+    required property int originalIndex     // position in list
     required property bool isExpressive
     required property bool highlighted
     required property bool activated        // from widget item (itemLoader.item?.activated)
     required property var activeTheme       // from BarThemes
     required property string widgetId
-    required property bool hasActiveLeftNeighbor
-    required property bool hasActiveRightNeighbor
 
     readonly property int barGroupStyle:     Config.options.bar.barGroupStyle
     readonly property int barBackgroundStyle: Config.options.bar.barBackgroundStyle
@@ -26,12 +24,14 @@ QtObject {
     // ── Radius ────────────────────────────────────────────────────────────────
     readonly property real startRadius: {
         if (barGroupStyle === 1) return Appearance.rounding.windowRounding;
-        return hasActiveLeftNeighbor ? Appearance.rounding.verysmall : Appearance.rounding.full;
+        const hasLeft = list.slice(0, originalIndex).some(i => i.visible !== false);
+        return hasLeft ? Appearance.rounding.verysmall : Appearance.rounding.full;
     }
 
     readonly property real endRadius: {
         if (barGroupStyle === 1) return Appearance.rounding.windowRounding;
-        return hasActiveRightNeighbor ? Appearance.rounding.verysmall : Appearance.rounding.full;
+        const hasRight = list.slice(originalIndex + 1).some(i => i.visible !== false);
+        return hasRight ? Appearance.rounding.verysmall : Appearance.rounding.full;
     }
 
     // ── Colors ────────────────────────────────────────────────────────────────
