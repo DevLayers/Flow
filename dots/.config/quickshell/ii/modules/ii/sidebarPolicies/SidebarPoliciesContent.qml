@@ -17,6 +17,41 @@ Item {
     anchors.fill: parent
     property var visitedTabs: ({})
 
+    // Policy controls must be handled at the content boundary as well as by
+    // the surrounding PanelWindow/TopLayer. The active tab can contain a
+    // TextEdit, which otherwise consumes Ctrl+D/P/O before the window-level
+    // Keys handler sees it.
+    Keys.priority: Keys.BeforeItem
+    Keys.onPressed: event => {
+        if ((event.modifiers & Qt.ControlModifier) === 0)
+            return;
+
+        const controller = root.scopeRoot;
+        if (event.key === Qt.Key_O) {
+            if (controller && typeof controller.togglePoliciesExtended === "function")
+                controller.togglePoliciesExtended();
+            else
+                GlobalStates.policiesExtended = !GlobalStates.policiesExtended;
+        } else if (event.key === Qt.Key_D) {
+            if (controller && typeof controller.togglePoliciesDetach === "function")
+                controller.togglePoliciesDetach();
+            else
+                GlobalStates.policiesDetached = !GlobalStates.policiesDetached;
+        } else if (event.key === Qt.Key_P) {
+            if (controller && typeof controller.togglePoliciesPin === "function")
+                controller.togglePoliciesPin();
+            else
+                GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
+        } else if (event.key === Qt.Key_PageDown) {
+            swipeView.incrementCurrentIndex();
+        } else if (event.key === Qt.Key_PageUp) {
+            swipeView.decrementCurrentIndex();
+        } else {
+            return;
+        }
+        event.accepted = true;
+    }
+
     // Toggles from Config
     property bool aiChatEnabled: Config.options.policies.ai !== 0
     property bool translatorEnabled: Config.options.policies.translator !== 0
@@ -182,18 +217,6 @@ Item {
         target: GlobalStates
         function onSidebarLeftOpenChanged() {
             if (GlobalStates.sidebarLeftOpen) Qt.callLater(root.focusAiInput);
-        }
-    }
-
-    Keys.onPressed: event => {
-        if (event.modifiers === Qt.ControlModifier) {
-            if (event.key === Qt.Key_PageDown) {
-                swipeView.incrementCurrentIndex();
-                event.accepted = true;
-            } else if (event.key === Qt.Key_PageUp) {
-                swipeView.decrementCurrentIndex();
-                event.accepted = true;
-            }
         }
     }
 

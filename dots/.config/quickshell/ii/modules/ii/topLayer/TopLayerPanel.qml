@@ -61,6 +61,30 @@ PanelWindow {
     readonly property bool barBottom: Config.options.bar.bottom && hasBarOnThisMonitor
     readonly property bool barOnLeft: barVertical && !barBottom
     readonly property bool barOnRight: barVertical && barBottom
+    readonly property bool policiesOnLeft: Config.options.sidebar.position === "default" || Config.options.sidebar.position === "left"
+    readonly property string policiesMonitorName: policiesOnLeft ? GlobalStates.effectiveLeftMonitor : GlobalStates.effectiveRightMonitor
+    readonly property bool policiesOpenOnMonitor: GlobalStates.policiesPanelOpen && screen.name === topPanel.policiesMonitorName
+    readonly property bool policiesRenderedOnLeft: {
+        const pos = Config.options.sidebar.position;
+        return pos === "default" || (pos === "left" && GlobalStates.policiesPanelOpen && !GlobalStates.dashboardPanelOpen);
+    }
+    readonly property bool policiesRenderedOnRight: {
+        const pos = Config.options.sidebar.position;
+        return pos === "inverted" || (pos === "right" && GlobalStates.policiesPanelOpen && !GlobalStates.dashboardPanelOpen);
+    }
+    readonly property bool policiesActiveOnMonitor: policiesOnLeft ? topPanel.leftSidebarActiveOnMonitor : topPanel.rightSidebarActiveOnMonitor
+
+    function togglePoliciesExtended() {
+        GlobalStates.policiesExtended = !GlobalStates.policiesExtended;
+    }
+
+    function togglePoliciesDetach() {
+        GlobalStates.policiesDetached = !GlobalStates.policiesDetached;
+    }
+
+    function togglePoliciesPin() {
+        GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
+    }
 
     readonly property bool isDynamicIslandTop: !topPanel.barVertical && !topPanel.barBottom && Config.options.bar.cornerStyle === 3 && hasBarOnThisMonitor
     readonly property bool isDynamicIslandBottom: !topPanel.barVertical && topPanel.barBottom && Config.options.bar.cornerStyle === 3 && hasBarOnThisMonitor
@@ -116,8 +140,8 @@ PanelWindow {
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor
     readonly property bool keepRightSidebarContentLoaded: Config.ready && Config.options.sidebar.keepRightSidebarLoaded
     readonly property bool rightSidebarContentWanted: GlobalStates.sidebarRightOpen || topPanel.keepRightSidebarContentLoaded
-    readonly property bool leftSidebarActiveOnMonitor: (GlobalStates.animatedLeftSidebarWidth > 0 || GlobalStates.sidebarLeftOpen) && screen.name === GlobalStates.effectiveLeftMonitor && !GlobalStates.policiesDetached
-    readonly property bool rightSidebarActiveOnMonitor: (GlobalStates.animatedRightSidebarWidth > 0 || GlobalStates.sidebarRightOpen) && screen.name === GlobalStates.effectiveRightMonitor
+    readonly property bool leftSidebarActiveOnMonitor: (GlobalStates.animatedLeftSidebarWidth > 0 || GlobalStates.sidebarLeftOpen) && screen.name === GlobalStates.effectiveLeftMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
+    readonly property bool rightSidebarActiveOnMonitor: (GlobalStates.animatedRightSidebarWidth > 0 || GlobalStates.sidebarRightOpen) && screen.name === GlobalStates.effectiveRightMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
 
     readonly property bool leftSidebarDialogDimmed: leftSidebarContentLoader.status === Loader.Ready && leftSidebarContentLoader.item && leftSidebarContentLoader.item.hasOwnProperty("anyDialogVisible") && leftSidebarContentLoader.item.anyDialogVisible
     readonly property bool rightSidebarDialogDimmed: rightSidebarContentLoader.status === Loader.Ready && rightSidebarContentLoader.item && rightSidebarContentLoader.item.hasOwnProperty("anyDialogVisible") && rightSidebarContentLoader.item.anyDialogVisible
@@ -151,7 +175,7 @@ PanelWindow {
     }
 
     readonly property bool leftSidebarWarmOnMonitor: {
-        if (GlobalStates.policiesDetached)
+        if (GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
             return false;
         if (GlobalStates.effectiveLeftMonitor !== "") {
             return screen.name === GlobalStates.effectiveLeftMonitor;
@@ -159,6 +183,8 @@ PanelWindow {
         return false;
     }
     readonly property bool rightSidebarWarmOnMonitor: {
+        if (GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
+            return false;
         if (GlobalStates.effectiveRightMonitor !== "") {
             return screen.name === GlobalStates.effectiveRightMonitor;
         }
@@ -188,7 +214,25 @@ PanelWindow {
     // SearchDrop/OsdDrop need this offset so they emerge from the bar's visual top edge.
     readonly property real barMargin: Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0
 
-    WlrLayershell.keyboardFocus: (searchOpenOnMonitor || (leftSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate) || (rightSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate)) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: (searchOpenOnMonitor || (topPanel.policiesOpenOnMonitor && !GlobalStates.connectSidebarsSeparate) || (leftSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate) || (rightSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate)) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+
+    // Resolve policy commands at window level so focused/selected TextEdits cannot
+    // consume Ctrl+D before the sidebar controller sees it.
+    Shortcut {
+        sequence: "Ctrl+D"
+        enabled: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.policiesOpenOnMonitor
+        onActivated: topPanel.togglePoliciesDetach()
+    }
+    Shortcut {
+        sequence: "Ctrl+O"
+        enabled: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.policiesOpenOnMonitor
+        onActivated: topPanel.togglePoliciesExtended()
+    }
+    Shortcut {
+        sequence: "Ctrl+P"
+        enabled: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.policiesOpenOnMonitor
+        onActivated: topPanel.togglePoliciesPin()
+    }
 
     // 1. Wrapped Frame Visuals
     Loader {
@@ -607,14 +651,15 @@ PanelWindow {
         WlrLayershell.namespace: "quickshell:pinReserver"
         exclusionMode: ExclusionMode.Normal
         color: "transparent"
-        visible: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && GlobalStates.policiesPinned && topPanel.leftSidebarActiveOnMonitor
+        visible: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && GlobalStates.policiesPinned && !GlobalStates.policiesDetached && topPanel.policiesActiveOnMonitor
         anchors {
             top: true
             bottom: true
-            left: true
+            left: topPanel.policiesOnLeft
+            right: !topPanel.policiesOnLeft
         }
         implicitWidth: GlobalStates.policiesWidth
-        exclusiveZone: implicitWidth - (topPanel.barOnLeft ? 0 : (Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin))
+        exclusiveZone: implicitWidth - ((topPanel.barVertical && ((topPanel.barOnLeft && topPanel.policiesOnLeft) || (topPanel.barOnRight && !topPanel.policiesOnLeft))) ? 0 : (Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin))
     }
 
     // Left Sidebar Policies Content
@@ -649,7 +694,7 @@ PanelWindow {
 
         Loader {
             id: leftSidebarContentLoader
-            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !GlobalStates.policiesDetached
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
             anchors.fill: parent
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
@@ -676,13 +721,30 @@ PanelWindow {
     // Detached Sidebar Policies Window
     // Disabled in Float+Connect mode — sidebars remain separate PanelWindows
     Loader {
-        active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && GlobalStates.policiesDetached && topPanel.screen.name === GlobalStates.effectiveLeftMonitor
+        active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && GlobalStates.policiesDetached && topPanel.policiesOpenOnMonitor
         sourceComponent: FloatingWindow {
+            id: detachedPoliciesWindow
             screen: topPanel.screen
             color: "transparent"
             visible: true
             width: GlobalStates.policiesWidth
-            height: topPanel.height - (Appearance.sizes.hyprlandGapsOut * 2)
+            height: Math.max(0, topPanel.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset - (Appearance.sizes.hyprlandGapsOut * 2))
+
+            Shortcut {
+                sequence: "Ctrl+D"
+                enabled: detachedPoliciesWindow.visible
+                onActivated: topPanel.togglePoliciesDetach()
+            }
+            Shortcut {
+                sequence: "Ctrl+O"
+                enabled: detachedPoliciesWindow.visible
+                onActivated: topPanel.togglePoliciesExtended()
+            }
+            Shortcut {
+                sequence: "Ctrl+P"
+                enabled: detachedPoliciesWindow.visible
+                onActivated: topPanel.togglePoliciesPin()
+            }
 
             Rectangle {
                 anchors.fill: parent
@@ -701,8 +763,16 @@ PanelWindow {
                 }
 
                 Keys.onPressed: event => {
-                    if (event.modifiers === Qt.ControlModifier && event.key === Qt.Key_D) {
-                        GlobalStates.policiesDetached = false;
+                    if ((event.modifiers & Qt.ControlModifier) !== 0) {
+                        if (event.key === Qt.Key_D) {
+                            topPanel.togglePoliciesDetach();
+                        } else if (event.key === Qt.Key_O) {
+                            topPanel.togglePoliciesExtended();
+                        } else if (event.key === Qt.Key_P) {
+                            topPanel.togglePoliciesPin();
+                        } else {
+                            return;
+                        }
                         event.accepted = true;
                     }
                 }
@@ -741,7 +811,7 @@ PanelWindow {
 
         Loader {
             id: rightSidebarContentLoader
-            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarContentWanted
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarContentWanted && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
             anchors.fill: parent
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
@@ -1227,7 +1297,7 @@ PanelWindow {
     Connections {
         target: GlobalStates
         function onPoliciesPinnedChanged() {
-            if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.activeLeftSidebarMonitor) {
+            if (topPanel.policiesOpenOnMonitor) {
                 if (GlobalStates.policiesPinned) {
                     GlobalFocusGrab.removeDismissable(topPanel);
                 } else {
@@ -1240,7 +1310,8 @@ PanelWindow {
             if (GlobalStates.connectSidebarsSeparate)
                 return;
             if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.effectiveRightMonitor) {
-                GlobalFocusGrab.addDismissable(topPanel);
+                if (topPanel.policiesOnLeft || !GlobalStates.policiesPinned)
+                    GlobalFocusGrab.addDismissable(topPanel);
             } else {
                 GlobalFocusGrab.removeDismissable(topPanel);
             }
@@ -1250,7 +1321,7 @@ PanelWindow {
             if (GlobalStates.connectSidebarsSeparate)
                 return;
             if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.effectiveLeftMonitor) {
-                if (!GlobalStates.policiesPinned) {
+                if (!topPanel.policiesOnLeft || !GlobalStates.policiesPinned) {
                     GlobalFocusGrab.addDismissable(topPanel);
                 }
             } else {
@@ -1266,10 +1337,11 @@ PanelWindow {
             if (GlobalStates.connectSidebarsSeparate)
                 return;
             if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.effectiveRightMonitor) {
-                GlobalStates.sidebarRightOpen = false;
+                if (topPanel.policiesOnLeft || !GlobalStates.policiesPinned)
+                    GlobalStates.sidebarRightOpen = false;
             }
             if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.effectiveLeftMonitor) {
-                if (!GlobalStates.policiesPinned) {
+                if (!topPanel.policiesOnLeft || !GlobalStates.policiesPinned) {
                     GlobalStates.sidebarLeftOpen = false;
                 }
             }
@@ -1278,7 +1350,7 @@ PanelWindow {
 
     Item {
         id: keyFocusHandler
-        focus: leftSidebarOpenOnMonitor || rightSidebarOpenOnMonitor || searchOpenOnMonitor
+        focus: topPanel.policiesOpenOnMonitor || rightSidebarOpenOnMonitor || searchOpenOnMonitor
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
                 GlobalStates.sidebarRightOpen = false;
@@ -1289,13 +1361,15 @@ PanelWindow {
                 event.accepted = true;
             }
 
-            if (event.modifiers === Qt.ControlModifier && leftSidebarOpenOnMonitor) {
+            if ((event.modifiers & Qt.ControlModifier) !== 0 && topPanel.policiesOpenOnMonitor) {
                 if (event.key === Qt.Key_O) {
-                    GlobalStates.policiesExtended = !GlobalStates.policiesExtended;
+                    topPanel.togglePoliciesExtended();
                 } else if (event.key === Qt.Key_D) {
-                    GlobalStates.policiesDetached = !GlobalStates.policiesDetached;
+                    topPanel.togglePoliciesDetach();
                 } else if (event.key === Qt.Key_P) {
-                    GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
+                    topPanel.togglePoliciesPin();
+                } else {
+                    return;
                 }
                 event.accepted = true;
             }
