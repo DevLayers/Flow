@@ -4,6 +4,16 @@ A powerful and flexible environment manager for [ii-vynx](https://github.com/vag
 
 ---
 
+## ✅ Requirements
+
+- **Hyprland 0.56.1 or newer**
+- **Matugen 4.1.0 or newer**
+
+> [!NOTE]
+> The lightweight scheme-switching path keeps compatibility with Matugen 3 by detecting whether `--source-color-index` is available, but Matugen **4.1.0+ is the supported/recommended version**. On Fedora, the installer enables the `avengemedia/danklinux` COPR so `matugen` is sourced from the repository that provides the 4.x release instead of Fedora 44's older 3.x package.
+
+---
+
 ## 🚀 Installation
 
 To install **ii-vynx** and set up the management environment, clone this repository and run the setup script:
