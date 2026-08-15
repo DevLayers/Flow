@@ -173,7 +173,6 @@ Item {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 8
-                    visible: !Config.options.displayCast || Config.options.displayCast.wirelessEnabled !== false
 
                     RowLayout {
                         Layout.fillWidth: true
