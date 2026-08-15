@@ -142,42 +142,42 @@ ContentPage {
                     onClicked: Idle.resetDurations()
                 }
             }
+        }
 
-            ConfigSwitch {
-                buttonIcon: "notifications_active"
-                text: Translation.tr("Warn before a timer ends")
-                checked: Config.options.idle.notifyOnExpiry
-                onCheckedChanged: {
-                    Config.options.idle.notifyOnExpiry = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Sends a notification shortly before the system is allowed to sleep again, with a button to add more time")
-                }
+        ConfigSwitch {
+            buttonIcon: "notifications_active"
+            text: Translation.tr("Warn before a timer ends")
+            checked: Config.options.idle.notifyOnExpiry
+            onCheckedChanged: {
+                Config.options.idle.notifyOnExpiry = checked;
             }
-
-            ConfigSpinBox {
-                enabled: Config.options.idle.notifyOnExpiry
-                icon: "timer"
-                text: Translation.tr("Warn this long before (s)")
-                value: Config.options.idle.warnLeadSec
-                from: 0
-                to: 600
-                stepSize: 15
-                onValueChanged: {
-                    Config.options.idle.warnLeadSec = value;
-                }
+            StyledToolTip {
+                text: Translation.tr("Sends a notification shortly before the system is allowed to sleep again, with a button to add more time")
             }
+        }
 
-            ConfigSpinBox {
-                icon: "more_time"
-                text: Translation.tr("Extend button adds (min)")
-                value: Config.options.idle.extendMinutes
-                from: 1
-                to: 120
-                stepSize: 5
-                onValueChanged: {
-                    Config.options.idle.extendMinutes = value;
-                }
+        ConfigSpinBox {
+            enabled: Config.options.idle.notifyOnExpiry
+            icon: "timer"
+            text: Translation.tr("Warn this long before (s)")
+            value: Config.options.idle.warnLeadSec
+            from: 0
+            to: 600
+            stepSize: 15
+            onValueChanged: {
+                Config.options.idle.warnLeadSec = value;
+            }
+        }
+
+        ConfigSpinBox {
+            icon: "more_time"
+            text: Translation.tr("Extend button adds (min)")
+            value: Config.options.idle.extendMinutes
+            from: 1
+            to: 120
+            stepSize: 5
+            onValueChanged: {
+                Config.options.idle.extendMinutes = value;
             }
         }
     }
