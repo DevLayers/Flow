@@ -103,6 +103,29 @@ Scope {
     }
 
     readonly property bool isOverviewVisible: root.searchActive && LauncherSearch.query === "" && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config && Config.options && Config.options.overview && Config.options.overview.enable !== undefined ? Config.options.overview.enable : true)
+    readonly property string overviewAnimStyle: Config.options.overview.animationStyle ?? "bounce"
+    readonly property int overviewAnimDurationEnter: Math.round(420 * Appearance.animMultiplier)
+    readonly property int overviewAnimDurationExit: Math.round(260 * Appearance.animMultiplier)
+    readonly property var overviewAnimCurveEnter: Appearance.animationCurves.expressiveFastSpatial
+    readonly property var overviewAnimCurveExit: Appearance.animationCurves.emphasizedAccel
+    readonly property bool overviewAnimationActive: root.searchActive || root.overviewRevealProgress > 0.001 || root.overviewFadeProgress > 0.001
+    property real overviewRevealProgress: root.isOverviewVisible ? 1.0 : 0.0
+    property real overviewFadeProgress: root.isOverviewVisible ? 1.0 : 0.0
+
+    Behavior on overviewRevealProgress {
+        NumberAnimation {
+            duration: root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: root.isOverviewVisible ? root.overviewAnimCurveEnter : root.overviewAnimCurveExit
+        }
+    }
+
+    Behavior on overviewFadeProgress {
+        NumberAnimation {
+            duration: root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit
+            easing.type: root.isOverviewVisible ? Easing.OutCubic : Easing.InCubic
+        }
+    }
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && (!Config.options.bar.onlyShowOnSingleMonitor || hasBarOnThisMonitor)
     readonly property bool hasBarOnThisMonitor: GlobalStates.isScreenAllowedForBar(win.screen)
@@ -1080,7 +1103,7 @@ Scope {
             right: true
         }
 
-        implicitHeight: (searchActive || isOverviewVisible) ? (win.screen ? win.screen.height : 1080) : 240
+        implicitHeight: (searchActive || overviewAnimationActive) ? (win.screen ? win.screen.height : 1080) : 240
 
         // Dynamic click/hover mask to prevent blocking the screen
         mask: Region {
@@ -1761,28 +1784,23 @@ Scope {
             anchors.top: container.bottom
             anchors.topMargin: 10
             anchors.horizontalCenter: parent.horizontalCenter
-            active: root.searchActive && !root.isScrollingLayout
+            active: root.overviewAnimationActive && !root.isScrollingLayout
             visible: opacity > 0.01
 
-            opacity: root.isOverviewVisible ? 1.0 : 0.0
-            transform: Translate {
-                y: root.isOverviewVisible ? 0 : 30
-                Behavior on y {
-                    NumberAnimation {
-                        duration: root.isOverviewVisible ? 450 : 280
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
+            opacity: root.overviewFadeProgress
+            transform: [
+                Translate {
+                    y: root.overviewAnimStyle === "zoom"
+                        ? ((1.0 - root.overviewFadeProgress) * -30)
+                        : ((1.0 - root.overviewRevealProgress) * 30)
+                },
+                Scale {
+                    origin.x: overviewLoader.implicitWidth / 2
+                    origin.y: overviewLoader.implicitHeight / 2
+                    xScale: root.overviewAnimStyle === "zoom" ? (0.92 + 0.08 * root.overviewFadeProgress) : 1.0
+                    yScale: root.overviewAnimStyle === "zoom" ? (0.92 + 0.08 * root.overviewFadeProgress) : 1.0
                 }
-            }
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.isOverviewVisible ? 450 : 60
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                }
-            }
+            ]
 
             sourceComponent: OverviewWidget {
                 panelWindow: win
@@ -1796,28 +1814,23 @@ Scope {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            active: root.searchActive && root.isScrollingLayout
+            active: root.overviewAnimationActive && root.isScrollingLayout
             visible: opacity > 0.01
 
-            opacity: root.isOverviewVisible ? 1.0 : 0.0
-            transform: Translate {
-                y: root.isOverviewVisible ? 0 : 30
-                Behavior on y {
-                    NumberAnimation {
-                        duration: root.isOverviewVisible ? 450 : 280
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
+            opacity: root.overviewFadeProgress
+            transform: [
+                Translate {
+                    y: root.overviewAnimStyle === "zoom"
+                        ? ((1.0 - root.overviewFadeProgress) * -30)
+                        : ((1.0 - root.overviewRevealProgress) * 30)
+                },
+                Scale {
+                    origin.x: scrollingOverviewLoader.width / 2
+                    origin.y: scrollingOverviewLoader.height / 2
+                    xScale: root.overviewAnimStyle === "zoom" ? (0.92 + 0.08 * root.overviewFadeProgress) : 1.0
+                    yScale: root.overviewAnimStyle === "zoom" ? (0.92 + 0.08 * root.overviewFadeProgress) : 1.0
                 }
-            }
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.isOverviewVisible ? 450 : 120
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                }
-            }
+            ]
 
             sourceComponent: ScrollingOverviewWidget {
                 anchors.fill: parent
