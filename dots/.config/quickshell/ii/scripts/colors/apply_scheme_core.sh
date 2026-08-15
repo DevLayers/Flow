@@ -101,22 +101,27 @@ if [[ "$scheme" == "scheme-intense" ]]; then
     matugen_type="scheme-fidelity"
 fi
 
-matugen_args=(--source-color-index 0)
+matugen_args=()
+
 if [[ "$accent" =~ ^#?[A-Fa-f0-9]{6}$ ]]; then
-    matugen_args+=(color hex "$accent")
+    matugen_args=(color hex "$accent")
 elif [[ -n "$source_image" && -f "$source_image" ]]; then
-    matugen_args+=(image "$source_image")
+    matugen_args=(image "$source_image" --source-color-index 0)
 else
     echo "[apply_scheme_core] No valid wallpaper/accent source available" >&2
     exit 1
 fi
+
 matugen_args+=(--mode "$mode" --type "$matugen_type")
 
 # This is the same core operation that makes colors.json and Matugen-managed
 # application templates update. FileView remains the primary shell update path;
 # a single best-effort IPC reload is sent after the final colors.json is ready
 # to cover a missed file-watch event without restoring the old repeated reloads.
-matugen "${matugen_args[@]}"
+if ! matugen "${matugen_args[@]}"; then
+    echo "[apply_scheme_core] Matugen failed; preserving current theme" >&2
+    exit 1
+fi
 
 if [[ "$scheme" == "scheme-intense" ]]; then
     python3 "$SCRIPT_DIR/boost_surface_chroma.py" \

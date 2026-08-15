@@ -1725,6 +1725,10 @@ install_hypr_config() {
 apply_config() {
     local url="$1" branch="$2" fork="$3" verb="$4"
     local head="" source_dir="" dirty=""
+    local target_preexisting=false
+    if [[ -e "$TARGET_DIR" || -L "$TARGET_DIR" ]]; then
+        target_preexisting=true
+    fi
 
     if [[ -n "$LOCAL_SRC" ]]; then
         # A local deploy has no remote to speak of, so everything the state
@@ -1851,11 +1855,19 @@ apply_config() {
 
     handle_base_config "$verb"
 
-    # Only launch the welcome window at the end of default installation.
-    # Prevent it from opening during update, fork switch, branch hop, or apply.
-    local first_run_file="${XDG_STATE_HOME:-$HOME/.local/state}/illogical-impulse/user/first_run.txt"
-    if [[ "$verb" == "install" ]]; then
-        rm -f "$first_run_file"
+    # The in-process FirstRunExperience owns the Welcome launch. Keep the
+    # marker in the same XDG state tree that Directories.state reads, and only
+    # clear it for an explicit install or a first deployment through bare
+    # `apply`. Existing applies, updates and fork switches must not reopen it.
+    local first_run_file="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/user/first_run.txt"
+    local legacy_first_run_file="${XDG_STATE_HOME:-$HOME/.local/state}/illogical-impulse/user/first_run.txt"
+    local fresh_deploy=false
+    if [[ "$verb" == "install" || ( "$verb" == "apply" && "$target_preexisting" != true ) ]]; then
+        fresh_deploy=true
+    fi
+
+    if [[ "$fresh_deploy" == true ]]; then
+        rm -f "$first_run_file" "$legacy_first_run_file"
     else
         mkdir -p "$(dirname "$first_run_file")"
         if [[ ! -f "$first_run_file" ]]; then
@@ -1864,18 +1876,6 @@ apply_config() {
     fi
 
     start_quickshell
-
-    if [[ "$verb" == "install" ]]; then
-        local bin=""
-        if have qs; then
-            bin="qs"
-        elif have quickshell; then
-            bin="quickshell"
-        fi
-        if [[ -n "$bin" ]]; then
-            nohup "$bin" -p "$TARGET_DIR/welcome.qml" >/dev/null 2>&1 &
-        fi
-    fi
 
     local summary="$fork/$branch${head:+ @ ${head:0:8}}"
     [[ -n "$LOCAL_SRC" ]] && summary="local $G_ARROW $(tilde "$LOCAL_SRC")"
