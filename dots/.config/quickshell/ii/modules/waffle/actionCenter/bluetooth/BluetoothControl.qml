@@ -23,6 +23,16 @@ Item {
         Bluetooth.defaultAdapter.discovering = false;
     }
 
+    // Powering on is asynchronous (rfkill unblock, then the D-Bus write), so scan
+    // only once the adapter reports itself as enabled.
+    Connections {
+        target: BluetoothStatus
+        function onEnabledChanged() {
+            if (BluetoothStatus.enabled && Bluetooth.defaultAdapter)
+                Bluetooth.defaultAdapter.discovering = true;
+        }
+    }
+
     WPanelPageColumn {
         anchors.fill: parent
 
@@ -53,12 +63,9 @@ Item {
                             checked: Bluetooth.defaultAdapter?.enabled ?? false
                             onCheckedChanged: {
                                 if (Bluetooth.defaultAdapter) {
-                                    Bluetooth.defaultAdapter.enabled = checked;
-                                    if (checked) {
-                                        Bluetooth.defaultAdapter.discovering = true;
-                                    } else {
+                                    BluetoothStatus.setEnabled(checked);
+                                    if (!checked)
                                         Bluetooth.defaultAdapter.discovering = false;
-                                    }
                                 }
                             }
                         }

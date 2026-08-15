@@ -52,9 +52,7 @@ AbstractBackgroundWidget {
             colBackgroundHover: Qt.rgba(root.contentColor.r, root.contentColor.g, root.contentColor.b, 0.15)
             colRipple: Qt.rgba(root.contentColor.r, root.contentColor.g, root.contentColor.b, 0.3)
             onClicked: {
-                if (Bluetooth.defaultAdapter)
-                    Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled;
-
+                BluetoothStatus.toggle();
             }
 
             MaterialSymbol {
