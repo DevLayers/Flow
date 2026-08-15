@@ -9,7 +9,6 @@ Singleton {
 
     property string pendingScheme: ""
     property string activeScheme: ""
-    property bool rerunPending: false
 
     function request(scheme) {
         if (!scheme || scheme === "")
@@ -20,16 +19,13 @@ Singleton {
     }
 
     function launchLatest() {
-        if (applyProcess.running) {
-            rerunPending = true;
+        if (applyProcess.running)
             return;
-        }
 
         if (!pendingScheme || pendingScheme === "")
             return;
 
         activeScheme = pendingScheme;
-        rerunPending = false;
 
         const command = `env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH ${Directories.wallpaperSwitchScriptPath} --type ${activeScheme} --noswitch > /tmp/switchwall_button.log 2>&1`;
         applyProcess.command = ["bash", "-c", command];
@@ -48,10 +44,10 @@ Singleton {
         running: false
 
         onExited: {
-            const hasNewerRequest = root.pendingScheme !== "" && root.pendingScheme !== root.activeScheme;
+            const completedScheme = root.activeScheme;
             root.activeScheme = "";
 
-            if (hasNewerRequest || root.rerunPending)
+            if (root.pendingScheme !== "" && root.pendingScheme !== completedScheme)
                 Qt.callLater(root.launchLatest);
         }
     }
