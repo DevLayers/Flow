@@ -28,7 +28,7 @@ Singleton {
 
         activeScheme = pendingScheme;
 
-        const command = `env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH ${Directories.wallpaperSwitchScriptPath} --type ${activeScheme} --noswitch > /tmp/switchwall_button.log 2>&1`;
+        const command = `env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH ${Directories.scriptPath}/colors/apply_scheme_core.sh ${activeScheme} > /tmp/switchwall_button.log 2>&1`;
         applyProcess.command = ["bash", "-c", command];
         applyProcess.running = true;
     }
