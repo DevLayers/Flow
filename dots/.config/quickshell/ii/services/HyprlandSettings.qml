@@ -8,6 +8,8 @@ import qs
 Singleton {
     id: root
 
+    property string lastAppLaunchAnimationSignature: ""
+
     function changeKey(key, value) {
         if (/['"\\`$|&;]/.test(String(value)) || /['"\\`$|&;]/.test(String(key))) {
             console.error("[HyprlandSettings] Unsafe characters rejected:", key, value)
@@ -57,11 +59,19 @@ Singleton {
         Quickshell.execDetached(["hyprctl", "eval", luaExpr]);
     }
 
-    function updateAppLaunchAnimation(enabled, startPercent, speed, curve) {
+    function updateAppLaunchAnimation(enabled, startPercent, speed, curve, force = false) {
         const isEnabled = enabled !== false;
         const percent = Math.max(5, Math.min(100, Math.round(Number(startPercent) || 20)));
         const animSpeed = Math.max(0.5, Math.min(20, Number(speed) || 3.2));
         const animCurve = (typeof curve === "string" && curve.trim() !== "") ? curve.trim() : "iiAppOpen";
+        const signature = [isEnabled ? "1" : "0", percent, animSpeed.toFixed(2), animCurve].join("|");
+
+        // Config.onLoaded calls this after every config reload. Avoid spawning
+        // four hyprctl processes when a preset did not actually change the app
+        // launch animation.
+        if (!force && signature === root.lastAppLaunchAnimationSignature)
+            return;
+        root.lastAppLaunchAnimationSignature = signature;
 
         const inStyle = isEnabled ? ("popin " + percent + "%") : "popin 100%";
         const outPercent = Math.min(90, Math.round(percent + (100 - percent) * 0.5));
@@ -78,7 +88,6 @@ Singleton {
 
     function setLayout(layout) {
         if (layout !== "default" && layout !== "scrolling" && layout !== "dwindle" && layout !== "monocle" && layout !== "master") return
-        // console.log("[HyprlandSettings] Setting layout to", layout)
         changeKey("general:layout", layout)
         Persistent.states.hyprland.layout = layout
     }
