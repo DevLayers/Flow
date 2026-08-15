@@ -42,6 +42,19 @@ config_get() {
     printf '%s' "$fallback"
 }
 
+request_shell_theme_reload_once() {
+    if ! command -v qs >/dev/null 2>&1; then
+        echo "[apply_scheme_core] qs not found; skipping one-shot shell reload" >&2
+        return 0
+    fi
+
+    if qs -c ii ipc call theme reapplyTheme >/dev/null 2>&1; then
+        echo "[apply_scheme_core] Requested one-shot shell theme reload"
+    else
+        echo "[apply_scheme_core] One-shot shell theme reload failed; FileView watcher remains primary" >&2
+    fi
+}
+
 mode=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null | tr -d "'" || true)
 if [[ "$mode" == "prefer-light" ]]; then
     mode="light"
@@ -100,14 +113,17 @@ fi
 matugen_args+=(--mode "$mode" --type "$matugen_type")
 
 # This is the same core operation that makes colors.json and Matugen-managed
-# application templates update. FileView watches colors.json, so no explicit
-# Quickshell IPC reload is necessary.
+# application templates update. FileView remains the primary shell update path;
+# a single best-effort IPC reload is sent after the final colors.json is ready
+# to cover a missed file-watch event without restoring the old repeated reloads.
 matugen "${matugen_args[@]}"
 
 if [[ "$scheme" == "scheme-intense" ]]; then
     python3 "$SCRIPT_DIR/boost_surface_chroma.py" \
         "$STATE_DIR/user/generated/colors.json" --mode "$mode"
 fi
+
+request_shell_theme_reload_once
 
 # Terminal generation is optional and, critically, does NOT regenerate the
 # all-schemes wallpaper preview cache. That cache depends on the wallpaper, not
