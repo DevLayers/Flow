@@ -16,10 +16,11 @@ GENERATED_DIR="$XDG_STATE_HOME/quickshell/user/generated"
 COLORS_FILE="$GENERATED_DIR/colors.json"
 SCSS_FILE="$GENERATED_DIR/material_colors.scss"
 TERMSCHEME="$COLOR_DIR/terminal/scheme-base.json"
-TEMP_SOURCE=""
+WPE_TEMP_SOURCE="/tmp/ii-preset-wpe-${request_id}.png"
+VIDEO_TEMP_SOURCE="/tmp/ii-preset-video-${request_id}.jpg"
 
 cleanup() {
-    [[ -z "$TEMP_SOURCE" ]] || rm -f -- "$TEMP_SOURCE"
+    rm -f -- "$WPE_TEMP_SOURCE" "$VIDEO_TEMP_SOURCE"
 }
 trap cleanup EXIT
 
@@ -76,12 +77,9 @@ resolve_wpe_preview() {
             return 0
         fi
         candidate="$workshop/$wpe_id/preview.gif"
-        if [[ -f "$candidate" ]]; then
-            TEMP_SOURCE="/tmp/ii-preset-wpe-${request_id}.png"
-            if extract_first_frame "$candidate" "$TEMP_SOURCE"; then
-                printf '%s' "$TEMP_SOURCE"
-                return 0
-            fi
+        if [[ -f "$candidate" ]] && extract_first_frame "$candidate" "$WPE_TEMP_SOURCE"; then
+            printf '%s' "$WPE_TEMP_SOURCE"
+            return 0
         fi
     done
     return 1
@@ -110,9 +108,8 @@ resolve_color_source() {
                 return 0
             fi
             [[ -f "$wallpaper" ]] || return 1
-            TEMP_SOURCE="/tmp/ii-preset-video-${request_id}.jpg"
-            extract_first_frame "$wallpaper" "$TEMP_SOURCE" || return 1
-            printf '%s' "$TEMP_SOURCE"
+            extract_first_frame "$wallpaper" "$VIDEO_TEMP_SOURCE" || return 1
+            printf '%s' "$VIDEO_TEMP_SOURCE"
             return 0
             ;;
         *)
