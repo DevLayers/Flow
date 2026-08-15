@@ -36,6 +36,12 @@ is_current_request || exit 0
 [[ -f "$CONFIG_FILE" ]] || exit 1
 mkdir -p "$GENERATED_DIR" "$cache_dir"
 
+# An uncached legacy/imported preset already committed its config. Give
+# Quickshell/compositor one frame before starting CPU-heavy color generation so
+# first-use fallback cannot steal time from the visible transition.
+sleep 0.12
+is_current_request || exit 0
+
 enable_apps=$(jq -r '.appearance.wallpaperTheming.enableAppsAndShell // true' "$CONFIG_FILE" 2>/dev/null)
 [[ "$enable_apps" == "true" ]] || exit 0
 
