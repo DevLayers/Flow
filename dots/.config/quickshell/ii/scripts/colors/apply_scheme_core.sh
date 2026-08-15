@@ -106,7 +106,14 @@ matugen_args=()
 if [[ "$accent" =~ ^#?[A-Fa-f0-9]{6}$ ]]; then
     matugen_args=(color hex "$accent")
 elif [[ -n "$source_image" && -f "$source_image" ]]; then
-    matugen_args=(image "$source_image" --source-color-index 0)
+    matugen_args=(image "$source_image")
+
+    # Matugen 4 introduced interactive source-color selection for images.
+    # Matugen 3 automatically uses its ranked source color and does not accept
+    # --source-color-index, so only add the flag when the installed CLI exposes it.
+    if matugen image --help 2>&1 | grep -qF -- '--source-color-index'; then
+        matugen_args+=(--source-color-index 0)
+    fi
 else
     echo "[apply_scheme_core] No valid wallpaper/accent source available" >&2
     exit 1
