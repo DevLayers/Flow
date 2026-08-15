@@ -1297,21 +1297,21 @@ Item {
     }
 
     ContentSection {
-        icon: "cast"
-        title: Translation.tr("Wireless Display & Casting")
+        icon: "cast_connected"
+        title: Translation.tr("Remote Streaming")
 
         ConfigSwitch {
-            buttonIcon: "cast"
-            text: Translation.tr("Enable wireless displays & casting")
-            checked: (Config.options.displayCast && Config.options.displayCast.wirelessEnabled !== undefined) ? Config.options.displayCast.wirelessEnabled : true
+            buttonIcon: "cast_connected"
+            text: Translation.tr("Sunshine host")
+            checked: SunshineService.running
             configPage: Qt.resolvedUrl("widgets/WirelessDisplaysConfig.qml")
             onCheckedChanged: {
-                if (Config.ready && Config.options.displayCast) {
-                    Config.options.displayCast.wirelessEnabled = checked;
-                }
+                if (SunshineService.refreshing || SunshineService.actionRunning || checked === SunshineService.running)
+                    return;
+                SunshineService.setRunning(checked);
             }
             StyledToolTip {
-                text: Translation.tr("Enables discovery and streaming to Miracast, MICE, and Chromecast receivers. Click to configure.")
+                text: Translation.tr("Starts or stops Sunshine for low-latency Moonlight streaming. Click to configure the host and pairing flow.")
             }
         }
     }
