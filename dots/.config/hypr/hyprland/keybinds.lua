@@ -63,7 +63,6 @@ hl.bind("CTRL + SUPER + R",
     hl.dsp.exec_cmd("killall ydotool; qs kill -c $qsConfig || killall qs quickshell 2>/dev/null; qs -c $qsConfig &"),
     { description = "Shell: Restart widgets" })
 hl.bind("CTRL + SUPER + P", hl.dsp.global("quickshell:panelFamilyCycle"), { description = "Shell: Cycle panel family" })
-hl.bind("SUPER + SHIFT + P", hl.dsp.global("quickshell:displayCastToggle"), { description = "Shell: Display & Cast" })
 
 --##! Utilities
 --# Screenshot, Record, OCR, Color picker, Clipboard history

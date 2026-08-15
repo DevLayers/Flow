@@ -1,6 +1,0 @@
-module qs.modules.ii.displayCast
-
-DisplayCast 1.0 DisplayCast.qml
-DisplayCastWindow 1.0 DisplayCastWindow.qml
-DisplayCastContent 1.0 DisplayCastContent.qml
-ProjectionModeCard 1.0 ProjectionModeCard.qml

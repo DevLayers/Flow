@@ -11,7 +11,41 @@ ContentPage {
 
     signal goBack()
 
+    readonly property string safeHostName: SunshineService.hostName || ""
+    readonly property string safeHostAddress: SunshineService.hostAddress || ""
+    readonly property var pairedClients: Array.isArray(SunshineService.pairedClients) ? SunshineService.pairedClients : []
+    readonly property int pairedClientCount: pairedClients.length
+
     Component.onCompleted: SunshineService.refresh()
+
+    component SectionLabel: RowLayout {
+        property string sectionIcon: ""
+        property string sectionTitle: ""
+
+        Layout.fillWidth: true
+        Layout.leftMargin: 4
+        Layout.rightMargin: 4
+        Layout.topMargin: 6
+        Layout.bottomMargin: 2
+        spacing: 8
+
+        MaterialSymbol {
+            visible: sectionIcon.length > 0
+            text: sectionIcon
+            iconSize: Appearance.font.pixelSize.large
+            color: Appearance.colors.colOnLayer1
+            Layout.alignment: Qt.AlignVCenter
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: sectionTitle
+            font.pixelSize: Appearance.font.pixelSize.small
+            font.weight: Font.DemiBold
+            color: Appearance.colors.colOnLayer1
+            Layout.alignment: Qt.AlignVCenter
+        }
+    }
 
     RowLayout {
         spacing: 12
@@ -90,6 +124,7 @@ ContentPage {
 
                 ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     spacing: 3
 
                     StyledText {
@@ -107,13 +142,14 @@ ContentPage {
                         color: SunshineService.running
                             ? Appearance.colors.colOnPrimaryContainer
                             : Appearance.colors.colOnLayer2
+                        elide: Text.ElideRight
                     }
 
                     StyledText {
                         Layout.fillWidth: true
                         text: {
-                            const host = SunshineService.hostName.length > 0 ? SunshineService.hostName : Translation.tr("This computer");
-                            const address = SunshineService.hostAddress.length > 0 ? SunshineService.hostAddress : Translation.tr("No LAN address detected");
+                            const host = root.safeHostName.length > 0 ? root.safeHostName : Translation.tr("This computer");
+                            const address = root.safeHostAddress.length > 0 ? root.safeHostAddress : Translation.tr("No LAN address detected");
                             return `${host}  ·  ${address}`;
                         }
                         font.pixelSize: Appearance.font.pixelSize.small
@@ -126,18 +162,23 @@ ContentPage {
 
                     StyledText {
                         visible: SunshineService.installed
-                        text: Translation.tr("%1 paired device(s)").arg(SunshineService.pairedClientCount)
+                        text: root.pairedClientCount === 1
+                            ? Translation.tr("1 paired device")
+                            : `${root.pairedClientCount} ${Translation.tr("paired devices")}`
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: SunshineService.running
                             ? Appearance.colors.colOnPrimaryContainer
                             : Appearance.colors.colSubtext
-                        opacity: 0.7
+                        opacity: 0.72
                     }
                 }
 
                 RippleButton {
                     visible: SunshineService.serviceAvailable
                     Layout.alignment: Qt.AlignVCenter
+                    Layout.leftMargin: 8
+                    implicitWidth: 84
+                    implicitHeight: 40
                     buttonText: SunshineService.running ? Translation.tr("Stop") : Translation.tr("Start")
                     buttonRadius: Appearance.rounding.full
                     enabled: !SunshineService.actionRunning && !SunshineService.refreshing
@@ -154,6 +195,8 @@ ContentPage {
 
         RowLayout {
             Layout.fillWidth: true
+            Layout.leftMargin: 4
+            Layout.rightMargin: 4
             spacing: 8
 
             RippleButtonWithIcon {
@@ -210,8 +253,8 @@ ContentPage {
                         number: "2",
                         icon: "lan",
                         title: Translation.tr("Select this PC"),
-                        description: SunshineService.hostAddress.length > 0
-                            ? SunshineService.hostAddress
+                        description: root.safeHostAddress.length > 0
+                            ? root.safeHostAddress
                             : Translation.tr("Use automatic discovery")
                     },
                     {
@@ -265,7 +308,7 @@ ContentPage {
                             Layout.fillWidth: true
                             text: modelData.title
                             font.weight: Font.DemiBold
-                            font.pixelSize: Appearance.font.pixelSize.body
+                            font.pixelSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colOnLayer2
                             wrapMode: Text.WordWrap
                         }
@@ -284,6 +327,9 @@ ContentPage {
 
         RippleButtonWithIcon {
             Layout.fillWidth: true
+            Layout.leftMargin: 4
+            Layout.rightMargin: 4
+            Layout.topMargin: 4
             materialIcon: "pin"
             mainText: Translation.tr("Open Sunshine to approve PIN")
             centerContent: true
@@ -291,108 +337,114 @@ ContentPage {
             onClicked: SunshineService.openWebUi()
         }
 
-        ContentSubsection {
-            title: Translation.tr("Paired devices")
-            icon: "devices_other"
+        SectionLabel {
+            sectionIcon: "devices_other"
+            sectionTitle: Translation.tr("Paired devices")
+            Layout.topMargin: 10
+        }
 
-            Rectangle {
-                visible: SunshineService.pairedClients.length === 0
+        Rectangle {
+            visible: root.pairedClients.length === 0
+            Layout.fillWidth: true
+            implicitHeight: emptyClientsLayout.implicitHeight + 24
+            radius: Appearance.rounding.normal
+            color: Appearance.colors.colLayer2
+
+            RowLayout {
+                id: emptyClientsLayout
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 10
+
+                MaterialSymbol {
+                    text: "devices_off"
+                    iconSize: 22
+                    color: Appearance.colors.colSubtext
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("No paired Moonlight devices found yet")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                }
+            }
+        }
+
+        Repeater {
+            model: root.pairedClients
+
+            delegate: Rectangle {
+                required property var modelData
                 Layout.fillWidth: true
-                implicitHeight: emptyClientsLayout.implicitHeight + 24
+                implicitHeight: clientLayout.implicitHeight + 20
                 radius: Appearance.rounding.normal
                 color: Appearance.colors.colLayer2
 
                 RowLayout {
-                    id: emptyClientsLayout
+                    id: clientLayout
                     anchors.fill: parent
-                    anchors.margins: 12
+                    anchors.margins: 10
                     spacing: 10
 
-                    MaterialSymbol {
-                        text: "devices_off"
-                        iconSize: 22
-                        color: Appearance.colors.colSubtext
+                    MaterialShapeWrappedMaterialSymbol {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: "devices"
+                        shape: MaterialShape.Shape.Circle
+                        iconSize: 19
+                        padding: 8
+                        fill: modelData.enabled ? 1 : 0
+                        color: modelData.enabled
+                            ? Appearance.colors.colSecondaryContainer
+                            : Appearance.colors.colLayer1
+                        colSymbol: modelData.enabled
+                            ? Appearance.colors.colOnSecondaryContainer
+                            : Appearance.colors.colSubtext
                     }
 
-                    StyledText {
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        text: Translation.tr("No paired Moonlight devices found yet")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colSubtext
-                    }
-                }
-            }
+                        Layout.minimumWidth: 0
+                        spacing: 1
 
-            Repeater {
-                model: SunshineService.pairedClients
-
-                delegate: Rectangle {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    implicitHeight: clientLayout.implicitHeight + 20
-                    radius: Appearance.rounding.normal
-                    color: Appearance.colors.colLayer2
-
-                    RowLayout {
-                        id: clientLayout
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 10
-
-                        MaterialShapeWrappedMaterialSymbol {
-                            Layout.alignment: Qt.AlignVCenter
-                            text: "devices"
-                            shape: MaterialShape.Shape.Circle
-                            iconSize: 19
-                            padding: 8
-                            fill: modelData.enabled ? 1 : 0
-                            color: modelData.enabled
-                                ? Appearance.colors.colSecondaryContainer
-                                : Appearance.colors.colLayer1
-                            colSymbol: modelData.enabled
-                                ? Appearance.colors.colOnSecondaryContainer
-                                : Appearance.colors.colSubtext
-                        }
-
-                        ColumnLayout {
+                        StyledText {
                             Layout.fillWidth: true
-                            spacing: 1
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: modelData.name
-                                font.weight: Font.DemiBold
-                                font.pixelSize: Appearance.font.pixelSize.body
-                                color: Appearance.colors.colOnLayer2
-                                elide: Text.ElideRight
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: modelData.enabled ? Translation.tr("Paired and allowed") : Translation.tr("Paired · disabled in Sunshine")
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colSubtext
-                            }
+                            text: modelData.name || Translation.tr("Moonlight device")
+                            font.weight: Font.DemiBold
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            color: Appearance.colors.colOnLayer2
+                            elide: Text.ElideRight
                         }
 
                         StyledText {
-                            text: modelData.enabled ? Translation.tr("Ready") : Translation.tr("Disabled")
-                            font.weight: Font.DemiBold
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: modelData.enabled ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
+                            Layout.fillWidth: true
+                            text: modelData.enabled
+                                ? Translation.tr("Paired and allowed")
+                                : Translation.tr("Paired · disabled in Sunshine")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
                         }
+                    }
+
+                    StyledText {
+                        text: modelData.enabled ? Translation.tr("Ready") : Translation.tr("Disabled")
+                        font.weight: Font.DemiBold
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: modelData.enabled ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
                     }
                 }
             }
+        }
 
-            StyledText {
-                visible: SunshineService.pairedClients.length > 0
-                Layout.fillWidth: true
-                text: Translation.tr("Pairing changes and device removal remain in Sunshine Web UI so ii never stores your Sunshine administrator password.")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
-                wrapMode: Text.WordWrap
-            }
+        StyledText {
+            visible: root.pairedClients.length > 0
+            Layout.fillWidth: true
+            Layout.leftMargin: 4
+            Layout.rightMargin: 4
+            text: Translation.tr("Pairing changes and device removal remain in Sunshine Web UI so ii never stores your Sunshine administrator password.")
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colSubtext
+            wrapMode: Text.WordWrap
         }
     }
 
@@ -408,112 +460,119 @@ ContentPage {
             wrapMode: Text.WordWrap
         }
 
-        ContentSubsection {
-            title: Translation.tr("Remote input")
-            icon: "touch_app"
+        SectionLabel {
+            sectionIcon: "touch_app"
+            sectionTitle: Translation.tr("Remote input")
+        }
 
-            ConfigSwitch {
-                buttonIcon: "keyboard"
-                text: Translation.tr("Keyboard input")
-                checked: SunshineService.keyboardEnabled
-                enabled: SunshineService.installed && !SunshineService.actionRunning
-                onCheckedChanged: {
-                    if (checked === SunshineService.keyboardEnabled || SunshineService.actionRunning)
-                        return;
-                    SunshineService.setInputOption("keyboard", checked);
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "mouse"
-                text: Translation.tr("Mouse input")
-                checked: SunshineService.mouseEnabled
-                enabled: SunshineService.installed && !SunshineService.actionRunning
-                onCheckedChanged: {
-                    if (checked === SunshineService.mouseEnabled || SunshineService.actionRunning)
-                        return;
-                    SunshineService.setInputOption("mouse", checked);
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "sports_esports"
-                text: Translation.tr("Controller input")
-                checked: SunshineService.controllerEnabled
-                enabled: SunshineService.installed && !SunshineService.actionRunning
-                onCheckedChanged: {
-                    if (checked === SunshineService.controllerEnabled || SunshineService.actionRunning)
-                        return;
-                    SunshineService.setInputOption("controller", checked);
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "stylus"
-                text: Translation.tr("Native touch & pen")
-                checked: SunshineService.nativePenTouchEnabled
-                enabled: SunshineService.installed && !SunshineService.actionRunning
-                onCheckedChanged: {
-                    if (checked === SunshineService.nativePenTouchEnabled || SunshineService.actionRunning)
-                        return;
-                    SunshineService.setInputOption("native_pen_touch", checked);
-                }
-                StyledToolTip {
-                    text: Translation.tr("Passes native touch and pen events from supported Moonlight clients to this computer.")
-                }
+        ConfigSwitch {
+            buttonIcon: "keyboard"
+            text: Translation.tr("Keyboard input")
+            checked: SunshineService.keyboardEnabled
+            enabled: SunshineService.installed && !SunshineService.actionRunning
+            onCheckedChanged: {
+                if (checked === SunshineService.keyboardEnabled || SunshineService.actionRunning)
+                    return;
+                SunshineService.setInputOption("keyboard", checked);
             }
         }
 
-        ContentSubsection {
-            title: Translation.tr("Video encoder")
-            icon: "memory"
-
-            ConfigSelectionArray {
-                currentValue: SunshineService.encoder
-                enabled: SunshineService.installed && !SunshineService.actionRunning
-                onSelected: newValue => {
-                    if (newValue === SunshineService.encoder || SunshineService.actionRunning)
-                        return;
-                    SunshineService.setEncoder(newValue);
-                }
-                options: [
-                    {
-                        displayName: Translation.tr("Automatic"),
-                        icon: "auto_awesome",
-                        value: "auto"
-                    },
-                    {
-                        displayName: "NVIDIA NVENC",
-                        icon: "memory",
-                        value: "nvenc"
-                    },
-                    {
-                        displayName: "Intel Quick Sync",
-                        icon: "memory",
-                        value: "quicksync"
-                    },
-                    {
-                        displayName: "AMD VCE",
-                        icon: "memory",
-                        value: "amdvce"
-                    },
-                    {
-                        displayName: "VA-API",
-                        icon: "memory",
-                        value: "vaapi"
-                    },
-                    {
-                        displayName: "Vulkan",
-                        icon: "memory",
-                        value: "vulkan"
-                    },
-                    {
-                        displayName: Translation.tr("Software"),
-                        icon: "developer_board",
-                        value: "software"
-                    }
-                ]
+        ConfigSwitch {
+            buttonIcon: "mouse"
+            text: Translation.tr("Mouse input")
+            checked: SunshineService.mouseEnabled
+            enabled: SunshineService.installed && !SunshineService.actionRunning
+            onCheckedChanged: {
+                if (checked === SunshineService.mouseEnabled || SunshineService.actionRunning)
+                    return;
+                SunshineService.setInputOption("mouse", checked);
             }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "sports_esports"
+            text: Translation.tr("Controller input")
+            checked: SunshineService.controllerEnabled
+            enabled: SunshineService.installed && !SunshineService.actionRunning
+            onCheckedChanged: {
+                if (checked === SunshineService.controllerEnabled || SunshineService.actionRunning)
+                    return;
+                SunshineService.setInputOption("controller", checked);
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "stylus"
+            text: Translation.tr("Native touch & pen")
+            checked: SunshineService.nativePenTouchEnabled
+            enabled: SunshineService.installed && !SunshineService.actionRunning
+            onCheckedChanged: {
+                if (checked === SunshineService.nativePenTouchEnabled || SunshineService.actionRunning)
+                    return;
+                SunshineService.setInputOption("native_pen_touch", checked);
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Passes native touch and pen events from supported Moonlight clients to this computer.")
+            }
+        }
+
+        SectionLabel {
+            sectionIcon: "memory"
+            sectionTitle: Translation.tr("Video encoder")
+            Layout.topMargin: 10
+        }
+
+        ConfigSelectionArray {
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
+            Layout.topMargin: 4
+            Layout.bottomMargin: 4
+            spacing: 8
+            currentValue: SunshineService.encoder
+            enabled: SunshineService.installed && !SunshineService.actionRunning
+            onSelected: newValue => {
+                if (newValue === SunshineService.encoder || SunshineService.actionRunning)
+                    return;
+                SunshineService.setEncoder(newValue);
+            }
+            options: [
+                {
+                    displayName: Translation.tr("Automatic"),
+                    icon: "auto_awesome",
+                    value: "auto"
+                },
+                {
+                    displayName: "NVIDIA NVENC",
+                    icon: "memory",
+                    value: "nvenc"
+                },
+                {
+                    displayName: "Intel Quick Sync",
+                    icon: "memory",
+                    value: "quicksync"
+                },
+                {
+                    displayName: "AMD VCE",
+                    icon: "memory",
+                    value: "amdvce"
+                },
+                {
+                    displayName: "VA-API",
+                    icon: "memory",
+                    value: "vaapi"
+                },
+                {
+                    displayName: "Vulkan",
+                    icon: "memory",
+                    value: "vulkan"
+                },
+                {
+                    displayName: Translation.tr("Software"),
+                    icon: "developer_board",
+                    value: "software"
+                }
+            ]
         }
     }
 
@@ -535,6 +594,8 @@ ContentPage {
 
         RowLayout {
             Layout.fillWidth: true
+            Layout.leftMargin: 4
+            Layout.rightMargin: 4
             spacing: 8
 
             RippleButtonWithIcon {
@@ -570,7 +631,7 @@ ContentPage {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: Translation.tr("Service: %1").arg(SunshineService.serviceUnit)
+                    text: `${Translation.tr("Service")}: ${SunshineService.serviceUnit || SunshineService.canonicalUnit}`
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colSubtext
                     elide: Text.ElideMiddle
@@ -578,7 +639,7 @@ ContentPage {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: Translation.tr("Config: %1").arg(SunshineService.configPath)
+                    text: `${Translation.tr("Config")}: ${SunshineService.configPath || ""}`
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colSubtext
                     elide: Text.ElideMiddle
