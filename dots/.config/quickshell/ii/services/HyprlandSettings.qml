@@ -88,6 +88,7 @@ Singleton {
 
     function setLayout(layout) {
         if (layout !== "default" && layout !== "scrolling" && layout !== "dwindle" && layout !== "monocle" && layout !== "master") return
+        // console.log("[HyprlandSettings] Setting layout to", layout)
         changeKey("general:layout", layout)
         Persistent.states.hyprland.layout = layout
     }
