@@ -194,32 +194,10 @@ Singleton {
         root.syncPinnedFileOrder()
     }
 
-    // ── Icon theme refresh ────────────────────────────────────────────────
-    // Bumped several times after a theme change to force icon reload across the dock
-    // TODO if loading the wallpaper takes too much time, the icons fail to change, i didn't find a better way
+    // Bumped once by IconThemes after DynamicTheme generation completes.
+    // Keep color changes independent from icon invalidation so a palette update
+    // cannot repeatedly recreate icon textures while the theme is still being built.
     property int iconThemeRevision: 0
-
-    Timer {
-        id: themeRefreshTimer
-        interval: 300
-        repeat: true
-        property int count: 0
-        onTriggered: {
-            root.iconThemeRevision += 1
-            if (++count >= 6) {
-                count = 0
-                stop()
-            }
-        }
-    }
-
-    Connections {
-        target: Appearance.m3colors
-        function onM3primaryChanged() {
-            themeRefreshTimer.count = 0
-            themeRefreshTimer.restart()
-        }
-    }
 
     // ── XDG user directories ──────────────────────────────────────────────
     property var xdgUserDirs: ({})

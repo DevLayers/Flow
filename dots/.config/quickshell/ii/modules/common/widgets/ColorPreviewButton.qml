@@ -100,10 +100,7 @@ RippleButton {
             ]);
         } else {
             Config.options.appearance.palette.type = colorScheme;
-            Quickshell.execDetached([
-                "bash", "-c",
-                `env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH ${Directories.wallpaperSwitchScriptPath} --type ${colorScheme} --noswitch > /tmp/switchwall_button.log 2>&1`
-            ]);
+            ColorSchemeApplyService.request(colorScheme);
         }
     }
 
