@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import qs.modules.common
+import qs.modules.common.widgets
 import QtQuick
 
 /**
@@ -16,7 +17,13 @@ Item {
     property bool shown: false
     signal closed
 
-    readonly property real panelWidth: Math.min(310, root.width - 56)
+    /**
+     * Inset on every side, so the sheet reads as something laid over the chat
+     * rather than as a second half of it. The gap on the right is what says
+     * the conversation is still there behind it.
+     */
+    readonly property real inset: 6
+    readonly property real panelWidth: Math.min(300, root.width - 56)
 
     opacity: root.shown ? 1 : 0
     visible: opacity > 0
@@ -37,18 +44,25 @@ Item {
         }
     }
 
+    StyledRectangularShadow {
+        target: panel
+    }
+
     Rectangle {
         id: panel
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
+        anchors.leftMargin: root.inset
+        anchors.topMargin: root.inset
+        anchors.bottomMargin: root.inset
         width: root.panelWidth
         radius: Appearance.rounding.normal
         color: Appearance.colors.colSurfaceContainerHigh
         clip: true
 
         transform: Translate {
-            x: root.shown ? 0 : -panel.width - 8
+            x: root.shown ? 0 : -panel.width - root.inset - 8
 
             Behavior on x {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)

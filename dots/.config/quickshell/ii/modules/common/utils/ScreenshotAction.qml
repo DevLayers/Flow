@@ -33,7 +33,13 @@ Singleton {
         SoundService.playEvent("screenshot", ["camera-shutter", "screen-capture"]);
     }
 
-    function getCommand(x, y, width, height, screenshotPath, action, saveDir = "") {
+    /**
+     * `aiPath`, when given, is where the AskAI crop is written. The chat used
+     * to fish the shot back out of the clipboard, which meant waiting a guessed
+     * number of milliseconds for cliphist to have noticed it; a file it was
+     * told the name of needs no guessing.
+     */
+    function getCommand(x, y, width, height, screenshotPath, action, saveDir = "", aiPath = "") {
         // Set command for action
         const rx = Math.round(x);
         const ry = Math.round(y);
@@ -72,7 +78,17 @@ Singleton {
             return ["bash", "-c", `${cropInPlace} && xdg-open "${root.imageSearchEngineBaseUrl}$(${uploadAndGetUrl(screenshotPath)})" && ${cleanup}`];
             break;
         case ScreenshotAction.Action.AskAI:
-            return ["bash", "-c", `${cropToStdout} | wl-copy && ${cleanup}`];
+            if (aiPath === "") {
+                return ["bash", "-c", `${cropToStdout} | wl-copy && ${cleanup}`];
+            }
+            // Written first, copied from the file after, so the chat can watch
+            // for the one and the clipboard still gets the other. The folder
+            // is made here rather than trusted to exist: it lives under /tmp,
+            // where it is created once at startup and can be swept away
+            // underneath a running shell, and a crop into a missing folder
+            // fails silently — the chat then waits for a file that never comes.
+            const quotedAiPath = `'${StringUtils.shellSingleQuoteEscape(aiPath)}'`;
+            return ["bash", "-c", `mkdir -p "$(dirname ${quotedAiPath})" && ${cropBase} ${quotedAiPath} && wl-copy < ${quotedAiPath} && ${cleanup}`];
             break;
         case ScreenshotAction.Action.CharRecognition:
             return ["bash", "-c", `${cropInPlace} && tesseract '${StringUtils.shellSingleQuoteEscape(screenshotPath)}' stdout -l $(tesseract --list-langs | awk 'NR>1{print $1}' | tr '\\n' '+' | sed 's/\\+$/\\n/') | wl-copy && ${cleanup}`];

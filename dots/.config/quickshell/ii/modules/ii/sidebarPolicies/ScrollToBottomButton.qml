@@ -14,8 +14,11 @@ RippleButton {
         bottomMargin: 10
     }
 
-    opacity: !target.atYEnd ? 1 : 0
-    scale: !target.atYEnd ? 1 : 0.7
+    /** Overridable: a list that scrolls itself knows better than `atYEnd` does. */
+    property bool shown: !root.target.atYEnd
+
+    opacity: root.shown ? 1 : 0
+    scale: root.shown ? 1 : 0.7
     visible: opacity > 0
     Behavior on opacity {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)

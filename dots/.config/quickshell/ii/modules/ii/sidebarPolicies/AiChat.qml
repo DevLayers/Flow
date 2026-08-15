@@ -25,6 +25,12 @@ Item {
     /** Whether the list of saved chats is on screen, in either of its hosts. */
     property bool sessionsOpen: false
     readonly property bool wideEnoughForPane: root.width >= 640
+    /**
+     * Between the chat pane and the conversation. Wider than the padding used
+     * everywhere else on purpose: the pane's other three sides also carry the
+     * sidebar's own inset, and a gap of one padding here read as a seam.
+     */
+    readonly property real sessionPaneGap: 20
 
     property int entranceTrigger: -1
 
@@ -307,11 +313,44 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         }
     }
 
+    /**
+     * Opens something that will take the focus — a file dialog, the region
+     * snip — without the sidebar closing behind it. The counter is lowered
+     * again by whoever raised it, so two of these can overlap.
+     */
+    function holdSidebarOpen() {
+        GlobalStates.policiesHoldOpen += 1;
+    }
+
+    function releaseSidebar() {
+        GlobalStates.policiesHoldOpen = Math.max(0, GlobalStates.policiesHoldOpen - 1);
+    }
+
+    Connections {
+        // The snip is not a process this file can watch, so the hold ends when
+        // the selector does, whether it took a shot or was waved away.
+        target: GlobalStates
+        function onRegionSelectorOpenChanged() {
+            if (GlobalStates.regionSelectorOpen || !root.snipHeld)
+                return;
+            root.snipHeld = false;
+            root.releaseSidebar();
+        }
+    }
+
+    property bool snipHeld: false
+
     Process {
         // The paperclip. Several files at once, because a message can carry
         // several.
         id: filePickerProc
         running: false
+        onRunningChanged: {
+            if (filePickerProc.running)
+                root.holdSidebarOpen();
+            else
+                root.releaseSidebar();
+        }
         command: ["bash", "-c", "if command -v kdialog >/dev/null; then " + "  FILES=$(kdialog --getopenfilename \"$HOME\" \"\" --multiple 2>/dev/null); " + "  if [ -n \"$FILES\" ]; then echo -n \"$FILES\" | tr '\\n' '|'; fi; " + "elif command -v zenity >/dev/null; then " + "  zenity --file-selection --multiple --separator=\"|\" 2>/dev/null; " + "fi"]
         stdout: StdioCollector {
             onStreamFinished: {
@@ -357,10 +396,18 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         colBackgroundHover: Appearance.colors.colLayer2Hover
         colRipple: Appearance.colors.colLayer2Active
         onClicked: composerButton.triggered()
+        // Same reason as the control chips: leave the whole button to the
+        // glyph, so its line box is centred instead of overflowing the
+        // padded content rect downwards. Anchoring the content item fights
+        // the geometry a Control assigns it, so it centres itself instead.
+        topPadding: 0
+        bottomPadding: 0
+        leftPadding: 0
+        rightPadding: 0
 
         contentItem: MaterialSymbol {
-            anchors.centerIn: parent
             horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
             text: composerButton.symbol
             iconSize: 20
             color: Appearance.colors.colOnLayer2
@@ -479,8 +526,18 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         active: root.sessionsOpen && root.wideEnoughForPane
         visible: active
 
-        sourceComponent: SessionList {
-            onCloseRequested: root.sessionsOpen = false
+        // The list draws no ground of its own — it is the drawer's content
+        // too — so the pane gives it the same surface the drawer does. Without
+        // one the rows sat directly on the transcript and read as part of it.
+        sourceComponent: Rectangle {
+            radius: Appearance.rounding.normal
+            color: Appearance.colors.colSurfaceContainerHigh
+
+            SessionList {
+                anchors.fill: parent
+                anchors.margins: 10
+                onCloseRequested: root.sessionsOpen = false
+            }
         }
     }
 
@@ -489,7 +546,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         anchors {
             fill: parent
             margins: root.padding
-            leftMargin: root.padding + (sessionPaneLoader.active ? sessionPaneLoader.width + root.padding : 0)
+            leftMargin: root.padding + (sessionPaneLoader.active ? sessionPaneLoader.width + root.sessionPaneGap : 0)
         }
         spacing: root.padding
 
@@ -633,23 +690,70 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 popin: false
                 animateAppearance: false
                 topMargin: statusBg.implicitHeight + statusBg.anchors.topMargin * 2
+                bottomMargin: 8
+                // A flick that carries on past the last message reads as a
+                // rendering fault, not as elasticity, on a list this tall.
+                boundsBehavior: Flickable.StopAtBounds
 
                 touchpadScrollFactor: Config.options.interactions.scrolling.touchpadScrollFactor * 1.4
                 mouseScrollFactor: Config.options.interactions.scrolling.mouseScrollFactor * 1.4
 
-                property int lastResponseLength: 0
-                onContentHeightChanged: {
-                    if (atYEnd) {
-                        Qt.callLater(function() {
-                            messageListView.positionViewAtEnd();
-                        });
-                    }
+                /** How far the bottom of the list is from the bottom of the view. */
+                readonly property real bottomGap: Math.max(0, messageListView.originY + messageListView.contentHeight - messageListView.height - messageListView.contentY)
+                /**
+                 * Whether an answer arriving should drag the view along. Asking
+                 * `atYEnd` at the moment the content grows always says no — it
+                 * has already grown by then — so what is remembered instead is
+                 * where the reader was standing before it did.
+                 */
+                property bool following: true
+                /**
+                 * Set while the view is moving because it was told to. Its own
+                 * scrolling would otherwise read as the reader walking away —
+                 * an answer streaming in would stop being followed on its
+                 * first token, and offer a button back to where it already was.
+                 */
+                property bool pinning: false
+
+                function pinToEnd() {
+                    messageListView.following = true;
+                    messageListView.pinning = true;
+                    messageListView.positionViewAtEnd();
+                    pinReleaseTimer.restart();
                 }
-                onCountChanged: {
-                    Qt.callLater(function() {
-                        messageListView.positionViewAtEnd();
+
+                Timer {
+                    id: pinReleaseTimer
+                    interval: Appearance.animation.scroll.duration + 80
+                    onTriggered: messageListView.pinning = false
+                }
+
+                // A gesture always has the final say, even mid-answer: it is
+                // the one thing here that is unambiguously the reader's doing.
+                onUserScrolled: (targetY, maxY) => {
+                    messageListView.pinning = false;
+                    messageListView.following = (maxY - targetY) < 48;
+                }
+                onDraggingChanged: {
+                    if (messageListView.dragging)
+                        messageListView.pinning = false;
+                }
+                onMovementEnded: messageListView.following = messageListView.bottomGap < 48
+                onContentYChanged: {
+                    if (messageListView.pinning)
+                        return;
+                    messageListView.following = messageListView.bottomGap < 48;
+                }
+                onContentHeightChanged: {
+                    if (!messageListView.following)
+                        return;
+                    Qt.callLater(function () {
+                        messageListView.pinToEnd();
                     });
                 }
+                onCountChanged: Qt.callLater(function () {
+                    messageListView.pinToEnd();
+                })
 
                 add: null // Prevent function calls from being janky
 
@@ -801,6 +905,11 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             ScrollToBottomButton {
                 z: 3
                 target: messageListView
+                // Not `atYEnd`: an answer streaming in moves the view itself,
+                // and this would offer a way back to where the reader already
+                // was on every token.
+                shown: !messageListView.following
+                downAction: () => messageListView.pinToEnd()
             }
         }
 
@@ -1064,10 +1173,20 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 }
                 spacing: 0
 
+                FontMetrics {
+                    // The buttons beside the field line up with the middle of
+                    // its last line of text, not with its bottom edge: the
+                    // field's own padding sits below that line, so a button
+                    // flush with the bottom reads as sitting too low.
+                    id: composerTextMetrics
+                    font: messageInputField.font
+                }
+
                 ComposerButton {
                     // Attaching used to be a slash command with a path typed
                     // by hand, or a drag. Both are still there.
                     Layout.alignment: Qt.AlignBottom
+                    Layout.bottomMargin: Math.max(0, messageInputField.bottomPadding + composerTextMetrics.height / 2 - implicitHeight / 2)
                     Layout.leftMargin: 5
                     symbol: "attach_file"
                     tooltipText: Translation.tr("Attach files")
@@ -1076,9 +1195,16 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
                 ComposerButton {
                     Layout.alignment: Qt.AlignBottom
+                    Layout.bottomMargin: Math.max(0, messageInputField.bottomPadding + composerTextMetrics.height / 2 - implicitHeight / 2)
                     symbol: "screenshot_region"
                     tooltipText: Translation.tr("Send a part of the screen")
-                    onTriggered: GlobalStates.snipForAiRequested()
+                    onTriggered: {
+                        if (!root.snipHeld) {
+                            root.snipHeld = true;
+                            root.holdSidebarOpen();
+                        }
+                        GlobalStates.snipForAiRequested();
+                    }
                 }
 
                 ScrollView {
@@ -1293,12 +1419,17 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     readonly property bool stopping: Ai.isGenerating
 
                     Layout.alignment: Qt.AlignBottom
+                    Layout.bottomMargin: Math.max(0, messageInputField.bottomPadding + composerTextMetrics.height / 2 - implicitHeight / 2)
                     Layout.rightMargin: 5
                     implicitWidth: 40
                     implicitHeight: 40
                     buttonRadius: Appearance.rounding.small
                     enabled: sendButton.stopping || messageInputField.text.length > 0
                     toggled: enabled
+                    topPadding: 0
+                    bottomPadding: 0
+                    leftPadding: 0
+                    rightPadding: 0
 
                     Behavior on enabled {
                         SequentialAnimation {
@@ -1328,8 +1459,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     }
 
                     contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
                         horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                         iconSize: 22
                         color: sendButton.enabled ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2Disabled
                         text: sendButton.stopping ? "stop" : "arrow_upward"

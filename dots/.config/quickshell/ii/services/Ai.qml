@@ -692,6 +692,15 @@ Singleton {
         scriptPath: root.requestScriptFilePath
         attachScriptPath: Directories.aiAttachScriptPath
 
+        /**
+         * Whether any line of this response parsed. curl reports the status
+         * after the body, so a failing request looks exactly like a streaming
+         * one until it ends: its error JSON goes through the parser, throws,
+         * and lands in the bubble as text. Nothing having parsed by the end is
+         * what says that text was never an answer.
+         */
+        property bool parsedAny: false
+
         onLine: data => {
             if (requester.message.thinking)
                 requester.message.thinking = false;
@@ -700,6 +709,7 @@ Singleton {
             try {
                 const result = requester.strategy.parseResponseLine(data, requester.message);
                 // console.log("[Ai] Parsed response result: ", JSON.stringify(result, null, 2));
+                requester.parsedAny = true;
 
                 if (result.functionCall) {
                     requester.message.functionCall = result.functionCall;
@@ -752,6 +762,14 @@ Singleton {
                     message.errorKind = root.transportErrorKind(status, code);
                     message.errorStatus = status;
                     message.errorText = root.transportErrorText(status, code);
+                    // Nothing parsed, so whatever is in the bubble is the
+                    // provider's complaint, not an answer. It belongs to the
+                    // card, where it can be unfolded, not to the transcript.
+                    if (!requester.parsedAny && message.content.length > 0) {
+                        message.errorDetails = message.content.trim();
+                        message.content = "";
+                        message.rawContent = "";
+                    }
                 }
             }
 
@@ -822,6 +840,7 @@ Singleton {
         requester.endpoint = strategy.buildEndpoint(model);
         requester.requestData = data;
         requester.apiKey = model.requires_key ? (root.apiKeys?.[model.key_id] ?? "") : "";
+        requester.parsedAny = false;
         requester.start();
     }
 
@@ -863,45 +882,35 @@ Singleton {
         root.makeRequest();
     }
 
-    Process {
-        id: decodeImageAndAttachProc
-        property string imageDecodePath: Directories.cliphistDecode
-        property string imageDecodeFileName: "image"
-        property string imageDecodeFilePath: `${imageDecodePath}/${imageDecodeFileName}`
-        function handleEntry(entry: string) {
-            imageDecodeFileName = parseInt(entry.match(/^(\d+)\t/)[1]);
-            decodeImageAndAttachProc.exec(["bash", "-c", `[ -f ${imageDecodeFilePath} ] || echo '${CF.StringUtils.shellSingleQuoteEscape(entry)}' | ${Cliphist.cliphistBinary} decode > '${imageDecodeFilePath}'`]);
-        }
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
-                Ai.attachFile(imageDecodeFilePath);
-            } else {
-                console.error("[Ai] Failed to decode image in clipboard content");
-            }
-        }
+    /**
+     * Attaches a region snip once the file exists.
+     *
+     * Called by RegionSelection.qml, whose own process is detached and whose
+     * window is gone a moment later, so the waiting is done here: this is a
+     * singleton and outlives the selector. What this replaced read the
+     * clipboard after a fixed delay, and so attached the shot only when the
+     * machine happened to be quick enough.
+     */
+    function attachSnip(path: string) {
+        if (!path || path.length === 0)
+            return;
+        snipWaitProc.attachPath = path;
+        snipWaitProc.running = false;
+        snipWaitProc.running = true;
     }
 
-    // This is being called by RegionSelection.qml
-    function handleClipboardAndAttach() {
-        handleClipboardTimer.start();
-    }
-    // We have to delay this a little to make sure the clipboard is updated
-    Timer {
-        id: handleClipboardTimer
-        interval: 450
-        onTriggered: {
-            const currentClipboardEntry = Cliphist.entries[0];
-            const cleanCliphistEntry = CF.StringUtils.cleanCliphistEntry(currentClipboardEntry);
-            if (/^\d+\t\[\[.*binary data.*\d+x\d+.*\]\]$/.test(currentClipboardEntry)) {
-                // First entry = currently copied entry = image?
-                decodeImageAndAttachProc.handleEntry(currentClipboardEntry);
-                return;
-            } else if (cleanCliphistEntry.startsWith("file://")) {
-                // First entry = currently copied entry = image?
-                const fileName = decodeURIComponent(cleanCliphistEntry);
-                Ai.attachFile(fileName);
+    Process {
+        id: snipWaitProc
+        property string attachPath: ""
+        // Four seconds at most: a crop of a screen takes a fraction of one,
+        // and a wait that never ends would hold a stale path forever.
+        command: ["bash", "-c", `for i in $(seq 1 40); do [ -s '${CF.StringUtils.shellSingleQuoteEscape(snipWaitProc.attachPath)}' ] && exit 0; sleep 0.1; done; exit 1`]
+        onExited: exitCode => {
+            if (exitCode !== 0) {
+                console.warn("[Ai] Region snip never appeared at", snipWaitProc.attachPath);
                 return;
             }
+            root.attachFile(snipWaitProc.attachPath);
         }
     }
 
@@ -1423,6 +1432,7 @@ Singleton {
                 "functionResponse": message.functionResponse,
                 "visibleToUser": message.visibleToUser,
                 "errorKind": message.errorKind,
+                "errorDetails": message.errorDetails,
                 "errorText": message.errorText,
                 "errorStatus": message.errorStatus,
                 "notice": message.notice
@@ -1459,6 +1469,7 @@ Singleton {
             "errorKind": data.errorKind ?? "",
             "errorText": data.errorText ?? "",
             "errorStatus": data.errorStatus ?? 0,
+            "errorDetails": data.errorDetails ?? "",
             "notice": data.notice ?? ""
         });
     }

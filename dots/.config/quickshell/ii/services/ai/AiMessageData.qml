@@ -49,6 +49,10 @@ QtObject {
     property string errorKind: ""
     property string errorText: ""
     property int errorStatus: 0
+    // What the provider actually sent back, kept off the transcript and shown
+    // only if the card is unfolded: it is a wall of JSON nobody asked for, and
+    // the one line that matters is already in `errorText`.
+    property string errorDetails: ""
     // A message the sidebar wrote about its own state, which the transcript
     // draws as a card instead of as text. Currently only "apiKey".
     property string notice: ""

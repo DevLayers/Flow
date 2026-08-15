@@ -701,24 +701,33 @@ PanelWindow {
         if (root.action === RegionSelection.SnipAction.Copy || root.action === RegionSelection.SnipAction.Edit) {
             root.action = root.mouseButton === Qt.RightButton ? RegionSelection.SnipAction.Edit : RegionSelection.SnipAction.Copy;
         }
-        if (root.action === RegionSelection.SnipAction.Search || root.action === RegionSelection.SnipAction.AskAI) {
-            root.action = root.mouseButton === Qt.RightButton ? RegionSelection.SnipAction.AskAI : RegionSelection.SnipAction.Search;
+        // Right-dragging a search turns it into a question for the assistant.
+        // It does not work the other way round: a selection started from the
+        // chat was asked for by name, and turning it into an image search sent
+        // the shot somewhere the composer never sees.
+        if (root.action === RegionSelection.SnipAction.Search && root.mouseButton === Qt.RightButton) {
+            root.action = RegionSelection.SnipAction.AskAI;
         }
 
         const screenshotDir = Config.options.screenSnip.savePath !== "" ? //
         Config.options.screenSnip.savePath : "";
         var screenshotAction = root.getScreenshotAction();
+        // The assistant is handed a file of its own rather than the clipboard:
+        // see ScreenshotAction.getCommand.
+        const askingAi = root.action === RegionSelection.SnipAction.AskAI;
+        const aiPath = askingAi ? `${Directories.cliphistDecode}/ai-snip-${Date.now()}.png` : "";
         const command = ScreenshotAction.getCommand(root.regionX * root.monitorScale //
         , root.regionY * root.monitorScale //
         , root.regionWidth * root.monitorScale//
         , root.regionHeight * root.monitorScale //
         , root.screenshotPath //
         , screenshotAction //
-        , screenshotDir);
+        , screenshotDir //
+        , aiPath);
         Quickshell.execDetached(command);
         ScreenshotAction.playShutterSound(screenshotAction);
-        if (root.action === RegionSelection.SnipAction.AskAI) {
-            Ai.handleClipboardAndAttach();
+        if (askingAi) {
+            Ai.attachSnip(aiPath);
             GlobalStates.policiesPanelOpen = true;
         }
         // Trigger screenshot overlay

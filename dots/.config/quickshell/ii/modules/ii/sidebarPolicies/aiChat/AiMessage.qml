@@ -552,9 +552,47 @@ Rectangle {
                         }
                     }
 
+                    StyledText {
+                        // The provider's own words, folded away. They are
+                        // usually a page of JSON that repeats what the line
+                        // above already said, and occasionally the only place
+                        // the real reason appears.
+                        Layout.fillWidth: true
+                        Layout.maximumHeight: 160
+                        visible: errorDetailsToggle.visible && errorDetailsToggle.unfolded
+                        text: root.messageData?.errorDetails ?? ""
+                        wrapMode: Text.Wrap
+                        elide: Text.ElideRight
+                        font.family: Appearance.font.family.monospace
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 6
+
+                        RippleButton {
+                            id: errorDetailsToggle
+                            property bool unfolded: false
+
+                            visible: (root.messageData?.errorDetails?.length ?? 0) > 0
+                            leftPadding: 10
+                            rightPadding: 10
+                            topPadding: 5
+                            bottomPadding: 5
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                            colBackgroundHover: Appearance.colors.colLayer2Hover
+                            colRipple: Appearance.colors.colLayer2Active
+                            onClicked: errorDetailsToggle.unfolded = !errorDetailsToggle.unfolded
+
+                            contentItem: StyledText {
+                                text: errorDetailsToggle.unfolded ? Translation.tr("Hide details") : Translation.tr("Details")
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colOnLayer2
+                            }
+                        }
 
                         Item {
                             Layout.fillWidth: true

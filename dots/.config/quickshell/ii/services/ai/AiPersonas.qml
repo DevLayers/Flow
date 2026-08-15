@@ -14,8 +14,10 @@ import qs.services // Translation
  * was already loadable, but on its own it is only a third of what makes an
  * answer look the way somebody wanted it.
  *
- * The ones shipped here are not examples. They are the four things this
- * machine is actually used for, and they can all be edited or deleted.
+ * The four shipped here are starting points, not a set: they are the shapes an
+ * answer usually needs to take on a desktop like this one. Any of them can be
+ * edited or deleted, and one written from scratch shadows a built-in that
+ * shares its id.
  */
 Scope {
     id: root
@@ -45,14 +47,14 @@ Scope {
             "starters": [Translation.tr("Review this component"), Translation.tr("Why does this binding loop?"), Translation.tr("Make this a Loader"), Translation.tr("Is this leaking?")]
         },
         {
-            "id": "neuro",
-            "name": Translation.tr("Neuroscience reading"),
-            "icon": "neurology",
-            "description": Translation.tr("Master's level, SI units, Vancouver citations"),
-            "systemPrompt": "You help read and reason about neuroscience and molecular cell biology at Master's level.\n\n- Assume the reader knows the fundamentals. Do not re-explain what an action potential is unless asked.\n- SI units throughout.\n- Cite in Vancouver format, numbered, with the reference list at the end. Never invent a citation: if you are not sure a paper exists, say so instead.\n- Separate what is established from what is contested, and say which is which.",
+            "id": "study",
+            "name": Translation.tr("Explain it"),
+            "icon": "school",
+            "description": Translation.tr("Pitched at the level you ask for, sources kept honest"),
+            "systemPrompt": "You explain things to someone who wants to understand them, not to be reassured.\n\n- Match the level the question is asked at. Do not re-explain the fundamentals unless they are what was asked about.\n- Lead with the thing itself, then why it works that way, then the edge cases.\n- Say which parts are settled and which are argued over, and never invent a source: if you are not sure something exists, say so.\n- One worked example beats three paragraphs of description.",
             "thinking": "high",
             "temperature": 0.4,
-            "starters": [Translation.tr("Summarise this paper's method"), Translation.tr("What is the evidence for this claim?"), Translation.tr("Explain this pathway"), Translation.tr("Which controls are missing here?")]
+            "starters": [Translation.tr("Explain this like I know the basics"), Translation.tr("What is the evidence for this claim?"), Translation.tr("Walk me through this step by step"), Translation.tr("What am I missing here?")]
         },
         {
             "id": "plain",

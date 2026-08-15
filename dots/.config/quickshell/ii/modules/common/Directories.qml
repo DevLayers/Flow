@@ -115,4 +115,10 @@ Singleton {
         Quickshell.execDetached(["mkdir", "-p", `${userWidgetsPath}`]);
         Quickshell.execDetached(["rm", "-rf", `${tempImages}`]);
     }
+
+    // The name of the user is read by a process, so for the first moments of
+    // a session it is still the placeholder and every /tmp path above points
+    // at a folder for a user who does not exist. The pass above therefore made
+    // the wrong folder; this one makes the right one as soon as the name lands.
+    onCliphistDecodeChanged: Quickshell.execDetached(["bash", "-c", `rm -rf '${cliphistDecode}'; mkdir -p '${cliphistDecode}'`])
 }

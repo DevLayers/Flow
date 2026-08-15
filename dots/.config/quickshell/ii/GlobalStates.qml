@@ -639,6 +639,15 @@ Singleton {
     property bool dashboardPanelOpen: false // formerly sidebarRightOpen
     property bool policiesPanelOpen: false  // formerly sidebarLeftOpen
 
+    /**
+     * Held above zero while something the left sidebar itself started — a file
+     * dialog, the region snip — is holding focus. Losing focus normally closes
+     * the sidebar, which meant its own buttons dismissed it and the work came
+     * back to nothing. Raise it before opening such a thing, lower it when
+     * that thing is gone.
+     */
+    property int policiesHoldOpen: 0
+
     property bool requestVolumeDialog: false
 
     readonly property bool effectiveLeftOpen: {

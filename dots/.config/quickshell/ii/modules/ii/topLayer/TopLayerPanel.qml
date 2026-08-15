@@ -1271,7 +1271,9 @@ PanelWindow {
                 GlobalStates.sidebarRightOpen = false;
             }
             if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.effectiveLeftMonitor) {
-                if (!GlobalStates.policiesPinned) {
+                // A file dialog or the region snip the sidebar itself opened
+                // holds it there until it is done.
+                if (!GlobalStates.policiesPinned && GlobalStates.policiesHoldOpen === 0) {
                     GlobalStates.sidebarLeftOpen = false;
                 }
             }

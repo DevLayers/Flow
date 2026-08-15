@@ -32,6 +32,15 @@ Item {
     readonly property var personas: Ai.personas.all
     readonly property string activeId: Ai.personas.currentId
 
+    /** Whether the prompt-file list is unfolded. Folded is the normal state. */
+    property bool promptsExpanded: false
+
+    /** "w-FourPointedSparkle.md" is a file name, not a way of answering. */
+    function promptFileName(path: string): string {
+        const base = String(path ?? "").split("/").pop().replace(/\.(md|txt|prompt)$/i, "");
+        return base.replace(/[-_]/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+    }
+
     implicitHeight: root.view === "prompt" ? promptLoader.implicitHeight : listColumnLayout.implicitHeight
 
     component SectionHeading: StyledText {
@@ -226,23 +235,32 @@ Item {
                     }
                 }
 
-                SectionHeading {
+                EntryRow {
+                    // Prompt files are the older way in and there can be a
+                    // dozen of them, none of which says what it does from its
+                    // name. They stay one click away instead of burying the
+                    // personas above under a list nobody reads.
                     visible: Ai.promptFiles.length > 0
-                    text: Translation.tr("Prompt files")
+                    symbol: root.promptsExpanded ? "expand_less" : "expand_more"
+                    label: Translation.tr("Prompt files")
+                    sublabel: Translation.tr("%1 files, taken as the whole prompt").arg(Ai.promptFiles.length)
+                    onClicked: root.promptsExpanded = !root.promptsExpanded
                 }
 
                 Repeater {
                     model: ScriptModel {
-                        values: Ai.promptFiles
+                        values: root.promptsExpanded ? Ai.promptFiles : []
                     }
 
                     delegate: EntryRow {
                         id: promptRow
                         required property var modelData
 
+                        readonly property bool userWritten: Array.from(Ai.userPrompts).indexOf(promptRow.modelData) >= 0
+
                         symbol: "description"
-                        label: String(promptRow.modelData).split("/").pop().replace(/\.(md|txt|prompt)$/i, "")
-                        sublabel: Translation.tr("Give this chat the prompt in this file")
+                        label: root.promptFileName(promptRow.modelData)
+                        sublabel: promptRow.userWritten ? Translation.tr("From your prompts folder") : Translation.tr("Shipped with the shell")
                         selected: Ai.currentPromptFile === promptRow.modelData
                         onClicked: {
                             Ai.loadPrompt(promptRow.modelData, false);
