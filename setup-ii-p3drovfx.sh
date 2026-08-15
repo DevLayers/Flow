@@ -1725,9 +1725,18 @@ install_hypr_config() {
 apply_config() {
     local url="$1" branch="$2" fork="$3" verb="$4"
     local head="" source_dir="" dirty=""
-    local target_preexisting=false
+    local target_managed=false
     if [[ -e "$TARGET_DIR" || -L "$TARGET_DIR" ]]; then
-        target_preexisting=true
+        # The directory may already exist because the base installer created
+        # it, or because the user copied a fork over it by hand.  Neither case
+        # proves that this setup script has deployed this tree before.  Only
+        # our deployment markers are reliable evidence of a managed target.
+        if [[ -f "$TARGET_DIR/.active-fork" ||
+            -f "$TARGET_DIR/.active-remote" ||
+            -f "$TARGET_DIR/.active-local" ||
+            -f "$TARGET_DIR/.active-commit" ]]; then
+            target_managed=true
+        fi
     fi
 
     if [[ -n "$LOCAL_SRC" ]]; then
@@ -1858,11 +1867,14 @@ apply_config() {
     # The in-process FirstRunExperience owns the Welcome launch. Keep the
     # marker in the same XDG state tree that Directories.state reads, and only
     # clear it for an explicit install or a first deployment through bare
-    # `apply`. Existing applies, updates and fork switches must not reopen it.
+    # `apply`. A pre-existing directory is not enough to classify an apply as
+    # an update: the base installer and manual fork swaps can leave that
+    # directory in place without our deployment markers. Explicit `update`
+    # and `switch` commands must never reopen it.
     local first_run_file="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/user/first_run.txt"
     local legacy_first_run_file="${XDG_STATE_HOME:-$HOME/.local/state}/illogical-impulse/user/first_run.txt"
     local fresh_deploy=false
-    if [[ "$verb" == "install" || ( "$verb" == "apply" && "$target_preexisting" != true ) ]]; then
+    if [[ "$verb" == "install" || ( "$verb" == "apply" && "$target_managed" != true ) ]]; then
         fresh_deploy=true
     fi
 
