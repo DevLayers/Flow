@@ -10,6 +10,7 @@ XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 CONFIG_DIR="$XDG_CONFIG_HOME/quickshell/ii"
 CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
+PRESETS_DIR="$XDG_CONFIG_HOME/illogical-impulse/presets"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COLOR_DIR="$SCRIPT_DIR/colors"
 GENERATED_DIR="$XDG_STATE_HOME/quickshell/user/generated"
@@ -137,6 +138,12 @@ wallpaper=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
 use_wpe=$(jq -r '.background.useWallpaperEngine // false' "$CONFIG_FILE" 2>/dev/null)
 accent=$(jq -r '.appearance.palette.accentColor // ""' "$CONFIG_FILE" 2>/dev/null)
 scheme=$(jq -r '.appearance.palette.type // "auto"' "$CONFIG_FILE" 2>/dev/null)
+color_engine=$(jq -r '.appearance.colorEngine // "vynx"' "$CONFIG_FILE" 2>/dev/null)
+
+material_generator="$COLOR_DIR/generate_colors_material.py"
+if [[ "$color_engine" == "fork" ]]; then
+    material_generator="$COLOR_DIR/generate_colors_material_vynx.py"
+fi
 
 current_dark=$(jq -r '.darkmode // empty' "$COLORS_FILE" 2>/dev/null)
 if [[ "$current_dark" == "true" ]]; then
@@ -217,7 +224,13 @@ if [[ -n "$custom_theme" ]]; then
     fi
     atomic_copy "$custom_theme" "$COLORS_FILE" || exit 1
 else
-    matugen_args+=(--mode "$mode" --type "$scheme")
+    matugen_scheme="$scheme"
+    # The fork backend intentionally asks Matugen for fidelity and applies the
+    # intense surface boost afterwards; mirror switchwall_vynx.sh exactly.
+    if [[ "$color_engine" == "fork" && "$scheme" == "scheme-intense" ]]; then
+        matugen_scheme="scheme-fidelity"
+    fi
+    matugen_args+=(--mode "$mode" --type "$matugen_scheme")
     matugen "${matugen_args[@]}" >/dev/null 2>&1 || exit 1
     is_current_request || exit 0
 
@@ -228,7 +241,7 @@ fi
 
 is_current_request || exit 0
 
-if [[ -z "$custom_theme" && -f "$TERMSCHEME" ]]; then
+if [[ -z "$custom_theme" && -f "$TERMSCHEME" && -f "$material_generator" ]]; then
     force_dark=$(jq -r '.appearance.wallpaperTheming.terminalGenerationProps.forceDarkMode // false' "$CONFIG_FILE" 2>/dev/null)
     if [[ "$force_dark" == "true" ]]; then
         generate_args+=(--mode dark)
@@ -248,7 +261,7 @@ if [[ -z "$custom_theme" && -f "$TERMSCHEME" ]]; then
     python_bin="python3"
     [[ -x "$venv/bin/python" ]] && python_bin="$venv/bin/python"
     scss_tmp="${SCSS_FILE}.preset.$$"
-    if "$python_bin" "$COLOR_DIR/generate_colors_material.py" "${generate_args[@]}" > "$scss_tmp"; then
+    if "$python_bin" "$material_generator" "${generate_args[@]}" > "$scss_tmp"; then
         if is_current_request; then
             mv -f -- "$scss_tmp" "$SCSS_FILE"
         else
@@ -264,5 +277,10 @@ is_current_request || exit 0
 atomic_copy "$COLORS_FILE" "$cache_dir/colors.json" || true
 atomic_copy "$SCSS_FILE" "$cache_dir/material_colors.scss" || true
 printf '%s\n' "$preset_name" > "$cache_dir/name"
+
+preset_file="$PRESETS_DIR/$preset_name.json"
+if [[ -f "$preset_file" ]]; then
+    sha256sum -- "$preset_file" | cut -d' ' -f1 > "$cache_dir/config.sha256"
+fi
 
 bash "$SCRIPT_DIR/preset_post_apply.sh" "$request_id" "$token_file" >/dev/null 2>&1 &
