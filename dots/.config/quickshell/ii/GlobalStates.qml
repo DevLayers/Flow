@@ -443,6 +443,20 @@ Singleton {
         return true;
     }
 
+    // The floating Dynamic Island is the sole owner of the search surface
+    // while it is enabled. Its PanelWindow chooses the configured target
+    // monitor, so ownership must not depend on the monitor that opened it.
+    readonly property bool floatingNotchOwnsSearch: {
+        if (!Config.ready || !root.overviewOpen)
+            return false;
+
+        const notch = Config.options.bar.floatingNotch;
+        if (!notch || !notch.enable || notch.centerInBar)
+            return false;
+
+        return true;
+    }
+
     readonly property bool osdConnectActive: {
         if (!connectModeActive)
             return false;

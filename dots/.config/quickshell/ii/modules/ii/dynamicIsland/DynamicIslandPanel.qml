@@ -32,8 +32,11 @@ Scope {
     }
 
     // State bindings
-    // centerInBar: DI never handles search — overviewOpen is handled by the default floating search panel
-    readonly property bool searchActive: GlobalStates.overviewOpen && !Config.options.bar.floatingNotch.centerInBar && (win.screen ? win.screen.name === GlobalStates.activeSearchMonitor : false)
+    // The floating island owns search whenever it is the active search
+    // surface. The PanelWindow already selects the configured target screen;
+    // tying this to activeSearchMonitor would leave a standalone SearchDrop
+    // visible when the query was opened from another monitor.
+    readonly property bool searchActive: GlobalStates.floatingNotchOwnsSearch
     readonly property bool osdActive: GlobalStates.osdVolumeOpen && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
     readonly property bool notificationActive: Notifications.popupList.length > 0
     readonly property bool recordingActive: (Persistent.states.screenRecord && Persistent.states.screenRecord.active) || false

@@ -20,7 +20,7 @@ Scope {
 
     Loader {
         id: overviewVariantsLoader
-        active: !GlobalStates.searchConnectActive
+        active: !GlobalStates.searchConnectActive && !GlobalStates.floatingNotchOwnsSearch
         sourceComponent: Component {
             Variants {
                 id: overviewVariant
@@ -474,7 +474,7 @@ Scope {
     }
 
     onSetSearchingTextRequested: text => {
-        if (GlobalStates.searchConnectActive) {
+        if (GlobalStates.searchConnectActive || GlobalStates.floatingNotchOwnsSearch) {
             GlobalStates.activeSearchQuery = text;
         }
     }

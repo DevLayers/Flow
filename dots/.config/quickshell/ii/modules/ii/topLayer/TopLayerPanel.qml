@@ -160,7 +160,8 @@ PanelWindow {
         var scrim = Qt.color(Appearance.colors.colScrim);
         return Qt.rgba(base.r * (1 - scrim.a) + scrim.r * scrim.a, base.g * (1 - scrim.a) + scrim.g * scrim.a, base.b * (1 - scrim.a) + scrim.b * scrim.a, base.a);
     }
-    readonly property bool searchOpenOnMonitor: (GlobalStates.overviewOpen || (searchDropLoader.item && searchDropLoader.item.openProgress > 0.001)) && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !(Config.ready && Config.options.bar.floatingNotch.enable && (!Config.options.bar.floatingNotch.onlyShowOnSingleMonitor || screen.name === Config.options.bar.floatingNotch.singleMonitorName))
+    readonly property bool searchDropSuppressed: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) || GlobalStates.floatingNotchOwnsSearch
+    readonly property bool searchOpenOnMonitor: (GlobalStates.overviewOpen || (searchDropLoader.item && searchDropLoader.item.openProgress > 0.001)) && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor && !topPanel.searchDropSuppressed
     readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && Config.options.bar.cornerStyle === 3) && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
 
     readonly property bool hasFullscreenWindowOnMonitor: {
@@ -1044,7 +1045,7 @@ PanelWindow {
     Loader {
         id: searchDropLoader
         z: 10
-        active: !GlobalStates.screenLocked && !(Config.ready && Config.options.bar.floatingNotch.enable && (!Config.options.bar.floatingNotch.onlyShowOnSingleMonitor || screen.name === Config.options.bar.floatingNotch.singleMonitorName))
+        active: !GlobalStates.screenLocked && !topPanel.searchDropSuppressed
         focus: searchOpenOnMonitor
         sourceComponent: Component {
             SearchConnect.SearchDrop {
