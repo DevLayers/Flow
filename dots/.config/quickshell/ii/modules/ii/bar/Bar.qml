@@ -16,6 +16,10 @@ import qs.modules.ii.bar.core
 Scope {
     id: bar
 
+    // Panel-family override. Desktop ii keeps 1.0; TabletFamily can request
+    // larger geometry without changing persistent Config values.
+    property real sizeScale: 1.0
+
     Variants {
         id: barVariant
 
@@ -32,8 +36,9 @@ Scope {
             // visible slide when wrapped frame is enabled.
             active: GlobalStates.barOpen && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
             component: BarWindow {
-                screen:       barLoader.modelData
+                screen: barLoader.modelData
                 monitorIndex: barLoader.monitorIndex
+                sizeScale: bar.sizeScale
             }
         }
     }
@@ -42,8 +47,8 @@ Scope {
     IpcHandler {
         target: "bar"
         function toggle(): void { GlobalStates.barOpen = !GlobalStates.barOpen; }
-        function close():  void { GlobalStates.barOpen = false; }
-        function open():   void { GlobalStates.barOpen = true; }
+        function close(): void { GlobalStates.barOpen = false; }
+        function open(): void { GlobalStates.barOpen = true; }
     }
 
     GlobalShortcut {
