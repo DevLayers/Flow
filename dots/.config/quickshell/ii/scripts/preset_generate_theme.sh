@@ -16,6 +16,12 @@ GENERATED_DIR="$XDG_STATE_HOME/quickshell/user/generated"
 COLORS_FILE="$GENERATED_DIR/colors.json"
 SCSS_FILE="$GENERATED_DIR/material_colors.scss"
 TERMSCHEME="$COLOR_DIR/terminal/scheme-base.json"
+TEMP_SOURCE=""
+
+cleanup() {
+    [[ -z "$TEMP_SOURCE" ]] || rm -f -- "$TEMP_SOURCE"
+}
+trap cleanup EXIT
 
 is_current_request() {
     [[ -n "$request_id" && -n "$token_file" && -f "$token_file" ]] || return 1
@@ -32,6 +38,91 @@ atomic_copy() {
     mv -f -- "$tmp" "$dst"
 }
 
+extract_first_frame() {
+    local input="$1"
+    local output="$2"
+    command -v ffmpeg >/dev/null 2>&1 || return 1
+    ffmpeg -loglevel error -y -i "$input" -frames:v 1 "$output" >/dev/null 2>&1
+}
+
+resolve_wpe_preview() {
+    local wpe_id="$1"
+    local assets="$2"
+    local candidate workshop
+    local -a workshops=()
+
+    if [[ -n "$assets" ]]; then
+        workshop="${assets/common\/wallpaper_engine\/assets/workshop\/content\/431960}"
+        workshops+=("$workshop")
+        workshop="${assets/common\/wallpaper_engine/workshop\/content\/431960}"
+        workshops+=("$workshop")
+    fi
+    workshops+=(
+        "$HOME/.local/share/Steam/steamapps/workshop/content/431960"
+        "$HOME/.steam/steam/steamapps/workshop/content/431960"
+        "$HOME/.steam/root/steamapps/workshop/content/431960"
+    )
+
+    for workshop in "${workshops[@]}"; do
+        [[ -d "$workshop/$wpe_id" ]] || continue
+        candidate="$workshop/$wpe_id/preview.jpg"
+        if [[ -f "$candidate" ]]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+        candidate="$workshop/$wpe_id/preview.png"
+        if [[ -f "$candidate" ]]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+        candidate="$workshop/$wpe_id/preview.gif"
+        if [[ -f "$candidate" ]]; then
+            TEMP_SOURCE="/tmp/ii-preset-wpe-${request_id}.png"
+            if extract_first_frame "$candidate" "$TEMP_SOURCE"; then
+                printf '%s' "$TEMP_SOURCE"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+resolve_color_source() {
+    local wallpaper="$1"
+    local use_wpe="$2"
+    local thumbnail source wpe_id wpe_assets
+
+    if [[ "$use_wpe" == "true" ]]; then
+        wpe_id=$(jq -r '.background.wallpaperEngineId // ""' "$CONFIG_FILE" 2>/dev/null)
+        wpe_assets=$(jq -r '.background.wallpaperEngineAssetsPath // ""' "$CONFIG_FILE" 2>/dev/null)
+        if [[ -n "$wpe_id" ]] && source=$(resolve_wpe_preview "$wpe_id" "$wpe_assets"); then
+            printf '%s' "$source"
+            return 0
+        fi
+        return 1
+    fi
+
+    case "${wallpaper,,}" in
+        *.mp4|*.mkv|*.webm|*.avi|*.mov|*.m4v|*.ogv)
+            thumbnail=$(jq -r '.background.thumbnailPath // ""' "$CONFIG_FILE" 2>/dev/null)
+            if [[ -f "$thumbnail" ]]; then
+                printf '%s' "$thumbnail"
+                return 0
+            fi
+            [[ -f "$wallpaper" ]] || return 1
+            TEMP_SOURCE="/tmp/ii-preset-video-${request_id}.jpg"
+            extract_first_frame "$wallpaper" "$TEMP_SOURCE" || return 1
+            printf '%s' "$TEMP_SOURCE"
+            return 0
+            ;;
+        *)
+            [[ -f "$wallpaper" ]] || return 1
+            printf '%s' "$wallpaper"
+            return 0
+            ;;
+    esac
+}
+
 is_current_request || exit 0
 [[ -f "$CONFIG_FILE" ]] || exit 1
 mkdir -p "$GENERATED_DIR" "$cache_dir"
@@ -46,6 +137,7 @@ enable_apps=$(jq -r '.appearance.wallpaperTheming.enableAppsAndShell // true' "$
 [[ "$enable_apps" == "true" ]] || exit 0
 
 wallpaper=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
+use_wpe=$(jq -r '.background.useWallpaperEngine // false' "$CONFIG_FILE" 2>/dev/null)
 accent=$(jq -r '.appearance.palette.accentColor // ""' "$CONFIG_FILE" 2>/dev/null)
 scheme=$(jq -r '.appearance.palette.type // "auto"' "$CONFIG_FILE" 2>/dev/null)
 
@@ -65,16 +157,18 @@ fi
 
 matugen_args=(--source-color-index 0)
 generate_args=()
+color_source=""
 
 if [[ "$accent" =~ ^#?[A-Fa-f0-9]{6}$ ]]; then
     matugen_args+=(color hex "$accent")
     generate_args+=(--color "$accent")
 else
-    if [[ ! -f "$wallpaper" ]]; then
-        exit 0
-    fi
-    matugen_args+=(image "$wallpaper")
-    generate_args+=(--path "$wallpaper")
+    # WPE/video presets need an image preview. Never feed a video or unrelated
+    # stale wallpaperPath directly into Matugen: if a safe source cannot be
+    # resolved, preserve the current palette and simply leave this preset cold.
+    color_source=$(resolve_color_source "$wallpaper" "$use_wpe") || exit 0
+    matugen_args+=(image "$color_source")
+    generate_args+=(--path "$color_source")
 fi
 
 allowed_scheme=0
@@ -83,10 +177,10 @@ case "$scheme" in
         allowed_scheme=1
         ;;
     auto|scheme-auto)
-        if [[ -f "$wallpaper" ]]; then
+        if [[ -n "$color_source" && -f "$color_source" ]]; then
             venv="${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-$XDG_STATE_HOME/quickshell/.venv}"
             if [[ -x "$venv/bin/python" ]]; then
-                detected=$("$venv/bin/python" "$COLOR_DIR/scheme_for_image.py" "$wallpaper" 2>/dev/null | tr -d '\n')
+                detected=$("$venv/bin/python" "$COLOR_DIR/scheme_for_image.py" "$color_source" 2>/dev/null | tr -d '\n')
                 case "$detected" in
                     scheme-content|scheme-expressive|scheme-fidelity|scheme-fruit-salad|scheme-monochrome|scheme-neutral|scheme-rainbow|scheme-tonal-spot|scheme-vibrant)
                         scheme="$detected"
