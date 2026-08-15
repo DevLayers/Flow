@@ -44,8 +44,18 @@ import qs.modules.ii.touchGestures
 Scope {
     id: root
 
-    property Component horizontalBarComponent: Component { Bar {} }
-    property Component overviewComponent: Component { Overview {} }
+    property Component horizontalBarComponent: defaultHorizontalBarComponent
+    property Component overviewComponent: defaultOverviewComponent
+
+    Component {
+        id: defaultHorizontalBarComponent
+        Bar {}
+    }
+
+    Component {
+        id: defaultOverviewComponent
+        Overview {}
+    }
 
     property bool barExtraCondition: true
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3
