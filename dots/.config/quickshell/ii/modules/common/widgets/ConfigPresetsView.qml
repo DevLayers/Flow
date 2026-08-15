@@ -20,20 +20,18 @@ ColumnLayout {
 
     Process {
         id: listPresetsProc
-        command: ["bash", "-c", `${Directories.scriptPath}/presets.sh list`]
+        command: [Directories.scriptPath + "/presets.sh", "list"]
         onRunningChanged: {
-            if (running) {
+            if (running)
                 presetsModel.clear();
-            }
         }
         stdout: SplitParser {
             onRead: data => {
-                let str = data.trim();
+                const str = data.trim();
                 if (!str)
                     return;
                 try {
-                    let obj = JSON.parse(str);
-                    presetsModel.append(obj);
+                    presetsModel.append(JSON.parse(str));
                 } catch (e) {
                     console.log("Failed to parse preset line:", e, str);
                 }
@@ -43,19 +41,16 @@ ColumnLayout {
 
     Process {
         id: importPresetProc
-        command: ["bash", "-c", `${Directories.scriptPath}/presets.sh import`]
+        command: [Directories.scriptPath + "/presets.sh", "import"]
         stdout: SplitParser {
             onRead: data => {
-                if (data.trim() === "success") {
+                if (data.trim() === "success")
                     refreshTimer.restart();
-                }
             }
         }
     }
 
-    Component.onCompleted: {
-        listPresetsProc.running = true;
-    }
+    Component.onCompleted: listPresetsProc.running = true
 
     ConfigRow {
         Layout.fillWidth: true
@@ -77,9 +72,10 @@ ColumnLayout {
             bottomLeftRadius: Appearance.rounding.full
             bottomRightRadius: Appearance.rounding.small
             Layout.fillHeight: true
-            enabled: presetNameInput.text.length > 0
+            enabled: presetNameInput.text.trim().length > 0 && !PresetManager.applying
             onClicked: {
-                Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh save "${presetNameInput.text}"`]);
+                const presetName = presetNameInput.text.trim();
+                Quickshell.execDetached([Directories.scriptPath + "/presets.sh", "save", presetName]);
                 refreshTimer.restart();
                 presetNameInput.text = "";
             }
@@ -93,6 +89,7 @@ ColumnLayout {
             bottomLeftRadius: Appearance.rounding.small
             bottomRightRadius: Appearance.rounding.full
             Layout.fillHeight: true
+            enabled: !PresetManager.applying
             onClicked: {
                 importPresetProc.running = false;
                 importPresetProc.running = true;
@@ -102,7 +99,7 @@ ColumnLayout {
 
     Timer {
         id: refreshTimer
-        interval: 500
+        interval: 300
         onTriggered: listPresetsProc.running = true
     }
 
@@ -178,9 +175,8 @@ ColumnLayout {
                         colBackground: "transparent"
                         colBackgroundHover: "transparent"
                         colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
-                        onClicked: {
-                            Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh load "${model.name}"`]);
-                        }
+                        enabled: !PresetManager.applying
+                        onClicked: PresetManager.apply(String(model.name))
                     }
 
                     ColumnLayout {
@@ -225,30 +221,31 @@ ColumnLayout {
                             }
 
                             RippleButton {
-                                    id: updateButton
-                                    anchors.right: exportButton.left
-                                    anchors.rightMargin: 5
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    implicitWidth: 30
-                                    implicitHeight: 30
-                                    buttonRadius: Appearance.rounding.full
-                                    colBackground: Appearance.colors.colTertiaryContainer
-                                    colBackgroundHover: Appearance.colors.colTertiaryContainerHover
-                                    colRipple: Appearance.colors.colTertiaryContainerActive
+                                id: updateButton
+                                anchors.right: exportButton.left
+                                anchors.rightMargin: 5
+                                anchors.verticalCenter: parent.verticalCenter
+                                implicitWidth: 30
+                                implicitHeight: 30
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Appearance.colors.colTertiaryContainer
+                                colBackgroundHover: Appearance.colors.colTertiaryContainerHover
+                                colRipple: Appearance.colors.colTertiaryContainerActive
+                                enabled: !PresetManager.applying
 
-                                    contentItem: MaterialSymbol {
+                                contentItem: MaterialSymbol {
                                     anchors.centerIn: parent
                                     text: "save"
                                     iconSize: 16
                                     color: Appearance.colors.colOnTertiaryContainer
                                 }
 
-                                    onClicked: {
-                                    Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh update "${model.name}"`]);
+                                onClicked: {
+                                    Quickshell.execDetached([Directories.scriptPath + "/presets.sh", "update", String(model.name)]);
                                     refreshTimer.restart();
                                 }
 
-                                    StyledToolTip {
+                                StyledToolTip {
                                     text: Translation.tr("Save settings to this preset")
                                 }
                             }
@@ -263,6 +260,7 @@ ColumnLayout {
                                 colBackground: Appearance.colors.colError
                                 colBackgroundHover: Appearance.colors.colErrorHover
                                 colRipple: Appearance.colors.colErrorActive
+                                enabled: !PresetManager.applying
 
                                 contentItem: MaterialSymbol {
                                     anchors.centerIn: parent
@@ -272,7 +270,7 @@ ColumnLayout {
                                 }
 
                                 onClicked: {
-                                    Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh delete "${model.name}"`]);
+                                    Quickshell.execDetached([Directories.scriptPath + "/presets.sh", "delete", String(model.name)]);
                                     refreshTimer.restart();
                                 }
 
@@ -292,6 +290,7 @@ ColumnLayout {
                                 colBackground: Appearance.colors.colPrimaryContainer
                                 colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                                 colRipple: Appearance.colors.colPrimaryContainerActive
+                                enabled: !PresetManager.applying
 
                                 contentItem: MaterialSymbol {
                                     anchors.centerIn: parent
@@ -300,9 +299,7 @@ ColumnLayout {
                                     color: Appearance.colors.colOnPrimaryContainer
                                 }
 
-                                onClicked: {
-                                    Quickshell.execDetached([Directories.scriptPath + "/presets.sh", "export", String(model.name)]);
-                                }
+                                onClicked: Quickshell.execDetached([Directories.scriptPath + "/presets.sh", "export", String(model.name)])
 
                                 StyledToolTip {
                                     text: Translation.tr("Export preset")
