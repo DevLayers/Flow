@@ -69,8 +69,6 @@ Item {
         id: firstCorner
         implicitSize: root.outerRadius
         color: root.fillColor
-        extendHorizontal: false
-        extendVertical: false
 
         corner: {
             if (root.isFirst) {
@@ -119,8 +117,6 @@ Item {
         id: lastCorner
         implicitSize: root.outerRadius
         color: root.fillColor
-        extendHorizontal: false
-        extendVertical: false
 
         corner: {
             if (root.isLast) {

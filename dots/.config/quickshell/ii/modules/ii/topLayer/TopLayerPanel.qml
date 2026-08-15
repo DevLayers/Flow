@@ -31,12 +31,10 @@ PanelWindow {
         right: true
     }
 
-    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && !(Config.options.bar.cornerStyle === 3 && !topPanel.barVertical) && hasBarOnThisMonitor
+    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && hasBarOnThisMonitor
     readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
     readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
-    readonly property real lockSlideDistance: topPanel.barVertical
-        ? Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding
-        : Appearance.sizes.barHeight + Appearance.rounding.screenRounding
+    readonly property real lockSlideDistance: topPanel.barVertical ? Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding : Appearance.sizes.barHeight + Appearance.rounding.screenRounding
     readonly property real lockSlideOffsetX: topPanel.barVertical ? (topPanel.barOnLeft ? -lockSlideDistance : lockSlideDistance) : 0
     readonly property real lockSlideOffsetY: topPanel.barVertical ? 0 : (topPanel.barBottom ? lockSlideDistance : -lockSlideDistance)
     readonly property real lockVisualOpacity: topPanel.usingWrappedFrame ? 1.0 - lockTransitionProgress : 1.0

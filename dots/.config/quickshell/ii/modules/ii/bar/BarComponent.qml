@@ -50,7 +50,6 @@ Item {
     property real oldX: x
     property real oldY: y
     property bool isReady: false
-    property bool layoutReady: false
     resources: [
         Translate {
             id: entryTranslation
@@ -136,7 +135,6 @@ Item {
             rootItem.oldX = rootItem.x;
             rootItem.oldY = rootItem.y;
             rootItem.isReady = true;
-            rootItem.layoutReady = true;
         }
     }
 
@@ -163,47 +161,7 @@ Item {
         return modelData.id === modeState._displayMode;
     }
 
-    readonly property bool hasLayoutContent: rootItem.widgetSelfVisible && (itemLoader.item ? itemLoader.item.visible : false)
-    readonly property real targetWidth: (hasLayoutContent && isWidgetVisibleInNotch && wrapper.implicitWidth > 0) ? wrapper.implicitWidth : 0
-    readonly property bool hasActiveLayoutContent: targetWidth > 0
-
-    // Radius boundaries must follow delegates that currently render content,
-    // not the persisted layout flags. A configured widget can stay in the
-    // model while its loaded component is invisible (for example, an idle timer).
-    readonly property bool hasActiveLeftNeighbor: {
-        const parentItem = rootItem.parent;
-        if (!parentItem || !parentItem.children)
-            return false;
-
-        const siblings = parentItem.children;
-        for (let i = 0; i < siblings.length; ++i) {
-            const sibling = siblings[i];
-            if (sibling === rootItem)
-                return false;
-            if (sibling && sibling.hasOwnProperty("hasActiveLayoutContent") && sibling.hasActiveLayoutContent)
-                return true;
-        }
-        return false;
-    }
-
-    readonly property bool hasActiveRightNeighbor: {
-        const parentItem = rootItem.parent;
-        if (!parentItem || !parentItem.children)
-            return false;
-
-        const siblings = parentItem.children;
-        let afterSelf = false;
-        for (let i = 0; i < siblings.length; ++i) {
-            const sibling = siblings[i];
-            if (sibling === rootItem) {
-                afterSelf = true;
-                continue;
-            }
-            if (afterSelf && sibling && sibling.hasOwnProperty("hasActiveLayoutContent") && sibling.hasActiveLayoutContent)
-                return true;
-        }
-        return false;
-    }
+    readonly property real targetWidth: (rootItem.widgetSelfVisible && (wrapper.itemIsVisible) && isWidgetVisibleInNotch && wrapper.implicitWidth > 0) ? wrapper.implicitWidth : 0
 
     implicitWidth: targetWidth
     Behavior on implicitWidth {
@@ -216,14 +174,14 @@ Item {
     }
 
     opacity: targetWidth > 0 ? 1.0 : 0.0
-    visible: !rootItem.layoutReady || (hasLayoutContent && (!isNotchMode || opacity > 0.01))
+    visible: opacity > 0.01
 
     readonly property bool isNotchMode: isNotchActive && !isNotchExpanded
 
     states: [
         State {
             name: "visible"
-            when: rootItem.isNotchMode && rootItem.isWidgetVisibleInNotch
+            when: !rootItem.isNotchMode || rootItem.isWidgetVisibleInNotch
             PropertyChanges {
                 target: verticalTranslation
                 y: 0
@@ -395,8 +353,6 @@ Item {
             sourceComponent: resolveComponent(modelData.id, rootItem.vertical, rootItem.widgetStyle)
             onLoaded: {
                 if (item) {
-                    rootItem.layoutReady = false;
-                    readyTimer.restart();
                     if (item.hasOwnProperty("onActivatedColor")) {
                         item.onActivatedColor = Qt.binding(() => groupTheme.colOnBackgroundHighlight);
                     }
@@ -563,8 +519,6 @@ Item {
         activated: itemLoader.item?.activated ?? false
         activeTheme: rootItem.activeTheme
         widgetId: modelData.id
-        hasActiveLeftNeighbor: rootItem.hasActiveLeftNeighbor
-        hasActiveRightNeighbor: rootItem.hasActiveRightNeighbor
     }
 
     // ── Widget Components ─────────────────────────────────────────────────────

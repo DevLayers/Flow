@@ -16,6 +16,22 @@ Item {
     // ── Active sub-page URL ("" = none) ───────────────────────────────────
     property alias activeSubPage: subPageOverlay.activeSubPage
 
+    property string autoSwitchNoticeMessage: ""
+
+    Timer {
+        id: autoSwitchNoticeTimer
+        interval: 6000
+        repeat: false
+        onTriggered: {
+            barConfigRoot.autoSwitchNoticeMessage = "";
+        }
+    }
+
+    function triggerAutoSwitchNotice(msg: string) {
+        autoSwitchNoticeMessage = msg;
+        autoSwitchNoticeTimer.restart();
+    }
+
     function openWidgetPage(componentId) {
         page.openWidgetPage(componentId);
     }
@@ -69,6 +85,9 @@ Item {
 
                     currentValue: Config.options.sidebar.sidebarStyle
                     onSelected: (newValue) => {
+                        if (newValue === "connect" && Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) {
+                            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island at top/bottom is incompatible with Connect mode. Bar corner style was automatically set to Hug."));
+                        }
                         ShellModePolicy.setMode(newValue);
                     }
                     options: {
@@ -88,6 +107,13 @@ Item {
                     }
                 }
 
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: barConfigRoot.autoSwitchNoticeMessage.length > 0
+                materialIcon: "info"
+                text: barConfigRoot.autoSwitchNoticeMessage
             }
 
             NoticeBox {
@@ -134,8 +160,11 @@ Item {
                 ConfigSelectionArray {
                     currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
                     onSelected: (newValue) => {
-                        Config.options.bar.bottom = (newValue & 1) !== 0;
-                        Config.options.bar.vertical = (newValue & 2) !== 0;
+                        const isVertical = (newValue & 2) !== 0;
+                        if (!isVertical && Config.options.bar.cornerStyle === 3 && Config.options.sidebar.sidebarStyle === "connect") {
+                            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island is only supported in vertical orientation in Connect mode. Shell mode was automatically switched to Default."));
+                        }
+                        ShellModePolicy.setBarPosition(newValue);
                     }
                     options: {
                         const locked = ShellModePolicy.barPositionLocked;
@@ -209,6 +238,10 @@ Item {
 
                     currentValue: Config.options.bar.cornerStyle
                     onSelected: (newValue) => {
+                        if (newValue === 3 && !Config.options.bar.vertical && Config.options.sidebar.sidebarStyle === "connect") {
+                            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island at top/bottom cannot be used in Connect mode. Shell mode was automatically switched to Default."));
+                            Config.options.sidebar.sidebarStyle = "default";
+                        }
                         Config.options.bar.cornerStyle = newValue;
                     }
                     options: {

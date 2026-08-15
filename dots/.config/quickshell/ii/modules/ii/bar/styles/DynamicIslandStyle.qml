@@ -190,7 +190,9 @@ Item {
             return baseWidth;
         }
 
-        property real baseRadius: Math.min(height / 2, Appearance.rounding.windowRounding + 12)
+        readonly property real availableIslandHeight: Math.max(0, height - root.frameThickness)
+        readonly property real islandRadius: Math.min(Appearance.rounding.screenRounding, Math.floor(availableIslandHeight / 2))
+        property real baseRadius: islandRadius
         topLeftRadius: !Config.options.bar.bottom ? 0 : baseRadius
         topRightRadius: !Config.options.bar.bottom ? 0 : baseRadius
         bottomLeftRadius: Config.options.bar.bottom ? 0 : baseRadius
@@ -544,11 +546,9 @@ Item {
     // line when transparency is enabled.
     RoundCorner {
         anchors.top: barBackground.top
+        anchors.topMargin: root.frameThickness
         anchors.right: barBackground.left
-        anchors.rightMargin: 0
-        extendHorizontal: true
-        extendVertical: true
-        implicitSize: barBackground.baseRadius
+        implicitSize: barBackground.islandRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.TopRight
         visible: root.showBarBackground && !Config.options.bar.bottom
@@ -559,15 +559,12 @@ Item {
                 easing.type: Easing.OutCubic
             }
         }
-        anchors.topMargin: root.frameThickness
     }
     RoundCorner {
         anchors.top: barBackground.top
+        anchors.topMargin: root.frameThickness
         anchors.left: barBackground.right
-        anchors.leftMargin: 0
-        extendHorizontal: true
-        extendVertical: true
-        implicitSize: barBackground.baseRadius
+        implicitSize: barBackground.islandRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.TopLeft
         visible: root.showBarBackground && !Config.options.bar.bottom
@@ -578,15 +575,12 @@ Item {
                 easing.type: Easing.OutCubic
             }
         }
-        anchors.topMargin: root.frameThickness
     }
     RoundCorner {
         anchors.bottom: barBackground.bottom
+        anchors.bottomMargin: root.frameThickness
         anchors.right: barBackground.left
-        anchors.rightMargin: 0
-        extendHorizontal: true
-        extendVertical: true
-        implicitSize: barBackground.baseRadius
+        implicitSize: barBackground.islandRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.BottomRight
         visible: root.showBarBackground && Config.options.bar.bottom
@@ -597,15 +591,12 @@ Item {
                 easing.type: Easing.OutCubic
             }
         }
-        anchors.bottomMargin: root.frameThickness
     }
     RoundCorner {
         anchors.bottom: barBackground.bottom
+        anchors.bottomMargin: root.frameThickness
         anchors.left: barBackground.right
-        anchors.leftMargin: 0
-        extendHorizontal: true
-        extendVertical: true
-        implicitSize: barBackground.baseRadius
+        implicitSize: barBackground.islandRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.BottomLeft
         visible: root.showBarBackground && Config.options.bar.bottom
@@ -616,6 +607,8 @@ Item {
                 easing.type: Easing.OutCubic
             }
         }
-        anchors.bottomMargin: root.frameThickness
     }
 }
+
+
+

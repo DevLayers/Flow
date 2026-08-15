@@ -68,7 +68,6 @@ Scope {
             activityRevealTimer.restart();
     }
 
-
     function revealForActivity(duration) {
         if (!autoHideActive)
             return;
@@ -102,7 +101,7 @@ Scope {
 
     readonly property bool isOverviewVisible: root.searchActive && LauncherSearch.query === "" && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config && Config.options && Config.options.overview && Config.options.overview.enable !== undefined ? Config.options.overview.enable : true)
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
-    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) && (!Config.options.bar.onlyShowOnSingleMonitor || hasBarOnThisMonitor)
+    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && (!Config.options.bar.onlyShowOnSingleMonitor || hasBarOnThisMonitor)
     readonly property bool hasBarOnThisMonitor: GlobalStates.isScreenAllowedForBar(win.screen)
     readonly property bool hasTopBar: GlobalStates.barOpen && !Config.options.bar.vertical && !Config.options.bar.bottom && hasBarOnThisMonitor
 

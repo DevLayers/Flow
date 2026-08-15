@@ -14,14 +14,12 @@ QtObject {
     id: root
 
     // ── Inputs ────────────────────────────────────────────────────────────────
-    required property var  screen
+    required property var screen
     required property bool hasActiveWindows
 
     // ── Background ────────────────────────────────────────────────────────────
     readonly property bool showBarBackground: {
-        return (root.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2)
-            || Config.options.bar.barBackgroundStyle === 1
-            || Config.options.bar.barBackgroundStyle === 3;
+        return (root.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2) || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3;
     }
 
     // ── Bar style ─────────────────────────────────────────────────────────────
@@ -29,35 +27,25 @@ QtObject {
 
     // ── Search ────────────────────────────────────────────────────────────────
     readonly property bool isSearchActiveHere: {
-        return GlobalStates.overviewOpen
-            && (root.screen ? GlobalStates.activeSearchMonitor === root.screen.name : false);
+        return GlobalStates.overviewOpen && (root.screen ? GlobalStates.activeSearchMonitor === root.screen.name : false);
     }
 
-    readonly property bool isSearchClipboardMode:
-        LauncherSearch.query.startsWith(Config.options.search.prefix.clipboard)
-    readonly property bool isSearchBluetoothMode:
-        LauncherSearch.query.startsWith(Config.options.search.prefix.bluetooth)
-    readonly property bool isSearchTranslatorMode:
-        LauncherSearch.query.startsWith(Config.options.search.prefix.translator)
+    readonly property bool isSearchClipboardMode: LauncherSearch.query.startsWith(Config.options.search.prefix.clipboard)
+    readonly property bool isSearchBluetoothMode: LauncherSearch.query.startsWith(Config.options.search.prefix.bluetooth)
+    readonly property bool isSearchTranslatorMode: LauncherSearch.query.startsWith(Config.options.search.prefix.translator)
     readonly property bool isSearchMediaDownloaderMode: {
-        return Config.options.mediaDownloader.enabled
-            && LauncherSearch.query.startsWith(Config.options.search.prefix.mediaDownloader);
+        return Config.options.mediaDownloader.enabled && LauncherSearch.query.startsWith(Config.options.search.prefix.mediaDownloader);
     }
     readonly property bool isSearchSpecialMode: {
-        return root.isSearchClipboardMode || root.isSearchBluetoothMode
-            || root.isSearchTranslatorMode || root.isSearchMediaDownloaderMode;
+        return root.isSearchClipboardMode || root.isSearchBluetoothMode || root.isSearchTranslatorMode || root.isSearchMediaDownloaderMode;
     }
 
     readonly property real expectedSearchWidth: {
-        return root.isSearchSpecialMode
-            ? (Config.options.search.clipboard.panelWidth ?? 860) + 48
-            : Config.options.search.baseWidth + 48;
+        return root.isSearchSpecialMode ? (Config.options.search.clipboard.panelWidth ?? 860) + 48 : Config.options.search.baseWidth + 48;
     }
 
     // ── Frame ─────────────────────────────────────────────────────────────────
     readonly property real frameThickness: {
-        return (Config.options.appearance.fakeScreenRounding === 3 && Config.options.bar.cornerStyle !== 3)
-            ? Config.options.appearance.wrappedFrameThickness
-            : 0;
+        return (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : 0;
     }
 }
