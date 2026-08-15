@@ -9,59 +9,82 @@ import Quickshell.Hyprland
 
 /**
  * Automatically reloads generated material colors.
- * It is necessary to run reapplyTheme() on startup because Singletons are lazily loaded.
+ *
+ * File notifications can arrive more than once for one atomic replace. Keep a
+ * single scheduled apply and fingerprint the payload so a preset switch cannot
+ * fan out into two complete Appearance.m3colors invalidation waves.
  */
 Singleton {
     id: root
     property string filePath: Directories.generatedMaterialThemePath
+    property string lastAppliedContent: ""
+    property int retryCount: 0
 
     function reapplyTheme() {
+        root.lastAppliedContent = "";
         themeFileView.reload();
+    }
+
+    function normalizedColor(value) {
+        return String(value ?? "").trim().toLowerCase();
     }
 
     function applyColors(fileContent) {
         try {
-            if (!fileContent || fileContent.trim() === "") {
-                console.log("[MaterialThemeLoader] applyColors: empty content, skipping")
+            const content = String(fileContent || "").trim();
+            if (!content) {
+                console.log("[MaterialThemeLoader] applyColors: empty content, skipping");
                 return;
             }
+            if (content === root.lastAppliedContent)
+                return;
 
-            const json = JSON.parse(fileContent)
-            const skip = { "darkmode": true, "transparent": true }
+            const json = JSON.parse(content);
+            const skip = { "darkmode": true, "transparent": true };
+            let changed = 0;
+
             for (const key in json) {
-                if (json.hasOwnProperty(key) && !skip[key]) {
-                    Appearance.m3colors[root._toM3Key(key)] = json[key]
-                }
+                if (!json.hasOwnProperty(key) || skip[key])
+                    continue;
+
+                const propertyName = root._toM3Key(key);
+                const nextValue = json[key];
+                if (root.normalizedColor(Appearance.m3colors[propertyName]) === root.normalizedColor(nextValue))
+                    continue;
+
+                Appearance.m3colors[propertyName] = nextValue;
+                changed++;
             }
 
-            root.updateDarkMode(json)
-            console.log("[MaterialThemeLoader] applyColors: darkmode=", Appearance.m3colors.darkmode, "bg=", Appearance.m3colors.m3background)
+            root.updateDarkMode(json);
+            root.lastAppliedContent = content;
+            console.log("[MaterialThemeLoader] applied", changed, "changed colors; darkmode=", Appearance.m3colors.darkmode);
         } catch (e) {
-            console.log("[MaterialThemeLoader] Error parsing colors.json:", e)
+            console.log("[MaterialThemeLoader] Error parsing colors.json:", e);
         }
     }
 
     function updateDarkMode(json) {
+        let nextDarkMode = null;
         if (typeof json.darkmode === "boolean") {
-            Appearance.m3colors.darkmode = json.darkmode;
-            return;
+            nextDarkMode = json.darkmode;
+        } else {
+            const background = json.background ?? json.surface;
+            if (background !== undefined && background !== null && background !== "")
+                nextDarkMode = Qt.color(background).hslLightness < 0.5;
         }
 
-        const background = json.background ?? json.surface;
-        if (background !== undefined && background !== null && background !== "") {
-            Appearance.m3colors.darkmode = Qt.color(background).hslLightness < 0.5;
-        }
+        if (nextDarkMode !== null && Appearance.m3colors.darkmode !== nextDarkMode)
+            Appearance.m3colors.darkmode = nextDarkMode;
     }
 
     function _toM3Key(key) {
-        const camelCaseKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase())
-        return `m3${camelCaseKey}`
+        const camelCaseKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+        return `m3${camelCaseKey}`;
     }
 
-    property int retryCount: 0
-
     function resetFilePathNextTime() {
-        resetFilePathNextWallpaperChange.enabled = true
+        resetFilePathNextWallpaperChange.enabled = true;
     }
 
     Connections {
@@ -69,9 +92,9 @@ Singleton {
         enabled: false
         target: Config.options.background
         function onWallpaperPathChanged() {
-            root.filePath = ""
-            root.filePath = Directories.generatedMaterialThemePath
-            resetFilePathNextWallpaperChange.enabled = false
+            root.filePath = "";
+            root.filePath = Directories.generatedMaterialThemePath;
+            resetFilePathNextWallpaperChange.enabled = false;
         }
     }
 
@@ -82,49 +105,42 @@ Singleton {
         running: false
         onTriggered: {
             if (root.retryCount < 5) {
-                root.retryCount++
-                console.log("[MaterialThemeLoader] Retrying file reload, attempt:", root.retryCount)
-                themeFileView.reload()
+                root.retryCount++;
+                themeFileView.reload();
             } else {
-                console.log("[MaterialThemeLoader] Max retries reached, resetting path to re-establish watch")
-                root.filePath = ""
-                root.filePath = Directories.generatedMaterialThemePath
-                root.retryCount = 0
+                console.log("[MaterialThemeLoader] Max retries reached, resetting file watch");
+                root.filePath = "";
+                root.filePath = Directories.generatedMaterialThemePath;
+                root.retryCount = 0;
             }
         }
     }
 
+    // Coalesce FileView's file-changed/load signals into exactly one apply on
+    // the next event-loop turn. Atomic preset cache copies no longer need the
+    // old second delayed read.
     Timer {
-        id: delayedFileRead
-        interval: Config.options?.hacks?.arbitraryRaceConditionDelay ?? 100
+        id: applyTimer
+        interval: 0
         repeat: false
         running: false
-        onTriggered: {
-            root.applyColors(themeFileView.text())
-        }
+        onTriggered: root.applyColors(themeFileView.text())
     }
 
     FileView {
         id: themeFileView
         path: Qt.resolvedUrl(root.filePath)
         watchChanges: true
-        onFileChanged: {
-            console.log("[MaterialThemeLoader] onFileChanged triggered, reloading...")
-            this.reload();
-            delayedFileRead.restart();
+
+        onFileChanged: themeFileView.reload()
+
+        onLoaded: {
+            root.retryCount = 0;
+            retryTimer.stop();
+            applyTimer.restart();
         }
-        onLoadedChanged: {
-            console.log("[MaterialThemeLoader] onLoadedChanged, loaded=", themeFileView.loaded)
-            if (themeFileView.loaded) {
-                root.retryCount = 0
-                retryTimer.stop()
-                root.applyColors(themeFileView.text())
-            }
-        }
-        onLoadFailed: {
-            console.log("[MaterialThemeLoader] onLoadFailed, starting retry timer")
-            retryTimer.start()
-        }
+
+        onLoadFailed: retryTimer.start()
     }
 
     function toggleLightDark() {
@@ -150,10 +166,7 @@ Singleton {
     GlobalShortcut {
         name: "toggleLightDark"
         description: "Toggles between dark theme and light theme"
-
-        onPressed: {
-            root.toggleLightDark();
-        }
+        onPressed: root.toggleLightDark()
     }
 
     IpcHandler {
