@@ -44,9 +44,9 @@ case $action in
             
             # Read colorEngine from the newly expanded config.json to run the correct script
             color_engine=$(jq -r '.appearance.colorEngine // "vynx"' "$CONFIG_FILE" 2>/dev/null)
-            switch_script="switchwall_vynx.sh"
+            switch_script="switchwall.sh"
             if [[ "$color_engine" == "fork" ]]; then
-                switch_script="switchwall.sh"
+                switch_script="switchwall_vynx.sh"
             fi
             
             # Apply wallpaper and colors from the newly loaded config
