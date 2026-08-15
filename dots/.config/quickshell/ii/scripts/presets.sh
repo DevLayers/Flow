@@ -121,17 +121,29 @@ write_status() {
     mv -f -- "$tmp" "$STATUS_FILE"
 }
 
+generator_process_matches() {
+    local pid="$1"
+    [[ "$pid" =~ ^[0-9]+$ && -r "/proc/$pid/cmdline" ]] || return 1
+    tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | grep -Fxq "$SCRIPTS_DIR/preset_generate_theme.sh"
+}
+
 cancel_previous_generator() {
     [[ -f "$GENERATOR_PID_FILE" ]] || return 0
     local old_request old_pid
     IFS=$'\t' read -r old_request old_pid < "$GENERATOR_PID_FILE" || true
-    if [[ "$old_pid" =~ ^[0-9]+$ && "$old_request" != "$request_id" ]]; then
+
+    # PID files outlive processes if a generator is superseded before its EXIT
+    # trap can clean up. Verify the PID still belongs to our exact warmup script
+    # before ever signalling its process group; this makes PID reuse harmless.
+    if [[ "$old_request" != "$request_id" ]] && generator_process_matches "$old_pid"; then
         kill -- "-$old_pid" >/dev/null 2>&1 || true
         for _ in {1..10}; do
-            kill -0 "$old_pid" >/dev/null 2>&1 || break
+            generator_process_matches "$old_pid" || break
             sleep 0.01
         done
-        kill -KILL -- "-$old_pid" >/dev/null 2>&1 || true
+        if generator_process_matches "$old_pid"; then
+            kill -KILL -- "-$old_pid" >/dev/null 2>&1 || true
+        fi
     fi
     rm -f -- "$GENERATOR_PID_FILE"
 }
@@ -147,6 +159,12 @@ start_cache_warmup() {
     local generator_pid=$!
     printf '%s\t%s\n' "$request_id" "$generator_pid" > "${GENERATOR_PID_FILE}.tmp.$$"
     mv -f -- "${GENERATOR_PID_FILE}.tmp.$$" "$GENERATOR_PID_FILE"
+
+    # If it exited in the tiny spawn→pidfile race, do not leave a stale PID for
+    # the next switch. A running generator removes its own matching entry.
+    if ! generator_process_matches "$generator_pid"; then
+        rm -f -- "$GENERATOR_PID_FILE"
+    fi
 }
 
 case "$action" in
