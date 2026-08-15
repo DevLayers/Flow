@@ -51,6 +51,20 @@ Item {
                     text: Translation.tr("Click button text to configure parallax movement directions, sidebars, and intensity.")
                 }
             }
+
+            ConfigSlider {
+                buttonIcon: "loupe"
+                text: Translation.tr("Preferred wallpaper zoom (%)")
+                enabled: !page.videoWallpaper
+                usePercentTooltip: true
+                from: 100
+                to: 150
+                stepSize: 1
+                value: Math.round((Config.options.background.parallax.workspaceZoom ?? 1.07) * 100)
+                onValueChanged: {
+                    Config.options.background.parallax.workspaceZoom = value / 100;
+                }
+            }
         }
 
         ContentSection {
