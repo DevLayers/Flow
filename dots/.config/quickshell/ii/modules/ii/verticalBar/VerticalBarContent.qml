@@ -133,7 +133,7 @@ Item { // Bar content region
             }
         }
 
-        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow
+        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -188,7 +188,7 @@ Item { // Bar content region
         radius: Appearance.rounding.full
 
         // GPU: only allocate FBO when island is actually visible (no widgets = invisible = no shadow needed)
-        layer.enabled: topIsland.visible && Config.options.bar.dropShadow
+        layer.enabled: topIsland.visible && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -219,7 +219,7 @@ Item { // Bar content region
         radius: Appearance.rounding.full
 
         // GPU: only allocate FBO when island is actually visible
-        layer.enabled: middleIsland.visible && Config.options.bar.dropShadow
+        layer.enabled: middleIsland.visible && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -250,7 +250,7 @@ Item { // Bar content region
         radius: Appearance.rounding.full
 
         // GPU: only allocate FBO when island is actually visible
-        layer.enabled: bottomIsland.visible && Config.options.bar.dropShadow
+        layer.enabled: bottomIsland.visible && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -272,7 +272,7 @@ Item { // Bar content region
         role: "first"
         fillColor: barBackground.actualColor
 
-        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -297,7 +297,7 @@ Item { // Bar content region
         role: "middle"
         fillColor: barBackground.actualColor
 
-        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -323,7 +323,7 @@ Item { // Bar content region
         role: "last"
         fillColor: barBackground.actualColor
 
-        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)

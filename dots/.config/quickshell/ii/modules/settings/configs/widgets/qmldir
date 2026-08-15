@@ -15,3 +15,5 @@ WeatherLocationCard 1.0 WeatherLocationCard.qml
 TouchGestureStatusCard 1.0 TouchGestureStatusCard.qml
 TouchGestureBindingCard 1.0 TouchGestureBindingCard.qml
 TouchGestureScreenPreview 1.0 TouchGestureScreenPreview.qml
+OsdPreviewCard 1.0 OsdPreviewCard.qml
+OsdPositionPicker 1.0 OsdPositionPicker.qml

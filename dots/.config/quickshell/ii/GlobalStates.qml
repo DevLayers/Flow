@@ -411,6 +411,33 @@ Singleton {
         }
     }
 
+    IpcHandler {
+        target: "osd"
+
+        function trigger(): void {
+            root.osdCurrentIndicator = "volume";
+            root.osdVolumeOpen = true;
+            root.osdInteraction();
+        }
+
+        function toggle(): void {
+            root.osdVolumeOpen = !root.osdVolumeOpen;
+            if (root.osdVolumeOpen) {
+                root.osdInteraction();
+            }
+        }
+
+        function hide(): void {
+            root.osdVolumeOpen = false;
+        }
+
+        function open(): void {
+            root.osdCurrentIndicator = "volume";
+            root.osdVolumeOpen = true;
+            root.osdInteraction();
+        }
+    }
+
     GlobalShortcut {
         name: "settingsToggle"
         description: "Toggles the settings window"

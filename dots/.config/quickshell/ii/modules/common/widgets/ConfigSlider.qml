@@ -16,6 +16,7 @@ Rectangle {
     property alias stepSize: slider.stepSize
     property alias snapMode: slider.snapMode
     property alias tooltipContent: slider.tooltipContent
+    property alias pressed: slider.pressed
     property real textWidth: 180
 
     Layout.fillWidth: true

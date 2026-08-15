@@ -150,12 +150,15 @@ Scope {
             return;
         if (Config.ready && Config.options.osd && Config.options.osd.hideWhenFullscreen && Notifications.focusedWindowFullscreen)
             return;
-        // If the OSD was fully closed (not just closing), reset expansion state
-        // so the next open always starts collapsed. This prevents stale state
-        // from a previous session when the Loader reuses the same PanelWindow.
-        if (!GlobalStates.osdVolumeOpen && osdLoader.item) {
-            osdLoader.item.isExpanded = false;
-            osdLoader.item.expandedProgress = 0.0;
+        if (!root.currentIndicator)
+            root.currentIndicator = "volume";
+        root.isClosing = false;
+        if (osdLoader.item) {
+            osdLoader.item.openedProgress = 1.0;
+            if (!GlobalStates.osdVolumeOpen) {
+                osdLoader.item.isExpanded = false;
+                osdLoader.item.expandedProgress = 0.0;
+            }
         }
         GlobalStates.osdVolumeOpen = true;
         osdTimeout.restart();

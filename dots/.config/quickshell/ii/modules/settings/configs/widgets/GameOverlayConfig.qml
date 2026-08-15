@@ -145,6 +145,64 @@ ContentPage {
     }
 
     ContentSection {
+        title: Translation.tr("Media Overlay")
+        icon: "play_circle"
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            ConfigSwitch {
+                buttonIcon: "linear_scale"
+                text: Translation.tr("Show slider")
+                checked: Config.options.overlay.media.showSlider
+                onCheckedChanged: {
+                    Config.options.overlay.media.showSlider = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Display playback progress slider in media overlay")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "opacity"
+                text: Translation.tr("Background opacity (%)")
+                value: Config.options.overlay.media.backgroundOpacityPercentage
+                from: 0
+                to: 100
+                stepSize: 5
+                onValueChanged: {
+                    Config.options.overlay.media.backgroundOpacityPercentage = value;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "gradient"
+                text: Translation.tr("Use lyrics gradient masking")
+                checked: Config.options.overlay.media.useGradientMask
+                onCheckedChanged: {
+                    Config.options.overlay.media.useGradientMask = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Apply smooth gradient masking on synchronized lyrics")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "format_size"
+                text: Translation.tr("Lyrics font size")
+                value: Config.options.overlay.media.lyricSize
+                from: 10
+                to: 100
+                stepSize: 1
+                onValueChanged: {
+                    Config.options.overlay.media.lyricSize = value;
+                }
+            }
+        }
+    }
+
+    ContentSection {
         title: Translation.tr("Notes")
         icon: "sticky_note_2"
 

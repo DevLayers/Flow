@@ -458,14 +458,23 @@ Item {
             ConfigSwitch {
                 buttonIcon: "filter_drama"
                 text: Translation.tr("Bar drop-shadow")
-                checked: Config.options.bar.dropShadow
+                enabled: !ShellModePolicy.barDropShadowBlocked
+                checked: Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
                 onCheckedChanged: {
-                    Config.options.bar.dropShadow = checked;
+                    if (!ShellModePolicy.barDropShadowBlocked)
+                        Config.options.bar.dropShadow = checked;
                 }
 
                 StyledToolTip {
                     text: Translation.tr("Shows a soft drop shadow underneath the status bar")
                 }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: ShellModePolicy.barDropShadowBlocked
+                materialIcon: "lock"
+                text: Translation.tr("Bar drop-shadow is disabled while Connect mode and transparency are both active to keep the bar color consistent with Sidebar Policies.")
             }
 
             ContentSubsection {

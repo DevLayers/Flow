@@ -48,7 +48,7 @@ Item {
 
         Behavior on radius { NumberAnimation { duration: 450; easing.type: Easing.OutExpo } }
 
-        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow
+        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -59,7 +59,7 @@ Item {
 
     Rectangle {
         id: bottomShadowGradient
-        visible: !root.isIslandMode && Config.options.bar.dropShadow && !Config.options.bar.autoHide.enable
+        visible: !root.isIslandMode && Config.options.bar.dropShadow && !Config.options.bar.autoHide.enable && !ShellModePolicy.barDropShadowBlocked
         anchors {
             bottom: barBackground.bottom
             left: barBackground.left
@@ -89,7 +89,7 @@ Item {
         color: root.islandFillColor
         radius: Appearance.rounding.full
 
-        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -113,7 +113,7 @@ Item {
         color: root.islandFillColor
         radius: Appearance.rounding.full
 
-        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -137,7 +137,7 @@ Item {
         color: root.islandFillColor
         radius: Appearance.rounding.full
 
-        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)

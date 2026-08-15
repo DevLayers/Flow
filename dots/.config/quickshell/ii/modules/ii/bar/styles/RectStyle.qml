@@ -38,7 +38,7 @@ Item {
         color: root.actualColor
         radius: 0
 
-        layer.enabled: Config.options.bar.dropShadow
+        layer.enabled: Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -49,7 +49,7 @@ Item {
 
     Rectangle {
         id: bottomShadowGradient
-        visible: Config.options.bar.dropShadow && !Config.options.bar.autoHide.enable
+        visible: Config.options.bar.dropShadow && !Config.options.bar.autoHide.enable && !ShellModePolicy.barDropShadowBlocked
         anchors {
             bottom: barBackground.bottom
             left: barBackground.left

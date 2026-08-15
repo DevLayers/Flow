@@ -98,7 +98,7 @@ Item {
             horizontalCenter: parent.horizontalCenter
         }
 
-        layer.enabled: Config.options.bar.dropShadow
+        layer.enabled: Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.smooth: true
         layer.effect: MultiEffect {
             shadowEnabled: true
@@ -609,6 +609,4 @@ Item {
         }
     }
 }
-
-
 

@@ -48,6 +48,11 @@ QtObject {
     readonly property bool osdStyleEditable: root.effectiveMode !== "connect"
     readonly property bool connectModeActive: root.effectiveMode === "connect"
 
+    // A transparent Connect bar cannot use its drop shadow without changing
+    // the apparent color of the shared colLayer0 surface.
+    readonly property bool barDropShadowBlocked:
+        root.connectModeActive && Config.options.appearance.transparency.enable
+
     readonly property string defaultBlockedReasonKey: root.floatingNotchActive
         && root.effectiveMode === "connect"
         ? "Disable Floating Dynamic Island first"
