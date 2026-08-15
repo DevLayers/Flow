@@ -100,7 +100,8 @@ RippleButton {
             ]);
         } else {
             Config.options.appearance.palette.type = colorScheme;
-            ColorSchemeApplyService.request(colorScheme);
+            Config.saveOptionsNow();
+            Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --noswitch`]);
         }
     }
 

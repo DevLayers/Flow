@@ -37,19 +37,6 @@ handle_kde_material_you_colors() {
     "$XDG_CONFIG_HOME"/matugen/templates/kde/kde-material-you-colors-wrapper.sh --scheme-variant "$kde_scheme_variant"
 }
 
-request_shell_theme_reload() {
-    # FileView normally notices colors.json, but an atomic inode replacement can
-    # be missed on some Quickshell/filesystem combinations. Ask the running shell
-    # to recreate its watcher after the generated file is complete.
-    if ! command -v qs >/dev/null 2>&1; then
-        echo "[switchwall.sh] Warning: qs not found; relying on the colors.json watcher" >&2
-        return 0
-    fi
-    if ! qs -c ii ipc call theme reapplyTheme 2>/dev/null; then
-        echo "[switchwall.sh] Warning: could not request Quickshell theme reload" >&2
-    fi
-}
-
 pre_process() {
     local mode_flag="$1"
     # Set GNOME color-scheme if mode_flag is dark or light
@@ -655,7 +642,6 @@ done"
         mkdir -p "$(dirname "$STATE_DIR/user/generated/colors.json")"
         cp "$theme_file" "$STATE_DIR/user/generated/colors.json"
         echo "[switchwall.sh] Applied theme: $type_flag"
-        request_shell_theme_reload
         python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
         "$SCRIPT_DIR"/applycolor.sh
     else
@@ -664,7 +650,6 @@ done"
             echo "[switchwall.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
             python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
         fi
-        request_shell_theme_reload
         python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
         if python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
