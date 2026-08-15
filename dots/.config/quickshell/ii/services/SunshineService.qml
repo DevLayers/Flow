@@ -178,7 +178,7 @@ Singleton {
             root.pairedClients = devices.map(device => ({
                 name: device.name || "Moonlight device",
                 uuid: device.uuid || "",
-                enabled: device.enabled !== false
+                enabled: root.parseBool(device.enabled, true)
             }));
         } catch (error) {
             console.warn("[SunshineService] Could not parse paired clients:", error);
