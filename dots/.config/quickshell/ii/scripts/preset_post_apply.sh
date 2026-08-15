@@ -36,9 +36,15 @@ if [[ -f "$COLORS_FILE" ]]; then
 fi
 
 # Terminal/OpenRGB application uses the already cached SCSS and is intentionally
-# detached from the visual transition.
-if [[ -f "$GENERATED_DIR/material_colors.scss" ]]; then
-    "$SCRIPT_DIR/colors/applycolor.sh" >/dev/null 2>&1 &
+# detached from the visual transition. Keep parity with the preset's selected
+# color engine instead of always using the default applycolor backend.
+color_engine=$(jq -r '.appearance.colorEngine // "vynx"' "$CONFIG_FILE" 2>/dev/null)
+applycolor_script="$SCRIPT_DIR/colors/applycolor.sh"
+if [[ "$color_engine" == "fork" ]]; then
+    applycolor_script="$SCRIPT_DIR/colors/applycolor_vynx.sh"
+fi
+if [[ -f "$GENERATED_DIR/material_colors.scss" && -f "$applycolor_script" ]]; then
+    bash "$applycolor_script" >/dev/null 2>&1 &
 fi
 
 is_current_request || exit 0
