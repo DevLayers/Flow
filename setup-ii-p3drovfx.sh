@@ -1490,6 +1490,30 @@ start_quickshell() {
     return 0
 }
 
+open_welcome_after_start() {
+    local attempt
+    local ipc_bin=""
+
+    if have qs; then
+        ipc_bin="qs"
+    elif have quickshell; then
+        ipc_bin="quickshell"
+    else
+        ui_warn "Welcome couldn't be opened via IPC, you can open it using SUPER + ALT + SHIFT + /."
+        return 0
+    fi
+
+    for attempt in {1..50}; do
+        if "$ipc_bin" -c ii ipc call welcome open >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 0.2
+    done
+
+    ui_warn "Welcome couldn't be opened via IPC, you can open it using SUPER + ALT + SHIFT + /."
+    return 0
+}
+
 restart_quickshell() {
     [[ "$OPT_RESTART" == true ]] || {
         ui_note "Restart skipped (--no-restart)."
@@ -1864,30 +1888,18 @@ apply_config() {
 
     handle_base_config "$verb"
 
-    # The in-process FirstRunExperience owns the Welcome launch. Keep the
-    # marker in the same XDG state tree that Directories.state reads, and only
-    # clear it for an explicit install or a first deployment through bare
-    # `apply`. A pre-existing directory is not enough to classify an apply as
-    # an update: the base installer and manual fork swaps can leave that
-    # directory in place without our deployment markers. Explicit `update`
-    # and `switch` commands must never reopen it.
-    local first_run_file="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/user/first_run.txt"
-    local legacy_first_run_file="${XDG_STATE_HOME:-$HOME/.local/state}/illogical-impulse/user/first_run.txt"
+    # A fresh install is opened explicitly through the running shell's IPC.
+    # Updates and fork switches keep the Welcome closed.
     local fresh_deploy=false
     if [[ "$verb" == "install" || ( "$verb" == "apply" && "$target_managed" != true ) ]]; then
         fresh_deploy=true
     fi
 
-    if [[ "$fresh_deploy" == true ]]; then
-        rm -f "$first_run_file" "$legacy_first_run_file"
-    else
-        mkdir -p "$(dirname "$first_run_file")"
-        if [[ ! -f "$first_run_file" ]]; then
-            echo "This file is just here to confirm you've been greeted :>" > "$first_run_file"
-        fi
-    fi
-
     start_quickshell
+
+    if [[ "$fresh_deploy" == true ]]; then
+        open_welcome_after_start
+    fi
 
     local summary="$fork/$branch${head:+ @ ${head:0:8}}"
     [[ -n "$LOCAL_SRC" ]] && summary="local $G_ARROW $(tilde "$LOCAL_SRC")"
