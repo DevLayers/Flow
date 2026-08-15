@@ -15,14 +15,54 @@ QtObject {
     id: root
 
     readonly property var pages: [{
+        "id": "hello",
+        "titleKey": "Hi there",
+        "subtitleKey": "Let's get your workspace ready.",
+        "icon": "waving_hand",
+        "headerShape": MaterialShape.Shape.PixelCircle,
+        "accentRole": "primary",
+        "nextLabelKey": "Let's go",
+        "nextIcon": "arrow_forward",
+        "component": "WelcomeHelloPage.qml"
+    }, {
+        "id": "language",
+        "titleKey": "Choose your language",
+        "subtitleKey": "You can change this later in Settings.",
+        "icon": "language",
+        "headerShape": MaterialShape.Shape.Circle,
+        "accentRole": "secondary",
+        "nextLabelKey": "Next",
+        "nextIcon": "translate",
+        "component": "WelcomeLanguagePage.qml"
+    }, {
+        "id": "keyboard",
+        "titleKey": "Choose your keyboard layout",
+        "subtitleKey": "Pick a layout for this computer.",
+        "icon": "keyboard",
+        "headerShape": MaterialShape.Shape.Circle,
+        "accentRole": "tertiary",
+        "nextLabelKey": "Next",
+        "nextIcon": "keyboard",
+        "component": "WelcomeKeyboardLayoutPage.qml"
+    }, {
+        "id": "time",
+        "titleKey": "Set the date and time",
+        "subtitleKey": "Choose the formats that feel natural to you.",
+        "icon": "schedule",
+        "headerShape": MaterialShape.Shape.SoftBurst,
+        "accentRole": "primary",
+        "nextLabelKey": "Get connected",
+        "nextIcon": "schedule",
+        "component": "WelcomeTimePage.qml"
+    }, {
         "id": "start",
         "titleKey": "Get connected",
         "subtitleKey": "Connect the essentials before you start. You can change these later.",
-        "icon": "waving_hand",
+        "icon": "wifi",
         "headerShape": MaterialShape.Shape.Cookie9Sided,
         "accentRole": "primary",
         "nextLabelKey": "Continue",
-        "nextIcon": "arrow_forward",
+        "nextIcon": "wifi",
         "component": "WelcomeStartPage.qml"
     }, {
         "id": "personalize",
@@ -51,19 +91,9 @@ QtObject {
         "icon": "dashboard_customize",
         "headerShape": MaterialShape.Shape.Sunny,
         "accentRole": "primary",
-        "nextLabelKey": "See the essentials",
-        "nextIcon": "keyboard",
-        "component": "WelcomeExperiencePage.qml"
-    }, {
-        "id": "essentials",
-        "titleKey": "Keep the essentials close",
-        "subtitleKey": "Set up keyboard, language and time preferences, then learn the shortcuts that make II feel fast.",
-        "icon": "keyboard",
-        "headerShape": MaterialShape.Shape.Clover4Leaf,
-        "accentRole": "secondary",
         "nextLabelKey": "Explore tutorials",
         "nextIcon": "school",
-        "component": "WelcomeEssentialsPage.qml"
+        "component": "WelcomeExperiencePage.qml"
     }, {
         "id": "learn",
         "titleKey": "Learn the useful features",

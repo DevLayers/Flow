@@ -254,7 +254,8 @@ Singleton {
             let hex = colorStr.substring(1);
             rgb = hex.length === 8 ? hex.substring(2) : hex;
         }
-        if (rgb === "") return;
+        if (rgb === "")
+            return;
         let hyprColor = "rgba(" + rgb + "AA)";
         Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
     }
@@ -268,7 +269,8 @@ Singleton {
         interval: 100
         repeat: false
         onTriggered: {
-            if (!Config.ready) return;
+            if (!Config.ready)
+                return;
             root.pushBorderColor();
         }
     }
@@ -305,10 +307,7 @@ Singleton {
     // Dynamic Island variants use colLayer0, whose opacity follows the
     // configured background transparency. Keep the threshold below that
     // rendered opacity, otherwise the entire island is excluded from blur.
-    readonly property real barIgnoreAlpha: Math.min(
-        root.ignoreAlpha,
-        Math.max(0, 1 - root.backgroundTransparency - 0.01)
-    )
+    readonly property real barIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
     onIgnoreAlphaChanged: {
         if (Config.ready) {
@@ -351,14 +350,16 @@ Singleton {
         repeat: false
         onTriggered: {
             root._isApplyingBorder = false;
-            if (!root._borderReapplyPending) return;
+            if (!root._borderReapplyPending)
+                return;
             root._borderReapplyPending = false;
             root.applyHyprlandBorder();
         }
     }
 
     function applyHyprlandBorder() {
-        if (!Config.ready) return;
+        if (!Config.ready)
+            return;
         if (root._isApplyingBorder) {
             root._borderReapplyPending = true;
             return;
@@ -375,14 +376,16 @@ Singleton {
         repeat: false
         onTriggered: {
             root._isApplyingRules = false;
-            if (!root._rulesReapplyPending) return;
+            if (!root._rulesReapplyPending)
+                return;
             root._rulesReapplyPending = false;
             root.applyHyprlandRules();
         }
     }
 
     function applyHyprlandRules() {
-        if (!Config.ready || root._isApplyingRules) return;
+        if (!Config.ready || root._isApplyingRules)
+            return;
         root._isApplyingRules = true;
         hyprlandRuleCooldownTimer.restart();
 

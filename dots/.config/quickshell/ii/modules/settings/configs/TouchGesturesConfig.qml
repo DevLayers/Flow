@@ -591,7 +591,30 @@ ContentPage {
         }
     }
 
-    // ── SECTION 6: COMPATIBILITY NOTICE ──────────────────────────────────────
+    // ── SECTION 6: TOUCHPAD & SCROLLING ──────────────────────────────────────
+    ContentSection {
+        icon: "mouse"
+        title: Translation.tr("Touchpad & Scrolling")
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            ConfigSwitch {
+                buttonIcon: "speed"
+                text: Translation.tr("Faster touchpad scrolling")
+                checked: Config.options.interactions.scrolling.fasterTouchpadScroll ?? false
+                onCheckedChanged: {
+                    Config.options.interactions.scrolling.fasterTouchpadScroll = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Enables accelerated smooth scrolling across menus, panels, and lists when using a touchpad.")
+                }
+            }
+        }
+    }
+
+    // ── SECTION 7: COMPATIBILITY NOTICE ──────────────────────────────────────
     ContentSection {
         icon: "info"
         title: Translation.tr("Compatibility Notice")

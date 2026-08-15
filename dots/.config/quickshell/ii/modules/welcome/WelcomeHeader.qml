@@ -10,7 +10,7 @@ import qs.services
 Item {
     id: root
 
-    property string currentPageId: "start"
+    property string currentPageId: "hello"
     property string outgoingPageId: ""
     property string incomingPageId: ""
     property int transitionDirection: 1

@@ -143,53 +143,59 @@ Item {
                 }
             }
 
-            ContentSubsection {
-                title: Translation.tr("Material OSD Options")
-                icon: "interests"
-                Layout.fillWidth: true
+            ContentSubsectionLabel {
+                text: Translation.tr("Material OSD Options")
                 visible: Config.options.osd.style === "material"
                 enabled: Config.options.sidebar.sidebarStyle !== "connect"
                 opacity: enabled ? 1.0 : 0.4
+                Layout.topMargin: 4
+            }
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
+            ConfigSwitch {
+                visible: Config.options.osd.style === "material"
+                enabled: Config.options.sidebar.sidebarStyle !== "connect"
+                opacity: enabled ? 1.0 : 0.4
+                buttonIcon: "compress"
+                text: Translation.tr("Minimal variant")
+                checked: Config.options.osd.material.minimal
+                onCheckedChanged: {
+                    Config.options.osd.material.minimal = checked;
+                }
+            }
 
-                    ConfigSwitch {
-                        buttonIcon: "compress"
-                        text: Translation.tr("Minimal variant")
-                        checked: Config.options.osd.material.minimal
-                        onCheckedChanged: {
-                            Config.options.osd.material.minimal = checked;
-                        }
-                    }
+            ConfigSwitch {
+                visible: Config.options.osd.style === "material"
+                enabled: Config.options.sidebar.sidebarStyle !== "connect"
+                opacity: enabled ? 1.0 : 0.4
+                buttonIcon: "shapes"
+                text: Translation.tr("Shaped value labels")
+                checked: Config.options.osd.material.shapedValues
+                onCheckedChanged: {
+                    Config.options.osd.material.shapedValues = checked;
+                }
+            }
 
-                    ConfigSwitch {
-                        buttonIcon: "shapes"
-                        text: Translation.tr("Shaped value labels")
-                        checked: Config.options.osd.material.shapedValues
-                        onCheckedChanged: {
-                            Config.options.osd.material.shapedValues = checked;
-                        }
-                    }
+            ConfigSwitch {
+                visible: Config.options.osd.style === "material"
+                enabled: Config.options.sidebar.sidebarStyle !== "connect"
+                opacity: enabled ? 1.0 : 0.4
+                buttonIcon: "circle"
+                text: Translation.tr("Circled shapes")
+                checked: Config.options.osd.material.circledShapes
+                onCheckedChanged: {
+                    Config.options.osd.material.circledShapes = checked;
+                }
+            }
 
-                    ConfigSwitch {
-                        buttonIcon: "circle"
-                        text: Translation.tr("Circled shapes")
-                        checked: Config.options.osd.material.circledShapes
-                        onCheckedChanged: {
-                            Config.options.osd.material.circledShapes = checked;
-                        }
-                    }
-
-                    ConfigSwitch {
-                        buttonIcon: "rotate_right"
-                        text: Translation.tr("Rotate shapes when changing values")
-                        checked: Config.options.osd.material.rotateShape
-                        onCheckedChanged: {
-                            Config.options.osd.material.rotateShape = checked;
-                        }
-                    }
+            ConfigSwitch {
+                visible: Config.options.osd.style === "material"
+                enabled: Config.options.sidebar.sidebarStyle !== "connect"
+                opacity: enabled ? 1.0 : 0.4
+                buttonIcon: "rotate_right"
+                text: Translation.tr("Rotate shapes when changing values")
+                checked: Config.options.osd.material.rotateShape
+                onCheckedChanged: {
+                    Config.options.osd.material.rotateShape = checked;
                 }
             }
 

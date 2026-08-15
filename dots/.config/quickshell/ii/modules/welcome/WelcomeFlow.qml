@@ -8,7 +8,7 @@ import qs.modules.common
 Item {
     id: root
 
-    property string currentPageId: "start"
+    property string currentPageId: "hello"
     property string previousPageId: ""
     property string incomingPageId: ""
     property string outgoingPageId: ""
@@ -18,10 +18,25 @@ Item {
     property bool nextButtonHovered: false
     property real navigationSafeArea: 84
 
+    readonly property string currentNextLabel: {
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        const page = pageLoader && pageLoader.item ? pageLoader.item : null;
+        return page && page.nextLabel !== undefined
+            ? page.nextLabel
+            : WelcomePageRegistry.nextLabelFor(root.currentPageId);
+    }
+    readonly property string currentNextIcon: {
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        const page = pageLoader && pageLoader.item ? pageLoader.item : null;
+        return page && page.nextIcon !== undefined
+            ? page.nextIcon
+            : WelcomePageRegistry.nextIconFor(root.currentPageId);
+    }
+
     readonly property real transitionOffset: WelcomeMotion.offsetFor(root.width)
 
     readonly property bool nestedPageOpen: {
-        if (root.currentPageId !== "learn" && root.currentPageId !== "essentials")
+        if (root.currentPageId !== "learn")
             return false;
         const pageLoader = root.loaderForPage(root.currentPageId);
         return (pageLoader && pageLoader.item && pageLoader.item.nestedPageOpen) === true;
@@ -36,7 +51,9 @@ Item {
     signal trySidebar()
     signal trySearch()
 
-    clip: true
+    // Page content may intentionally overhang its body stage. The top-level
+    // Welcome window remains the only clipping boundary for Pixel decorations.
+    clip: false
 
     function pageIndex(pageId) {
         return WelcomePageRegistry.pageIndexById(pageId);
@@ -68,7 +85,7 @@ Item {
 
     function reset() {
         transitionAnimation.stop();
-        root.currentPageId = "start";
+        root.currentPageId = "hello";
         root.previousPageId = "";
         Qt.callLater(root.normalizePages);
     }
@@ -144,18 +161,34 @@ Item {
 
     function goNext() {
         const index = root.pageIndex(root.currentPageId);
-        if (index >= 0 && index < WelcomePageRegistry.pages.length - 1)
-            root.goToPage(WelcomePageRegistry.pages[index + 1].id);
+        if (index < 0 || index >= WelcomePageRegistry.pages.length - 1)
+            return;
+
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        const page = pageLoader && pageLoader.item ? pageLoader.item : null;
+        if (page && page.prepareNext && !page.prepareNext())
+            return;
+
+        root.goToPage(WelcomePageRegistry.pages[index + 1].id);
     }
 
     function closeNestedPage(): bool {
-        if (root.currentPageId !== "learn" && root.currentPageId !== "essentials")
+        if (root.currentPageId !== "learn")
             return false;
         const pageLoader = root.loaderForPage(root.currentPageId);
         const page = pageLoader && pageLoader.item ? pageLoader.item : null;
         return page && page.closeNestedPage
             ? page.closeNestedPage()
             : false;
+    }
+
+    function skipCurrentPage(): void {
+        if (root.currentPageId !== "keyboard")
+            return;
+        const index = root.pageIndex(root.currentPageId);
+        if (index < 0 || index >= WelcomePageRegistry.pages.length - 1)
+            return;
+        root.goToPage(WelcomePageRegistry.pages[index + 1].id);
     }
 
     function openTutorial(tutorialId: string): void {

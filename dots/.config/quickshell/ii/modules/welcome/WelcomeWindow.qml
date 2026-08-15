@@ -25,6 +25,7 @@ FloatingWindow {
     Rectangle {
         id: surface
         anchors.fill: parent
+        clip: false
         radius: Appearance.rounding.large
         color: Appearance.colors.colLayer0
         scale: (root.opening ? 0.992 : 1)
@@ -49,6 +50,8 @@ FloatingWindow {
 
             WelcomeHeader {
                 id: header
+                // Page decorations may overhang their stage; chrome stays on top.
+                z: 2
                 Layout.fillWidth: true
                 currentPageId: flow.currentPageId
                 outgoingPageId: flow.outgoingPageId
@@ -60,6 +63,7 @@ FloatingWindow {
             }
 
             WelcomeProgress {
+                z: 2
                 Layout.fillWidth: true
                 currentPageIndex: WelcomePageRegistry.pageIndexById(flow.currentPageId)
                 pageCount: WelcomePageRegistry.pages.length
@@ -67,9 +71,11 @@ FloatingWindow {
 
             Item {
                 id: pageStage
+                z: 1
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.topMargin: -Appearance.rounding.verysmall
+                clip: false
 
                 WelcomeFlow {
                     id: flow
@@ -112,12 +118,14 @@ FloatingWindow {
             pageIndex: WelcomePageRegistry.pageIndexById(flow.currentPageId)
             pageCount: WelcomePageRegistry.pages.length
             transitionRunning: flow.transitionRunning
+            nextLabel: flow.currentNextLabel
+            nextIcon: flow.currentNextIcon
+            skipVisible: flow.currentPageId === "keyboard"
+            skipLabel: Translation.tr("Skip")
             onPreviousRequested: flow.goPrevious()
             onNextRequested: flow.goNext()
-            // The final action is intentionally non-dismissive. Users can
-            // close Welcome with the window control or Escape when they are
-            // ready, without losing the final setup summary immediately.
-            onFinishRequested: root.restoreFocus()
+            onSkipRequested: flow.skipCurrentPage()
+            onFinishRequested: GlobalStates.closeWelcome()
         }
         Keys.priority: Keys.BeforeItem
         Keys.onPressed: event => {

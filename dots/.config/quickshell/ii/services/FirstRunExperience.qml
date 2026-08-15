@@ -13,12 +13,16 @@ Singleton {
     property string firstRunNotifSummary: "Welcome!"
     property string firstRunNotifBody: "Hit Super+/ for a list of keybinds"
     property string defaultWallpaperPath: FileUtils.trimFileProtocol(`${Directories.assetsPath}/images/default_wallpaper.png`)
+    property bool firstRunHandled: false
 
     function load() {
         firstRunFileView.reload()
     }
 
     function handleFirstRun() {
+        if (root.firstRunHandled)
+            return;
+        root.firstRunHandled = true
         Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, root.defaultWallpaperPath])
         GlobalStates.openWelcome()
     }
@@ -28,7 +32,7 @@ Singleton {
         path: Qt.resolvedUrl(firstRunFilePath)
         atomicWrites: true
         onLoadFailed: (error) => {
-            if (error == FileViewError.FileNotFound) {
+            if (error == FileViewError.FileNotFound && !root.firstRunHandled) {
                 firstRunFileView.setText(root.firstRunFileContent)
                 root.handleFirstRun()
             }

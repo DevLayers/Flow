@@ -219,6 +219,8 @@ Button {
     property color colBackgroundToggledActive: Appearance?.colors.colPrimaryActive ?? colBackgroundToggledHover
     property color colRipple: Appearance?.colors.colLayer1Active ?? "#D6CEE2"
     property color colRippleToggled: Appearance?.colors.colPrimaryActive ?? "#D6CEE2"
+    property real borderWidth: 0
+    property color borderColor: Appearance?.colors.colOutline ?? "transparent"
 
     Behavior on buttonEffectiveRadius {
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -373,6 +375,8 @@ Button {
         bottomRightRadius: root.bottomRightRadius
         implicitHeight: 30
         color: root.buttonColor
+        border.width: root.borderWidth
+        border.color: root.borderColor
         Behavior on color {
             animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
         }

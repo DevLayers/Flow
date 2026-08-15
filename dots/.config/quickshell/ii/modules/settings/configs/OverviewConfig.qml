@@ -71,10 +71,11 @@ ContentPage {
                     Config.options.overview.centerIcons = checked;
                 }
             }
-
         }
 
-        Item { Layout.preferredHeight: 16 }
+        Item {
+            Layout.preferredHeight: 16
+        }
 
         // Group 2: Behaviors
         ColumnLayout {
@@ -134,9 +135,21 @@ ContentPage {
                             Config.options.overview.animationStyle = newValue;
                         }
                         options: [
-                            { displayName: Translation.tr("Slide + Bounce"), icon: "animation", value: "bounce" },
-                            { displayName: Translation.tr("Smooth Slide"), icon: "swipe", value: "smooth" },
-                            { displayName: Translation.tr("Zoom In"), icon: "zoom_in", value: "zoom" }
+                            {
+                                displayName: Translation.tr("Slide + Bounce"),
+                                icon: "animation",
+                                value: "bounce"
+                            },
+                            {
+                                displayName: Translation.tr("Smooth Slide"),
+                                icon: "swipe",
+                                value: "smooth"
+                            },
+                            {
+                                displayName: Translation.tr("Zoom In"),
+                                icon: "zoom_in",
+                                value: "zoom"
+                            }
                         ]
                     }
 
@@ -157,7 +170,6 @@ ContentPage {
                     Config.options.overview.enableCascadeAnimation = checked;
                 }
             }
-
         }
     }
 
@@ -231,8 +243,16 @@ ContentPage {
                             Config.options.overview.orderRightLeft = newValue;
                         }
                         options: [
-                            { displayName: Translation.tr("Left to right"), icon: "arrow_forward", value: false },
-                            { displayName: Translation.tr("Right to left"), icon: "arrow_back", value: true }
+                            {
+                                displayName: Translation.tr("Left to right"),
+                                icon: "arrow_forward",
+                                value: false
+                            },
+                            {
+                                displayName: Translation.tr("Right to left"),
+                                icon: "arrow_back",
+                                value: true
+                            }
                         ]
                     }
                 }
@@ -255,8 +275,16 @@ ContentPage {
                             Config.options.overview.orderBottomUp = newValue;
                         }
                         options: [
-                            { displayName: Translation.tr("Top-down"), icon: "arrow_downward", value: false },
-                            { displayName: Translation.tr("Bottom-up"), icon: "arrow_upward", value: true }
+                            {
+                                displayName: Translation.tr("Top-down"),
+                                icon: "arrow_downward",
+                                value: false
+                            },
+                            {
+                                displayName: Translation.tr("Bottom-up"),
+                                icon: "arrow_upward",
+                                value: true
+                            }
                         ]
                     }
                 }
@@ -311,18 +339,30 @@ ContentPage {
                     currentValue: Config.options.background.zoomOutStyle
                     onSelected: newValue => Config.options.background.zoomOutStyle = newValue
                     options: [
-                        { displayName: Translation.tr("Gnome Like"), icon: "blur_on", enabled: !page.videoWallpaper, value: 0 },
-                        { displayName: Translation.tr("Default"), icon: "grid_view", value: 1 },
-                        { displayName: Translation.tr("Zoom In"), icon: "zoom_in", enabled: !page.videoWallpaper, value: 2 }
+                        {
+                            displayName: Translation.tr("Gnome Like"),
+                            icon: "blur_on",
+                            enabled: !page.videoWallpaper,
+                            value: 0
+                        },
+                        {
+                            displayName: Translation.tr("Default"),
+                            icon: "grid_view",
+                            value: 1
+                        },
+                        {
+                            displayName: Translation.tr("Zoom In"),
+                            icon: "zoom_in",
+                            enabled: !page.videoWallpaper,
+                            value: 2
+                        }
                     ]
                 }
 
                 OverviewPreviewButton {
                     Layout.alignment: Qt.AlignVCenter
                     enabled: Config.options.background.zoomOutEnabled && (!page.videoWallpaper || Config.options.background.zoomOutStyle === 1)
-                    tooltipText: !Config.options.background.zoomOutEnabled
-                        ? Translation.tr("Enable Zoom animation to preview this style.")
-                        : Translation.tr("Open the Overview to preview the selected zoom style")
+                    tooltipText: !Config.options.background.zoomOutEnabled ? Translation.tr("Enable Zoom animation to preview this style.") : Translation.tr("Open the Overview to preview the selected zoom style")
                 }
             }
         }

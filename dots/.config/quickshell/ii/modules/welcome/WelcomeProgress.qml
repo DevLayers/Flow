@@ -9,7 +9,7 @@ Item {
     id: root
 
     property int currentPageIndex: 0
-    property int pageCount: 7
+    property int pageCount: 10
 
     implicitHeight: Appearance.rounding.small
     Accessible.name: Translation.tr("Step %1 of %2")

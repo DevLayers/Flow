@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Hyprland
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -9,26 +8,76 @@ import qs.services
 Item {
     id: root
 
-    signal backRequested()
+    property bool nextButtonHovered: false
 
+    readonly property var layoutOptions: {
+        const options = [
+            { code: "us", label: "English (US)" },
+            { code: "gb", label: "English (UK)" },
+            { code: "br", label: "Português (Brasil)" },
+            { code: "de", label: "Deutsch" },
+            { code: "fr", label: "Français" },
+            { code: "es", label: "Español" },
+            { code: "it", label: "Italiano" },
+            { code: "pt", label: "Português" },
+            { code: "ru", label: "Русский" },
+            { code: "uk", label: "Українська" },
+            { code: "tr", label: "Türkçe" },
+            { code: "pl", label: "Polski" },
+            { code: "cz", label: "Čeština" },
+            { code: "hu", label: "Magyar" },
+            { code: "se", label: "Svenska" },
+            { code: "no", label: "Norsk" },
+            { code: "dk", label: "Dansk" },
+            { code: "fi", label: "Suomi" },
+            { code: "gr", label: "Ελληνικά" },
+            { code: "il", label: "עברית" },
+            { code: "jp", label: "日本語" },
+            { code: "kr", label: "한국어" },
+            { code: "cn", label: "简体中文" },
+            { code: "in", label: "English (India)" },
+            { code: "latam", label: "Español (Latinoamérica)" }
+        ];
+        const current = HyprlandXkb.layoutCodes.length > 0 ? HyprlandXkb.layoutCodes[0] : "";
+        if (current.length > 0 && options.findIndex(option => option.code === current) < 0)
+            options.unshift({ code: current, label: Translation.tr("Current (%1)").arg(current) });
+        return options;
+    }
+
+    property string selectedLayoutCode: HyprlandXkb.layoutCodes.length > 0
+        ? HyprlandXkb.layoutCodes[0]
+        : "us"
+    property bool manualEntry: false
     property bool statusIsError: false
     property string statusText: ""
-    property bool appliedFeedback: false
+
+    readonly property string desiredLayoutValue: root.manualEntry
+        ? root.normalizeValue(manualLayoutField.text, false)
+        : root.selectedLayoutCode
+    readonly property string desiredVariantValue: root.manualEntry
+        ? root.normalizeValue(manualVariantField.text, true)
+        : ""
+    readonly property bool inputInvalid: root.manualEntry
+        && (root.desiredLayoutValue.length === 0
+            || (manualVariantField.text.trim().length > 0 && root.desiredVariantValue.length === 0))
+    readonly property bool hasChanges: root.inputInvalid
+        || root.desiredLayoutValue !== HyprlandXkb.layoutCodes.join(",")
+        || root.desiredVariantValue !== HyprlandXkb.layoutVariants.join(",")
+    readonly property string nextLabel: root.hasChanges
+        ? Translation.tr("Save to Hyprland")
+        : Translation.tr("Next")
+    readonly property string nextIcon: root.hasChanges ? "save" : "keyboard"
 
     Timer {
         id: feedbackTimer
-        interval: 2200
-        onTriggered: {
-            root.appliedFeedback = false;
-            root.statusText = "";
-        }
+        interval: 2400
+        onTriggered: root.statusText = ""
     }
 
     function normalizeValue(value, allowEmpty): string {
         const parts = String(value ?? "").split(",").map(part => part.trim());
         if (!allowEmpty && parts.some(part => part.length === 0))
             return "";
-
         for (const part of parts) {
             if (!/^[A-Za-z0-9_-]*$/.test(part))
                 return "";
@@ -36,25 +85,22 @@ Item {
         return parts.join(",");
     }
 
-    function applyKeyboardLayout(): void {
-        const layoutValue = root.normalizeValue(layoutField.text, false);
-        const variantValue = root.normalizeValue(variantField.text, true);
+    function applyKeyboardLayout(): bool {
+        const layoutValue = root.desiredLayoutValue;
+        const variantValue = root.desiredVariantValue;
         if (layoutValue.length === 0) {
             root.statusIsError = true;
             root.statusText = Translation.tr("Enter at least one valid XKB layout code, such as us or br.");
             feedbackTimer.restart();
-            return;
+            return false;
         }
-        if (variantValue.length === 0 && variantField.text.trim().length > 0) {
+        if (root.manualEntry && variantValue.length === 0 && manualVariantField.text.trim().length > 0) {
             root.statusIsError = true;
             root.statusText = Translation.tr("Use only letters, numbers, underscores and hyphens in variants.");
             feedbackTimer.restart();
-            return;
+            return false;
         }
 
-        // `keyword` applies the change immediately to the running Hyprland
-        // instance. HyprlandConfig then stores the same values in the managed
-        // shell override so the next session keeps the selected layouts.
         Quickshell.execDetached(["hyprctl", "keyword", "input:kb_layout", layoutValue]);
         Quickshell.execDetached(["hyprctl", "keyword", "input:kb_variant", variantValue]);
         HyprlandConfig.setMany({
@@ -63,231 +109,149 @@ Item {
         }, {});
 
         root.statusIsError = false;
-        root.statusText = Translation.tr("Keyboard layouts applied to Hyprland.");
-        root.appliedFeedback = true;
+        root.statusText = Translation.tr("Keyboard layout saved to Hyprland.");
         feedbackTimer.restart();
+        return true;
     }
 
-    function switchKeyboardLayout(): void {
-        Quickshell.execDetached(["hyprctl", "switchxkblayout", "all", "next"]);
-        root.statusIsError = false;
-        root.statusText = Translation.tr("Switched to the next keyboard layout.");
-        feedbackTimer.restart();
+    function prepareNext(): bool {
+        return !root.hasChanges || root.applyKeyboardLayout();
     }
 
-    function syncFields(): void {
-        if (!layoutField.activeFocus)
-            layoutField.text = HyprlandXkb.layoutCodes.join(",");
-        if (!variantField.activeFocus)
-            variantField.text = HyprlandXkb.layoutVariants.join(",");
+    function syncManualFields() {
+        if (!manualLayoutField.activeFocus)
+            manualLayoutField.text = HyprlandXkb.layoutCodes.join(",");
+        if (!manualVariantField.activeFocus)
+            manualVariantField.text = HyprlandXkb.layoutVariants.join(",");
     }
 
     ColumnLayout {
         anchors.fill: parent
+        anchors.leftMargin: Appearance.rounding.large
+        anchors.rightMargin: Appearance.rounding.large
+        anchors.topMargin: Appearance.rounding.small
         spacing: Appearance.rounding.small
 
-        RowLayout {
+        ListView {
+            id: layoutList
             Layout.fillWidth: true
-            spacing: Appearance.rounding.small
+            Layout.fillHeight: true
+            Layout.minimumHeight: Appearance.rounding.large * 12
+            // Let the hover scale breathe past the list viewport. The
+            // Welcome window remains the outer clipping boundary.
+            clip: false
+            spacing: Appearance.rounding.verysmall
+            boundsBehavior: Flickable.StopAtBounds
+            model: root.layoutOptions
 
-            RippleButton {
-                Layout.preferredWidth: Appearance.rounding.verylarge
-                Layout.preferredHeight: Appearance.rounding.verylarge
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                colBackgroundActive: Appearance.colors.colSecondaryContainerActive
-                colRipple: Appearance.colors.colSecondaryContainerActive
-                Accessible.name: Translation.tr("Back to essentials")
-                onClicked: root.backRequested()
+            delegate: RippleButton {
+                id: layoutButton
+                required property var modelData
+                width: layoutList.width
+                implicitHeight: Appearance.rounding.large * 2.5
+                buttonRadius: Appearance.rounding.normal
+                toggled: !root.manualEntry && root.selectedLayoutCode === modelData.code
+                colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer1
+                colBackgroundHover: toggled ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer1Hover
+                colBackgroundActive: toggled ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer1Active
+                colRipple: toggled ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer1Active
+                opacity: root.manualEntry ? 0.55 : 1
+                Accessible.name: modelData.label
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "arrow_back"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnSecondaryContainer
+                contentItem: RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: Appearance.rounding.normal
+                    anchors.rightMargin: Appearance.rounding.normal
+                    spacing: Appearance.rounding.small
+
+                    MaterialSymbol {
+                        text: "keyboard"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: layoutButton.toggled
+                            ? Appearance.colors.colOnPrimary
+                            : Appearance.colors.colOnLayer1
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: layoutButton.modelData.label
+                        color: layoutButton.toggled
+                            ? Appearance.colors.colOnPrimary
+                            : Appearance.colors.colOnLayer1
+                        font.family: Appearance.font.family.title
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        font.pixelSize: Appearance.font.pixelSize.large
+                        font.weight: layoutButton.toggled ? Font.Bold : Font.DemiBold
+                    }
+
+                    MaterialSymbol {
+                        visible: layoutButton.toggled
+                        text: "check"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnPrimary
+                    }
                 }
+
+                onClicked: root.selectedLayoutCode = layoutButton.modelData.code
+            }
+        }
+
+        ConfigSwitch {
+            Layout.fillWidth: true
+            forceUniformRadius: true
+            buttonIcon: "edit"
+            text: Translation.tr("Enter a custom layout manually")
+            checked: root.manualEntry
+            onCheckedChanged: {
+                if (root.manualEntry !== checked)
+                    root.manualEntry = checked;
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: root.manualEntry
+            spacing: Appearance.rounding.verysmall
+
+            MaterialTextField {
+                id: manualLayoutField
+                Layout.fillWidth: true
+                placeholderText: Translation.tr("Layout codes, for example us,br")
+                text: HyprlandXkb.layoutCodes.join(",")
             }
 
-            ColumnLayout {
+            MaterialTextField {
+                id: manualVariantField
                 Layout.fillWidth: true
-                spacing: Appearance.rounding.verysmall
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Keyboard layout")
-                    color: Appearance.colors.colOnLayer1
-                    font.family: Appearance.font.family.title
-                    font.pixelSize: Appearance.font.pixelSize.hugeass
-                    font.variableAxes: Appearance.font.variableAxes.titleRounded
-                    font.weight: Font.Bold
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Add layouts and variants directly to Hyprland.")
-                    color: Appearance.colors.colOnLayer2
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    wrapMode: Text.WordWrap
-                }
+                placeholderText: Translation.tr("Variants, optional; for example ,abnt2")
+                text: HyprlandXkb.layoutVariants.join(",")
             }
         }
 
         Item {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            implicitHeight: statusLabel.implicitHeight
+            visible: root.statusText.length > 0
 
-            // ContentPage is a full-frame widget. Keep it inside a layout
-            // item so its anchors cannot cover the local page header.
-            ContentPage {
+            StyledText {
+                id: statusLabel
                 anchors.fill: parent
-                forceWidth: false
-                bottomContentPadding: Appearance.rounding.large
-
-                ContentSection {
-                    icon: "keyboard"
-                    title: Translation.tr("Keyboard layouts")
-
-                    ContentSubsection {
-                        title: Translation.tr("Active layout")
-                        icon: "translate"
-                        tooltip: Translation.tr("Switch between the layouts configured in Hyprland.")
-                        Layout.fillWidth: true
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Appearance.rounding.small
-
-                            StyledText {
-                                id: activeLayoutText
-                                Layout.fillWidth: true
-                                text: HyprlandXkb.currentLayoutCode.length > 0
-                                    ? Translation.tr("Current: %1").arg(HyprlandXkb.currentLayoutCode)
-                                    : Translation.tr("No active layout reported")
-                                color: Appearance.colors.colOnLayer1
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                font.weight: Font.DemiBold
-                                elide: Text.ElideRight
-
-                                Behavior on opacity {
-                                    enabled: WelcomeMotion.motionEnabled
-                                    NumberAnimation {
-                                        duration: Appearance.animation.elementMoveFast.duration
-                                        easing.type: Appearance.animation.elementMoveFast.type
-                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                    }
-                                }
-                            }
-
-                            RippleButtonWithIcon {
-                                materialIcon: "swap_horiz"
-                                mainText: Translation.tr("Switch layout")
-                                centerContent: true
-                                colText: Appearance.colors.colOnSecondaryContainer
-                                colBackground: Appearance.colors.colSecondaryContainer
-                                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                                colBackgroundActive: Appearance.colors.colSecondaryContainerActive
-                                colRipple: Appearance.colors.colSecondaryContainerActive
-                                onClicked: root.switchKeyboardLayout()
-                            }
-                        }
-                    }
-
-                    ContentSubsection {
-                        title: Translation.tr("Layouts")
-                        icon: "language"
-                        tooltip: Translation.tr("Comma-separated XKB layout codes, for example us,br.")
-                        Layout.fillWidth: true
-
-                        MaterialTextField {
-                            id: layoutField
-                            Layout.fillWidth: true
-                            placeholderText: Translation.tr("Layout codes, for example us,br")
-                            wrapMode: TextEdit.NoWrap
-                            text: HyprlandXkb.layoutCodes.join(",")
-                        }
-                    }
-
-                    ContentSubsection {
-                        title: Translation.tr("Layout variants")
-                        icon: "tune"
-                        tooltip: Translation.tr("Optional comma-separated XKB variants. Keep empty entries to match a layout, for example ,abnt2.")
-                        Layout.fillWidth: true
-
-                        MaterialTextField {
-                            id: variantField
-                            Layout.fillWidth: true
-                            placeholderText: Translation.tr("Variants, optional; for example ,abnt2")
-                            wrapMode: TextEdit.NoWrap
-                            text: HyprlandXkb.layoutVariants.join(",")
-                        }
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                        implicitHeight: statusTextLabel.implicitHeight
-                        visible: opacity > 0.001
-                        opacity: root.statusText.length > 0 ? 1 : 0
-
-                        Behavior on opacity {
-                            enabled: WelcomeMotion.motionEnabled
-                            NumberAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Appearance.animation.elementMoveFast.type
-                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                            }
-                        }
-
-                        StyledText {
-                            id: statusTextLabel
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            text: root.statusText
-                            color: root.statusIsError
-                                ? Appearance.colors.colError
-                                : Appearance.colors.colPrimary
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            wrapMode: Text.WordWrap
-                            y: root.statusText.length > 0 ? 0 : 4
-
-                            Behavior on y {
-                                enabled: WelcomeMotion.motionEnabled
-                                NumberAnimation {
-                                    duration: Appearance.animation.elementMoveFast.duration
-                                    easing.type: Appearance.animation.elementMoveFast.type
-                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                }
-                            }
-                        }
-                    }
-
-                    RippleButtonWithIcon {
-                        Layout.fillWidth: true
-                        materialIcon: root.appliedFeedback ? "check" : "save"
-                        mainText: root.appliedFeedback
-                            ? Translation.tr("Applied to Hyprland")
-                            : Translation.tr("Apply to Hyprland")
-                        centerContent: true
-                        colText: Appearance.colors.colOnPrimary
-                        colBackground: Appearance.colors.colPrimary
-                        colBackgroundHover: Appearance.colors.colPrimaryHover
-                        colBackgroundActive: Appearance.colors.colPrimaryActive
-                        colRipple: Appearance.colors.colPrimaryActive
-                        onClicked: root.applyKeyboardLayout()
-                    }
-                }
+                text: root.statusText
+                color: root.statusIsError ? Appearance.colors.colError : Appearance.colors.colPrimary
+                font.pixelSize: Appearance.font.pixelSize.small
+                wrapMode: Text.WordWrap
             }
         }
+
     }
 
     Connections {
         target: HyprlandXkb
         function onLayoutCodesChanged() {
-            root.syncFields();
+            root.syncManualFields();
         }
         function onLayoutVariantsChanged() {
-            root.syncFields();
+            root.syncManualFields();
         }
     }
 }

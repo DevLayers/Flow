@@ -271,6 +271,19 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                visible: Config.options.bar.cornerStyle === 1
+                buttonIcon: "shadow"
+                text: Translation.tr("Show shadow in Float style")
+                checked: Config.options.bar.floatStyleShadow ?? true
+                onCheckedChanged: {
+                    Config.options.bar.floatStyleShadow = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows a subtle drop shadow behind the bar when floating.")
+                }
+            }
+
             ContentSubsectionLabel {
                 text: Translation.tr("Dynamic Island behavior")
                 visible: Config.options.bar.cornerStyle === 3

@@ -1265,6 +1265,23 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "crop"
+        title: Translation.tr("Edge & Interaction Tweaks")
+
+        ConfigSwitch {
+            buttonIcon: "crop"
+            text: Translation.tr("Enable 1-pixel screen edge workaround")
+            checked: Config.options.interactions.deadPixelWorkaround.enable ?? false
+            onCheckedChanged: {
+                Config.options.interactions.deadPixelWorkaround.enable = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Compensates for 1-pixel margin discrepancies on the right and bottom screen edges in Hyprland.")
+            }
+        }
+    }
+
+    ContentSection {
         icon: "link"
         title: Translation.tr("Related settings")
 
