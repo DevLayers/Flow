@@ -7,8 +7,9 @@ import Quickshell.Wayland
 Singleton {
     id: root
 
-    property alias inhibit: idleInhibitor.enabled
-    inhibit: false
+    // Not an alias onto the inhibitor's own enabled: the Wayland object has to be held back
+    // until its surface is up, so the two can't be the same flag. See _surfaceReady below.
+    property bool inhibit: false
 
     // Epoch ms at which a timed session ends; 0 means "indefinite" (the classic behaviour).
     // Must be `real` — epoch ms is far past the range of QML's 32-bit int.
@@ -236,11 +237,34 @@ Singleton {
         Persistent.states.idle.sessionId = root._sessionId
     }
 
+    // Hyprland settles an idle inhibitor's fate when it is created: an inhibitor whose surface
+    // hasn't committed a buffer yet fails its aliveAndVisible() check and is dropped, and it is
+    // only ever reconsidered on window map/unmap, fullscreen or focus changes — a layer surface
+    // becoming mapped doesn't trigger that. This window's surface isn't up yet when a Keep awake
+    // restored at startup flips inhibit on, so the toggle read as on while the system slept
+    // anyway, until some unrelated window happened to map. Holding the inhibitor back and then
+    // re-asserting it makes that check run again once the surface is really there.
+    property bool _surfaceReady: false
+    property int _reassertsLeft: 4
+
+    Timer {
+        id: reassertTimer
+        interval: 2000
+        repeat: true
+        running: root._reassertsLeft > 0
+        onTriggered: {
+            root._reassertsLeft--
+            // Recreating the object is what makes Hyprland look again; Wayland keeps request
+            // order, so it processes the destroy and then the create.
+            root._surfaceReady = false
+            Qt.callLater(() => root._surfaceReady = true)
+        }
+    }
+
     IdleInhibitor {
         id: idleInhibitor
+        enabled: root.inhibit && root._surfaceReady
         window: PanelWindow {
-            // Inhibitor requires a "visible" surface
-            // Actually not lol
             implicitWidth: 0
             implicitHeight: 0
             color: "transparent"
