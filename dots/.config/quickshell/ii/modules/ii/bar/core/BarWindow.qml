@@ -21,11 +21,14 @@ Scope {
 
     required property ShellScreen screen
     required property int monitorIndex
+    property real sizeScale: 1.0
 
+    readonly property real effectiveBaseBarHeight: Appearance.sizes.baseBarHeight * root.sizeScale
+    readonly property real effectiveBarHeight: Appearance.sizes.barHeight * root.sizeScale
     readonly property bool lockUsesFade: Config.options.appearance.fakeScreenRounding === 3
     readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
     readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
-    readonly property real lockSlideDistance: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
+    readonly property real lockSlideDistance: root.effectiveBarHeight + Appearance.rounding.screenRounding
     readonly property real lockSlideOffsetY: Config.options.bar.bottom ? lockSlideDistance : -lockSlideDistance
 
     // ── Space reserver (reserves space so windows don't overlap bar) ──────────
@@ -40,7 +43,7 @@ Scope {
         }
         exclusionMode: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) ? ExclusionMode.Ignore : ExclusionMode.Normal
 
-        property real targetZone: Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+        property real targetZone: root.effectiveBaseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut * 2 : 0)
         property real minZone: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : 0
 
         exclusiveZone: {
@@ -50,7 +53,7 @@ Scope {
             return (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - barRoot.hiddenAmount);
         }
 
-        implicitHeight: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
+        implicitHeight: root.effectiveBarHeight + Appearance.rounding.screenRounding
         color: "transparent"
         mask: Region {}
     }
@@ -118,7 +121,7 @@ Scope {
 
         property bool superShow: false
         property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
-        property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.barHeight : 0
+        property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? root.effectiveBarHeight : 0
         Behavior on hiddenAmount {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
         }
@@ -178,7 +181,7 @@ Scope {
                 rightMargin: (Config.options.interactions.deadPixelWorkaround.enable) * 1
                 bottomMargin: (Config.options.interactions.deadPixelWorkaround.enable && Config.options.bar.bottom) * 1
             }
-            height: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
+            height: root.effectiveBarHeight + Appearance.rounding.screenRounding
 
             Item {
                 id: hoverMaskRegion
@@ -194,7 +197,7 @@ Scope {
 
             BarContent {
                 id: barContent
-                implicitHeight: Appearance.sizes.barHeight
+                height: root.effectiveBarHeight
                 anchors {
                     right: parent.right
                     left: parent.left
