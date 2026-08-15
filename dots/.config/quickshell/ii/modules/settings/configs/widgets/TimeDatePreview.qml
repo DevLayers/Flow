@@ -12,7 +12,7 @@ import qs.services
 GridLayout {
     id: root
 
-    columns: width >= 460 ? 2 : 1
+    columns: (width > 0 ? width >= 460 : true) ? 2 : 1
     columnSpacing: 10
     rowSpacing: 10
 

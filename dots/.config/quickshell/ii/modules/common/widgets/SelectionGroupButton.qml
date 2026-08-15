@@ -36,26 +36,18 @@ GroupButton {
     contentItem: RowLayout {
         spacing: 4 * (root.buttonText?.length > 0)
 
-        Loader {
+        MaterialSymbol {
             Layout.alignment: Qt.AlignVCenter
-            active: root.buttonIcon && root.buttonIcon.length > 0
-            visible: active
-            sourceComponent: Item {
-                implicitWidth: materialSymbol.implicitWidth
-                MaterialSymbol {
-                    id: materialSymbol
-                    anchors.centerIn: parent
-                    text: root.buttonIcon
-                    iconSize: Appearance.font.pixelSize.larger
-                    fill: root.toggled ? 1 : 0
-                    color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                }
-            }
+            visible: root.buttonIcon !== undefined && root.buttonIcon !== ""
+            text: root.buttonIcon || ""
+            iconSize: Appearance.font.pixelSize.larger
+            fill: root.toggled ? 1 : 0
+            color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
         }
 
         Loader {
             Layout.alignment: Qt.AlignVCenter
-            active: root.buttonShape && root.buttonShape.length > 0
+            active: root.buttonShape !== undefined && root.buttonShape !== ""
             visible: active
             sourceComponent: MaterialShape {
                 id: materialSymbol2
@@ -68,7 +60,7 @@ GroupButton {
 
         Loader {
             Layout.alignment: Qt.AlignVCenter
-            active: root.buttonSymbol && root.buttonSymbol.length > 0
+            active: root.buttonSymbol !== undefined && root.buttonSymbol !== ""
             visible: active
             sourceComponent: CustomIcon {
                 id: materialSymbol3
@@ -80,22 +72,11 @@ GroupButton {
             }
         }
 
-        Item {
-            implicitWidth: root.buttonText?.length > 0 ? textItem.implicitWidth : 0
-            implicitHeight: textMetrics.height // Force height to that of regular text
-
-            TextMetrics {
-                id: textMetrics
-                font.family: Appearance.font.family.main
-                text: "Abc"
-            }
-
-            StyledText {
-                id: textItem
-                anchors.centerIn: parent
-                color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                text: root.buttonText
-            }
+        StyledText {
+            Layout.alignment: Qt.AlignVCenter
+            visible: root.buttonText !== undefined && root.buttonText.length > 0
+            color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+            text: root.buttonText || ""
         }
     }
 }

@@ -29,6 +29,10 @@ Item {
         if (index < 0 || index >= monitorConfig.monitors.length)
             return;
 
+        arrangement.nudgeOffset = Qt.point(deltaX === 0 ? 0 : (deltaX > 0 ? 1 : -1),
+            deltaY === 0 ? 0 : (deltaY > 0 ? 1 : -1));
+        arrangement.nudgeToken += 1;
+
         const monitor = monitorConfig.monitors[index];
         if (!monitor || monitor.disabled)
             return;
@@ -61,6 +65,7 @@ Item {
                 Layout.minimumWidth: Appearance.rounding.large * 18
                 Layout.preferredWidth: Appearance.rounding.large * 29
                 monitorConfig: monitorConfig
+                expressive: true
             }
 
             ColumnLayout {
@@ -79,29 +84,76 @@ Item {
                     color: Appearance.colors.colLayer2Base
                     radius: Appearance.rounding.large
 
-                    ColumnLayout {
+                    RowLayout {
                         id: selectedMonitorCol
                         anchors.fill: parent
                         anchors.margins: Appearance.rounding.normal
                         spacing: Appearance.rounding.unsharpenmore
 
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("Selected Monitor")
-                            color: Appearance.colors.colSubtext
-                            font.pixelSize: Appearance.font.pixelSize.small
+                        MaterialShapeWrappedMaterialSymbol {
+                            Layout.alignment: Qt.AlignTop
+                            text: "monitor"
+                            shape: MaterialShape.Shape.Cookie7Sided
+                            iconSize: Appearance.font.pixelSize.large
+                            padding: Appearance.rounding.small
+                            fill: 1
+                            color: Appearance.colors.colSecondaryContainer
+                            colSymbol: Appearance.colors.colOnSecondaryContainer
                         }
 
-                        StyledText {
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            text: root.selectedMonitor
-                                ? (root.selectedMonitor.description || root.selectedMonitor.name || Translation.tr("None"))
-                                : Translation.tr("None")
-                            color: Appearance.colors.colOnLayer1
-                            font.pixelSize: Appearance.font.pixelSize.larger
-                            font.weight: Font.Bold
-                            wrapMode: Text.Wrap
-                            elide: Text.ElideRight
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Selected Monitor")
+                                color: Appearance.colors.colSubtext
+                                font.pixelSize: Appearance.font.pixelSize.small
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.selectedMonitor
+                                    ? (root.selectedMonitor.description || root.selectedMonitor.name || Translation.tr("None"))
+                                    : Translation.tr("None")
+                                color: Appearance.colors.colOnLayer1
+                                font.family: Appearance.font.family.title
+                                font.variableAxes: Appearance.font.variableAxes.titleRounded
+                                font.pixelSize: Appearance.font.pixelSize.larger
+                                font.weight: Font.Bold
+                                wrapMode: Text.Wrap
+                                elide: Text.ElideRight
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: !!root.selectedMonitor
+                                text: root.selectedMonitor
+                                    ? (root.selectedMonitor.currentMode
+                                        || ((root.selectedMonitor.width || 0) + " × " + (root.selectedMonitor.height || 0)))
+                                    : ""
+                                color: Appearance.colors.colOnLayer2
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        Pill {
+                            id: primaryPill
+                            visible: !!root.selectedMonitor && !!root.selectedMonitor.primary
+                            Layout.alignment: Qt.AlignTop
+                            implicitWidth: primaryPillLabel.implicitWidth + Appearance.rounding.normal
+                            implicitHeight: Appearance.font.pixelSize.small + Appearance.rounding.small
+                            color: Appearance.colors.colPrimaryContainer
+
+                            StyledText {
+                                id: primaryPillLabel
+                                anchors.centerIn: parent
+                                text: Translation.tr("Primary")
+                                color: Appearance.colors.colOnPrimaryContainer
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.Bold
+                            }
                         }
                     }
                 }

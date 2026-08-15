@@ -8,6 +8,8 @@ import Quickshell
 import Quickshell.Bluetooth
 
 import qs.modules.ii.sidebarDashboard.quickToggles.androidStyle
+import "androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
+import "androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 
 AbstractQuickPanel {
     id: root
@@ -29,8 +31,21 @@ AbstractQuickPanel {
         function onSidebarRightOpenChanged() {
             if (GlobalStates.sidebarRightOpen) {
                 root.triggerContentEntrance();
+            } else if (editController.active) {
+                editController.cancel();
             }
         }
+    }
+
+    onEditModeChanged: {
+        if (!root.editMode && editController.active)
+            editController.cancel();
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.editMode && editController.active
+        onActivated: editController.cancel()
     }
 
     // Sizes
@@ -43,59 +58,56 @@ AbstractQuickPanel {
     readonly property real baseCellHeight: 56
 
     // Toggles config
-    readonly property list<string> availableToggleTypes: ["network", "bluetooth", "vpn", "tailscale", "dnsOverTls", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "screenRecord", "colorPicker", "videoEditor", "onScreenKeyboard", "mic", "audio", "notifications", "autoDnd", "powerProfile", "musicRecognition", "antiFlashbang", "screenShader", "soundcoreAnc", "systemSounds", "localSend", "mediaWidget", "volumeSlider", "micSlider", "brightnessSlider", "gammaSlider", "keyboardBacklight"]
+    readonly property list<string> availableToggleTypes: QuickToggleCatalog.allTypes()
     function isToggleVisible(toggleType) {
         return true
     }
     readonly property int columns: Config.options.sidebar.quickToggles.android.columns
 
-    // Pages data — reads from Config.
-    // The stored format is: pages = [[toggle, toggle, ...], [toggle, ...], ...]
-    // Each inner array is one page. Each toggle is {type: string, size: int}.
+    // Pages data — reads from Config and exposes the canonical in-memory shape.
+    // The legacy `size` field is read only by the catalog normalizer and is not
+    // returned to delegates.
     readonly property list<var> pages: {
         const cfg = Config.options.sidebar.quickToggles.android;
         if (!Config.ready)
             return [[]];
         if (!cfg.pages || cfg.pages.length === 0)
             return [[]];
-
-        var rawPages = cfg.pages;
-        const first = rawPages[0];
-        // Detect format: if first element has a `type` property, it's the old flat
-        // toggle list (legacy `toggles` renamed to `pages`). Wrap in a single page.
-        // Otherwise it's the new pages-of-arrays format.
-        if (first && typeof first === "object" && first.type !== undefined) {
-            // Old flat format — wrap in single page
-            rawPages = [cfg.pages];
-        }
-
-        return rawPages.map(page => (page || [])
-            .filter(toggle => toggle && root.isToggleVisible(toggle.type))
-            .map(toggle => {
-                var t = Object.assign({}, toggle);
-                var defaultH = (t.type === "mediaWidget") ? 2 : 1;
-                var defaultW = (t.type === "mediaWidget") ? 2 : 1;
-                var w = t.sizeW ?? t.size ?? defaultW;
-                t.sizeW = Math.max(1, Math.min(w, root.columns));
-                t.sizeH = Math.max(1, t.sizeH ?? defaultH);
-                t.size = t.sizeW;
-                return t;
-            })
-        );
+        return QuickToggleCatalog.normalizePages(cfg.pages, root.columns, {
+            warn: function(message) { console.warn(message); }
+        });
     }
 
-    // Current page toggles
-    readonly property list<var> currentPageToggles: {
-        if (currentPage >= 0 && currentPage < pages.length)
-            return pages[currentPage] || [];
-        return [];
+    QuickToggleEditController {
+        id: editController
+        config: Config.options.sidebar.quickToggles.android
+        persistedPages: root.pages
+        columns: root.columns
+    }
+
+    property alias editController: editController
+
+    // The persisted page arrays are the delegate model. A gesture may change
+    // preview geometry, but it must never reorder/retype this model while a
+    // MouseArea owns the grab.
+    readonly property list<var> displayPages: root.pages
+
+    // Same-page reorder and resize get a live packed preview. Cross-page drag
+    // keeps both pages stable until release, then commits one atomic move.
+    readonly property list<var> geometryPages: {
+        if (!editController.active)
+            return root.pages;
+        if (editController.mode === "resize"
+                || editController.targetPage === editController.sourcePage)
+            return editController.draftPages;
+        return root.pages;
     }
 
     // All used toggle types across all pages
     readonly property list<string> allUsedTypes: {
         var types = [];
-        for (var p = 0; p < pages.length; p++) {
-            var page = pages[p];
+        for (var p = 0; p < root.pages.length; p++) {
+            var page = root.pages[p];
             if (!page)
                 continue;
             for (var i = 0; i < page.length; i++) {
@@ -108,150 +120,73 @@ AbstractQuickPanel {
 
     readonly property list<var> unusedToggles: {
         const types = availableToggleTypes.filter(type => root.isToggleVisible(type) && !allUsedTypes.includes(type));
-        return types.map(type => {
-            return {
-                type: type,
-                size: (type === "mediaWidget") ? 2 : 1,
-                sizeW: (type === "mediaWidget") ? 2 : 1,
-                sizeH: (type === "mediaWidget") ? 2 : 1
-            };
-        });
+        return types.map(type => QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
     }
 
-    function getGridRowsNeeded(togglesList) {
-        if (!togglesList || togglesList.length === 0)
-            return 0;
-        var cols = Math.max(1, columns);
-        var grid = [];
+    readonly property var packedUnusedToggles: QuickToggleLayout.pack(root.unusedToggles, root.columns)
+    readonly property list<var> positionedUnusedToggles: QuickToggleLayout.positionedItems(
+        root.unusedToggles,
+        root.packedUnusedToggles,
+        root.baseCellWidth,
+        root.baseCellHeight,
+        root.spacing
+    )
 
-        function isFree(r, c, w, h) {
-            if (c + w > cols) return false;
-            for (var dr = 0; dr < h; dr++) {
-                var rowArr = grid[r + dr];
-                if (rowArr) {
-                    for (var dc = 0; dc < w; dc++) {
-                        if (rowArr[c + dc]) return false;
-                    }
-                }
-            }
-            return true;
-        }
-
-        function markOccupied(r, c, w, h) {
-            for (var dr = 0; dr < h; dr++) {
-                var rowIdx = r + dr;
-                while (grid.length <= rowIdx) {
-                    grid.push(new Array(cols).fill(false));
-                }
-                for (var dc = 0; dc < w; dc++) {
-                    grid[rowIdx][c + dc] = true;
-                }
-            }
-        }
-
-        var maxRow = 0;
-        for (var i = 0; i < togglesList.length; i++) {
-            if (!togglesList[i])
-                continue;
-            var t = togglesList[i];
-            var defaultH = (t.type === "mediaWidget") ? 2 : 1;
-            var defaultW = (t.type === "mediaWidget") ? 2 : 1;
-            var w = Math.max(1, Math.min(t.sizeW ?? t.size ?? defaultW, cols));
-            var h = Math.max(1, t.sizeH ?? defaultH);
-
-            var r = 0;
-            var placed = false;
-            while (!placed) {
-                for (var c = 0; c <= cols - w; c++) {
-                    if (isFree(r, c, w, h)) {
-                        markOccupied(r, c, w, h);
-                        maxRow = Math.max(maxRow, r + h);
-                        placed = true;
-                        break;
-                    }
-                }
-                if (!placed) r++;
-            }
-        }
-        return maxRow;
+    // One packer owns both visible geometry and height. Delegates are decorated
+    // by stable id below; their model order remains the persisted order.
+    readonly property list<var> packedPages: {
+        var result = [];
+        for (var i = 0; i < geometryPages.length; i++)
+            result.push(QuickToggleLayout.pack(geometryPages[i] || [], root.columns));
+        return result;
     }
 
-
+    readonly property list<var> positionedPages: {
+        var result = [];
+        for (var i = 0; i < root.pages.length; i++) {
+            result.push(QuickToggleLayout.positionedItems(
+                root.pages[i] || [],
+                root.packedPages[i] || { rowsUsed: 0, items: [] },
+                root.baseCellWidth,
+                root.baseCellHeight,
+                root.spacing
+            ));
+        }
+        return result;
+    }
 
     // Calculate height for a specific page
     function pageHeight(pageIndex) {
-        if (pageIndex < 0 || pageIndex >= pages.length)
+        if (pageIndex < 0 || pageIndex >= root.pages.length)
             return baseCellHeight + 8;
-        var pageToggles = pages[pageIndex] || [];
-        var rows = getGridRowsNeeded(pageToggles);
+        var packedPage = packedPages[pageIndex];
+        var rows = packedPage ? packedPage.rowsUsed : 0;
         return Math.max(baseCellHeight, rows * (baseCellHeight + spacing) - spacing) + 8;
     }
 
     // Dynamic height based on current page + page indicators
     readonly property real currentContentHeight: pageHeight(currentPage) + (editMode ? 14 : 0)
-    readonly property real pageIndicatorHeight: pages.length > 1 ? 20 : 0
 
     implicitHeight: contentItem.implicitHeight + root.padding * 2
     Behavior on implicitHeight {
         animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
     }
 
-    // Helper: deep-clone pages, run mutator, reassign to Config
-    // This is REQUIRED because list<var> returns a copy, not a reference.
-    function mutatePages(mutatorFn) {
-        var cloned = JSON.parse(JSON.stringify(Config.options.sidebar.quickToggles.android.pages));
-        mutatorFn(cloned);
-        Config.options.sidebar.quickToggles.android.pages = cloned;
-    }
-
-    function resolveLayoutConflicts(pageIndex, gridColumns) {
-        var cols = Math.max(1, gridColumns);
-        mutatePages(function (pages) {
-            if (pageIndex < 0 || pageIndex >= pages.length)
-                return;
-            var page = pages[pageIndex];
-            if (!page || page.length === 0)
-                return;
-
-            for (var i = 0; i < page.length; i++) {
-                if (!page[i]) continue;
-                var w = page[i].sizeW ?? page[i].size ?? 1;
-                var h = page[i].sizeH ?? 1;
-                w = Math.max(1, Math.min(w, cols));
-                h = Math.max(1, h);
-                page[i].sizeW = w;
-                page[i].sizeH = h;
-                page[i].size = w;
-            }
-        });
-    }
-
     // Page management functions
     function addPage() {
-        var targetPage;
-        mutatePages(function (p) {
-            p.push([]);
-            targetPage = p.length - 1;
-        });
-        currentPage = targetPage;
+        if (editController.addPage())
+            currentPage = editController.targetPage;
     }
 
     function removePage(pageIndex) {
-        if (pages.length <= 1)
-            return; // Never remove last page
-        if (pageIndex < 0 || pageIndex >= pages.length)
+        if (!editController.removePage(pageIndex))
             return;
-
-        mutatePages(function (p) {
-            p.splice(pageIndex, 1);
-        });
-
-        if (currentPage >= pages.length)
-            currentPage = Math.max(0, pages.length - 1);
+        var remaining = Config.options.sidebar.quickToggles.android.pages.length;
+        currentPage = Math.min(currentPage, Math.max(0, remaining - 1));
     }
 
     function goToPage(pageIndex) {
-        if (pageIndex < 0 || pageIndex >= pages.length)
+        if (pageIndex < 0 || pageIndex >= displayPages.length)
             return;
         currentPage = pageIndex;
     }
@@ -267,16 +202,14 @@ AbstractQuickPanel {
         interval: 500
         repeat: false
         onTriggered: {
-            if (root.dragScrollPendingPage >= 0 && root.dragScrollPendingPage < root.pages.length) {
+            if (root.dragScrollPendingPage >= 0 && root.dragScrollPendingPage < root.displayPages.length) {
                 root.currentPage = root.dragScrollPendingPage;
-                // Notify all dragging buttons about the new target page
-                root.dragScrollPageChanged(root.dragScrollPendingPage);
+                if (root.editController.active)
+                    root.editController.setTargetPage(root.dragScrollPendingPage);
             }
             root.dragScrollPendingPage = -1;
         }
     }
-
-    signal dragScrollPageChanged(int newPage)
 
     function cancelDragScroll() {
         dragScrollTimer.stop();
@@ -287,59 +220,18 @@ AbstractQuickPanel {
         var newPage = -1;
         if (absX < dragScrollEdgeThreshold && currentPage > 0) {
             newPage = currentPage - 1;
-        } else if (absX > root.width - dragScrollEdgeThreshold && currentPage < pages.length - 1) {
+        } else if (absX > root.width - dragScrollEdgeThreshold && currentPage < displayPages.length - 1) {
             newPage = currentPage + 1;
         }
 
         if (newPage >= 0 && newPage !== dragScrollPendingPage) {
             dragScrollPendingPage = newPage;
             dragScrollTimer.restart();
-            // Update dragTargetPage on the button immediately for visual feedback
-            if (dragButton && dragButton.hasOwnProperty("dragTargetPage")) {
-                dragButton.dragTargetPage = newPage;
-            }
         } else if (newPage < 0) {
             // Back in safe zone — reset pending
             dragScrollPendingPage = -1;
             dragScrollTimer.stop();
-            if (dragButton && dragButton.hasOwnProperty("dragTargetPage")) {
-                dragButton.dragTargetPage = dragButton.pageIndex;
-            }
         }
-    }
-
-    // Move a toggle from one page to another at the drop position
-    function moveToggleToPage(buttonType, fromPage, toPage, dropAbsX, dropAbsY) {
-        if (fromPage === toPage)
-            return;
-        if (toPage < 0 || toPage >= pages.length)
-            return;
-
-        mutatePages(function (pages) {
-            if (fromPage < 0 || fromPage >= pages.length)
-                return;
-            var sourcePage = pages[fromPage];
-            if (!sourcePage)
-                return;
-
-            // Find and remove the toggle from the source page
-            var toggleData = null;
-            for (var i = 0; i < sourcePage.length; i++) {
-                if (sourcePage[i].type === buttonType) {
-                    toggleData = JSON.parse(JSON.stringify(sourcePage[i]));
-                    sourcePage.splice(i, 1);
-                    break;
-                }
-            }
-            if (!toggleData)
-                return;
-
-            // Append to the target page (position at end, layout engine will sort)
-            var targetPage = pages[toPage];
-            if (!targetPage)
-                pages[toPage] = [];
-            pages[toPage].push(toggleData);
-        });
     }
 
     Column {
@@ -357,46 +249,28 @@ AbstractQuickPanel {
             width: parent.width
             spacing: root.spacing
 
+            StableQuickToggleModel {
+                id: fixedSlidersModel
+                sourceValues: {
+                    var list = [];
+                    const cfg = Config.options.sidebar.quickSliders;
+                    if (cfg.enable) {
+                        if (cfg.showBrightness)
+                            list.push(QuickToggleCatalog.item("brightnessSlider", "brightnessSlider", root.columns, 1, root.columns));
+                        if (cfg.showGamma)
+                            list.push(QuickToggleCatalog.item("gammaSlider", "gammaSlider", root.columns, 1, root.columns));
+                        if (cfg.showVolume)
+                            list.push(QuickToggleCatalog.item("volumeSlider", "volumeSlider", root.columns, 1, root.columns));
+                        if (cfg.showMic)
+                            list.push(QuickToggleCatalog.item("micSlider", "micSlider", root.columns, 1, root.columns));
+                    }
+                    return list;
+                }
+            }
+
             Repeater {
                 id: fixedSlidersRepeater
-                model: ScriptModel {
-                    values: {
-                        var list = [];
-                        const cfg = Config.options.sidebar.quickSliders;
-                        if (cfg.enable) {
-                            if (cfg.showBrightness)
-                                list.push({
-                                    type: "brightnessSlider",
-                                    sizeW: root.columns,
-                                    sizeH: 1,
-                                    size: root.columns
-                                });
-                            if (cfg.showGamma)
-                                list.push({
-                                    type: "gammaSlider",
-                                    sizeW: root.columns,
-                                    sizeH: 1,
-                                    size: root.columns
-                                });
-                            if (cfg.showVolume)
-                                list.push({
-                                    type: "volumeSlider",
-                                    sizeW: root.columns,
-                                    sizeH: 1,
-                                    size: root.columns
-                                });
-                            if (cfg.showMic)
-                                list.push({
-                                    type: "micSlider",
-                                    sizeW: root.columns,
-                                    sizeH: 1,
-                                    size: root.columns
-                                });
-                        }
-                        return list;
-                    }
-                    objectProp: "type"
-                }
+                model: fixedSlidersModel
                 delegate: AndroidToggleDelegateChooser {
                     editMode: false // Force false so they can't be dragged
                     baseCellWidth: root.baseCellWidth
@@ -440,7 +314,7 @@ AbstractQuickPanel {
             Flickable {
                 id: flickable
                 anchors.fill: parent
-                contentWidth: width * root.pages.length
+                contentWidth: width * root.displayPages.length
                 contentHeight: height
                 flickableDirection: Flickable.HorizontalFlick
                 boundsBehavior: Flickable.StopAtBounds
@@ -449,7 +323,7 @@ AbstractQuickPanel {
                 // Snap to page on release
                 onMovementEnded: {
                     var targetPage = Math.round(contentX / width);
-                    targetPage = Math.max(0, Math.min(targetPage, root.pages.length - 1));
+                    targetPage = Math.max(0, Math.min(targetPage, root.displayPages.length - 1));
                     root.currentPage = targetPage;
                     snapAnimation.to = targetPage * width;
                     snapAnimation.start();
@@ -462,14 +336,14 @@ AbstractQuickPanel {
                     onWheel: function (wheelEvent) {
                         if (Math.abs(wheelEvent.angleDelta.x) > Math.abs(wheelEvent.angleDelta.y)) {
                             // Horizontal scroll
-                            if (wheelEvent.angleDelta.x < 0 && root.currentPage < root.pages.length - 1) {
+                            if (wheelEvent.angleDelta.x < 0 && root.currentPage < root.displayPages.length - 1) {
                                 root.goToPage(root.currentPage + 1);
                             } else if (wheelEvent.angleDelta.x > 0 && root.currentPage > 0) {
                                 root.goToPage(root.currentPage - 1);
                             }
                         } else {
                             // Vertical scroll → map to horizontal paging
-                            if (wheelEvent.angleDelta.y < 0 && root.currentPage < root.pages.length - 1) {
+                            if (wheelEvent.angleDelta.y < 0 && root.currentPage < root.displayPages.length - 1) {
                                 root.goToPage(root.currentPage + 1);
                             } else if (wheelEvent.angleDelta.y > 0 && root.currentPage > 0) {
                                 root.goToPage(root.currentPage - 1);
@@ -493,7 +367,7 @@ AbstractQuickPanel {
 
                     Repeater {
                         id: pagesRepeater
-                        model: root.pages.length
+                        model: root.displayPages.length
 
                         Item {
                             id: pageContainer
@@ -503,7 +377,7 @@ AbstractQuickPanel {
 
                             // Show only current page content as visible when current
                             property bool isCurrent: root.currentPage === index
-                            property list<var> pageToggles: root.pages[index] || []
+                            property list<var> pageToggles: root.positionedPages[index] || []
 
                             Loader {
                                 id: pageContentLoader
@@ -514,67 +388,53 @@ AbstractQuickPanel {
                                 }
                                 active: pageContainer.isCurrent || root.editMode
                                 asynchronous: true
-                                sourceComponent: GridLayout {
-                                    id: pageContentGrid
+                                sourceComponent: Item {
+                                    id: pageContentCanvas
                                     anchors {
                                         left: parent.left
                                         right: parent.right
                                         top: parent.top
                                     }
-                                    columns: root.columns
-                                    columnSpacing: root.spacing
-                                    rowSpacing: root.spacing
+                                    implicitHeight: root.pageHeight(pageContainer.index)
+                                    height: implicitHeight
                                     objectName: "pageContent_" + pageContainer.index
 
-                                    Repeater {
-                                        model: root.columns
-                                        Item {
-                                            required property int index
-                                            Layout.row: 1000
-                                            Layout.column: index
-                                            Layout.columnSpan: 1
-                                            Layout.rowSpan: 1
-                                            Layout.preferredWidth: root.baseCellWidth
-                                            Layout.preferredHeight: 0
-                                            implicitWidth: root.baseCellWidth
-                                            implicitHeight: 0
-                                        }
+                                    StableQuickToggleModel {
+                                        id: pageToggleModel
+                                        sourceValues: pageContainer.pageToggles
                                     }
 
                                     Repeater {
                                         id: gridRepeater
-                                    model: ScriptModel {
-                                        values: pageContainer.pageToggles
-                                        objectProp: "type"
-                                    }
-                                    delegate: AndroidToggleDelegateChooser {
+                                        model: pageToggleModel
+                                        delegate: AndroidToggleDelegateChooser {
 
-                                        editMode: root.editMode
-                                        baseCellWidth: root.baseCellWidth
-                                        baseCellHeight: root.baseCellHeight
-                                        spacing: root.spacing
-                                        isUnused: false
-                                        pageIndex: pageContainer.index
-                                        gridColumns: root.columns
-                                        panel: root
-                                        gridRef: pageContentGrid
-                                        entranceTrigger: root.entranceTrigger
+                                            editMode: root.editMode
+                                            baseCellWidth: root.baseCellWidth
+                                            baseCellHeight: root.baseCellHeight
+                                            spacing: root.spacing
+                                            isUnused: false
+                                            pageIndex: pageContainer.index
+                                            gridColumns: root.columns
+                                            panel: root
+                                            gridRef: pageContentCanvas
+                                            entranceTrigger: root.entranceTrigger
 
-                                        onOpenAudioOutputDialog: root.openAudioOutputDialog()
-                                        onOpenAudioInputDialog: root.openAudioInputDialog()
-                                        onOpenBluetoothDialog: root.openBluetoothDialog()
-                                        onOpenNightLightDialog: root.openNightLightDialog()
-                                        onOpenWifiDialog: root.openWifiDialog()
-                                        onOpenDarkModeDialog: root.openDarkModeDialog()
-                                        onOpenLocalSendDialog: root.openLocalSendDialog()
-                                        onOpenVpnDialog: root.openVpnDialog()
-                                        onOpenTailscaleDialog: root.openTailscaleDialog()
-                                        onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
-                                        onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
-                                        onOpenScreenShaderDialog: root.openScreenShaderDialog()
+                                            onOpenAudioOutputDialog: root.openAudioOutputDialog()
+                                            onOpenAudioInputDialog: root.openAudioInputDialog()
+                                            onOpenBluetoothDialog: root.openBluetoothDialog()
+                                            onOpenNightLightDialog: root.openNightLightDialog()
+                                            onOpenWifiDialog: root.openWifiDialog()
+                                            onOpenDarkModeDialog: root.openDarkModeDialog()
+                                            onOpenLocalSendDialog: root.openLocalSendDialog()
+                                            onOpenVpnDialog: root.openVpnDialog()
+                                            onOpenTailscaleDialog: root.openTailscaleDialog()
+                                            onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
+                                            onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
+                                            onOpenScreenShaderDialog: root.openScreenShaderDialog()
+                                        }
                                     }
                                 }
-                            }
                             }
                         }
                     }
@@ -587,10 +447,10 @@ AbstractQuickPanel {
             id: pageIndicators
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 6
-            visible: root.pages.length > 1
+            visible: root.displayPages.length > 1
 
             Repeater {
-                model: root.pages.length
+                model: root.displayPages.length
                 delegate: Rectangle {
                     required property int index
                     width: root.currentPage === index ? 16 : 8
@@ -665,7 +525,7 @@ AbstractQuickPanel {
                             color: Appearance.colors.colPrimary
                         }
                         StyledText {
-                            text: Translation.tr("Page %1 / %2").arg(root.currentPage + 1).arg(root.pages.length)
+                            text: Translation.tr("Page %1 / %2").arg(root.currentPage + 1).arg(root.displayPages.length)
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.weight: Font.Bold
                             color: Appearance.colors.colOnSurface
@@ -677,7 +537,7 @@ AbstractQuickPanel {
                 RippleButton {
                     Layout.preferredWidth: root.baseCellHeight
                     Layout.preferredHeight: root.baseCellHeight * 0.6
-                    visible: root.currentPage < root.pages.length - 1
+                    visible: root.currentPage < root.displayPages.length - 1
                     bottomLeftRadius: Appearance.rounding.full
                     topLeftRadius: Appearance.rounding.full
                     bottomRightRadius: Appearance.rounding.verysmall
@@ -721,7 +581,7 @@ AbstractQuickPanel {
                 RippleButton {
                     Layout.preferredWidth: root.baseCellHeight
                     Layout.preferredHeight: root.baseCellHeight * 0.6
-                    visible: root.pages.length > 1
+                    visible: root.displayPages.length > 1
                     bottomLeftRadius: Appearance.rounding.verysmall
                     topLeftRadius: Appearance.rounding.verysmall
                     bottomRightRadius: Appearance.rounding.full
@@ -761,32 +621,23 @@ AbstractQuickPanel {
         // Unused toggles (edit mode)
         FadeLoader {
             shown: root.editMode
-            sourceComponent: GridLayout {
-                id: unusedRows
-                columns: root.columns
-                columnSpacing: root.spacing
-                rowSpacing: root.spacing
+            anchors {
+                left: parent.left
+                right: parent.right
+            }
+            sourceComponent: Item {
+                id: unusedCanvas
+                implicitHeight: Math.max(0, root.packedUnusedToggles.rowsUsed
+                    * (root.baseCellHeight + root.spacing) - root.spacing)
+                height: implicitHeight
 
-                Repeater {
-                    model: root.columns
-                    Item {
-                        required property int index
-                        Layout.row: 1000
-                        Layout.column: index
-                        Layout.columnSpan: 1
-                        Layout.rowSpan: 1
-                        Layout.preferredWidth: root.baseCellWidth
-                        Layout.preferredHeight: 0
-                        implicitWidth: root.baseCellWidth
-                        implicitHeight: 0
-                    }
+                StableQuickToggleModel {
+                    id: unusedToggleModel
+                    sourceValues: root.positionedUnusedToggles
                 }
 
                 Repeater {
-                    model: ScriptModel {
-                        values: root.unusedToggles
-                        objectProp: "type"
-                    }
+                    model: unusedToggleModel
                     delegate: AndroidToggleDelegateChooser {
 
                         editMode: root.editMode
@@ -797,7 +648,7 @@ AbstractQuickPanel {
                         pageIndex: root.currentPage
                         gridColumns: root.columns
                         panel: root
-                        gridRef: unusedRows
+                        gridRef: unusedCanvas
 
                         onOpenAudioOutputDialog: root.openAudioOutputDialog()
                         onOpenAudioInputDialog: root.openAudioInputDialog()
@@ -832,4 +683,5 @@ AbstractQuickPanel {
             currentPage = Math.max(0, pages.length - 1);
         }
     }
+
 }

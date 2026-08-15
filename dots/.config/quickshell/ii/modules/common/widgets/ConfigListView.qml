@@ -13,30 +13,28 @@ Rectangle {
 
     Layout.fillWidth: true
 
-    // Use view contentHeight for accurate dynamic row heights
-    implicitHeight: view.contentHeight + componentSelectRow.height + 30
+    property real entryHeight: 48
+    property real listSpacing: 4
+    property real contentMargins: 10
+    property real sectionSpacing: 10
+
+    readonly property int itemCount: root.listModel?.length ?? 0
+    readonly property real entriesHeight: root.itemCount <= 0
+        ? 0
+        : root.itemCount * root.entryHeight + (root.itemCount - 1) * root.listSpacing
+
+    // Deterministic geometry: independent of view.contentHeight
+    implicitHeight: root.entriesHeight + componentSelectRow.implicitHeight + root.contentMargins * 2 + root.sectionSpacing
 
     color: "transparent"
     radius: Appearance.rounding.large
 
     property int barSection // 0: left, 1: center, 2: right
     property var listModel
-    property int selectedCompIndex
+    property var availableComponents: []
+    property int selectedCompIndex: 0
 
     property bool dragging: false
-
-    // Compute available components from registry based on what's already used
-    readonly property var usedIds: {
-        let ids = [];
-        let allLists = [Config.options.bar.layouts.left, Config.options.bar.layouts.center, Config.options.bar.layouts.right];
-        for (let list of allLists) {
-            for (let item of list) {
-                ids.push(item.id);
-            }
-        }
-        return ids;
-    }
-    readonly property var availableComps: BarComponentRegistry.getAvailableComponents(usedIds)
 
     signal updated(var newList)
 
@@ -45,7 +43,7 @@ Rectangle {
     }
 
     /*
-     * We have to initilize the layout because we don't define the default values in Config.qml file
+     * We have to initialize the layout because we don't define the default values in Config.qml file
     */
     function initilizateLayout(list) {
         const source = list || [];
@@ -94,38 +92,37 @@ Rectangle {
         }
         delegate: ConfigListViewEntry {
             barSection: root.barSection
+            entryHeight: root.entryHeight
         }
     }
 
-    StyledListView {
-        id: view
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: root.contentMargins
+        spacing: root.sectionSpacing
 
-        interactive: false
-        anchors {
-            fill: parent
-            margins: 10
+        StyledListView {
+            id: view
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.entriesHeight
+            Layout.minimumHeight: root.entriesHeight
+            Layout.maximumHeight: root.entriesHeight
+
+            interactive: false
+            spacing: root.listSpacing
+            cacheBuffer: 0
+            model: visualModel
+
+            animatePopulate: false
+            animateAppearance: !Config.options?.appearance?.settingsPerformanceMode
+            animateMovement: !Config.options?.appearance?.settingsPerformanceMode
         }
 
-        add: null
-
-        model: visualModel
-
-        spacing: 4
-        cacheBuffer: 0
-        animateAppearance: !Config.options?.appearance?.settingsPerformanceMode
-        animateMovement: !Config.options?.appearance?.settingsPerformanceMode
-    }
-
-    RowLayout {
-        id: componentSelectRow
-        anchors {
-            left: parent.left
-            right: parent.right
-            bottom: parent.bottom
-            margins: 10
-        }
-
-        spacing: 4
+        RowLayout {
+            id: componentSelectRow
+            Layout.fillWidth: true
+            spacing: 4
 
             StyledComboBox {
                 id: componentSelector
@@ -135,43 +132,44 @@ Rectangle {
                 Layout.minimumWidth: 0
 
                 topRightRadius: Appearance.rounding.verysmall
-            bottomRightRadius: Appearance.rounding.verysmall
+                bottomRightRadius: Appearance.rounding.verysmall
 
-            buttonIcon: "box"
-            textRole: "title"
-            model: root.availableComps
-            enabled: root.availableComps.length >= 1
+                buttonIcon: "box"
+                textRole: "title"
+                model: root.availableComponents
+                enabled: root.availableComponents.length >= 1
 
-            onActivated: index => {
-                root.selectedCompIndex = index;
+                onActivated: index => {
+                    root.selectedCompIndex = index;
+                }
             }
-        }
 
-        RippleButton {
-            id: addComponentButton
-            implicitHeight: componentSelector.implicitHeight
+            RippleButton {
+                id: addComponentButton
+                implicitHeight: componentSelector.implicitHeight
 
-            topLeftRadius: Appearance.rounding.verysmall
-            bottomLeftRadius: Appearance.rounding.verysmall
-            topRightRadius: Appearance.rounding.full
-            bottomRightRadius: Appearance.rounding.full
+                topLeftRadius: Appearance.rounding.verysmall
+                bottomLeftRadius: Appearance.rounding.verysmall
+                topRightRadius: Appearance.rounding.full
+                bottomRightRadius: Appearance.rounding.full
 
-            buttonText: Translation.tr("Add component")
-            enabled: root.availableComps.length >= 1
+                buttonText: Translation.tr("Add component")
+                enabled: root.availableComponents.length >= 1
 
-            colBackground: Appearance.colors.colSecondaryContainer
-            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-            rippleColor: Appearance.colors.colSecondaryContainerActive
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                rippleColor: Appearance.colors.colSecondaryContainerActive
 
-            onClicked: {
-                let available = root.availableComps;
-                if (available[root.selectedCompIndex] == null)
-                    return;
-                let newComp = initilizateComponent(available[root.selectedCompIndex]);
-                // Create a NEW array reference so the binding in BarConfig.qml
-                // actually triggers QML property change notification to update
-                // the bar's Repeater models.
-                root.updated(listModel.concat([newComp]));
+                onClicked: {
+                    let available = root.availableComponents;
+                    if (available[root.selectedCompIndex] == null)
+                        return;
+                    let newComp = initilizateComponent(available[root.selectedCompIndex]);
+                    // Create a NEW array reference so the binding in BarConfig.qml
+                    // actually triggers QML property change notification to update
+                    // the bar's Repeater models.
+                    root.updated(listModel.concat([newComp]));
+                }
             }
         }
     }

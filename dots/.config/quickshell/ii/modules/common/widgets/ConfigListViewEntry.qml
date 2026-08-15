@@ -21,19 +21,15 @@ Item {
     readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
 
     property int barSection
+    property real entryHeight: 48
 
     anchors {
         right: parent?.right
         left: parent?.left
     }
-    height: content.height
+    height: wrapper.entryHeight
+    implicitHeight: wrapper.entryHeight
     property int visualIndex: DelegateModel.itemsIndex
-
-
-    Behavior on y {
-        enabled: !wrapper.performanceMode
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-    }
 
     function getOrderedList() {
         var ordered = []
@@ -82,7 +78,7 @@ Item {
         bottomLeftRadius: bottomRadius
         bottomRightRadius: bottomRadius
 
-        height: contentRow.implicitHeight + 4
+        height: wrapper.entryHeight
 
         color: dragArea.held ? colActive : colBackground
         Behavior on color {
@@ -259,7 +255,7 @@ Item {
         drag.target: held ? content : undefined
         drag.axis: Drag.YAxis
         drag.minimumY: 0
-        drag.maximumY: root.listModel.length * 40 + (root.listModel.length - 1) * 4
+        drag.maximumY: (root.listModel?.length ?? 1) * wrapper.entryHeight + ((root.listModel?.length ?? 1) - 1) * 4
 
         onPressAndHold: {
             root.dragging = true
@@ -288,8 +284,11 @@ Item {
             fill: button.iconFill ? 1 : 0
         }
 
-        StyledToolTip {
-            text: button.tooltip
+        Loader {
+            active: button.hovered && button.tooltip !== ""
+            sourceComponent: StyledToolTip {
+                text: button.tooltip
+            }
         }
     }
 }

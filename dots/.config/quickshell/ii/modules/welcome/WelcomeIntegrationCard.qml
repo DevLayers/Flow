@@ -13,12 +13,15 @@ RippleButton {
     property var usedInChips: []
     property string stateText: ""
     property string stateKind: "neutral"
+    property bool hero: false
 
     signal activated()
 
-    implicitHeight: 114
+    implicitHeight: root.hero
+        ? Appearance.rounding.verylarge * 5 + Appearance.rounding.normal
+        : Appearance.rounding.verylarge * 3 + Appearance.rounding.normal
     buttonRadius: Appearance.rounding.large
-    buttonRadiusPressed: Appearance.rounding.full
+    buttonRadiusPressed: Appearance.rounding.normal
     colBackground: Appearance.colors.colLayer1
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colBackgroundActive: Appearance.colors.colLayer1Active
@@ -53,7 +56,7 @@ RippleButton {
         anchors.bottomMargin: 14
         spacing: 6
 
-        // Top Row: Icon + Title + Status Pill + Arrow
+        // Top Row: expressive shape + title + status pill
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
@@ -61,19 +64,30 @@ RippleButton {
             MaterialShapeWrappedMaterialSymbol {
                 Layout.alignment: Qt.AlignVCenter
                 text: root.materialIcon
-                shape: MaterialShape.Shape.Cookie7Sided
-                iconSize: Appearance.font.pixelSize.normal
-                padding: 8
+                shape: root.hovered
+                    ? MaterialShape.Shape.SoftBurst
+                    : MaterialShape.Shape.Cookie7Sided
+                iconSize: root.hero
+                    ? Appearance.font.pixelSize.huge
+                    : Appearance.font.pixelSize.large
+                padding: Appearance.rounding.small
                 color: Appearance.colors.colSecondaryContainer
                 colSymbol: Appearance.colors.colOnSecondaryContainer
+                rotation: root.hovered ? 8 : 0
+
+                Behavior on rotation {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
             }
 
             StyledText {
                 Layout.alignment: Qt.AlignVCenter
                 text: root.title
                 color: Appearance.colors.colOnLayer1
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.DemiBold
+                font.pixelSize: root.hero
+                    ? Appearance.font.pixelSize.hugeass
+                    : Appearance.font.pixelSize.large
+                font.weight: Font.Bold
                 elide: Text.ElideRight
             }
 
@@ -84,12 +98,30 @@ RippleButton {
                 visible: root.stateText.length > 0
                 radius: Appearance.rounding.full
                 implicitHeight: 22
-                implicitWidth: statusTextItem.implicitWidth + 14
+                implicitWidth: statusIcon.implicitWidth + statusTextItem.implicitWidth + 22
                 color: root.stateBgColor
+
+                MaterialSymbol {
+                    id: statusIcon
+                    anchors.left: parent.left
+                    anchors.leftMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.stateText.indexOf("…") >= 0
+                        ? "progress_activity"
+                        : root.stateKind === "ready"
+                            ? "check"
+                            : root.stateKind === "attention"
+                                ? "warning"
+                                : "info"
+                    iconSize: Appearance.font.pixelSize.smaller
+                    color: root.stateFgColor
+                }
 
                 StyledText {
                     id: statusTextItem
-                    anchors.centerIn: parent
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: statusIcon.right
+                    anchors.leftMargin: 4
                     text: root.stateText
                     color: root.stateFgColor
                     font.pixelSize: Appearance.font.pixelSize.smaller - 1
@@ -97,12 +129,6 @@ RippleButton {
                 }
             }
 
-            MaterialSymbol {
-                Layout.alignment: Qt.AlignVCenter
-                text: "arrow_forward"
-                iconSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnLayer2
-            }
         }
 
         // Description
@@ -110,8 +136,10 @@ RippleButton {
             Layout.fillWidth: true
             text: root.description
             color: Appearance.colors.colOnLayer2
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            maximumLineCount: 1
+            font.pixelSize: root.hero
+                ? Appearance.font.pixelSize.small
+                : Appearance.font.pixelSize.smaller
+            maximumLineCount: root.hero ? 2 : 1
             elide: Text.ElideRight
         }
 

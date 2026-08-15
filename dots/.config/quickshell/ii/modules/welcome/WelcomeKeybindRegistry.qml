@@ -51,10 +51,10 @@ QtObject {
         "icon": "wallpaper",
         "matcher": "Shell: Toggle wallpaper selector"
     }, {
-        "id": "welcome",
-        "labelKey": "Welcome",
-        "icon": "waving_hand",
-        "matcher": "Shell: Toggle welcome"
+        "id": "keyboardLayout",
+        "labelKey": "Switch keyboard layout",
+        "icon": "keyboard",
+        "matcher": "Switch keyboard layout"
     }]
 
     readonly property var actions: [...everydayActions, ...exploreActions]

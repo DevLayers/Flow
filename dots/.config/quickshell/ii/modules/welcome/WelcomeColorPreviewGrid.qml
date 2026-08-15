@@ -57,6 +57,7 @@ GridLayout {
             customTheme: root.customTheme
             builtInTheme: root.builtInTheme
             shouldLoad: index < root.loadedCount
+            expressiveSelection: true
 
             onHoveredChanged: {
                 const displayName = root.formatText(modelData);

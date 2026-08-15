@@ -57,6 +57,7 @@ RippleButton {
     readonly property bool toggled: isWidgetScheme
         ? widgetSchemeToggled
         : Config.options.appearance.palette.type === colorScheme
+    property bool expressiveSelection: false
     readonly property bool sharpMode: Config.options.appearance.sharpMode
 
     colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
@@ -68,6 +69,9 @@ RippleButton {
         : Appearance.colors.colLayer2Active
 
     buttonRadius: Appearance.rounding.small
+
+    scale: (root.down ? 0.96 : (root.hovered ? 1.01 : 1.0))
+        * (root.expressiveSelection && root.toggled ? 1.03 : 1.0)
 
     Layout.fillWidth: true
     implicitHeight: 64

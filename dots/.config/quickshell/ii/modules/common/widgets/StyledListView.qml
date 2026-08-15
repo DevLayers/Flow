@@ -14,6 +14,7 @@ ListView {
     property real dragDistance: 0
     property bool popin: true
     property bool animateAppearance: true
+    property bool animatePopulate: true
     property bool animateMovement: false
     property bool dismissToLeft: false
     property bool useSlideInAnimation: false
@@ -52,10 +53,14 @@ ListView {
     ScrollBar.vertical: StyledScrollBar {}
 
     MouseArea {
-        visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
+        visible: root.interactive && root.contentHeight > root.height
         anchors.fill: parent
         acceptedButtons: Qt.NoButton
         onWheel: function (wheelEvent) {
+            if (!root.interactive || root.contentHeight <= root.height) {
+                wheelEvent.accepted = false;
+                return;
+            }
             const delta = wheelEvent.angleDelta.y / root.mouseScrollDeltaThreshold;
             // The angleDelta.y of a touchpad is usually small and continuous,
             // while that of a mouse wheel is typically in multiples of ±120.
@@ -114,7 +119,7 @@ ListView {
     }
 
     populate: Transition {
-        enabled: root.animateAppearance
+        enabled: root.animatePopulate
         ParallelAnimation {
             // Slide Animation
             NumberAnimation {
