@@ -273,9 +273,8 @@ Item {
 
                         visible: opacity > 0
                         opacity: (wallpaper.status === Image.Ready && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
-                        // GPU: cap sourceSize to screen resolution — loading > native res wastes VRAM with no visual gain.
-                        // Clamp to max 110% of screen (enough for parallax headroom).
-                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.min(Math.round(screen.width * preferredWallpaperScale), Math.round(screen.width * 1.1)) : 1920, screen.height > 0 ? Math.min(Math.round(screen.height * preferredWallpaperScale), Math.round(screen.height * 1.1)) : 1080) : Qt.size(-1, -1)
+                        // GPU: cap sourceSize to screen resolution with dynamic zoom headroom — loading > needed res wastes VRAM with no visual gain.
+                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
 
                         imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
                         animated: Config.options.background.animateWallpaperChanges
@@ -304,8 +303,8 @@ Item {
                             }
                         }
 
-                        // GPU: same sourceSize cap as main wallpaper
-                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.min(Math.round(screen.width * preferredWallpaperScale), Math.round(screen.width * 1.1)) : 1920, screen.height > 0 ? Math.min(Math.round(screen.height * preferredWallpaperScale), Math.round(screen.height * 1.1)) : 1080) : Qt.size(-1, -1)
+                        // GPU: same dynamic sourceSize cap as main wallpaper
+                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
                         imageSource: (isActive && !wallpaperSafetyTriggered) ? wallpaperImageRoot.lockscreenWallpaperPath : ""
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation

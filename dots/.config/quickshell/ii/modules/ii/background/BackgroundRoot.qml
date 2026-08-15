@@ -302,16 +302,9 @@ PanelWindow {
         const height = bgRoot.wallpaperHeight;
         const screenW = bgRoot.screen.width;
         const screenH = bgRoot.screen.height;
-        if (width <= 0 || height <= 0) return;
+        if (width <= 0 || height <= 0 || screenW <= 0 || screenH <= 0) return;
         
-        let targetScale = 1.0;
-        if (Config.options.background.scaleLargeWallpapers) {
-            if (width <= screenW || height <= screenH) {
-                targetScale = Math.max(screenW / width, screenH / height);
-            } else {
-                targetScale = Math.min(bgRoot.preferredWallpaperScale, width / screenW, height / screenH);
-            }
-        }
+        let targetScale = bgRoot.preferredWallpaperScale;
         
         if (Config.options.background.blurWhenWindowsOpen || Config.options.lock.blur.enable) {
             targetScale *= 1.03;
