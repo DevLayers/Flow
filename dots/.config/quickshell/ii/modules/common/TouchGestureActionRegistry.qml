@@ -151,7 +151,7 @@ Singleton {
             break;
 
         case "regionScreenshot":
-            Hyprland.dispatch("global", "quickshell:regionScreenshot");
+            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "region", "screenshot"]);
             break;
 
         case "fullscreenScreenshot":
@@ -159,11 +159,11 @@ Singleton {
             break;
 
         case "regionSearch":
-            Hyprland.dispatch("global", "quickshell:regionSearch");
+            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "region", "search"]);
             break;
 
         case "regionOcr":
-            Hyprland.dispatch("global", "quickshell:regionOcr");
+            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "region", "ocr"]);
             break;
 
         case "screenTranslate":
@@ -171,15 +171,15 @@ Singleton {
             break;
 
         case "colorPicker":
-            Hyprland.dispatch("global", "quickshell:colorPickerLaunch");
+            GlobalStates.launchColorPicker();
             break;
 
         case "regionRecord":
-            Hyprland.dispatch("global", "quickshell:regionRecord");
+            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "region", "record"]);
             break;
 
         case "regionRecordWithSound":
-            Hyprland.dispatch("global", "quickshell:regionRecordWithSound");
+            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "region", "recordWithSound"]);
             break;
 
         case "mediaControls":
@@ -219,7 +219,7 @@ Singleton {
             break;
 
         case "wallpaperRandom":
-            Hyprland.dispatch("global", "quickshell:wallpaperSelectorRandom");
+            Wallpapers.randomFromCurrentFolder();
             break;
 
         case "toggleLightDark":
@@ -227,19 +227,19 @@ Singleton {
             break;
 
         case "scratchpad":
-            Hyprland.dispatch("togglespecialworkspace", "special");
+            Hyprland.dispatch("hl.dsp.workspace.toggle_special('special')");
             break;
 
         case "closeWindow":
-            Hyprland.dispatch("killactive", "");
+            Hyprland.dispatch("hl.dsp.window.close()");
             break;
 
         case "toggleFullscreen":
-            Hyprland.dispatch("fullscreen", "0");
+            Hyprland.dispatch("hl.dsp.window.fullscreen({ mode = 'fullscreen', action = 'toggle' })");
             break;
 
         case "toggleFloating":
-            Hyprland.dispatch("togglefloating", "");
+            Hyprland.dispatch("hl.dsp.window.float({ action = 'toggle' })");
             break;
 
         case "none":

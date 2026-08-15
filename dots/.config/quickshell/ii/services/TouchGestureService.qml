@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs
 import qs.services
@@ -90,8 +91,16 @@ Singleton {
     function isFullscreenOnScreen(screenName) {
         try {
             var focusedName = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
-            if (focusedName === screenName && HyprlandData && HyprlandData.activeWindow && HyprlandData.activeWindow.fullscreen) {
-                return true;
+            if (focusedName === screenName) {
+                if (ToplevelManager.activeToplevel?.wayland?.fullscreen) {
+                    return true;
+                }
+                var mon = Hyprland.monitorFor(screenByName(screenName));
+                if (mon && mon.activeWorkspace && HyprlandData && HyprlandData.windowList) {
+                    var wsId = mon.activeWorkspace.id;
+                    var fsWin = HyprlandData.windowList.find(w => w.workspace?.id === wsId && (w.fullscreen || (w.fullscreenMode !== undefined && w.fullscreenMode > 0)));
+                    if (fsWin) return true;
+                }
             }
         } catch (e) {}
         return false;
