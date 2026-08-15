@@ -21,6 +21,7 @@ ShellRoot {
     property string openRgbApplyScript: Quickshell.shellPath("scripts/colors/openRGB/apply_openrgb.py")
     property bool openRgbStartupApplied: false
 
+    // Stuff for every panel family
     ReloadPopup {}
 
     Component.onCompleted: {
@@ -38,13 +39,13 @@ ShellRoot {
         Updates.load();
         DarkModeService.automatic;
         ChangelogService.load();
-        SoundService.indexReady;
-        VideoColorSampler.active;
-        WaterReminderService.enabled;
-        GoogleDriveService.configured;
-        AppStats.stateDir;
-        TilingAssistant.enabled;
-        TouchGestureService.enabled;
+        SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled
+        VideoColorSampler.active; // Touch singleton to initialize
+        WaterReminderService.enabled; // Touch singleton: drives water reminder notifications
+        GoogleDriveService.configured; // Touch singleton: keeps scheduled backups independent of Settings
+        AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
+        TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
+        TouchGestureService.enabled; // Touch singleton: starts passive touch input helper daemon
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
             PhoneContactsService.available;
@@ -53,6 +54,7 @@ ShellRoot {
         root.applyOpenRgbIfEnabled();
     }
 
+    // Panel families
     property var families: ["ii", "waffle"]
     function cyclePanelFamily() {
         const currentIndex = families.indexOf(Config.options.panelFamily);
@@ -103,6 +105,10 @@ ShellRoot {
         component: WaffleFamily {}
     }
 
+    // Settings app loaded in-process once requested, then kept alive briefly
+    // for fast re-opens. After the delay we drop the component to recover
+    // its QML memory. Positive configured delays are capped at five seconds;
+    // 0 still means keep it warm explicitly.
     readonly property int settingsUnloadCapSeconds: 5
 
     function settingsUnloadDelaySeconds() {
@@ -127,12 +133,17 @@ ShellRoot {
             if (GlobalStates.settingsOpen)
                 return;
             settingsUnloadTimer.stop();
+            // The visual Loader only owns the Settings object tree. These
+            // singletons outlive it, so release their page-specific data too.
             SearchRegistry.clearIndex();
             ThemePreviewCache.release();
             WallpaperPreviewCache.release();
             settingsLoader.loadedOnce = false;
         }
 
+        // When settings closes, schedule an unload pass. If the user
+        // reopens before the timer fires, the timer is reset and we
+        // keep the warm component.
         Timer {
             id: settingsUnloadTimer
             interval: root.settingsUnloadDelaySeconds() * 1000
@@ -144,14 +155,14 @@ ShellRoot {
             target: GlobalStates
             function onSettingsOpenChanged() {
                 if (GlobalStates.settingsOpen) {
-                    settingsUnloadTimer.stop();
+                    settingsUnloadTimer.stop()
                     if (!settingsLoader.loadedOnce)
-                        settingsLoader.loadedOnce = true;
+                        settingsLoader.loadedOnce = true
                 } else {
-                    const s = root.settingsUnloadDelaySeconds();
+                    const s = root.settingsUnloadDelaySeconds()
                     if (s > 0) {
-                        settingsUnloadTimer.interval = s * 1000;
-                        settingsUnloadTimer.restart();
+                        settingsUnloadTimer.interval = s * 1000
+                        settingsUnloadTimer.restart()
                     }
                 }
             }
@@ -169,6 +180,9 @@ ShellRoot {
         }
     }
 
+    // Welcome runs in-process so it shares Config, GlobalStates and the same
+    // Quickshell lifecycle as Settings. Unlike Settings, the onboarding is
+    // destroyed as soon as it closes so costly page trees do not stay warm.
     Loader {
         id: welcomeLoader
         active: Config.ready && GlobalStates.welcomeOpen
@@ -176,6 +190,7 @@ ShellRoot {
         source: "modules/welcome/WelcomeWindow.qml"
     }
 
+    // Shortcuts
     IpcHandler {
         target: "panelFamily"
 
@@ -187,6 +202,7 @@ ShellRoot {
     GlobalShortcut {
         name: "panelFamilyCycle"
         description: "Cycles panel family"
+
         onPressed: root.cyclePanelFamily()
     }
 }
