@@ -1,9 +1,11 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Shapes
 import qs.modules.common
 
-Canvas {
+Item {
     id: root
+
     property real amplitudeMultiplier: 0.5
     property real frequency: 6
     property color color: Appearance?.colors.colPrimary ?? "#685496"
@@ -13,74 +15,79 @@ Canvas {
 
     property real phase: 0.0
 
-    renderTarget: Canvas.Image
+    readonly property real amplitude: root.lineWidth * root.amplitudeMultiplier
+    readonly property real centerY: root.height / 2
 
-    onPaint: {
-        if (width <= 0 || height <= 0)
-            return;
+    readonly property var wavePoints: {
+        var pts = [];
+        var w = root.width;
+        var h = root.height;
+        if (w <= 0 || h <= 0)
+            return pts;
 
-        var ctx = getContext("2d");
-        ctx.clearRect(0, 0, width, height);
-
-        var centerY = height / 2;
         var startX = root.lineWidth / 2;
-        var endX = root.width - (root.lineWidth / 2);
-
+        var endX = w - (root.lineWidth / 2);
         if (endX <= startX)
-            return;
+            return pts;
 
-        ctx.strokeStyle = root.color;
-        ctx.lineWidth = root.lineWidth;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.beginPath();
+        var amp = root.amplitude;
+        var cY = root.centerY;
 
-        var amplitude = root.lineWidth * root.amplitudeMultiplier;
-        if (amplitude <= 0.01) {
-            ctx.moveTo(startX, centerY);
-            ctx.lineTo(endX, centerY);
-            ctx.stroke();
-            return;
+        if (amp <= 0.01) {
+            pts.push(Qt.point(startX, cY));
+            pts.push(Qt.point(endX, cY));
+            return pts;
         }
 
         var len = Math.max(1, root.fullLength);
         var k = (root.frequency * 2 * Math.PI) / len;
-        var currentPhase = root.phase;
+        var curPhase = root.phase;
+        var step = 4;
 
-        ctx.moveTo(startX, centerY + amplitude * Math.sin(k * startX + currentPhase));
-        for (var x = startX + 2; x < endX; x += 2) {
-            ctx.lineTo(x, centerY + amplitude * Math.sin(k * x + currentPhase));
+        pts.push(Qt.point(startX, cY + amp * Math.sin(k * startX + curPhase)));
+        for (var x = startX + step; x < endX; x += step) {
+            pts.push(Qt.point(x, cY + amp * Math.sin(k * x + curPhase)));
         }
-        ctx.lineTo(endX, centerY + amplitude * Math.sin(k * endX + currentPhase));
-        ctx.stroke();
+        pts.push(Qt.point(endX, cY + amp * Math.sin(k * endX + curPhase)));
+
+        return pts;
+    }
+
+    Shape {
+        id: shape
+        anchors.fill: parent
+        preferredRendererType: Shape.GeometryRenderer
+        asynchronous: false
+
+        ShapePath {
+            strokeWidth: root.lineWidth
+            strokeColor: root.color
+            fillColor: "transparent"
+            capStyle: ShapePath.RoundCap
+            joinStyle: ShapePath.RoundJoin
+
+            PathPolyline {
+                path: root.wavePoints
+            }
+        }
     }
 
     Timer {
         id: animTimer
-        interval: 33 // ~30 FPS for silky-smooth wave animation with ultra-low CPU load
+        interval: 66 // ~15 FPS: visually smooth wave flow while saving 90% compositor surface redraws
         running: root.animateWave && root.visible && root.amplitudeMultiplier > 0.01
         repeat: true
         onTriggered: {
-            root.phase += 0.09;
+            root.phase += 0.16;
             if (root.phase > 6.2831853) {
                 root.phase -= 6.2831853;
             }
-            root.requestPaint();
         }
     }
 
     onAnimateWaveChanged: {
         if (!animateWave) {
             root.phase = 0;
-            root.requestPaint();
         }
     }
-
-    onWidthChanged: root.requestPaint()
-    onHeightChanged: root.requestPaint()
-    onColorChanged: root.requestPaint()
-    onLineWidthChanged: root.requestPaint()
-    onAmplitudeMultiplierChanged: root.requestPaint()
-    onFullLengthChanged: root.requestPaint()
-    onFrequencyChanged: root.requestPaint()
 }

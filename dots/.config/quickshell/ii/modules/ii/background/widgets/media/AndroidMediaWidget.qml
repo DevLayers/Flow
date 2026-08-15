@@ -687,6 +687,7 @@ AbstractBackgroundWidget {
                             active: root.player ? (root.player.canSeek ?? false) : false
                             sourceComponent: StyledSlider {
                                 configuration: StyledSlider.Configuration.Wavy
+                                animateWave: root.playing && root.visible
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 handleColor: root.accentColor
@@ -706,6 +707,7 @@ AbstractBackgroundWidget {
                             active: root.player ? !(root.player.canSeek ?? false) : false
                             sourceComponent: StyledProgressBar {
                                 wavy: root.player ? root.playing : false
+                                animateWave: root.playing && root.visible
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
