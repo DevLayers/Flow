@@ -17,9 +17,8 @@ Item {
     property real verticalPadding: 16
 
     Component.onCompleted: {
-        NetworkDisplayService.ensureBackend();
-        NetworkDisplayService.runDiagnostics();
         DisplayProjectionService.fetchMonitors();
+        SunshineService.refresh();
     }
 
     implicitWidth: contentWidth + 2 * Appearance.sizes.elevationMargin
@@ -57,7 +56,6 @@ Item {
                 width: flickable.width
                 spacing: 16
 
-                // ── Header ──────────────────────────────────────────────────
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -100,11 +98,9 @@ Item {
                     }
                 }
 
-                // ── Physical Projection Modes ───────────────────────────────
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 8
-                    visible: !Config.options.displayCast || Config.options.displayCast.showProjectionModes !== false
 
                     RowLayout {
                         Layout.fillWidth: true
@@ -174,13 +170,6 @@ Item {
                     }
                 }
 
-                // ── Active Cast Card ────────────────────────────────────────
-                ActiveCastCard {
-                    Layout.fillWidth: true
-                    visible: NetworkDisplayService.activeStreamUnit !== "" || NetworkDisplayService.sessionState === "Starting" || NetworkDisplayService.sessionState === "SessionActive"
-                }
-
-                // ── Wireless Displays ───────────────────────────────────────
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 8
@@ -191,43 +180,112 @@ Item {
 
                         StyledText {
                             Layout.fillWidth: true
-                            text: Translation.tr("Wireless Displays")
+                            text: Translation.tr("Remote Streaming")
                             font.family: Appearance.font.family.title
                             font.weight: Font.Bold
                             font.pixelSize: Appearance.font.pixelSize.body
                             color: Appearance.colors.colOnLayer0
                         }
 
-                        RippleButton {
-                            buttonText: Translation.tr("Refresh")
-                            buttonRadius: Appearance.rounding.small
-                            colBackground: Appearance.colors.colLayer2
-                            onClicked: {
-                                NetworkDisplayService.startDiscovery();
+                        StyledText {
+                            text: {
+                                if (!SunshineService.installed)
+                                    return Translation.tr("Unavailable");
+                                return SunshineService.running ? Translation.tr("Ready") : Translation.tr("Stopped");
+                            }
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.DemiBold
+                            color: SunshineService.running ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: sunshineLayout.implicitHeight + 24
+                        radius: Appearance.rounding.large
+                        color: Appearance.colors.colLayer1
+
+                        RowLayout {
+                            id: sunshineLayout
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 12
+
+                            MaterialShapeWrappedMaterialSymbol {
+                                Layout.alignment: Qt.AlignVCenter
+                                text: SunshineService.running ? "cast_connected" : "cast"
+                                shape: MaterialShape.Shape.Cookie9Sided
+                                iconSize: Appearance.font.pixelSize.large
+                                padding: 9
+                                fill: SunshineService.running ? 1 : 0
+                                color: SunshineService.running ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSecondaryContainer
+                                colSymbol: SunshineService.running ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: SunshineService.installed
+                                        ? Translation.tr("Sunshine")
+                                        : Translation.tr("Sunshine not detected")
+                                    font.family: Appearance.font.family.title
+                                    font.weight: Font.DemiBold
+                                    font.pixelSize: Appearance.font.pixelSize.body
+                                    color: Appearance.colors.colOnLayer1
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: {
+                                        if (!SunshineService.installed)
+                                            return Translation.tr("Install Sunshine to stream with Moonlight.");
+                                        if (SunshineService.hostAddress.length > 0)
+                                            return Translation.tr("Moonlight host: %1").arg(SunshineService.hostAddress);
+                                        return Translation.tr("Low-latency host for Moonlight clients");
+                                    }
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colSubtext
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            RippleButton {
+                                visible: SunshineService.serviceAvailable
+                                buttonText: SunshineService.running ? Translation.tr("Stop") : Translation.tr("Start")
+                                buttonRadius: Appearance.rounding.small
+                                enabled: !SunshineService.actionRunning && !SunshineService.refreshing
+                                onClicked: SunshineService.setRunning(!SunshineService.running)
                             }
                         }
                     }
 
-                    // Empty or backend status
-                    WirelessBackendStatus {
+                    RowLayout {
                         Layout.fillWidth: true
-                        visible: !NetworkDisplayService.backendInstalled || NetworkDisplayService.filteredDisplays.length === 0 || (NetworkDisplayService.sessionState === "Error" && NetworkDisplayService.activeStreamUnit === "")
-                    }
+                        spacing: 8
 
-                    // Sink List
-                    Repeater {
-                        model: NetworkDisplayService.filteredDisplays
-                        delegate: WirelessDisplayDelegate {
-                            required property var modelData
+                        RippleButtonWithIcon {
                             Layout.fillWidth: true
-                            displayItem: modelData
-                            onConnectRequested: uuid => NetworkDisplayService.connectTo(uuid)
-                            onDisconnectRequested: () => NetworkDisplayService.disconnect()
+                            materialIcon: "open_in_new"
+                            mainText: Translation.tr("Sunshine Web UI")
+                            centerContent: true
+                            enabled: SunshineService.installed
+                            onClicked: SunshineService.openWebUi()
+                        }
+
+                        RippleButtonWithIcon {
+                            Layout.fillWidth: true
+                            materialIcon: "refresh"
+                            mainText: Translation.tr("Refresh")
+                            centerContent: true
+                            enabled: !SunshineService.refreshing && !SunshineService.actionRunning
+                            onClicked: SunshineService.refresh()
                         }
                     }
                 }
 
-                // ── Footer ──────────────────────────────────────────────────
                 RippleButtonWithIcon {
                     Layout.fillWidth: true
                     materialIcon: "settings"

@@ -11,17 +11,13 @@ import "../../shared/cards"
 MouseArea {
     id: indicator
 
-    readonly property bool activelyCasting: NetworkDisplayService.activeStreamUnit !== ""
-    property bool activelyPortalSharing: false
-    property bool activelyScreenSharing: activelyPortalSharing || activelyCasting
+    property bool vertical: false
+    property bool activelyScreenSharing: false
 
     visible: activelyScreenSharing
     implicitWidth: activelyScreenSharing ? (vertical ? Appearance.sizes.verticalBarWidth : 40) : 0
     implicitHeight: activelyScreenSharing ? (vertical ? 40 : Appearance.sizes.baseBarHeight) : 0
     hoverEnabled: true
-    cursorShape: Qt.PointingHandCursor
-    onClicked: GlobalStates.toggleDisplayCast()
-
     Process {
         id: screenShareProc
         running: true
@@ -34,9 +30,9 @@ MouseArea {
         watchChanges: true
         onFileChanged: this.reload()
         onLoaded: {
-            let txt = stateFile.text().trim();
-            indicator.activelyPortalSharing = txt.length > 0 && txt.toLowerCase() !== "none" && !txt.toLowerCase().includes("none");
-            rootItem.toggleVisible(indicator.activelyScreenSharing);
+            let txt = stateFile.text().trim()
+            indicator.activelyScreenSharing = txt.length > 0 && txt.toLowerCase() !== "none" && !txt.toLowerCase().includes("none")
+            rootItem.toggleVisible(indicator.activelyScreenSharing)
         }
     }
 
@@ -55,7 +51,7 @@ MouseArea {
 
         MaterialSymbol {
             anchors.centerIn: parent
-            text: indicator.activelyCasting ? "cast_connected" : "cast"
+            text: "cast"
             iconSize: 20
             color: Appearance.colors.colOnPrimaryContainer
         }
@@ -67,13 +63,13 @@ MouseArea {
         contentItem: HeroCard {
             compactMode: true
             anchors.centerIn: parent
-            icon: indicator.activelyCasting ? "cast_connected" : "screen_share"
+            icon: "cast_connected"
 
-            title: indicator.activelyCasting ? (NetworkDisplayService.activeSinkName || Translation.tr("Wireless Display")) : stateFile.text().trim()
-            subtitle: indicator.activelyCasting ? Translation.tr("Screen cast active — click to manage") : Translation.tr("is using your screen")
+            title: stateFile.text().trim()
+            subtitle: Translation.tr("is using your screen")
 
-            pillText: indicator.activelyCasting ? Translation.tr("Casting") : Translation.tr("Sharing..")
-            pillIcon: indicator.activelyCasting ? "cast_connected" : "screen_share"
+            pillText: Translation.tr("Sharing..")
+            pillIcon: "screen_share"
         }
     }
 }

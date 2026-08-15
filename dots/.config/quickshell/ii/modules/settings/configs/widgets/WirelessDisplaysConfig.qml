@@ -10,6 +10,8 @@ ContentPage {
 
     signal goBack()
 
+    Component.onCompleted: SunshineService.refresh()
+
     RowLayout {
         spacing: 12
 
@@ -34,136 +36,194 @@ ContentPage {
             onClicked: root.goBack()
         }
 
-        StyledText {
-            text: Translation.tr("Wireless Displays & Cast")
-            font.pixelSize: Appearance.font.pixelSize.large
-            font.family: Appearance.font.family.title
-            color: Appearance.colors.colOnLayer0
+        ColumnLayout {
+            spacing: 1
+
+            StyledText {
+                text: Translation.tr("Remote Streaming")
+                font.pixelSize: Appearance.font.pixelSize.large
+                font.family: Appearance.font.family.title
+                color: Appearance.colors.colOnLayer0
+            }
+
+            StyledText {
+                text: Translation.tr("Sunshine host for Moonlight clients")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colSubtext
+            }
         }
     }
 
     ContentSection {
         icon: "info"
-        title: Translation.tr("Information & Requirements")
+        title: Translation.tr("Sunshine & Moonlight")
 
         NoticeBox {
             Layout.fillWidth: true
-            text: Translation.tr("Display & Cast lets you project your desktop to external monitors (Primary only, Duplicate, Extend, External only) or stream wirelessly to smart TVs and receivers using Miracast and Chromecast.")
+            text: Translation.tr("Sunshine hosts a low-latency desktop stream from this computer. Open Moonlight on your TV, tablet, phone, or another computer and connect to this host from the client device.")
         }
 
         NoticeBox {
             Layout.fillWidth: true
-            text: Translation.tr("Important: Avoid using the Flatpak version of GNOME Network Displays. The Flatpak runtime lacks essential H.264 video encoding codecs on Fedora, which causes black screens on TVs. Always use the native system package: sudo dnf install gnome-network-displays.")
-        }
-
-        KeyboardShortcutBox {
-            Layout.fillWidth: true
-            text: Translation.tr("Open Display & Cast quick popup")
-            keys: ["Super", "Shift", "P"]
+            text: Translation.tr("Moonlight normally discovers Sunshine automatically on the same local network. If the host does not appear, add the LAN address shown below manually in Moonlight.")
         }
     }
 
     ContentSection {
-        icon: "network_check"
-        title: Translation.tr("System Capabilities & Diagnostics")
+        icon: "cast_connected"
+        title: Translation.tr("Sunshine Host")
 
-        NetworkDisplayStatusCard {
+        Rectangle {
             Layout.fillWidth: true
-        }
+            implicitHeight: statusLayout.implicitHeight + 28
+            radius: Appearance.rounding.normal
+            color: Appearance.colors.colLayer2
 
-        HelperCodeBox {
-            visible: !NetworkDisplayService.bridgeAvailable
-            Layout.fillWidth: true
-            icon: "terminal"
-            title: Translation.tr("Compile Rust Network Display Bridge")
-            text: Translation.tr("To compile and install the native D-Bus casting bridge helper, run this command in your terminal (requires Rust toolchain and cargo):")
-            codeSnippet: "cd " + Directories.scriptPath + "/networkDisplays/network_display_bridge_src && cargo build --release && cp target/release/network_display_bridge ../network_display_bridge"
-            snippetWrapMode: Text.Wrap
-        }
+            RowLayout {
+                id: statusLayout
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 12
 
-        HelperCodeBox {
-            visible: !NetworkDisplayService.backendInstalled
-            Layout.fillWidth: true
-            icon: "download"
-            title: Translation.tr("Install GNOME Network Displays (Native Package)")
-            text: Translation.tr("GNOME Network Displays is required for discovery and stream orchestration. Install the native package via DNF:")
-            codeSnippet: "sudo dnf install -y gnome-network-displays"
-            snippetWrapMode: Text.Wrap
-        }
-    }
-
-    ContentSection {
-        icon: "settings_input_antenna"
-        title: Translation.tr("Protocols & Behavior")
-
-        ConfigSwitch {
-            buttonIcon: "wifi"
-            text: Translation.tr("Miracast (Wi-Fi Direct P2P)")
-            checked: (Config.options.displayCast && Config.options.displayCast.showMiracastP2p !== undefined) ? Config.options.displayCast.showMiracastP2p : true
-            onCheckedChanged: {
-                if (Config.ready && Config.options.displayCast) {
-                    Config.options.displayCast.showMiracastP2p = checked;
+                MaterialShapeWrappedMaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: !SunshineService.installed ? "warning" : (SunshineService.running ? "cast_connected" : "cast")
+                    shape: MaterialShape.Shape.Cookie9Sided
+                    iconSize: Appearance.font.pixelSize.large
+                    padding: 10
+                    fill: SunshineService.running ? 1 : 0
+                    color: SunshineService.running ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSecondaryContainer
+                    colSymbol: SunshineService.running ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
                 }
-            }
-            StyledToolTip {
-                text: Translation.tr("Direct peer-to-peer Wi-Fi connection to TV/receivers without a shared router.")
-            }
-        }
 
-        ConfigSwitch {
-            buttonIcon: "router"
-            text: Translation.tr("Miracast over Infrastructure (MICE)")
-            checked: (Config.options.displayCast && Config.options.displayCast.showMiracastMice !== undefined) ? Config.options.displayCast.showMiracastMice : true
-            onCheckedChanged: {
-                if (Config.ready && Config.options.displayCast) {
-                    Config.options.displayCast.showMiracastMice = checked;
-                }
-            }
-            StyledToolTip {
-                text: Translation.tr("Connects to Miracast displays discovered over the existing local Wi-Fi / LAN.")
-            }
-        }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
 
-        ConfigSwitch {
-            buttonIcon: "cast"
-            text: Translation.tr("Google Cast / Chromecast")
-            checked: (Config.options.displayCast && Config.options.displayCast.showChromecast !== undefined) ? Config.options.displayCast.showChromecast : true
-            onCheckedChanged: {
-                if (Config.ready && Config.options.displayCast) {
-                    Config.options.displayCast.showChromecast = checked;
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: {
+                            if (!SunshineService.installed)
+                                return Translation.tr("Sunshine not detected");
+                            if (SunshineService.running)
+                                return Translation.tr("Sunshine is ready");
+                            return Translation.tr("Sunshine is stopped");
+                        }
+                        font.weight: Font.DemiBold
+                        font.pixelSize: Appearance.font.pixelSize.body
+                        color: Appearance.colors.colOnLayer2
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: SunshineService.serviceAvailable
+                            ? SunshineService.serviceUnit
+                            : Translation.tr("Install the native Sunshine package to expose its user service.")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
+                        elide: Text.ElideMiddle
+                    }
                 }
-            }
-            StyledToolTip {
-                text: Translation.tr("Casting to Android TVs, Google TV, Chromecast dongles, and Nest displays.")
+
+                RippleButton {
+                    buttonText: Translation.tr("Refresh")
+                    buttonRadius: Appearance.rounding.small
+                    enabled: !SunshineService.refreshing && !SunshineService.actionRunning
+                    onClicked: SunshineService.refresh()
+                }
             }
         }
 
         ConfigSwitch {
             buttonIcon: "power_settings_new"
-            text: Translation.tr("Stop backend when idle")
-            checked: (Config.options.displayCast && Config.options.displayCast.stopBackendWhenIdle !== undefined) ? Config.options.displayCast.stopBackendWhenIdle : true
+            text: Translation.tr("Run Sunshine host")
+            checked: SunshineService.running
+            enabled: SunshineService.serviceAvailable && !SunshineService.refreshing && !SunshineService.actionRunning
             onCheckedChanged: {
-                if (Config.ready && Config.options.displayCast) {
-                    Config.options.displayCast.stopBackendWhenIdle = checked;
-                }
+                if (SunshineService.refreshing || SunshineService.actionRunning || checked === SunshineService.running)
+                    return;
+                SunshineService.setRunning(checked);
             }
             StyledToolTip {
-                text: Translation.tr("Automatically stops background discovery and streaming processes when the popup closes.")
+                text: Translation.tr("Starts or stops the Sunshine user service for the current session.")
             }
         }
 
         ConfigSwitch {
-            buttonIcon: "close_fullscreen"
-            text: Translation.tr("Close popup after changing projection mode")
-            checked: (Config.options.displayCast && Config.options.displayCast.closeAfterProjectionChange !== undefined) ? Config.options.displayCast.closeAfterProjectionChange : true
+            buttonIcon: "login"
+            text: Translation.tr("Start Sunshine on login")
+            checked: SunshineService.enabledOnLogin
+            enabled: SunshineService.serviceAvailable && !SunshineService.refreshing && !SunshineService.actionRunning
             onCheckedChanged: {
-                if (Config.ready && Config.options.displayCast) {
-                    Config.options.displayCast.closeAfterProjectionChange = checked;
-                }
+                if (SunshineService.refreshing || SunshineService.actionRunning || checked === SunshineService.enabledOnLogin)
+                    return;
+                SunshineService.setEnabledOnLogin(checked);
             }
             StyledToolTip {
-                text: Translation.tr("Automatically dismisses the Display & Cast popup once a quick layout is selected.")
+                text: Translation.tr("Enables or disables the Sunshine systemd user service at login.")
             }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Item { Layout.fillWidth: true }
+
+            RippleButtonWithIcon {
+                materialIcon: "restart_alt"
+                mainText: Translation.tr("Restart")
+                enabled: SunshineService.serviceAvailable && SunshineService.running && !SunshineService.actionRunning
+                onClicked: SunshineService.restart()
+            }
+
+            RippleButtonWithIcon {
+                materialIcon: "open_in_new"
+                mainText: Translation.tr("Open Sunshine Web UI")
+                enabled: SunshineService.installed
+                onClicked: SunshineService.openWebUi()
+            }
+        }
+
+        NoticeBox {
+            visible: SunshineService.lastError.length > 0
+            Layout.fillWidth: true
+            text: SunshineService.lastError
+        }
+    }
+
+    ContentSection {
+        icon: "router"
+        title: Translation.tr("Connect a Moonlight Device")
+
+        HelperCodeBox {
+            Layout.fillWidth: true
+            icon: "lan"
+            title: Translation.tr("Host address")
+            text: Translation.tr("Use this address in Moonlight only if automatic discovery does not find this computer.")
+            codeSnippet: SunshineService.hostAddress.length > 0
+                ? SunshineService.hostAddress
+                : Translation.tr("No LAN address detected")
+            snippetWrapMode: Text.Wrap
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            text: Translation.tr("Pairing flow: open Moonlight on the client, select this computer (or add the host address), then open the Sunshine Web UI and enter the PIN shown by Moonlight in Sunshine's PIN page.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            text: Translation.tr("The Sunshine Web UI uses HTTPS on port 47990 by default and may show a browser warning because its local certificate is self-signed.")
+        }
+
+        RippleButtonWithIcon {
+            Layout.fillWidth: true
+            materialIcon: "open_in_new"
+            mainText: Translation.tr("Open Sunshine Web UI")
+            centerContent: true
+            enabled: SunshineService.installed
+            onClicked: SunshineService.openWebUi()
         }
     }
 }

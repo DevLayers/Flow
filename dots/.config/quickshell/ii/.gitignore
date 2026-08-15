@@ -7,8 +7,3 @@ AGENTS.md
 
 # Script de sync local
 scripts/sync_to_vynx.sh
-
-# Rust build artifacts
-target/
-**/target/
-scripts/networkDisplays/network_display_bridge
