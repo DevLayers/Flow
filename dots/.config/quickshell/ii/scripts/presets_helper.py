@@ -8,6 +8,8 @@ import sys
 import tempfile
 from contextlib import contextmanager
 
+VIDEO_EXTENSIONS = (".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".ogv")
+
 
 def sanitize_val(val, home_dir):
     if isinstance(val, dict):
@@ -110,6 +112,50 @@ def deep_merge(base, overlay):
     return result
 
 
+def normalize_video_constraints(data):
+    """Make video/WPE presets valid before their single config commit.
+
+    Wallpapers.qml enforces these same invariants reactively. Doing it here
+    prevents a preset load from first committing an invalid combination and
+    then forcing a second Config.saveOptionsNow() write immediately after the
+    reload.
+    """
+    background = data.get("background")
+    if not isinstance(background, dict):
+        return data
+
+    wallpaper_path = str(background.get("wallpaperPath", "") or "").lower()
+    video_active = background.get("useWallpaperEngine") is True or wallpaper_path.endswith(VIDEO_EXTENSIONS)
+    if not video_active:
+        return data
+
+    background.update({
+        "blurWhenWindowsOpen": False,
+        "zoomOutEnabled": False,
+        "zoomOutStyle": 1,
+        "windowZoomOnOverview": False,
+        "windowZoomLiveCapture": False,
+        "cheatsheetZoomOut": False,
+        "overviewZoomOut": False,
+        "workspaceBlur": False,
+    })
+
+    parallax = background.get("parallax")
+    if isinstance(parallax, dict):
+        parallax.update({
+            "vertical": False,
+            "autoVertical": False,
+            "enableWorkspace": False,
+            "enableSidebar": False,
+            "loop": False,
+            "invertHorizontal": False,
+            "invertVertical": False,
+            "workspaceZoom": 1.0,
+        })
+
+    return data
+
+
 def find_wallpaper_fallback(presets_dir, preset_name):
     pattern = os.path.join(presets_dir, f"{glob.escape(preset_name)}.*")
     for filepath in glob.glob(pattern):
@@ -131,8 +177,7 @@ def validate_preset_name(name):
 def load_json(path, fallback=None):
     try:
         with open(path, "r", encoding="utf-8") as handle:
-            value = json.load(handle)
-        return value
+            return json.load(handle)
     except FileNotFoundError:
         return fallback
 
@@ -223,7 +268,7 @@ def apply_preset(input_path, output_path, presets_dir, preset_name, token_file, 
 
     # Preserve options added by newer shell versions when applying an older
     # preset, matching the behavior of the upstream end4 preset path.
-    merged = deep_merge(current, preset)
+    merged = normalize_video_constraints(deep_merge(current, preset))
 
     # The token check and atomic replace share the same lock used by the shell
     # when registering newer requests. Therefore an older request can either
