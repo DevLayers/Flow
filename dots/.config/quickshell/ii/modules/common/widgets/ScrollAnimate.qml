@@ -10,8 +10,11 @@ Item {
     // Settings Performance Mode.
     property Item targetItem: parent
     readonly property bool scrollAnimationsEnabled: Config.options?.appearance?.scrollAnimations ?? true
-    readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
-    property bool active: root.scrollAnimationsEnabled && !root.performanceMode
+    readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? true
+    // Settings pages are only created after Config.ready. Keeping this gate
+    // here as well prevents any other consumer from attaching transforms while
+    // the adapter is still being populated from disk.
+    property bool active: Config.ready && root.scrollAnimationsEnabled && !root.performanceMode
 
     Loader {
         active: root.active && root.targetItem !== null
@@ -26,7 +29,6 @@ Item {
             property Item targetItem: root.targetItem
             property Item attachedTarget: null
             property Flickable flickable: null
-            property bool targetOpacityBindingEnabled: true
             // mapToItem() does not expose the target item's layout geometry as
             // a binding dependency. Bump this after layout changes so the
             // initial visibility pass runs again once the parent layout has
@@ -77,14 +79,12 @@ Item {
                 }
                 targetItem.transform = transforms;
                 attachedTarget = targetItem;
-                targetOpacityBindingEnabled = true;
             }
 
             function detachTransform() {
                 if (!attachedTarget)
                     return;
 
-                targetOpacityBindingEnabled = false;
                 const transforms = attachedTarget.transform;
                 const scaleIdx = transforms.indexOf(scrollScaleTransform);
                 if (scaleIdx !== -1) {
@@ -95,8 +95,6 @@ Item {
                     transforms.splice(transIdx, 1);
                 }
                 attachedTarget.transform = transforms;
-                if (attachedTarget.opacity < 0.999)
-                    attachedTarget.opacity = 1.0;
                 attachedTarget = null;
             }
 
@@ -133,7 +131,9 @@ Item {
             // Check visibility with a generous buffer to begin the animation
             // before a delegate enters the viewport.
             readonly property bool isVisible: {
-                if (!flickable || !targetItem || flickable.height <= 0)
+                if (!flickable || !targetItem || flickable.height <= 0
+                        || flickable.contentHeight <= 0
+                        || targetItem.width <= 0 || targetItem.height <= 0)
                     return true;
 
                 const isBelowTop = (relativeY + targetItem.height) >= -60;
@@ -141,18 +141,14 @@ Item {
                 return isBelowTop && isAboveBottom;
             }
 
-            readonly property real targetOpacity: isVisible ? 1.0 : 0.0
+            // Keep opacity out of this controller. Several settings controls
+            // use `visible: opacity > 0`; hiding them here removes them from
+            // their Layout, changes contentHeight, and can leave them stuck
+            // until a scroll event invalidates mapToItem().
             readonly property real targetScale: isVisible ? 1.0 : 0.92
             readonly property real targetTranslateY: isVisible ? 0 : 20
-            property real animatedOpacity: 0.0
             property real animatedScale: 0.92
             property real animatedTranslateY: 20
-
-            Binding {
-                target: animation
-                property: "animatedOpacity"
-                value: animation.targetOpacity
-            }
 
             Binding {
                 target: animation
@@ -164,14 +160,6 @@ Item {
                 target: animation
                 property: "animatedTranslateY"
                 value: animation.targetTranslateY
-            }
-
-            Behavior on animatedOpacity {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                }
             }
 
             Behavior on animatedScale {
@@ -188,13 +176,6 @@ Item {
                     easing.type: Appearance.animation.elementMove.type
                     easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
                 }
-            }
-
-            Binding {
-                target: animation.targetItem
-                property: "opacity"
-                value: animation.animatedOpacity
-                when: animation.targetOpacityBindingEnabled && animation.animatedOpacity < 0.999
             }
 
             Component.onCompleted: {

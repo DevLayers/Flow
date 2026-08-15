@@ -404,15 +404,15 @@ Singleton {
         }
 
         // v4 -> v5: Settings now has one performance switch instead of two
-        // independent rendering switches. Preserve the low-overhead experience
-        // for anyone who had either legacy switch disabled.
+        // independent rendering switches. Older presets predate the new
+        // switch, so default them to the safe, low-overhead path. Users can
+        // still opt back into scroll effects after the migration.
         if (from < 5 && raw.appearance !== undefined
                 && raw.appearance !== null
                 && typeof raw.appearance === "object"
                 && !Array.isArray(raw.appearance)
                 && raw.appearance.settingsPerformanceMode === undefined) {
-            raw.appearance.settingsPerformanceMode = raw.appearance.scrollAnimations === false
-                    || raw.appearance.scrollFadeMask === false;
+            raw.appearance.settingsPerformanceMode = true;
             console.log(`[Config] Migrated Settings performance mode to ${raw.appearance.settingsPerformanceMode}`);
         }
 
@@ -1113,7 +1113,7 @@ Singleton {
                 property bool colorfulScrollbar: false
                 property bool scrollAnimations: false
                 property bool scrollFadeMask: false
-                property bool settingsPerformanceMode: false
+                property bool settingsPerformanceMode: true
                 property JsonObject appLaunchAnimation: JsonObject {
                     property bool enable: true
                     property int startPercent: 20 // 5 - 50%
