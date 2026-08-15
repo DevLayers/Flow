@@ -15,7 +15,12 @@ Loader {
     property bool dismissed: false
     readonly property bool severe: Config.configHealthState === "malformed"
     // bannerText guards against a state with no copy rendering as an empty box.
-    active: Config.configHealthState !== "ok" && root.bannerText !== "" && !root.dismissed
+    // A successful schema migration is informational and should not occupy
+    // the Settings layout on every load. Keep actionable health states visible.
+    active: Config.configHealthState !== "ok"
+        && Config.configHealthState !== "migrated"
+        && root.bannerText !== ""
+        && !root.dismissed
     // An inactive Loader is zero-height but still counts as a ColumnLayout
     // child, so it reserves a spacing slot above the window content. Hiding it
     // drops it out of the layout entirely.
@@ -36,8 +41,6 @@ Loader {
             return Translation.tr("config.json has invalid JSON syntax. Settings changes won't save until it's fixed — hand-edit the file, or reset it to defaults below.");
         if (state === "recovered")
             return Translation.tr("config.json is valid again — settings will save normally.");
-        if (state === "migrated")
-            return Translation.tr("Some settings were migrated to a newer format.");
         if (state === "repaired")
             return keys.length === 1 ? Translation.tr("A setting had an invalid value and was reset to default: %1").arg(keys[0]) : Translation.tr("%1 settings had an invalid value and were reset to default: %2").arg(keys.length).arg(keys.join(", "));
         if (state === "unknownKeys")
