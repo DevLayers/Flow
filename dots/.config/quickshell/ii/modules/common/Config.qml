@@ -2728,6 +2728,20 @@ Singleton {
                 }
             }
 
+            property JsonObject displayCast: JsonObject {
+                property bool wirelessEnabled: true
+                property bool stopBackendWhenIdle: true
+
+                property bool showMiracastP2p: true
+                property bool showMiracastMice: true
+                property bool showChromecast: true
+
+                property bool showProjectionModes: true
+                property bool closeAfterProjectionChange: true
+
+                property string preferredProjectionMonitor: "auto"
+            }
+
             property JsonObject oledSaver: JsonObject {
                 property int cursorHideDelay: 5 // seconds of no mouse movement before the cursor hides again
                 property int hintExtraDelay: 10 // extra seconds the dismiss hint stays visible after the cursor hides

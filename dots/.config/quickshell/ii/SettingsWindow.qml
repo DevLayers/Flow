@@ -9,13 +9,10 @@ import QtQuick.Layouts
 import Quickshell
 import qs.services
 import qs.modules.common
-import qs.modules.common.functions as CF
 import "modules/settings"
 
 FloatingWindow {
     id: root
-    property string firstRunFilePath: CF.FileUtils.trimFileProtocol(`${Directories.state}/user/first_run.txt`)
-    property string firstRunFileContent: "This file is just here to confirm you've been greeted :>"
     property real contentPadding: 8
     property bool showNextTime: false
 

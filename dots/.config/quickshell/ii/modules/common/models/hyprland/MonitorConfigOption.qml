@@ -1,8 +1,7 @@
-pragma ComponentBehavior: Bound
 import QtQml
 import QtQuick
+import Quickshell
 import Quickshell.Io
-import qs.services
 import "../"
 
 NestableObject {
@@ -13,7 +12,7 @@ NestableObject {
     Component.onCompleted: {
         Qt.callLater(() => {
             fetchProc.running = true;
-            reloadProfiles();
+            profilesProc.running = true;
         });
     }
 
@@ -42,7 +41,6 @@ NestableObject {
 
     function doSave() {
         if (saveProc.running) {
-            // If the process is still running, try again shortly
             debounceSaveTimer.start();
             return;
         }
@@ -192,7 +190,6 @@ NestableObject {
 
     function reloadFromHyprland() {
         Quickshell.execDetached(["hyprctl", "reload"]);
-        // delay fetching so hyprctl reload has time to apply
         delayFetchTimer.restart();
     }
 

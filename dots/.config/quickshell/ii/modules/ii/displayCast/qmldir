@@ -1,0 +1,9 @@
+module qs.modules.ii.displayCast
+
+DisplayCast 1.0 DisplayCast.qml
+DisplayCastWindow 1.0 DisplayCastWindow.qml
+DisplayCastContent 1.0 DisplayCastContent.qml
+ProjectionModeCard 1.0 ProjectionModeCard.qml
+WirelessDisplayDelegate 1.0 WirelessDisplayDelegate.qml
+WirelessBackendStatus 1.0 WirelessBackendStatus.qml
+ActiveCastCard 1.0 ActiveCastCard.qml

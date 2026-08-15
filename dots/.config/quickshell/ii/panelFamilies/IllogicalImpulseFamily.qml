@@ -40,6 +40,7 @@ import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
 import qs.modules.ii.touchGestures
+import qs.modules.ii.displayCast
 
 Scope {
     property bool barExtraCondition: true
@@ -215,4 +216,8 @@ Scope {
         extraCondition: Config.ready && Boolean(Config.options && Config.options.interactions && Config.options.interactions.touchGestures && Config.options.interactions.touchGestures.enable)
         component: TouchGestures {}
     }
+    PanelLoader {
+        component: DisplayCast {}
+    }
 }
+

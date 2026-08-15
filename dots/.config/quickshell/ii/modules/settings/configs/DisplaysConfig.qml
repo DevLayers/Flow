@@ -8,6 +8,8 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.services
 import qs.modules.common.models.hyprland
+import qs.modules.settings.configs.widgets
+import "widgets"
 
 ContentPage {
     id: page
@@ -1282,6 +1284,29 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "cast"
+        title: Translation.tr("Wireless Display & Casting")
+
+        ConfigSwitch {
+            buttonIcon: "cast"
+            text: Translation.tr("Enable wireless displays & casting")
+            checked: (Config.options.displayCast && Config.options.displayCast.wirelessEnabled !== undefined) ? Config.options.displayCast.wirelessEnabled : true
+            configPage: Qt.resolvedUrl("./WirelessDisplaysSubPage.qml")
+            onCheckedChanged: {
+                if (Config.ready && Config.options.displayCast) {
+                    Config.options.displayCast.wirelessEnabled = checked;
+                }
+            }
+            onOpenSubPage: {
+                subPageOverlay.open(Qt.resolvedUrl("./WirelessDisplaysSubPage.qml"));
+            }
+            StyledToolTip {
+                text: Translation.tr("Enables discovery and streaming to Miracast, MICE, and Chromecast receivers. Click to configure.")
+            }
+        }
+    }
+
+    ContentSection {
         icon: "link"
         title: Translation.tr("Related settings")
 
@@ -1295,5 +1320,11 @@ ContentPage {
                 sectionHighlight: Translation.tr("Night Light")
             }
         }
+    }
+
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }

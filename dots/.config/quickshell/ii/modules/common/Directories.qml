@@ -89,6 +89,7 @@ Singleton {
     property string geniusLyricsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/lyrics/genius-lyrics.js`)
     property string ytmusicLyricsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/lyrics/ytmusic-lyrics-wrapper.sh`)
     property string localSendDownloadPath: FileUtils.trimFileProtocol(`${Directories.home}/Downloads/localsend`)
+    property string networkDisplayBridgePath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/networkDisplays/network_display_bridge`)
     // Widget extensions
     property string userWidgetsPath: FileUtils.trimFileProtocol(`${Directories.config}/quickshell/ii/user_widgets`)
     property string widgetExtensionsPath: `${Directories.shellConfig}/widget_extensions.json`

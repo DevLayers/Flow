@@ -47,6 +47,8 @@ Singleton {
     property bool cheatsheetOpen: false
     property bool crosshairOpen: false
     property bool notesOpen: false
+    property bool displayCastOpen: false
+    property string activeDisplayCastMonitor: ""
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
     // Names of screens currently blacked out by the OLED saver overlay. Independent
@@ -360,6 +362,55 @@ Singleton {
 
     function closeCheatsheet() {
         root.cheatsheetOpen = false;
+    }
+
+    function resolveDisplayCastMonitor(monitorName) {
+        if (monitorName && monitorName.length > 0)
+            return monitorName;
+
+        const focused = HyprlandData.monitors.find(m => m.focused);
+        if (focused && focused.name)
+            return focused.name;
+
+        if (Quickshell.screens.length > 0)
+            return Quickshell.screens[0].name;
+
+        return "";
+    }
+
+    function toggleDisplayCast(monitorName) {
+        if (root.displayCastOpen) {
+            root.displayCastOpen = false;
+            return;
+        }
+
+        root.activeDisplayCastMonitor = resolveDisplayCastMonitor(monitorName);
+        root.displayCastOpen = true;
+    }
+
+    function openDisplayCast(monitorName) {
+        root.activeDisplayCastMonitor = resolveDisplayCastMonitor(monitorName);
+        root.displayCastOpen = true;
+    }
+
+    function closeDisplayCast() {
+        root.displayCastOpen = false;
+    }
+
+    IpcHandler {
+        target: "displayCast"
+
+        function toggle(): void {
+            root.toggleDisplayCast();
+        }
+
+        function open(): void {
+            root.openDisplayCast();
+        }
+
+        function close(): void {
+            root.closeDisplayCast();
+        }
     }
 
     IpcHandler {
@@ -846,4 +897,29 @@ Singleton {
             root.superDown = false;
         }
     }
+
+    GlobalShortcut {
+        name: "displayCastToggle"
+        description: "Toggles Display & Cast"
+        onPressed: {
+            root.toggleDisplayCast();
+        }
+    }
+
+    GlobalShortcut {
+        name: "displayCastOpen"
+        description: "Opens Display & Cast"
+        onPressed: {
+            root.openDisplayCast();
+        }
+    }
+
+    GlobalShortcut {
+        name: "displayCastClose"
+        description: "Closes Display & Cast"
+        onPressed: {
+            root.closeDisplayCast();
+        }
+    }
 }
+
