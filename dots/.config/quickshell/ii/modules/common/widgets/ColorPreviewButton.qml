@@ -100,6 +100,7 @@ RippleButton {
             ]);
         } else {
             Config.options.appearance.palette.type = colorScheme;
+            Config.options.appearance.palette.accentColor = "";
             Config.saveOptionsNow();
             Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --noswitch`]);
         }
