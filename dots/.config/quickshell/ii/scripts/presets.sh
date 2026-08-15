@@ -63,13 +63,24 @@ cache_snapshot() {
     atomic_copy "$GENERATED_DIR/colors.json" "$cache_dir/colors.json" || true
     atomic_copy "$GENERATED_DIR/material_colors.scss" "$cache_dir/material_colors.scss" || true
     printf '%s\n' "$preset_name" > "$cache_dir/name"
+    if [[ -f "$PRESETS_DIR/$preset_name.json" ]]; then
+        sha256sum -- "$PRESETS_DIR/$preset_name.json" | cut -d' ' -f1 > "$cache_dir/config.sha256"
+    fi
 }
 
 restore_cached_theme() {
     local preset_name="$1"
     local cache_dir
     cache_dir=$(cache_dir_for "$preset_name")
-    [[ -f "$cache_dir/colors.json" ]] || return 1
+    [[ -f "$cache_dir/colors.json" && -f "$cache_dir/config.sha256" ]] || return 1
+
+    # Never trust a palette cache after the preset JSON was edited by hand or
+    # rewritten by another tool. A mismatch falls back to asynchronous warmup
+    # and refreshes the cache without penalizing the config switch itself.
+    local expected_hash current_hash
+    expected_hash=$(cat -- "$cache_dir/config.sha256" 2>/dev/null)
+    current_hash=$(sha256sum -- "$PRESETS_DIR/$preset_name.json" 2>/dev/null | cut -d' ' -f1)
+    [[ -n "$expected_hash" && "$expected_hash" == "$current_hash" ]] || return 1
 
     # Presets do not own the global light/dark mode. Reusing an exported cache
     # from the opposite mode would emit darkmodeChanged and can recursively
@@ -288,6 +299,9 @@ case "$action" in
                 mkdir -p "$TMP_DIR/preset-cache"
                 cp -- "$cache_dir/colors.json" "$TMP_DIR/preset-cache/colors.json"
                 [[ ! -f "$cache_dir/material_colors.scss" ]] || cp -- "$cache_dir/material_colors.scss" "$TMP_DIR/preset-cache/material_colors.scss"
+                # config.json was sanitized for portability, so fingerprint the
+                # exported representation rather than copying the local hash.
+                sha256sum -- "$TMP_DIR/config.json" | cut -d' ' -f1 > "$TMP_DIR/preset-cache/config.sha256"
             fi
 
             (cd "$TMP_DIR" && zip -qr "$DEST_ZIP" .) || fail_export "Could not write the archive to: $DEST_ZIP"
@@ -356,6 +370,7 @@ case "$action" in
                         mkdir -p "$cache_dir"
                         atomic_copy "$TMP_DIR/preset-cache/colors.json" "$cache_dir/colors.json" || true
                         atomic_copy "$TMP_DIR/preset-cache/material_colors.scss" "$cache_dir/material_colors.scss" || true
+                        atomic_copy "$TMP_DIR/preset-cache/config.sha256" "$cache_dir/config.sha256" || true
                         printf '%s\n' "$preset_name" > "$cache_dir/name"
                     fi
                     echo 'success'
