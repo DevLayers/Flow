@@ -27,6 +27,15 @@ Item {
             property Item attachedTarget: null
             property Flickable flickable: null
             property bool targetOpacityBindingEnabled: true
+            // mapToItem() does not expose the target item's layout geometry as
+            // a binding dependency. Bump this after layout changes so the
+            // initial visibility pass runs again once the parent layout has
+            // assigned the final delegate positions.
+            property int layoutTick: 0
+
+            function scheduleLayoutRefresh() {
+                layoutRefreshTimer.restart();
+            }
 
             Scale {
                 id: scrollScaleTransform
@@ -46,6 +55,13 @@ Item {
                 interval: 50
                 repeat: false
                 onTriggered: animation.findFlickable()
+            }
+
+            Timer {
+                id: layoutRefreshTimer
+                interval: 0
+                repeat: false
+                onTriggered: animation.layoutTick++
             }
 
             function attachTransform() {
@@ -89,6 +105,7 @@ Item {
                 while (nextParent) {
                     if (nextParent.flickableDirection !== undefined && nextParent.contentY !== undefined) {
                         flickable = nextParent;
+                        scheduleLayoutRefresh();
                         return;
                     }
                     nextParent = nextParent.parent;
@@ -102,6 +119,10 @@ Item {
                     return 0;
                 // Reading contentY keeps this binding reactive to scrolling.
                 const scrollY = flickable.contentY;
+                // mapToItem() itself is not reactive to layout-only position
+                // changes; this explicit tick invalidates the binding after a
+                // deferred layout pass.
+                const layoutPass = animation.layoutTick;
                 try {
                     return targetItem.mapToItem(flickable, 0, 0).y;
                 } catch (error) {
@@ -181,6 +202,7 @@ Item {
                 if (!flickable)
                     retryTimer.start();
                 attachTransform();
+                scheduleLayoutRefresh();
             }
 
             onTargetItemChanged: {
@@ -190,6 +212,38 @@ Item {
                 if (!flickable)
                     retryTimer.start();
                 attachTransform();
+                scheduleLayoutRefresh();
+            }
+
+            Connections {
+                target: animation.targetItem
+                ignoreUnknownSignals: true
+
+                function onYChanged() {
+                    animation.scheduleLayoutRefresh();
+                }
+
+                function onHeightChanged() {
+                    animation.scheduleLayoutRefresh();
+                }
+
+                function onParentChanged() {
+                    animation.findFlickable();
+                    animation.scheduleLayoutRefresh();
+                }
+            }
+
+            Connections {
+                target: animation.flickable
+                ignoreUnknownSignals: true
+
+                function onHeightChanged() {
+                    animation.scheduleLayoutRefresh();
+                }
+
+                function onContentHeightChanged() {
+                    animation.scheduleLayoutRefresh();
+                }
             }
 
             Component.onDestruction: {

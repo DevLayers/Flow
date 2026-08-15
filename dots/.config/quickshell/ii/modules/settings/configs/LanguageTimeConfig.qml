@@ -21,41 +21,81 @@ Item {
         root.activeSubPage = Qt.resolvedUrl(url);
     }
 
-    property var languages: ["auto"]
-    property var languagesModel: [{ "displayName": "auto", "value": "auto" }]
+    property list<string> languages: ["auto"]
+    property list<var> languagesModel: [{ "displayName": "auto", "value": "auto" }]
+    property bool languageLoadRequested: false
+    property int deferredLoadStage: 0
+
+    function loadLanguages() {
+        if (root.languageLoadRequested || getLanguagesProc.running)
+            return;
+
+        root.languageLoadRequested = true;
+        getLanguagesProc.bufferList = [];
+        getLanguagesProc.running = true;
+    }
+
+    // Keep external-process startup and the live previews out of the async
+    // page-incubation critical path. Updating a ComboBox model while its page
+    // is still being created is a rare but reproducible source of crashes.
+    Timer {
+        id: languageLoadTimer
+        interval: 0
+        running: true
+        onTriggered: root.loadLanguages()
+    }
+
+    Timer {
+        id: previewLoadTimer
+        interval: 0
+        running: true
+        onTriggered: root.deferredLoadStage = 1
+    }
+
+    Timer {
+        id: weekPickerLoadTimer
+        interval: 0
+        onTriggered: root.deferredLoadStage = 2
+    }
 
     Process {
         id: getLanguagesProc
         command: ["trans", "-list-languages", "-no-bidi"]
-        property var bufferList: ["auto"]
-        running: true
+        property list<string> bufferList: []
+        running: false
         stdout: SplitParser {
-                onRead: data => {
-                    getLanguagesProc.bufferList.push(data.trim());
+            onRead: data => {
+                const lines = String(data).split(/\r?\n/);
+                for (const line of lines) {
+                    const language = line.trim();
+                    if (language.length > 0)
+                        getLanguagesProc.bufferList.push(language);
                 }
             }
-            onExited: (exitCode, exitStatus) => {
-                let langs = getLanguagesProc.bufferList.filter(lang => lang.trim().length > 0 && lang !== "auto").sort((a, b) => a.localeCompare(b));
-                langs.unshift("auto");
-                root.languages = langs;
-                
-                let modelList = [];
-                for (let i = 0; i < langs.length; i++) {
-                    modelList.push({
-                        "displayName": langs[i],
-                        "value": langs[i]
-                    });
-                }
-                root.languagesModel = modelList;
-                getLanguagesProc.bufferList = [];
-            }
         }
-    
-        Process {
-            id: translationProc
-            property string locale: ""
-            command: [Directories.aiTranslationScriptPath, translationProc.locale]
+        onExited: exitCode => {
+            if (exitCode !== 0)
+                return;
+
+            const languages = Array.from(new Set(getLanguagesProc.bufferList))
+                .filter(language => language !== "auto")
+                .sort((a, b) => a.localeCompare(b));
+            languages.unshift("auto");
+
+            root.languages = languages;
+            root.languagesModel = languages.map(language => ({
+                "displayName": language,
+                "value": language
+            }));
+            getLanguagesProc.bufferList = [];
         }
+    }
+
+    Process {
+        id: translationProc
+        property string locale: ""
+        command: [Directories.aiTranslationScriptPath, translationProc.locale]
+    }
 
     ContentPage {
         id: page
@@ -160,9 +200,16 @@ Item {
         icon: "nest_clock_farsight_analog"
         title: Translation.tr("Time & Date Formats")
 
-        TimeDatePreview {
+        ProgressiveSectionLoader {
+            id: timeDatePreviewLoader
+            source: Qt.resolvedUrl("widgets/TimeDatePreview.qml")
+            active: root.deferredLoadStage >= 1
+            asynchronous: true
+            estimatedHeight: 342
+            prioritizeOnViewport: true
             Layout.fillWidth: true
             Layout.bottomMargin: 16
+            onLoaded: weekPickerLoadTimer.start()
         }
 
         ConfigSwitch {
@@ -199,7 +246,12 @@ Item {
             tooltip: Translation.tr("Choose how calendars arrange the seven-day week")
             Layout.fillWidth: true
 
-            WeekStartPicker {
+            ProgressiveSectionLoader {
+                source: Qt.resolvedUrl("widgets/WeekStartPicker.qml")
+                active: root.deferredLoadStage >= 2
+                asynchronous: true
+                estimatedHeight: 306
+                prioritizeOnViewport: true
                 Layout.fillWidth: true
             }
         }
