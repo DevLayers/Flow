@@ -168,4 +168,4 @@ atomic_copy "$COLORS_FILE" "$cache_dir/colors.json" || true
 atomic_copy "$SCSS_FILE" "$cache_dir/material_colors.scss" || true
 printf '%s\n' "$preset_name" > "$cache_dir/name"
 
-"$SCRIPT_DIR/preset_post_apply.sh" "$request_id" "$token_file" >/dev/null 2>&1 &
+bash "$SCRIPT_DIR/preset_post_apply.sh" "$request_id" "$token_file" >/dev/null 2>&1 &
