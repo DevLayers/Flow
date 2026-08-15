@@ -33,7 +33,7 @@ Item {
     readonly property bool is3WaySlider: is3Way && effectiveSizeW === 2 && effectiveSizeH === 1 && (Config.options.sidebar.quickToggles.useThreeWaySliders ?? false)
 
     // Use the rendered widget's hover state while keeping it in this delegate's
-    // local scene graph. The grid delegate remains the only layout owner.
+    // local scene graph. The stable canvas delegate remains the layout owner.
     property bool hovered: (visualButton.hovered || visualButton.mouseArea.containsMouse)
                            || (root.editMode && editableItem.containsMouse)
 
@@ -71,6 +71,33 @@ Item {
     property int gridColumns: 4
     property var panel: null
     property var gridRef: null
+
+    // Active pages and the drawer use one explicit packed coordinate system.
+    // Bind only when geometry is present so fixed sliders can still be owned by
+    // their Column positioner.
+    readonly property bool hasExplicitGeometry: root.buttonData
+        && root.buttonData.layoutX !== undefined
+        && root.buttonData.layoutY !== undefined
+    Binding on x {
+        when: root.hasExplicitGeometry
+        value: Number(root.buttonData.layoutX)
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    Binding on y {
+        when: root.hasExplicitGeometry
+        value: Number(root.buttonData.layoutY)
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    z: root.isDragging ? 100 : 0
+
+    Behavior on x {
+        enabled: root.hasExplicitGeometry && !root.isDragging
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    Behavior on y {
+        enabled: root.hasExplicitGeometry && !root.isDragging
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
 
     // Entrance animation (Reorder animation effect - tuned delay & full opacity fade)
     property int entranceTrigger: -1
@@ -155,14 +182,6 @@ Item {
     }
 
     // Sizing shenanigans - use effective sizes for live resize preview
-    Layout.columnSpan: root.effectiveSizeW
-    Layout.rowSpan: root.effectiveSizeH
-    Layout.preferredWidth: root.implicitWidth
-    Layout.preferredHeight: root.implicitHeight
-    Layout.fillWidth: false
-    Layout.fillHeight: false
-
-
     property real baseWidth: root.baseCellWidth * root.effectiveSizeW + cellSpacing * (root.effectiveSizeW - 1)
     property real baseHeight: root.baseCellHeight * root.effectiveSizeH + cellSpacing * (root.effectiveSizeH - 1)
 

@@ -93,6 +93,79 @@ TestCase {
         compare(source.map(function(value) { return value.id; }), ["a", "b", "c", "d"]);
     }
 
+    function test_positioned_model_keeps_delegate_identity_during_reorder() {
+        var persisted = [
+            item("network", 1, 1),
+            item("audio", 1, 1),
+            item("bluetooth", 1, 1),
+            item("brightnessSlider", 4, 1)
+        ];
+        var preview = [persisted[1], persisted[2], persisted[0], persisted[3]];
+        var positioned = Layout.positionedItems(persisted, Layout.pack(preview, 4), 80, 56, 6);
+
+        compare(positioned.map(function(value) { return value.id; }),
+                ["network", "audio", "bluetooth", "brightnessSlider"]);
+        compare(positioned.map(function(value) { return value.type; }),
+                ["network", "audio", "bluetooth", "brightnessSlider"]);
+        compare(positioned[0].layoutX, 2 * 86);
+        compare(positioned[1].layoutX, 0);
+        compare(positioned[3].layoutY, 62);
+    }
+
+    function test_positioned_model_backfills_hole_before_full_width_slider() {
+        var persisted = [
+            item("a", 1, 1), item("b", 1, 1), item("c", 1, 1),
+            item("slider", 4, 1), item("d", 1, 1)
+        ];
+        var positioned = Layout.positionedItems(persisted, Layout.pack(persisted, 4), 80, 56, 6);
+
+        compare(positioned[3].layoutY, 62);
+        compare(positioned[4].layoutX, 3 * 86);
+        compare(positioned[4].layoutY, 0);
+    }
+
+    function test_positioned_drawer_items_do_not_share_the_origin() {
+        var drawer = [item("a", 1, 1), item("b", 1, 1), item("c", 1, 1), item("d", 1, 1), item("e", 1, 1)];
+        var positioned = Layout.positionedItems(drawer, Layout.pack(drawer, 4), 80, 56, 6);
+        var positions = positioned.map(function(value) { return value.layoutX + ":" + value.layoutY; });
+
+        compare(new Set(positions).size, drawer.length);
+        compare(positioned[4].layoutX, 0);
+        compare(positioned[4].layoutY, 62);
+    }
+
+    function test_hovered_item_swaps_in_both_directions() {
+        var source = [item("tailscale", 1, 1), item("darkMode", 1, 1)];
+        var packed = Layout.pack(source, 4);
+
+        compare(Layout.findInsertionIndex(packed.items, 0, 0, "darkMode"), 0);
+        compare(Layout.findInsertionIndex(packed.items, 0, 1, "tailscale"), 2);
+    }
+
+    function test_full_width_item_targets_the_whole_hovered_row() {
+        var movingUp = [
+            item("a", 1, 1), item("b", 1, 1), item("c", 1, 1), item("d", 1, 1),
+            item("slider", 4, 1)
+        ];
+        var packedUp = Layout.pack(movingUp, 4);
+        compare(Layout.findInsertionIndex(packedUp.items, 0, 0, "slider", 4), 0);
+
+        var movingDown = [
+            item("slider", 4, 1),
+            item("a", 1, 1), item("b", 1, 1), item("c", 1, 1), item("d", 1, 1)
+        ];
+        var packedDown = Layout.pack(movingDown, 4);
+        compare(Layout.findInsertionIndex(packedDown.items, 1, 0, "slider", 4), 5);
+    }
+
+    function test_resize_span_uses_absolute_gesture_delta() {
+        compare(Layout.resizeSpanFromDelta(1, 27, 50, 6, 4), 1);
+        compare(Layout.resizeSpanFromDelta(1, 29, 50, 6, 4), 2);
+        compare(Layout.resizeSpanFromDelta(1, 40, 50, 6, 4), 2);
+        compare(Layout.resizeSpanFromDelta(1, 83, 50, 6, 4), 2);
+        compare(Layout.resizeSpanFromDelta(1, 85, 50, 6, 4), 3);
+    }
+
     function test_deterministic_stress_never_overlaps() {
         var source = [];
         for (var i = 0; i < 120; i++) {

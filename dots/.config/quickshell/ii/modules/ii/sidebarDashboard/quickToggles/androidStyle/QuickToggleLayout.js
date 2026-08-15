@@ -130,6 +130,54 @@ function rowsUsed(items, columns) {
     return pack(items, columns).rowsUsed;
 }
 
+// Quantize from the gesture's immutable origin. Callers must provide a delta
+// measured in a stable ancestor coordinate system; measuring inside a resize
+// handle that moves with the item creates a resize feedback loop.
+function resizeSpanFromDelta(startSpan, deltaPixels, cellSize, spacing, maximumSpan) {
+    var start = integerAtLeastOne(startSpan, 1);
+    var maximum = Math.max(start, integerAtLeastOne(maximumSpan, start));
+    var step = Math.max(1, Number(cellSize) + Number(spacing));
+    var delta = Number(deltaPixels);
+    if (!isFinite(delta))
+        delta = 0;
+    return Math.max(1, Math.min(maximum, start + Math.round(delta / step)));
+}
+
+// Keep the delegate model in its persisted order and attach only geometry from
+// a packed preview. This is deliberately separate from pack(): reordering a
+// draft must move existing delegates, never replace/retype them while a mouse
+// grab is active.
+function positionedItems(items, packed, cellWidth, cellHeight, spacing) {
+    var source = toArray(items);
+    var packedItems = packed && packed.items ? toArray(packed.items) : [];
+    var byId = Object.create(null);
+    var stepX = Math.max(1, Number(cellWidth) + Number(spacing));
+    var stepY = Math.max(1, Number(cellHeight) + Number(spacing));
+    var result = [];
+
+    for (var packedIndex = 0; packedIndex < packedItems.length; packedIndex++) {
+        var placement = packedItems[packedIndex];
+        if (placement && typeof placement.id === "string")
+            byId[placement.id] = placement;
+    }
+
+    for (var index = 0; index < source.length; index++) {
+        var item = source[index];
+        if (!item || typeof item !== "object")
+            continue;
+        var positioned = cloneObject(item);
+        var geometry = byId[item.id];
+        if (geometry) {
+            positioned.sizeW = geometry.sizeW;
+            positioned.sizeH = geometry.sizeH;
+            positioned.layoutX = geometry.column * stepX;
+            positioned.layoutY = geometry.row * stepY;
+        }
+        result.push(positioned);
+    }
+    return result;
+}
+
 function findItem(items, id) {
     var source = toArray(items);
     for (var i = 0; i < source.length; i++) {
@@ -201,15 +249,69 @@ function validateNoOverlap(packed, columns) {
     return true;
 }
 
-function findInsertionIndex(packedItems, row, column, draggedId) {
+function findInsertionIndex(packedItems, row, column, draggedId, columns) {
     var source = toArray(packedItems);
     if (source.length === 0)
         return 0;
+
+    var draggedIndex = findItem(source, draggedId);
+    var draggedItem = draggedIndex >= 0 ? source[draggedIndex] : null;
+    var draggedWidth = integerAtLeastOne(draggedItem && draggedItem.columnSpan, 1);
+    var draggedHeight = integerAtLeastOne(draggedItem && draggedItem.rowSpan, 1);
+    var gridColumns = Number(columns);
+    if (!isFinite(gridColumns) || gridColumns < 1) {
+        gridColumns = 1;
+        for (var widthIndex = 0; widthIndex < source.length; widthIndex++) {
+            var widthItem = source[widthIndex];
+            if (widthItem)
+                gridColumns = Math.max(gridColumns, widthItem.column + widthItem.columnSpan);
+        }
+    }
+    gridColumns = Math.max(1, Math.floor(gridColumns));
+
+    var targetRect = {
+        row: Math.max(0, Math.floor(Number(row) || 0)),
+        column: Math.max(0, Math.min(
+            Math.max(0, gridColumns - draggedWidth),
+            Math.floor(Number(column) || 0)
+        )),
+        rowSpan: draggedHeight,
+        columnSpan: Math.min(draggedWidth, gridColumns)
+    };
+
+    // A large delegate targets every item under its prospective footprint.
+    // Moving backward inserts before the first overlap; moving forward inserts
+    // after the last one. A 4x1 slider therefore exchanges with a whole row.
+    var firstHit = source.length;
+    var lastHit = -1;
+    for (var hitIndex = 0; hitIndex < source.length; hitIndex++) {
+        var hitItem = source[hitIndex];
+        if (!hitItem || hitItem.id === draggedId)
+            continue;
+        if (rectanglesOverlap(targetRect, hitItem)) {
+            firstHit = Math.min(firstHit, hitIndex);
+            lastHit = Math.max(lastHit, hitIndex);
+        }
+    }
+
+    if (lastHit >= 0) {
+        if (draggedIndex >= 0 && draggedIndex < firstHit)
+            return lastHit + 1;
+        if (draggedIndex > lastHit)
+            return firstHit;
+
+        var draggedComesAfterTarget = draggedItem
+            && (draggedItem.row > targetRect.row
+                || (draggedItem.row === targetRect.row && draggedItem.column > targetRect.column));
+        return draggedComesAfterTarget ? firstHit : lastHit + 1;
+    }
+
     for (var i = 0; i < source.length; i++) {
         var item = source[i];
         if (!item || item.id === draggedId)
             continue;
-        if (row < item.row || (row === item.row && column < item.column))
+        if (targetRect.row < item.row
+                || (targetRect.row === item.row && targetRect.column < item.column))
             return i;
     }
     return source.length;

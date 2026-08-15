@@ -34,6 +34,33 @@ Item {
     property var panel: null
     property var gridRef: null
 
+    // Active pages and the drawer use one explicit packed coordinate system.
+    // Bind only when geometry is present so fixed sliders can still be owned by
+    // their Column positioner.
+    readonly property bool hasExplicitGeometry: root.buttonData
+        && root.buttonData.layoutX !== undefined
+        && root.buttonData.layoutY !== undefined
+    Binding on x {
+        when: root.hasExplicitGeometry
+        value: Number(root.buttonData.layoutX)
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    Binding on y {
+        when: root.hasExplicitGeometry
+        value: Number(root.buttonData.layoutY)
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    z: root.isDragging ? 100 : 0
+
+    Behavior on x {
+        enabled: root.hasExplicitGeometry && !root.isDragging
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    Behavior on y {
+        enabled: root.hasExplicitGeometry && !root.isDragging
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+
     property int entranceTrigger: -1
     property real _entranceOpacity: 0
     property real _entranceScale: 0.85
@@ -89,14 +116,6 @@ Item {
     HoverHandler {
         id: hoverHandler
     }
-
-    Layout.columnSpan: root.effectiveSizeW
-    Layout.rowSpan: root.effectiveSizeH
-    Layout.preferredWidth: root.implicitWidth
-    Layout.preferredHeight: root.implicitHeight
-    Layout.fillWidth: false
-    Layout.fillHeight: false
-
 
     property real baseWidth: root.baseCellWidth * root.effectiveSizeW + cellSpacing * (root.effectiveSizeW - 1)
     property real baseHeight: root.baseCellHeight * root.effectiveSizeH + cellSpacing * (root.effectiveSizeH - 1)

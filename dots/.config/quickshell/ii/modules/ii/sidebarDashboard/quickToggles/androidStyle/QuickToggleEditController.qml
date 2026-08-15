@@ -104,11 +104,21 @@ Item {
             target = (draftPages[pageIndex] || []).length;
         target = Math.floor(target);
 
+        if (location.page === pageIndex) {
+            if (target > location.index)
+                target--;
+            target = Math.max(0, Math.min(target, Math.max(0, draftPages[pageIndex].length - 1)));
+            if (target === location.index) {
+                targetPage = pageIndex;
+                targetIndex = target;
+                return false;
+            }
+        } else {
+            target = Math.max(0, Math.min(target, draftPages[pageIndex].length));
+        }
+
         var pages = clonePages(draftPages);
         var item = pages[location.page].splice(location.index, 1)[0];
-        if (location.page === pageIndex && target > location.index)
-            target--;
-        target = Math.max(0, Math.min(target, pages[pageIndex].length));
         pages[pageIndex].splice(target, 0, item);
         draftPages = pages;
         targetPage = pageIndex;
@@ -117,9 +127,9 @@ Item {
         return true;
     }
 
-    // Convert the pointer position into a row-major insertion point using the
-    // same packed draft that renders the grid. The controller owns the draft;
-    // delegates only provide pointer geometry.
+    // Convert the prospective dragged rectangle into a row-major insertion
+    // point using the same packed draft that renders the grid. The controller
+    // owns the draft; delegates only provide pointer geometry.
     function previewReorderAt(pageIndex, pointerX, pointerY, cellWidth, cellHeight, spacing) {
         if (!active || mode !== "reorder")
             return false;
@@ -128,10 +138,33 @@ Item {
 
         var stepX = Math.max(1, Number(cellWidth) + Number(spacing));
         var stepY = Math.max(1, Number(cellHeight) + Number(spacing));
-        var column = Math.max(0, Math.floor(Number(pointerX) / stepX));
-        var row = Math.max(0, Math.floor(Number(pointerY) / stepY));
         var packed = QuickToggleLayout.pack(draftPages[pageIndex] || [], root.columns);
-        var index = QuickToggleLayout.findInsertionIndex(packed.items, row, column, draggedId);
+        var draggedPackedIndex = QuickToggleLayout.findItem(packed.items, draggedId);
+        if (draggedPackedIndex < 0)
+            return false;
+        var dragged = packed.items[draggedPackedIndex];
+        var draggedPixelWidth = dragged.columnSpan * Number(cellWidth)
+            + Math.max(0, dragged.columnSpan - 1) * Number(spacing);
+        var draggedPixelHeight = dragged.rowSpan * Number(cellHeight)
+            + Math.max(0, dragged.rowSpan - 1) * Number(spacing);
+        var centerX = Number(pointerX);
+        var centerY = Number(pointerY);
+        if (!isFinite(centerX))
+            centerX = 0;
+        if (!isFinite(centerY))
+            centerY = 0;
+        var column = Math.max(0, Math.min(
+            root.columns - dragged.columnSpan,
+            Math.round((centerX - draggedPixelWidth / 2) / stepX)
+        ));
+        var row = Math.max(0, Math.round((centerY - draggedPixelHeight / 2) / stepY));
+        var index = QuickToggleLayout.findInsertionIndex(
+            packed.items,
+            row,
+            column,
+            draggedId,
+            root.columns
+        );
         return previewReorder(pageIndex, index);
     }
 

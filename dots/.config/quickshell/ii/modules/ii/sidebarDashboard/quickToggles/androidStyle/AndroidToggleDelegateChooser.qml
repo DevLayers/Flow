@@ -3,7 +3,6 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
-import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
 
@@ -15,10 +14,6 @@ DelegateChooser {
     required property real spacing
     property int pageIndex: 0
     property int gridColumns: 4
-    property int layoutRow: 0
-    property int layoutColumn: 0
-    property int layoutRowSpan: 1
-    property int layoutColumnSpan: 1
     property bool isUnused: false
     property var panel: null
     property var gridRef: null
@@ -36,7 +31,7 @@ DelegateChooser {
     signal openIdleInhibitorDialog
     signal openScreenShaderDialog
 
-    role: "type"
+    role: "toggleType"
 
     DelegateChoice {
         roleValue: "screenShader"
@@ -51,10 +46,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -79,10 +70,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -107,10 +94,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -135,10 +118,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -163,10 +142,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -188,10 +163,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -213,10 +184,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -238,10 +205,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -266,10 +229,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -291,10 +250,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -316,10 +271,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -344,10 +295,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -372,10 +319,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -397,10 +340,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -425,10 +364,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -453,10 +388,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -478,10 +409,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -503,10 +430,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -528,10 +451,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -553,10 +472,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -578,10 +493,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -603,10 +514,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -627,10 +534,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -652,10 +555,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -680,10 +579,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -704,10 +599,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -732,10 +623,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -760,10 +647,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -785,10 +668,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -810,10 +689,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -835,10 +710,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -863,10 +734,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -891,10 +758,6 @@ DelegateChooser {
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
             cellSize: modelData.sizeW
-            Layout.row: root.layoutRow
-            Layout.column: root.layoutColumn
-            Layout.rowSpan: root.layoutRowSpan
-            Layout.columnSpan: root.layoutColumnSpan
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel

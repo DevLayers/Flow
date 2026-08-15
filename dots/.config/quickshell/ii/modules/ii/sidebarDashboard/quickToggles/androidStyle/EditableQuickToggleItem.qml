@@ -2,6 +2,7 @@ import QtQuick
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import "QuickToggleLayout.js" as QuickToggleLayout
 
 // Shared editing surface for every Android quick-toggle delegate. The visual
 // widget stays owned by its base component; this item only handles gestures,
@@ -22,12 +23,18 @@ Item {
 
     property real pressX: 0
     property real pressY: 0
+    property real pressPointerPanelX: 0
+    property real pressPointerPanelY: 0
+    property real pressItemPanelX: 0
+    property real pressItemPanelY: 0
     property real editDragX: 0
     property real editDragY: 0
     property bool editingRight: false
     property bool editingBottom: false
     property int resizeStartW: 1
     property int resizeStartH: 1
+    property real resizeStartReferenceX: 0
+    property real resizeStartReferenceY: 0
     property bool resizing: false
 
     property alias containsMouse: editInteraction.containsMouse
@@ -48,6 +55,13 @@ Item {
         return true;
     }
 
+    function resizePointerInStableReference(sourceItem, pointerX, pointerY) {
+        var reference = root.target.panel || root.target.gridRef || root.target.parent;
+        if (!reference)
+            return Qt.point(pointerX, pointerY);
+        return reference.mapFromItem(sourceItem, pointerX, pointerY);
+    }
+
     function previewResize(deltaX, deltaY) {
         if (!root.resizing || !root.controller)
             return;
@@ -61,12 +75,21 @@ Item {
             if (width === 4 && height === 1)
                 height = 2;
         } else {
-            var columns = root.target.baseCellWidth > 0 ? Math.round(deltaX / root.target.baseCellWidth) : 0;
-            width = Math.max(1, Math.min(root.target.gridColumns, root.resizeStartW + columns));
-            if (root.canResizeHeight) {
-                var rows = root.target.baseCellHeight > 0 ? Math.round(deltaY / root.target.baseCellHeight) : 0;
-                height = Math.max(1, Math.min(8, root.resizeStartH + rows));
-            }
+            width = QuickToggleLayout.resizeSpanFromDelta(
+                root.resizeStartW,
+                deltaX,
+                root.target.baseCellWidth,
+                root.target.cellSpacing,
+                root.target.gridColumns
+            );
+            if (root.canResizeHeight)
+                height = QuickToggleLayout.resizeSpanFromDelta(
+                    root.resizeStartH,
+                    deltaY,
+                    root.target.baseCellHeight,
+                    root.target.cellSpacing,
+                    8
+                );
         }
 
         root.controller.previewResize(width, height);
@@ -106,35 +129,66 @@ Item {
         acceptedButtons: Qt.LeftButton
 
         onPressed: event => {
-            if (!root.isUnused) {
-                if (!root.controller || !root.controller.beginReorder(root.target.buttonData.id, root.target.pageIndex))
-                    return;
-            }
+            if (!root.isUnused && !root.controller)
+                return;
             root.pressX = event.x;
             root.pressY = event.y;
+            if (root.target.panel) {
+                var pointer = root.target.panel.mapFromItem(editInteraction, event.x, event.y);
+                var origin = root.target.panel.mapFromItem(root.target, 0, 0);
+                root.pressPointerPanelX = pointer.x;
+                root.pressPointerPanelY = pointer.y;
+                root.pressItemPanelX = origin.x;
+                root.pressItemPanelY = origin.y;
+            }
             root.target.dragOffsetX = 0;
             root.target.dragOffsetY = 0;
             root.target.isDragging = false;
         }
 
         onPositionChanged: event => {
-            if (!pressed)
+            if (!pressed || root.isUnused)
                 return;
             var dx = event.x - root.pressX;
             var dy = event.y - root.pressY;
-            if (!root.target.isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4))
-                root.target.isDragging = root.isUnused || (root.controller && root.controller.active);
+            var panelPos = null;
+            if (root.target.panel) {
+                panelPos = root.target.panel.mapFromItem(editInteraction, event.x, event.y);
+                dx = panelPos.x - root.pressPointerPanelX;
+                dy = panelPos.y - root.pressPointerPanelY;
+            }
+            if (!root.target.isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+                if (!root.controller.beginReorder(root.target.buttonData.id, root.target.pageIndex))
+                    return;
+                root.target.isDragging = true;
+            }
 
             if (!root.target.isDragging)
                 return;
 
-            root.target.dragOffsetX = dx;
-            root.target.dragOffsetY = dy;
-            var centerX = dx + root.target.width / 2;
-            var centerY = dy + root.target.height / 2;
+            // Preview packing may move the delegate root. Compensate that move
+            // so the visual remains under the grabbed pointer without
+            // reparenting it out of the stable delegate.
+            if (root.target.panel) {
+                var currentOrigin = root.target.panel.mapFromItem(root.target, 0, 0);
+                root.target.dragOffsetX = root.pressItemPanelX + dx - currentOrigin.x;
+                root.target.dragOffsetY = root.pressItemPanelY + dy - currentOrigin.y;
+            } else {
+                root.target.dragOffsetX = dx;
+                root.target.dragOffsetY = dy;
+            }
             if (!root.isUnused && root.controller
                     && root.controller.targetPage === root.target.pageIndex) {
-                var gridPos = root.target.parent.mapFromItem(root.target, centerX, centerY);
+                var gridPos;
+                if (root.target.gridRef && root.target.panel) {
+                    gridPos = root.target.gridRef.mapFromItem(
+                        root.target.panel,
+                        root.pressItemPanelX + dx + root.target.width / 2,
+                        root.pressItemPanelY + dy + root.target.height / 2
+                    );
+                } else {
+                    gridPos = root.target.parent.mapFromItem(editInteraction, event.x, event.y);
+                }
                 root.controller.previewReorderAt(
                     root.target.pageIndex,
                     gridPos.x,
@@ -145,7 +199,8 @@ Item {
                 );
             }
             if (root.target.panel && root.target.panel.handleDragScrollRequest) {
-                var panelPos = root.target.panel.mapFromItem(root.target, centerX, centerY);
+                if (!panelPos)
+                    panelPos = root.target.panel.mapFromItem(editInteraction, event.x, event.y);
                 root.target.panel.handleDragScrollRequest(panelPos.x, root.target);
             }
         }
@@ -213,22 +268,25 @@ Item {
         visible: root.canResize
 
         MouseArea {
+            id: rightResizeArea
             anchors.fill: parent
             anchors.margins: -12
             cursorShape: Qt.SizeHorCursor
             preventStealing: true
-            property real startX: 0
 
             onPressed: event => {
                 if (!root.beginResize())
                     return;
-                startX = event.x;
+                var start = root.resizePointerInStableReference(rightResizeArea, event.x, event.y);
+                root.resizeStartReferenceX = start.x;
+                root.resizeStartReferenceY = start.y;
                 root.editingRight = true;
             }
             onPositionChanged: event => {
                 if (!root.resizing)
                     return;
-                var deltaX = event.x - startX;
+                var current = root.resizePointerInStableReference(rightResizeArea, event.x, event.y);
+                var deltaX = current.x - root.resizeStartReferenceX;
                 root.editDragX = deltaX;
                 root.previewResize(deltaX, 0);
             }
@@ -248,22 +306,25 @@ Item {
         visible: root.canResizeHeight && (!root.isMedia || root.target.catalogSize[0] <= 2)
 
         MouseArea {
+            id: bottomResizeArea
             anchors.fill: parent
             anchors.margins: -12
             cursorShape: Qt.SizeVerCursor
             preventStealing: true
-            property real startY: 0
 
             onPressed: event => {
                 if (!root.beginResize())
                     return;
-                startY = event.y;
+                var start = root.resizePointerInStableReference(bottomResizeArea, event.x, event.y);
+                root.resizeStartReferenceX = start.x;
+                root.resizeStartReferenceY = start.y;
                 root.editingBottom = true;
             }
             onPositionChanged: event => {
                 if (!root.resizing)
                     return;
-                var deltaY = event.y - startY;
+                var current = root.resizePointerInStableReference(bottomResizeArea, event.x, event.y);
+                var deltaY = current.y - root.resizeStartReferenceY;
                 root.editDragY = deltaY;
                 root.previewResize(0, deltaY);
             }

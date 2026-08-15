@@ -55,6 +55,89 @@ TestCase {
         verify(controller.cancelReorder());
     }
 
+    function test_reorder_same_slot_is_a_noop() {
+        fakeConfig.pages = sourcePages;
+        controller.persistedPages = sourcePages;
+        verify(controller.beginReorder("b", 0));
+        var before = JSON.stringify(controller.draftPages);
+        verify(!controller.previewReorder(0, 1));
+        compare(JSON.stringify(controller.draftPages), before);
+        verify(controller.cancelReorder());
+    }
+
+    function test_adjacent_toggles_swap_in_both_drag_directions() {
+        var pages = [[
+            { id: "tailscale", type: "tailscale", sizeW: 1, sizeH: 1 },
+            { id: "darkMode", type: "darkMode", sizeW: 1, sizeH: 1 }
+        ]];
+        fakeConfig.pages = pages;
+        controller.persistedPages = pages;
+
+        verify(controller.beginReorder("darkMode", 0));
+        verify(controller.previewReorderAt(0, 25, 28, 50, 56, 6));
+        compare(ids(controller.draftPages[0]), ["darkMode", "tailscale"]);
+        compare(controller.draftPages[0][0].sizeW, 1);
+        verify(controller.cancelReorder());
+
+        verify(controller.beginReorder("tailscale", 0));
+        verify(controller.previewReorderAt(0, 75, 28, 50, 56, 6));
+        compare(ids(controller.draftPages[0]), ["darkMode", "tailscale"]);
+        compare(controller.draftPages[0][0].sizeW, 1);
+        verify(controller.cancelReorder());
+    }
+
+    function test_reorder_never_transfers_slider_size() {
+        var pages = [[
+            { id: "tailscale", type: "tailscale", sizeW: 1, sizeH: 1 },
+            { id: "volumeSlider", type: "volumeSlider", sizeW: 4, sizeH: 1 }
+        ]];
+        fakeConfig.pages = pages;
+        controller.persistedPages = pages;
+
+        verify(controller.beginReorder("volumeSlider", 0));
+        verify(controller.previewReorderAt(0, 25, 28, 50, 56, 6));
+        compare(ids(controller.draftPages[0]), ["volumeSlider", "tailscale"]);
+        compare(controller.draftPages[0][0].sizeW, 4);
+        compare(controller.draftPages[0][0].sizeH, 1);
+        compare(controller.draftPages[0][1].sizeW, 1);
+        compare(controller.draftPages[0][1].sizeH, 1);
+        verify(controller.cancelReorder());
+    }
+
+    function test_full_width_slider_swaps_with_an_entire_row() {
+        var sliderLast = [[
+            { id: "a", type: "network", sizeW: 1, sizeH: 1 },
+            { id: "b", type: "bluetooth", sizeW: 1, sizeH: 1 },
+            { id: "c", type: "vpn", sizeW: 1, sizeH: 1 },
+            { id: "d", type: "darkMode", sizeW: 1, sizeH: 1 },
+            { id: "slider", type: "volumeSlider", sizeW: 4, sizeH: 1 }
+        ]];
+        fakeConfig.pages = sliderLast;
+        controller.persistedPages = sliderLast;
+        verify(controller.beginReorder("slider", 0));
+        verify(controller.previewReorderAt(0, 109, 28, 50, 56, 6));
+        compare(ids(controller.draftPages[0]), ["slider", "a", "b", "c", "d"]);
+        compare(controller.draftPages[0][0].sizeW, 4);
+        verify(controller.commitReorder());
+        compare(ids(fakeConfig.pages[0]), ["slider", "a", "b", "c", "d"]);
+
+        var sliderFirst = [[
+            { id: "slider", type: "volumeSlider", sizeW: 4, sizeH: 1 },
+            { id: "a", type: "network", sizeW: 1, sizeH: 1 },
+            { id: "b", type: "bluetooth", sizeW: 1, sizeH: 1 },
+            { id: "c", type: "vpn", sizeW: 1, sizeH: 1 },
+            { id: "d", type: "darkMode", sizeW: 1, sizeH: 1 }
+        ]];
+        fakeConfig.pages = sliderFirst;
+        controller.persistedPages = sliderFirst;
+        verify(controller.beginReorder("slider", 0));
+        verify(controller.previewReorderAt(0, 109, 90, 50, 56, 6));
+        compare(ids(controller.draftPages[0]), ["a", "b", "c", "d", "slider"]);
+        compare(controller.draftPages[0][4].sizeW, 4);
+        verify(controller.commitReorder());
+        compare(ids(fakeConfig.pages[0]), ["a", "b", "c", "d", "slider"]);
+    }
+
     function test_cross_page_reorder_commits_from_controller_target() {
         var pages = [
             [{ id: "a", type: "network", sizeW: 1, sizeH: 1 }, { id: "b", type: "bluetooth", sizeW: 1, sizeH: 1 }],
