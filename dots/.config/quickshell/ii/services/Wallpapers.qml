@@ -225,6 +225,28 @@ Singleton {
         if (!parallax)
             return;
 
+        // Most preset loads now arrive already normalized by presets_helper.py.
+        // Avoid mutating the adapter and forcing a second config write when the
+        // constraints are already satisfied.
+        const alreadyConstrained = background.blurWhenWindowsOpen === false
+            && background.zoomOutEnabled === false
+            && background.zoomOutStyle === 1
+            && background.windowZoomOnOverview === false
+            && background.windowZoomLiveCapture === false
+            && background.cheatsheetZoomOut === false
+            && background.overviewZoomOut === false
+            && background.workspaceBlur === false
+            && parallax.vertical === false
+            && parallax.autoVertical === false
+            && parallax.enableWorkspace === false
+            && parallax.enableSidebar === false
+            && parallax.loop === false
+            && parallax.invertHorizontal === false
+            && parallax.invertVertical === false
+            && parallax.workspaceZoom === 1.0;
+        if (alreadyConstrained)
+            return;
+
         root.enforcingVideoWallpaperConstraints = true;
 
         background.blurWhenWindowsOpen = false;
