@@ -17,3 +17,4 @@ TouchGestureBindingCard 1.0 TouchGestureBindingCard.qml
 TouchGestureScreenPreview 1.0 TouchGestureScreenPreview.qml
 NetworkDisplayStatusCard 1.0 NetworkDisplayStatusCard.qml
 NetworkDisplayDiagnosticRow 1.0 NetworkDisplayDiagnosticRow.qml
+WirelessDisplaysConfig 1.0 WirelessDisplaysConfig.qml

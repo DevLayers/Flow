@@ -11,13 +11,26 @@ import qs.modules.common.models.hyprland
 import qs.modules.settings.configs.widgets
 import "widgets"
 
-ContentPage {
-    id: page
-    forceWidth: false
+Item {
+    id: root
+    anchors.fill: parent
 
-    MonitorConfigOption {
-        id: monitorConfig
-    }
+    property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
+    property int loadStage: 0
+
+    Component.onCompleted: Qt.callLater(() => root.loadStage = 1)
+
+    ContentPage {
+        id: page
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
+        visible: opacity > 0
+
+        MonitorConfigOption {
+            id: monitorConfig
+        }
 
     component MonitorRect: Rectangle {
         id: rectRoot
@@ -1291,14 +1304,11 @@ ContentPage {
             buttonIcon: "cast"
             text: Translation.tr("Enable wireless displays & casting")
             checked: (Config.options.displayCast && Config.options.displayCast.wirelessEnabled !== undefined) ? Config.options.displayCast.wirelessEnabled : true
-            configPage: Qt.resolvedUrl("./WirelessDisplaysSubPage.qml")
+            configPage: Qt.resolvedUrl("widgets/WirelessDisplaysConfig.qml")
             onCheckedChanged: {
                 if (Config.ready && Config.options.displayCast) {
                     Config.options.displayCast.wirelessEnabled = checked;
                 }
-            }
-            onOpenSubPage: {
-                subPageOverlay.open(Qt.resolvedUrl("./WirelessDisplaysSubPage.qml"));
             }
             StyledToolTip {
                 text: Translation.tr("Enables discovery and streaming to Miracast, MICE, and Chromecast receivers. Click to configure.")
@@ -1320,6 +1330,8 @@ ContentPage {
                 sectionHighlight: Translation.tr("Night Light")
             }
         }
+    }
+
     }
 
     ConfigSubPageHost {

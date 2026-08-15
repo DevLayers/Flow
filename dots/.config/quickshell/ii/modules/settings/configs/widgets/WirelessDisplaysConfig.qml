@@ -162,7 +162,7 @@ ContentPage {
                 }
             }
             StyledToolTip {
-                text: Translation.tr("Closes the Display & Cast popup immediately after selecting a projection mode.")
+                text: Translation.tr("Automatically dismisses the Display & Cast popup once a quick layout is selected.")
             }
         }
     }
