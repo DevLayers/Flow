@@ -264,6 +264,13 @@ Singleton {
         root.options.appearance.sharpMode = (root.options.appearance.roundingValue === 0);
     }
 
+    function syncAppLaunchAnimation() {
+        if (!root.options || !root.options.appearance || !root.options.appearance.appLaunchAnimation)
+            return;
+        let anim = root.options.appearance.appLaunchAnimation;
+        HyprlandSettings.updateAppLaunchAnimation(anim.enable, anim.startPercent, anim.speed, anim.curve);
+    }
+
     function migrateWidgetLockBehavior() {
         if (Persistent.states.background.lockBehaviorMigrated)
             return;
@@ -813,6 +820,7 @@ Singleton {
             if (root.repairConfigFile())
                 return;
             migrateRoundingConfig();
+            syncAppLaunchAnimation();
         }
         onLoadFailed: error => {
             if (error != FileViewError.FileNotFound) {
@@ -1106,6 +1114,12 @@ Singleton {
                 property bool scrollAnimations: false
                 property bool scrollFadeMask: false
                 property bool settingsPerformanceMode: false
+                property JsonObject appLaunchAnimation: JsonObject {
+                    property bool enable: true
+                    property int startPercent: 20 // 5 - 50%
+                    property real speed: 3.2
+                    property string curve: "iiAppOpen"
+                }
                 property JsonObject openrgb: JsonObject {
                     property bool enable: false
                     property bool applyOnStartup: true

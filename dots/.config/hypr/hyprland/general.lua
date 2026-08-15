@@ -240,33 +240,37 @@ hl.curve("stall", {
     type = "bezier",
     points = {{1, -0.1}, {0.7, 0.85}}
 })
+hl.curve("iiAppOpen", {
+    type = "bezier",
+    points = {{0.05, 0.9}, {0.1, 1}}
+})
 -- Configs
 -- windows
 hl.animation({
     leaf = "windowsIn",
     enabled = true,
-    speed = 3,
-    bezier = "emphasizedDecel",
-    style = "popin 80%"
+    speed = 3.2,
+    bezier = "iiAppOpen",
+    style = "popin 20%"
 })
 hl.animation({
     leaf = "fadeIn",
     enabled = true,
-    speed = 3,
-    bezier = "emphasizedDecel"
+    speed = 3.2,
+    bezier = "iiAppOpen"
 })
 hl.animation({
     leaf = "windowsOut",
     enabled = true,
-    speed = 2,
-    bezier = "emphasizedDecel",
-    style = "popin 90%"
+    speed = 3.2,
+    bezier = "iiAppOpen",
+    style = "popin 60%"
 })
 hl.animation({
     leaf = "fadeOut",
     enabled = true,
-    speed = 2,
-    bezier = "emphasizedDecel"
+    speed = 3.2,
+    bezier = "iiAppOpen"
 })
 hl.animation({
     leaf = "windowsMove",
