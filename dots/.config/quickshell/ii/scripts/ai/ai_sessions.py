@@ -147,6 +147,7 @@ def normalize(session: Any, fallback_id: str = "") -> dict | None:
 
 def entry_of(session: dict) -> dict:
     messages = session.get("messages") or []
+    run = session.get("run") if isinstance(session.get("run"), dict) else {}
     return {
         "id": session["id"],
         "title": session["title"],
@@ -156,6 +157,10 @@ def entry_of(session: dict) -> dict:
         "modelId": session["modelId"],
         "messageCount": len(messages),
         "preview": preview_of(messages),
+        "runId": str(run.get("runId") or ""),
+        "runState": str(run.get("state") or ""),
+        "needsInspection": run.get("state") == "needsInspection",
+        "isSeen": bool(run.get("isSeen", True)),
     }
 
 

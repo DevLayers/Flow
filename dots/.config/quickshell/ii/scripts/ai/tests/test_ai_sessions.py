@@ -32,9 +32,13 @@ class AiSessionsContractTests(unittest.TestCase):
                 "title": "Legacy",
                 "messages": [],
                 "futureField": {"keep": True},
+                "run": {"runId": "run-1", "state": "needsInspection", "isSeen": False},
             }
             result = call("save", directory, "chat-1", payload=legacy)
             self.assertIn("chat-1", [entry["id"] for entry in result["sessions"]])
+            entry = result["sessions"][0]
+            self.assertEqual(entry["runState"], "needsInspection")
+            self.assertTrue(entry["needsInspection"])
             session_file = Path(directory) / "chat-1.json"
             saved = json.loads(session_file.read_text())
             self.assertEqual(saved["schema"], 3)

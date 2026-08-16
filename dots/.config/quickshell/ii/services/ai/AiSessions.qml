@@ -118,7 +118,7 @@ Scope {
      * Writes a session object. The caller owns the shape; only the id is
      * forced, so a fork cannot overwrite the chat it came from.
      */
-    function commit(session: var, requestedOperationId: string = "", flushNow: bool = false): string {
+    function commit(session, requestedOperationId = "", flushNow = false) {
         if (!session || root.dir.length === 0)
             return "";
         const id = session.id ?? root.currentId;
@@ -138,7 +138,7 @@ Scope {
     }
 
     /** Stage a first-turn snapshot without making it visible to the index. */
-    function stageSubmission(session: var, requestedOperationId: string = ""): string {
+    function stageSubmission(session, requestedOperationId = "") {
         if (!session || root.dir.length === 0)
             return "";
         const id = session.id ?? root.currentId;
@@ -196,7 +196,7 @@ Scope {
     }
 
     /** Loads a session for a background repository record without selecting it. */
-    function load(id: string, requestedOperationId: string = ""): string {
+    function load(id, requestedOperationId = "") {
         if (!id || id.length === 0 || root.dir.length === 0)
             return "";
         const operationId = requestedOperationId || root.operationId("load");

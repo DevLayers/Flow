@@ -82,6 +82,7 @@ Singleton {
     }
 
     function enforcePolicy() {
+        root.runCoordinator.cancelByPolicy(root.localOnly);
         const blocksTransport = transport => transport.running && (!root.enabled || (root.localOnly && transport.model && !root.catalog.isModelLocal(transport.model)));
         if (blocksTransport(requester))
             root.stopGeneration();
@@ -96,6 +97,88 @@ Singleton {
     }
 
     onAiPolicyChanged: root.enforcePolicy()
+
+    // These are singletons owned by the facade. Visual hosts only observe
+    // their projections; they never create a second repository or run slot.
+    readonly property AiConversationRepository conversations: AiConversationRepository {}
+    readonly property AiRunCoordinator runCoordinator: AiRunCoordinator {
+        onRunStarted: run => root.onRunStarted(run)
+        onRunActivity: (run, event) => root.onRunActivity(run, event)
+        onRunFinished: run => root.onRunFinished(run)
+    }
+    property string currentRunId: ""
+    property string currentRunSessionId: ""
+    property string currentRunRequestId: ""
+    property string currentRunResponseId: ""
+    property var runningMessageIDs: []
+    property var runningMessageByID: ({})
+    property var pendingRunJournal: null
+
+    function journalRun(sessionId: string, run: var) {
+        root.pendingRunJournal = {
+            sessionId: sessionId,
+            run: run
+        };
+        runJournalTimer.restart();
+    }
+
+    function onRunStarted(run: var) {
+        root.conversations.setRun(run.sessionId, run);
+        root.pendingRunJournal = {
+            sessionId: run.sessionId,
+            run: run
+        };
+        runJournalTimer.restart();
+    }
+
+    function onRunActivity(run: var, event: var) {
+        root.conversations.setRun(run.sessionId, run);
+        if (run.sessionId === root.currentRunSessionId && root.runningMessageIDs.length > 0)
+            root.conversations.capture(run.sessionId, root.runningSessionToJson());
+        root.pendingRunJournal = {
+            sessionId: run.sessionId,
+            run: run
+        };
+        runJournalTimer.restart();
+    }
+
+    function onRunFinished(run: var) {
+        root.conversations.setRun(run.sessionId, run);
+        if (run.sessionId === root.currentRunSessionId && root.runningMessageIDs.length > 0)
+            root.conversations.capture(run.sessionId, root.runningSessionToJson());
+        root.pendingRunJournal = null;
+        root.commitRunSession(run.sessionId, true);
+        if (root.currentRunId === run.runId)
+            root.currentRunId = "";
+    }
+
+    function commitRunSession(sessionId: string, flushNow = false) {
+        const id = String(sessionId ?? "");
+        if (!id)
+            return;
+        if (id === root.sessions.currentId) {
+            root.commitSession(flushNow);
+            return;
+        }
+        if (id === root.currentRunSessionId && root.runningMessageIDs.length > 0)
+            root.conversations.capture(id, root.runningSessionToJson());
+        const snapshot = root.conversations.snapshot(id);
+        if (snapshot)
+            root.sessions.commit(snapshot, "", flushNow);
+    }
+
+    Timer {
+        id: runJournalTimer
+        interval: 700
+        onTriggered: {
+            const pending = root.pendingRunJournal;
+            root.pendingRunJournal = null;
+            if (!pending)
+                return;
+            root.commitRunSession(pending.sessionId, false);
+        }
+    }
+
     // Set while a failed request waits to be sent again, so the UI can say so
     // instead of looking stuck.
     property string retryNotice: ""
@@ -332,6 +415,7 @@ Singleton {
     Component.onCompleted: {
         root.migrateAiDefaults();
         root.resetSessionSettings();
+        root.sessions.ensureLoaded();
         setModel(currentModelId, false, false); // Do necessary setup for model
     }
 
@@ -700,8 +784,10 @@ Singleton {
             root.postResponseHook();
             root.postResponseHook = null; // Reset hook after use
         }
-        root.autoTitle(); // Names it first, so the write below carries the name
-        root.commitSession();
+        const runSessionId = root.currentRunSessionId;
+        if (!runSessionId || runSessionId === root.sessions.currentId)
+            root.autoTitle(); // Names it first, so the write below carries the name
+        root.commitRunSession(runSessionId || root.sessions.currentId, true);
         root.responseFinished();
     }
 
@@ -811,6 +897,8 @@ Singleton {
         property bool parsedAny: false
 
         onLine: data => {
+            if (root.currentRunId.length > 0)
+                root.runCoordinator.activity(root.currentRunId, "stream", { "bytes": String(data ?? "").length });
             if (requester.message.thinking)
                 requester.message.thinking = false;
             // console.log("[Ai] Raw response line: ", data);
@@ -897,6 +985,11 @@ Singleton {
             if (!message.done)
                 root.markDone(message);
 
+            if (root.currentRunId.length > 0) {
+                const finalState = reason === "done" ? "completed" : (reason === "aborted" ? "cancelled" : "failed");
+                root.runCoordinator.finish(root.currentRunId, finalState, reason);
+            }
+
             if (message.content.includes("API key not valid") || status === 401 || status === 403) {
                 const model = root.models[message.model];
                 if (model)
@@ -939,6 +1032,20 @@ Singleton {
             return;
         }
 
+        // Give the run a stable destination before creating its placeholder.
+        // The first user turn may not have been flushed yet because it was
+        // typed into a brand-new chat.
+        if (root.sessions.currentId.length === 0)
+            root.commitSession(true);
+        let requestMessageId = "";
+        for (let at = root.messageIDs.length - 1; at >= 0; at--) {
+            const candidateMessage = root.messageByID[root.messageIDs[at]];
+            if (candidateMessage?.role === "user") {
+                requestMessageId = root.messageIDs[at];
+                break;
+            }
+        }
+
         // Fetch API keys if needed
         if (model.requires_key && !KeyringStorage.loaded)
             KeyringStorage.fetchKeyringData();
@@ -969,6 +1076,23 @@ Singleton {
         const id = idForMessage(message);
         root.messageIDs = [...root.messageIDs, id];
         root.messageByID[id] = message;
+
+        const runResult = root.runCoordinator.start(root.sessions.currentId, requestMessageId, id, model.id, "ai");
+        if (!runResult.accepted) {
+            root.messageIDs = root.messageIDs.filter(messageId => messageId !== id);
+            delete root.messageByID[id];
+            message.destroy();
+            root.addMessage(Translation.tr("AI is busy with another conversation. Open or stop the active run first."), root.interfaceRole);
+            return;
+        }
+        root.currentRunId = runResult.runId;
+        root.currentRunSessionId = runResult.sessionId;
+        root.currentRunRequestId = requestMessageId;
+        root.currentRunResponseId = id;
+        root.runningMessageIDs = root.messageIDs.slice();
+        root.runningMessageByID = Object.assign({}, root.messageByID);
+        root.conversations.capture(root.currentRunSessionId, root.sessionToJson());
+        root.commitSession(true);
 
         requester.model = model;
         requester.strategy = strategy;
@@ -1465,6 +1589,8 @@ Singleton {
         }
         const serial = root.toolbox.noteCall(name, args);
         message.toolCallSerial = serial;
+        if (root.currentRunId.length > 0)
+            root.runCoordinator.activity(root.currentRunId, "tool", { "tool": name, "serial": serial });
 
         if (root.toolbox.permission(name) === "deny") {
             root.toolbox.finishCall(serial, "refused", Translation.tr("Turned off"));
@@ -1551,6 +1677,8 @@ Singleton {
         exportDir: Directories.aiExports
         onSaveRequested: root.commitSession()
         onSessionOpened: session => root.applySession(session)
+        onSaveSucceeded: (operationId, sessionId) => root.conversations.markSaveAcknowledged(sessionId)
+        onSaveFailed: (operationId, sessionId, reason) => root.conversations.markSavePending(sessionId, true)
         onCurrentDropped: root.newChat()
     }
 
@@ -1642,8 +1770,10 @@ Singleton {
     /** Whether the model has already been asked to name this one. */
     property bool sessionTitleAsked: false
 
-    function messageToJson(id: string): var {
-        const message = root.messageByID[id];
+    function serializeMessageFrom(id, source) {
+        const message = source?.[id];
+        if (!message)
+            return null;
         return ({
                 "id": id,
                 "role": message.role,
@@ -1676,8 +1806,16 @@ Singleton {
             });
     }
 
+    function serializeMessage(id) {
+        return root.serializeMessageFrom(id, root.messageByID);
+    }
+
     function chatToJson() {
-        return root.messageIDs.map(id => root.messageToJson(id));
+        return root.messageIDs.map(id => root.serializeMessage(id)).filter(message => message !== null);
+    }
+
+    function runningChatToJson() {
+        return root.runningMessageIDs.map(id => root.serializeMessageFrom(id, root.runningMessageByID)).filter(message => message !== null);
     }
 
     function messageFromJson(data: var): AiMessageData {
@@ -1727,22 +1865,54 @@ Singleton {
                 "promptFile": root.currentPromptFile,
                 "personaId": root.sessionPersonaId,
                 "promptOverride": root.promptOverride,
-                "messages": root.chatToJson()
+                "messages": root.chatToJson(),
+                "run": root.conversations.records[root.sessions.currentId]?.run ?? null,
+                "searchQueries": [],
+                "activityEvents": root.conversations.records[root.sessions.currentId]?.run?.activityEvents ?? []
             });
+    }
+
+    function runningSessionToJson(): var {
+        const sessionId = root.currentRunSessionId;
+        const base = root.conversations.snapshot(sessionId) ?? ({
+                "schema": root.sessionSchema,
+                "id": sessionId,
+                "title": "",
+                "createdAt": Date.now(),
+                "pinned": true,
+                "modelId": root.currentModelId,
+                "thinking": root.thinkingLevel,
+                "temperature": root.temperature,
+                "promptFile": "",
+                "personaId": "",
+                "promptOverride": ""
+            });
+        return Object.assign({}, base, {
+            schema: root.sessionSchema,
+            id: sessionId,
+            modelId: root.currentRunId.length > 0 ? (root.runCoordinator.runFor(root.currentRunId)?.modelId ?? base.modelId) : base.modelId,
+            messages: root.runningChatToJson(),
+            run: root.conversations.records[sessionId]?.run ?? null,
+            activityEvents: root.conversations.records[sessionId]?.run?.activityEvents ?? [],
+            updatedAt: Date.now()
+        });
     }
 
     /**
      * Writes the conversation on screen. An empty chat is not a session: one
      * is only started once there is something in it.
      */
-    function commitSession() {
+    function commitSession(flushNow = false) {
         if (root.messageIDs.length === 0)
             return;
         if (root.sessions.currentId.length === 0) {
             root.sessions.currentId = root.sessions.newId();
             root.sessionCreatedAt = Date.now();
         }
-        root.sessions.commit(root.sessionToJson());
+        const snapshot = root.sessionToJson();
+        root.conversations.capture(root.sessions.currentId, snapshot);
+        root.conversations.markSavePending(root.sessions.currentId, true);
+        root.sessions.commit(snapshot, "", flushNow);
     }
 
     /** Puts the conversation away and starts an empty one. */
@@ -1776,7 +1946,15 @@ Singleton {
      * set right now.
      */
     function applySession(session: var) {
-        root.stopGeneration();
+        const sessionId = root.sessions.currentId;
+        if (sessionId.length > 0) {
+            let restoredRun = session.run ?? root.conversations.records[sessionId]?.run ?? null;
+            if (restoredRun && !root.runCoordinator.terminalStates.includes(restoredRun.state)) {
+                restoredRun = root.runCoordinator.restore(restoredRun);
+                session.run = restoredRun;
+            }
+            root.conversations.capture(sessionId, session);
+        }
         root.clearMessages();
         const ids = [];
         const byId = ({});
