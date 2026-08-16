@@ -124,23 +124,34 @@ ApiStrategy {
             });
         }
 
-        // Reasoning is paid for out of `max_tokens`, so the cap is raised to
-        // leave room for an answer after the thinking is done.
-        const thinking = model.thinkingKind === "anthropic" && thinkingOn(model);
+        // Anthropic has two incompatible reasoning contracts. Adaptive models
+        // use an effort level; older models use a token budget.
+        const adaptive = model.thinkingKind === "anthropic-adaptive";
+        const budgeted = model.thinkingKind === "anthropic-budget";
+        const thinking = thinkingOn(model);
         const budget = thinking ? thinkingBudget(model) : 0;
         let baseData = {
             "model": model.model,
             "system": systemPrompt,
             "messages": history,
-            "max_tokens": thinking ? Math.max(maxOutputTokens(model), budget + 1024) : maxOutputTokens(model),
+            "max_tokens": budgeted && thinking ? Math.max(maxOutputTokens(model), budget + 1024) : maxOutputTokens(model),
             "stream": true
         };
-        if (thinking) {
+        if (adaptive) {
+            baseData.thinking = {
+                "type": thinking ? "adaptive" : "disabled"
+            };
+            if (thinking)
+                baseData.output_config = {
+                    "effort": thinkingLevel(model)
+                };
+        } else if (budgeted && thinking) {
             baseData.thinking = {
                 "type": "enabled",
                 "budget_tokens": budget
             };
-        } else if (model.samplingParams) {
+        }
+        if ((!adaptive || !thinking) && model.samplingParams) {
             // Extended thinking fixes the sampler: a temperature sent next to
             // it is refused, so it is only sent when thinking is off.
             baseData.temperature = temperature;

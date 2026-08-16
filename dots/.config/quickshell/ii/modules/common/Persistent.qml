@@ -131,7 +131,13 @@ Singleton {
 
             property JsonObject ai: JsonObject {
                 // Catalog id of the model that answers, "provider:model".
-                property string modelId: "google:gemini-3.7-flash"
+                property string modelId: "google:gemini-3.6-flash"
+                // Defaults for a new chat. The older fields below are kept so
+                // states written by the first AI rebuild can be migrated.
+                property string defaultModelId: ""
+                property real defaultTemperature: -1
+                property string defaultThinkingLevel: ""
+                property string defaultPersonaId: ""
                 // Retired in favour of modelId, kept declared only so an old
                 // file can be read once. See migrateAiModelId().
                 property string provider: ""

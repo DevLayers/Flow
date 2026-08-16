@@ -24,7 +24,8 @@ import QtQuick;
  * for substrings.
  * - thinking: Model can produce reasoning/thought output
  * - thinkingKind: Which knob turns it on — "gemini-level" (3.x), a
- *   "gemini-budget" (2.5), "anthropic" or "effort"
+ *   "gemini-budget" (2.5), "anthropic-adaptive", "anthropic-budget" or
+ *   "effort"
  * - thinkingAlwaysOn: Reasoning cannot be turned off for this model
  * - attachments: Model accepts file uploads
  * - vision: Model can read images

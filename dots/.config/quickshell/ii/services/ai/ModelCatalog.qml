@@ -56,13 +56,6 @@ QtObject {
             // resolves to something.
             models: [
                 {
-                    value: "gemini-3.7-flash",
-                    title: "Gemini 3.7 Flash",
-                    thinking: true,
-                    thinkingKind: "gemini-level",
-                    samplingParams: false
-                },
-                {
                     value: "gemini-3.6-flash",
                     title: "Gemini 3.6 Flash",
                     thinking: true,
@@ -119,8 +112,6 @@ QtObject {
             key_get_link: "https://console.anthropic.com/settings/keys",
             key_get_description: Translation.tr("**Pricing**: Pay-as-you-go (token based).\n\n**Instructions**: Log into the Anthropic Console, open Settings → API keys, and create a key."),
             capabilities: {
-                thinking: true,
-                thinkingKind: "anthropic",
                 attachments: true,
                 vision: true,
                 tools: true,
@@ -133,16 +124,25 @@ QtObject {
             models: [
                 {
                     value: "claude-sonnet-5",
-                    title: "Claude Sonnet 5"
+                    title: "Claude Sonnet 5",
+                    thinking: true,
+                    thinkingKind: "anthropic-adaptive",
+                    samplingParams: false,
+                    contextWindow: 1000000,
+                    maxOutput: 131072
                 },
                 {
                     value: "claude-opus-5",
                     title: "Claude Opus 5",
-                    maxOutput: 32000
+                    thinking: true,
+                    thinkingKind: "anthropic-adaptive",
+                    samplingParams: false
                 },
                 {
                     value: "claude-haiku-4-5-20251001",
-                    title: "Claude Haiku 4.5"
+                    title: "Claude Haiku 4.5",
+                    thinking: true,
+                    thinkingKind: "anthropic-budget"
                 }
             ]
         },
@@ -174,7 +174,12 @@ QtObject {
                 {
                     value: "deepseek-v4-flash",
                     title: "DeepSeek V4 Flash",
-                    modelProvider: "deepseek"
+                    modelProvider: "deepseek",
+                    thinking: true,
+                    thinkingKind: "effort",
+                    samplingParams: false,
+                    contextWindow: 1000000,
+                    maxOutput: 65536
                 }
             ]
         },
@@ -197,11 +202,21 @@ QtObject {
             models: [
                 {
                     value: "deepseek-v4-flash",
-                    title: "DeepSeek V4 Flash"
+                    title: "DeepSeek V4 Flash",
+                    thinking: true,
+                    thinkingKind: "effort",
+                    samplingParams: false,
+                    contextWindow: 1000000,
+                    maxOutput: 65536
                 },
                 {
                     value: "deepseek-v4-pro",
-                    title: "DeepSeek V4 Pro"
+                    title: "DeepSeek V4 Pro",
+                    thinking: true,
+                    thinkingKind: "effort",
+                    samplingParams: false,
+                    contextWindow: 1000000,
+                    maxOutput: 65536
                 }
             ]
         },
@@ -221,7 +236,12 @@ QtObject {
             models: [
                 {
                     value: "deepseek-v4-flash",
-                    title: "DeepSeek V4 Flash (Zen)"
+                    title: "DeepSeek V4 Flash (Zen)",
+                    thinking: true,
+                    thinkingKind: "effort",
+                    samplingParams: false,
+                    contextWindow: 1000000,
+                    maxOutput: 65536
                 }
             ]
         },
