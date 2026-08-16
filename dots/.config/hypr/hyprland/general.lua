@@ -166,7 +166,10 @@ hl.config({
         blur = {
             enabled = true,
             xray = false,
-            special = false,
+            -- Let Hyprland blur the desktop behind special workspaces (the scratchpad).
+            -- This is compositor-side blur, so the background stays smooth without
+            -- creating a fullscreen blur window in Quickshell.
+            special = true,
             new_optimizations = true,
             size = 10,
             passes = 3,
