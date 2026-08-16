@@ -721,35 +721,31 @@ Singleton {
                     "pactl set-default-sink DroidCam-Mic 2>/dev/null || true"])
                 // Now launch scrcpy (no PULSE_SINK env needed — the default
                 // sink swap handles the routing).
+                // The restore timer is armed inside the launch, not here:
+                // resolving the ADB target is asynchronous, and starting the
+                // 3s countdown before scrcpy is even spawned could restore
+                // the default sink out from under it.
                 root._launchScrcpyMicInner()
-                // Schedule restoration after 3s — enough time for scrcpy's
-                // SDL2 to create the sink-input on DroidCam-Mic.
-                restoreDefaultSinkTimer.restart()
             }
         }
     }
 
     /** Inner scrcpy launch — called by defaultSinkSwapProc after the swap. */
     function _launchScrcpyMicInner(): void {
+        // Resolve the ADB target on demand — the phone's wireless-debugging
+        // port changes on every toggle/reboot, and a stale one leaves scrcpy
+        // with no device and the mic silently dead.
+        KdeConnectService.withAdbTarget(targetArgs => root._launchScrcpyMicWithTarget(targetArgs))
+    }
+
+    function _launchScrcpyMicWithTarget(targetArgs): void {
         // --no-video      : don't capture video (audio only)
         // --no-window     : don't open an SDL window
         // --audio-source=mic : capture the phone's microphone
         // --audio-buffer=50  : low latency (50ms)
         const args = ["scrcpy", "--no-video", "--no-window",
                       "--audio-source=mic", "--audio-buffer=50"]
-
-        // Wireless ADB if configured in the scrcpy settings page.
-        const scrcpyConf = Config.options.phone ? Config.options.phone.scrcpy : null
-        const useWireless = scrcpyConf ? scrcpyConf.useWireless : false
-        const wirelessIp = scrcpyConf ? (scrcpyConf.wirelessIp || "") : ""
-        const wirelessPort = scrcpyConf ? (scrcpyConf.wirelessPort || "5555") : "5555"
-
-        if (useWireless && wirelessIp.length > 0) {
-            const host = wirelessIp + ":" + wirelessPort
-            Quickshell.execDetached(["bash", "-c",
-                "adb connect " + root._shellQuote(host) + " >/dev/null 2>&1"])
-            args.push("--serial=" + root._shellQuote(host))
-        }
+            .concat(targetArgs || [])
 
         root.activeIp = "(scrcpy)"
         root.activePort = 0
@@ -759,6 +755,10 @@ Singleton {
         // Launch detached (survives Quickshell restarts).
         micLaunchProc.command = ["bash", root._sessionScript, "launch", "scrcpy-mic"].concat(args)
         micLaunchProc.running = true
+
+        // Restore the user's default sink 3s from now — long enough for
+        // scrcpy's SDL2 to create its sink-input on DroidCam-Mic.
+        restoreDefaultSinkTimer.restart()
 
         // Backup: after 2s, also try to move any stray scrcpy sink-input
         // onto DroidCam-Mic (in case the default sink swap failed and the

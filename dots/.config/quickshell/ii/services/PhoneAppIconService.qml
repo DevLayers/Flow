@@ -53,7 +53,7 @@ Singleton {
 
         wanted.forEach(name => {
             root.pending.add(name);
-            root._send({
+            root._sendToDevice({
                 "cmd": "fetch",
                 "package": name,
                 "deviceId": root.deviceId
@@ -84,6 +84,19 @@ Singleton {
         if (!iconProc.running) return;
         message.target_args = KdeConnectService.adbTargetArgs() || [];
         iconProc.write(JSON.stringify(message) + "\n");
+    }
+
+    /** Same as _send, but re-resolves the ADB target first — the phone's
+     *  wireless-debugging port can change between two polls of the prober,
+     *  and pulling icons against a stale one just returns nothing. Only used
+     *  for commands that actually reach the device; cache reads stay sync. */
+    function _sendToDevice(message: var): void {
+        if (!iconProc.running) return;
+        KdeConnectService.withAdbTarget(args => {
+            if (!iconProc.running) return;
+            message.target_args = args || [];
+            iconProc.write(JSON.stringify(message) + "\n");
+        });
     }
 
     function _resetProgress(): void {

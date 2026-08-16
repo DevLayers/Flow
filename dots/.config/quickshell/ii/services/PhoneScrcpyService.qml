@@ -80,8 +80,13 @@ Singleton {
         root.appsLoading = true
         root.appsError = ""
         root.ensureManagerRunning()
+        // Resolve the ADB target on demand: the phone's wireless-debugging
+        // port can change between two polls of the 30s prober, and a stale
+        // one silently lists zero apps.
+        KdeConnectService.withAdbTarget(args => root._refreshApps(args))
+    }
 
-        const targetArgs = KdeConnectService.adbTargetArgs() || []
+    function _refreshApps(targetArgs): void {
         const deviceId = KdeConnectService.activeDeviceId || "default"
 
         sessionManagerProc.write(JSON.stringify({
@@ -103,8 +108,10 @@ Singleton {
         }
         root.mirrorLaunching = true
         root.mirrorLaunchError = ""
+        KdeConnectService.withAdbTarget(args => root._launchMirror(args))
+    }
 
-        const targetArgs = KdeConnectService.adbTargetArgs() || []
+    function _launchMirror(targetArgs): void {
         const extraArgs = []
 
         const opts = Config.options?.phone?.scrcpy
@@ -164,13 +171,16 @@ Singleton {
             return
         }
 
-        const sessionId = "app:" + packageName
         if (root.isAppRunning(packageName)) {
             root.focusApp(packageName)
             return
         }
 
-        const targetArgs = KdeConnectService.adbTargetArgs() || []
+        KdeConnectService.withAdbTarget(args => root._launchApp(packageName, args))
+    }
+
+    function _launchApp(packageName: string, targetArgs): void {
+        const sessionId = "app:" + packageName
         const appOpts = Config.options?.phone?.scrcpy?.appMode || {}
         const useFlex = appOpts.flexDisplay ?? false
         const w = appOpts.displayWidth || 1280

@@ -71,15 +71,8 @@ Singleton {
             KdeConnectService.dispatchActionFeedback(Translation.tr("ADB is not reachable. Enable Wireless Debugging / USB Debugging."), false)
             return
         }
-        const encoded = encodeURIComponent(number)
-        const targetSerial = KdeConnectService.resolvedAdbSerial || ""
-        let cmd = ["adb"]
-        if (targetSerial) {
-            cmd.push("-s", targetSerial)
-        }
-        cmd.push("shell", "am", "start", "-a", "android.intent.action.DIAL", "-d", "tel:" + encoded)
-        Quickshell.execDetached(cmd)
-        KdeConnectService.dispatchActionFeedback(Translation.tr("Opening dialer for %1…").arg(number), true)
+        root._startIntent("android.intent.action.DIAL", "tel:" + encodeURIComponent(number),
+            Translation.tr("Opening dialer for %1…").arg(number))
     }
 
     function composeSms(number: string): void {
@@ -92,15 +85,20 @@ Singleton {
             KdeConnectService.dispatchActionFeedback(Translation.tr("ADB is not reachable. Enable Wireless Debugging / USB Debugging."), false)
             return
         }
-        const encoded = encodeURIComponent(number)
-        const targetSerial = KdeConnectService.resolvedAdbSerial || ""
-        let cmd = ["adb"]
-        if (targetSerial) {
-            cmd.push("-s", targetSerial)
-        }
-        cmd.push("shell", "am", "start", "-a", "android.intent.action.SENDTO", "-d", "sms:" + encoded)
-        Quickshell.execDetached(cmd)
-        KdeConnectService.dispatchActionFeedback(Translation.tr("Opening SMS for %1…").arg(number), true)
+        root._startIntent("android.intent.action.SENDTO", "sms:" + encodeURIComponent(number),
+            Translation.tr("Opening SMS for %1…").arg(number))
+    }
+
+    /** Fires an `am start` on the phone. The ADB target is re-resolved first
+     *  because the wireless-debugging port changes on every toggle/reboot,
+     *  and a stale serial makes the intent vanish with no error. */
+    function _startIntent(action: string, uri: string, feedback: string): void {
+        KdeConnectService.withAdbTarget(targetArgs => {
+            const cmd = ["adb"].concat(targetArgs || [])
+            cmd.push("shell", "am", "start", "-a", action, "-d", uri)
+            Quickshell.execDetached(cmd)
+            KdeConnectService.dispatchActionFeedback(feedback, true)
+        })
     }
 
     function toggleFavorite(contactId: string): void {
