@@ -24,6 +24,9 @@ Scope {
     /** API dialect of the model in use, and whether it has search of its own. */
     property string apiFormat: "openai"
     property bool searchAvailable: false
+    /** Profile-level exposure; permissions below remain per-tool approvals. */
+    property string functionExposure: "all"
+    property bool localOnly: false
 
     // ── Registry ──────────────────────────────────────────────────────────
     // `description` is what the model reads, `title`/`summary` what the user
@@ -216,6 +219,12 @@ Scope {
             if (def.formats.indexOf(format) === -1)
                 continue;
             if (def.needsSearch && !root.searchAvailable)
+                continue;
+            if (root.functionExposure === "none")
+                continue;
+            if (root.functionExposure === "safe" && def.risk !== "safe")
+                continue;
+            if (root.localOnly && def.id === "run_shell_command")
                 continue;
             if (root.permission(def.id) === "deny")
                 continue;

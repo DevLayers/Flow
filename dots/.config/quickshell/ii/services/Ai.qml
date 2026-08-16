@@ -173,6 +173,7 @@ Singleton {
 
         const modelId = root.currentModelId;
         const model = root.catalog.models[modelId] ?? null;
+        const profile = root.responseProfileForModel(modelId);
         const permission = root.canSubmit(modelId);
         const waitingForKeyring = !!model && model.requires_key && !KeyringStorage.loaded;
         if (!permission.allowed && !waitingForKeyring)
@@ -187,10 +188,15 @@ Singleton {
             text: prompt,
             attachments: files,
             modelId: modelId,
-            thinkingLevel: root.thinkingLevel,
+            responseMode: profile.responseMode,
+            webMode: profile.webMode,
+            functionExposure: profile.functionExposure,
+            thinkingLevel: profile.thinkingLevel,
             temperature: root.temperature,
             systemPrompt: root.systemPrompt,
-            toolOverride: root.currentTool,
+            toolOverride: profile.toolMode,
+            profileFallback: profile.fallbackReason,
+            profile: profile,
             draftRevisionAtSubmit: root.draftRevision,
             beforeSessionId: root.sessions.currentId,
             beforeSessionCreatedAt: root.sessionCreatedAt,
@@ -708,6 +714,17 @@ Singleton {
     }
     readonly property var thinkingLevels: ["off", "low", "medium", "high"]
     property string thinkingLevel: "medium"
+    /** Session-scoped profile requests; empty response mode keeps legacy thinking levels. */
+    property string sessionResponseMode: ""
+    property string sessionWebMode: ""
+    property string sessionFunctionExposure: ""
+    readonly property string responseMode: sessionResponseMode.length > 0
+        ? AiResponseProfiles.normalizeResponseMode(sessionResponseMode)
+        : AiResponseProfiles.responseModeForThinking(thinkingLevel)
+    readonly property var responseProfile: root.responseProfileForModel(root.currentModelId)
+    readonly property string webMode: root.responseProfile.webMode
+    readonly property string functionExposure: root.responseProfile.functionExposure
+    readonly property bool canForceWeb: root.responseProfile.canForceWeb
     property string sessionModelId: ""
     property string sessionPersonaId: ""
     readonly property string defaultModelId: {
@@ -730,6 +747,16 @@ Singleton {
     // not to. The control bar reads both; nothing here tests provider names.
     readonly property bool currentModelThinks: root.currentModelEntry?.thinking ?? false
     readonly property bool currentModelAlwaysThinks: root.currentModelEntry?.thinkingAlwaysOn ?? false
+
+    function responseProfileForModel(modelId) {
+        const model = root.catalog.models[String(modelId ?? "")] ?? null;
+        return AiResponseProfiles.reconcile(model, {
+            responseMode: root.responseMode,
+            thinkingLevel: root.sessionResponseMode.length === 0 ? root.thinkingLevel : "",
+            webMode: root.sessionWebMode.length > 0 ? root.sessionWebMode : "auto",
+            functionExposure: root.sessionFunctionExposure.length > 0 ? root.sessionFunctionExposure : "all"
+        }, root.onlineAllowed, root.configuredTool);
+    }
 
     /**
      * Ids are handed out once and kept: they are written to the session file
@@ -766,6 +793,8 @@ Singleton {
     readonly property AiTools toolbox: AiTools {
         apiFormat: root.currentModelEntry?.api_format ?? "openai"
         searchAvailable: root.currentModelEntry?.builtinSearch ?? false
+        functionExposure: root.responseProfile.functionExposure
+        localOnly: root.localOnly
         onCallCheckpointChanged: entry => root.recordToolCheckpoint(entry)
     }
     readonly property var availableTools: root.toolbox.availableModes.filter(mode => root.onlineAllowed || mode !== "search")
@@ -1008,6 +1037,7 @@ Singleton {
             return false;
         }
         root.sessionModelId = model.id;
+        root.thinkingLevel = root.responseProfileForModel(model.id).thinkingLevel;
         if (setPersistentState)
             root.rememberModel(model.id);
         if (feedback)
@@ -1082,7 +1112,39 @@ Singleton {
             root.addMessage(Translation.tr("Thinking level must be one of:\n- %1").arg(root.thinkingLevels.join("\n- ")), root.interfaceRole);
             return false;
         }
-        root.thinkingLevel = value;
+        root.sessionResponseMode = "";
+        root.thinkingLevel = (root.currentModelAlwaysThinks && value === "off") ? "low" : value;
+        root.sessions.scheduleSave();
+        return true;
+    }
+
+    function setResponseMode(mode, feedback = true) {
+        const value = AiResponseProfiles.normalizeResponseMode(mode);
+        root.sessionResponseMode = value;
+        const profile = root.responseProfileForModel(root.currentModelId);
+        root.thinkingLevel = profile.thinkingLevel;
+        root.sessions.scheduleSave();
+        if (feedback)
+            root.addMessage(Translation.tr("Response mode: %1").arg(value), root.interfaceRole);
+        return true;
+    }
+
+    function setWebMode(mode, feedback = true) {
+        const value = AiResponseProfiles.normalizeWebMode(mode);
+        root.sessionWebMode = value;
+        const profile = root.responseProfileForModel(root.currentModelId);
+        root.sessions.scheduleSave();
+        if (feedback && profile.webMode !== value)
+            root.addMessage(Translation.tr("Web mode fell back to %1 for this model.").arg(profile.webMode), root.interfaceRole);
+        return true;
+    }
+
+    function setFunctionExposure(exposure, feedback = true) {
+        const value = AiResponseProfiles.normalizeFunctionExposure(exposure);
+        root.sessionFunctionExposure = value;
+        root.sessions.scheduleSave();
+        if (feedback)
+            root.addMessage(Translation.tr("Tool exposure: %1").arg(value), root.interfaceRole);
         return true;
     }
 
@@ -1526,14 +1588,15 @@ Singleton {
         if (!pending && model.requires_key && !KeyringStorage.loaded)
             KeyringStorage.fetchKeyringData();
 
+        const profile = pending ? (pending.profile ?? root.responseProfileForModel(model.id)) : root.responseProfileForModel(model.id);
         const strategy = pending ? root.apiStrategies[model.api_format || "openai"] : root.currentApiStrategy;
-        strategy.activeThinkingLevel = pending ? pending.thinkingLevel : root.thinkingLevel;
+        strategy.activeThinkingLevel = profile.thinkingLevel;
         const messageArray = root.messageIDs.map(id => root.messageByID[id]);
         const filteredMessageArray = messageArray.filter(message => message.role !== root.interfaceRole);
         // Tool support is a property of the model, not of its address. A
         // local model that can call functions keeps them; a remote one
         // that cannot does not get them handed over anyway.
-        const toolOverride = pending ? pending.toolOverride : root.currentTool;
+        const toolOverride = profile.toolMode;
         const tools = model.tools && (root.onlineAllowed || toolOverride !== "search")
                 ? root.toolbox.wireTools(model.api_format, toolOverride)
                 : null;
@@ -1546,6 +1609,10 @@ Singleton {
         const message = root.aiMessageComponent.createObject(root, {
             "role": "assistant",
             "model": model.id,
+            "responseMode": profile.responseMode,
+            "webMode": profile.webMode,
+            "functionExposure": profile.functionExposure,
+            "profileFallback": profile.fallbackReason,
             "content": "",
             "rawContent": "",
             "thinking": true,
@@ -2337,6 +2404,10 @@ Singleton {
                 "localFilePath": message.localFilePath,
                 "attachments": message.attachments,
                 "model": message.model,
+                "responseMode": message.responseMode,
+                "webMode": message.webMode,
+                "functionExposure": message.functionExposure,
+                "profileFallback": message.profileFallback,
                 "thought": message.thought,
                 "thoughtSignature": message.thoughtSignature,
                 "thinkingBlocks": message.thinkingBlocks,
@@ -2384,6 +2455,10 @@ Singleton {
             "localFilePath": data.localFilePath,
             "attachments": data.attachments ?? [],
             "model": data.model,
+            "responseMode": data.responseMode ?? "balanced",
+            "webMode": data.webMode ?? "off",
+            "functionExposure": data.functionExposure ?? "all",
+            "profileFallback": data.profileFallback ?? "",
             "thought": data.thought ?? "",
             "thoughtSignature": data.thoughtSignature ?? "",
             "thinkingBlocks": data.thinkingBlocks ?? [],
@@ -2421,6 +2496,9 @@ Singleton {
                 "pinned": root.sessions.currentEntry?.pinned ?? false,
                 "modelId": root.currentModelId,
                 "thinking": root.thinkingLevel,
+                "responseMode": root.responseMode,
+                "webMode": root.webMode,
+                "functionExposure": root.functionExposure,
                 "temperature": root.temperature,
                 "promptFile": root.currentPromptFile,
                 "personaId": root.sessionPersonaId,
@@ -2444,6 +2522,9 @@ Singleton {
                 "pinned": true,
                 "modelId": root.currentModelId,
                 "thinking": root.thinkingLevel,
+                "responseMode": root.responseMode,
+                "webMode": root.webMode,
+                "functionExposure": root.functionExposure,
                 "temperature": root.temperature,
                 "promptFile": "",
                 "personaId": "",
@@ -2455,6 +2536,9 @@ Singleton {
             titleRevision: base.titleRevision ?? root.titleRevision,
             isProvisionalTitle: base.isProvisionalTitle ?? root.isProvisionalTitle,
             modelId: root.currentRunId.length > 0 ? (root.runCoordinator.runFor(root.currentRunId)?.modelId ?? base.modelId) : base.modelId,
+            responseMode: root.responseMode,
+            webMode: root.webMode,
+            functionExposure: root.functionExposure,
             messages: root.runningChatToJson(),
             run: root.conversations.records[sessionId]?.run ?? null,
             searchQueries: sessionId === root.sessions.currentId ? root.sessionSearchQueries : (base.searchQueries ?? []),
@@ -2562,6 +2646,11 @@ Singleton {
         root.sessionModelId = session.modelId ?? root.defaultModelId;
         root.temperature = typeof session.temperature === "number" ? session.temperature : root.defaultTemperature;
         root.thinkingLevel = root.thinkingLevels.indexOf(session.thinking) >= 0 ? session.thinking : root.defaultThinkingLevel;
+        root.sessionResponseMode = AiResponseProfiles.responseModes.indexOf(String(session.responseMode ?? "")) >= 0 ? String(session.responseMode) : "";
+        root.sessionWebMode = AiResponseProfiles.webModes.indexOf(String(session.webMode ?? "")) >= 0 ? String(session.webMode) : "";
+        root.sessionFunctionExposure = AiResponseProfiles.functionExposures.indexOf(String(session.functionExposure ?? "")) >= 0 ? String(session.functionExposure) : "";
+        const restoredProfile = root.responseProfileForModel(root.sessionModelId);
+        root.thinkingLevel = restoredProfile.thinkingLevel;
         root.currentPromptFile = session.promptFile ?? "";
         root.promptOverride = session.promptOverride ?? "";
         root.sessionPersonaId = session.personaId ?? root.defaultPersonaId;
@@ -2588,6 +2677,9 @@ Singleton {
         root.sessionPersonaId = root.defaultPersonaId;
         root.temperature = root.defaultTemperature;
         root.thinkingLevel = root.defaultThinkingLevel;
+        root.sessionResponseMode = "";
+        root.sessionWebMode = "";
+        root.sessionFunctionExposure = "";
     }
 
     /**

@@ -15,6 +15,12 @@ QtObject {
     // with it, and so the next turn can hand them over again.
     property var attachments: []
     property string model
+    // Effective request profile recorded with the answer, so regenerating or
+    // reopening a conversation explains what the model actually received.
+    property string responseMode: "balanced"
+    property string webMode: "off"
+    property string functionExposure: "all"
+    property string profileFallback: ""
     // Reasoning, kept apart from the answer. `thought` is the summary text the
     // model streamed; the other two are what has to be handed back verbatim on
     // the next turn or multi-step reasoning loses its thread — Gemini's part
