@@ -78,26 +78,26 @@ ApiStrategy {
 
         const history = messages.map(message => {
             const hasCall = message.functionName?.length > 0;
-            if (hasCall && message.functionCall?.id)
-                lastCallId = message.functionCall.id;
+            const storedCalls = Array.isArray(message.functionCalls) && message.functionCalls.length > 0 ? message.functionCalls : (message.functionCall?.id ? [message.functionCall] : []);
+            const calls = Array.from(storedCalls);
+            if (calls.length > 0 && calls[calls.length - 1]?.id)
+                lastCallId = calls[calls.length - 1].id;
             if (!hasCall || !(message.functionResponse?.length > 0)) {
                 // The turn where the model asked for the call. The result that
                 // follows only means something next to it, so the call has to
                 // be replayed as a call, not as the text describing it.
-                if (toolMessages && message.role === "assistant" && message.functionCall?.id) {
+                if (toolMessages && message.role === "assistant" && calls.length > 0) {
                     return {
                         "role": "assistant",
                         "content": message.rawContent,
-                        "tool_calls": [
-                            {
-                                "id": message.functionCall.id,
-                                "type": "function",
-                                "function": {
-                                    "name": message.functionName,
-                                    "arguments": JSON.stringify(message.functionCall.args ?? ({}))
-                                }
+                        "tool_calls": calls.map(call => ({
+                            "id": call.id,
+                            "type": "function",
+                            "function": {
+                                "name": call.name,
+                                "arguments": JSON.stringify(call.args ?? ({}))
                             }
-                        ]
+                        }))
                     };
                 }
                 return withAttachments({
@@ -108,7 +108,8 @@ ApiStrategy {
             // The result of a call the model asked for. Pairing it with the id
             // of that call is what lets the model match them up; without one,
             // the exchange has to be flattened into ordinary text.
-            if (!toolMessages || lastCallId.length === 0) {
+            const callId = message.functionCallId || message.functionCall?.id || lastCallId;
+            if (!toolMessages || callId.length === 0) {
                 return {
                     "role": "user",
                     "content": `[[ Output of ${message.functionName} ]]\n${message.functionResponse}`
@@ -118,7 +119,7 @@ ApiStrategy {
                 "role": "tool",
                 "name": message.functionName,
                 "content": message.functionResponse,
-                "tool_call_id": lastCallId
+                "tool_call_id": callId
             };
             lastCallId = "";
             return result;
@@ -194,11 +195,11 @@ ApiStrategy {
             appendAnswer(message, delta?.content || dataJson.message?.content || "");
 
             // The call is only whole once the model stops adding to it.
-            if (choice?.finish_reason === "tool_calls" || (choice?.finish_reason && hasPendingCalls())) {
-                const call = takeToolCall(message);
-                if (call)
+            if (hasPendingCalls() && (choice?.finish_reason || dataJson.done)) {
+                const calls = takeToolCalls(message);
+                if (calls.length > 0)
                     return {
-                        functionCall: call,
+                        functionCalls: calls,
                         finished: false
                     };
             }
@@ -253,33 +254,37 @@ ApiStrategy {
         return Object.keys(pendingCalls).length > 0;
     }
 
-    /** The first complete call, if there is one. Only one runs per turn. */
-    function takeToolCall(message): var {
+    /** All complete calls, in their wire order. None are silently discarded. */
+    function takeToolCalls(message): var {
         const keys = Object.keys(pendingCalls);
         if (keys.length === 0)
-            return null;
-        const call = pendingCalls[keys[0]];
+            return [];
+        keys.sort((a, b) => Number(a) - Number(b));
+        const calls = [];
+        const collected = pendingCalls;
         pendingCalls = ({});
-        if (!call.name || call.name.length === 0)
-            return null;
-
-        let args = {};
-        try {
-            args = call.args.length > 0 ? JSON.parse(call.args) : {};
-        } catch (e) {
-            console.log("[AI] OpenAI-compatible: Could not read call arguments: ", e);
+        for (const key of keys) {
+            const call = collected[key];
+            if (!call.name || call.name.length === 0)
+                continue;
+            let args = {};
+            try {
+                args = call.args.length > 0 ? JSON.parse(call.args) : {};
+            } catch (e) {
+                console.log("[AI] OpenAI-compatible: Could not read call arguments: ", e);
+            }
+            const parsedCall = {
+                name: call.name,
+                args: args,
+                id: call.id
+            };
+            calls.push(parsedCall);
+            const newContent = `\n\n[[ Function: ${call.name}(${JSON.stringify(args, null, 2)}) ]]\n`;
+            closeThought(message);
+            message.rawContent += newContent;
+            message.content += newContent;
         }
-        const newContent = `\n\n[[ Function: ${call.name}(${JSON.stringify(args, null, 2)}) ]]\n`;
-        closeThought(message);
-        message.rawContent += newContent;
-        message.content += newContent;
-        message.functionName = call.name;
-        message.functionCall = call.name;
-        return {
-            name: call.name,
-            args: args,
-            id: call.id
-        };
+        return calls;
     }
 
     function onRequestFinished(message) {

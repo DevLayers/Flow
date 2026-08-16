@@ -35,6 +35,9 @@ Singleton {
     // A tool exchange asked for another turn while the current one was still
     // streaming. Sent as soon as it ends.
     property bool followUpQueued: false
+    /** Tool calls returned in one assistant turn, waiting for their turn. */
+    property var pendingToolCalls: []
+    property string activeToolCallId: ""
 
     /**
      * What the model is told before anything else, with the values filled in.
@@ -741,10 +744,9 @@ Singleton {
                 // console.log("[Ai] Parsed response result: ", JSON.stringify(result, null, 2));
                 requester.parsedAny = true;
 
-                if (result.functionCall) {
-                    requester.message.functionCall = result.functionCall;
-                    root.handleFunctionCall(result.functionCall.name, result.functionCall.args, requester.message);
-                }
+                const functionCalls = Array.isArray(result.functionCalls) ? result.functionCalls : (result.functionCall ? [result.functionCall] : []);
+                if (functionCalls.length > 0)
+                    root.handleFunctionCalls(functionCalls, requester.message);
                 if (result.tokenUsage) {
                     root.tokenCount.input = result.tokenUsage.input;
                     root.tokenCount.output = result.tokenUsage.output;
@@ -892,6 +894,8 @@ Singleton {
      */
     function stopGeneration(): bool {
         root.followUpQueued = false;
+        root.pendingToolCalls = [];
+        root.activeToolCallId = "";
         return requester.abort();
     }
 
@@ -901,6 +905,10 @@ Singleton {
      * never replaces one in flight, so it waits for that stream to end.
      */
     function requestFollowUp() {
+        if (root.pendingToolCalls.length > 0) {
+            root.processNextToolCall();
+            return;
+        }
         if (requester.running) {
             root.followUpQueued = true;
             return;
@@ -1158,12 +1166,14 @@ Singleton {
         root.makeRequest();
     }
 
-    function createFunctionOutputMessage(name, output, includeOutputInChat = true) {
+    function createFunctionOutputMessage(name, output, includeOutputInChat = true, callId = "") {
+        const resolvedCallId = callId || root.activeToolCallId;
         return aiMessageComponent.createObject(root, {
             "role": "user",
             "content": `[[ Output of ${name} ]]${includeOutputInChat ? ("\n\n<think>\n" + output + "\n</think>") : ""}`,
             "rawContent": `[[ Output of ${name} ]]${includeOutputInChat ? ("\n\n<think>\n" + output + "\n</think>") : ""}`,
             "functionName": name,
+            "functionCallId": resolvedCallId,
             "functionResponse": output,
             "thinking": false,
             "done": true
@@ -1171,8 +1181,8 @@ Singleton {
         });
     }
 
-    function addFunctionOutputMessage(name, output) {
-        const aiMessage = createFunctionOutputMessage(name, output);
+    function addFunctionOutputMessage(name, output, callId = "") {
+        const aiMessage = createFunctionOutputMessage(name, output, true, callId);
         const id = idForMessage(aiMessage);
         root.messageIDs = [...root.messageIDs, id];
         root.messageByID[id] = aiMessage;
@@ -1191,6 +1201,7 @@ Singleton {
         message.functionPending = false; // User decided, no more "thinking"
         root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Rejected"));
         addFunctionOutputMessage(message.functionName, Translation.tr("Command rejected by user"));
+        root.requestFollowUp();
     }
 
     function approveCommand(message: AiMessageData) {
@@ -1201,7 +1212,7 @@ Singleton {
     }
 
     function runShellCommand(message: AiMessageData, command: string) {
-        const responseMessage = createFunctionOutputMessage(message.functionName, "", false);
+        const responseMessage = createFunctionOutputMessage(message.functionName, "", false, message.functionCallId);
         const id = idForMessage(responseMessage);
         root.messageIDs = [...root.messageIDs, id];
         root.messageByID[id] = responseMessage;
@@ -1314,11 +1325,44 @@ Singleton {
         message.pendingChanges = [];
         root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Rejected"));
         addFunctionOutputMessage("set_shell_config", Translation.tr("Settings change rejected by user"));
+        root.requestFollowUp();
     }
 
-    function handleFunctionCall(name, args: var, message: AiMessageData) {
+    function handleFunctionCalls(calls: var, message: AiMessageData) {
+        const list = Array.from(calls ?? []).filter(call => call?.name);
+        if (list.length === 0)
+            return;
+        message.functionCalls = list;
+        root.pendingToolCalls = list.map(call => ({
+                    call: call,
+                    message: message
+                }));
+        root.processNextToolCall();
+    }
+
+    function processNextToolCall() {
+        if (root.pendingToolCalls.length === 0) {
+            root.activeToolCallId = "";
+            root.requestFollowUp();
+            return;
+        }
+        const next = root.pendingToolCalls[0];
+        root.pendingToolCalls = root.pendingToolCalls.slice(1);
+        root.activeToolCallId = String(next.call.id ?? "");
+        root.handleFunctionCall(next.call.name, next.call.args, next.message, root.activeToolCallId);
+    }
+
+    function handleFunctionCall(name, args: var, message: AiMessageData, callId = "") {
+        message.functionName = name;
+        message.functionCallId = callId;
+        message.functionCall = {
+            name: name,
+            args: args,
+            id: callId
+        };
         if (!root.toolbox.definitionFor(name)) {
-            root.addMessage(Translation.tr("Unknown function call: %1").arg(name), "assistant");
+            addFunctionOutputMessage(name, Translation.tr("Unknown function call: %1").arg(name));
+            root.requestFollowUp();
             return;
         }
         const serial = root.toolbox.noteCall(name, args);
@@ -1515,6 +1559,8 @@ Singleton {
                 "annotationSources": message.annotationSources,
                 "functionName": message.functionName,
                 "functionCall": message.functionCall,
+                "functionCalls": message.functionCalls,
+                "functionCallId": message.functionCallId,
                 "functionResponse": message.functionResponse,
                 "visibleToUser": message.visibleToUser,
                 "errorKind": message.errorKind,
@@ -1550,6 +1596,8 @@ Singleton {
             "annotationSources": data.annotationSources ?? [],
             "functionName": data.functionName ?? "",
             "functionCall": data.functionCall,
+            "functionCalls": data.functionCalls ?? [],
+            "functionCallId": data.functionCallId ?? "",
             "functionResponse": data.functionResponse ?? "",
             "visibleToUser": data.visibleToUser ?? true,
             "errorKind": data.errorKind ?? "",

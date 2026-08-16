@@ -61,45 +61,56 @@ ApiStrategy {
 
     function buildRequestData(model: AiModel, messages, systemPrompt: string, temperature: real, tools: list<var>) {
         beginAttachments();
-        let contents = messages.map(message => {
+        const contents = [];
+        let lastFunctionResponse = null;
+        messages.forEach(message => {
             // console.log("[AI] Building request data for message:", JSON.stringify(message, null, 2));
             const geminiApiRoleName = (message.role === "assistant") ? "model" : message.role;
             const usingSearch = tools?.[0]?.google_search !== undefined;
-            if (!usingSearch && message.functionCall != undefined && message.functionName.length > 0) {
-                return {
+            const storedCalls = Array.isArray(message.functionCalls) && message.functionCalls.length > 0 ? message.functionCalls : (message.functionCall ? [message.functionCall] : []);
+            if (!usingSearch && storedCalls.length > 0 && message.functionName.length > 0) {
+                const callParts = storedCalls.map((call, index) => Object.assign({
+                    functionCall: {
+                        "name": call.name,
+                        "args": call.args ?? ({})
+                    }
+                }, index === 0 ? signaturePart(message) : ({})));
+                contents.push({
                     "role": geminiApiRoleName,
-                    "parts": [
-                        Object.assign({
-                            functionCall: {
-                                "name": message.functionName
-                            }
-                        }, signaturePart(message))
-                    ]
-                };
+                    "parts": callParts
+                });
+                lastFunctionResponse = null;
+                return;
             }
-            if (!usingSearch && message.functionResponse != undefined && message.functionName.length > 0) {
-                return {
-                    "role": geminiApiRoleName,
-                    "parts": [
-                        {
-                            functionResponse: {
-                                "name": message.functionName,
-                                "response": {
-                                    "content": message.functionResponse
-                                }
-                            }
+            if (!usingSearch && (message.functionResponse ?? "").length > 0 && message.functionName.length > 0) {
+                const responsePart = {
+                    functionResponse: {
+                        "name": message.functionName,
+                        "response": {
+                            "content": message.functionResponse
                         }
-                    ]
+                    }
                 };
+                if (!lastFunctionResponse) {
+                    lastFunctionResponse = {
+                        "role": geminiApiRoleName,
+                        "parts": []
+                    };
+                    contents.push(lastFunctionResponse);
+                }
+                lastFunctionResponse.parts.push(responsePart);
+                return;
             }
-            return {
+            lastFunctionResponse = null;
+            contents.push({
                 "role": geminiApiRoleName,
                 "parts": [
                     Object.assign({
                         text: message.rawContent
                     }, signaturePart(message)),
-                    ...attachmentParts(message, model)]
-            };
+                    ...attachmentParts(message, model)
+                ]
+            });
         });
         let baseData = {
             "contents": contents,
@@ -218,7 +229,7 @@ ApiStrategy {
             // Every part, in order. A chunk can hold a thought summary and the
             // start of the answer at once, and reading only the first one
             // drops whichever came second.
-            let functionCall = null;
+            const functionCalls = [];
             const parts = dataJson.candidates[0]?.content?.parts ?? [];
             for (let i = 0; i < parts.length; i++) {
                 const part = parts[i];
@@ -231,14 +242,12 @@ ApiStrategy {
                     message.rawContent += newContent;
                     message.content += newContent;
                     message.functionName = part.functionCall.name;
-                    message.functionCall = part.functionCall.name;
-                    // Gemini can ask for several calls at once. Only the first
-                    // is run: the caller answers one call per turn.
-                    if (!functionCall)
-                        functionCall = {
-                            name: part.functionCall.name,
-                            args: part.functionCall.args
-                        };
+                    const functionCall = {
+                        name: part.functionCall.name,
+                        args: part.functionCall.args
+                    };
+                    message.functionCall = functionCall;
+                    functionCalls.push(functionCall);
                     continue;
                 }
 
@@ -249,9 +258,9 @@ ApiStrategy {
                 else
                     appendAnswer(message, part.text);
             }
-            if (functionCall)
+            if (functionCalls.length > 0)
                 return {
-                    functionCall: functionCall,
+                    functionCalls: functionCalls,
                     finished: finished
                 };
             if (finished)
