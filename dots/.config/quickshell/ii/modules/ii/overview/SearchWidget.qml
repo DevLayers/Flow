@@ -603,8 +603,11 @@ Item {
                 }
 
                 onEscapeToSearch: {
-                    if (root.isAiMode)
+                    if (root.isAiMode) {
+                        if (aiPanelLoader.item && aiPanelLoader.item.handleEscape())
+                            return;
                         root.exitAiMode();
+                    }
                 }
 
                 onSendMessage: {

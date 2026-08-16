@@ -23,7 +23,7 @@ import Quickshell.Io
  *
  * Everything reads the shared Ai singleton, so it stays in sync with the sidebar chat.
  */
-Item {
+AiSearchSurface {
     id: root
 
     signal requestBackToSearch()
