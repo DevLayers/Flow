@@ -156,12 +156,13 @@ Scope {
     }
 
     /** Commit a previously staged snapshot immediately before dispatch. */
-    function commitSubmissionForDispatch(sessionId: string, operationId: string): string {
-        if (!sessionId || !operationId || root.dir.length === 0)
+    function commitSubmissionForDispatch(sessionId: string, stagingOperationId: string, requestedOperationId = ""): string {
+        if (!sessionId || !stagingOperationId || root.dir.length === 0)
             return "";
+        const operationId = requestedOperationId || root.operationId("commit");
         root.enqueue({
             kind: "commitSubmission",
-            args: ["commit-staged", root.dir, sessionId, operationId],
+            args: ["commit-staged", root.dir, sessionId, stagingOperationId],
             operationId: operationId,
             sessionId: sessionId
         });
@@ -169,12 +170,13 @@ Scope {
     }
 
     /** Remove a staged snapshot that never reached the network. */
-    function abortSubmission(sessionId: string, operationId: string): string {
-        if (!sessionId || !operationId || root.dir.length === 0)
+    function abortSubmission(sessionId: string, stagingOperationId: string, requestedOperationId = ""): string {
+        if (!sessionId || !stagingOperationId || root.dir.length === 0)
             return "";
+        const operationId = requestedOperationId || root.operationId("abort");
         root.enqueue({
             kind: "abortSubmission",
-            args: ["abort-staged", root.dir, sessionId, operationId],
+            args: ["abort-staged", root.dir, sessionId, stagingOperationId],
             operationId: operationId,
             sessionId: sessionId
         });

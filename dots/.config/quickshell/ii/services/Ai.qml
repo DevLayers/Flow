@@ -28,7 +28,11 @@ Singleton {
     readonly property string apiKeyEnvVarName: "API_KEY"
 
     signal responseFinished
-    readonly property bool isGenerating: requester.running
+    signal submissionStateChanged(var submission)
+    signal submissionStarted(string submissionId, string runId, string sessionId)
+    signal submissionFailed(string submissionId, string operationId, string errorCode, var recoveryActionIds)
+    signal submissionCancelled(string submissionId, string reason)
+    readonly property bool isGenerating: requester.running || root.pendingSubmissionId.length > 0
     /** Central AI availability contract shared by every host. */
     readonly property int aiPolicy: Number(Config.options?.policies?.ai ?? 1)
     readonly property bool enabled: root.aiPolicy !== 0
@@ -113,6 +117,360 @@ Singleton {
     property var runningMessageIDs: []
     property var runningMessageByID: ({})
     property var pendingRunJournal: null
+    property int submissionSequence: 0
+    property string pendingSubmissionId: ""
+    property var pendingSubmission: null
+    property string submissionNotice: ""
+    property int draftRevision: 0
+
+    onDraftChanged: root.draftRevision += 1
+
+    function submissionOperationId(prefix) {
+        root.submissionSequence += 1;
+        return `${prefix}-${Date.now()}-${root.submissionSequence}`;
+    }
+
+    function rejectSubmission(errorCode, userMessage, recoveryActionIds) {
+        root.submissionNotice = userMessage;
+        root.submissionFailed("", "", errorCode, recoveryActionIds ?? []);
+        root.addMessage(userMessage, root.interfaceRole, {
+            "notice": "submission",
+            "errorKind": errorCode
+        });
+        return {
+            accepted: false,
+            state: "rejected",
+            errorCode: errorCode,
+            userMessage: userMessage,
+            recoveryActionIds: recoveryActionIds ?? []
+        };
+    }
+
+    /**
+     * Synchronous submit contract. It only validates immutable input and
+     * reserves the one global pending slot; keyring and disk work continue
+     * through correlated signals below.
+     */
+    function submit(text, context = null, source = "unknown") {
+        const prompt = String(text ?? "");
+        const files = Array.isArray(context?.attachments) ? context.attachments.slice() : root.attachments.slice();
+        if (prompt.trim().length === 0 && files.length === 0)
+            return root.rejectSubmission("empty-input", Translation.tr("Write a question or attach a file first."), ["focus-composer"]);
+        if (root.pendingSubmissionId.length > 0 || requester.running || (root.runCoordinator.activeRunId.length > 0 && root.runCoordinator.activeStates.includes(root.runCoordinator.runFor(root.runCoordinator.activeRunId)?.state)))
+            return root.rejectSubmission("busy", Translation.tr("AI is busy with another conversation. Open or stop the active run first."), ["open-active-run", "stop-active-run"]);
+
+        const modelId = root.currentModelId;
+        const model = root.catalog.models[modelId] ?? null;
+        const permission = root.canSubmit(modelId);
+        const waitingForKeyring = !!model && model.requires_key && !KeyringStorage.loaded;
+        if (!permission.allowed && !waitingForKeyring)
+            return root.rejectSubmission(permission.reason || "unavailable", Translation.tr("This AI model is not ready to receive a message."), permission.recoveryActionIds ?? ["open-models"]);
+
+        root.submissionSequence += 1;
+        const submissionId = `submission-${Date.now()}-${root.submissionSequence}`;
+        const pending = {
+            submissionId: submissionId,
+            operationId: root.submissionOperationId("submit"),
+            source: String(source ?? "unknown"),
+            text: prompt,
+            attachments: files,
+            modelId: modelId,
+            thinkingLevel: root.thinkingLevel,
+            temperature: root.temperature,
+            systemPrompt: root.systemPrompt,
+            toolOverride: root.currentTool,
+            draftRevisionAtSubmit: root.draftRevision,
+            beforeSessionId: root.sessions.currentId,
+            beforeSessionCreatedAt: root.sessionCreatedAt,
+            baseMessageIDs: root.messageIDs.slice(),
+            insertedIds: [],
+            insertedObjects: ({}),
+            state: waitingForKeyring ? "waitingKeyring" : "pending",
+            cancelRequested: false,
+            deferJournal: true
+        };
+        root.pendingSubmissionId = submissionId;
+        root.pendingSubmission = pending;
+        root.submissionStateChanged(pending);
+        if (waitingForKeyring)
+            KeyringStorage.fetchKeyringData();
+        else
+            Qt.callLater(root.resumePendingSubmission);
+        return {
+            accepted: true,
+            submissionId: submissionId,
+            operationId: pending.operationId,
+            state: "pending"
+        };
+    }
+
+    function resumePendingSubmission() {
+        const pending = root.pendingSubmission;
+        if (!pending || pending.submissionId !== root.pendingSubmissionId || pending.cancelRequested)
+            return;
+        if (pending.state === "preparing" || pending.state === "staging" || pending.state === "durableNotStarted" || pending.state === "networkStarting" || pending.state === "started")
+            return;
+        const model = root.catalog.models[pending.modelId] ?? null;
+        const permission = root.canSubmit(pending.modelId);
+        if (!permission.allowed) {
+            if (permission.reason === "keyring-loading")
+                return;
+            root.failPendingSubmission(permission.reason || "unavailable", Translation.tr("This AI model is no longer available."), permission.recoveryActionIds ?? ["open-models"]);
+            return;
+        }
+        if (!model || (root.sessions.currentId !== pending.beforeSessionId)) {
+            root.failPendingSubmission("session-changed", Translation.tr("The chat changed while the request was preparing. Nothing was sent."), ["retry-submit"]);
+            return;
+        }
+        for (let i = 0; i < pending.baseMessageIDs.length; i++) {
+            if (root.messageIDs[i] !== pending.baseMessageIDs[i]) {
+                root.failPendingSubmission("conversation-changed", Translation.tr("The conversation changed while the request was preparing. Nothing was sent."), ["retry-submit"]);
+                return;
+            }
+        }
+        pending.state = "preparing";
+        root.submissionStateChanged(pending);
+        Qt.callLater(() => {
+            if (root.pendingSubmissionId === pending.submissionId)
+                root.preparePendingSubmission(pending);
+        });
+    }
+
+    function preparePendingSubmission(pending) {
+        if (!pending || root.pendingSubmissionId !== pending.submissionId || pending.cancelRequested)
+            return;
+        if (root.sessions.currentId.length === 0) {
+            root.sessions.currentId = root.sessions.newId();
+            root.sessionCreatedAt = Date.now();
+        }
+        if (root.sessions.currentId !== pending.beforeSessionId && pending.beforeSessionId.length > 0) {
+            root.failPendingSubmission("session-changed", Translation.tr("The chat changed while the request was preparing. Nothing was sent."), ["retry-submit"]);
+            return;
+        }
+        pending.sessionId = root.sessions.currentId;
+        const user = root.aiMessageComponent.createObject(root, {
+            "role": "user",
+            "content": pending.text.length > 0 ? pending.text : Translation.tr("(see attached)"),
+            "rawContent": pending.text.length > 0 ? pending.text : Translation.tr("(see attached)"),
+            "attachments": pending.attachments,
+            "thinking": false,
+            "done": true
+        });
+        const userId = root.idForMessage(user);
+        pending.userMessageId = userId;
+        pending.insertedIds = [userId];
+        pending.insertedObjects[userId] = user;
+        root.messageIDs = [...root.messageIDs, userId];
+        root.messageByID[userId] = user;
+        root.makeRequest(pending);
+    }
+
+    function rollbackPendingMessages(pending) {
+        if (!pending)
+            return;
+        const removed = pending.insertedIds ?? [];
+        for (let i = 0; i < removed.length; i++) {
+            const id = removed[i];
+            if (root.messageByID[id] !== pending.insertedObjects[id])
+                continue;
+            const message = root.messageByID[id];
+            delete root.messageByID[id];
+            root.messageIDs = root.messageIDs.filter(item => item !== id);
+            message.destroy();
+        }
+        pending.insertedIds = [];
+        if (pending.beforeSessionId.length === 0 && root.messageIDs.length === 0 && root.sessions.currentId === pending.sessionId) {
+            root.sessions.currentId = "";
+            root.sessionCreatedAt = pending.beforeSessionCreatedAt;
+        }
+    }
+
+    function finishPendingSubmission(pending, cancelled, reason) {
+        if (!pending || root.pendingSubmissionId !== pending.submissionId)
+            return;
+        const run = pending.runId ? root.runCoordinator.runFor(pending.runId) : null;
+        if (run && !root.runCoordinator.terminalStates.includes(run.state))
+            root.runCoordinator.finish(pending.runId, "cancelled", cancelled ? "cancelled" : "submissionFailed");
+        root.rollbackPendingMessages(pending);
+        if (pending.beforeSessionId.length === 0 && root.sessions.currentId === pending.sessionId) {
+            root.sessions.currentId = "";
+            root.sessionCreatedAt = pending.beforeSessionCreatedAt;
+        }
+        root.pendingSubmission = null;
+        root.pendingSubmissionId = "";
+        root.submissionNotice = cancelled ? Translation.tr("Message cancelled before it was sent.") : (pending.errorMessage ?? Translation.tr("The message could not be sent."));
+        root.submissionStateChanged({
+            submissionId: pending.submissionId,
+            state: cancelled ? "cancelled" : "failed",
+            reason: reason
+        });
+        if (cancelled)
+            root.submissionCancelled(pending.submissionId, reason);
+        else
+            root.submissionFailed(pending.submissionId, pending.operationId ?? "", reason, pending.recoveryActionIds ?? []);
+    }
+
+    function failPendingSubmission(errorCode, userMessage, recoveryActionIds) {
+        const pending = root.pendingSubmission;
+        if (!pending || pending.state === "compensating")
+            return;
+        pending.errorCode = errorCode;
+        pending.errorMessage = userMessage;
+        pending.recoveryActionIds = recoveryActionIds ?? [];
+        pending.cancelRequested = true;
+        pending.state = "compensating";
+        root.submissionStateChanged(pending);
+        const pendingRun = pending.runId ? root.runCoordinator.runFor(pending.runId) : null;
+        if (pendingRun && !root.runCoordinator.terminalStates.includes(pendingRun.state))
+            root.runCoordinator.finish(pending.runId, "cancelled", "submissionFailed");
+        root.rollbackPendingMessages(pending);
+        if (pending.stateBeforeCompensation === "durableNotStarted" || pending.stateBeforeCompensation === "networkStarting" || pending.stateBeforeCompensation === "started") {
+            const snapshot = root.messageIDs.length > 0 ? root.sessionToJson() : null;
+            if (snapshot) {
+                pending.compensationOperationId = root.sessions.commit(snapshot, root.submissionOperationId("compensate"), true);
+                return;
+            }
+        }
+        if (pending.stageOperationId) {
+            pending.abortOperationId = root.sessions.abortSubmission(pending.sessionId, pending.stageOperationId, root.submissionOperationId("abort"));
+            if (pending.abortOperationId)
+                return;
+        }
+        root.finishPendingSubmission(pending, false, errorCode);
+    }
+
+    function cancelPendingSubmission(reason = "cancelled") {
+        const pending = root.pendingSubmission;
+        if (!pending)
+            return false;
+        pending.cancelRequested = true;
+        pending.stateBeforeCompensation = pending.state;
+        root.failPendingSubmission("cancelled", Translation.tr("Message cancelled before it was sent."), []);
+        pending.cancelReason = reason;
+        return true;
+    }
+
+    function handleSubmissionStageSucceeded(operationId, sessionId) {
+        const pending = root.pendingSubmission;
+        if (!pending || pending.stageOperationId !== operationId || pending.sessionId !== sessionId)
+            return;
+        if (pending.cancelRequested) {
+            pending.stateBeforeCompensation = "durableNotStarted";
+            root.failPendingSubmission("cancelled", Translation.tr("Message cancelled before it was sent."), []);
+            return;
+        }
+        pending.state = "durableNotStarted";
+        root.submissionStateChanged(pending);
+        pending.commitOperationId = root.sessions.commitSubmissionForDispatch(sessionId, operationId, root.submissionOperationId("commit"));
+    }
+
+    function handleSubmissionCommitSucceeded(operationId, sessionId) {
+        const pending = root.pendingSubmission;
+        if (!pending || pending.commitOperationId !== operationId || pending.sessionId !== sessionId)
+            return;
+        if (pending.cancelRequested) {
+            pending.stateBeforeCompensation = "durableNotStarted";
+            root.failPendingSubmission("cancelled", Translation.tr("Message cancelled before it was sent."), []);
+            return;
+        }
+        pending.state = "networkStarting";
+        root.runCoordinator.transition(pending.runId, "thinking", "networkStarting", { "executionStarted": false });
+        const snapshot = root.sessionToJson();
+        pending.networkOperationId = root.sessions.commit(snapshot, root.submissionOperationId("network-start"), true);
+        root.submissionStateChanged(pending);
+    }
+
+    function handleSubmissionSaveSucceeded(operationId, sessionId) {
+        const pending = root.pendingSubmission;
+        if (!pending || pending.networkOperationId !== operationId || pending.sessionId !== sessionId)
+            if (!pending || pending.compensationOperationId !== operationId || pending.sessionId !== sessionId)
+                return;
+        if (pending.compensationOperationId === operationId) {
+            if (pending.stageOperationId) {
+                pending.abortOperationId = root.sessions.abortSubmission(sessionId, pending.stageOperationId, root.submissionOperationId("abort"));
+                if (pending.abortOperationId)
+                    return;
+            }
+            root.finishPendingSubmission(pending, pending.cancelReason === "user", "compensated");
+            return;
+        }
+        root.dispatchPendingSubmission(pending);
+    }
+
+    function dispatchPendingSubmission(pending) {
+        if (!pending || root.pendingSubmissionId !== pending.submissionId)
+            return;
+        if (pending.cancelRequested || !root.canSubmit(pending.modelId).allowed) {
+            pending.stateBeforeCompensation = "networkStarting";
+            root.failPendingSubmission("cancelled", Translation.tr("Message cancelled before it was sent."), []);
+            return;
+        }
+        pending.state = "started";
+        pending.deferJournal = false;
+        root.runCoordinator.transition(pending.runId, "thinking", "networkStarted", {
+            "executionStarted": true,
+            "networkStartedAt": Date.now()
+        });
+        const prepared = pending.prepared;
+        requester.model = prepared.model;
+        requester.strategy = prepared.strategy;
+        requester.message = prepared.message;
+        requester.endpoint = prepared.endpoint;
+        requester.requestData = prepared.requestData;
+        requester.apiKey = prepared.apiKey;
+        requester.parsedAny = false;
+        if (root.draftRevision === pending.draftRevisionAtSubmit)
+            root.draft = "";
+        root.clearAttachments();
+        root.submissionStateChanged(pending);
+        root.submissionStarted(pending.submissionId, pending.runId, pending.sessionId);
+        requester.start();
+    }
+
+    function handleSubmissionSaveFailed(operationId, sessionId, reason) {
+        const pending = root.pendingSubmission;
+        if (!pending)
+            return;
+        if (pending.compensationOperationId === operationId) {
+            root.finishPendingSubmission(pending, pending.cancelReason === "user", reason);
+            return;
+        }
+        if (pending.networkOperationId === operationId || pending.stageOperationId === operationId) {
+            pending.stateBeforeCompensation = pending.state;
+            root.failPendingSubmission("save-failed", Translation.tr("The message was not saved, so it was not sent."), ["retry-submit"]);
+        }
+    }
+
+    function handleSubmissionStageFailed(operationId, sessionId, reason) {
+        const pending = root.pendingSubmission;
+        if (!pending || pending.stageOperationId !== operationId || pending.sessionId !== sessionId)
+            return;
+        pending.stateBeforeCompensation = "staging";
+        root.finishPendingSubmission(pending, pending.cancelRequested, reason);
+    }
+
+    function handleSubmissionCommitFailed(operationId, sessionId, reason) {
+        const pending = root.pendingSubmission;
+        if (!pending || pending.commitOperationId !== operationId || pending.sessionId !== sessionId)
+            return;
+        pending.stateBeforeCompensation = "durableNotStarted";
+        root.failPendingSubmission("save-failed", Translation.tr("The message was not saved, so it was not sent."), ["retry-submit"]);
+    }
+
+    function handleSubmissionAbortFinished(operationId, sessionId, reason) {
+        const pending = root.pendingSubmission;
+        if (!pending || pending.abortOperationId !== operationId || pending.sessionId !== sessionId)
+            return;
+        root.finishPendingSubmission(pending, pending.cancelReason === "user", reason);
+    }
+
+    Connections {
+        target: KeyringStorage
+        function onLoadedChanged() {
+            if (KeyringStorage.loaded)
+                root.resumePendingSubmission();
+        }
+    }
 
     function journalRun(sessionId: string, run: var) {
         root.pendingRunJournal = {
@@ -124,6 +482,11 @@ Singleton {
 
     function onRunStarted(run: var) {
         root.conversations.setRun(run.sessionId, run);
+        const pending = root.pendingSubmission;
+        if (pending && pending.submissionId === root.pendingSubmissionId && pending.sessionId === run.sessionId && pending.deferJournal) {
+            pending.runPreview = run;
+            return;
+        }
         root.pendingRunJournal = {
             sessionId: run.sessionId,
             run: run
@@ -133,6 +496,9 @@ Singleton {
 
     function onRunActivity(run: var, event: var) {
         root.conversations.setRun(run.sessionId, run);
+        const pending = root.pendingSubmission;
+        if (pending && pending.submissionId === root.pendingSubmissionId && pending.sessionId === run.sessionId && pending.deferJournal)
+            return;
         if (run.sessionId === root.currentRunSessionId && root.runningMessageIDs.length > 0)
             root.conversations.capture(run.sessionId, root.runningSessionToJson());
         root.pendingRunJournal = {
@@ -144,12 +510,27 @@ Singleton {
 
     function onRunFinished(run: var) {
         root.conversations.setRun(run.sessionId, run);
+        const pending = root.pendingSubmission;
+        if (pending && pending.submissionId === root.pendingSubmissionId && pending.sessionId === run.sessionId && pending.state !== "started") {
+            root.pendingRunJournal = null;
+            if (root.currentRunId === run.runId)
+                root.currentRunId = "";
+            if (run.resultReason === "cancelledByPolicy" || run.resultReason === "disabledByPolicy") {
+                pending.stateBeforeCompensation = pending.state;
+                root.failPendingSubmission("policy-changed", Translation.tr("The AI policy changed before this message was sent."), ["retry-submit"]);
+            }
+            return;
+        }
         if (run.sessionId === root.currentRunSessionId && root.runningMessageIDs.length > 0)
             root.conversations.capture(run.sessionId, root.runningSessionToJson());
         root.pendingRunJournal = null;
         root.commitRunSession(run.sessionId, true);
         if (root.currentRunId === run.runId)
             root.currentRunId = "";
+        if (pending && pending.submissionId === root.pendingSubmissionId && pending.sessionId === run.sessionId) {
+            root.pendingSubmission = null;
+            root.pendingSubmissionId = "";
+        }
     }
 
     function commitRunSession(sessionId: string, flushNow = false) {
@@ -1008,13 +1389,20 @@ Singleton {
     /**
      * Builds and sends a request for the conversation as it currently stands.
      */
-    function makeRequest() {
-        const candidate = root.currentModelEntry;
-        if (candidate?.requires_key && !KeyringStorage.loaded)
+    function makeRequest(submission = null) {
+        const pending = submission;
+        if (pending && root.pendingSubmissionId !== pending.submissionId)
+            return;
+        const candidate = pending ? (root.catalog.models[pending.modelId] ?? null) : root.currentModelEntry;
+        if (!pending && candidate?.requires_key && !KeyringStorage.loaded)
             KeyringStorage.fetchKeyringData();
-        const permission = root.canSubmit(root.currentModelId);
+        const permission = root.canSubmit(pending ? pending.modelId : root.currentModelId);
         if (!permission.allowed) {
-            const model = root.currentModelEntry;
+            if (pending && permission.reason !== "keyring-loading") {
+                root.failPendingSubmission(permission.reason || "unavailable", Translation.tr("This AI model is no longer available."), permission.recoveryActionIds ?? ["open-models"]);
+                return;
+            }
+            const model = pending ? candidate : root.currentModelEntry;
             if (permission.reason === "missing-key" && model)
                 root.addApiKeyAdvice(model);
             else if (permission.reason === "keyring-loading")
@@ -1026,8 +1414,13 @@ Singleton {
             return;
         }
 
-        const model = root.currentModelEntry;
-        if (requester.running) {
+        const model = candidate;
+        if (!model) {
+            if (pending)
+                root.failPendingSubmission("model-unavailable", Translation.tr("This AI model is no longer available."), ["open-models"]);
+            return;
+        }
+        if (!pending && requester.running) {
             root.addMessage(Translation.tr("Still answering. Stop the current response before sending another."), root.interfaceRole);
             return;
         }
@@ -1035,7 +1428,7 @@ Singleton {
         // Give the run a stable destination before creating its placeholder.
         // The first user turn may not have been flushed yet because it was
         // typed into a brand-new chat.
-        if (root.sessions.currentId.length === 0)
+        if (!pending && root.sessions.currentId.length === 0)
             root.commitSession(true);
         let requestMessageId = "";
         for (let at = root.messageIDs.length - 1; at >= 0; at--) {
@@ -1047,27 +1440,28 @@ Singleton {
         }
 
         // Fetch API keys if needed
-        if (model.requires_key && !KeyringStorage.loaded)
+        if (!pending && model.requires_key && !KeyringStorage.loaded)
             KeyringStorage.fetchKeyringData();
 
-        const strategy = root.currentApiStrategy;
-        strategy.activeThinkingLevel = root.thinkingLevel;
+        const strategy = pending ? root.apiStrategies[model.api_format || "openai"] : root.currentApiStrategy;
+        strategy.activeThinkingLevel = pending ? pending.thinkingLevel : root.thinkingLevel;
         const messageArray = root.messageIDs.map(id => root.messageByID[id]);
         const filteredMessageArray = messageArray.filter(message => message.role !== root.interfaceRole);
         // Tool support is a property of the model, not of its address. A
         // local model that can call functions keeps them; a remote one
         // that cannot does not get them handed over anyway.
-        const tools = model.tools && (root.onlineAllowed || root.currentTool !== "search")
-                ? root.toolbox.wireTools(model.api_format, root.currentTool)
+        const toolOverride = pending ? pending.toolOverride : root.currentTool;
+        const tools = model.tools && (root.onlineAllowed || toolOverride !== "search")
+                ? root.toolbox.wireTools(model.api_format, toolOverride)
                 : null;
 
-        const data = strategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, tools);
+        const data = strategy.buildRequestData(model, filteredMessageArray, pending ? pending.systemPrompt : root.systemPrompt, pending ? pending.temperature : root.temperature, tools);
         // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
 
         /* Create local message object */
         const message = root.aiMessageComponent.createObject(root, {
             "role": "assistant",
-            "model": root.currentModelId,
+            "model": model.id,
             "content": "",
             "rawContent": "",
             "thinking": true,
@@ -1082,7 +1476,11 @@ Singleton {
             root.messageIDs = root.messageIDs.filter(messageId => messageId !== id);
             delete root.messageByID[id];
             message.destroy();
-            root.addMessage(Translation.tr("AI is busy with another conversation. Open or stop the active run first."), root.interfaceRole);
+            if (pending) {
+                root.failPendingSubmission("busy", Translation.tr("AI is busy with another conversation. Open or stop the active run first."), ["open-active-run", "stop-active-run"]);
+            } else {
+                root.addMessage(Translation.tr("AI is busy with another conversation. Open or stop the active run first."), root.interfaceRole);
+            }
             return;
         }
         root.currentRunId = runResult.runId;
@@ -1092,8 +1490,29 @@ Singleton {
         root.runningMessageIDs = root.messageIDs.slice();
         root.runningMessageByID = Object.assign({}, root.messageByID);
         root.conversations.capture(root.currentRunSessionId, root.sessionToJson());
-        root.commitSession(true);
+        if (pending) {
+            pending.responseMessageId = id;
+            pending.insertedIds = [...pending.insertedIds, id];
+            pending.insertedObjects[id] = message;
+            pending.runId = runResult.runId;
+            pending.sessionId = runResult.sessionId;
+            pending.prepared = {
+                model: model,
+                strategy: strategy,
+                message: message,
+                endpoint: strategy.buildEndpoint(model),
+                requestData: data,
+                apiKey: model.requires_key ? (root.apiKeys?.[model.key_id] ?? "") : ""
+            };
+            pending.state = "staging";
+            pending.stageOperationId = root.sessions.stageSubmission(root.sessionToJson(), root.submissionOperationId("stage"));
+            root.submissionStateChanged(pending);
+            if (!pending.stageOperationId)
+                root.failPendingSubmission("save-failed", Translation.tr("The message could not be staged, so it was not sent."), ["retry-submit"]);
+            return;
+        }
 
+        root.commitSession(true);
         requester.model = model;
         requester.strategy = strategy;
         requester.message = message;
@@ -1111,6 +1530,8 @@ Singleton {
         root.followUpQueued = false;
         root.pendingToolCalls = [];
         root.activeToolCallId = "";
+        if (root.pendingSubmissionId.length > 0 && !requester.running)
+            return root.cancelPendingSubmission("user");
         return requester.abort();
     }
 
@@ -1133,23 +1554,19 @@ Singleton {
 
     function sendUserMessage(message) {
         const files = root.attachments;
-        if (message.length === 0 && files.length === 0)
-            return;
         if (root.pendingAttachmentCount > 0) {
             root.attachmentNotice = Translation.tr("Still checking attachments. Try sending again in a moment.");
-            return;
+            return {
+                accepted: false,
+                state: "rejected",
+                errorCode: "attachments-pending"
+            };
         }
-        // The files go with the question, not with the answer: that is where
-        // they belong when the chat is reopened, and it is what lets the next
-        // turn hand them over again.
-        root.addMessage(message.length > 0 ? message : Translation.tr("(see attached)"), "user", files.length > 0 ? ({
-                "attachments": files
-            }) : null);
-        root.clearAttachments();
-        // Written before the answer comes back, so a question survives a reply
-        // that never arrives.
-        root.sessions.scheduleSave();
-        root.makeRequest();
+        // The files go with the question, not the answer. `submit` keeps the
+        // immutable copy until the durable checkpoint is acknowledged.
+        return root.submit(message, {
+            "attachments": files
+        }, "chat");
     }
 
     /**
@@ -1677,8 +2094,20 @@ Singleton {
         exportDir: Directories.aiExports
         onSaveRequested: root.commitSession()
         onSessionOpened: session => root.applySession(session)
-        onSaveSucceeded: (operationId, sessionId) => root.conversations.markSaveAcknowledged(sessionId)
-        onSaveFailed: (operationId, sessionId, reason) => root.conversations.markSavePending(sessionId, true)
+        onSaveSucceeded: (operationId, sessionId) => {
+            root.conversations.markSaveAcknowledged(sessionId);
+            root.handleSubmissionSaveSucceeded(operationId, sessionId);
+        }
+        onSaveFailed: (operationId, sessionId, reason) => {
+            root.conversations.markSavePending(sessionId, true);
+            root.handleSubmissionSaveFailed(operationId, sessionId, reason);
+        }
+        onStageSucceeded: (operationId, sessionId) => root.handleSubmissionStageSucceeded(operationId, sessionId)
+        onStageFailed: (operationId, sessionId, reason) => root.handleSubmissionStageFailed(operationId, sessionId, reason)
+        onCommitSubmissionSucceeded: (operationId, sessionId) => root.handleSubmissionCommitSucceeded(operationId, sessionId)
+        onCommitSubmissionFailed: (operationId, sessionId, reason) => root.handleSubmissionCommitFailed(operationId, sessionId, reason)
+        onAbortSubmissionSucceeded: (operationId, sessionId) => root.handleSubmissionAbortFinished(operationId, sessionId, "aborted")
+        onAbortSubmissionFailed: (operationId, sessionId, reason) => root.handleSubmissionAbortFinished(operationId, sessionId, reason)
         onCurrentDropped: root.newChat()
     }
 
@@ -1917,6 +2346,10 @@ Singleton {
 
     /** Puts the conversation away and starts an empty one. */
     function newChat() {
+        if (root.pendingSubmissionId.length > 0) {
+            root.cancelPendingSubmission("new-chat");
+            return;
+        }
         root.commitSession();
         root.keepDraft();
         root.clearMessages();
@@ -1935,6 +2368,12 @@ Singleton {
     function openSession(sessionId: string) {
         if (sessionId.length === 0 || sessionId === root.sessions.currentId)
             return;
+        if (root.pendingSubmissionId.length > 0) {
+            root.addMessage(Translation.tr("Wait for this message to finish saving, or stop it before switching chats."), root.interfaceRole, {
+                "notice": "submission"
+            });
+            return;
+        }
         root.commitSession(); // Whatever is on screen keeps its own file
         root.keepDraft();
         root.sessions.openSession(sessionId);

@@ -68,9 +68,11 @@ Scope {
 
     function transition(runId: string, state: string, reason = "", extra = null) {
         const run = root.runFor(runId);
-        if (!run || !root.states.includes(state))
+        if (!run || !root.states.includes(state)) {
+            console.warn("[AiRunCoordinator] Invalid transition", runId, state);
             return false;
-        if (root.terminalStates.includes(run.state) && run.state !== state)
+        }
+        if (root.terminalStates.includes(run.state))
             return false;
         const next = Object.assign({}, run, extra ?? ({}), {
             state: state,
