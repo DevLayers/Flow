@@ -287,7 +287,11 @@ ApiStrategy {
         message.rawContent += newContent;
         message.content += newContent;
         message.functionName = name;
-        message.functionCall = name;
+        message.functionCall = {
+            name: name,
+            args: args,
+            id: id
+        };
         return {
             functionCall: {
                 name: name,

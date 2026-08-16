@@ -242,9 +242,11 @@ ApiStrategy {
                     message.rawContent += newContent;
                     message.content += newContent;
                     message.functionName = part.functionCall.name;
+                    const callId = `gemini-${(message.toolCalls?.length ?? message.functionCalls?.length ?? 0) + functionCalls.length + 1}`;
                     const functionCall = {
                         name: part.functionCall.name,
-                        args: part.functionCall.args
+                        args: part.functionCall.args,
+                        id: callId
                     };
                     message.functionCall = functionCall;
                     functionCalls.push(functionCall);

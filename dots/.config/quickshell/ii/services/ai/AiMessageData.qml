@@ -35,6 +35,10 @@ QtObject {
     property string functionName
     property var functionCall
     property var functionCalls: []
+    // Complete set of calls in this assistant turn. The singular legacy
+    // fields remain for compatibility, while this list preserves each call
+    // identity when providers interleave tool fragments.
+    property var toolCalls: []
     property string functionCallId: ""
     property string functionResponse
     property bool functionPending: false

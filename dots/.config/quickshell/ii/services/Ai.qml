@@ -570,6 +570,73 @@ Singleton {
     /** Tool calls returned in one assistant turn, waiting for their turn. */
     property var pendingToolCalls: []
     property string activeToolCallId: ""
+    // Session-owned metadata that survives a Search/sidebar handoff and a
+    // restart. Message-level arrays remain the rich-rendering source.
+    property list<string> sessionSearchQueries: []
+    property var sessionSources: []
+    property var sessionToolCheckpoints: []
+
+    function recordToolCheckpoint(entry: var) {
+        if (!entry || entry.serial === undefined)
+            return;
+        const sessionId = root.currentRunSessionId || root.sessions.currentId;
+        const visible = sessionId === root.sessions.currentId;
+        const snapshot = visible ? null : root.conversations.snapshot(sessionId);
+        const current = Array.from(visible ? (root.sessionToolCheckpoints ?? []) : (snapshot?.toolCheckpoints ?? []));
+        const index = current.findIndex(item => item.serial === entry.serial);
+        const nextEntry = Object.assign({}, entry, {
+            sessionId: sessionId
+        });
+        if (index >= 0)
+            current[index] = nextEntry;
+        else
+            current.push(nextEntry);
+        const checkpoints = current.slice(-100);
+        if (visible) {
+            root.sessionToolCheckpoints = checkpoints;
+            root.sessions.scheduleSave();
+        } else if (snapshot) {
+            root.conversations.capture(sessionId, Object.assign({}, snapshot, {
+                toolCheckpoints: checkpoints,
+                updatedAt: Date.now()
+            }));
+            root.commitRunSession(sessionId, false);
+        }
+    }
+
+    function updateSessionGrounding(message: AiMessageData, sessionId = "") {
+        if (!message)
+            return;
+        const targetSessionId = String(sessionId || root.currentRunSessionId || root.sessions.currentId);
+        const visible = targetSessionId === root.sessions.currentId;
+        const snapshot = visible ? null : root.conversations.snapshot(targetSessionId);
+        let sessionQueries = Array.from(visible ? root.sessionSearchQueries : (snapshot?.searchQueries ?? []));
+        let sessionSources = Array.from(visible ? root.sessionSources : (snapshot?.sources ?? []));
+        const queries = Array.from(message.searchQueries ?? []).map(value => String(value)).filter(value => value.length > 0);
+        if (queries.length > 0)
+            sessionQueries = [...new Set([...sessionQueries, ...queries])].slice(-50);
+        const incoming = Array.from(message.annotationSources ?? []);
+        if (incoming.length > 0) {
+            const byUrl = {};
+            sessionSources.concat(incoming).forEach(source => {
+                const url = String(source?.url ?? "");
+                const key = url.length > 0 ? url : JSON.stringify(source);
+                byUrl[key] = source;
+            });
+            sessionSources = Object.values(byUrl).slice(-100);
+        }
+        if (visible) {
+            root.sessionSearchQueries = sessionQueries;
+            root.sessionSources = sessionSources;
+        } else if (snapshot) {
+            root.conversations.capture(targetSessionId, Object.assign({}, snapshot, {
+                searchQueries: sessionQueries,
+                sources: sessionSources,
+                updatedAt: Date.now()
+            }));
+            root.commitRunSession(targetSessionId, false);
+        }
+    }
 
     /**
      * What the model is told before anything else, with the values filled in.
@@ -685,6 +752,7 @@ Singleton {
     readonly property AiTools toolbox: AiTools {
         apiFormat: root.currentModelEntry?.api_format ?? "openai"
         searchAvailable: root.currentModelEntry?.builtinSearch ?? false
+        onCallCheckpointChanged: entry => root.recordToolCheckpoint(entry)
     }
     readonly property var availableTools: root.toolbox.availableModes.filter(mode => root.onlineAllowed || mode !== "search")
     readonly property var toolDescriptions: root.toolbox.modeDescriptions
@@ -1276,8 +1344,6 @@ Singleton {
          * and lands in the bubble as text. Nothing having parsed by the end is
          * what says that text was never an answer.
          */
-        property bool parsedAny: false
-
         onLine: data => {
             if (root.currentRunId.length > 0)
                 root.runCoordinator.activity(root.currentRunId, "stream", { "bytes": String(data ?? "").length });
@@ -1289,6 +1355,7 @@ Singleton {
                 const result = requester.strategy.parseResponseLine(data, requester.message);
                 // console.log("[Ai] Parsed response result: ", JSON.stringify(result, null, 2));
                 requester.parsedAny = true;
+                root.updateSessionGrounding(requester.message, root.currentRunSessionId);
 
                 const functionCalls = Array.isArray(result.functionCalls) ? result.functionCalls : (result.functionCall ? [result.functionCall] : []);
                 if (functionCalls.length > 0)
@@ -1972,12 +2039,39 @@ Singleton {
         const list = Array.from(calls ?? []).filter(call => call?.name);
         if (list.length === 0)
             return;
-        message.functionCalls = list;
-        root.pendingToolCalls = list.map(call => ({
+        const known = Array.from(message.toolCalls ?? []);
+        const fresh = [];
+        list.forEach(call => {
+            const normalized = {
+                name: String(call.name),
+                args: call.args ?? ({}),
+                id: String(call.id ?? "")
+            };
+            const key = normalized.id.length > 0 ? normalized.id : `${normalized.name}:${JSON.stringify(normalized.args)}`;
+            const exists = known.some(item => {
+                const itemKey = String(item.id ?? "").length > 0 ? String(item.id) : `${item.name}:${JSON.stringify(item.args ?? ({}))}`;
+                return itemKey === key;
+            });
+            if (exists)
+                return;
+            known.push(normalized);
+            fresh.push(normalized);
+        });
+        if (fresh.length === 0)
+            return;
+        message.toolCalls = known;
+        message.functionCalls = known.map(call => ({
+                    name: call.name,
+                    args: call.args,
+                    id: call.id
+                }));
+        const wasEmpty = root.pendingToolCalls.length === 0;
+        root.pendingToolCalls = root.pendingToolCalls.concat(fresh.map(call => ({
                     call: call,
                     message: message
-                }));
-        root.processNextToolCall();
+                })));
+        if (wasEmpty)
+            root.processNextToolCall();
     }
 
     function processNextToolCall() {
@@ -2226,9 +2320,11 @@ Singleton {
                 "done": true,
                 "annotations": message.annotations,
                 "annotationSources": message.annotationSources,
+                "searchQueries": message.searchQueries,
                 "functionName": message.functionName,
                 "functionCall": message.functionCall,
                 "functionCalls": message.functionCalls,
+                "toolCalls": message.toolCalls,
                 "functionCallId": message.functionCallId,
                 "functionResponse": message.functionResponse,
                 "visibleToUser": message.visibleToUser,
@@ -2271,9 +2367,11 @@ Singleton {
             "done": data.done ?? true,
             "annotations": data.annotations ?? [],
             "annotationSources": data.annotationSources ?? [],
+            "searchQueries": data.searchQueries ?? [],
             "functionName": data.functionName ?? "",
             "functionCall": data.functionCall,
             "functionCalls": data.functionCalls ?? [],
+            "toolCalls": data.toolCalls ?? data.functionCalls ?? [],
             "functionCallId": data.functionCallId ?? "",
             "functionResponse": data.functionResponse ?? "",
             "visibleToUser": data.visibleToUser ?? true,
@@ -2303,7 +2401,9 @@ Singleton {
                 "promptOverride": root.promptOverride,
                 "messages": root.chatToJson(),
                 "run": root.conversations.records[root.sessions.currentId]?.run ?? null,
-                "searchQueries": [],
+                "searchQueries": root.sessionSearchQueries,
+                "sources": root.sessionSources,
+                "toolCheckpoints": root.sessionToolCheckpoints,
                 "activityEvents": root.conversations.records[root.sessions.currentId]?.run?.activityEvents ?? []
             });
     }
@@ -2331,6 +2431,9 @@ Singleton {
             modelId: root.currentRunId.length > 0 ? (root.runCoordinator.runFor(root.currentRunId)?.modelId ?? base.modelId) : base.modelId,
             messages: root.runningChatToJson(),
             run: root.conversations.records[sessionId]?.run ?? null,
+            searchQueries: sessionId === root.sessions.currentId ? root.sessionSearchQueries : (base.searchQueries ?? []),
+            sources: sessionId === root.sessions.currentId ? root.sessionSources : (base.sources ?? []),
+            toolCheckpoints: sessionId === root.sessions.currentId ? root.sessionToolCheckpoints : (base.toolCheckpoints ?? []),
             activityEvents: root.conversations.records[sessionId]?.run?.activityEvents ?? [],
             updatedAt: Date.now()
         });
@@ -2371,6 +2474,9 @@ Singleton {
         root.isProvisionalTitle = true;
         root.titleRequestSessionId = "";
         root.titleRequestRevision = -1;
+        root.sessionSearchQueries = [];
+        root.sessionSources = [];
+        root.sessionToolCheckpoints = [];
         root.promptOverride = "";
         root.currentPromptFile = "";
         root.resetSessionSettings();
@@ -2424,6 +2530,9 @@ Singleton {
         root.sessionTitleAsked = root.sessionTitle.length > 0;
         root.titleRevision = Number(session.titleRevision ?? 0);
         root.isProvisionalTitle = session.isProvisionalTitle === true || (session.isProvisionalTitle === undefined && root.sessionTitle.length === 0);
+        root.sessionSearchQueries = Array.from(session.searchQueries ?? []).map(value => String(value)).slice(-50);
+        root.sessionSources = Array.from(session.sources ?? []).slice(-100);
+        root.sessionToolCheckpoints = Array.from(session.toolCheckpoints ?? []).slice(-100);
         root.sessionModelId = session.modelId ?? root.defaultModelId;
         root.temperature = typeof session.temperature === "number" ? session.temperature : root.defaultTemperature;
         root.thinkingLevel = root.thinkingLevels.indexOf(session.thinking) >= 0 ? session.thinking : root.defaultThinkingLevel;

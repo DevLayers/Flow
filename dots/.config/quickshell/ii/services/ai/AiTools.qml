@@ -278,6 +278,7 @@ Scope {
     readonly property int logSize: Math.max(0, Config.options?.ai?.tools?.logSize ?? 50)
     property var callLog: []
     property int callSerial: 0
+    signal callCheckpointChanged(var entry)
 
     function describeArgs(id: string, args: var): string {
         if (!args)
@@ -307,6 +308,7 @@ Scope {
             at: Date.now()
         };
         root.callLog = [entry].concat(Array.from(root.callLog)).slice(0, root.logSize);
+        root.callCheckpointChanged(entry);
         return entry.serial;
     }
 
@@ -323,6 +325,7 @@ Scope {
             }
             updated.status = status;
             updated.outcome = outcome;
+            root.callCheckpointChanged(updated);
             return updated;
         });
     }

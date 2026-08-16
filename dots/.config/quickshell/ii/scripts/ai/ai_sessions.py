@@ -9,7 +9,8 @@ from them.
 Envelope (schema 3):
     {"schema": 1, "id", "title", "createdAt", "updatedAt", "pinned",
      "modelId", "thinking", "temperature", "promptFile", "personaId",
-     "promptOverride", "messages": [...]}
+     "promptOverride", "messages": [...], "searchQueries": [...],
+     "sources": [...], "toolCheckpoints": [...]}
 
 Index entry: id, title, createdAt, updatedAt, pinned, modelId, messageCount,
 preview.
@@ -36,6 +37,7 @@ import os
 import shutil
 import sys
 import time
+import tempfile
 import uuid
 from typing import Any
 
@@ -62,11 +64,18 @@ def read_json(path: str) -> Any:
 def write_json(path: str, payload: Any) -> bool:
     # Written beside the target and renamed, so a session file is never left
     # half-written if the shell dies mid-save.
-    tmp = f"{path}.tmp"
+    directory = os.path.dirname(path) or "."
+    tmp = ""
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as handle:
+        os.makedirs(directory, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=directory,
+            prefix=f".{os.path.basename(path)}.", suffix=".tmp", delete=False
+        ) as handle:
+            tmp = handle.name
             json.dump(payload, handle, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(tmp, path)
         return True
     except OSError:
@@ -141,6 +150,10 @@ def normalize(session: Any, fallback_id: str = "") -> dict | None:
         "personaId": str(session.get("personaId") or ""),
         "promptOverride": str(session.get("promptOverride") or ""),
         "messages": messages,
+        "searchQueries": [str(value) for value in session.get("searchQueries", []) if str(value)],
+        "sources": [value for value in session.get("sources", []) if isinstance(value, dict)],
+        "toolCheckpoints": [value for value in session.get("toolCheckpoints", []) if isinstance(value, dict)],
+        "activityEvents": [value for value in session.get("activityEvents", []) if isinstance(value, dict)],
     })
     return normalized
 
@@ -252,6 +265,36 @@ def import_legacy(directory: str, legacy_dir: str) -> int:
     return imported
 
 
+def prune_staging(directory: str) -> int:
+    """Discard uncommitted first-turn snapshots left by a crashed shell.
+
+    A staged submission is deliberately not canonical until commit-staged has
+    updated the session and index. Bootstrap is the only safe owner of these
+    files, so an interrupted process cannot resurrect a ghost turn later.
+    """
+    staging = os.path.join(directory, STAGING_NAME)
+    removed = 0
+    try:
+        names = os.listdir(staging)
+    except OSError:
+        return 0
+    for name in names:
+        path = os.path.join(staging, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            os.unlink(path)
+            removed += 1
+        except OSError:
+            continue
+    try:
+        if not os.listdir(staging):
+            os.rmdir(staging)
+    except OSError:
+        pass
+    return removed
+
+
 def markdown_of(session: dict) -> str:
     lines = [f"# {session['title'] or 'Untitled chat'}", ""]
     stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(session["updatedAt"] / 1000))
@@ -283,9 +326,10 @@ def cmd_bootstrap(argv: list) -> int:
     directory = argv[0]
     legacy = argv[1] if len(argv) > 1 else ""
     os.makedirs(directory, exist_ok=True)
+    pruned = prune_staging(directory)
     imported = import_legacy(directory, legacy)
     entries = rebuild_index(directory) if imported else load_index(directory)
-    return emit({"sessions": save_index(directory, entries), "imported": imported})
+    return emit({"sessions": save_index(directory, entries), "imported": imported, "stagingPruned": pruned})
 
 
 def cmd_save(argv: list) -> int:

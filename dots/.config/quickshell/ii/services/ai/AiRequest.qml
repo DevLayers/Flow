@@ -58,11 +58,13 @@ Scope {
     readonly property int attachmentFailureExitCode: 65
     readonly property string attachmentErrorMarker: "@@II_ATTACHMENT_ERROR:"
     property string attachmentError: ""
+    property bool parsedAny: false
 
     // Where the message stood when the current attempt started, so a retry
     // can drop whatever the failed attempt wrote before trying again.
     property int contentMark: 0
     property int rawContentMark: 0
+    property var messageSnapshot: null
 
     signal line(string data)
     signal retrying(int attempt, int delaySeconds, int status)
@@ -86,8 +88,42 @@ Scope {
         root.contentMark = root.message?.content.length ?? 0;
         root.rawContentMark = root.message?.rawContent.length ?? 0;
         root.strategy.reset();
+        root.messageSnapshot = root.snapshotMessage();
         root.launch();
         return true;
+    }
+
+    function snapshotMessage(): var {
+        const message = root.message;
+        if (!message)
+            return null;
+        return {
+            content: message.content,
+            rawContent: message.rawContent,
+            thought: message.thought,
+            thoughtSignature: message.thoughtSignature,
+            thinkingBlocks: JSON.parse(JSON.stringify(message.thinkingBlocks ?? [])),
+            thoughtDurationMs: message.thoughtDurationMs,
+            thoughtTokens: message.thoughtTokens,
+            thinking: message.thinking,
+            done: message.done,
+            annotations: JSON.parse(JSON.stringify(message.annotations ?? [])),
+            annotationSources: JSON.parse(JSON.stringify(message.annotationSources ?? [])),
+            searchQueries: JSON.parse(JSON.stringify(message.searchQueries ?? [])),
+            functionName: message.functionName,
+            functionCall: message.functionCall ? JSON.parse(JSON.stringify(message.functionCall)) : null,
+            functionCalls: JSON.parse(JSON.stringify(message.functionCalls ?? [])),
+            toolCalls: JSON.parse(JSON.stringify(message.toolCalls ?? [])),
+            functionCallId: message.functionCallId,
+            functionResponse: message.functionResponse,
+            functionPending: message.functionPending,
+            pendingChanges: JSON.parse(JSON.stringify(message.pendingChanges ?? [])),
+            toolCallSerial: message.toolCallSerial,
+            errorKind: message.errorKind,
+            errorText: message.errorText,
+            errorStatus: message.errorStatus,
+            errorDetails: message.errorDetails
+        };
     }
 
     /**
@@ -103,11 +139,15 @@ Scope {
             requestProc.running = false; // onExited reports it
             return true;
         }
-        root.finished("aborted", root.httpStatus, root.exitCode);
+        root.finish("aborted", root.httpStatus, root.exitCode);
         return true;
     }
 
     function launch() {
+        // A retry is a new parse attempt. Provider-specific fragment buffers
+        // and the facade's parsed flag must not leak into it.
+        root.strategy.reset();
+        root.parsedAny = false;
         const scriptFilePath = CF.FileUtils.trimFileProtocol(root.scriptPath);
         // Written before the script that reads it, and rewritten on every
         // attempt: a retry re-runs the attachment step over a fresh body.
@@ -167,11 +207,36 @@ Scope {
     }
 
     function rollbackMessage() {
-        if (!root.message)
+        if (!root.message || !root.messageSnapshot)
             return;
-        root.message.content = root.message.content.slice(0, root.contentMark);
-        root.message.rawContent = root.message.rawContent.slice(0, root.rawContentMark);
-        root.message.thinking = true;
+        const message = root.message;
+        const snapshot = root.messageSnapshot;
+        Object.keys(snapshot).forEach(key => {
+            const value = snapshot[key];
+            if (Array.isArray(value) || (value && typeof value === "object"))
+                message[key] = JSON.parse(JSON.stringify(value));
+            else
+                message[key] = value;
+        });
+        message.thinking = true;
+        message.done = false;
+    }
+
+    function cleanupTemporaryFiles() {
+        const scriptFilePath = CF.FileUtils.trimFileProtocol(root.scriptPath);
+        const bodyFilePath = CF.FileUtils.trimFileProtocol(root.bodyPath);
+        const files = [];
+        if (scriptFilePath.length > 0)
+            files.push(scriptFilePath);
+        if (bodyFilePath.length > 0)
+            files.push(bodyFilePath);
+        if (files.length > 0)
+            Quickshell.execDetached(["rm", "-f", "--", ...files]);
+    }
+
+    function finish(reason: string, status: int, code: int) {
+        root.cleanupTemporaryFiles();
+        root.finished(reason, status, code);
     }
 
     FileView {
@@ -224,11 +289,11 @@ Scope {
             root.exitCode = exitCode;
 
             if (root.aborted) {
-                root.finished("aborted", root.httpStatus, exitCode);
+                root.finish("aborted", root.httpStatus, exitCode);
                 return;
             }
             if (root.attachmentError.length > 0) {
-                root.finished("attachmentError", root.httpStatus, exitCode);
+                root.finish("attachmentError", root.httpStatus, exitCode);
                 return;
             }
             if (root.retryable()) {
@@ -241,7 +306,7 @@ Scope {
                 return;
             }
             const ok = exitCode === 0 && (root.httpStatus === 0 || (root.httpStatus >= 200 && root.httpStatus < 300));
-            root.finished(ok ? "done" : "error", root.httpStatus, exitCode);
+            root.finish(ok ? "done" : "error", root.httpStatus, exitCode);
         }
     }
 }

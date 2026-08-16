@@ -61,6 +61,41 @@ class AiSessionsContractTests(unittest.TestCase):
             self.assertTrue(aborted["aborted"])
             self.assertFalse((Path(directory) / ".staging" / "op-2.json").exists())
 
+    def test_schema_three_keeps_grounding_and_tool_checkpoints(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = {
+                "id": "chat-3",
+                "title": "Grounded",
+                "messages": [{
+                    "id": "assistant-1",
+                    "role": "assistant",
+                    "rawContent": "answer",
+                    "searchQueries": ["latest status"],
+                    "annotationSources": [{"url": "https://example.test", "text": "Source"}],
+                    "toolCalls": [{"id": "call-a", "name": "get_shell_config", "args": {}}],
+                }],
+                "searchQueries": ["latest status"],
+                "sources": [{"url": "https://example.test", "text": "Source"}],
+                "toolCheckpoints": [{"serial": 4, "status": "done", "id": "get_shell_config"}],
+            }
+            call("save", directory, "chat-3", payload=session)
+            saved = call("open", directory, "chat-3")["session"]
+            self.assertEqual(saved["schema"], 3)
+            self.assertEqual(saved["searchQueries"], ["latest status"])
+            self.assertEqual(saved["sources"][0]["url"], "https://example.test")
+            self.assertEqual(saved["toolCheckpoints"][0]["serial"], 4)
+
+    def test_bootstrap_prunes_only_uncommitted_staging_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            staging = Path(directory) / ".staging"
+            staging.mkdir()
+            (staging / "stale.json").write_text("{}")
+            (Path(directory) / "keep.txt").write_text("keep")
+            result = call("bootstrap", directory)
+            self.assertEqual(result["stagingPruned"], 1)
+            self.assertFalse(staging.exists())
+            self.assertTrue((Path(directory) / "keep.txt").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
