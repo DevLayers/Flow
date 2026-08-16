@@ -105,6 +105,7 @@ Singleton {
     // These are singletons owned by the facade. Visual hosts only observe
     // their projections; they never create a second repository or run slot.
     readonly property AiConversationRepository conversations: AiConversationRepository {}
+    readonly property AiSurfaceRouter surfaceRouter: AiSurfaceRouter {}
     readonly property AiRunCoordinator runCoordinator: AiRunCoordinator {
         onRunStarted: run => root.onRunStarted(run)
         onRunActivity: (run, event) => root.onRunActivity(run, event)
@@ -2198,6 +2199,10 @@ Singleton {
     property real sessionCreatedAt: 0
     /** Whether the model has already been asked to name this one. */
     property bool sessionTitleAsked: false
+    property int titleRevision: 0
+    property bool isProvisionalTitle: true
+    property string titleRequestSessionId: ""
+    property int titleRequestRevision: -1
 
     function serializeMessageFrom(id, source) {
         const message = source?.[id];
@@ -2285,6 +2290,8 @@ Singleton {
                 "schema": root.sessionSchema,
                 "id": root.sessions.currentId,
                 "title": root.sessionTitle,
+                "titleRevision": root.titleRevision,
+                "isProvisionalTitle": root.isProvisionalTitle,
                 "createdAt": root.sessionCreatedAt > 0 ? root.sessionCreatedAt : Date.now(),
                 "updatedAt": Date.now(),
                 "pinned": root.sessions.currentEntry?.pinned ?? false,
@@ -2319,6 +2326,8 @@ Singleton {
         return Object.assign({}, base, {
             schema: root.sessionSchema,
             id: sessionId,
+            titleRevision: base.titleRevision ?? root.titleRevision,
+            isProvisionalTitle: base.isProvisionalTitle ?? root.isProvisionalTitle,
             modelId: root.currentRunId.length > 0 ? (root.runCoordinator.runFor(root.currentRunId)?.modelId ?? base.modelId) : base.modelId,
             messages: root.runningChatToJson(),
             run: root.conversations.records[sessionId]?.run ?? null,
@@ -2358,6 +2367,10 @@ Singleton {
         root.sessionTitle = "";
         root.sessionCreatedAt = 0;
         root.sessionTitleAsked = false;
+        root.titleRevision = 0;
+        root.isProvisionalTitle = true;
+        root.titleRequestSessionId = "";
+        root.titleRequestRevision = -1;
         root.promptOverride = "";
         root.currentPromptFile = "";
         root.resetSessionSettings();
@@ -2409,6 +2422,8 @@ Singleton {
         root.sessionTitle = session.title ?? "";
         root.sessionCreatedAt = session.createdAt ?? Date.now();
         root.sessionTitleAsked = root.sessionTitle.length > 0;
+        root.titleRevision = Number(session.titleRevision ?? 0);
+        root.isProvisionalTitle = session.isProvisionalTitle === true || (session.isProvisionalTitle === undefined && root.sessionTitle.length === 0);
         root.sessionModelId = session.modelId ?? root.defaultModelId;
         root.temperature = typeof session.temperature === "number" ? session.temperature : root.defaultTemperature;
         root.thinkingLevel = root.thinkingLevels.indexOf(session.thinking) >= 0 ? session.thinking : root.defaultThinkingLevel;
@@ -2460,6 +2475,8 @@ Singleton {
         if (root.sessionTitle.length > 0)
             root.sessionTitle = Translation.tr("%1 (fork)").arg(root.sessionTitle);
         root.sessionTitleAsked = root.sessionTitle.length > 0;
+        root.titleRevision += 1;
+        root.isProvisionalTitle = false;
         root.commitSession();
         return true;
     }
@@ -2471,6 +2488,8 @@ Singleton {
             return;
         root.sessionTitle = trimmed;
         root.sessionTitleAsked = true;
+        root.titleRevision += 1;
+        root.isProvisionalTitle = false;
         if (root.messageIDs.length === 0) {
             root.addMessage(Translation.tr("Nothing to name yet — this chat is empty."), root.interfaceRole);
             return;
@@ -2536,10 +2555,14 @@ Singleton {
             return;
         root.sessionTitleAsked = true;
         root.sessionTitle = root.shortTitle(opening);
-        root.requestTitle(opening);
+        root.titleRevision += 1;
+        root.isProvisionalTitle = true;
+        root.titleRequestSessionId = root.sessions.currentId;
+        root.titleRequestRevision = root.titleRevision;
+        root.requestTitle(opening, root.titleRequestSessionId, root.titleRequestRevision);
     }
 
-    function requestTitle(opening: string) {
+    function requestTitle(opening: string, sessionId: string, expectedRevision: int) {
         const model = root.currentModelEntry;
         if (!model || titleRequester.running)
             return;
@@ -2592,7 +2615,11 @@ Singleton {
             const suggested = root.shortTitle(root.titleMessage.content);
             if (suggested.length === 0 || suggested.length > 60)
                 return;
+            if (root.sessions.currentId !== root.titleRequestSessionId || root.titleRevision !== root.titleRequestRevision || !root.isProvisionalTitle)
+                return;
             root.sessionTitle = suggested;
+            root.isProvisionalTitle = false;
+            root.titleRevision += 1;
             root.commitSession();
         }
     }

@@ -728,7 +728,12 @@ PanelWindow {
         ScreenshotAction.playShutterSound(screenshotAction);
         if (askingAi) {
             Ai.attachSnip(aiPath);
-            GlobalStates.policiesPanelOpen = true;
+            Ai.surfaceRouter.open({
+                "surface": "sidebar",
+                "monitorName": root.screen?.name ?? "",
+                "focusIntent": "composer",
+                "attachmentPath": aiPath
+            });
         }
         // Trigger screenshot overlay
         if (Config.options.regionSelector.enableOverlay ?? true) {
