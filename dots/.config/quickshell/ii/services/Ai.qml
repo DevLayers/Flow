@@ -666,6 +666,19 @@ Singleton {
         return "";
     }
 
+    function attachmentErrorText(raw: string): string {
+        try {
+            const result = JSON.parse(raw);
+            if (Array.isArray(result.failed) && result.failed.length > 0)
+                return Translation.tr("Could not attach: %1").arg(result.failed.join(", "));
+            if (result.error)
+                return Translation.tr("Could not attach the file: %1").arg(result.error);
+        } catch (e) {
+            // Keep a useful message even if a helper failure was not JSON.
+        }
+        return Translation.tr("Could not attach one or more files. Nothing was sent.");
+    }
+
     /**
      * Sends the failed turn again. Nothing is forked: an answer that never
      * arrived is not a branch worth keeping.
@@ -764,6 +777,18 @@ Singleton {
             root.retryNotice = "";
             if (!message)
                 return;
+
+            if (reason === "attachmentError") {
+                root.attachmentNotice = root.attachmentErrorText(requester.attachmentError);
+                const messageId = root.messageIDs.find(id => root.messageByID[id] === message);
+                if (messageId !== undefined) {
+                    root.messageIDs = root.messageIDs.filter(id => id !== messageId);
+                    delete root.messageByID[messageId];
+                }
+                message.destroy();
+                root.sessions.scheduleSave();
+                return;
+            }
 
             if (reason === "aborted") {
                 root.followUpQueued = false;

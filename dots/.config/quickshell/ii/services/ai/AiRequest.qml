@@ -55,6 +55,9 @@ Scope {
     property int httpStatus: 0
     property int exitCode: 0
     property bool aborted: false
+    readonly property int attachmentFailureExitCode: 65
+    readonly property string attachmentErrorMarker: "@@II_ATTACHMENT_ERROR:"
+    property string attachmentError: ""
 
     // Where the message stood when the current attempt started, so a retry
     // can drop whatever the failed attempt wrote before trying again.
@@ -63,7 +66,7 @@ Scope {
 
     signal line(string data)
     signal retrying(int attempt, int delaySeconds, int status)
-    /** reason: "done" | "error" | "aborted" */
+    /** reason: "done" | "error" | "aborted" | "attachmentError" */
     signal finished(string reason, int status, int code)
 
     /**
@@ -79,6 +82,7 @@ Scope {
         root.attempt = 0;
         root.httpStatus = 0;
         root.exitCode = 0;
+        root.attachmentError = "";
         root.contentMark = root.message?.content.length ?? 0;
         root.rawContentMark = root.message?.rawContent.length ?? 0;
         root.strategy.reset();
@@ -132,6 +136,7 @@ Scope {
         };
         const headerString = Object.entries(headers).filter(([k, v]) => v && v.length > 0).map(([k, v]) => `-H '${k}: ${v}'`).join(" ");
         const authHeader = root.strategy.buildAuthorizationHeader(root.apiKeyEnvVarName);
+        const quotedEndpoint = `'${CF.StringUtils.shellSingleQuoteEscape(root.endpoint)}'`;
 
         const quotedBody = `'${CF.StringUtils.shellSingleQuoteEscape(root.bodyPath)}'`;
         let content = "#!/usr/bin/env bash\n";
@@ -142,16 +147,17 @@ Scope {
         const injections = root.strategy.attachmentInjections ?? [];
         if (injections.length > 0 && root.attachScriptPath.length > 0) {
             const spec = CF.StringUtils.shellSingleQuoteEscape(JSON.stringify(injections));
-            content += `python3 '${CF.StringUtils.shellSingleQuoteEscape(CF.FileUtils.trimFileProtocol(root.attachScriptPath))}' inject ${quotedBody} '${spec}' > /dev/null\n`;
+            const attachScript = `'${CF.StringUtils.shellSingleQuoteEscape(CF.FileUtils.trimFileProtocol(root.attachScriptPath))}'`;
+            content += `attachResult=$(python3 ${attachScript} inject ${quotedBody} '${spec}'); attachExit=$?; if [ $attachExit -ne 0 ]; then printf '%s%s\\n' '${root.attachmentErrorMarker}' "$attachResult"; exit ${root.attachmentFailureExitCode}; fi\n`;
         }
 
-        content += "curl --no-buffer -sS" + ` --connect-timeout ${root.connectTimeout}` + (root.requestTimeout > 0 ? ` --max-time ${root.requestTimeout}` : "") + ` -w '\\n${root.statusMarker}%{http_code}@@\\n'` + ` "${root.endpoint}"` + ` ${headerString}` + (authHeader ? ` ${authHeader}` : "") + ` --data-binary @${quotedBody}` + "\n";
+        content += "curl --no-buffer -sS" + ` --connect-timeout ${root.connectTimeout}` + (root.requestTimeout > 0 ? ` --max-time ${root.requestTimeout}` : "") + ` -w '\\n${root.statusMarker}%{http_code}@@\\n'` + ` ${quotedEndpoint}` + ` ${headerString}` + (authHeader ? ` ${authHeader}` : "") + ` --data-binary @${quotedBody}` + "\n";
 
         return content;
     }
 
     function retryable(): bool {
-        if (root.aborted || root.attempt >= root.maxRetries)
+        if (root.aborted || root.attachmentError.length > 0 || root.attempt >= root.maxRetries)
             return false;
         if (root.httpStatus === 429 || root.httpStatus >= 500)
             return true;
@@ -201,6 +207,10 @@ Scope {
                     root.httpStatus = parseInt(data.slice(root.statusMarker.length)) || 0;
                     return;
                 }
+                if (data.startsWith(root.attachmentErrorMarker)) {
+                    root.attachmentError = data.slice(root.attachmentErrorMarker.length);
+                    return;
+                }
                 if (data.length === 0)
                     return;
                 if (root.requestTimeout > 0)
@@ -215,6 +225,10 @@ Scope {
 
             if (root.aborted) {
                 root.finished("aborted", root.httpStatus, exitCode);
+                return;
+            }
+            if (root.attachmentError.length > 0) {
+                root.finished("attachmentError", root.httpStatus, exitCode);
                 return;
             }
             if (root.retryable()) {

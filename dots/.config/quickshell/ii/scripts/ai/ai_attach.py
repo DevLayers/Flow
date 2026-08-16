@@ -148,8 +148,8 @@ def inject(body_path: str, spec_raw: str) -> dict:
         try:
             body = body.replace(marker, encoded(item.get("mode", "b64"), path))
         except OSError as error:
-            # The request still goes out: an attachment that vanished between
-            # being picked and being sent is worth a note, not a dead request.
+            # The caller aborts the request when any attachment has vanished
+            # between being picked and being sent.
             body = body.replace(marker, "")
             failures.append(f"{os.path.basename(path)}: {error.strerror}")
 
@@ -172,9 +172,10 @@ def main() -> int:
     if command == "inject":
         if len(sys.argv) < 4:
             print(json.dumps({"error": "inject needs a body path and a spec"}))
-            return 0
-        print(json.dumps(inject(sys.argv[2], sys.argv[3])))
-        return 0
+            return 1
+        result = inject(sys.argv[2], sys.argv[3])
+        print(json.dumps(result))
+        return 1 if result.get("error") or result.get("failed") else 0
     print(json.dumps({"error": f"Unknown command: {command}"}))
     return 0
 
