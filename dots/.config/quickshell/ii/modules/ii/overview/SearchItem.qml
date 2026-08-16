@@ -16,6 +16,7 @@ import Quickshell.Hyprland
 RippleButton {
     id: root
     property var entry
+    readonly property bool keepsOverviewOpen: entry?.keepOverviewOpen ?? false
     property string query
     property bool entryShown: entry?.shown ?? true
     property string itemType: entry?.type ?? Translation.tr("App")
@@ -137,7 +138,7 @@ RippleButton {
                 const isSystemControl = root.entry?.key?.startsWith("sys:");
                 const cmdKey = isSystemControl ? root.entry.key.slice(4) : "";
                 const isConfirming = isSystemControl && LauncherSearch.confirmKey !== cmdKey;
-                const isModeSwitch = (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
+                const isModeSwitch = root.keepsOverviewOpen || (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
 
                 root.actionPanelOpen = false;
                 if (!isConfirming && !isModeSwitch) {
@@ -1033,7 +1034,7 @@ RippleButton {
         const isSystemControl = root.entry?.key?.startsWith("sys:");
         const cmdKey = isSystemControl ? root.entry.key.slice(4) : "";
         const isConfirming = isSystemControl && LauncherSearch.confirmKey !== cmdKey;
-        const isModeSwitch = (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
+        const isModeSwitch = root.keepsOverviewOpen || (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
 
         if (!isConfirming && !isModeSwitch) {
             GlobalStates.overviewOpen = false;

@@ -127,6 +127,23 @@ Item {
             }
         }
 
+        if (Config.options.search.ai?.trigger === "suggest" && Config.options.ai?.enable !== false) {
+            suggestions.push({
+                title: Translation.tr("Assistant"),
+                items: [{
+                    name: Translation.tr("Ask AI"),
+                    comment: Translation.tr("Open a chat with the selected model"),
+                    type: Translation.tr("AI chat"),
+                    iconName: "auto_awesome",
+                    iconType: 2,
+                    keepOverviewOpen: true,
+                    execute: () => {
+                        LauncherSearch.query = Config.options.search.prefix.ai;
+                    }
+                }]
+            });
+        }
+
         return suggestions;
     }
 
@@ -202,13 +219,13 @@ Item {
     }
 
     function activateSelected() {
-        if (root.flatItems.length > 0 && activeFlatIndex >= 0 && activeFlatIndex < root.flatItems.length) {
-            let selectedItem = root.flatItems[activeFlatIndex];
-            if (selectedItem && selectedItem.data && selectedItem.data.execute) {
-                selectedItem.data.execute();
-            }
-        }
-        GlobalStates.overviewOpen = false;
+        const selectedItem = root.flatItems.length > 0 && activeFlatIndex >= 0 && activeFlatIndex < root.flatItems.length
+            ? root.flatItems[activeFlatIndex]
+            : null;
+        if (selectedItem?.data?.execute)
+            selectedItem.data.execute();
+        if (!selectedItem?.data?.keepOverviewOpen)
+            GlobalStates.overviewOpen = false;
     }
 
     Flickable {
@@ -326,7 +343,7 @@ Item {
                                 isFirst: index === 0
                                 isLast: index === sectionColumn.modelData.items.length - 1
 
-                                entry: itemButton.modelData.appEntry || { comment: itemButton.modelData.comment }
+                                entry: itemButton.modelData.appEntry || itemButton.modelData
                                 itemType: itemButton.modelData.type
                                 itemName: itemButton.modelData.name
                                 iconName: itemButton.modelData.iconName
@@ -336,7 +353,8 @@ Item {
                                 itemClickActionName: Translation.tr("Open")
                                 itemExecute: () => {
                                     itemButton.modelData.execute();
-                                    GlobalStates.overviewOpen = false;
+                                    if (!itemButton.modelData.keepOverviewOpen)
+                                        GlobalStates.overviewOpen = false;
                                 }
 
                                 Connections {

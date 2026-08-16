@@ -2970,6 +2970,15 @@ Singleton {
                     property string translator: "@"
                     property string mediaDownloader: "!"
                     property string materialSymbols: "*"
+                    property string ai: "&"
+                }
+                property JsonObject ai: JsonObject {
+                    // How the AI chat is triggered from the search:
+                    // "prefix" — only via the configured prefix
+                    // "suggest" — adds an "Ask AI" fallback row to the results
+                    // "auto" — switches to the AI chat when the query matches nothing
+                    property string trigger: "prefix"
+                    property int panelWidth: 720
                 }
                 property JsonObject imageSearch: JsonObject {
                     property string imageSearchEngineBaseUrl: "https://lens.google.com/uploadbyurl?url=" //lens.google.com/uploadbyurl?url="

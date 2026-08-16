@@ -64,7 +64,73 @@ Item {
     readonly property bool isTranslatorMode: root.searchingText.startsWith(Config.options.search.prefix.translator)
     readonly property bool isMediaDownloaderMode: Config.options.mediaDownloader.enabled && root.searchingText.startsWith(Config.options.search.prefix.mediaDownloader)
     readonly property bool isMaterialSymbolsMode: root.searchingText.startsWith(Config.options.search.prefix.materialSymbols)
-    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
+    readonly property bool isAiMode: Config.options.ai?.enable !== false && (root.searchingText.startsWith(Config.options.search.prefix.ai) || root.aiAutoEngaged || root.aiModeLocked)
+    // Auto AI recognition: when enabled, a settled query that matches no app,
+    // command or prefix hands the search over to the AI chat.
+    property bool aiAutoEngaged: false
+    // Once AI mode is entered (prefix, suggest or auto), it stays locked
+    // until the user explicitly goes back (back button or Esc). Clearing
+    // the text does NOT exit AI mode.
+    property bool aiModeLocked: false
+    readonly property bool aiAutoTriggerEnabled: Config.options.ai?.enable !== false && (Config.options.search.ai?.trigger ?? "prefix") === "auto"
+    readonly property var searchPrefixValues: {
+        const p = Config.options.search.prefix;
+        return [p.action, p.app, p.bluetooth, p.clipboard, p.fileSearch, p.emojis, p.math, p.shellCommand, p.webSearch, p.windowSearch, p.fileBrowser, p.translator, p.mediaDownloader, p.materialSymbols, p.ai].filter(v => v && v.length > 0);
+    }
+    readonly property bool queryHasAnyPrefix: root.searchPrefixValues.some(prefix => root.searchingText.startsWith(prefix))
+    // Results that are actual matches — the always-there fallback rows
+    // (shell command, math, web, ask-AI) never count.
+    readonly property int realResultCount: LauncherSearch.results.filter(r => r && r.key !== "cmd:shell" && r.key !== "web:search" && r.key !== "ai:ask" && r.key !== "mpris:now-playing" && !r.key.startsWith("math:")).length
+    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode || root.isAiMode
+
+    // Latch: however AI mode was entered (prefix typed, suggestion row or
+    // auto detection), it stays on until back/Esc — deleting the text must
+    // not yank the panel away mid-conversation.
+    onIsAiModeChanged: {
+        if (root.isAiMode && !root.aiModeLocked)
+            root.aiModeLocked = true;
+    }
+
+    // Debounce so a query that is still matching things asynchronously does
+    // not flip the whole widget into AI mode between keystrokes.
+    Timer {
+        id: aiAutoEngageTimer
+        interval: 350
+        onTriggered: {
+            if (root.aiAutoTriggerEnabled && !root.aiAutoEngaged && !root.queryHasAnyPrefix && root.searchingText.trim().length >= 3 && root.realResultCount === 0) {
+                root.aiAutoEngaged = true;
+                root.aiModeLocked = true;
+            }
+        }
+    }
+
+    onSearchingTextChanged: {
+        if (root.searchingText === "" || root.queryHasAnyPrefix) {
+            root.aiAutoEngaged = false;
+            aiAutoEngageTimer.stop();
+        } else if (root.aiAutoTriggerEnabled && !root.aiAutoEngaged && root.searchingText.trim().length >= 3 && root.realResultCount === 0) {
+            aiAutoEngageTimer.restart();
+        }
+    }
+
+    onRealResultCountChanged: {
+        if (root.aiAutoEngaged)
+            return;
+        if (root.aiAutoTriggerEnabled && !root.queryHasAnyPrefix && root.searchingText.trim().length >= 3 && root.realResultCount === 0)
+            aiAutoEngageTimer.restart();
+        else
+            aiAutoEngageTimer.stop();
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (!GlobalStates.overviewOpen) {
+                root.aiAutoEngaged = false;
+                root.aiModeLocked = false;
+            }
+        }
+    }
     readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !root.isAnySpecialMode && root.searchingText === ""
     readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
     property bool showResults: searchingText != "" || isAnySpecialMode || alwaysListAppsMode || (searchingText === "" && LauncherSearch.results.length > 0)
@@ -158,7 +224,10 @@ Item {
     readonly property bool openStateStable: root.inNotchMode ? false : (!root._heightAnimating && !root._widthAnimating)
 
     function focusFirstItem() {
-        if (root.isBluetoothMode) {} else if (root.isClipboardMode) {} else if (root.isTranslatorMode) {
+        if (root.showSuggestionsPanel) {
+            if (suggestionsPanelLoader.item)
+                suggestionsPanelLoader.item.focusFirst();
+        } else if (root.isBluetoothMode) {} else if (root.isClipboardMode) {} else if (root.isTranslatorMode) {
             if (translatorPanelLoader.item)
                 translatorPanelLoader.item.focusInput();
         } else if (root.isMediaDownloaderMode) {
@@ -167,6 +236,8 @@ Item {
         } else if (root.isMaterialSymbolsMode) {
             if (materialSymbolsPanelLoader.item)
                 materialSymbolsPanelLoader.item.focusInput();
+        } else if (root.isAiMode) {
+            root.focusSearchInput();
         } else {
             appResults.currentIndex = 0;
         }
@@ -184,6 +255,30 @@ Item {
         searchBar.searchInput.selectAll();
         LauncherSearch.query = "";
         searchBar.animateWidth = true;
+    }
+
+    // Leave AI chat and return to the plain search. Clears the query so the
+    // "&" prefix does not immediately re-enter AI mode.
+    function exitAiMode() {
+        root.aiAutoEngaged = false;
+        root.aiModeLocked = false;
+        LauncherSearch.query = "";
+        searchBar.searchInput.text = "";
+        root.focusSearchInput();
+    }
+
+    // Send the current search bar text as a chat message. The search bar is
+    // the composer in AI mode, so both Enter in the field and the send button
+    // in the panel funnel through here.
+    function sendAiMessage() {
+        const raw = root.searchingText;
+        const cleaned = StringUtils.cleanOnePrefix(raw, [Config.options.search.prefix.ai]).trim();
+        if (!cleaned)
+            return;
+        Ai.sendUserMessage(cleaned);
+        LauncherSearch.query = "";
+        searchBar.searchInput.text = "";
+        root.focusSearchInput();
     }
 
     function setSearchingText(text) {
@@ -272,6 +367,8 @@ Item {
     }
     Rectangle {
         id: searchWidgetContent
+        // Centered vertically like every other mode — the AI panel is just
+        // another panel below the search bar, same as clipboard/translator.
         anchors.centerIn: parent
         width: GlobalStates.searchConnectActive ? parent.width : implicitWidth
         height: GlobalStates.searchConnectActive ? parent.height : implicitHeight
@@ -296,6 +393,8 @@ Item {
                 baseW = Config.options.search.clipboard.panelWidth ?? 860;
             else if (root.isMaterialSymbolsMode)
                 baseW = 380;
+            else if (root.isAiMode)
+                baseW = Config.options.search.ai?.panelWidth ?? 720;
             else
                 baseW = Math.max(Config.options.search.baseWidth, gridLayout.implicitWidth);
 
@@ -319,6 +418,8 @@ Item {
                 return (mediaDownloaderPanelLoader.item ? mediaDownloaderPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isMaterialSymbolsMode)
                 return (materialSymbolsPanelLoader.item ? materialSymbolsPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
+            if (root.isAiMode)
+                return (aiPanelLoader.item ? aiPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             return gridLayout.implicitHeight;
         }
         radius: Appearance.rounding.windowRounding
@@ -369,6 +470,7 @@ Item {
                 Layout.bottomMargin: verticalPadding
                 Layout.row: root.overviewPosition == "bottom" ? 1 : 0
                 animateWidth: true
+                aiModeActive: root.isAiMode
                 Synchronizer on searchingText {
                     property alias source: root.searchingText
                 }
@@ -379,11 +481,22 @@ Item {
                 isTranslatorPanelFocused: root.isTranslatorMode && translatorPanelLoader.item && translatorPanelLoader.item.focusedControlIndex !== -1
                 isMediaDownloaderPanelFocused: root.isMediaDownloaderMode && mediaDownloaderPanelLoader.item && mediaDownloaderPanelLoader.item.focusedControlIndex !== -1
                 isMaterialSymbolsPanelFocused: root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item && materialSymbolsPanelLoader.item.focusedControlIndex !== -1
+                showSuggestionsPanel: root.showSuggestionsPanel
 
                 onCtrlKPressed: {
                     if (appResults.visible) {
                         root.requestToggleActions();
                     }
+                }
+
+                onEscapeToSearch: {
+                    if (root.isAiMode)
+                        root.exitAiMode();
+                }
+
+                onSendMessage: {
+                    if (root.isAiMode)
+                        root.sendAiMessage();
                 }
 
                 onNavigateUp: {
@@ -402,6 +515,9 @@ Item {
                     } else if (root.isMaterialSymbolsMode) {
                         if (materialSymbolsPanelLoader.item)
                             materialSymbolsPanelLoader.item.navigateUp();
+                    } else if (root.showSuggestionsPanel) {
+                        if (suggestionsPanelLoader.item)
+                            suggestionsPanelLoader.item.navigateUp();
                     } else {
                         if (appResults.count > 0 && appResults.currentIndex > 0)
                             appResults.currentIndex--;
@@ -424,6 +540,9 @@ Item {
                     } else if (root.isMaterialSymbolsMode) {
                         if (materialSymbolsPanelLoader.item)
                             materialSymbolsPanelLoader.item.navigateDown();
+                    } else if (root.showSuggestionsPanel) {
+                        if (suggestionsPanelLoader.item)
+                            suggestionsPanelLoader.item.navigateDown();
                     } else {
                         if (appResults.count > 0 && appResults.currentIndex < appResults.count - 1)
                             appResults.currentIndex++;
@@ -467,6 +586,8 @@ Item {
                         mediaDownloaderPanelLoader.item.activateSelected();
                     else if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item)
                         materialSymbolsPanelLoader.item.activateSelected();
+                    else if (root.showSuggestionsPanel && suggestionsPanelLoader.item)
+                        suggestionsPanelLoader.item.activateSelected();
                 }
 
                 onDeleteSelected: {
@@ -1170,6 +1291,50 @@ Item {
                     property: "searchQuery"
                     value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.materialSymbols])
                     when: materialSymbolsPanelLoader.status === Loader.Ready
+                }
+            }
+
+            Loader {
+                id: aiPanelLoader
+                active: root.isAiMode || opacity > 0.01
+                visible: opacity > 0.01
+                Layout.fillWidth: true
+                Layout.preferredHeight: (root.isAiMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
+                height: Layout.preferredHeight
+                source: "AiChatPanel.qml"
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
+
+                opacity: root.isAiMode ? 1.0 : 0.0
+                transform: Translate {
+                    y: (1.0 - aiPanelLoader.opacity) * 16
+                }
+                layer.enabled: opacity > 0.001 && opacity < 0.999
+                layer.effect: MultiEffect {
+                    blurEnabled: (1.0 - parent.opacity) > 0.001
+                    blurMax: 32.0
+                    blur: (1.0 - parent.opacity) * 0.5
+                }
+                Behavior on opacity {
+                    enabled: !root.inNotchMode
+                    NumberAnimation {
+                        duration: 220
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+
+                Connections {
+                    target: aiPanelLoader.item
+                    ignoreUnknownSignals: true
+                    function onRequestBackToSearch() {
+                        root.exitAiMode();
+                    }
+                    function onRequestFocusComposer() {
+                        root.focusSearchInput();
+                    }
+                    function onRequestSendMessage() {
+                        root.sendAiMessage();
+                    }
                 }
             }
 

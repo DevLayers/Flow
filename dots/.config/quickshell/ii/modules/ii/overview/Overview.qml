@@ -512,6 +512,10 @@ Scope {
         togglePrefixedSearch(Config.options.search.prefix.materialSymbols);
     }
 
+    function toggleAi() {
+        togglePrefixedSearch(Config.options.search.prefix.ai);
+    }
+
     IpcHandler {
         target: "search"
 
@@ -544,6 +548,10 @@ Scope {
         function materialSymbolsToggle() {
             GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleMaterialSymbols();
+        }
+        function aiToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
+            overviewScope.toggleAi();
         }
         function searchOnlyToggle() {
             GlobalStates.superReleaseMightTrigger = false;
@@ -656,6 +664,16 @@ Scope {
         onPressed: {
             GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleMaterialSymbols();
+        }
+    }
+
+    GlobalShortcut {
+        name: "overviewAiToggle"
+        description: "Toggle AI chat on overview widget"
+
+        onPressed: {
+            GlobalStates.superReleaseMightTrigger = false;
+            overviewScope.toggleAi();
         }
     }
 }

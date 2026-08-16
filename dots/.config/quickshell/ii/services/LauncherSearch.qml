@@ -764,6 +764,26 @@ Singleton {
                 Qt.openUrlExternally(url);
             }
         });
+        const aiAskResultObject = resultComp.createObject(null, {
+            key: "ai:ask",
+            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.ai),
+            verb: Translation.tr("Ask"),
+            type: Translation.tr("AI chat"),
+            iconName: 'auto_awesome',
+            iconType: LauncherSearchResult.IconType.Material,
+            keepOverviewOpen: true,
+            execute: () => {
+                const query = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.ai);
+                // Defer: mutating the query synchronously rebuilds the result
+                // list and destroys this delegate while its click event is
+                // still being processed, which can re-dispatch the click onto
+                // whatever row lands under the cursor and immediately undo
+                // the mode switch.
+                Qt.callLater(() => {
+                    root.query = Config.options.search.prefix.ai + query;
+                });
+            }
+        });
         const launcherActionObjects = root.allActions.map(action => {
             const actionString = `${Config.options.search.prefix.action}${action.action}`;
             if (actionString.startsWith(root.query) || root.query.startsWith(actionString)) {
@@ -1119,6 +1139,10 @@ Singleton {
                 result.push(commandResultObject);
             if (!isMath && mathResultObject)
                 result.push(mathResultObject);
+            if ((Config.options.search.ai?.trigger ?? "prefix") === "suggest"
+                && Config.options.ai?.enable !== false
+                && !root.query.startsWith(Config.options.search.prefix.ai))
+                result.push(aiAskResultObject);
             if (!startsWithWebSearchPrefix)
                 result.push(webSearchResultObject);
         }
@@ -1194,6 +1218,7 @@ Singleton {
             keywords: properties.keywords || [],
             isMath: !!properties.isMath,
             isBuiltin: !!properties.isBuiltin,
+            keepOverviewOpen: !!properties.keepOverviewOpen,
             category: properties.category || properties.type || ""
         };
     }

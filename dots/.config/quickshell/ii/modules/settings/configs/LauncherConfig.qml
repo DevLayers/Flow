@@ -269,6 +269,51 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "auto_awesome"
+        title: Translation.tr("AI Chat in Search")
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            StyledText {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: Translation.tr("How the search hands a query over to the AI chat. The prefix always works; the modes below add automatic recognition on top of it.")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+
+            StyledComboBox {
+                id: aiTriggerSelector
+                buttonIcon: "auto_awesome"
+                textRole: "displayName"
+                model: [
+                    {
+                        displayName: Translation.tr("Prefix only"),
+                        value: "prefix"
+                    },
+                    {
+                        displayName: Translation.tr("Suggest \"Ask AI\" row"),
+                        value: "suggest"
+                    },
+                    {
+                        displayName: Translation.tr("Auto-open when nothing matches"),
+                        value: "auto"
+                    }
+                ]
+                currentIndex: {
+                    const index = model.findIndex(item => item.value === (Config.options.search.ai?.trigger ?? "prefix"));
+                    return index !== -1 ? index : 0;
+                }
+                onActivated: index => {
+                    Config.options.search.ai.trigger = model[index].value;
+                }
+            }
+        }
+    }
+
+    ContentSection {
         icon: "tag"
         title: Translation.tr("Search Prefixes")
 
@@ -347,6 +392,11 @@ ContentPage {
                         "name": Translation.tr("Material Symbols"),
                         "icon": "font_download",
                         "prop": "materialSymbols"
+                    },
+                    {
+                        "name": Translation.tr("AI Chat"),
+                        "icon": "auto_awesome",
+                        "prop": "ai"
                     }
                 ]
 
@@ -356,8 +406,8 @@ ContentPage {
                     color: Appearance.colors.colSurfaceContainerLow
                     topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                     topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomLeftRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomRightRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomLeftRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomRightRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                     ScrollAnimate {}
 
