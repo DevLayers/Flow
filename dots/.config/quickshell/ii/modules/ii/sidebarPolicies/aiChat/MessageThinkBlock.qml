@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import qs.services
+import qs.services.ai
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -175,7 +176,7 @@ Item {
                     parentHovered: headerMouseArea.containsMouse
                     tooltipText: Translation.tr("Copy reasoning")
                     onClicked: {
-                        Quickshell.clipboardText = root.thoughtText;
+                        AiOutputController.copyText(root.thoughtText);
                         copyButton.activated = true;
                         copyResetTimer.restart();
                     }

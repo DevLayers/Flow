@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import qs
 import qs.services
+import qs.services.ai
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -390,7 +391,7 @@ Item {
                 }
 
                 StyledToolTip {
-                    text: Translation.tr("Attach files")
+                    text: AiActionRegistry.tooltip("attach", { surface: "search" })
                 }
             }
 
@@ -419,6 +420,14 @@ Item {
                             root.requestSendMessage();
                         }
                     }
+                }
+
+                StyledToolTip {
+                    text: AiActionRegistry.tooltip(Ai.isGenerating ? "stop" : "send", {
+                        surface: "search",
+                        busy: Ai.isGenerating,
+                        text: ""
+                    })
                 }
 
                 Behavior on color {

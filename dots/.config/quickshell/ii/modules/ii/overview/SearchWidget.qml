@@ -10,6 +10,7 @@ import Quickshell.Io
 
 import qs
 import qs.services
+import qs.services.ai
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -344,10 +345,48 @@ Item {
         const cleaned = StringUtils.cleanOnePrefix(raw, [Config.options.search.prefix.ai]).trim();
         if (!cleaned)
             return;
-        Ai.sendUserMessage(cleaned);
+        const parsed = AiActionRegistry.parseInput(cleaned, "/");
+        if (parsed.kind === "command" || parsed.kind === "unknown-command") {
+            root.executeAiCommand(parsed);
+        } else {
+            Ai.sendUserMessage(parsed.text);
+        }
         LauncherSearch.query = "";
         searchBar.searchInput.text = "";
         root.focusSearchInput();
+    }
+
+    // Search and sidebar share the parser; commands that need a sidebar host
+    // hand off through the same router instead of becoming accidental prompts.
+    function executeAiCommand(parsed: var) {
+        if (parsed.kind === "unknown-command") {
+            Ai.submissionNotice = Translation.tr("Unknown AI command: %1").arg(parsed.name);
+            return;
+        }
+        const args = parsed.args ?? [];
+        switch (parsed.id) {
+        case "model":
+            Ai.setModel(args.join(" ").trim());
+            break;
+        case "provider":
+            Ai.setProvider(args.join(" ").trim());
+            break;
+        case "thinking":
+            Ai.setThinkingLevel(args[0] ?? "medium");
+            break;
+        case "temperature":
+            Ai.setTemperature(Number(args[0]));
+            break;
+        case "new-chat":
+            Ai.newChat();
+            break;
+        case "history":
+            root.continueInSidebar();
+            break;
+        default:
+            Ai.submissionNotice = Translation.tr("/%1 is available in the sidebar.").arg(parsed.name);
+            break;
+        }
     }
 
     function setSearchingText(text) {

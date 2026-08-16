@@ -1,5 +1,6 @@
 import qs
 import qs.services
+import qs.services.ai
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -282,18 +283,17 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
     ]
 
     function handleInput(inputText) {
-        if (inputText.startsWith(root.commandPrefix)) {
+        const parsed = AiActionRegistry.parseInput(inputText, root.commandPrefix);
+        if (parsed.kind === "command" || parsed.kind === "unknown-command") {
             // Handle special commands
-            const command = inputText.split(" ")[0].substring(1);
-            const args = inputText.split(" ").slice(1);
-            const commandObj = root.allCommands.find(cmd => cmd.name === `${command}`);
+            const commandObj = root.allCommands.find(cmd => cmd.name === `${parsed.id ?? parsed.name}` || cmd.name === `${parsed.name}`);
             if (commandObj) {
-                commandObj.execute(args);
+                commandObj.execute(parsed.args);
             } else {
-                Ai.addMessage(Translation.tr("Unknown command: ") + command, Ai.interfaceRole);
+                Ai.addMessage(Translation.tr("Unknown command: ") + parsed.name, Ai.interfaceRole);
             }
         } else {
-            Ai.sendUserMessage(inputText);
+            Ai.sendUserMessage(parsed.text);
         }
 
         // Always scroll to bottom when user sends a message
@@ -1489,7 +1489,11 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     }
 
                     StyledToolTip {
-                        text: sendButton.stopping ? Translation.tr("Stop") : Translation.tr("Send")
+                        text: AiActionRegistry.tooltip(sendButton.stopping ? "stop" : "send", {
+                            surface: "sidebar",
+                            busy: sendButton.stopping,
+                            text: messageInputField.text
+                        })
                     }
                 }
             }

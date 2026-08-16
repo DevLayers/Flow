@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import qs.services
+import qs.services.ai
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -405,7 +406,7 @@ ColumnLayout {
                 color: Appearance.colors.colSubtext
             }
             onClicked: {
-                Quickshell.clipboardText = root.messageData?.content ?? "";
+                AiOutputController.copyText(root.messageData?.content ?? "");
             }
         }
 

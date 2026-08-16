@@ -1,4 +1,5 @@
 import qs.services
+import qs.services.ai
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -273,7 +274,7 @@ Rectangle {
                             // The reasoning is never part of what gets copied.
                             // Chats saved before it had a field of its own
                             // still carry it inline, so it is stripped too.
-                            Quickshell.clipboardText = (root.messageData?.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim()
+                            AiOutputController.copyText((root.messageData?.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim())
                             copyButton.activated = true
                             copyIconTimer.restart()
                         }

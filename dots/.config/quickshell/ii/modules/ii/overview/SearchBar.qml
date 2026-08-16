@@ -349,6 +349,11 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
+            if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && root.aiModeActive && (event.modifiers & Qt.ShiftModifier)) {
+                searchInput.insert(searchInput.cursorPosition, "\n");
+                event.accepted = true;
+                return;
+            }
             if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
                 root.ctrlKPressed();
                 event.accepted = true;

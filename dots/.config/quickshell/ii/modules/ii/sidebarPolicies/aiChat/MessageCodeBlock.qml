@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import qs.services
+import qs.services.ai
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -67,7 +68,7 @@ ColumnLayout {
                     buttonIcon: activated ? "inventory" : "content_copy"
 
                     onClicked: {
-                        Quickshell.clipboardText = segmentContent
+                        AiOutputController.copyText(segmentContent)
                         copyCodeButton.activated = true
                         copyIconTimer.restart()
                     }
