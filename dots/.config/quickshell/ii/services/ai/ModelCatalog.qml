@@ -277,12 +277,12 @@ QtObject {
 
     readonly property var providers: {
         const result = {};
-        const onlineDisallowed = Config.options?.policies?.ai === 2;
+        const policy = Number(Config.options?.policies?.ai ?? 1);
         const extras = catalog.extraModelsByProvider;
 
         for (let i = 0; i < catalog.providerDefs.length; i++) {
             const def = catalog.providerDefs[i];
-            if (onlineDisallowed && !def.local)
+            if (policy === 0)
                 continue;
             let entries = (def.models ?? []).slice();
             if (def.id === "ollama")
@@ -291,9 +291,59 @@ QtObject {
                 entries = catalog.customEntries;
             if (extras[def.id])
                 entries = entries.concat(extras[def.id]);
+            entries = entries.filter(entry => catalog.entryAllowed(def, entry));
             result[def.id] = catalog.buildProvider(def, entries);
         }
         return result;
+    }
+
+    /**
+     * Local policy is an endpoint boundary, not a provider-name hint.
+     * A custom model can be attached to the Ollama provider while pointing at
+     * a remote host, so every effective endpoint is checked before it enters
+     * the catalog.
+     */
+    function isLoopbackEndpoint(endpoint: string): bool {
+        const value = String(endpoint ?? "").trim();
+        if (value.startsWith("unix://"))
+            return true;
+
+        const match = /^(https?):\/\/([^\/?#]+)/i.exec(value);
+        if (!match)
+            return false;
+
+        let authority = match[2];
+        const at = authority.lastIndexOf("@");
+        if (at >= 0)
+            authority = authority.slice(at + 1);
+
+        let host = authority;
+        if (host.startsWith("[")) {
+            const closing = host.indexOf("]");
+            host = closing >= 0 ? host.slice(1, closing) : host;
+        } else {
+            host = host.split(":")[0];
+        }
+        host = host.toLowerCase();
+        if (host === "localhost" || host === "::1")
+            return true;
+        if (/^127(?:\.\d{1,3}){3}$/.test(host))
+            return true;
+        return false;
+    }
+
+    function entryAllowed(def: var, entry: var): bool {
+        const policy = Number(Config.options?.policies?.ai ?? 1);
+        if (policy !== 2)
+            return true;
+        const endpoint = entry?.endpoint ?? def.endpoint ?? "";
+        return catalog.isLoopbackEndpoint(endpoint);
+    }
+
+    function isModelLocal(model: var): bool {
+        if (!model)
+            return false;
+        return catalog.isLoopbackEndpoint(model.endpoint);
     }
 
     readonly property var providerIds: Object.keys(catalog.providers)

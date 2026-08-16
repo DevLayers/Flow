@@ -1140,7 +1140,7 @@ Singleton {
             if (!isMath && mathResultObject)
                 result.push(mathResultObject);
             if ((Config.options.search.ai?.trigger ?? "prefix") === "suggest"
-                && Config.options.ai?.enable !== false
+                && Ai.enabled
                 && !root.query.startsWith(Config.options.search.prefix.ai))
                 result.push(aiAskResultObject);
             if (!startsWithWebSearchPrefix)

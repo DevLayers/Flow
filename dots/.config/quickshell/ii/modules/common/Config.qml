@@ -296,7 +296,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 6
+    readonly property int currentConfigVersion: 7
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -461,6 +461,20 @@ Singleton {
             }
             if (raw.sidebar?.ai !== undefined && raw.sidebar.ai !== null)
                 delete raw.sidebar.ai.showProviderAndModelButtons;
+        }
+
+        // v6 -> v7: the sidebar AI switch was named as if it enabled the
+        // product, but it only controlled the proactive startup index. Keep
+        // that exact meaning under the AI namespace so all hosts can share a
+        // single policy while users retain their preference.
+        if (from < 7) {
+            if (raw.ai === undefined || raw.ai === null || typeof raw.ai !== "object" || Array.isArray(raw.ai))
+                raw.ai = {};
+            if (raw.ai.indexAtStartup === undefined && typeof raw.sidebar?.ai?.enable === "boolean")
+                raw.ai.indexAtStartup = raw.sidebar.ai.enable;
+            if (raw.sidebar?.ai !== undefined && raw.sidebar.ai !== null)
+                delete raw.sidebar.ai.enable;
+            console.log("[Config] Migrated sidebar.ai.enable to ai.indexAtStartup");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -1055,6 +1069,9 @@ Singleton {
             }
 
             property JsonObject ai: JsonObject {
+                // Controls only proactive model/prompt indexing at startup;
+                // policy availability is Config.options.policies.ai.
+                property bool indexAtStartup: true
                 property string systemPrompt: "## Style\n- Use casual tone, don't be formal!\n- Always be brief and to the point, unless asked otherwise\n- Don't repeat the user's question\n- Be approachable: Avoid using overly complicated, domain-specific terms and provide analogies when asked to explain a concept\n\n## Context (ignore when irrelevant)\n- You are a helpful and inspiring sidebar assistant on a {DISTRO} Linux system\n- Desktop environment: {DE}\n- Current date & time: {DATETIME}\n- Focused app: {WINDOWCLASS}\n\n## Presentation\n- Use Markdown features in your response: \n  - **Bold** text to **highlight keywords** in your response\n  - **Split long information into small sections** with h2 headers and a relevant emoji at the start of it (for example `## \ud83d\udc27 Linux`). Bullet points are preferred over long paragraphs, unless you're offering writing support or instructed otherwise by the user.\n- Asked to compare different options? You should firstly use a table to compare the main aspects, then elaborate or include relevant comments from online forums *after* the table. Make sure to provide a final recommendation for the user's use case!\n- Use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX '$$' delimiters. NEVER generate LaTeX code in a latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular documents (resumes, letters, essays, CVs, etc.).\n\nThanks!\n"
                 property JsonObject tools: JsonObject {
                     // What the assistant may reach for: "functions" (settings,
@@ -3063,12 +3080,6 @@ Singleton {
                 }
                 property JsonObject ai: JsonObject {
                     property bool textFadeIn: false
-                    // When false, the Ai service never spawns its index
-                    // probe at boot (saves one Python fork + ollama
-                    // listing). The panel itself still loads on demand
-                    // via policies.ai; this only gates the proactive
-                    // model listing.
-                    property bool enable: true
                 }
                 property JsonObject booru: JsonObject {
                     property bool allowNsfw: false

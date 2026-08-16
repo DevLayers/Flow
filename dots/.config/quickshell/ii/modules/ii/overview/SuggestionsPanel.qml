@@ -127,7 +127,7 @@ Item {
             }
         }
 
-        if (Config.options.search.ai?.trigger === "suggest" && Config.options.ai?.enable !== false) {
+        if (Config.options.search.ai?.trigger === "suggest" && Ai.enabled) {
             suggestions.push({
                 title: Translation.tr("Assistant"),
                 items: [{

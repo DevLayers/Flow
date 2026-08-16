@@ -18,7 +18,7 @@ Item {
     property var visitedTabs: ({})
 
     // Toggles from Config
-    property bool aiChatEnabled: Config.options.policies.ai !== 0
+    property bool aiChatEnabled: Ai.enabled
     property bool translatorEnabled: Config.options.policies.translator !== 0
     property bool mediaEnabled: Config.options.policies.player !== 0
     property bool wallpapersEnabled: Config.options.policies.wallpapers !== 0

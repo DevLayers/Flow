@@ -51,9 +51,9 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "smart_toy"
             text: Translation.tr("List available models at startup")
-            checked: Config.options.sidebar.ai.enable
+            checked: Config.options.ai.indexAtStartup
             onCheckedChanged: {
-                Config.options.sidebar.ai.enable = checked;
+                Config.options.ai.indexAtStartup = checked;
             }
         }
 

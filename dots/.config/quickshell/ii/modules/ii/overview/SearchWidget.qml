@@ -64,7 +64,7 @@ Item {
     readonly property bool isTranslatorMode: root.searchingText.startsWith(Config.options.search.prefix.translator)
     readonly property bool isMediaDownloaderMode: Config.options.mediaDownloader.enabled && root.searchingText.startsWith(Config.options.search.prefix.mediaDownloader)
     readonly property bool isMaterialSymbolsMode: root.searchingText.startsWith(Config.options.search.prefix.materialSymbols)
-    readonly property bool isAiMode: Config.options.ai?.enable !== false && (root.searchingText.startsWith(Config.options.search.prefix.ai) || root.aiAutoEngaged || root.aiModeLocked)
+    readonly property bool isAiMode: Ai.enabled && (root.searchingText.startsWith(Config.options.search.prefix.ai) || root.aiAutoEngaged || root.aiModeLocked)
     // Auto AI recognition: when enabled, a settled query that matches no app,
     // command or prefix hands the search over to the AI chat.
     property bool aiAutoEngaged: false
@@ -72,10 +72,11 @@ Item {
     // until the user explicitly goes back (back button or Esc). Clearing
     // the text does NOT exit AI mode.
     property bool aiModeLocked: false
-    readonly property bool aiAutoTriggerEnabled: Config.options.ai?.enable !== false && (Config.options.search.ai?.trigger ?? "prefix") === "auto"
+    readonly property bool aiAutoTriggerEnabled: Ai.enabled && (Config.options.search.ai?.trigger ?? "prefix") === "auto"
     readonly property var searchPrefixValues: {
         const p = Config.options.search.prefix;
-        return [p.action, p.app, p.bluetooth, p.clipboard, p.fileSearch, p.emojis, p.math, p.shellCommand, p.webSearch, p.windowSearch, p.fileBrowser, p.translator, p.mediaDownloader, p.materialSymbols, p.ai].filter(v => v && v.length > 0);
+        return [p.action, p.app, p.bluetooth, p.clipboard, p.fileSearch, p.emojis, p.math, p.shellCommand, p.webSearch, p.windowSearch, p.fileBrowser, p.translator, p.mediaDownloader, p.materialSymbols, p.ai]
+            .filter(v => v && v.length > 0 && (Ai.enabled || v !== p.ai));
     }
     readonly property bool queryHasAnyPrefix: root.searchPrefixValues.some(prefix => root.searchingText.startsWith(prefix))
     // Results that are actual matches — the always-there fallback rows

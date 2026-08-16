@@ -513,6 +513,8 @@ Scope {
     }
 
     function toggleAi() {
+        if (!Ai.enabled)
+            return;
         togglePrefixedSearch(Config.options.search.prefix.ai);
     }
 

@@ -29,6 +29,73 @@ Singleton {
 
     signal responseFinished
     readonly property bool isGenerating: requester.running
+    /** Central AI availability contract shared by every host. */
+    readonly property int aiPolicy: Number(Config.options?.policies?.ai ?? 1)
+    readonly property bool enabled: root.aiPolicy !== 0
+    readonly property bool onlineAllowed: root.aiPolicy === 1
+    readonly property bool localOnly: root.aiPolicy === 2
+    readonly property bool hasSelectableModel: root.catalog.modelIds.length > 0
+
+    function canSubmit(modelId = ""): var {
+        if (!root.enabled)
+            return {
+                allowed: false,
+                reason: "disabled",
+                recoveryActionIds: ["open-ai-policy"]
+            };
+
+        const id = String(modelId ?? "").trim() || root.currentModelId;
+        const model = root.catalog.models[id] ?? null;
+        if (!model)
+            return {
+                allowed: false,
+                reason: "model-unavailable",
+                recoveryActionIds: ["open-models"]
+            };
+
+        if (root.localOnly && !root.catalog.isModelLocal(model))
+            return {
+                allowed: false,
+                reason: "remote-model-blocked",
+                recoveryActionIds: ["open-models"]
+            };
+
+        if (model.requires_key && !KeyringStorage.loaded)
+            return {
+                allowed: false,
+                reason: "keyring-loading",
+                recoveryActionIds: ["retry-submit"]
+            };
+
+        if (model.requires_key && !(root.apiKeys?.[model.key_id]?.length > 0))
+            return {
+                allowed: false,
+                reason: "missing-key",
+                recoveryActionIds: ["open-keys"]
+            };
+
+        return {
+            allowed: true,
+            reason: "",
+            recoveryActionIds: []
+        };
+    }
+
+    function enforcePolicy() {
+        const blocksTransport = transport => transport.running && (!root.enabled || (root.localOnly && transport.model && !root.catalog.isModelLocal(transport.model)));
+        if (blocksTransport(requester))
+            root.stopGeneration();
+        if (blocksTransport(keyTester))
+            keyTester.abort();
+        if (blocksTransport(titleRequester))
+            titleRequester.abort();
+        if (!root.onlineAllowed && commandExecutionProc.running)
+            commandExecutionProc.running = false;
+        if (!root.onlineAllowed && root.toolOverride === "search")
+            root.toolOverride = "";
+    }
+
+    onAiPolicyChanged: root.enforcePolicy()
     // Set while a failed request waits to be sent again, so the UI can say so
     // instead of looking stuck.
     property string retryNotice: ""
@@ -148,12 +215,13 @@ Singleton {
     // binding to the config, and the settings page would stop reaching the
     // chat for the rest of the session.
     property string toolOverride: ""
-    readonly property string currentTool: root.toolOverride.length > 0 ? root.toolOverride : (Config.options?.ai?.tools?.mode ?? "functions")
+    readonly property string configuredTool: root.toolOverride.length > 0 ? root.toolOverride : (Config.options?.ai?.tools?.mode ?? "functions")
+    readonly property string currentTool: !root.onlineAllowed && root.configuredTool === "search" ? "none" : root.configuredTool
     readonly property AiTools toolbox: AiTools {
         apiFormat: root.currentModelEntry?.api_format ?? "openai"
         searchAvailable: root.currentModelEntry?.builtinSearch ?? false
     }
-    readonly property var availableTools: root.toolbox.availableModes
+    readonly property var availableTools: root.toolbox.availableModes.filter(mode => root.onlineAllowed || mode !== "search")
     readonly property var toolDescriptions: root.toolbox.modeDescriptions
 
     // Providers and models are described once, in the catalog. Nothing here
@@ -271,14 +339,15 @@ Singleton {
     // all in ONE Process spawn. Replaces four parallel
     // `Process { running: true }` invocations that fired on every boot
     // even if the user had never opened the AI panel.
-    // Gated by Config.options.ai.enable: when false, no fork happens
-    // until the user opens the AI panel (which sets the flag). This is
+    // Gated by Config.options.ai.indexAtStartup: when false, no fork happens
+    // until the user opens the AI panel. Policy No also prevents indexing.
+    // This is
     // particularly useful for users without ollama installed (the
     // previous incarnation spawned a script that blocked ~50ms probing
     // the daemon on every boot).
     Process {
         id: aiIndexProc
-        running: Config?.options?.ai?.enable ?? true
+        running: root.enabled && (Config?.options?.ai?.indexAtStartup ?? true)
         command: [
             "python3",
             Directories.scriptPath + "/ai/ai_index.py".replace(/file:\/\//, ""),
@@ -537,6 +606,13 @@ Singleton {
             root.keyTestId = keyId;
             root.keyTestState = "failed";
             root.keyTestMessage = Translation.tr("No model uses this key.");
+            return;
+        }
+        const permission = root.canSubmit(model.id);
+        if (!permission.allowed) {
+            root.keyTestId = keyId;
+            root.keyTestState = "failed";
+            root.keyTestMessage = Translation.tr("This model is unavailable under the current AI policy.");
             return;
         }
         const key = root.apiKeys?.[keyId] ?? "";
@@ -840,11 +916,24 @@ Singleton {
      * Builds and sends a request for the conversation as it currently stands.
      */
     function makeRequest() {
-        const model = root.currentModelEntry;
-        if (!model) {
-            root.addMessage(Translation.tr("No model selected. Pick one with %1model MODEL").arg("/"), root.interfaceRole);
+        const candidate = root.currentModelEntry;
+        if (candidate?.requires_key && !KeyringStorage.loaded)
+            KeyringStorage.fetchKeyringData();
+        const permission = root.canSubmit(root.currentModelId);
+        if (!permission.allowed) {
+            const model = root.currentModelEntry;
+            if (permission.reason === "missing-key" && model)
+                root.addApiKeyAdvice(model);
+            else if (permission.reason === "keyring-loading")
+                root.addMessage(Translation.tr("The system keyring is still loading. Try sending again in a moment."), root.interfaceRole);
+            else if (permission.reason === "disabled")
+                root.addMessage(Translation.tr("AI is disabled by the current policy."), root.interfaceRole);
+            else
+                root.addMessage(Translation.tr("No usable AI model is available. Open Models or AI settings to configure one."), root.interfaceRole);
             return;
         }
+
+        const model = root.currentModelEntry;
         if (requester.running) {
             root.addMessage(Translation.tr("Still answering. Stop the current response before sending another."), root.interfaceRole);
             return;
@@ -861,7 +950,9 @@ Singleton {
         // Tool support is a property of the model, not of its address. A
         // local model that can call functions keeps them; a remote one
         // that cannot does not get them handed over anyway.
-        const tools = model.tools ? root.toolbox.wireTools(model.api_format, root.currentTool) : null;
+        const tools = model.tools && (root.onlineAllowed || root.currentTool !== "search")
+                ? root.toolbox.wireTools(model.api_format, root.currentTool)
+                : null;
 
         const data = strategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, tools);
         // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
@@ -1212,6 +1303,13 @@ Singleton {
     }
 
     function runShellCommand(message: AiMessageData, command: string) {
+        if (!root.onlineAllowed) {
+            root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Shell commands are disabled by the local-only AI policy."));
+            addFunctionOutputMessage(message.functionName, Translation.tr("Shell commands are disabled while AI is restricted to local providers."), message.functionCallId);
+            root.requestFollowUp();
+            return;
+        }
+
         const responseMessage = createFunctionOutputMessage(message.functionName, "", false, message.functionCallId);
         const id = idForMessage(responseMessage);
         root.messageIDs = [...root.messageIDs, id];
@@ -1371,6 +1469,13 @@ Singleton {
         if (root.toolbox.permission(name) === "deny") {
             root.toolbox.finishCall(serial, "refused", Translation.tr("Turned off"));
             addFunctionOutputMessage(name, Translation.tr("%1 is turned off. The user has to allow it in the AI settings before it can be used.").arg(name));
+            root.requestFollowUp();
+            return;
+        }
+
+        if (!root.onlineAllowed && (name === "switch_to_search_mode" || name === "run_shell_command")) {
+            root.toolbox.finishCall(serial, "refused", Translation.tr("Blocked by local-only policy"));
+            addFunctionOutputMessage(name, Translation.tr("This tool requires network or shell access and is disabled by the current AI policy."), callId);
             root.requestFollowUp();
             return;
         }
@@ -1821,7 +1926,7 @@ Singleton {
         const model = root.currentModelEntry;
         if (!model || titleRequester.running)
             return;
-        if (model.requires_key && !(root.apiKeys?.[model.key_id]?.length > 0))
+        if (!root.canSubmit(model.id).allowed)
             return;
         const strategy = root.titleStrategyFor(model.api_format || "openai");
         const answer = root.firstTextOfRole("assistant");
