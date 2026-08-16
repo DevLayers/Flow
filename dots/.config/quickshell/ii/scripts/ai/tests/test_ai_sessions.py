@@ -96,6 +96,22 @@ class AiSessionsContractTests(unittest.TestCase):
             self.assertFalse(staging.exists())
             self.assertTrue((Path(directory) / "keep.txt").exists())
 
+    def test_trash_restore_and_purge_are_separate_operations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = {"id": "chat-trash", "title": "Trash me", "messages": []}
+            call("save", directory, "chat-trash", payload=session)
+
+            removed = call("delete", directory, "chat-trash")
+            self.assertNotIn("chat-trash", [entry["id"] for entry in removed["sessions"]])
+            self.assertTrue((Path(directory) / ".trash" / "chat-trash.json").exists())
+
+            restored = call("restore", directory, "chat-trash")
+            self.assertIn("chat-trash", [entry["id"] for entry in restored["sessions"]])
+            call("delete", directory, "chat-trash")
+            purged = call("purge", directory, "chat-trash")
+            self.assertEqual(purged["purged"], "chat-trash")
+            self.assertFalse((Path(directory) / ".trash" / "chat-trash.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

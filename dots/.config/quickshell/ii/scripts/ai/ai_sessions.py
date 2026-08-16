@@ -22,6 +22,7 @@ Subcommands, each printing one JSON object on stdout:
     open      DIR ID             return the whole session
     delete    DIR ID             move it to the trash, return the index
     restore   DIR ID             take it back out of the trash, return the index
+    purge     DIR ID             permanently remove one trashed chat
     duplicate DIR ID NEW_ID      copy it under a new id, return the index
     patch     DIR ID [--title T] [--pinned 0|1]
     export    DIR ID OUT_PATH    write Markdown, return the path
@@ -432,6 +433,19 @@ def cmd_restore(argv: list) -> int:
     return emit({"sessions": save_index(directory, entries), "session": session})
 
 
+def cmd_purge(argv: list) -> int:
+    """Permanently remove a chat, but only after it is already in the trash."""
+    directory, session_id = argv[0], argv[1]
+    target = trash_path(directory, session_id)
+    if not os.path.exists(target):
+        return emit({"error": "That chat is not in the trash"})
+    try:
+        os.unlink(target)
+    except OSError:
+        return emit({"error": "Could not permanently remove that chat"})
+    return emit({"sessions": save_index(directory, load_index(directory)), "purged": session_id})
+
+
 def cmd_duplicate(argv: list) -> int:
     directory, session_id, new_id = argv[0], argv[1], argv[2]
     session = normalize(read_json(session_path(directory, session_id)), session_id)
@@ -513,6 +527,7 @@ COMMANDS = {
     "open": (2, cmd_open),
     "delete": (2, cmd_delete),
     "restore": (2, cmd_restore),
+    "purge": (2, cmd_purge),
     "duplicate": (3, cmd_duplicate),
     "patch": (2, cmd_patch),
     "export": (3, cmd_export),

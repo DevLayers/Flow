@@ -38,17 +38,6 @@ AiSearchSurface {
         composer.focusInput();
     }
 
-    /** Which floating popover is up: "", "model", "tools", "keys", "sessions". */
-    property string activePopover: ""
-
-    function openPopover(name: string) {
-        root.activePopover = (root.activePopover === name) ? "" : name;
-    }
-
-    function closePopovers() {
-        root.activePopover = "";
-    }
-
     readonly property var visibleMessageIds: Ai.messageIDs.filter(id => {
         const m = Ai.messageByID[id];
         return m && m.role !== Ai.interfaceRole && (m.visibleToUser ?? true);
@@ -57,7 +46,7 @@ AiSearchSurface {
     Connections {
         target: Ai
         function onKeyManagerRequested() {
-            root.activePopover = "keys";
+            root.navigateTo("keys");
         }
     }
 
@@ -165,11 +154,11 @@ AiSearchSurface {
             Repeater {
                 model: ScriptModel {
                     values: [
-                        { icon: "auto_awesome", popover: "model", active: root.activePopover === "model", tooltip: Translation.tr("Model (/model)") },
-                        { icon: "add_comment", popover: "", active: false, tooltip: Translation.tr("New chat (/new)") },
-                        { icon: "history", popover: "sessions", active: root.activePopover === "sessions", tooltip: Translation.tr("History (/sessions)") },
-                        { icon: "construction", popover: "tools", active: root.activePopover === "tools", tooltip: Translation.tr("Tools (/tool)") },
-                        { icon: Ai.currentModelHasApiKey ? "key" : "key_alert", popover: "keys", active: root.activePopover === "keys", tooltip: Translation.tr("Keys (/key)") }
+                        { icon: "auto_awesome", page: "models", active: root.navigator.currentPage === "models", tooltip: Translation.tr("Models") },
+                        { icon: "add_comment", page: "", active: false, tooltip: Translation.tr("New chat (/new)") },
+                        { icon: "history", page: "history", active: root.navigator.currentPage === "history", tooltip: Translation.tr("History (/sessions)") },
+                        { icon: "construction", page: "tools", active: root.navigator.currentPage === "tools", tooltip: Translation.tr("Tools (/tool)") },
+                        { icon: Ai.currentModelHasApiKey ? "key" : "key_alert", page: "keys", active: root.navigator.currentPage === "keys", tooltip: Translation.tr("Keys (/key)") }
                     ]
                 }
 
@@ -182,12 +171,11 @@ AiSearchSurface {
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     colRipple: Appearance.colors.colLayer2Active
                     onClicked: {
-                        if (modelData.popover === "") {
+                        if (modelData.page === "") {
                             Ai.newChat();
-                            root.closePopovers();
                             root.requestFocusComposer();
                         } else {
-                            root.openPopover(modelData.popover);
+                            root.navigateTo(modelData.page);
                         }
                     }
 
@@ -347,177 +335,5 @@ AiSearchSurface {
             onRequestNewChat: root.requestFocusComposer()
         }
 
-        // ── Popovers ──────────────────────────────────────────
-
-        Rectangle {
-            anchors.fill: parent
-            visible: root.activePopover !== ""
-            color: "transparent"
-            z: 10
-
-            MouseArea {
-                anchors.fill: parent
-                onClicked: root.closePopovers()
-            }
-        }
-
-        Rectangle {
-            id: popoverSurface
-            visible: root.activePopover !== ""
-            anchors.top: parent.top
-            anchors.right: parent.right
-            anchors.topMargin: 48
-            anchors.rightMargin: 8
-            width: Math.min(parent.width - 16, 380)
-            height: Math.min(parent.height - 60, popoverContent.implicitHeight + 20)
-            radius: Appearance.rounding.normal
-            color: Appearance.colors.colSurfaceContainerHigh
-            z: 11
-
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-
-            ColumnLayout {
-                id: popoverContent
-                anchors.fill: parent
-                anchors.margins: 10
-                spacing: 8
-
-                // Model picker
-                ScrollView {
-                    visible: root.activePopover === "model"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
-
-                    ColumnLayout {
-                        width: popoverSurface.width - 20
-                        spacing: 8
-
-                        MaterialTextField {
-                            id: modelSearch
-                            Layout.fillWidth: true
-                            placeholderText: Translation.tr("Search models...")
-                        }
-
-                        AiModelPickerPopover {
-                            Layout.fillWidth: true
-                            query: modelSearch.text
-                            maxListHeight: popoverSurface.height - 120
-                            onPicked: modelId => {
-                                Ai.setModel(modelId, false);
-                                root.closePopovers();
-                                root.requestFocusComposer();
-                            }
-                        }
-                    }
-                }
-
-                AiToolsPopover {
-                    visible: root.activePopover === "tools"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    onClosed: {
-                        if (root.activePopover === "tools")
-                            root.activePopover = "";
-                    }
-                }
-
-                AiApiKeyManager {
-                    visible: root.activePopover === "keys"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    onClosed: {
-                        if (root.activePopover === "keys")
-                            root.activePopover = "";
-                    }
-                }
-
-                // Session history
-                ScrollView {
-                    visible: root.activePopover === "sessions"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
-
-                    ListView {
-                        id: sessionList
-                        width: popoverSurface.width - 20
-                        implicitHeight: contentHeight
-                        clip: true
-                        spacing: 4
-                        boundsBehavior: Flickable.StopAtBounds
-
-                        model: ScriptModel {
-                            values: {
-                                const entries = Array.from(Ai.sessions?.index ?? []);
-                                entries.sort((a, b) => {
-                                    if ((b.pinned ?? false) !== (a.pinned ?? false))
-                                        return (b.pinned ?? false) ? 1 : -1;
-                                    return String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? ""));
-                                });
-                                return entries;
-                            }
-                        }
-
-                        delegate: RippleButton {
-                            id: sessionEntry
-                            required property var modelData
-                            width: sessionList.width
-                            implicitHeight: sessionColumn.implicitHeight + 12
-                            buttonRadius: Appearance.rounding.small
-                            colBackground: Ai.sessions?.currentId === modelData.id ? Appearance.colors.colSecondaryContainer : ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                            colBackgroundHover: Appearance.colors.colLayer2Hover
-                            colRipple: Appearance.colors.colLayer2Active
-                            onClicked: {
-                                Ai.openSession(modelData.id);
-                                root.closePopovers();
-                                root.requestFocusComposer();
-                            }
-
-                            contentItem: ColumnLayout {
-                                id: sessionColumn
-                                spacing: 2
-
-                                RowLayout {
-                                    spacing: 6
-
-                                    MaterialSymbol {
-                                        visible: sessionEntry.modelData.pinned ?? false
-                                        text: "push_pin"
-                                        iconSize: Appearance.font.pixelSize.smallie
-                                        color: Appearance.colors.colSubtext
-                                    }
-
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: sessionEntry.modelData.title ?? Translation.tr("Untitled")
-                                        elide: Text.ElideRight
-                                        font.pixelSize: Appearance.font.pixelSize.smaller
-                                        color: Appearance.colors.colOnLayer2
-                                    }
-
-                                    StyledText {
-                                        text: String(sessionEntry.modelData.messageCount ?? 0)
-                                        font.pixelSize: Appearance.font.pixelSize.smallie
-                                        color: Appearance.colors.colSubtext
-                                    }
-                                }
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    visible: (sessionEntry.modelData.preview ?? "").length > 0
-                                    text: sessionEntry.modelData.preview ?? ""
-                                    elide: Text.ElideRight
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    color: Appearance.colors.colSubtext
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }

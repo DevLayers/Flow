@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import qs
+import qs.services.ai
 import qs.modules.common
 import qs.modules.common.widgets
 
@@ -78,72 +79,9 @@ Item {
         visible: active && root.pageOpacity(root.fixturePageId) > 0
         opacity: root.pageOpacity(root.fixturePageId)
         x: root.navigator.pageOffset(root.fixturePageId) * width
-        sourceComponent: Component {
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 18
-                spacing: 10
-
-                MaterialShape {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    color: Appearance.colors.colLayer1
-                    shape: MaterialShape.Shape.SoftBoom
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 24
-                        spacing: 8
-
-                        RippleButton {
-                            implicitWidth: 40
-                            implicitHeight: 40
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                            colBackgroundHover: Appearance.colors.colLayer2Hover
-                            colRipple: Appearance.colors.colLayer2Active
-                            onClicked: root.navigator.back()
-
-                            contentItem: MaterialSymbol {
-                                text: "arrow_back"
-                                iconSize: Appearance.font.pixelSize.normal
-                                color: Appearance.colors.colOnLayer1
-                            }
-
-                            StyledToolTip { text: Translation.tr("Back (Esc)") }
-                        }
-
-                        MaterialSymbol {
-                            text: "auto_awesome"
-                            iconSize: Appearance.font.pixelSize.huge
-                            color: Appearance.m3colors.m3primary
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: root.fixturePageId.length > 0 ? root.fixturePageId : Translation.tr("AI Search")
-                            font.pixelSize: Appearance.font.pixelSize.huge
-                            font.weight: Font.DemiBold
-                            color: Appearance.colors.colOnLayer1
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("This page is ready for the next AI Search surface.")
-                            wrapMode: Text.Wrap
-                            color: Appearance.colors.colSubtext
-                        }
-
-                        Item { Layout.fillHeight: true }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("Esc to go back")
-                            color: Appearance.colors.colSubtext
-                        }
-                    }
-                }
-            }
+        sourceComponent: AiSearchPage {
+            pageId: root.fixturePageId
+            onRequestBack: root.navigator.back()
         }
 
         Behavior on opacity {

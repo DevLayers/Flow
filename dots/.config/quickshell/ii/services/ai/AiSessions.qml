@@ -40,6 +40,8 @@ Scope {
 
     /** The chat just deleted, kept until the undo offer goes away. */
     property var deletedEntry: null
+    /** Retention is a UI policy; destructive purge always requires an id. */
+    property int retentionDays: 30
 
     readonly property var currentEntry: root.entryFor(root.currentId)
 
@@ -252,6 +254,34 @@ Scope {
             root.currentId = "";
             root.currentDropped();
         }
+    }
+
+    /** Explicit name for page hosts; the old remove() API remains compatible. */
+    function trash(id: string) {
+        root.remove(id);
+    }
+
+    function restore(id: string) {
+        if (!id)
+            return;
+        root.enqueue({
+            kind: "index",
+            args: ["restore", root.dir, id]
+        });
+    }
+
+    /** Permanently deletes only the already-trashed file for this id. */
+    function purge(id: string) {
+        if (!id)
+            return;
+        root.enqueue({
+            kind: "index",
+            args: ["purge", root.dir, id]
+        });
+    }
+
+    function setRetentionDays(days: int) {
+        root.retentionDays = Math.max(1, Math.min(3650, Number(days) || 30));
     }
 
     function undoDelete() {
