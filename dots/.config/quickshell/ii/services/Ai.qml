@@ -49,7 +49,7 @@ Singleton {
     readonly property string basePrompt: {
         if (root.promptOverride.length > 0)
             return root.promptOverride;
-        const persona = root.personas.current;
+        const persona = root.personas.byId(root.sessionPersonaId);
         if (persona?.systemPrompt?.length > 0)
             return persona.systemPrompt;
         return Config.options?.ai?.systemPrompt ?? "";
@@ -81,7 +81,7 @@ Singleton {
         return (key?.length > 0);
     }
     property var postResponseHook
-    property real temperature: Persistent.states?.ai?.temperature ?? 0.5
+    property real temperature: 0.5
     property QtObject tokenCount: QtObject {
         property int input: -1
         property int output: -1
@@ -91,7 +91,25 @@ Singleton {
         property int total: -1
     }
     readonly property var thinkingLevels: ["off", "low", "medium", "high"]
-    property string thinkingLevel: Persistent.states?.ai?.thinkingLevel ?? "medium"
+    property string thinkingLevel: "medium"
+    property string sessionModelId: ""
+    property string sessionPersonaId: ""
+    readonly property string defaultModelId: {
+        const explicit = Persistent.states?.ai?.defaultModelId ?? "";
+        return explicit.length > 0 ? explicit : (Persistent.states?.ai?.modelId ?? "");
+    }
+    readonly property real defaultTemperature: {
+        const explicit = Persistent.states?.ai?.defaultTemperature ?? -1;
+        return explicit >= 0 ? explicit : (Persistent.states?.ai?.temperature ?? 0.5);
+    }
+    readonly property string defaultThinkingLevel: {
+        const explicit = Persistent.states?.ai?.defaultThinkingLevel ?? "";
+        return explicit.length > 0 ? explicit : (Persistent.states?.ai?.thinkingLevel ?? "medium");
+    }
+    readonly property string defaultPersonaId: {
+        const explicit = Persistent.states?.ai?.defaultPersonaId ?? "";
+        return explicit.length > 0 ? explicit : (Persistent.states?.ai?.personaId ?? "");
+    }
     // Whether the current model reasons at all, and whether it can be told
     // not to. The control bar reads both; nothing here tests provider names.
     readonly property bool currentModelThinks: root.currentModelEntry?.thinking ?? false
@@ -151,7 +169,7 @@ Singleton {
     // first provider, so a model that disappeared keeps the account it was
     // billed to.
     readonly property string currentModelId: {
-        const wanted = Persistent.states?.ai?.modelId ?? "";
+        const wanted = root.sessionModelId.length > 0 ? root.sessionModelId : root.defaultModelId;
         if (root.catalog.models[wanted])
             return wanted;
         const provider = root.providers[wanted.split(":")[0]] ?? root.providers[root.providerIds[0] ?? ""] ?? null;
@@ -241,6 +259,8 @@ Singleton {
     property string requestScriptFilePath: `/tmp/quickshell-${SystemInfo.username}/ai/request.sh`
 
     Component.onCompleted: {
+        root.migrateAiDefaults();
+        root.resetSessionSettings();
         setModel(currentModelId, false, false); // Do necessary setup for model
     }
 
@@ -366,10 +386,9 @@ Singleton {
                 root.addMessage(Translation.tr("Invalid model. Supported:\n\n- %1").arg(root.catalog.modelIds.join("\n- ")), root.interfaceRole);
             return false;
         }
-        if (setPersistentState) {
-            Persistent.states.ai.modelId = model.id;
+        root.sessionModelId = model.id;
+        if (setPersistentState)
             root.rememberModel(model.id);
-        }
         if (feedback)
             root.addMessage(Translation.tr("Model set to %1").arg(model.name), root.interfaceRole);
         if (model.requires_key && root.apiKeysLoaded && !(root.apiKeys[model.key_id]?.length > 0))
@@ -431,7 +450,6 @@ Singleton {
                 root.addMessage(Translation.tr("Temperature must be between 0 and %1").arg(limit), Ai.interfaceRole);
             return;
         }
-        Persistent.states.ai.temperature = value;
         root.temperature = value;
         if (feedback)
             root.addMessage(Translation.tr("Temperature set to %1").arg(value), Ai.interfaceRole);
@@ -443,7 +461,6 @@ Singleton {
             root.addMessage(Translation.tr("Thinking level must be one of:\n- %1").arg(root.thinkingLevels.join("\n- ")), root.interfaceRole);
             return false;
         }
-        Persistent.states.ai.thinkingLevel = value;
         root.thinkingLevel = value;
         return true;
     }
@@ -811,6 +828,7 @@ Singleton {
             KeyringStorage.fetchKeyringData();
 
         const strategy = root.currentApiStrategy;
+        strategy.activeThinkingLevel = root.thinkingLevel;
         const messageArray = root.messageIDs.map(id => root.messageByID[id]);
         const filteredMessageArray = messageArray.filter(message => message.role !== root.interfaceRole);
         // Tool support is a property of the model, not of its address. A
@@ -869,6 +887,10 @@ Singleton {
         const files = root.attachments;
         if (message.length === 0 && files.length === 0)
             return;
+        if (root.pendingAttachmentCount > 0) {
+            root.attachmentNotice = Translation.tr("Still checking attachments. Try sending again in a moment.");
+            return;
+        }
         // The files go with the question, not with the answer: that is where
         // they belong when the chat is reopened, and it is what lets the next
         // turn hand them over again.
@@ -965,19 +987,30 @@ Singleton {
      * which is what Escape in the composer and `/attach` with no argument
      * have always meant.
      */
+    property int attachmentGeneration: 0
+    property var probeQueue: []
+    property var pendingAttachmentPaths: []
+    property string activeProbePath: ""
+    property int activeProbeGeneration: -1
+    readonly property int pendingAttachmentCount: root.pendingAttachmentPaths.length
+
     function attachFile(filePath: string) {
         const path = CF.FileUtils.trimFileProtocol(String(filePath ?? "")).trim();
         if (path.length === 0) {
             root.clearAttachments();
             return;
         }
-        if (root.attachments.some(file => file.path === path))
+        if (root.attachments.some(file => file.path === path) || root.pendingAttachmentPaths.indexOf(path) >= 0)
             return;
-        if (root.attachments.length >= root.maxAttachments) {
+        if (root.attachments.length + root.pendingAttachmentPaths.length >= root.maxAttachments) {
             root.attachmentNotice = Translation.tr("%1 files is as many as one message takes.").arg(root.maxAttachments);
             return;
         }
-        root.probeQueue.push(path);
+        root.pendingAttachmentPaths = [...root.pendingAttachmentPaths, path];
+        root.probeQueue = [...root.probeQueue, {
+                path: path,
+                generation: root.attachmentGeneration
+            }];
         root.runProbe();
     }
 
@@ -988,20 +1021,32 @@ Singleton {
     }
 
     function clearAttachments() {
+        root.attachmentGeneration += 1;
+        root.probeQueue = [];
+        root.pendingAttachmentPaths = [];
+        root.activeProbePath = "";
+        root.activeProbeGeneration = -1;
+        if (probeProc.running)
+            probeProc.running = false;
         root.attachments = [];
         root.attachmentNotice = "";
     }
 
-    property var probeQueue: []
-
     function runProbe() {
         if (probeProc.running || root.probeQueue.length === 0)
             return;
-        probeProc.command = ["python3", Directories.aiAttachScriptPath, "probe", root.probeQueue.shift()];
+        const job = root.probeQueue[0];
+        root.probeQueue = root.probeQueue.slice(1);
+        root.activeProbePath = job.path;
+        root.activeProbeGeneration = job.generation;
+        probeProc.command = ["python3", Directories.aiAttachScriptPath, "probe", job.path];
         probeProc.running = true;
     }
 
-    function acceptProbed(raw: string) {
+    function acceptProbed(raw: string, path: string, generation: int) {
+        if (generation !== root.attachmentGeneration || path !== root.activeProbePath)
+            return;
+        root.pendingAttachmentPaths = root.pendingAttachmentPaths.filter(item => item !== path);
         let file;
         try {
             file = JSON.parse(raw.trim());
@@ -1019,6 +1064,10 @@ Singleton {
             return;
         }
         root.attachmentNotice = "";
+        if (root.attachments.length >= root.maxAttachments)
+            return;
+        if (root.attachments.some(item => item.path === file.path))
+            return;
         root.attachments = [...root.attachments, file];
     }
 
@@ -1026,9 +1075,21 @@ Singleton {
         id: probeProc
         stdout: StdioCollector {
             id: probeCollector
-            onStreamFinished: root.acceptProbed(probeCollector.text)
+            onStreamFinished: root.acceptProbed(probeCollector.text, probeProc.probePath, probeProc.probeGeneration)
         }
-        onExited: Qt.callLater(root.runProbe)
+        property string probePath: ""
+        property int probeGeneration: -1
+        onRunningChanged: {
+            if (probeProc.running) {
+                probeProc.probePath = root.activeProbePath;
+                probeProc.probeGeneration = root.activeProbeGeneration;
+            }
+        }
+        onExited: {
+            root.activeProbePath = "";
+            root.activeProbeGeneration = -1;
+            Qt.callLater(root.runProbe);
+        }
     }
 
     /**
@@ -1324,7 +1385,7 @@ Singleton {
     // sets all of them; a chat remembers which one it was held with.
 
     readonly property AiPersonas personas: AiPersonas {}
-    readonly property var currentPersona: root.personas.current
+    readonly property var currentPersona: root.personas.byId(root.sessionPersonaId)
     readonly property bool personaModified: root.personas.modified(root.currentPersona, root.currentModelId, root.thinkingLevel, root.temperature)
 
     /**
@@ -1338,7 +1399,7 @@ Singleton {
                 root.addMessage(Translation.tr("No persona called “%1”").arg(personaId), root.interfaceRole);
             return false;
         }
-        Persistent.states.ai.personaId = persona?.id ?? "";
+        root.sessionPersonaId = persona?.id ?? "";
         // A chat's own prompt was written for this chat, not for the persona
         // that happens to be picked now, so it goes when the persona changes.
         root.promptOverride = "";
@@ -1400,7 +1461,7 @@ Singleton {
     /** The key panel was asked for, from a command or from a card in the chat. */
     signal keyManagerRequested
 
-    readonly property int sessionSchema: 1
+    readonly property int sessionSchema: 2
     /** Name of the conversation on screen. Empty until it earns one. */
     property string sessionTitle: ""
     property real sessionCreatedAt: 0
@@ -1486,7 +1547,7 @@ Singleton {
                 "thinking": root.thinkingLevel,
                 "temperature": root.temperature,
                 "promptFile": root.currentPromptFile,
-                "personaId": root.personas.currentId,
+                "personaId": root.sessionPersonaId,
                 "promptOverride": root.promptOverride,
                 "messages": root.chatToJson()
             });
@@ -1518,6 +1579,7 @@ Singleton {
         root.sessionTitleAsked = false;
         root.promptOverride = "";
         root.currentPromptFile = "";
+        root.resetSessionSettings();
         root.restoreDraft();
         root.sessions.ensureLoaded();
     }
@@ -1552,18 +1614,35 @@ Singleton {
         root.sessionTitle = session.title ?? "";
         root.sessionCreatedAt = session.createdAt ?? Date.now();
         root.sessionTitleAsked = root.sessionTitle.length > 0;
-        if (session.modelId && root.catalog.models[session.modelId])
-            root.setModel(session.modelId, false);
-        if (session.thinking && root.thinkingLevels.indexOf(session.thinking) >= 0)
-            root.setThinkingLevel(session.thinking);
-        if (typeof session.temperature === "number")
-            root.setTemperature(session.temperature, false);
+        root.sessionModelId = session.modelId ?? root.defaultModelId;
+        root.temperature = typeof session.temperature === "number" ? session.temperature : root.defaultTemperature;
+        root.thinkingLevel = root.thinkingLevels.indexOf(session.thinking) >= 0 ? session.thinking : root.defaultThinkingLevel;
         root.currentPromptFile = session.promptFile ?? "";
         root.promptOverride = session.promptOverride ?? "";
-        if (session.personaId !== undefined && session.personaId !== root.personas.currentId)
-            Persistent.states.ai.personaId = session.personaId;
+        root.sessionPersonaId = session.personaId ?? root.defaultPersonaId;
         root.clearAttachments();
         root.restoreDraft();
+    }
+
+    function migrateAiDefaults() {
+        const state = Persistent.states?.ai;
+        if (!state)
+            return;
+        if (state.defaultModelId.length === 0)
+            state.defaultModelId = state.modelId;
+        if (state.defaultTemperature < 0)
+            state.defaultTemperature = state.temperature;
+        if (state.defaultThinkingLevel.length === 0)
+            state.defaultThinkingLevel = state.thinkingLevel;
+        if (state.defaultPersonaId.length === 0)
+            state.defaultPersonaId = state.personaId;
+    }
+
+    function resetSessionSettings() {
+        root.sessionModelId = root.defaultModelId;
+        root.sessionPersonaId = root.defaultPersonaId;
+        root.temperature = root.defaultTemperature;
+        root.thinkingLevel = root.defaultThinkingLevel;
     }
 
     /**

@@ -30,6 +30,7 @@ Scope {
     /** Index entries: {id, title, createdAt, updatedAt, pinned, modelId, messageCount, preview}. */
     property var index: []
     property string currentId: ""
+    property bool loading: false
     property bool loaded: false
     property string lastError: ""
 
@@ -67,9 +68,9 @@ Scope {
     }
 
     function ensureLoaded() {
-        if (root.loaded || root.dir.length === 0)
+        if (root.loaded || root.loading || root.dir.length === 0)
             return;
-        root.loaded = true; // One bootstrap per shell run, even if it fails.
+        root.loading = true;
         root.enqueue({
             kind: "bootstrap",
             args: ["bootstrap", root.dir, root.legacyDir]
@@ -239,7 +240,18 @@ Scope {
         }
         if (parsed.error) {
             root.lastError = parsed.error;
+            if (op.kind === "bootstrap")
+                root.loading = false;
             return;
+        }
+        if (op.kind === "bootstrap") {
+            if (!Array.isArray(parsed.sessions)) {
+                root.lastError = "Session bootstrap returned no index";
+                root.loading = false;
+                return;
+            }
+            root.loading = false;
+            root.loaded = true;
         }
         root.lastError = "";
         if (Array.isArray(parsed.sessions))
@@ -283,7 +295,11 @@ Scope {
             onStreamFinished: root.applyResult(opProc.op, opCollector.text)
         }
 
-        onExited: Qt.callLater(root.runNext)
+        onExited: {
+            if (opProc.op?.kind === "bootstrap" && !root.loaded)
+                root.loading = false;
+            Qt.callLater(root.runNext);
+        }
     }
 
     Process {

@@ -6,9 +6,10 @@ lists them so the sidebar never has to open every file to draw the list. The
 files are the source of truth; the index is a cache that can always be rebuilt
 from them.
 
-Envelope (schema 1):
+Envelope (schema 2):
     {"schema": 1, "id", "title", "createdAt", "updatedAt", "pinned",
-     "modelId", "thinking", "temperature", "promptFile", "messages": [...]}
+     "modelId", "thinking", "temperature", "promptFile", "personaId",
+     "promptOverride", "messages": [...]}
 
 Index entry: id, title, createdAt, updatedAt, pinned, modelId, messageCount,
 preview.
@@ -38,7 +39,7 @@ import time
 import uuid
 from typing import Any
 
-SCHEMA = 1
+SCHEMA = 2
 INDEX_NAME = "index.json"
 TRASH_NAME = ".trash"
 IMPORT_MARKER = ".imported"
@@ -116,7 +117,8 @@ def normalize(session: Any, fallback_id: str = "") -> dict | None:
     stamp = now_ms()
     created = session.get("createdAt")
     updated = session.get("updatedAt")
-    return {
+    normalized = dict(session)
+    normalized.update({
         "schema": SCHEMA,
         "id": str(session.get("id") or fallback_id or uuid.uuid4()),
         "title": str(session.get("title") or ""),
@@ -127,8 +129,11 @@ def normalize(session: Any, fallback_id: str = "") -> dict | None:
         "thinking": str(session.get("thinking") or ""),
         "temperature": session.get("temperature", None),
         "promptFile": str(session.get("promptFile") or ""),
+        "personaId": str(session.get("personaId") or ""),
+        "promptOverride": str(session.get("promptOverride") or ""),
         "messages": messages,
-    }
+    })
+    return normalized
 
 
 def entry_of(session: dict) -> dict:
