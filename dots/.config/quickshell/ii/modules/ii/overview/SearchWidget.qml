@@ -77,6 +77,9 @@ Item {
     // until the user explicitly goes back (back button or Esc). Clearing
     // the text does NOT exit AI mode.
     property bool aiModeLocked: false
+    // Prevents a query that entered AI mode from being copied repeatedly when
+    // the launcher query is cleared or the draft is restored asynchronously.
+    property bool aiDraftHydrated: false
     readonly property bool aiAutoTriggerEnabled: Ai.enabled && (Config.options.search.ai?.trigger ?? "prefix") === "auto"
     readonly property var searchPrefixValues: {
         const p = Config.options.search.prefix;
@@ -93,8 +96,18 @@ Item {
     // auto detection), it stays on until back/Esc — deleting the text must
     // not yank the panel away mid-conversation.
     onIsAiModeChanged: {
-        if (root.isAiMode && !root.aiModeLocked)
+        if (root.isAiMode) {
+            if (!root.aiDraftHydrated) {
+                root.aiDraftHydrated = true;
+                const initialDraft = StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.ai]).trim();
+                if (Ai.draft.trim().length === 0 && initialDraft.length > 0)
+                    Ai.draft = initialDraft;
+                LauncherSearch.query = "";
+            }
             root.aiModeLocked = true;
+        } else {
+            root.aiDraftHydrated = false;
+        }
         root.tryConsumeSurfaceIntent();
     }
 
@@ -251,6 +264,10 @@ Item {
     }
 
     function focusSearchInput() {
+        if (root.isAiMode && aiPanelLoader.item) {
+            aiPanelLoader.item.focusComposer();
+            return;
+        }
         searchBar.forceFocus();
     }
 
@@ -341,18 +358,17 @@ Item {
     // the composer in AI mode, so both Enter in the field and the send button
     // in the panel funnel through here.
     function sendAiMessage() {
-        const raw = root.searchingText;
+        const raw = Ai.draft;
         const cleaned = StringUtils.cleanOnePrefix(raw, [Config.options.search.prefix.ai]).trim();
         if (!cleaned)
             return;
         const parsed = AiActionRegistry.parseInput(cleaned, "/");
         if (parsed.kind === "command" || parsed.kind === "unknown-command") {
             root.executeAiCommand(parsed);
+            Ai.draft = "";
         } else {
             Ai.sendUserMessage(parsed.text);
         }
-        LauncherSearch.query = "";
-        searchBar.searchInput.text = "";
         root.focusSearchInput();
     }
 
@@ -577,6 +593,8 @@ Item {
                 id: searchBar
                 property real verticalPadding: 4
                 Layout.fillWidth: true
+                Layout.preferredHeight: root.isAiMode ? 0 : implicitHeight
+                Layout.minimumHeight: 0
                 Layout.leftMargin: 10
                 Layout.rightMargin: 10
                 Layout.topMargin: verticalPadding
@@ -595,6 +613,24 @@ Item {
                 isMediaDownloaderPanelFocused: root.isMediaDownloaderMode && mediaDownloaderPanelLoader.item && mediaDownloaderPanelLoader.item.focusedControlIndex !== -1
                 isMaterialSymbolsPanelFocused: root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item && materialSymbolsPanelLoader.item.focusedControlIndex !== -1
                 showSuggestionsPanel: root.showSuggestionsPanel
+                enabled: !root.isAiMode
+                opacity: root.isAiMode ? 0 : 1
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
+
+                Behavior on Layout.preferredHeight {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveSmall.duration
+                        easing.type: Appearance.animation.elementMoveSmall.type
+                        easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
+                    }
+                }
 
                 onCtrlKPressed: {
                     if (appResults.visible) {

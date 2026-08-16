@@ -32,7 +32,11 @@ AiSearchSurface {
     signal requestContinueInSidebar()
 
     implicitWidth: parent ? parent.width : 720
-    implicitHeight: 520
+    implicitHeight: chatColumn.implicitHeight
+
+    function focusComposer() {
+        composer.focusInput();
+    }
 
     /** Which floating popover is up: "", "model", "tools", "keys", "sessions". */
     property string activePopover: ""
@@ -77,6 +81,7 @@ AiSearchSurface {
     }
 
     ColumnLayout {
+        id: chatColumn
         anchors.fill: parent
         spacing: 0
 
@@ -211,8 +216,13 @@ AiSearchSurface {
         // ── Transcript / Empty state ──────────────────────────
 
         Item {
+            id: transcriptSurface
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.minimumHeight: 0
+            Layout.preferredHeight: root.visibleMessageIds.length > 0
+                ? Math.min(420, Math.max(120, messageList.contentHeight))
+                : 0
             clip: true
 
             // Empty state
@@ -322,117 +332,19 @@ AiSearchSurface {
 
         // ── Bottom composer bar ──────────────────────────────
 
-        RowLayout {
+        AiSearchComposer {
+            id: composer
             Layout.fillWidth: true
             Layout.leftMargin: 8
             Layout.rightMargin: 8
             Layout.topMargin: 6
             Layout.bottomMargin: 6
-            spacing: 6
-
-            // Model chip
-            RippleButton {
-                Layout.alignment: Qt.AlignVCenter
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colLayer2
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colRipple: Appearance.colors.colLayer2Active
-                onClicked: root.openPopover("model")
-
-                contentItem: RowLayout {
-                    spacing: 4
-
-                    MaterialSymbol {
-                        text: "auto_awesome"
-                        iconSize: Appearance.font.pixelSize.smallie
-                        color: Appearance.colors.colOnLayer2
-                    }
-
-                    StyledText {
-                        Layout.maximumWidth: 120
-                        text: Ai.currentModelEntry?.title ?? Ai.currentModelId
-                        elide: Text.ElideMiddle
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colOnLayer2
-                    }
-
-                    MaterialSymbol {
-                        text: "expand_more"
-                        iconSize: Appearance.font.pixelSize.smallie
-                        color: Appearance.colors.colSubtext
-                    }
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Model (/model)")
-                }
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            // Attach button
-            RippleButton {
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: 36
-                implicitHeight: 36
-                buttonRadius: Appearance.rounding.full
-                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colRipple: Appearance.colors.colLayer2Active
-                onClicked: attachPicker.running = true
-
-                contentItem: MaterialSymbol {
-                    text: "attach_file"
-                    iconSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnLayer2
-                }
-
-                StyledToolTip {
-                    text: AiActionRegistry.tooltip("attach", { surface: "search" })
-                }
-            }
-
-            // Send / Stop button
-            Rectangle {
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: 40
-                implicitHeight: 40
-                radius: Appearance.rounding.full
-                color: Ai.isGenerating ? Appearance.colors.colLayer2 : Appearance.colors.colPrimary
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: Ai.isGenerating ? "stop" : "arrow_upward"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Ai.isGenerating ? Appearance.colors.colOnLayer2 : Appearance.m3colors.m3onPrimary
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (Ai.isGenerating) {
-                            Ai.stopGeneration();
-                        } else {
-                            root.requestSendMessage();
-                        }
-                    }
-                }
-
-                StyledToolTip {
-                    text: AiActionRegistry.tooltip(Ai.isGenerating ? "stop" : "send", {
-                        surface: "search",
-                        busy: Ai.isGenerating,
-                        text: ""
-                    })
-                }
-
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                }
-            }
+            onRequestSend: root.requestSendMessage()
+            onRequestEscape: root.requestBackToSearch()
+            onRequestModels: root.navigateTo("models")
+            onRequestHistory: root.navigateTo("history")
+            onRequestTools: root.navigateTo("tools")
+            onRequestNewChat: root.requestFocusComposer()
         }
 
         // ── Popovers ──────────────────────────────────────────

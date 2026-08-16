@@ -95,6 +95,24 @@ Item {
                         anchors.margins: 24
                         spacing: 8
 
+                        RippleButton {
+                            implicitWidth: 40
+                            implicitHeight: 40
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                            colBackgroundHover: Appearance.colors.colLayer2Hover
+                            colRipple: Appearance.colors.colLayer2Active
+                            onClicked: root.navigator.back()
+
+                            contentItem: MaterialSymbol {
+                                text: "arrow_back"
+                                iconSize: Appearance.font.pixelSize.normal
+                                color: Appearance.colors.colOnLayer1
+                            }
+
+                            StyledToolTip { text: Translation.tr("Back (Esc)") }
+                        }
+
                         MaterialSymbol {
                             text: "auto_awesome"
                             iconSize: Appearance.font.pixelSize.huge
