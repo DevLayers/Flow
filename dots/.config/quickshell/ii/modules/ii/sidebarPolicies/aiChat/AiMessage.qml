@@ -1,5 +1,6 @@
 import qs.services
 import qs.services.ai
+import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -21,7 +22,7 @@ Rectangle {
     property bool renderMarkdown: true
     property bool editing: false
 
-    property list<var> messageBlocks: StringUtils.splitMarkdownBlocks(root.messageData?.content)
+    property list<var> messageBlocks: AiTranscriptRegistry.blocksFor(root.messageData)
 
     /** Asks the control bar for a model to redo this answer with. */
     signal regenerateRequested(string messageId)
@@ -413,7 +414,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.bottomMargin: active ? root.contentSpacing : 0
                 active: (root.messageData?.thought?.length ?? 0) > 0
-                sourceComponent: MessageThinkBlock {
+                sourceComponent: AiMessageThinkBlock {
                     editing: root.editing
                     renderMarkdown: root.renderMarkdown
                     enableMouseSelection: root.enableMouseSelection
@@ -454,7 +455,7 @@ Rectangle {
                     id: messageDelegate
                     role: "type"
 
-                    DelegateChoice { roleValue: "code"; MessageCodeBlock {
+                    DelegateChoice { roleValue: "code"; AiMessageCodeBlock {
                         editing: root.editing
                         renderMarkdown: root.renderMarkdown
                         enableMouseSelection: root.enableMouseSelection
@@ -462,7 +463,7 @@ Rectangle {
                         segmentLang: modelData.lang
                         messageData: root.messageData
                     } }
-                    DelegateChoice { roleValue: "think"; MessageThinkBlock {
+                    DelegateChoice { roleValue: "think"; AiMessageThinkBlock {
                         editing: root.editing
                         renderMarkdown: root.renderMarkdown
                         enableMouseSelection: root.enableMouseSelection
@@ -471,7 +472,7 @@ Rectangle {
                         done: root.messageData?.done ?? false
                         completed: modelData.completed ?? false
                     } }
-                    DelegateChoice { roleValue: "text"; MessageTextBlock {
+                    DelegateChoice { roleValue: "text"; AiMessageTextBlock {
                         editing: root.editing
                         renderMarkdown: root.renderMarkdown
                         enableMouseSelection: root.enableMouseSelection
@@ -491,7 +492,7 @@ Rectangle {
             active: (root.messageData?.pendingChanges?.length ?? 0) > 0 && (root.messageData?.functionPending ?? false)
             visible: active
 
-            sourceComponent: ConfigDiffCard {
+            sourceComponent: AiConfigDiffCard {
                 messageData: root.messageData
             }
         }
@@ -702,7 +703,7 @@ Rectangle {
                 model: ScriptModel {
                     values: root.messageData?.annotationSources || []
                 }
-                delegate: AnnotationSourceButton {
+                delegate: AiAnnotationSourceButton {
                     required property var modelData
                     displayText: modelData.text
                     url: modelData.url
@@ -720,7 +721,7 @@ Rectangle {
                 model: ScriptModel {
                     values: root.messageData?.searchQueries || []
                 }
-                delegate: SearchQueryButton {
+                delegate: AiSearchQueryButton {
                     required property var modelData
                     query: modelData
                 }

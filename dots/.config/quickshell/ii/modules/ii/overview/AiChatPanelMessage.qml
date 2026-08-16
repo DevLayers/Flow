@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import qs.services
 import qs.services.ai
+import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -9,7 +10,6 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
-import "../sidebarPolicies/aiChat"
 
 /**
  * One message, minimal: user turns are pills docked right, assistant turns
@@ -23,7 +23,7 @@ ColumnLayout {
     required property var messageData
 
     readonly property bool isUser: root.messageData?.role === "user"
-    readonly property var messageBlocks: StringUtils.splitMarkdownBlocks(root.messageData?.content)
+    readonly property var messageBlocks: AiTranscriptRegistry.blocksFor(root.messageData)
     readonly property var sentFiles: Array.from(root.messageData?.attachments ?? [])
 
     spacing: 4
@@ -120,7 +120,7 @@ ColumnLayout {
         Loader {
             Layout.fillWidth: true
             active: (root.messageData?.thought?.length ?? 0) > 0
-            sourceComponent: MessageThinkBlock {
+            sourceComponent: AiMessageThinkBlock {
                 messageData: root.messageData
                 done: root.messageData?.done ?? false
                 thoughtText: root.messageData?.thought ?? ""
@@ -155,7 +155,7 @@ ColumnLayout {
 
                 DelegateChoice {
                     roleValue: "code"
-                    MessageCodeBlock {
+                    AiMessageCodeBlock {
                         segmentContent: modelData.content
                         segmentLang: modelData.lang
                         messageData: root.messageData
@@ -163,7 +163,7 @@ ColumnLayout {
                 }
                 DelegateChoice {
                     roleValue: "think"
-                    MessageThinkBlock {
+                    AiMessageThinkBlock {
                         segmentContent: modelData.content
                         messageData: root.messageData
                         done: root.messageData?.done ?? false
@@ -172,7 +172,7 @@ ColumnLayout {
                 }
                 DelegateChoice {
                     roleValue: "text"
-                    MessageTextBlock {
+                    AiMessageTextBlock {
                         segmentContent: modelData.content
                         messageData: root.messageData
                         done: root.messageData?.done ?? false
@@ -186,7 +186,7 @@ ColumnLayout {
             Layout.fillWidth: true
             active: (root.messageData?.pendingChanges?.length ?? 0) > 0 && (root.messageData?.functionPending ?? false)
             visible: active
-            sourceComponent: ConfigDiffCard {
+            sourceComponent: AiConfigDiffCard {
                 messageData: root.messageData
             }
         }
@@ -346,7 +346,7 @@ ColumnLayout {
                 model: ScriptModel {
                     values: root.messageData?.annotationSources || []
                 }
-                delegate: AnnotationSourceButton {
+                delegate: AiAnnotationSourceButton {
                     required property var modelData
                     displayText: modelData.text
                     url: modelData.url
@@ -364,7 +364,7 @@ ColumnLayout {
                 model: ScriptModel {
                     values: root.messageData?.searchQueries || []
                 }
-                delegate: SearchQueryButton {
+                delegate: AiSearchQueryButton {
                     required property var modelData
                     query: modelData
                 }

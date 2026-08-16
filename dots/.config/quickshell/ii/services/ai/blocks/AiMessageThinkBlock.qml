@@ -233,7 +233,7 @@ Item {
                     id: thoughtColumn
                     width: thoughtFlickable.width
 
-                    MessageTextBlock {
+                    AiMessageTextBlock {
                         width: parent.width
                         editing: root.editing
                         renderMarkdown: root.renderMarkdown

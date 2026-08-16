@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import qs
 import qs.services
 import qs.services.ai
+import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -11,8 +12,6 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
-import "../sidebarPolicies"
-import "../sidebarPolicies/aiChat"
 
 /**
  * Unified AI chat panel for the overview search.
@@ -202,7 +201,7 @@ Item {
 
         // ── Attachment tray ──────────────────────────────────
 
-        AttachmentTray {
+        AiAttachmentTray {
             Layout.fillWidth: true
             Layout.leftMargin: 12
             Layout.rightMargin: 12
@@ -304,7 +303,7 @@ Item {
                 }
                 onMovingChanged: {
                     if (!moving)
-                        following = atYEnd;
+                        following = AiTranscriptRegistry.shouldFollow(contentY, height, contentHeight);
                 }
                 onHeightChanged: {
                     if (following)
@@ -490,7 +489,7 @@ Item {
                             placeholderText: Translation.tr("Search models...")
                         }
 
-                        ModelPickerPopover {
+                        AiModelPickerPopover {
                             Layout.fillWidth: true
                             query: modelSearch.text
                             maxListHeight: popoverSurface.height - 120
@@ -503,7 +502,7 @@ Item {
                     }
                 }
 
-                ToolsPopover {
+                AiToolsPopover {
                     visible: root.activePopover === "tools"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -513,7 +512,7 @@ Item {
                     }
                 }
 
-                ApiKeyManager {
+                AiApiKeyManager {
                     visible: root.activePopover === "keys"
                     Layout.fillWidth: true
                     Layout.fillHeight: true

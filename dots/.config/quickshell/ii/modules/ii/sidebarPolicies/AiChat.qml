@@ -1,6 +1,7 @@
 import qs
 import qs.services
 import qs.services.ai
+import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -1148,7 +1149,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
 
-            AttachmentTray {
+            AiAttachmentTray {
                 id: attachmentTray
                 anchors {
                     top: parent.top

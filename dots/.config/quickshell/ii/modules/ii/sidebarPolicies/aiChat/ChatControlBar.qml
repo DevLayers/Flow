@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import qs.services
+import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -650,7 +651,7 @@ Item {
 
     Component {
         id: modelPickerComponent
-        ModelPickerPopover {
+        AiModelPickerPopover {
             onPicked: modelId => {
                 Ai.setModel(modelId, false);
                 root.closePopover();
@@ -678,14 +679,14 @@ Item {
 
     Component {
         id: toolsComponent
-        ToolsPopover {
+        AiToolsPopover {
             onClosed: root.closePopover()
         }
     }
 
     Component {
         id: regenerateComponent
-        ModelPickerPopover {
+        AiModelPickerPopover {
             onPicked: modelId => {
                 Ai.regenerateWith(root.regenerateMessageId, modelId);
                 root.regenerateMessageId = "";
@@ -703,7 +704,7 @@ Item {
 
     Component {
         id: keysComponent
-        ApiKeyManager {
+        AiApiKeyManager {
             onClosed: root.closePopover()
         }
     }
