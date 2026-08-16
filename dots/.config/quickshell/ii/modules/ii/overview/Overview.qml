@@ -393,6 +393,7 @@ Scope {
                                 SearchWidget {
                                     id: searchWidget
                                     shadowOpacity: searchWidgetWrapper.slideOpacity
+                                    surfaceMonitorName: root.screen?.name ?? ""
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     Synchronizer on searchingText {
                                         property alias source: root.searchingText

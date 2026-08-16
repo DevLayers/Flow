@@ -21,6 +21,10 @@ Item {
     focus: true
     signal requestToggleActions
     property bool inNotchMode: false
+    // Set by the per-monitor Overview host so a deep-link is acknowledged by
+    // the monitor that is actually rendering the Search surface.
+    property string surfaceMonitorName: ""
+    property string routedSessionRequestId: ""
 
     readonly property string xdgConfigHome: Directories.config
     readonly property int typingDebounceInterval: 200
@@ -90,6 +94,7 @@ Item {
     onIsAiModeChanged: {
         if (root.isAiMode && !root.aiModeLocked)
             root.aiModeLocked = true;
+        root.tryConsumeSurfaceIntent();
     }
 
     // Debounce so a query that is still matching things asynchronously does
@@ -248,6 +253,69 @@ Item {
         searchBar.forceFocus();
     }
 
+    function continueInSidebar() {
+        Ai.surfaceRouter.open({
+            surface: "sidebar",
+            monitorName: root.surfaceMonitorName,
+            sessionId: Ai.sessions.currentId,
+            focusIntent: "composer"
+        });
+    }
+
+    // A router request is consumed only after this per-monitor Search host is
+    // visible and the AI panel exists. Session loading is also acknowledged
+    // only after Ai has selected the requested session, so a deep-link cannot
+    // clear itself while another conversation is still on screen.
+    function tryConsumeSurfaceIntent() {
+        const intent = Ai.surfaceRouter.pendingIntent;
+        if (!intent || intent.surface !== "search" || intent.monitorName !== root.surfaceMonitorName)
+            return;
+        if (!GlobalStates.overviewOpen || !root.isAiMode || !aiPanelLoader.item)
+            return;
+        if (intent.sessionId.length > 0 && Ai.sessions.currentId !== intent.sessionId) {
+            if (root.routedSessionRequestId !== intent.requestId) {
+                root.routedSessionRequestId = intent.requestId;
+                Ai.openSession(intent.sessionId);
+            }
+            return;
+        }
+        if (intent.focusIntent === "composer")
+            root.focusSearchInput();
+        Ai.surfaceRouter.acknowledge(intent.requestId);
+        root.routedSessionRequestId = "";
+    }
+
+    Connections {
+        target: Ai.surfaceRouter
+        function onPendingIntentChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
+    Connections {
+        target: Ai.sessions
+        function onCurrentIdChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+        function onLoadedChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
+    Connections {
+        target: aiPanelLoader
+        function onStatusChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
     function disableExpandAnimation() {
         searchBar.animateWidth = false;
     }
@@ -301,6 +369,11 @@ Item {
     }
 
     Keys.onPressed: event => {
+        if (event.key === Qt.Key_J && (event.modifiers & Qt.ControlModifier) && root.isAiMode) {
+            root.continueInSidebar();
+            event.accepted = true;
+            return;
+        }
         if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
             if (appResults.visible) {
                 root.requestToggleActions();
@@ -1335,6 +1408,9 @@ Item {
                     }
                     function onRequestSendMessage() {
                         root.sendAiMessage();
+                    }
+                    function onRequestContinueInSidebar() {
+                        root.continueInSidebar();
                     }
                 }
             }

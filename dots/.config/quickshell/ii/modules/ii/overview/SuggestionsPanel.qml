@@ -138,7 +138,10 @@ Item {
                     iconType: 2,
                     keepOverviewOpen: true,
                     execute: () => {
-                        LauncherSearch.query = Config.options.search.prefix.ai;
+                        Ai.surfaceRouter.open({
+                            surface: "search",
+                            focusIntent: "composer"
+                        });
                     }
                 }]
             });

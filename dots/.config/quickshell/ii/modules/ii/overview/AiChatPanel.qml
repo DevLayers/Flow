@@ -29,6 +29,7 @@ Item {
     signal requestBackToSearch()
     signal requestFocusComposer()
     signal requestSendMessage()
+    signal requestContinueInSidebar()
 
     implicitWidth: parent ? parent.width : 720
     implicitHeight: 520
@@ -107,6 +108,27 @@ Item {
 
                 StyledToolTip {
                     text: Translation.tr("Back to search (Esc)")
+                }
+            }
+
+            RippleButton {
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: 32
+                implicitHeight: 32
+                buttonRadius: Appearance.rounding.full
+                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colRipple: Appearance.colors.colLayer2Active
+                onClicked: root.requestContinueInSidebar()
+
+                contentItem: MaterialSymbol {
+                    text: "open_in_new"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnLayer1
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Continue in sidebar (Ctrl+J)")
                 }
             }
 

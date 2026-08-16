@@ -16,6 +16,7 @@ Item {
     property int sidebarPadding: 12
     anchors.fill: parent
     property var visitedTabs: ({})
+    property string routedSessionRequestId: ""
 
     // Toggles from Config
     property bool aiChatEnabled: Ai.enabled
@@ -178,10 +179,52 @@ Item {
         swipeView.currentItem?.item?.forceActiveFocus();
     }
 
+    // Consume a sidebar deep-link only after the AI tab is the visible
+    // SwipeView item. A requested session is selected first; until the session
+    // store confirms that selection the router intent remains pending.
+    function tryConsumeSurfaceIntent() {
+        const intent = Ai.surfaceRouter.pendingIntent;
+        if (!intent || intent.surface !== "sidebar")
+            return;
+        if (!GlobalStates.sidebarLeftOpen || intent.monitorName !== GlobalStates.activeLeftSidebarMonitor)
+            return;
+        if (root.activeTabs[swipeView.currentIndex]?.icon !== "neurology" || !swipeView.currentItem?.item)
+            return;
+        if (intent.sessionId.length > 0 && Ai.sessions.currentId !== intent.sessionId) {
+            if (root.routedSessionRequestId !== intent.requestId) {
+                root.routedSessionRequestId = intent.requestId;
+                Ai.openSession(intent.sessionId);
+            }
+            return;
+        }
+        if (intent.focusIntent === "composer")
+            root.focusAiInput();
+        Ai.surfaceRouter.acknowledge(intent.requestId);
+        root.routedSessionRequestId = "";
+    }
+
+    Connections {
+        target: Ai.surfaceRouter
+        function onPendingIntentChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
+    Connections {
+        target: Ai.sessions
+        function onCurrentIdChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+        function onLoadedChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
     Connections {
         target: GlobalStates
         function onSidebarLeftOpenChanged() {
             if (GlobalStates.sidebarLeftOpen) Qt.callLater(root.focusAiInput);
+            root.tryConsumeSurfaceIntent();
         }
     }
 
@@ -297,6 +340,7 @@ Item {
                     }
 
                     Qt.callLater(root.focusAiInput);
+                    Qt.callLater(root.tryConsumeSurfaceIntent);
                 }
 
                 Component.onCompleted: {
@@ -332,6 +376,7 @@ Item {
                         onLoaded: {
                             if (item) {
                                 item.anchors.fill = this;
+                                root.tryConsumeSurfaceIntent();
 
                                 // Opening the sidebar and changing policy toggles can
                                 // activate this Loader asynchronously. In that case

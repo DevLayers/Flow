@@ -1,6 +1,8 @@
 pragma ComponentBehavior: Bound
 
 import qs
+import qs.services
+import qs.modules.common
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
@@ -27,7 +29,7 @@ Scope {
     function open(intent = null) {
         const requested = intent ?? ({});
         const surface = requested.surface === "sidebar" ? "sidebar" : "search";
-        const monitorName = String(requested.monitorName ?? Hyprland.focusedMonitor?.name ?? "");
+        const monitorName = String(requested.monitorName ?? requested.screenName ?? Hyprland.focusedMonitor?.name ?? "");
         const normalized = Object.assign({}, requested, {
             requestId: root.nextRequestId(),
             surface: surface,
@@ -35,15 +37,21 @@ Scope {
             sessionId: String(requested.sessionId ?? ""),
             messageId: String(requested.messageId ?? ""),
             blockId: String(requested.blockId ?? ""),
-            focusIntent: String(requested.focusIntent ?? "composer")
+            focusIntent: String(requested.focusIntent ?? requested.focus ?? "composer")
         });
         root.pendingIntent = normalized;
         if (surface === "sidebar") {
             GlobalStates.activeLeftSidebarMonitor = monitorName;
+            Persistent.states.sidebar.policies.tab = 0;
             GlobalStates.overviewOpen = false;
             GlobalStates.policiesPanelOpen = true;
         } else {
             GlobalStates.activeSearchMonitor = monitorName;
+            // Search hosts consume this prefix through their normal mode
+            // detection; assigning the service query also handles an already
+            // open Overview without relying on a delayed callback.
+            GlobalStates.activeSearchQuery = Config.options.search.prefix.ai;
+            LauncherSearch.query = Config.options.search.prefix.ai;
             GlobalStates.overviewOpen = true;
         }
         root.requestOpened(normalized);
