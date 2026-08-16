@@ -106,6 +106,12 @@ Singleton {
     // their projections; they never create a second repository or run slot.
     readonly property AiConversationRepository conversations: AiConversationRepository {}
     readonly property AiSurfaceRouter surfaceRouter: AiSurfaceRouter {}
+    readonly property AiDraftStore draftStore: AiDraftStore {
+        directory: Directories.aiDrafts
+        scriptPath: Directories.aiDraftsScriptPath
+        onStoreReady: root.onDraftStoreReady()
+        onStoreError: reason => root.submissionNotice = reason
+    }
     readonly property AiRunCoordinator runCoordinator: AiRunCoordinator {
         onRunStarted: run => root.onRunStarted(run)
         onRunActivity: (run, event) => root.onRunActivity(run, event)
@@ -123,8 +129,13 @@ Singleton {
     property var pendingSubmission: null
     property string submissionNotice: ""
     property int draftRevision: 0
+    property bool restoringDraft: false
 
-    onDraftChanged: root.draftRevision += 1
+    onDraftChanged: {
+        root.draftRevision += 1;
+        if (!root.restoringDraft && root.draftStore.loaded)
+            root.draftStore.setDraft(root.sessionDraftId(), root.draft);
+    }
 
     function submissionOperationId(prefix) {
         root.submissionSequence += 1;
@@ -420,8 +431,11 @@ Singleton {
         requester.requestData = prepared.requestData;
         requester.apiKey = prepared.apiKey;
         requester.parsedAny = false;
-        if (root.draftRevision === pending.draftRevisionAtSubmit)
+        if (root.draftRevision === pending.draftRevisionAtSubmit) {
+            const sentDraft = root.draft;
             root.draft = "";
+            root.draftStore.clearDraft(root.sessionDraftId(pending.beforeSessionId), sentDraft);
+        }
         root.clearAttachments();
         root.submissionStateChanged(pending);
         root.submissionStarted(pending.submissionId, pending.runId, pending.sessionId);
@@ -866,6 +880,7 @@ Singleton {
         root.migrateAiDefaults();
         root.resetSessionSettings();
         root.sessions.ensureLoaded();
+        root.draftStore.ensureLoaded();
         setModel(currentModelId, false, false); // Do necessary setup for model
     }
 
@@ -1525,6 +1540,7 @@ Singleton {
 
         const data = strategy.buildRequestData(model, filteredMessageArray, pending ? pending.systemPrompt : root.systemPrompt, pending ? pending.temperature : root.temperature, tools);
         // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
+
 
         /* Create local message object */
         const message = root.aiMessageComponent.createObject(root, {
@@ -2268,19 +2284,29 @@ Singleton {
     property string draft: ""
     signal draftRestored(string text)
 
+    readonly property string newDraftId: "__new__"
+
+    function sessionDraftId(sessionId = null) {
+        if (sessionId !== null)
+            return String(sessionId).length > 0 ? String(sessionId) : root.newDraftId;
+        return root.sessions.currentId.length > 0 ? root.sessions.currentId : root.newDraftId;
+    }
+
+    function onDraftStoreReady() {
+        root.restoreDraft();
+    }
+
     function keepDraft() {
-        const id = root.sessions.currentId;
-        if (id.length === 0)
+        if (!root.draftStore.loaded)
             return;
-        if (root.draft.trim().length > 0)
-            root.drafts[id] = root.draft;
-        else
-            delete root.drafts[id];
+        root.draftStore.setDraft(root.sessionDraftId(), root.draft);
     }
 
     function restoreDraft() {
-        const id = root.sessions.currentId;
-        root.draft = (id.length > 0 ? root.drafts[id] : "") ?? "";
+        const id = root.sessionDraftId();
+        root.restoringDraft = true;
+        root.draft = root.draftStore.loaded ? root.draftStore.textFor(id) : "";
+        root.restoringDraft = false;
         root.draftRestored(root.draft);
     }
 
