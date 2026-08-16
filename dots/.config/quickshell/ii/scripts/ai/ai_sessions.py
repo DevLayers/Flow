@@ -6,7 +6,7 @@ lists them so the sidebar never has to open every file to draw the list. The
 files are the source of truth; the index is a cache that can always be rebuilt
 from them.
 
-Envelope (schema 2):
+Envelope (schema 3):
     {"schema": 1, "id", "title", "createdAt", "updatedAt", "pinned",
      "modelId", "thinking", "temperature", "promptFile", "personaId",
      "promptOverride", "messages": [...]}
@@ -39,9 +39,10 @@ import time
 import uuid
 from typing import Any
 
-SCHEMA = 2
+SCHEMA = 3
 INDEX_NAME = "index.json"
 TRASH_NAME = ".trash"
+STAGING_NAME = ".staging"
 IMPORT_MARKER = ".imported"
 PREVIEW_LENGTH = 120
 
@@ -82,6 +83,14 @@ def session_path(directory: str, session_id: str) -> str:
 
 def trash_path(directory: str, session_id: str) -> str:
     return os.path.join(directory, TRASH_NAME, f"{session_id}.json")
+
+
+def staging_path(directory: str, operation_id: str) -> str:
+    return os.path.join(directory, STAGING_NAME, f"{operation_id}.json")
+
+
+def valid_operation_id(operation_id: str) -> bool:
+    return bool(operation_id) and all(character.isalnum() or character in "-_" for character in operation_id)
 
 
 def plain_text(message: dict) -> str:
@@ -286,6 +295,49 @@ def cmd_save(argv: list) -> int:
     return emit({"sessions": save_index(directory, entries)})
 
 
+def cmd_stage(argv: list) -> int:
+    directory, session_id, operation_id = argv[0], argv[1], argv[2]
+    if not valid_operation_id(operation_id):
+        return emit({"error": "Invalid staging operation id"})
+    session = normalize(read_json_stdin(), session_id)
+    if session is None:
+        return emit({"error": "Malformed session"})
+    session["id"] = session_id
+    if not write_json(staging_path(directory, operation_id), session):
+        return emit({"error": "Could not stage the session"})
+    return emit({"staged": True, "operationId": operation_id, "id": session_id})
+
+
+def cmd_commit_staged(argv: list) -> int:
+    directory, session_id, operation_id = argv[0], argv[1], argv[2]
+    if not valid_operation_id(operation_id):
+        return emit({"error": "Invalid staging operation id"})
+    staged = normalize(read_json(staging_path(directory, operation_id)), session_id)
+    if staged is None or staged.get("id") != session_id:
+        return emit({"error": "Staged session is missing or invalid"})
+    if not write_json(session_path(directory, session_id), staged):
+        return emit({"error": "Could not commit the staged session"})
+    try:
+        os.unlink(staging_path(directory, operation_id))
+    except OSError:
+        pass
+    entries = upsert(load_index(directory), entry_of(staged))
+    return emit({"sessions": save_index(directory, entries), "committed": True, "operationId": operation_id})
+
+
+def cmd_abort_staged(argv: list) -> int:
+    directory, session_id, operation_id = argv[0], argv[1], argv[2]
+    if not valid_operation_id(operation_id):
+        return emit({"error": "Invalid staging operation id"})
+    try:
+        os.unlink(staging_path(directory, operation_id))
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return emit({"error": "Could not abort the staged session"})
+    return emit({"aborted": True, "operationId": operation_id, "id": session_id})
+
+
 def read_json_stdin() -> Any:
     try:
         return json.loads(sys.stdin.read())
@@ -406,6 +458,9 @@ def cmd_search(argv: list) -> int:
 COMMANDS = {
     "bootstrap": (1, cmd_bootstrap),
     "save": (2, cmd_save),
+    "stage": (3, cmd_stage),
+    "commit-staged": (3, cmd_commit_staged),
+    "abort-staged": (3, cmd_abort_staged),
     "open": (2, cmd_open),
     "delete": (2, cmd_delete),
     "restore": (2, cmd_restore),

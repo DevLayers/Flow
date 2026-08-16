@@ -47,8 +47,30 @@ Scope {
     signal saveRequested
     /** A session came back from disk and should replace the conversation. */
     signal sessionOpened(var session)
+    /** A queued save reached the helper and was made durable. */
+    signal saveSucceeded(string operationId, string sessionId)
+    /** A queued save could not be made durable. */
+    signal saveFailed(string operationId, string sessionId, string reason)
+    /** A background load completed without changing the visible session. */
+    signal loadSucceeded(string operationId, string sessionId, var session)
+    signal loadFailed(string operationId, string sessionId, string reason)
+    /** Atomic submission primitives used by the run coordinator. */
+    signal stageSucceeded(string operationId, string sessionId)
+    signal stageFailed(string operationId, string sessionId, string reason)
+    signal commitSubmissionSucceeded(string operationId, string sessionId)
+    signal commitSubmissionFailed(string operationId, string sessionId, string reason)
+    signal abortSubmissionSucceeded(string operationId, string sessionId)
+    signal abortSubmissionFailed(string operationId, string sessionId, string reason)
     /** A chat the user was reading was deleted elsewhere in the list. */
     signal currentDropped
+
+    property int operationSequence: 0
+    readonly property int schemaVersion: 3
+
+    function operationId(prefix: string): string {
+        root.operationSequence += 1;
+        return `${prefix}-${Date.now()}-${root.operationSequence}`;
+    }
 
     function newId(): string {
         // A v4-shaped id. Uniqueness is what matters here, not entropy quality.
@@ -96,17 +118,67 @@ Scope {
      * Writes a session object. The caller owns the shape; only the id is
      * forced, so a fork cannot overwrite the chat it came from.
      */
-    function commit(session: var) {
+    function commit(session: var, requestedOperationId: string = "", flushNow: bool = false): string {
         if (!session || root.dir.length === 0)
-            return;
+            return "";
         const id = session.id ?? root.currentId;
         if (!id || id.length === 0)
-            return;
+            return "";
+        const operationId = requestedOperationId || root.operationId("save");
+        if (flushNow)
+            saveTimer.stop();
         root.enqueue({
             kind: "save",
             args: ["save", root.dir, id],
-            stdin: JSON.stringify(session)
+            stdin: JSON.stringify(session),
+            operationId: operationId,
+            sessionId: id
         });
+        return operationId;
+    }
+
+    /** Stage a first-turn snapshot without making it visible to the index. */
+    function stageSubmission(session: var, requestedOperationId: string = ""): string {
+        if (!session || root.dir.length === 0)
+            return "";
+        const id = session.id ?? root.currentId;
+        if (!id || id.length === 0)
+            return "";
+        const operationId = requestedOperationId || root.operationId("stage");
+        root.enqueue({
+            kind: "stage",
+            args: ["stage", root.dir, id, operationId],
+            stdin: JSON.stringify(session),
+            operationId: operationId,
+            sessionId: id
+        });
+        return operationId;
+    }
+
+    /** Commit a previously staged snapshot immediately before dispatch. */
+    function commitSubmissionForDispatch(sessionId: string, operationId: string): string {
+        if (!sessionId || !operationId || root.dir.length === 0)
+            return "";
+        root.enqueue({
+            kind: "commitSubmission",
+            args: ["commit-staged", root.dir, sessionId, operationId],
+            operationId: operationId,
+            sessionId: sessionId
+        });
+        return operationId;
+    }
+
+    /** Remove a staged snapshot that never reached the network. */
+    function abortSubmission(sessionId: string, operationId: string): string {
+        if (!sessionId || !operationId || root.dir.length === 0)
+            return "";
+        root.enqueue({
+            kind: "abortSubmission",
+            args: ["abort-staged", root.dir, sessionId, operationId],
+            operationId: operationId,
+            sessionId: sessionId
+        });
+        return operationId;
     }
 
     // ── Reading and editing ───────────────────────────────────────────────
@@ -117,8 +189,24 @@ Scope {
         root.enqueue({
             kind: "open",
             args: ["open", root.dir, id],
-            id: id
+            id: id,
+            operationId: root.operationId("open"),
+            sessionId: id
         });
+    }
+
+    /** Loads a session for a background repository record without selecting it. */
+    function load(id: string, requestedOperationId: string = ""): string {
+        if (!id || id.length === 0 || root.dir.length === 0)
+            return "";
+        const operationId = requestedOperationId || root.operationId("load");
+        root.enqueue({
+            kind: "load",
+            args: ["open", root.dir, id],
+            operationId: operationId,
+            sessionId: id
+        });
+        return operationId;
     }
 
     function rename(id: string, title: string) {
@@ -228,20 +316,45 @@ Scope {
         opProc.running = true;
     }
 
-    function applyResult(op: var, raw: string) {
-        if (!op || raw.trim().length === 0)
+    function failOperation(op: var, reason: string) {
+        if (!op || (op === opProc.op && opProc.operationAcknowledged))
             return;
+        if (op === opProc.op)
+            opProc.operationAcknowledged = true;
+        const operationId = String(op.operationId ?? "");
+        const sessionId = String(op.sessionId ?? op.id ?? "");
+        if (op.kind === "save")
+            root.saveFailed(operationId, sessionId, reason);
+        else if (op.kind === "load")
+            root.loadFailed(operationId, sessionId, reason);
+        else if (op.kind === "stage")
+            root.stageFailed(operationId, sessionId, reason);
+        else if (op.kind === "commitSubmission")
+            root.commitSubmissionFailed(operationId, sessionId, reason);
+        else if (op.kind === "abortSubmission")
+            root.abortSubmissionFailed(operationId, sessionId, reason);
+    }
+
+    function applyResult(op: var, raw: string) {
+        if (op === opProc.op && opProc.operationAcknowledged)
+            return;
+        if (!op || raw.trim().length === 0) {
+            root.failOperation(op, "The session helper returned no result");
+            return;
+        }
         let parsed;
         try {
             parsed = JSON.parse(raw);
         } catch (error) {
             console.log("[AiSessions] Unreadable helper output:", error);
+            root.failOperation(op, "The session helper returned invalid JSON");
             return;
         }
         if (parsed.error) {
             root.lastError = parsed.error;
             if (op.kind === "bootstrap")
                 root.loading = false;
+            root.failOperation(op, String(parsed.error));
             return;
         }
         if (op.kind === "bootstrap") {
@@ -254,12 +367,26 @@ Scope {
             root.loaded = true;
         }
         root.lastError = "";
+        if (op === opProc.op)
+            opProc.operationAcknowledged = true;
         if (Array.isArray(parsed.sessions))
             root.index = parsed.sessions;
         if (op.kind === "open" && parsed.session) {
             root.currentId = parsed.session.id;
             root.sessionOpened(parsed.session);
         }
+        if (op.kind === "save")
+            root.saveSucceeded(String(op.operationId ?? ""), String(op.sessionId ?? ""));
+        else if (op.kind === "load" && parsed.session)
+            root.loadSucceeded(String(op.operationId ?? ""), String(op.sessionId ?? ""), parsed.session);
+        else if (op.kind === "load")
+            root.failOperation(op, "The session helper returned no session");
+        else if (op.kind === "stage")
+            root.stageSucceeded(String(op.operationId ?? ""), String(op.sessionId ?? ""));
+        else if (op.kind === "commitSubmission")
+            root.commitSubmissionSucceeded(String(op.operationId ?? ""), String(op.sessionId ?? ""));
+        else if (op.kind === "abortSubmission")
+            root.abortSubmissionSucceeded(String(op.operationId ?? ""), String(op.sessionId ?? ""));
     }
 
     Timer {
@@ -280,22 +407,33 @@ Scope {
         id: opProc
         property var op: null
         property string payload: ""
+        property bool outputSeen: false
+        property bool operationAcknowledged: false
 
         onRunningChanged: {
-            if (!opProc.running || opProc.payload.length === 0)
-                return;
-            opProc.write(opProc.payload);
-            opProc.stdinEnabled = false; // Closing stdin is what makes it read
+            if (opProc.running) {
+                opProc.outputSeen = false;
+                opProc.operationAcknowledged = false;
+                if (opProc.payload.length > 0) {
+                    opProc.write(opProc.payload);
+                    opProc.stdinEnabled = false; // Closing stdin is what makes it read
+                }
+            }
         }
 
         stdout: StdioCollector {
             id: opCollector
             // `op` is left alone until the next one starts: whether this fires
             // before or after the process exits is not worth depending on.
-            onStreamFinished: root.applyResult(opProc.op, opCollector.text)
+            onStreamFinished: {
+                opProc.outputSeen = true;
+                root.applyResult(opProc.op, opCollector.text);
+            }
         }
 
         onExited: {
+            if (!opProc.outputSeen)
+                root.failOperation(opProc.op, "The session helper exited without an acknowledgement");
             if (opProc.op?.kind === "bootstrap" && !root.loaded)
                 root.loading = false;
             Qt.callLater(root.runNext);

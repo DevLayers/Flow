@@ -1635,7 +1635,7 @@ Singleton {
     /** The key panel was asked for, from a command or from a card in the chat. */
     signal keyManagerRequested
 
-    readonly property int sessionSchema: 2
+    readonly property int sessionSchema: 3
     /** Name of the conversation on screen. Empty until it earns one. */
     property string sessionTitle: ""
     property real sessionCreatedAt: 0
