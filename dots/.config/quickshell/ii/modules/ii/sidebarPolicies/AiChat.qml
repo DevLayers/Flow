@@ -331,7 +331,17 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         // the selector does, whether it took a shot or was waved away.
         target: GlobalStates
         function onRegionSelectorOpenChanged() {
+            if (GlobalStates.regionSelectorOpen) {
+                snipHoldTimeout.stop();
+                return;
+            }
             if (GlobalStates.regionSelectorOpen || !root.snipHeld)
+                return;
+            root.snipHeld = false;
+            root.releaseSidebar();
+        }
+        function onSidebarLeftOpenChanged() {
+            if (GlobalStates.sidebarLeftOpen || !root.snipHeld)
                 return;
             root.snipHeld = false;
             root.releaseSidebar();
@@ -339,6 +349,17 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
     }
 
     property bool snipHeld: false
+    Timer {
+        id: snipHoldTimeout
+        interval: 10000
+        repeat: false
+        onTriggered: {
+            if (!root.snipHeld || GlobalStates.regionSelectorOpen)
+                return;
+            root.snipHeld = false;
+            root.releaseSidebar();
+        }
+    }
 
     Process {
         // The paperclip. Several files at once, because a message can carry
@@ -1202,6 +1223,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         if (!root.snipHeld) {
                             root.snipHeld = true;
                             root.holdSidebarOpen();
+                            snipHoldTimeout.restart();
                         }
                         GlobalStates.snipForAiRequested();
                     }

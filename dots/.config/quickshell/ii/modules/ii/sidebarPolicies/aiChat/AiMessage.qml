@@ -507,8 +507,6 @@ Rectangle {
                 implicitHeight: errorColumnLayout.implicitHeight + 10 * 2
                 radius: Appearance.rounding.small
                 color: ColorUtils.transparentize(Appearance.m3colors.m3error, 0.88)
-                border.width: 1
-                border.color: ColorUtils.transparentize(Appearance.m3colors.m3error, 0.7)
 
                 ColumnLayout {
                     id: errorColumnLayout
@@ -730,4 +728,3 @@ Rectangle {
 
     }
 }
-
