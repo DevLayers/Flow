@@ -91,6 +91,13 @@ Singleton {
     property bool adbReachable: false
     property string resolvedAdbSerial: ""
 
+    /** How many devices `adb devices` reports in the "device" state. When
+     *  there is exactly one, every consumer omits `-s` entirely: Android
+     *  re-rolls its wireless-debugging port often enough that a serial can
+     *  go stale between resolving it and the command reaching the phone,
+     *  and "the only device" cannot go stale. */
+    property int adbDeviceCount: 0
+
     /** Live wireless ADB target ("ip:port") the next scrcpy launch will use.
      *  In auto mode this tracks KDE Connect's reported reachable address so
      *  the user never has to type an IP that changes (VPN, DHCP, etc.).
@@ -1082,6 +1089,7 @@ Singleton {
                 // network target so a plugged-in phone always wins.
                 "SERIAL=$(adb devices | awk '$2==\"device\" {print $1}' | grep -v ':' | head -n1); " +
                 "if [ -z \"$SERIAL\" ]; then SERIAL=$(adb devices | awk '$2==\"device\" {print $1}' | head -n1); fi; " +
+                "echo \"COUNT:$(adb devices | awk '$2==\"device\"' | wc -l)\"; " +
                 "if [ -n \"$SERIAL\" ]; then echo \"SERIAL:$SERIAL\"; exit 0; fi; " +
                 "exit 1"]
         }
@@ -1091,11 +1099,14 @@ Singleton {
                 const lines = this.text.split("\n")
                 let serial = ""
                 let mdns = ""
+                let count = 0
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i].trim()
                     if (line.startsWith("SERIAL:")) serial = line.substring(7).trim()
                     else if (line.startsWith("MDNS:")) mdns = line.substring(5).trim()
+                    else if (line.startsWith("COUNT:")) count = parseInt(line.substring(6).trim()) || 0
                 }
+                root.adbDeviceCount = count
                 // Assign unconditionally: leaving the previous serial in place
                 // when the probe finds nothing is what made a changed port
                 // stick forever, since adbTargetArgs() prefers it over the
@@ -1552,6 +1563,11 @@ Singleton {
      * ip:port target. The short `-s` form is accepted by both adb and scrcpy.
      */
     function adbTargetArgs() {
+        // With a single attached device, naming it is pure downside: adb
+        // already targets it implicitly, and a wireless serial resolved a
+        // moment ago may point at a port the phone has since re-rolled.
+        if (root.adbDeviceCount === 1)
+            return []
         if (root.resolvedAdbSerial)
             return ["-s", root.resolvedAdbSerial]
         const scrcpyConfig = Config.options?.phone?.scrcpy
