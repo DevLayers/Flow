@@ -706,6 +706,15 @@ Item {
                                     source: modelData.icon
                                     implicitSize: (root.individualIconBoxHeight * root.iconRatio) * (root.numbersByInteractionVisible ? 1 / 1.5 : 1)
 
+                                    // Force reload when the icon theme regenerates; decode at the stable
+                                    // base size so hover animations don't re-decode every frame, async
+                                    // so the re-decode doesn't stall the UI thread
+                                    asynchronous: true
+                                    backer.cache: false
+                                    backer.sourceSize: Qt.size(
+                                        root.individualIconBoxHeight * root.iconRatio + TaskbarApps.iconThemeRevision,
+                                        root.individualIconBoxHeight * root.iconRatio + TaskbarApps.iconThemeRevision)
+
                                     Behavior on anchors.leftMargin {
                                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                                     }

@@ -368,6 +368,12 @@ Item {
                                         implicitSize: root.iconSize
                                         visible: wsItem.icon !== ""
                                             && Config.options.bar.workspaces.dockShowAppIcons
+
+                                        // Force reload when the icon theme regenerates
+                                        asynchronous: true
+                                        backer.cache: false
+                                        backer.sourceSize: Qt.size(root.iconSize + TaskbarApps.iconThemeRevision,
+                                                                   root.iconSize + TaskbarApps.iconThemeRevision)
                                     }
 
                                     // ── Monochrome tint (DocktoPanel pattern) ──
@@ -540,6 +546,12 @@ Item {
                 source: activeOverlay._activeIcon
                 implicitSize: root.iconSize
                 visible: activeOverlay._activeIcon !== "" && Config.options.bar.workspaces.dockShowAppIcons
+
+                // Force reload when the icon theme regenerates
+                asynchronous: true
+                backer.cache: false
+                backer.sourceSize: Qt.size(root.iconSize + TaskbarApps.iconThemeRevision,
+                                           root.iconSize + TaskbarApps.iconThemeRevision)
 
                 layer.enabled: Config.options.appearance.icons.enableShapeMask
                 layer.effect: OpacityMask {
