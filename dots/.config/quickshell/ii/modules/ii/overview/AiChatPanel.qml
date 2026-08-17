@@ -430,6 +430,7 @@ AiSearchSurface {
             Layout.bottomMargin: 6
             onRequestSend: root.requestSendMessage()
             onRequestEscape: root.handleComposerEscape()
+            onRequestOpenHistory: root.navigateTo("history")
         }
 
     }
