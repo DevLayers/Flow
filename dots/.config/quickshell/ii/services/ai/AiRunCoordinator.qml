@@ -10,6 +10,18 @@ Scope {
     readonly property var states: ["idle", "preparing", "thinking", "searching", "toolRunning", "needsAction", "streaming", "completed", "failed", "cancelled", "interrupted", "needsInspection"]
     readonly property var terminalStates: ["completed", "failed", "cancelled", "interrupted", "needsInspection"]
     readonly property var activeStates: ["preparing", "thinking", "searching", "toolRunning", "needsAction", "streaming"]
+    // A run is intentionally not an unconstrained bag of labels.  Keeping
+    // the legal edges here prevents a late stream/tool callback from moving a
+    // finished run back into an active state.
+    readonly property var transitionGraph: ({
+        idle: ["preparing"],
+        preparing: ["preparing", "thinking", "failed", "cancelled", "interrupted", "needsInspection"],
+        thinking: ["thinking", "searching", "toolRunning", "needsAction", "streaming", "completed", "failed", "cancelled", "interrupted", "needsInspection"],
+        searching: ["searching", "thinking", "toolRunning", "needsAction", "streaming", "completed", "failed", "cancelled", "interrupted", "needsInspection"],
+        toolRunning: ["toolRunning", "thinking", "searching", "needsAction", "streaming", "completed", "failed", "cancelled", "interrupted", "needsInspection"],
+        needsAction: ["needsAction", "thinking", "searching", "toolRunning", "streaming", "completed", "failed", "cancelled", "interrupted", "needsInspection"],
+        streaming: ["streaming", "thinking", "searching", "toolRunning", "needsAction", "completed", "failed", "cancelled", "interrupted", "needsInspection"]
+    })
     property var runs: ({})
     property string activeRunId: ""
 
@@ -51,6 +63,8 @@ Scope {
             isSeen: true,
             notificationEmitted: false,
             executionStarted: false,
+            executionStartedAt: 0,
+            networkStartedAt: 0,
             activityEvents: []
         };
         root.runs = Object.assign({}, root.runs, {
@@ -74,6 +88,12 @@ Scope {
         }
         if (root.terminalStates.includes(run.state))
             return false;
+        const allowed = root.transitionGraph[run.state] ?? [];
+        if (!allowed.includes(state)) {
+            console.warn("[AiRunCoordinator] Illegal transition", run.state, "->", state, runId);
+            root.runRejected("illegal-transition");
+            return false;
+        }
         const next = Object.assign({}, run, extra ?? ({}), {
             state: state,
             resultReason: reason || run.resultReason,
@@ -105,14 +125,44 @@ Scope {
             type: String(type ?? "activity"),
             at: Date.now()
         });
+        const nextState = type === "search" ? "searching" : (type === "tool" ? "toolRunning" : "streaming");
+        const allowed = root.transitionGraph[run.state] ?? [];
+        if (!allowed.includes(nextState)) {
+            console.warn("[AiRunCoordinator] Illegal activity transition", run.state, "->", nextState, runId);
+            root.runRejected("illegal-transition");
+            return false;
+        }
         const next = Object.assign({}, run, {
-            state: type === "search" ? "searching" : (type === "tool" ? "toolRunning" : "streaming"),
+            state: nextState,
             activityEvents: [...(run.activityEvents ?? []), event].slice(-100)
         });
         root.runs = Object.assign({}, root.runs, {
             [runId]: next
         });
         root.runActivity(next, event);
+        return true;
+    }
+
+    /** Mark an irreversible tool/config execution only after its journal ACK. */
+    function markExecutionStarted(runId: string, extra = null): bool {
+        const run = root.runFor(runId);
+        // A provider may finish the assistant stream before the journal
+        // helper ACKs. A completed run can still own the approved tool call;
+        // failed/cancelled runs cannot.
+        if (!run || (root.terminalStates.includes(run.state) && run.state !== "completed"))
+            return false;
+        const next = Object.assign({}, run, extra ?? ({}), {
+            executionStarted: true,
+            executionStartedAt: Date.now()
+        });
+        root.runs = Object.assign({}, root.runs, {
+            [runId]: next
+        });
+        root.runActivity(next, {
+            type: "executionStarted",
+            at: Date.now(),
+            tool: String(extra?.tool ?? "")
+        });
         return true;
     }
 
@@ -136,7 +186,7 @@ Scope {
         if (!run || !run.runId)
             return null;
         const restored = Object.assign({}, run, {
-            state: run.executionStarted ? "needsInspection" : "interrupted",
+            state: run.executionStarted === true ? "needsInspection" : "interrupted",
             resultReason: "restart",
             finishedAt: Date.now(),
             isSeen: false

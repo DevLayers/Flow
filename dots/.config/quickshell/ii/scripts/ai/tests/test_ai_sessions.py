@@ -2,14 +2,18 @@
 """Small contract tests for the durable AI session helper."""
 
 import json
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "ai_sessions.py"
+sys.path.insert(0, str(SCRIPT.parent))
+import ai_sessions  # noqa: E402
 
 
 def call(*args: str, payload=None) -> dict:
@@ -60,6 +64,32 @@ class AiSessionsContractTests(unittest.TestCase):
             aborted = call("abort-staged", directory, "chat-2", "op-2")
             self.assertTrue(aborted["aborted"])
             self.assertFalse((Path(directory) / ".staging" / "op-2.json").exists())
+
+    def test_index_failure_is_not_reported_as_success_and_keeps_staging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = {"id": "chat-index", "title": "Index failure", "messages": []}
+            call("stage", directory, "chat-index", "op-index", payload=session)
+            output = io.StringIO()
+
+            original = ai_sessions.write_json
+            def fail_index(path, payload):
+                if path.endswith("/index.json"):
+                    return False
+                return original(path, payload)
+
+            with mock.patch.object(ai_sessions, "write_json", side_effect=fail_index):
+                with contextlib.redirect_stdout(output):
+                    ai_sessions.cmd_commit_staged([directory, "chat-index", "op-index"])
+
+            result = json.loads(output.getvalue())
+            self.assertIn("error", result)
+            self.assertTrue((Path(directory) / "chat-index.json").exists())
+            self.assertTrue((Path(directory) / ".staging" / "op-index.json").exists())
+
+    def test_save_index_returns_none_when_index_write_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(ai_sessions, "write_json", return_value=False):
+                self.assertIsNone(ai_sessions.save_index(directory, []))
 
     def test_schema_three_keeps_grounding_and_tool_checkpoints(self):
         with tempfile.TemporaryDirectory() as directory:

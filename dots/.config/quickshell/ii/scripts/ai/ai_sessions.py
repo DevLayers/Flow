@@ -210,10 +210,19 @@ def load_index(directory: str, rebuild_if_missing: bool = True) -> list:
     return rebuild_index(directory)
 
 
-def save_index(directory: str, entries: list) -> list:
+def save_index(directory: str, entries: list) -> list | None:
     entries = sort_entries(entries)
-    write_json(os.path.join(directory, INDEX_NAME), {"schema": SCHEMA, "sessions": entries})
+    if not write_json(os.path.join(directory, INDEX_NAME), {"schema": SCHEMA, "sessions": entries}):
+        return None
     return entries
+
+
+def emit_index(directory: str, entries: list, **extra: Any) -> int:
+    """Never report a successful mutation when the index write failed."""
+    saved = save_index(directory, entries)
+    if saved is None:
+        return emit({"error": "Could not write the session index"})
+    return emit({"sessions": saved, **extra})
 
 
 def upsert(entries: list, entry: dict) -> list:
@@ -330,7 +339,7 @@ def cmd_bootstrap(argv: list) -> int:
     pruned = prune_staging(directory)
     imported = import_legacy(directory, legacy)
     entries = rebuild_index(directory) if imported else load_index(directory)
-    return emit({"sessions": save_index(directory, entries), "imported": imported, "stagingPruned": pruned})
+    return emit_index(directory, entries, imported=imported, stagingPruned=pruned)
 
 
 def cmd_save(argv: list) -> int:
@@ -342,7 +351,7 @@ def cmd_save(argv: list) -> int:
     if not write_json(session_path(directory, session_id), session):
         return emit({"error": "Could not write the session file"})
     entries = upsert(load_index(directory), entry_of(session))
-    return emit({"sessions": save_index(directory, entries)})
+    return emit_index(directory, entries)
 
 
 def cmd_stage(argv: list) -> int:
@@ -367,12 +376,20 @@ def cmd_commit_staged(argv: list) -> int:
         return emit({"error": "Staged session is missing or invalid"})
     if not write_json(session_path(directory, session_id), staged):
         return emit({"error": "Could not commit the staged session"})
-    try:
-        os.unlink(staging_path(directory, operation_id))
-    except OSError:
-        pass
     entries = upsert(load_index(directory), entry_of(staged))
-    return emit({"sessions": save_index(directory, entries), "committed": True, "operationId": operation_id})
+    saved = save_index(directory, entries)
+    if saved is None:
+        return emit({"error": "Could not write the session index"})
+    result = emit({"sessions": saved, "committed": True, "operationId": operation_id})
+    # Keep the staging record until the index ACK succeeds. If the index write
+    # failed, a retry can safely repeat the canonical write and rebuild the
+    # cache instead of losing the only transaction marker.
+    if result == 0:
+        try:
+            os.unlink(staging_path(directory, operation_id))
+        except OSError:
+            pass
+    return result
 
 
 def cmd_abort_staged(argv: list) -> int:
@@ -407,14 +424,14 @@ def cmd_delete(argv: list) -> int:
     directory, session_id = argv[0], argv[1]
     source = session_path(directory, session_id)
     if not os.path.exists(source):
-        return emit({"sessions": save_index(directory, load_index(directory))})
+        return emit_index(directory, load_index(directory))
     os.makedirs(os.path.join(directory, TRASH_NAME), exist_ok=True)
     try:
         shutil.move(source, trash_path(directory, session_id))
     except OSError:
         return emit({"error": "Could not delete that chat"})
     entries = [entry for entry in load_index(directory) if entry.get("id") != session_id]
-    return emit({"sessions": save_index(directory, entries)})
+    return emit_index(directory, entries)
 
 
 def cmd_restore(argv: list) -> int:
@@ -430,7 +447,7 @@ def cmd_restore(argv: list) -> int:
     if session is None:
         return emit({"error": "That chat came back unreadable"})
     entries = upsert(load_index(directory), entry_of(session))
-    return emit({"sessions": save_index(directory, entries), "session": session})
+    return emit_index(directory, entries, session=session)
 
 
 def cmd_purge(argv: list) -> int:
@@ -443,7 +460,7 @@ def cmd_purge(argv: list) -> int:
         os.unlink(target)
     except OSError:
         return emit({"error": "Could not permanently remove that chat"})
-    return emit({"sessions": save_index(directory, load_index(directory)), "purged": session_id})
+    return emit_index(directory, load_index(directory), purged=session_id)
 
 
 def cmd_duplicate(argv: list) -> int:
@@ -460,7 +477,7 @@ def cmd_duplicate(argv: list) -> int:
     if not write_json(session_path(directory, new_id), session):
         return emit({"error": "Could not write the copy"})
     entries = upsert(load_index(directory), entry_of(session))
-    return emit({"sessions": save_index(directory, entries), "id": new_id})
+    return emit_index(directory, entries, id=new_id)
 
 
 def cmd_patch(argv: list) -> int:
@@ -478,7 +495,7 @@ def cmd_patch(argv: list) -> int:
     if not write_json(session_path(directory, session_id), session):
         return emit({"error": "Could not write the session file"})
     entries = upsert(load_index(directory), entry_of(session))
-    return emit({"sessions": save_index(directory, entries)})
+    return emit_index(directory, entries)
 
 
 def cmd_export(argv: list) -> int:

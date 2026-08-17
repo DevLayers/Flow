@@ -381,8 +381,14 @@ AiSearchSurface {
                 }
 
                 delegate: AiChatPanelMessage {
-                    messageId: modelData
-                    messageData: Ai.messageByID[modelData]
+                    required property var modelData
+                    // Delegate roles are untyped QVariant values in a
+                    // ScriptModel. Coerce the id at the boundary so a stale
+                    // delegate/context object cannot be assigned to the
+                    // message's string property while a session is changing.
+                    readonly property string delegateMessageId: String(modelData ?? "")
+                    messageId: delegateMessageId
+                    messageData: Ai.messageByID[delegateMessageId] ?? null
                 }
 
                 property bool following: true

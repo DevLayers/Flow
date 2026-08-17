@@ -1,0 +1,6 @@
+module qs.modules.settings.configs.ai
+
+AdvancedAiConfig 1.0 AdvancedAiConfig.qml
+AiPeriodDropdown 1.0 AiPeriodDropdown.qml
+AiUsageDashboard 1.0 AiUsageDashboard.qml
+CustomModelsConfig 1.0 CustomModelsConfig.qml

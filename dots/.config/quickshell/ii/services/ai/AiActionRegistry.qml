@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import qs
 import qs.modules.common
+import qs.services
 
 /**
  * Shared action and input vocabulary for every AI host.

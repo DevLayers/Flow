@@ -306,6 +306,7 @@ Singleton {
     function finishPendingSubmission(pending, cancelled, reason) {
         if (!pending || root.pendingSubmissionId !== pending.submissionId)
             return;
+        compensationRetryTimer.stop();
         const run = pending.runId ? root.runCoordinator.runFor(pending.runId) : null;
         if (run && !root.runCoordinator.terminalStates.includes(run.state))
             root.runCoordinator.finish(pending.runId, "cancelled", cancelled ? "cancelled" : "submissionFailed");
@@ -337,6 +338,7 @@ Singleton {
         pending.recoveryActionIds = recoveryActionIds ?? [];
         pending.cancelRequested = true;
         pending.state = "compensating";
+        pending.compensationAttempts = Number(pending.compensationAttempts ?? 0);
         root.submissionStateChanged(pending);
         const pendingRun = pending.runId ? root.runCoordinator.runFor(pending.runId) : null;
         if (pendingRun && !root.runCoordinator.terminalStates.includes(pendingRun.state))
@@ -345,8 +347,10 @@ Singleton {
         if (pending.stateBeforeCompensation === "durableNotStarted" || pending.stateBeforeCompensation === "networkStarting" || pending.stateBeforeCompensation === "started") {
             const snapshot = root.messageIDs.length > 0 ? root.sessionToJson() : null;
             if (snapshot) {
+                pending.compensationSnapshot = snapshot;
                 pending.compensationOperationId = root.sessions.commit(snapshot, root.submissionOperationId("compensate"), true);
-                return;
+                if (pending.compensationOperationId)
+                    return;
             }
         }
         if (pending.stageOperationId) {
@@ -363,8 +367,8 @@ Singleton {
             return false;
         pending.cancelRequested = true;
         pending.stateBeforeCompensation = pending.state;
-        root.failPendingSubmission("cancelled", Translation.tr("Message cancelled before it was sent."), []);
         pending.cancelReason = reason;
+        root.failPendingSubmission("cancelled", Translation.tr("Message cancelled before it was sent."), []);
         return true;
     }
 
@@ -404,6 +408,7 @@ Singleton {
             if (!pending || pending.compensationOperationId !== operationId || pending.sessionId !== sessionId)
                 return;
         if (pending.compensationOperationId === operationId) {
+            pending.compensationOperationId = "";
             if (pending.stageOperationId) {
                 pending.abortOperationId = root.sessions.abortSubmission(sessionId, pending.stageOperationId, root.submissionOperationId("abort"));
                 if (pending.abortOperationId)
@@ -426,7 +431,10 @@ Singleton {
         pending.state = "started";
         pending.deferJournal = false;
         root.runCoordinator.transition(pending.runId, "thinking", "networkStarted", {
-            "executionStarted": true,
+            // Network I/O is recoverable; only an acknowledged tool/config
+            // checkpoint sets executionStarted and requires inspection after
+            // a restart.
+            "executionStarted": false,
             "networkStartedAt": Date.now()
         });
         const prepared = pending.prepared;
@@ -437,6 +445,13 @@ Singleton {
         requester.requestData = prepared.requestData;
         requester.apiKey = prepared.apiKey;
         requester.parsedAny = false;
+        const started = requester.start();
+        if (!started) {
+            pending.stateBeforeCompensation = "networkStarting";
+            root.failPendingSubmission("request-start-failed", Translation.tr("The request could not be started."), ["retry-submit"]);
+            return;
+        }
+
         if (root.draftRevision === pending.draftRevisionAtSubmit) {
             const sentDraft = root.draft;
             root.draft = "";
@@ -445,7 +460,12 @@ Singleton {
         root.clearAttachments();
         root.submissionStateChanged(pending);
         root.submissionStarted(pending.submissionId, pending.runId, pending.sessionId);
-        requester.start();
+
+        // The durable submit transaction ends when the requester accepts the
+        // run. From here on, the run coordinator owns lifecycle and the
+        // session may be changed without rolling back the live response.
+        root.pendingSubmission = null;
+        root.pendingSubmissionId = "";
     }
 
     function handleSubmissionSaveFailed(operationId, sessionId, reason) {
@@ -453,7 +473,14 @@ Singleton {
         if (!pending)
             return;
         if (pending.compensationOperationId === operationId) {
-            root.finishPendingSubmission(pending, pending.cancelReason === "user", reason);
+            pending.compensationOperationId = "";
+            pending.compensationAttempts = Number(pending.compensationAttempts ?? 0) + 1;
+            pending.compensationLastError = reason;
+            pending.state = "compensating";
+            root.submissionNotice = Translation.tr("The failed message is being rolled back; retrying its local journal.");
+            root.submissionStateChanged(pending);
+            compensationRetryTimer.interval = Math.min(8000, 1000 * Math.pow(2, Math.max(0, pending.compensationAttempts - 1)));
+            compensationRetryTimer.restart();
             return;
         }
         if (pending.networkOperationId === operationId || pending.stageOperationId === operationId) {
@@ -485,6 +512,28 @@ Singleton {
         root.finishPendingSubmission(pending, pending.cancelReason === "user", reason);
     }
 
+    function retryCompensation() {
+        const pending = root.pendingSubmission;
+        if (!pending || pending.state !== "compensating" || pending.compensationOperationId || !pending.compensationSnapshot)
+            return;
+        pending.compensationOperationId = root.sessions.commit(
+            pending.compensationSnapshot,
+            root.submissionOperationId("compensate-retry"),
+            true
+        );
+        if (!pending.compensationOperationId) {
+            compensationRetryTimer.interval = Math.min(8000, Math.max(1000, compensationRetryTimer.interval * 2));
+            compensationRetryTimer.restart();
+        }
+    }
+
+    Timer {
+        id: compensationRetryTimer
+        interval: 1500
+        repeat: false
+        onTriggered: root.retryCompensation()
+    }
+
     Connections {
         target: KeyringStorage
         function onLoadedChanged() {
@@ -498,7 +547,25 @@ Singleton {
             sessionId: sessionId,
             run: run
         };
-        runJournalTimer.restart();
+        root.scheduleRunJournal();
+    }
+
+    // Journal at the leading edge, then at most once per interval while a
+    // stream is active. A trailing-only debounce lost the whole run whenever
+    // chunks arrived faster than the debounce window.
+    function scheduleRunJournal() {
+        if (runJournalTimer.running)
+            return;
+        root.flushRunJournal();
+        runJournalTimer.start();
+    }
+
+    function flushRunJournal() {
+        const pending = root.pendingRunJournal;
+        root.pendingRunJournal = null;
+        if (!pending)
+            return "";
+        return root.commitRunSession(pending.sessionId, false);
     }
 
     function onRunStarted(run: var) {
@@ -512,7 +579,7 @@ Singleton {
             sessionId: run.sessionId,
             run: run
         };
-        runJournalTimer.restart();
+        root.scheduleRunJournal();
     }
 
     function onRunActivity(run: var, event: var) {
@@ -526,7 +593,7 @@ Singleton {
             sessionId: run.sessionId,
             run: run
         };
-        runJournalTimer.restart();
+        root.scheduleRunJournal();
     }
 
     function onRunFinished(run: var) {
@@ -545,6 +612,7 @@ Singleton {
         if (run.sessionId === root.currentRunSessionId && root.runningMessageIDs.length > 0)
             root.conversations.capture(run.sessionId, root.runningSessionToJson());
         root.pendingRunJournal = null;
+        runJournalTimer.stop();
         root.commitRunSession(run.sessionId, true);
         if (root.currentRunId === run.runId)
             root.currentRunId = "";
@@ -557,27 +625,26 @@ Singleton {
     function commitRunSession(sessionId: string, flushNow = false) {
         const id = String(sessionId ?? "");
         if (!id)
-            return;
+            return "";
         if (id === root.sessions.currentId) {
-            root.commitSession(flushNow);
-            return;
+            return root.commitSession(flushNow);
         }
         if (id === root.currentRunSessionId && root.runningMessageIDs.length > 0)
             root.conversations.capture(id, root.runningSessionToJson());
         const snapshot = root.conversations.snapshot(id);
         if (snapshot)
-            root.sessions.commit(snapshot, "", flushNow);
+            return root.sessions.commit(snapshot, "", flushNow);
+        return "";
     }
 
     Timer {
         id: runJournalTimer
         interval: 700
+        repeat: true
         onTriggered: {
-            const pending = root.pendingRunJournal;
-            root.pendingRunJournal = null;
-            if (!pending)
-                return;
-            root.commitRunSession(pending.sessionId, false);
+            root.flushRunJournal();
+            if (!root.pendingRunJournal)
+                runJournalTimer.stop();
         }
     }
 
@@ -590,6 +657,9 @@ Singleton {
     /** Tool calls returned in one assistant turn, waiting for their turn. */
     property var pendingToolCalls: []
     property string activeToolCallId: ""
+    /** One irreversible tool effect may wait for a durable journal ACK. */
+    property var pendingToolExecution: null
+    property int toolExecutionSequence: 0
     // Session-owned metadata that survives a Search/sidebar handoff and a
     // restart. Message-level arrays remain the rich-rendering source.
     property list<string> sessionSearchQueries: []
@@ -1307,6 +1377,13 @@ Singleton {
         if (!message || message.done)
             return;
         message.done = true;
+        // The usage ledger counts every finished response; tokens only when
+        // the provider actually reported them (total stayed -1 otherwise),
+        // success only when nothing flagged the message with an error kind.
+        AiUsage.recordResponse(message.model ?? root.currentModelId,
+            root.tokenCount.input, root.tokenCount.output,
+            root.tokenCount.thinking, root.tokenCount.total,
+            (message.errorKind ?? "").length === 0);
         if (root.postResponseHook) {
             root.postResponseHook();
             root.postResponseHook = null; // Reset hook after use
@@ -1604,6 +1681,13 @@ Singleton {
         const data = strategy.buildRequestData(model, filteredMessageArray, pending ? pending.systemPrompt : root.systemPrompt, pending ? pending.temperature : root.temperature, tools);
         // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
 
+        // Fresh response, fresh counters: a dialect that never reports usage
+        // must not inherit the previous answer's numbers — and the usage
+        // ledger reads exactly these when the response finishes.
+        root.tokenCount.input = -1;
+        root.tokenCount.output = -1;
+        root.tokenCount.thinking = -1;
+        root.tokenCount.total = -1;
 
         /* Create local message object */
         const message = root.aiMessageComponent.createObject(root, {
@@ -1964,9 +2048,25 @@ Singleton {
         });
     }
 
-    function addFunctionOutputMessage(name, output, callId = "") {
+    function addFunctionOutputMessage(name, output, callId = "", sessionId = "") {
         const aiMessage = createFunctionOutputMessage(name, output, true, callId);
         const id = idForMessage(aiMessage);
+        const targetSessionId = String(sessionId || root.currentRunSessionId || root.sessions.currentId);
+        const belongsToRun = targetSessionId.length > 0
+            && targetSessionId === root.currentRunSessionId
+            && root.runningMessageIDs.length > 0;
+        if (belongsToRun) {
+            root.runningMessageIDs = [...root.runningMessageIDs, id];
+            root.runningMessageByID[id] = aiMessage;
+            if (targetSessionId === root.sessions.currentId) {
+                root.messageIDs = [...root.messageIDs, id];
+                root.messageByID[id] = aiMessage;
+            } else {
+                root.conversations.capture(targetSessionId, root.runningSessionToJson());
+                root.commitRunSession(targetSessionId, false);
+            }
+            return;
+        }
         root.messageIDs = [...root.messageIDs, id];
         root.messageByID[id] = aiMessage;
     }
@@ -1990,22 +2090,166 @@ Singleton {
     function approveCommand(message: AiMessageData) {
         if (!message.functionPending)
             return;
-        message.functionPending = false; // User decided, no more "thinking"
+        // Keep the approval card alive until the journal ACK; the side effect
+        // must not begin merely because the click handler ran.
         root.runShellCommand(message, message.functionCall?.args?.command ?? "");
+    }
+
+    function failToolExecution(message: AiMessageData, serial: int, reason: string, checkpointSerial = -1, sessionId = "") {
+        if (!message)
+            return;
+        if (root.pendingToolExecution?.message === message)
+            root.pendingToolExecution = null;
+        message.functionPending = false;
+        root.toolbox.finishCall(serial, "failed", reason);
+        if (checkpointSerial >= 0 && checkpointSerial !== serial)
+            root.recordToolCheckpoint({
+                serial: checkpointSerial,
+                id: String(message.functionName ?? "tool"),
+                title: root.toolbox.titleFor(String(message.functionName ?? "tool")),
+                icon: root.toolbox.definitionFor(String(message.functionName ?? "tool"))?.icon ?? "build",
+                detail: Translation.tr("Execution was blocked before the side effect."),
+                status: "failed",
+                outcome: reason,
+                at: Date.now()
+            });
+        root.addFunctionOutputMessage(message.functionName, reason, message.functionCallId, sessionId);
+        root.requestFollowUp();
+    }
+
+    /**
+     * Writes an approved side-effect intent and waits for its ACK. The
+     * operation itself is started only after a second checkpoint marks the
+     * irreversible execution boundary.
+     */
+    function beginToolExecution(message: AiMessageData, kind: string, payload: var): bool {
+        if (!message)
+            return false;
+        if (root.pendingToolExecution) {
+            root.failToolExecution(message, message.toolCallSerial, Translation.tr("Another tool is already being prepared."));
+            return false;
+        }
+        const runId = root.currentRunId;
+        const run = root.runCoordinator.runFor(runId);
+        const sessionId = root.currentRunSessionId || root.sessions.currentId;
+        if (!run || !root.runCoordinator.activeStates.includes(run.state) || sessionId.length === 0) {
+            root.failToolExecution(message, message.toolCallSerial, Translation.tr("This tool call is no longer attached to an active run."));
+            return false;
+        }
+        const serial = Number(message.toolCallSerial ?? -1);
+        const checkpointSerial = serial >= 0 ? serial : -(++root.toolExecutionSequence);
+        const entry = {
+            serial: checkpointSerial,
+            id: String(message.functionName ?? kind),
+            title: root.toolbox.titleFor(String(message.functionName ?? kind)),
+            icon: root.toolbox.definitionFor(String(message.functionName ?? kind))?.icon ?? "build",
+            detail: kind === "shell" ? String(payload?.command ?? "") : JSON.stringify(payload?.changes ?? []),
+            status: "approved",
+            outcome: "",
+            at: Date.now(),
+            kind: kind
+        };
+        root.recordToolCheckpoint(entry);
+        const operationId = root.commitRunSession(sessionId, true);
+        if (!operationId) {
+            root.failToolExecution(message, serial, Translation.tr("The tool was not run because its approval could not be saved."), checkpointSerial);
+            return false;
+        }
+        root.pendingToolExecution = {
+            operationId: operationId,
+            sessionId: sessionId,
+            runId: runId,
+            message: message,
+            kind: kind,
+            serial: serial,
+            checkpointSerial: checkpointSerial,
+            command: String(payload?.command ?? ""),
+            changes: Array.from(payload?.changes ?? []),
+            phase: "approved"
+        };
+        return true;
+    }
+
+    function handleToolJournalSaveSucceeded(operationId: string, sessionId: string): bool {
+        const pending = root.pendingToolExecution;
+        if (!pending || pending.operationId !== operationId || pending.sessionId !== sessionId)
+            return false;
+        if (pending.phase === "approved") {
+            if (!root.runCoordinator.markExecutionStarted(pending.runId, {
+                "tool": pending.kind,
+                "toolCallSerial": pending.serial
+            })) {
+                root.failToolExecution(pending.message, pending.serial, Translation.tr("The run ended before the tool could start."), pending.checkpointSerial, pending.sessionId);
+                return true;
+            }
+            root.recordToolCheckpoint({
+                serial: pending.checkpointSerial,
+                id: String(pending.message.functionName ?? pending.kind),
+                title: root.toolbox.titleFor(String(pending.message.functionName ?? pending.kind)),
+                icon: root.toolbox.definitionFor(String(pending.message.functionName ?? pending.kind))?.icon ?? "build",
+                detail: pending.kind === "shell" ? pending.command : JSON.stringify(pending.changes),
+                status: "executionStarted",
+                outcome: "",
+                at: Date.now(),
+                kind: pending.kind
+            });
+            pending.phase = "executionStarted";
+            pending.operationId = root.commitRunSession(pending.sessionId, true);
+            if (!pending.operationId) {
+                root.failToolExecution(pending.message, pending.serial, Translation.tr("The tool could not confirm its execution checkpoint."), pending.checkpointSerial);
+            }
+            return true;
+        }
+        root.pendingToolExecution = null;
+        pending.message.functionPending = false;
+        if (pending.kind === "shell")
+            root.startShellCommand(pending.message, pending.command, pending.sessionId);
+        else
+            root.applyConfigChangesNow(pending.message, pending.changes, pending.sessionId);
+        return true;
+    }
+
+    function handleToolJournalSaveFailed(operationId: string, sessionId: string, reason: string): bool {
+        const pending = root.pendingToolExecution;
+        if (!pending || pending.operationId !== operationId || pending.sessionId !== sessionId)
+            return false;
+        root.pendingToolExecution = null;
+        root.failToolExecution(pending.message, pending.serial, Translation.tr("The tool was not run because its journal could not be saved: %1").arg(reason), pending.checkpointSerial, pending.sessionId);
+        return true;
     }
 
     function runShellCommand(message: AiMessageData, command: string) {
         if (!root.onlineAllowed) {
+            message.functionPending = false;
             root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Shell commands are disabled by the local-only AI policy."));
             addFunctionOutputMessage(message.functionName, Translation.tr("Shell commands are disabled while AI is restricted to local providers."), message.functionCallId);
             root.requestFollowUp();
             return;
         }
+        root.beginToolExecution(message, "shell", { "command": command });
+    }
 
+    function startShellCommand(message: AiMessageData, command: string, sessionId = "") {
         const responseMessage = createFunctionOutputMessage(message.functionName, "", false, message.functionCallId);
         const id = idForMessage(responseMessage);
-        root.messageIDs = [...root.messageIDs, id];
-        root.messageByID[id] = responseMessage;
+        const targetSessionId = String(sessionId || root.currentRunSessionId || root.sessions.currentId);
+        const belongsToRun = targetSessionId.length > 0
+            && targetSessionId === root.currentRunSessionId
+            && root.runningMessageIDs.length > 0;
+        if (belongsToRun) {
+            root.runningMessageIDs = [...root.runningMessageIDs, id];
+            root.runningMessageByID[id] = responseMessage;
+            if (targetSessionId === root.sessions.currentId) {
+                root.messageIDs = [...root.messageIDs, id];
+                root.messageByID[id] = responseMessage;
+            } else {
+                root.conversations.capture(targetSessionId, root.runningSessionToJson());
+                root.commitRunSession(targetSessionId, false);
+            }
+        } else {
+            root.messageIDs = [...root.messageIDs, id];
+            root.messageByID[id] = responseMessage;
+        }
 
         commandExecutionProc.message = responseMessage;
         commandExecutionProc.baseMessageContent = responseMessage.content;
@@ -2085,6 +2329,10 @@ Singleton {
 
     /** Writes the changes the user kept, and tells the model which those were. */
     function applyConfigChanges(message: AiMessageData, changes: var) {
+        root.beginToolExecution(message, "config", { "changes": Array.from(changes ?? []) });
+    }
+
+    function applyConfigChangesNow(message: AiMessageData, changes: var, sessionId = "") {
         const proposed = Array.from(message.pendingChanges ?? []).length;
         message.functionPending = false;
         message.pendingChanges = [];
@@ -2104,7 +2352,7 @@ Singleton {
         if (results.length === 0)
             results.push(Translation.tr("The user kept every setting as it was."));
         root.toolbox.finishCall(message.toolCallSerial, applied > 0 ? "done" : "refused", Translation.tr("%1 of %2 applied").arg(applied).arg(Math.max(proposed, applied)));
-        addFunctionOutputMessage("set_shell_config", results.join("\n"));
+        addFunctionOutputMessage("set_shell_config", results.join("\n"), "", sessionId);
         root.requestFollowUp();
     }
 
@@ -2274,10 +2522,14 @@ Singleton {
         onSessionOpened: session => root.applySession(session)
         onSaveSucceeded: (operationId, sessionId) => {
             root.conversations.markSaveAcknowledged(sessionId);
+            if (root.handleToolJournalSaveSucceeded(operationId, sessionId))
+                return;
             root.handleSubmissionSaveSucceeded(operationId, sessionId);
         }
         onSaveFailed: (operationId, sessionId, reason) => {
             root.conversations.markSavePending(sessionId, true);
+            if (root.handleToolJournalSaveFailed(operationId, sessionId, reason))
+                return;
             root.handleSubmissionSaveFailed(operationId, sessionId, reason);
         }
         onStageSucceeded: (operationId, sessionId) => root.handleSubmissionStageSucceeded(operationId, sessionId)
@@ -2484,6 +2736,28 @@ Singleton {
         });
     }
 
+    // A session may have been saved while its provider process was still
+    // streaming. There is no process to resume after a restart or when an old
+    // chat is opened, so restoring `done: false` would create an immortal
+    // loading row. Convert only unfinished assistant turns to a terminal,
+    // retryable message; completed history remains byte-for-byte intact.
+    function recoverInterruptedMessages(messages: var, run: var): var {
+        const source = Array.isArray(messages) ? messages : [];
+        const hasUnfinishedRun = !!run && !root.runCoordinator.terminalStates.includes(String(run.state ?? ""));
+        return source.map(data => {
+            const value = Object.assign({}, data ?? ({}));
+            if (value.role === "assistant" && (value.done !== true || value.thinking === true) && (hasUnfinishedRun || value.done !== true)) {
+                value.done = true;
+                value.thinking = false;
+                if (String(value.errorKind ?? "").length === 0)
+                    value.errorKind = "interrupted";
+                if (String(value.errorText ?? "").length === 0)
+                    value.errorText = Translation.tr("This response was interrupted. You can retry it.");
+            }
+            return value;
+        });
+    }
+
     function sessionToJson(): var {
         return ({
                 "schema": root.sessionSchema,
@@ -2555,7 +2829,7 @@ Singleton {
      */
     function commitSession(flushNow = false) {
         if (root.messageIDs.length === 0)
-            return;
+            return "";
         if (root.sessions.currentId.length === 0) {
             root.sessions.currentId = root.sessions.newId();
             root.sessionCreatedAt = Date.now();
@@ -2563,12 +2837,20 @@ Singleton {
         const snapshot = root.sessionToJson();
         root.conversations.capture(root.sessions.currentId, snapshot);
         root.conversations.markSavePending(root.sessions.currentId, true);
-        root.sessions.commit(snapshot, "", flushNow);
+        return root.sessions.commit(snapshot, "", flushNow);
     }
 
     /** Puts the conversation away and starts an empty one. */
     function newChat() {
-        if (root.pendingSubmissionId.length > 0) {
+        if (root.pendingToolExecution || commandExecutionProc.running) {
+            root.addMessage(Translation.tr("Wait for the active tool to finish before switching chats."), root.interfaceRole, {
+                "notice": "submission"
+            });
+            return;
+        }
+        const pending = root.pendingSubmission;
+        const activeRun = root.currentRunId.length > 0 && root.runCoordinator.activeStates.includes(root.runCoordinator.runFor(root.currentRunId)?.state);
+        if (pending && !activeRun && !requester.running) {
             root.cancelPendingSubmission("new-chat");
             return;
         }
@@ -2597,7 +2879,15 @@ Singleton {
     function openSession(sessionId: string) {
         if (sessionId.length === 0 || sessionId === root.sessions.currentId)
             return;
-        if (root.pendingSubmissionId.length > 0) {
+        if (root.pendingToolExecution || commandExecutionProc.running) {
+            root.addMessage(Translation.tr("Wait for the active tool to finish before switching chats."), root.interfaceRole, {
+                "notice": "submission"
+            });
+            return;
+        }
+        const pending = root.pendingSubmission;
+        const activeRun = root.currentRunId.length > 0 && root.runCoordinator.activeStates.includes(root.runCoordinator.runFor(root.currentRunId)?.state);
+        if (pending && !activeRun && !requester.running) {
             root.addMessage(Translation.tr("Wait for this message to finish saving, or stop it before switching chats."), root.interfaceRole, {
                 "notice": "submission"
             });
@@ -2617,7 +2907,7 @@ Singleton {
         const sessionId = root.sessions.currentId;
         if (sessionId.length > 0) {
             let restoredRun = session.run ?? root.conversations.records[sessionId]?.run ?? null;
-            if (restoredRun && !root.runCoordinator.terminalStates.includes(restoredRun.state)) {
+            if (restoredRun && (!root.runCoordinator.terminalStates.includes(restoredRun.state) || restoredRun.executionStarted === true)) {
                 restoredRun = root.runCoordinator.restore(restoredRun);
                 session.run = restoredRun;
             }
@@ -2626,7 +2916,12 @@ Singleton {
         root.clearMessages();
         const ids = [];
         const byId = ({});
-        const messages = session.messages ?? [];
+        const originalMessages = Array.isArray(session.messages) ? session.messages : [];
+        const messages = root.recoverInterruptedMessages(originalMessages, session.run ?? null);
+        const recoveredMessages = messages.some((value, index) => {
+            const original = originalMessages[index] ?? ({});
+            return value.done !== original.done || value.thinking !== original.thinking || value.errorKind !== original.errorKind || value.errorText !== original.errorText;
+        });
         for (let i = 0; i < messages.length; i++) {
             const data = messages[i];
             const id = (data.id && String(data.id).length > 0) ? String(data.id) : root.sessions.newId();
@@ -2656,6 +2951,8 @@ Singleton {
         root.sessionPersonaId = session.personaId ?? root.defaultPersonaId;
         root.clearAttachments();
         root.restoreDraft();
+        if (recoveredMessages)
+            root.commitSession(true);
     }
 
     function migrateAiDefaults() {

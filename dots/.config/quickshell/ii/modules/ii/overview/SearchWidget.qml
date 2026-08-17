@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 
-import Qt.labs.synchronizer
 import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Effects
@@ -63,7 +62,19 @@ Item {
         }
     }
 
-    property string searchingText: LauncherSearch.query
+    // Keep one authoritative query path. Binding this property directly to
+    // LauncherSearch while also synchronizing it from SearchBar created a
+    // QML binding loop during the AI handoff (the query is intentionally
+    // cleared when the chat surface takes over).
+    property string searchingText: ""
+
+    Connections {
+        target: LauncherSearch
+        function onQueryChanged() {
+            if (root.searchingText !== LauncherSearch.query)
+                root.searchingText = LauncherSearch.query;
+        }
+    }
     readonly property bool isClipboardMode: root.searchingText.startsWith(Config.options.search.prefix.clipboard)
     readonly property bool isBluetoothMode: root.searchingText.startsWith(Config.options.search.prefix.bluetooth)
     readonly property bool isTranslatorMode: root.searchingText.startsWith(Config.options.search.prefix.translator)
@@ -132,6 +143,8 @@ Item {
             aiAutoEngageTimer.restart();
         }
     }
+
+    Component.onCompleted: root.searchingText = LauncherSearch.query
 
     onRealResultCountChanged: {
         if (root.aiAutoEngaged)
@@ -368,7 +381,7 @@ Item {
         root.aiModeLocked = false;
         LauncherSearch.query = "";
         searchBar.searchInput.text = "";
-        root.focusSearchInput();
+        Qt.callLater(root.focusSearchInput);
     }
 
     // Send the current search bar text as a chat message. The search bar is
@@ -630,8 +643,10 @@ Item {
                 Layout.row: root.overviewPosition == "bottom" ? 1 : 0
                 animateWidth: true
                 aiModeActive: root.isAiMode
-                Synchronizer on searchingText {
-                    property alias source: root.searchingText
+                Binding {
+                    target: searchBar
+                    property: "searchingText"
+                    value: root.searchingText
                 }
 
                 clipboardMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode

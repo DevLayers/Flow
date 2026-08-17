@@ -7,6 +7,7 @@ import Quickshell.Io
 import qs
 import qs.modules.common
 import qs.modules.common.functions
+import qs.services
 
 /** Shared copy/paste boundary for AI message output and composers. */
 Singleton {

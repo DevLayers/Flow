@@ -76,6 +76,7 @@ Singleton {
     property string userAiPrompts: FileUtils.trimFileProtocol(`${Directories.shellConfig}/ai/prompts`)
     property string userActions: FileUtils.trimFileProtocol(`${Directories.shellConfig}/actions`)
     property string aiChats: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/chats`)
+    property string aiUsage: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/usage.json`)
     // Composer drafts are intentionally isolated from settings and transcript
     // files; the store owns atomic writes and recovery for this directory.
     property string aiDrafts: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/drafts`)
@@ -114,6 +115,7 @@ Singleton {
         Quickshell.execDetached(["bash", "-c", `rm -rf '${latexOutput}'; mkdir -p '${latexOutput}'`]);
         Quickshell.execDetached(["bash", "-c", `rm -rf '${cliphistDecode}'; mkdir -p '${cliphistDecode}'`]);
         Quickshell.execDetached(["mkdir", "-p", `${aiChats}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${FileUtils.parentDirectory(aiUsage)}`]);
         Quickshell.execDetached(["mkdir", "-p", `${aiDrafts}`]);
         Quickshell.execDetached(["mkdir", "-p", `${appStats}`]);
         Quickshell.execDetached(["mkdir", "-p", `${userActions}`]);

@@ -2,7 +2,6 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import Qt.labs.synchronizer
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Controls
@@ -57,7 +56,6 @@ Scope {
 
                         readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
                         readonly property string animStyle: (GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? "zoom" : (Config.options.overview.animationStyle ?? "bounce")
-                        property string searchingText: ""
 
                         WlrLayershell.namespace: "quickshell:overview"
                         WlrLayershell.layer: WlrLayer.Overlay
@@ -69,6 +67,7 @@ Scope {
                         property list<real> animCurveEnter: Appearance.animationCurves.expressiveFastSpatial
                         property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
                         readonly property bool overviewShouldShow: LauncherSearch.query === ""
+                            && !(searchWidget?.isAiMode ?? false)
                             && !GlobalStates.searchOnlyMode
                             && !GlobalStates.searchCenterMode
                             && !Config.options.search.suggestions.enable
@@ -395,9 +394,6 @@ Scope {
                                     shadowOpacity: searchWidgetWrapper.slideOpacity
                                     surfaceMonitorName: root.screen?.name ?? ""
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    Synchronizer on searchingText {
-                                        property alias source: root.searchingText
-                                    }
                                 }
                             }
 
@@ -406,7 +402,7 @@ Scope {
                                 anchors.bottom: root.isBottomBar ? searchWidgetWrapper.top : undefined
                                 anchors.top: root.isBottomBar ? undefined : searchWidgetWrapper.bottom
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout
+                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout && !(searchWidget?.isAiMode ?? false)
                                 opacity: root.overviewShouldShow ? searchWidgetWrapper.slideOpacity * root.overviewFadeProgress : 0.0
 
                                 layer.enabled: overviewLoader.opacity < 0.999
