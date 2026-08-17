@@ -42,8 +42,10 @@ QtObject {
     signal pageTransitionFinished(string page)
     signal focusRequested(string page)
 
-    NumberAnimation {
-        id: transitionAnimation
+    // QtObject has no visual/data default property. Keep the animation as an
+    // explicit object property so the navigator can be instantiated safely
+    // by AiSearchSurface (and so hot reload cannot discard a child silently).
+    property NumberAnimation transitionAnimation: NumberAnimation {
         target: root
         property: "transitionProgress"
         from: 0
@@ -63,7 +65,7 @@ QtObject {
         if (!root.hasPage(targetPage) || targetPage === root.currentPage && !root.transitioning)
             return false;
 
-        transitionAnimation.stop();
+        root.transitionAnimation.stop();
         root.outgoingPage = root.currentPage;
         root.incomingPage = targetPage;
         root.transitionDirection = direction < 0 ? -1 : 1;
@@ -76,7 +78,7 @@ QtObject {
             root.transitionProgress = 1;
             root.finishTransition();
         } else {
-            transitionAnimation.restart();
+            root.transitionAnimation.restart();
         }
         return true;
     }
@@ -103,7 +105,7 @@ QtObject {
 
     function back() {
         if (root.transitioning) {
-            transitionAnimation.stop();
+            root.transitionAnimation.stop();
             root.incomingPage = root.outgoingPage;
             root.outgoingPage = root.currentPage;
             root.pendingPop = false;
@@ -114,7 +116,7 @@ QtObject {
                 root.transitionProgress = 1;
                 root.finishTransition();
             } else {
-                transitionAnimation.restart();
+                root.transitionAnimation.restart();
             }
             return true;
         }

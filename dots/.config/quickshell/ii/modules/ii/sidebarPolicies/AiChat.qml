@@ -40,6 +40,97 @@ Item {
         root.entranceTrigger++;
     }
 
+    // Handoff state is logical, not a reference to a sidebar delegate. The
+    // Search surface can therefore recreate this chat at another width (or
+    // after hot reload) without retaining an invalid QML object.
+    function captureHandoffState() {
+        const anchor = {
+            messageId: "",
+            offset: 0,
+            following: messageListView.following === true
+        };
+        if (messageListView.count <= 0)
+            return anchor;
+        const probeY = Math.min(8, Math.max(0, messageListView.height - 1));
+        const index = messageListView.indexAt(8, probeY);
+        if (index < 0)
+            return anchor;
+        const modelIds = Ai.messageIDs.filter(id => {
+            const message = Ai.messageByID[id];
+            return message?.visibleToUser ?? true;
+        });
+        anchor.messageId = String(modelIds[index] ?? "");
+        const delegate = messageListView.itemAtIndex(index);
+        if (delegate)
+            anchor.offset = Math.max(0, Number(delegate.y) - Number(messageListView.contentY));
+        return anchor;
+    }
+
+    function restoreHandoffAnchor(anchor) {
+        const source = anchor && typeof anchor === "object" ? anchor : ({});
+        if (source.following === true) {
+            messageListView.pinToEnd();
+            return true;
+        }
+        const modelIds = Ai.messageIDs.filter(id => {
+            const message = Ai.messageByID[id];
+            return message?.visibleToUser ?? true;
+        });
+        const index = modelIds.indexOf(String(source.messageId ?? ""));
+        if (index < 0)
+            return false;
+        messageListView.following = false;
+        messageListView.positionViewAtIndex(index, ListView.Beginning);
+        const offset = Number(source.offset ?? 0);
+        if (isFinite(offset) && offset > 0)
+            messageListView.contentY = Math.max(0, messageListView.contentY - offset);
+        return true;
+    }
+
+    function focusMessageTarget(messageId, anchor) {
+        const targetId = String(messageId ?? "");
+        const modelIds = Ai.messageIDs.filter(id => {
+            const message = Ai.messageByID[id];
+            return message?.visibleToUser ?? true;
+        });
+        const index = modelIds.indexOf(targetId);
+        if (index < 0)
+            return false;
+        messageListView.following = false;
+        messageListView.positionViewAtIndex(index, ListView.Center);
+        const offset = Number(anchor?.offset ?? 0);
+        if (isFinite(offset) && offset > 0)
+            messageListView.contentY = Math.max(0, messageListView.contentY - offset);
+        Qt.callLater(function() {
+            const delegate = messageListView.itemAtIndex(index);
+            if (delegate && typeof delegate.forceActiveFocus === "function")
+                delegate.forceActiveFocus();
+            else
+                messageListView.forceActiveFocus();
+        });
+        return true;
+    }
+
+    // Returning false leaves a deep-link pending until a streamed target is
+    // present in this host. Composer handoffs may be acknowledged immediately
+    // once the AI tab is the visible SwipeView page.
+    function applySurfaceIntent(intent) {
+        if (!intent)
+            return false;
+        const hasExplicitTarget = String(intent.messageId ?? "").length > 0 || String(intent.blockId ?? "").length > 0;
+        if (hasExplicitTarget) {
+            const targetId = Ai.surfaceRouter.resolveTargetMessageId(intent);
+            return root.focusMessageTarget(targetId, intent.scrollAnchor);
+        }
+        const anchor = intent.scrollAnchor ?? ({});
+        const hasAnchor = String(anchor.messageId ?? "").length > 0 || anchor.following === true;
+        if (hasAnchor && !root.restoreHandoffAnchor(anchor))
+            return false;
+        if (String(intent.focusIntent ?? "composer") === "composer")
+            messageInputField.forceActiveFocus();
+        return hasAnchor || String(intent.focusIntent ?? "composer") === "composer";
+    }
+
     onFocusChanged: focus => {
         if (focus) {
             root.inputField.forceActiveFocus();
@@ -61,8 +152,20 @@ Item {
             root.sessionsOpen = false;
             event.accepted = true;
         }
+        if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_J) {
+            Ai.surfaceRouter.open({
+                surface: "search",
+                monitorName: GlobalStates.activeLeftSidebarMonitor,
+                sessionId: Ai.sessions.currentId,
+                focusIntent: "composer",
+                scrollAnchor: root.captureHandoffState()
+            });
+            event.accepted = true;
+            return;
+        }
         if ((event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier) && event.key === Qt.Key_O) {
             Ai.newChat();
+            event.accepted = true;
         }
     }
 

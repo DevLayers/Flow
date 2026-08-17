@@ -7,6 +7,7 @@ import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.sidebarPolicies
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -36,6 +37,87 @@ AiSearchSurface {
 
     function focusComposer() {
         composer.focusInput();
+    }
+
+    // Handoffs carry logical transcript ids, never delegate objects. Search
+    // and the sidebar have different widths, so restoring a raw contentY
+    // would land on the wrong paragraph; the first visible message plus its
+    // viewport offset is stable across both layouts.
+    function captureHandoffState() {
+        const anchor = {
+            messageId: "",
+            offset: 0,
+            following: messageList.following === true
+        };
+        if (messageList.count <= 0)
+            return anchor;
+        const probeY = Math.min(8, Math.max(0, messageList.height - 1));
+        const index = messageList.indexAt(8, probeY);
+        if (index < 0 || index >= root.visibleMessageIds.length)
+            return anchor;
+        anchor.messageId = String(root.visibleMessageIds[index] ?? "");
+        const delegate = messageList.itemAtIndex(index);
+        if (delegate)
+            anchor.offset = Math.max(0, Number(delegate.y) - Number(messageList.contentY));
+        return anchor;
+    }
+
+    function restoreHandoffAnchor(anchor) {
+        const source = anchor && typeof anchor === "object" ? anchor : ({});
+        if (source.following === true) {
+            messageList.following = true;
+            messageList.positionViewAtEnd();
+            return true;
+        }
+        const anchorId = String(source.messageId ?? "");
+        const index = root.visibleMessageIds.indexOf(anchorId);
+        if (index < 0)
+            return false;
+        messageList.following = false;
+        messageList.positionViewAtIndex(index, ListView.Beginning);
+        const offset = Number(source.offset ?? 0);
+        if (isFinite(offset) && offset > 0)
+            messageList.contentY = Math.max(0, messageList.contentY - offset);
+        return true;
+    }
+
+    function focusMessageTarget(messageId, anchor) {
+        const targetId = String(messageId ?? "");
+        const index = root.visibleMessageIds.indexOf(targetId);
+        if (index < 0)
+            return false;
+        messageList.following = false;
+        messageList.positionViewAtIndex(index, ListView.Center);
+        const offset = Number(anchor?.offset ?? 0);
+        if (isFinite(offset) && offset > 0)
+            messageList.contentY = Math.max(0, messageList.contentY - offset);
+        Qt.callLater(function() {
+            const delegate = messageList.itemAtIndex(index);
+            if (delegate && typeof delegate.forceActiveFocus === "function")
+                delegate.forceActiveFocus();
+            else
+                messageList.forceActiveFocus();
+        });
+        return true;
+    }
+
+    // Called by SearchWidget only after the requested session is visible.
+    // Returning false keeps the router intent pending for streamed targets.
+    function applySurfaceIntent(intent) {
+        if (!intent)
+            return false;
+        const hasExplicitTarget = String(intent.messageId ?? "").length > 0 || String(intent.blockId ?? "").length > 0;
+        if (hasExplicitTarget) {
+            const targetId = Ai.surfaceRouter.resolveTargetMessageId(intent);
+            return root.focusMessageTarget(targetId, intent.scrollAnchor);
+        }
+        const anchor = intent.scrollAnchor ?? ({});
+        const hasAnchor = String(anchor.messageId ?? "").length > 0 || anchor.following === true;
+        if (hasAnchor && !root.restoreHandoffAnchor(anchor))
+            return false;
+        if (String(intent.focusIntent ?? "composer") === "composer")
+            root.focusComposer();
+        return hasAnchor || String(intent.focusIntent ?? "composer") === "composer";
     }
 
     function handleComposerEscape() {

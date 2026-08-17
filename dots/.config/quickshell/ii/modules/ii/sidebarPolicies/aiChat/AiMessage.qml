@@ -30,6 +30,12 @@ Rectangle {
     readonly property bool isUser: root.messageData?.role === "user"
     readonly property var sentFiles: Array.from(root.messageData?.attachments ?? [])
 
+    focus: false
+    activeFocusOnTab: true
+    Accessible.name: root.isUser
+        ? Translation.tr("Your message: %1").arg(String(root.messageData?.content ?? ""))
+        : Translation.tr("Assistant response")
+
     anchors.left: parent?.left
     anchors.right: parent?.right
     implicitHeight: columnLayout.implicitHeight + root.messagePadding * 2

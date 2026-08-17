@@ -27,6 +27,12 @@ ColumnLayout {
     readonly property var sentFiles: Array.from(root.messageData?.attachments ?? [])
     readonly property bool actionFocused: copyButton.activeFocus || regenerateButton.activeFocus
 
+    focus: false
+    activeFocusOnTab: true
+    Accessible.name: root.isUser
+        ? Translation.tr("Your message: %1").arg(String(root.messageData?.content ?? ""))
+        : Translation.tr("Assistant response")
+
     spacing: 4
     Layout.fillWidth: true
 

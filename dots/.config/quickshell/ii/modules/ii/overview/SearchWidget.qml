@@ -272,11 +272,15 @@ Item {
     }
 
     function continueInSidebar() {
+        const panel = aiPanelLoader.item;
         Ai.surfaceRouter.open({
             surface: "sidebar",
             monitorName: root.surfaceMonitorName,
             sessionId: Ai.sessions.currentId,
-            focusIntent: "composer"
+            focusIntent: "composer",
+            scrollAnchor: panel && typeof panel.captureHandoffState === "function"
+                ? panel.captureHandoffState()
+                : null
         });
     }
 
@@ -297,8 +301,11 @@ Item {
             }
             return;
         }
-        if (intent.focusIntent === "composer")
-            root.focusSearchInput();
+        const panel = aiPanelLoader.item;
+        if (!panel || typeof panel.applySurfaceIntent !== "function")
+            return;
+        if (!panel.applySurfaceIntent(intent))
+            return;
         Ai.surfaceRouter.acknowledge(intent.requestId);
         root.routedSessionRequestId = "";
     }
@@ -316,6 +323,16 @@ Item {
             root.tryConsumeSurfaceIntent();
         }
         function onLoadedChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
+    Connections {
+        target: Ai
+        function onMessageIDsChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+        function onMessageByIDChanged() {
             root.tryConsumeSurfaceIntent();
         }
     }

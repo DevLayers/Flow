@@ -197,8 +197,9 @@ Item {
             }
             return;
         }
-        if (intent.focusIntent === "composer")
-            root.focusAiInput();
+        const chat = swipeView.currentItem.item;
+        if (!chat || typeof chat.applySurfaceIntent !== "function" || !chat.applySurfaceIntent(intent))
+            return;
         Ai.surfaceRouter.acknowledge(intent.requestId);
         root.routedSessionRequestId = "";
     }
@@ -216,6 +217,16 @@ Item {
             root.tryConsumeSurfaceIntent();
         }
         function onLoadedChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
+    Connections {
+        target: Ai
+        function onMessageIDsChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+        function onMessageByIDChanged() {
             root.tryConsumeSurfaceIntent();
         }
     }
