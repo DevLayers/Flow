@@ -136,6 +136,16 @@ ApiStrategy {
             ],
             "stream": true
         };
+        if (quirk(model, "nativeOllama", false)) {
+            const baseName = String(model.value ?? model.model ?? "").split(":")[0].toLowerCase();
+            const level = thinkingLevel(model);
+            // Ollama accepts booleans for Qwen/DeepSeek and named levels for
+            // GPT-OSS. Explicitly sending this prevents a thinking model from
+            // spending the whole response in its reasoning channel.
+            baseData.think = !model.thinking || level === "off"
+                ? false
+                : baseName.startsWith("gpt-oss") ? level : true;
+        }
         baseData[quirk(model, "maxTokensKey", "max_tokens")] = maxOutputTokens(model);
         if (model.samplingParams)
             baseData.temperature = temperature;
@@ -190,9 +200,18 @@ ApiStrategy {
             if (delta?.tool_calls)
                 collectToolCalls(delta.tool_calls);
 
-            // Ollama's non-streaming shape puts the text one level up.
-            appendThought(message, delta?.reasoning_content || delta?.reasoning || "");
-            appendAnswer(message, delta?.content || dataJson.message?.content || "");
+            // OpenAI-compatible streams normally put reasoning/content in the
+            // delta. Ollama's native streaming shape keeps both fields under
+            // `message` instead (Qwen emits `message.thinking` for a long
+            // time before it emits answer content). Keep that reasoning in
+            // the transcript instead of leaving the message looking like a
+            // permanent loading indicator.
+            const nativeMessage = dataJson.message ?? ({});
+            const nativeThought = typeof nativeMessage.thinking === "string" ? nativeMessage.thinking : "";
+            const nativeContent = typeof nativeMessage.content === "string" ? nativeMessage.content : "";
+            appendThought(message,
+                delta?.reasoning_content || delta?.reasoning || nativeThought);
+            appendAnswer(message, delta?.content || nativeContent);
 
             // The call is only whole once the model stops adding to it.
             if (hasPendingCalls() && (choice?.finish_reason || dataJson.done)) {

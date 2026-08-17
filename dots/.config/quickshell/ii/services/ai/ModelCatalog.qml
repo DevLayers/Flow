@@ -393,12 +393,28 @@ QtObject {
         const toolsAllowed = Config.options?.ai?.tools?.localModels ?? false;
         const result = [];
         for (let i = 0; i < names.length; i++) {
+            const modelName = String(names[i] ?? "");
+            const baseName = modelName.split(":")[0].toLowerCase();
+            // Ollama's native chat API is the only API that exposes the
+            // separate `message.thinking` and `message.content` fields. The
+            // OpenAI compatibility endpoint can put the whole Qwen reasoning
+            // trace in `reasoning_content`, leaving the final answer empty.
+            // Keep discovered models on the native endpoint so thinking and
+            // the answer arrive as two reliable streams.
+            const thinkingModel = /^(qwen3(?:\.5)?|deepseek-r1|deepseek-v3\.1|gpt-oss)/.test(baseName);
             result.push({
-                value: names[i],
-                title: catalog.guessModelName(names[i]),
-                icon: catalog.guessModelLogo(names[i]),
-                description: Translation.tr("Local Ollama model | %1").arg(names[i]),
-                homepage: `https://ollama.com/library/${names[i]}`,
+                value: modelName,
+                title: catalog.guessModelName(modelName),
+                icon: catalog.guessModelLogo(modelName),
+                description: Translation.tr("Local Ollama model | %1").arg(modelName),
+                homepage: `https://ollama.com/library/${modelName}`,
+                endpoint: "http://localhost:11434/api/chat",
+                api_format: "openai",
+                quirks: {
+                    nativeOllama: true
+                },
+                thinking: thinkingModel,
+                thinkingKind: thinkingModel ? "ollama" : "",
                 tools: toolsAllowed
             });
         }
