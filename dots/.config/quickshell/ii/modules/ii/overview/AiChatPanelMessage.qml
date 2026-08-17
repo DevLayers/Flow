@@ -29,6 +29,11 @@ ColumnLayout {
 
     focus: false
     activeFocusOnTab: true
+    // ListView delegates are not laid out by a Row/ColumnLayout, so
+    // Layout.fillWidth alone does not give this message the viewport width.
+    // Without an explicit width every nested TextArea measures against its
+    // tiny implicit width and wraps one character per line.
+    width: ListView.view ? ListView.view.width : 0
     Accessible.name: root.isUser
         ? Translation.tr("Your message: %1").arg(String(root.messageData?.content ?? ""))
         : Translation.tr("Assistant response")
@@ -120,7 +125,11 @@ ColumnLayout {
     ColumnLayout {
         visible: !root.isUser
         Layout.fillWidth: true
-        spacing: root.contentSpacing
+        // `contentSpacing` belongs to this assistant ColumnLayout, not the
+        // outer message root. Referencing `root.contentSpacing` produced an
+        // undefined-to-real assignment and collapsed streamed rows in the
+        // Search transcript.
+        spacing: contentSpacing
 
         property real contentSpacing: 3
 
