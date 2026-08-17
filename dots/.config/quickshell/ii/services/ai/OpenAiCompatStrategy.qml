@@ -136,7 +136,8 @@ ApiStrategy {
             ],
             "stream": true
         };
-        if (quirk(model, "nativeOllama", false)) {
+        const nativeOllama = quirk(model, "nativeOllama", false);
+        if (nativeOllama) {
             const baseName = String(model.value ?? model.model ?? "").split(":")[0].toLowerCase();
             const level = thinkingLevel(model);
             // Ollama accepts booleans for Qwen/DeepSeek and named levels for
@@ -145,10 +146,24 @@ ApiStrategy {
             baseData.think = !model.thinking || level === "off"
                 ? false
                 : baseName.startsWith("gpt-oss") ? level : true;
+            // `/api/chat` does not understand OpenAI's `max_tokens`.  Without
+            // its native cap, a reasoning model can exhaust Ollama's default
+            // generation budget on thought alone and finish with no answer.
+            baseData.options = Object.assign({}, baseData.options ?? {}, {
+                num_predict: maxOutputTokens(model)
+            });
+        } else {
+            baseData[quirk(model, "maxTokensKey", "max_tokens")] = maxOutputTokens(model);
         }
-        baseData[quirk(model, "maxTokensKey", "max_tokens")] = maxOutputTokens(model);
-        if (model.samplingParams)
-            baseData.temperature = temperature;
+        if (model.samplingParams) {
+            // The native API keeps sampling parameters in `options`; placing
+            // temperature at the OpenAI-compatible top level makes Ollama
+            // silently ignore the user's selected value.
+            if (nativeOllama)
+                baseData.options = Object.assign({}, baseData.options ?? ({}), { temperature: temperature });
+            else
+                baseData.temperature = temperature;
+        }
         // Reasoning models take a named effort here. Models that do not
         // reason reject the key outright, so it is only sent when the model
         // says that is the knob it has.
@@ -207,11 +222,10 @@ ApiStrategy {
             // the transcript instead of leaving the message looking like a
             // permanent loading indicator.
             const nativeMessage = dataJson.message ?? ({});
-            const nativeThought = typeof nativeMessage.thinking === "string" ? nativeMessage.thinking : "";
-            const nativeContent = typeof nativeMessage.content === "string" ? nativeMessage.content : "";
-            appendThought(message,
-                delta?.reasoning_content || delta?.reasoning || nativeThought);
-            appendAnswer(message, delta?.content || nativeContent);
+            const nativeThought = textFromValue(nativeMessage.thinking ?? nativeMessage.reasoning);
+            const nativeContent = textFromValue(nativeMessage.content);
+            appendThought(message, textFromValue(delta?.reasoning_content ?? delta?.reasoning ?? delta?.thinking) || nativeThought);
+            appendAnswer(message, textFromValue(delta?.content) || nativeContent);
 
             // The call is only whole once the model stops adding to it.
             if (hasPendingCalls() && (choice?.finish_reason || dataJson.done)) {
@@ -223,23 +237,14 @@ ApiStrategy {
                     };
             }
 
-            if (dataJson.usage) {
-                return {
-                    tokenUsage: {
-                        input: dataJson.usage.prompt_tokens ?? -1,
-                        output: dataJson.usage.completion_tokens ?? -1,
-                        thinking: dataJson.usage.completion_tokens_details?.reasoning_tokens ?? -1,
-                        total: dataJson.usage.total_tokens ?? -1
-                    }
-                };
-            }
-
-            if (dataJson.done || choice?.finish_reason === "stop") {
+            const tokenUsage = tokenUsageFrom(dataJson);
+            const finished = dataJson.done === true || (choice?.finish_reason !== undefined && choice?.finish_reason !== null);
+            if (finished)
                 closeThought(message);
-                return {
-                    finished: true
-                };
-            }
+            if (tokenUsage || finished)
+                return Object.assign({}, tokenUsage ? { tokenUsage: tokenUsage } : ({}), {
+                    finished: finished
+                });
         } catch (e) {
             console.log("[AI] OpenAI-compatible: Could not parse line: ", e);
             message.rawContent += line;
@@ -247,6 +252,47 @@ ApiStrategy {
         }
 
         return {};
+    }
+
+    /** Text may be a string or a provider's typed content-parts array. */
+    function textFromValue(value): string {
+        if (typeof value === "string")
+            return value;
+        if (!Array.isArray(value))
+            return "";
+        return value.map(part => {
+            if (typeof part === "string")
+                return part;
+            if (!part || typeof part !== "object")
+                return "";
+            return typeof part.text === "string" ? part.text
+                : typeof part.content === "string" ? part.content : "";
+        }).join("");
+    }
+
+    /** Normalises OpenAI-compatible and native Ollama terminal token fields. */
+    function tokenUsageFrom(data): var {
+        const usage = data?.usage ?? ({});
+        const input = knownToken(usage.prompt_tokens ?? usage.input_tokens ?? data?.prompt_eval_count);
+        const output = knownToken(usage.completion_tokens ?? usage.output_tokens ?? data?.eval_count);
+        const thinking = knownToken(usage.completion_tokens_details?.reasoning_tokens
+            ?? usage.output_tokens_details?.reasoning_tokens ?? data?.thinking_eval_count);
+        let total = knownToken(usage.total_tokens ?? usage.total_token_count);
+        if (total < 0 && input >= 0 && output >= 0)
+            total = input + output;
+        if (input < 0 && output < 0 && thinking < 0 && total < 0)
+            return null;
+        return {
+            input: input,
+            output: output,
+            thinking: thinking,
+            total: total
+        };
+    }
+
+    function knownToken(value): int {
+        const number = Number(value);
+        return isFinite(number) && number >= 0 ? Math.round(number) : -1;
     }
 
     /** Merges one delta's worth of tool-call fragments into what came before. */

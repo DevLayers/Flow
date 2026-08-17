@@ -33,7 +33,7 @@ Item {
         "actions": { title: Translation.tr("Actions"), subtitle: Translation.tr("Keyboard actions available from Search AI."), icon: "bolt" }
     })
 
-    readonly property var meta: root.pageMeta[root.pageId] ?? root.pageMeta.models
+    readonly property var meta: root.pageMeta[root.pageId] ?? ({ title: "", subtitle: "", icon: "info" })
     implicitHeight: pageCard.implicitHeight
 
     function cycleResponseMode() {
@@ -135,7 +135,8 @@ Item {
                     : root.pageId === "history" ? historyPage
                     : root.pageId === "tools" ? toolsPage
                     : root.pageId === "keys" ? keysPage
-                    : actionsPage
+                    : root.pageId === "actions" ? actionsPage
+                    : null
             }
         }
     }

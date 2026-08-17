@@ -182,7 +182,9 @@ Scope {
                                     searchWidget.disableExpandAnimation();
                                     overviewScope.dontAutoCancelSearch = false;
                                 } else {
-                                    if (!overviewScope.dontAutoCancelSearch) {
+                                    const hasIncomingQuery = GlobalStates.activeSearchQuery.length > 0;
+                                    if (!hasIncomingQuery) {
+                                        overviewScope.dontAutoCancelSearch = false;
                                         searchWidget.cancelSearch();
                                     }
                                     root.consumePendingSearchQuery();

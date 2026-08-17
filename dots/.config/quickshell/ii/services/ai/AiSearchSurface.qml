@@ -53,7 +53,15 @@ Item {
         return 0;
     }
 
-    readonly property string fixturePageId: root.navigator.incomingPage.length > 0 ? root.navigator.incomingPage : root.navigator.currentPage
+    readonly property string activeSubpageId: {
+        if (root.navigator.incomingPage.length > 0 && root.navigator.incomingPage !== "chat")
+            return root.navigator.incomingPage;
+        if (root.navigator.outgoingPage.length > 0 && root.navigator.outgoingPage !== "chat")
+            return root.navigator.outgoingPage;
+        if (root.navigator.currentPage !== "chat")
+            return root.navigator.currentPage;
+        return "";
+    }
 
     Binding {
         target: root.navigator
@@ -105,12 +113,12 @@ Item {
     Loader {
         id: fixturePage
         anchors.fill: parent
-        active: root.navigator.currentPage !== "chat" || root.navigator.incomingPage.length > 0
-        visible: active && root.pageOpacity(root.fixturePageId) > 0
-        opacity: root.pageOpacity(root.fixturePageId)
-        x: root.navigator.pageOffset(root.fixturePageId) * width
+        active: root.activeSubpageId.length > 0
+        visible: active && root.pageOpacity(root.activeSubpageId) > 0
+        opacity: root.pageOpacity(root.activeSubpageId)
+        x: root.navigator.pageOffset(root.activeSubpageId) * width
         sourceComponent: AiSearchPage {
-            pageId: root.fixturePageId
+            pageId: root.activeSubpageId
             onRequestBack: root.navigator.back()
         }
 

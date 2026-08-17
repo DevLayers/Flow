@@ -22,7 +22,8 @@ Rectangle {
     property bool renderMarkdown: true
     property bool editing: false
 
-    property list<var> messageBlocks: AiTranscriptRegistry.blocksFor(root.messageData)
+    readonly property string transcriptContent: String(root.messageData?.content ?? root.messageData?.rawContent ?? "")
+    property list<var> messageBlocks: AiTranscriptRegistry.blocksForContent(root.transcriptContent)
 
     /** Asks the control bar for a model to redo this answer with. */
     signal regenerateRequested(string messageId)
@@ -447,7 +448,7 @@ Rectangle {
                 FadeLoader {
                     id: loadingIndicatorLoader
                     anchors.centerIn: parent
-                    shown: (root.messageBlocks.length < 1) && ((root.messageData?.thought?.length ?? 0) === 0) && (!root.messageData.done)
+                    shown: (root.messageBlocks.length < 1) && ((root.messageData?.thought?.length ?? 0) === 0) && !(root.messageData?.done ?? false)
                     sourceComponent: MaterialLoadingIndicator {
                         loading: true
                     }
@@ -457,36 +458,66 @@ Rectangle {
                 model: ScriptModel {
                     values: root.messageBlocks
                 }
-                delegate: DelegateChooser {
-                    id: messageDelegate
-                    role: "type"
+                delegate: Item {
+                    id: messageBlockItem
+                    required property var modelData
+                    Layout.fillWidth: true
+                    implicitWidth: parent ? parent.width : 0
+                    implicitHeight: messageBlockLoader.implicitHeight
 
-                    DelegateChoice { roleValue: "code"; AiMessageCodeBlock {
-                        editing: root.editing
-                        renderMarkdown: root.renderMarkdown
-                        enableMouseSelection: root.enableMouseSelection
-                        segmentContent: modelData.content
-                        segmentLang: modelData.lang
-                        messageData: root.messageData
-                    } }
-                    DelegateChoice { roleValue: "think"; AiMessageThinkBlock {
-                        editing: root.editing
-                        renderMarkdown: root.renderMarkdown
-                        enableMouseSelection: root.enableMouseSelection
-                        segmentContent: modelData.content
-                        messageData: root.messageData
-                        done: root.messageData?.done ?? false
-                        completed: modelData.completed ?? false
-                    } }
-                    DelegateChoice { roleValue: "text"; AiMessageTextBlock {
-                        editing: root.editing
-                        renderMarkdown: root.renderMarkdown
-                        enableMouseSelection: root.enableMouseSelection
-                        segmentContent: modelData.content
-                        messageData: root.messageData
-                        done: root.messageData?.done ?? false
-                        forceDisableChunkSplitting: root.messageData?.content.includes("```") ?? true
-                    } }
+                    Component {
+                        id: sidebarCodeBlockComp
+                        AiMessageCodeBlock {
+                            width: messageBlockItem.width
+                            editing: root.editing
+                            renderMarkdown: root.renderMarkdown
+                            enableMouseSelection: root.enableMouseSelection
+                            segmentContent: messageBlockItem.modelData?.content ?? ""
+                            segmentLang: messageBlockItem.modelData?.lang ?? "txt"
+                            messageData: root.messageData
+                        }
+                    }
+
+                    Component {
+                        id: sidebarThinkBlockComp
+                        AiMessageThinkBlock {
+                            width: messageBlockItem.width
+                            editing: root.editing
+                            renderMarkdown: root.renderMarkdown
+                            enableMouseSelection: root.enableMouseSelection
+                            segmentContent: messageBlockItem.modelData?.content ?? ""
+                            messageData: root.messageData
+                            done: root.messageData?.done ?? false
+                            completed: messageBlockItem.modelData?.completed ?? false
+                        }
+                    }
+
+                    Component {
+                        id: sidebarTextBlockComp
+                        AiMessageTextBlock {
+                            width: messageBlockItem.width
+                            editing: root.editing
+                            renderMarkdown: root.renderMarkdown
+                            enableMouseSelection: root.enableMouseSelection
+                            segmentContent: messageBlockItem.modelData?.content ?? ""
+                            messageData: root.messageData
+                            done: root.messageData?.done ?? false
+                            forceDisableChunkSplitting: root.messageData?.content?.includes("```") ?? true
+                        }
+                    }
+
+                    Loader {
+                        id: messageBlockLoader
+                        width: parent.width
+                        sourceComponent: {
+                            const blockType = messageBlockItem.modelData?.type;
+                            if (blockType === "code")
+                                return sidebarCodeBlockComp;
+                            if (blockType === "think")
+                                return sidebarThinkBlockComp;
+                            return sidebarTextBlockComp;
+                        }
+                    }
                 }
             }
         }

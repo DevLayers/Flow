@@ -541,7 +541,7 @@ Item {
 
     StyledRectangularShadow {
         target: searchWidgetContent
-        visible: !GlobalStates.searchConnectActive && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
+        visible: !root.isAiMode && !GlobalStates.searchConnectActive && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
         opacity: root.shadowOpacity
         offset: Qt.vector2d(0.0, 0.0)
     }
@@ -552,8 +552,8 @@ Item {
         anchors.centerIn: parent
         width: GlobalStates.searchConnectActive ? parent.width : implicitWidth
         height: GlobalStates.searchConnectActive ? parent.height : implicitHeight
-        clip: true
-        layer.enabled: true
+        clip: !root.isAiMode
+        layer.enabled: !root.isAiMode && !GlobalStates.searchConnectActive
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: searchWidgetContent.width
@@ -599,11 +599,11 @@ Item {
             if (root.isMaterialSymbolsMode)
                 return (materialSymbolsPanelLoader.item ? materialSymbolsPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isAiMode)
-                return (aiPanelLoader.item ? aiPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
+                return aiPanelLoader.item ? aiPanelLoader.item.implicitHeight : 520;
             return gridLayout.implicitHeight;
         }
-        radius: Appearance.rounding.windowRounding
-        color: GlobalStates.searchConnectActive ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
+        radius: root.isAiMode ? 0 : Appearance.rounding.windowRounding
+        color: (GlobalStates.searchConnectActive || root.isAiMode) ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
 
         Behavior on implicitWidth {
             id: searchWidthBehavior
@@ -638,6 +638,7 @@ Item {
             anchors.rightMargin: (GlobalStates.searchConnectActive && !root.inNotchMode) ? 24 : 0
             anchors.top: parent.top
             columns: 1
+            rowSpacing: root.isAiMode ? 0 : 5
             clip: true
 
             SearchBar {
@@ -646,11 +647,12 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.isAiMode ? 0 : implicitHeight
                 Layout.minimumHeight: 0
-                Layout.leftMargin: 10
-                Layout.rightMargin: 10
-                Layout.topMargin: verticalPadding
-                Layout.bottomMargin: verticalPadding
+                Layout.leftMargin: root.isAiMode ? 0 : 10
+                Layout.rightMargin: root.isAiMode ? 0 : 10
+                Layout.topMargin: root.isAiMode ? 0 : verticalPadding
+                Layout.bottomMargin: root.isAiMode ? 0 : verticalPadding
                 Layout.row: root.overviewPosition == "bottom" ? 1 : 0
+                visible: !root.isAiMode
                 animateWidth: true
                 aiModeActive: root.isAiMode
                 Binding {

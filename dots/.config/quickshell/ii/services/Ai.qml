@@ -1401,8 +1401,8 @@ Singleton {
         // the provider actually reported them (total stayed -1 otherwise),
         // success only when nothing flagged the message with an error kind.
         AiUsage.recordResponse(message.model ?? root.currentModelId,
-            root.tokenCount.input, root.tokenCount.output,
-            root.tokenCount.thinking, root.tokenCount.total,
+            message.inputTokens, message.outputTokens,
+            message.thoughtTokens, message.totalTokens,
             (message.errorKind ?? "").length === 0);
         if (root.postResponseHook) {
             root.postResponseHook();
@@ -1538,6 +1538,9 @@ Singleton {
                     root.tokenCount.input = result.tokenUsage.input;
                     root.tokenCount.output = result.tokenUsage.output;
                     root.tokenCount.total = result.tokenUsage.total;
+                    requester.message.inputTokens = result.tokenUsage.input;
+                    requester.message.outputTokens = result.tokenUsage.output;
+                    requester.message.totalTokens = result.tokenUsage.total;
                     const thinkingTokens = result.tokenUsage.thinking ?? -1;
                     root.tokenCount.thinking = thinkingTokens;
                     // Counted per message too: the think block says what this
@@ -1545,8 +1548,11 @@ Singleton {
                     if (thinkingTokens >= 0)
                         requester.message.thoughtTokens = thinkingTokens;
                 }
-                if (result.finished)
-                    root.markDone(requester.message);
+                // Some OpenAI-compatible services send their usage frame after
+                // the finish reason.  Marking the message done here records a
+                // zero-token response before that final frame arrives.  The
+                // transport's `onFinished` below is the single terminal point
+                // and runs after every streamed frame has been parsed.
             } catch (e) {
                 console.log("[AI] Could not parse response: ", e);
                 requester.message.rawContent += data;
@@ -2724,6 +2730,9 @@ Singleton {
                 "thinkingBlocks": message.thinkingBlocks,
                 "thoughtDurationMs": message.thoughtDurationMs,
                 "thoughtTokens": message.thoughtTokens,
+                "inputTokens": message.inputTokens,
+                "outputTokens": message.outputTokens,
+                "totalTokens": message.totalTokens,
                 "thinking": false,
                 "done": true,
                 "annotations": message.annotations,
@@ -2775,6 +2784,9 @@ Singleton {
             "thinkingBlocks": data.thinkingBlocks ?? [],
             "thoughtDurationMs": data.thoughtDurationMs ?? 0,
             "thoughtTokens": data.thoughtTokens ?? -1,
+            "inputTokens": data.inputTokens ?? -1,
+            "outputTokens": data.outputTokens ?? -1,
+            "totalTokens": data.totalTokens ?? -1,
             "thinking": data.thinking ?? false,
             "done": data.done ?? true,
             "annotations": data.annotations ?? [],

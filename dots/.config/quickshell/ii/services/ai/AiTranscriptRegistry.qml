@@ -19,8 +19,12 @@ Singleton {
     readonly property list<string> rendererKinds: ["text", "code", "think", "error", "config"]
     readonly property int followThreshold: 28
 
+    function blocksForContent(content) {
+        return StringUtils.splitMarkdownBlocks(String(content ?? ""));
+    }
+
     function blocksFor(message) {
-        return StringUtils.splitMarkdownBlocks(String(message?.content ?? ""));
+        return root.blocksForContent(message?.content ?? message?.rawContent ?? "");
     }
 
     function isRenderable(kind) {

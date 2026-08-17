@@ -33,6 +33,12 @@ QtObject {
     property real thoughtStartedAt: 0
     property real thoughtDurationMs: 0
     property int thoughtTokens: -1
+    // Terminal usage is retained with the turn as well as in the aggregate
+    // ledger. This keeps a completed local/free-model response auditable after
+    // reopening its session and prevents another turn from overwriting it.
+    property int inputTokens: -1
+    property int outputTokens: -1
+    property int totalTokens: -1
     property bool thinking: true
     property bool done: false
     property var annotations: []

@@ -15,16 +15,20 @@ import Quickshell
 import Quickshell.Io
 
 /**
- * Unified AI chat panel for the overview search.
+ * Floating Bubbles 3-rectangle AI Chat panel for Overview Search (Figma Prototype Design).
  *
- * Layout: header (back + title + navigation) → transcript → bottom composer.
- * The search bar above this panel acts as the text input — this panel is purely the
- * conversation surface, consistent with how bluetooth/clipboard/translator panels
- * sit below the search bar.
+ * 1. Top Header Rectangle:
+ *    - Left: Brain shape icon ("network_intelligence", fill: 1) that switches to "arrow_back" on hover (returns to search)
+ *    - Middle: AI Task Title (with clean fallback)
+ *    - Right: History toggle & New Chat buttons (with fill: 1)
  *
- * Everything reads the shared Ai singleton, so it stays in sync with the sidebar chat.
+ * 2. Middle Canvas Rectangle:
+ *    - Hosts the message transcript and the inlined history view with fade + slide animation
+ *
+ * 3. Bottom Composer Rectangle:
+ *    - Multi-line keyboard-first prompt input, model selector pill, and send button
  */
-AiSearchSurface {
+Item {
     id: root
 
     signal requestBackToSearch()
@@ -32,17 +36,25 @@ AiSearchSurface {
     signal requestSendMessage()
     signal requestContinueInSidebar()
 
-    implicitWidth: parent ? parent.width : 720
-    implicitHeight: chatColumn.implicitHeight
+    property bool historyOpen: false
+    property string pendingTrashId: ""
+
+    readonly property real headerControlExtent: Math.round(Appearance.font.pixelSize.huge * 2)
+    readonly property real headerControlPadding: Appearance.rounding.small
+    readonly property real headerHeight: headerControlExtent + headerControlPadding * 2
+    readonly property real canvasHeight: 380
+    readonly property real composerHeight: headerControlExtent + headerControlPadding * 2
+    readonly property real columnSpacing: Appearance.rounding.small
+
+    implicitWidth: 720
+    implicitHeight: headerHeight + canvasHeight + composerHeight + columnSpacing * 2
+    width: parent ? parent.width : implicitWidth
+    height: implicitHeight
 
     function focusComposer() {
         composer.focusInput();
     }
 
-    // Handoffs carry logical transcript ids, never delegate objects. Search
-    // and the sidebar have different widths, so restoring a raw contentY
-    // would land on the wrong paragraph; the first visible message plus its
-    // viewport offset is stable across both layouts.
     function captureHandoffState() {
         const anchor = {
             messageId: "",
@@ -101,8 +113,6 @@ AiSearchSurface {
         return true;
     }
 
-    // Called by SearchWidget only after the requested session is visible.
-    // Returning false keeps the router intent pending for streamed targets.
     function applySurfaceIntent(intent) {
         if (!intent)
             return false;
@@ -120,318 +130,522 @@ AiSearchSurface {
         return hasAnchor || String(intent.focusIntent ?? "composer") === "composer";
     }
 
+    function handleEscape() {
+        if (root.historyOpen) {
+            root.historyOpen = false;
+            return true;
+        }
+        return false;
+    }
+
     function handleComposerEscape() {
         if (!root.handleEscape())
             root.requestBackToSearch();
     }
-
-    // Focus is requested by the host when the inline page becomes active.
 
     readonly property var visibleMessageIds: Ai.messageIDs.filter(id => {
         const m = Ai.messageByID[id];
         return m && m.role !== Ai.interfaceRole && (m.visibleToUser ?? true);
     })
 
-    Connections {
-        target: Ai
-        function onKeyManagerRequested() {
-            root.navigateTo("keys");
-        }
-    }
-
-    // File picker for attachments
-    Process {
-        id: attachPicker
-        command: ["bash", "-c",
-            "if command -v kdialog >/dev/null; then " +
-            "  FILES=$(kdialog --getopenfilename \"$HOME\" \"\" --multiple 2>/dev/null); " +
-            "  if [ -n \"$FILES\" ]; then echo -n \"$FILES\" | tr '\\n' '|'; fi; " +
-            "elif command -v zenity >/dev/null; then " +
-            "  zenity --file-selection --multiple --separator=\"|\" 2>/dev/null; " +
-            "fi"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const paths = this.text.split("|").filter(p => p.length > 0);
-                for (let i = 0; i < paths.length; i++)
-                    Ai.attachFile(paths[i]);
-            }
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Escape) {
+            if (!root.handleEscape())
+                root.requestBackToSearch();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_O && (event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)) {
+            Ai.newChat();
+            root.historyOpen = false;
+            event.accepted = true;
         }
     }
 
     ColumnLayout {
         id: chatColumn
         anchors.fill: parent
-        spacing: 0
+        spacing: root.columnSpacing
 
-        // ── Header ────────────────────────────────────────────
+        // ════════════════════════════════════════════════════════
+        // 1. TOP HEADER RECTANGLE
+        // ════════════════════════════════════════════════════════
 
-        RowLayout {
+        Rectangle {
+            id: headerSurface
             Layout.fillWidth: true
-            Layout.leftMargin: 4
-            Layout.rightMargin: 4
-            Layout.topMargin: 4
-            Layout.bottomMargin: 4
-            spacing: 4
+            implicitHeight: root.headerHeight
+            Layout.preferredHeight: root.headerHeight
+            color: Appearance.colors.colLayer1
+            radius: Appearance.rounding.full
+            clip: true
 
-            RippleButton {
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colRipple: Appearance.colors.colLayer2Active
-                onClicked: root.requestBackToSearch()
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: root.headerControlPadding
+                spacing: Appearance.rounding.verysmall
 
-                Accessible.name: Translation.tr("Back to search")
-
-                contentItem: MaterialSymbol {
-                    text: "arrow_back"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnLayer1
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Back to search (Esc)")
-                }
-            }
-
-            RippleButton {
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colRipple: Appearance.colors.colLayer2Active
-                onClicked: root.requestContinueInSidebar()
-
-                Accessible.name: Translation.tr("Continue in sidebar")
-
-                contentItem: MaterialSymbol {
-                    text: "open_in_new"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnLayer1
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Continue in sidebar (Ctrl+J)")
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: {
-                        const title = Ai.sessions?.titleFor?.(Ai.sessions?.currentId ?? "") ?? "";
-                        return title.length > 0 ? title : Translation.tr("New chat");
-                    }
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnLayer1
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    visible: !Ai.currentModelHasApiKey && Ai.currentModelEntry?.requires_key
-                    text: Translation.tr("No API key set")
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.smallie
-                    color: Appearance.m3colors.m3error
-                }
-            }
-
-            Repeater {
-                model: ScriptModel {
-                    values: [
-                        { icon: "auto_awesome", page: "models", active: root.navigator.currentPage === "models", tooltip: Translation.tr("Models") },
-                        { icon: "add_comment", page: "", active: false, tooltip: Translation.tr("New chat (/new)") },
-                        { icon: "history", page: "history", active: root.navigator.currentPage === "history", tooltip: Translation.tr("History (/sessions)") },
-                        { icon: "construction", page: "tools", active: root.navigator.currentPage === "tools", tooltip: Translation.tr("Tools (/tool)") },
-                        { icon: Ai.currentModelHasApiKey ? "key" : "key_alert", page: "keys", active: root.navigator.currentPage === "keys", tooltip: Translation.tr("Keys (/key)") }
-                    ]
-                }
-
+                // Brain shape button (switches to back arrow on hover)
                 RippleButton {
-                    required property var modelData
-                    implicitWidth: 32
-                    implicitHeight: 32
+                    id: brainBackButton
+                    implicitWidth: root.headerControlExtent
+                    implicitHeight: root.headerControlExtent
                     buttonRadius: Appearance.rounding.full
-                    colBackground: modelData.active ? Appearance.colors.colLayer2 : ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                    colBackground: brainBackButton.hovered ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     colRipple: Appearance.colors.colLayer2Active
-                    onClicked: {
-                        if (modelData.page === "") {
-                            Ai.newChat();
-                            root.requestFocusComposer();
-                        } else {
-                            root.navigateTo(modelData.page);
-                        }
-                    }
+                    onClicked: root.requestBackToSearch()
 
-                    Accessible.name: modelData.tooltip
+                    Accessible.name: Translation.tr("Back to search")
 
                     contentItem: MaterialSymbol {
-                        text: modelData.icon
-                        iconSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnLayer1
+                        text: brainBackButton.hovered ? "arrow_back" : "network_intelligence"
+                        fill: 1
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: brainBackButton.hovered ? Appearance.m3colors.m3primary : Appearance.colors.colOnLayer1
                     }
 
                     StyledToolTip {
-                        text: modelData.tooltip
+                        text: Translation.tr("Back to search (Esc)")
                     }
                 }
-            }
-        }
 
-        // ── Attachment tray ──────────────────────────────────
-
-        AiAttachmentTray {
-            Layout.fillWidth: true
-            Layout.leftMargin: 12
-            Layout.rightMargin: 12
-            visible: Ai.attachments.length > 0 || Ai.attachmentNotice.length > 0
-        }
-
-        // ── Transcript / Empty state ──────────────────────────
-
-        Item {
-            id: transcriptSurface
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.minimumHeight: 0
-            Layout.preferredHeight: root.visibleMessageIds.length > 0
-                ? Math.min(420, Math.max(120, messageList.contentHeight))
-                : 0
-            clip: true
-
-            // Empty state
-            ColumnLayout {
-                anchors.centerIn: parent
-                anchors.margins: 20
-                width: Math.min(parent.width - 40, 480)
-                spacing: 14
-                visible: root.visibleMessageIds.length === 0
-
-                MaterialSymbol {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "auto_awesome"
-                    iconSize: Math.round(Appearance.font.pixelSize.huge * 1.6)
-                    color: Appearance.colors.colPrimary
-                }
-
+                // AI Task Title
                 StyledText {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: Translation.tr("How can I help you?")
-                    font.pixelSize: Math.round(Appearance.font.pixelSize.huge * 1.1)
+                    id: taskTitleText
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Appearance.rounding.verysmall
+                    Layout.rightMargin: Appearance.rounding.verysmall
+                    text: {
+                        const title = Ai.sessions?.currentTitle?.trim()
+                            || Ai.sessions?.titleFor?.(Ai.sessions?.currentId ?? "")?.trim()
+                            || "";
+                        return title.length > 0 ? title : Translation.tr("New conversation");
+                    }
+                    elide: Text.ElideRight
+                    font.family: Appearance.font.family.main
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.DemiBold
+                    font.variableAxes: Appearance.font.variableAxes.main
                     color: Appearance.colors.colOnLayer1
                 }
 
-                Flow {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: 8
+                // Right action toggles: History & New Chat
+                RowLayout {
+                    spacing: Appearance.rounding.verysmall
 
-                    Repeater {
-                        model: ScriptModel {
-                            values: (Ai.starters ?? []).slice(0, 4)
+                    RippleButton {
+                        id: historyToggleBtn
+                        implicitWidth: root.headerControlExtent
+                        implicitHeight: root.headerControlExtent
+                        buttonRadius: Appearance.rounding.full
+                        toggled: root.historyOpen
+                        colBackground: root.historyOpen ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                        colBackgroundHover: root.historyOpen ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
+                        colRipple: Appearance.colors.colLayer2Active
+                        onClicked: root.historyOpen = !root.historyOpen
+
+                        Accessible.name: Translation.tr("History")
+
+                        contentItem: MaterialSymbol {
+                            text: "history"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: root.historyOpen ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("History (/sessions)")
+                        }
+                    }
+
+                    RippleButton {
+                        id: newChatBtn
+                        implicitWidth: root.headerControlExtent
+                        implicitHeight: root.headerControlExtent
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colRipple: Appearance.colors.colLayer2Active
+                        onClicked: {
+                            Ai.newChat();
+                            root.historyOpen = false;
+                            root.requestFocusComposer();
+                        }
+
+                        Accessible.name: Translation.tr("New chat")
+
+                        contentItem: MaterialSymbol {
+                            text: "add_comment"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.colors.colOnLayer2
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("New chat (/new)")
+                        }
+                    }
+                }
+            }
+        }
+
+        // ════════════════════════════════════════════════════════
+        // 2. MIDDLE CANVAS RECTANGLE (Messages & History)
+        // ════════════════════════════════════════════════════════
+
+        Rectangle {
+            id: canvasSurface
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.canvasHeight
+            implicitHeight: root.canvasHeight
+            Layout.minimumHeight: 180
+            color: Appearance.colors.colLayer1
+            radius: Appearance.rounding.large
+            clip: true
+
+            // Messages view (Transcript & Starters)
+            Item {
+                id: messagesView
+                anchors.fill: parent
+                opacity: root.historyOpen ? 0.0 : 1.0
+                visible: opacity > 0.001
+                transform: Translate {
+                    x: root.historyOpen ? -36 : 0
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+                Behavior on transform {
+                    NumberAnimation {
+                        property: "x"
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+
+                // Empty state starter chips
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    width: parent.width - 48
+                    spacing: 16
+                    visible: root.visibleMessageIds.length === 0
+
+                    MaterialSymbol {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "auto_awesome"
+                        fill: 1
+                        iconSize: Appearance.font.pixelSize.huge
+                        color: Appearance.m3colors.m3primary
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: Translation.tr("How can I help you?")
+                        font.pixelSize: Appearance.font.pixelSize.large
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnLayer1
+                    }
+
+                    Flow {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 8
+
+                        Repeater {
+                            model: [
+                                Translation.tr("Explain what this command does"),
+                                Translation.tr("Summarise this in three points"),
+                                Translation.tr("What is wrong with this code?"),
+                                Translation.tr("Help me word this")
+                            ]
+                            delegate: RippleButton {
+                                id: starterBtn
+                                required property string modelData
+                                implicitHeight: 32
+                                implicitWidth: starterLabel.implicitWidth + 24
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Appearance.colors.colLayer2
+                                colBackgroundHover: Appearance.colors.colLayer2Hover
+                                colRipple: Appearance.colors.colLayer2Active
+                                onClicked: {
+                                    Ai.draft = starterBtn.modelData;
+                                    root.requestFocusComposer();
+                                }
+
+                                contentItem: StyledText {
+                                    id: starterLabel
+                                    anchors.centerIn: parent
+                                    text: starterBtn.modelData
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colOnLayer2
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Messages list
+                ListView {
+                    id: messageList
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    clip: true
+                    spacing: 12
+                    visible: root.visibleMessageIds.length > 0
+                    model: root.visibleMessageIds
+
+                    property bool following: true
+
+                    onContentYChanged: {
+                        if (moving) {
+                            following = atYEnd;
+                        }
+                    }
+
+                    onCountChanged: {
+                        if (following) {
+                            Qt.callLater(positionViewAtEnd);
+                        }
+                    }
+
+                    delegate: AiChatPanelMessage {
+                        id: messageDelegate
+                        required property string modelData
+                        required property int index
+                        width: messageList.width
+                        messageId: modelData
+                    }
+                }
+            }
+
+            // Inlined Session History view
+            Item {
+                id: historyView
+                anchors.fill: parent
+                anchors.margins: 16
+                opacity: root.historyOpen ? 1.0 : 0.0
+                visible: opacity > 0.001
+                transform: Translate {
+                    x: root.historyOpen ? 0 : 36
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+                Behavior on transform {
+                    NumberAnimation {
+                        property: "x"
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 12
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        StyledText {
+                            text: Translation.tr("Conversations")
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.weight: Font.DemiBold
+                            color: Appearance.colors.colOnLayer1
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        StyledText {
+                            text: Translation.tr("%1 sessions").arg(Ai.sessions.entries.length)
+                            font.pixelSize: Appearance.font.pixelSize.smallie
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+
+                    ListView {
+                        id: sessionList
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 6
+                        model: Ai.sessions.entries
+
+                        delegate: RowLayout {
+                            id: sessionRow
+                            required property var modelData
+                            width: sessionList.width
+                            spacing: 8
+
+                            RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 48
+                                buttonRadius: Appearance.rounding.normal
+                                toggled: Ai.sessions.currentId === sessionRow.modelData.id
+                                colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                                colBackgroundHover: toggled ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                                colRipple: Appearance.colors.colLayer2Active
+                                onClicked: {
+                                    Ai.openSession(sessionRow.modelData.id);
+                                    root.historyOpen = false;
+                                    root.requestFocusComposer();
+                                }
+
+                                contentItem: RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
+                                    spacing: 8
+
+                                    MaterialSymbol {
+                                        text: sessionRow.modelData.pinned ? "push_pin" : "chat_bubble"
+                                        fill: 1
+                                        iconSize: Appearance.font.pixelSize.normal
+                                        color: Appearance.colors.colOnLayer2
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: sessionRow.modelData.title || Translation.tr("Untitled chat")
+                                            elide: Text.ElideRight
+                                            color: Appearance.colors.colOnLayer2
+                                        }
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: sessionRow.modelData.preview || Translation.tr("No messages yet")
+                                            elide: Text.ElideRight
+                                            font.pixelSize: Appearance.font.pixelSize.smallie
+                                            color: Appearance.colors.colSubtext
+                                        }
+                                    }
+                                }
+                            }
+
+                            RippleButton {
+                                implicitWidth: 32
+                                implicitHeight: 32
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                                colBackgroundHover: Appearance.colors.colLayer2Hover
+                                colRipple: Appearance.colors.colLayer2Active
+                                onClicked: Ai.sessions.setPinned(sessionRow.modelData.id, !sessionRow.modelData.pinned)
+
+                                contentItem: MaterialSymbol {
+                                    text: "push_pin"
+                                    fill: 1
+                                    iconSize: Appearance.font.pixelSize.smallie
+                                    color: sessionRow.modelData.pinned ? Appearance.m3colors.m3primary : Appearance.colors.colSubtext
+                                }
+
+                                StyledToolTip { text: Translation.tr("Pin or unpin") }
+                            }
+
+                            RippleButton {
+                                implicitWidth: 32
+                                implicitHeight: 32
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                                colBackgroundHover: Appearance.colors.colLayer2Hover
+                                colRipple: Appearance.colors.colLayer2Active
+                                onClicked: root.pendingTrashId = root.pendingTrashId === sessionRow.modelData.id ? "" : sessionRow.modelData.id
+
+                                Accessible.name: Translation.tr("Move chat to trash")
+
+                                contentItem: MaterialSymbol {
+                                    text: "delete"
+                                    fill: 1
+                                    iconSize: Appearance.font.pixelSize.smallie
+                                    color: Appearance.m3colors.m3error
+                                }
+
+                                StyledToolTip { text: Translation.tr("Move to trash") }
+                            }
+
+                            RippleButton {
+                                visible: root.pendingTrashId === sessionRow.modelData.id
+                                implicitWidth: 32
+                                implicitHeight: 32
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Appearance.m3colors.m3error
+                                colBackgroundHover: Appearance.m3colors.m3error
+                                colRipple: Appearance.colors.colLayer2Active
+                                onClicked: {
+                                    Ai.sessions.trash(sessionRow.modelData.id);
+                                    root.pendingTrashId = "";
+                                }
+
+                                Accessible.name: Translation.tr("Confirm moving chat to trash")
+
+                                contentItem: MaterialSymbol {
+                                    text: "check"
+                                    fill: 1
+                                    iconSize: Appearance.font.pixelSize.smallie
+                                    color: Appearance.m3colors.m3onError
+                                }
+
+                                StyledToolTip { text: Translation.tr("Confirm trash") }
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        visible: !!Ai.sessions.deletedEntry
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("%1 moved to trash").arg(Ai.sessions.deletedEntry?.title ?? Translation.tr("Chat"))
+                            elide: Text.ElideRight
+                            font.pixelSize: Appearance.font.pixelSize.smallie
+                            color: Appearance.colors.colSubtext
                         }
 
                         RippleButton {
-                            id: starterChip
-                            required property var modelData
+                            implicitWidth: 76
+                            implicitHeight: 30
                             buttonRadius: Appearance.rounding.full
-                            colBackground: Appearance.colors.colLayer2
-                            colBackgroundHover: Appearance.colors.colLayer2Hover
-                            colRipple: Appearance.colors.colLayer2Active
-                            onClicked: {
-                                Ai.sendUserMessage(starterChip.modelData);
-                                root.requestFocusComposer();
-                            }
+                            colBackground: Appearance.colors.colSecondaryContainer
+                            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                            colRipple: Appearance.colors.colSecondaryContainerActive
+                            onClicked: Ai.sessions.undoDelete()
 
                             contentItem: StyledText {
-                                text: starterChip.modelData
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colOnLayer2
+                                text: Translation.tr("Undo")
+                                horizontalAlignment: Text.AlignHCenter
+                                color: Appearance.m3colors.m3onSecondaryContainer
                             }
                         }
                     }
                 }
             }
-
-            // Message list
-            ListView {
-                id: messageList
-                anchors.fill: parent
-                anchors.margins: 12
-                clip: true
-                spacing: 10
-                visible: root.visibleMessageIds.length > 0
-                boundsBehavior: Flickable.StopAtBounds
-
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AsNeeded
-                }
-
-                model: ScriptModel {
-                    values: root.visibleMessageIds
-                }
-
-                delegate: AiChatPanelMessage {
-                    required property var modelData
-                    // Delegate roles are untyped QVariant values in a
-                    // ScriptModel. Coerce the id at the boundary so a stale
-                    // delegate/context object cannot be assigned to the
-                    // message's string property while a session is changing.
-                    readonly property string delegateMessageId: String(modelData ?? "")
-                    messageId: delegateMessageId
-                    messageData: Ai.messageByID[delegateMessageId] ?? null
-                }
-
-                property bool following: true
-                onCountChanged: {
-                    if (following)
-                        Qt.callLater(() => messageList.positionViewAtEnd());
-                }
-                onContentHeightChanged: {
-                    if (following)
-                        positionViewAtEnd();
-                }
-                onMovingChanged: {
-                    if (!moving)
-                        following = AiTranscriptRegistry.shouldFollow(contentY, height, contentHeight);
-                }
-                onHeightChanged: {
-                    if (following)
-                        positionViewAtEnd();
-                }
-            }
-
-            ScrollToBottomButton {
-                target: messageList
-                shown: messageList.visible && !messageList.atYEnd && messageList.contentHeight > messageList.height
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 6
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
         }
 
-        // ── Bottom composer bar ──────────────────────────────
+        // ════════════════════════════════════════════════════════
+        // 3. BOTTOM COMPOSER RECTANGLE
+        // ════════════════════════════════════════════════════════
 
         AiSearchComposer {
             id: composer
             Layout.fillWidth: true
-            Layout.leftMargin: 8
-            Layout.rightMargin: 8
-            Layout.topMargin: 6
-            Layout.bottomMargin: 6
             onRequestSend: root.requestSendMessage()
             onRequestEscape: root.handleComposerEscape()
-            onRequestOpenHistory: root.navigateTo("history")
+            onRequestOpenHistory: root.historyOpen = !root.historyOpen
         }
-
     }
 }

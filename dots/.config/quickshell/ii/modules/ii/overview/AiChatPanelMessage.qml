@@ -23,7 +23,11 @@ ColumnLayout {
     required property var messageData
 
     readonly property bool isUser: root.messageData?.role === "user"
-    readonly property var messageBlocks: AiTranscriptRegistry.blocksFor(root.messageData)
+    // Keep the dependency on `content` explicit. QML cannot always infer a
+    // property read hidden behind a singleton JavaScript helper, which left a
+    // restored final answer with a stale empty ScriptModel.
+    readonly property string transcriptContent: String(root.messageData?.content ?? root.messageData?.rawContent ?? "")
+    readonly property var messageBlocks: AiTranscriptRegistry.blocksForContent(root.transcriptContent)
     readonly property var sentFiles: Array.from(root.messageData?.attachments ?? [])
     readonly property bool actionFocused: copyButton.activeFocus || regenerateButton.activeFocus
 
@@ -102,8 +106,11 @@ ColumnLayout {
         Rectangle {
             id: userBubble
             visible: root.isUser
-            Layout.maximumWidth: Math.min(parent?.width * 0.78 ?? 400, userText.implicitWidth + 28)
-            implicitWidth: Math.min(parent?.width * 0.78 ?? 400, Math.max(120, userText.implicitWidth + 28))
+            // Referencing the RowLayout's own width here feeds the child's
+            // implicit width back into the parent and causes a recursive
+            // rearrange. The ListView delegate width is the stable boundary.
+            Layout.maximumWidth: Math.min(root.width * 0.78, userText.implicitWidth + 28)
+            implicitWidth: Math.min(root.width * 0.78, Math.max(120, userText.implicitWidth + 28))
             implicitHeight: userText.implicitHeight + 20
             radius: Appearance.rounding.large
             color: Appearance.colors.colPrimaryContainer
@@ -166,33 +173,55 @@ ColumnLayout {
             model: ScriptModel {
                 values: root.messageBlocks
             }
-            delegate: DelegateChooser {
-                role: "type"
+            delegate: Item {
+                id: blockItem
+                required property var modelData
+                Layout.fillWidth: true
+                implicitWidth: parent ? parent.width : 0
+                implicitHeight: blockLoader.implicitHeight
 
-                DelegateChoice {
-                    roleValue: "code"
+                Component {
+                    id: codeBlockComp
                     AiMessageCodeBlock {
-                        segmentContent: modelData.content
-                        segmentLang: modelData.lang
+                        width: blockItem.width
+                        segmentContent: blockItem.modelData?.content ?? ""
+                        segmentLang: blockItem.modelData?.lang ?? "txt"
                         messageData: root.messageData
                     }
                 }
-                DelegateChoice {
-                    roleValue: "think"
+
+                Component {
+                    id: thinkBlockComp
                     AiMessageThinkBlock {
-                        segmentContent: modelData.content
+                        width: blockItem.width
+                        segmentContent: blockItem.modelData?.content ?? ""
                         messageData: root.messageData
                         done: root.messageData?.done ?? false
-                        completed: modelData.completed ?? false
+                        completed: blockItem.modelData?.completed ?? false
                     }
                 }
-                DelegateChoice {
-                    roleValue: "text"
+
+                Component {
+                    id: textBlockComp
                     AiMessageTextBlock {
-                        segmentContent: modelData.content
+                        width: blockItem.width
+                        segmentContent: blockItem.modelData?.content ?? ""
                         messageData: root.messageData
                         done: root.messageData?.done ?? false
-                        forceDisableChunkSplitting: root.messageData?.content.includes("```") ?? true
+                        forceDisableChunkSplitting: root.messageData?.content?.includes("```") ?? true
+                    }
+                }
+
+                Loader {
+                    id: blockLoader
+                    width: parent.width
+                    sourceComponent: {
+                        const blockType = blockItem.modelData?.type;
+                        if (blockType === "code")
+                            return codeBlockComp;
+                        if (blockType === "think")
+                            return thinkBlockComp;
+                        return textBlockComp;
                     }
                 }
             }

@@ -36,6 +36,11 @@ Singleton {
      */
     property var data: ({})
     property bool ready: false
+    // A response can finish before this singleton's FileView has loaded on a
+    // fresh shell start. Keep those records in RAM, then merge them only after
+    // the persisted ledger is in place instead of silently losing local and
+    // free-model usage.
+    property var pendingResponses: []
     property real initTimestamp: Date.now()
     property int missingFileGracePeriod: 2000
     property int missingFileRetryInterval: 1500
@@ -228,10 +233,32 @@ Singleton {
     }
 
     function recordResponse(model: string, input: int, output: int, thinking: int, total: int, ok: bool) {
-        if (!root.ready)
+        const record = {
+            model: String(model ?? ""),
+            input: Number(input),
+            output: Number(output),
+            thinking: Number(thinking),
+            total: Number(total),
+            ok: ok === true
+        };
+        if (!root.ready) {
+            root.pendingResponses = [...root.pendingResponses, record];
             return;
+        }
+        root.applyResponse(record);
+    }
 
-        const clean = value => value >= 0 ? Math.round(value) : 0;
+    function flushPendingResponses() {
+        if (!root.ready || root.pendingResponses.length === 0)
+            return;
+        const queued = root.pendingResponses;
+        root.pendingResponses = [];
+        for (let index = 0; index < queued.length; index++)
+            root.applyResponse(queued[index]);
+    }
+
+    function applyResponse(record: var) {
+        const clean = value => Number(value) >= 0 ? Math.round(Number(value)) : 0;
         const next = {
             days: Object.assign({}, root.data.days ?? ({})),
             models: Object.assign({}, root.data.models ?? ({})),
@@ -246,24 +273,24 @@ Singleton {
             input: 0, output: 0, thinking: 0, total: 0, requests: 0, ok: 0, err: 0
         }, next.days[key]);
         day.requests += 1;
-        if (ok)
+        if (record.ok)
             day.ok += 1;
         else
             day.err += 1;
 
-        const usageKnown = total >= 0;
+        const usageKnown = Number(record.total) >= 0;
         if (usageKnown) {
-            day.input += clean(input);
-            day.output += clean(output);
-            day.thinking += clean(thinking);
-            day.total += clean(total);
-            next.allTime.input += clean(input);
-            next.allTime.output += clean(output);
-            next.allTime.thinking += clean(thinking);
-            next.allTime.total += clean(total);
+            day.input += clean(record.input);
+            day.output += clean(record.output);
+            day.thinking += clean(record.thinking);
+            day.total += clean(record.total);
+            next.allTime.input += clean(record.input);
+            next.allTime.output += clean(record.output);
+            next.allTime.thinking += clean(record.thinking);
+            next.allTime.total += clean(record.total);
         }
         next.allTime.requests += 1;
-        if (ok)
+        if (record.ok)
             next.allTime.ok += 1;
         else
             next.allTime.err += 1;
@@ -273,22 +300,22 @@ Singleton {
         const hourKey = String(now.getHours());
         const hourBucket = Object.assign({total: 0, requests: 0, ok: 0, err: 0}, hours[hourKey]);
         hourBucket.requests += 1;
-        if (ok)
+        if (record.ok)
             hourBucket.ok += 1;
         else
             hourBucket.err += 1;
         if (usageKnown)
-            hourBucket.total += clean(total);
+            hourBucket.total += clean(record.total);
         hours[hourKey] = hourBucket;
         day.hours = hours;
         next.days[key] = day;
 
-        const modelId = String(model ?? "");
+        const modelId = record.model;
         if (modelId.length > 0) {
             const modelEntry = Object.assign({total: 0, requests: 0}, next.models[modelId]);
             modelEntry.requests += 1;
             if (usageKnown)
-                modelEntry.total += clean(total);
+                modelEntry.total += clean(record.total);
             next.models[modelId] = modelEntry;
 
             // The same totals inside the day bucket give "top models" a
@@ -297,7 +324,7 @@ Singleton {
             const dayModel = Object.assign({total: 0, requests: 0}, dayModels[modelId]);
             dayModel.requests += 1;
             if (usageKnown)
-                dayModel.total += clean(total);
+                dayModel.total += clean(record.total);
             dayModels[modelId] = dayModel;
             day.models = dayModels;
         }
@@ -364,12 +391,13 @@ Singleton {
         atomicWrites: true
         onFileChanged: fileReloadTimer.restart()
         onLoaded: {
-            root.ready = true;
             const loaded = usageAdapter.data;
             // A missing or corrupted file must not wipe what this session
             // already collected — only replace when the read has the shape.
             if (loaded && typeof loaded === "object" && (loaded.days !== undefined || loaded.allTime !== undefined))
                 root.data = loaded;
+            root.ready = true;
+            root.flushPendingResponses();
         }
         onLoadFailed: error => {
             if (error != FileViewError.FileNotFound)
@@ -377,6 +405,7 @@ Singleton {
             const elapsed = Date.now() - root.initTimestamp;
             if (elapsed > root.missingFileGracePeriod) {
                 root.ready = true;
+                root.flushPendingResponses();
                 fileWriteTimer.restart();
             } else {
                 missingFileRetryTimer.restart();

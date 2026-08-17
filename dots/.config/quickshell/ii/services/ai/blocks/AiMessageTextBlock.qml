@@ -17,14 +17,14 @@ ColumnLayout {
     property bool editing: false
     property bool renderMarkdown: true
     property bool enableMouseSelection: false
-    property var segmentContent: ({})
-    property var messageData: {}
+    property var segmentContent: ""
+    property var messageData: null
     property bool done: true
     property bool forceDisableChunkSplitting: false
 
     property list<string> renderedLatexHashes: []
-    property string renderedSegmentContent: ""
-    property string shownText: ""
+    property string renderedSegmentContent: typeof segmentContent === "string" ? segmentContent : ""
+    property string shownText: renderedSegmentContent
     property bool fadeChunkSplitting: !forceDisableChunkSplitting && !editing && !/\n\|/.test(shownText) && Config.options.sidebar.ai.textFadeIn
 
     Layout.fillWidth: true
@@ -76,23 +76,14 @@ ColumnLayout {
         if (!editing) {
             renderLatex()
         } else {
-            // console.log("Editing mode enabled", segmentContent)
-            root.shownText = segmentContent
+            root.renderedSegmentContent = String(segmentContent ?? "");
         }
     }
 
     onSegmentContentChanged: {
-        // console.log("Segment content changed: " + segmentContent);
-        renderedSegmentContent = segmentContent;
+        renderedSegmentContent = String(segmentContent ?? "");
         if (!root.editing && segmentContent) {
             root.renderLatex();
-        }
-    }
-
-    onRenderedSegmentContentChanged: {
-        // console.log("Rendered segment content changed: " + renderedSegmentContent);
-        if (renderedSegmentContent) {
-            root.shownText = renderedSegmentContent;
         }
     }
 
@@ -103,7 +94,6 @@ ColumnLayout {
         target: LatexRenderer
         function onRenderFinished(hash, imagePath) {
             const expression = LatexRenderer.processedExpressions[hash];
-            // console.log("Render finished: " + hash + " " + expression);
             handleRenderedLatex(hash);
         }
     }
@@ -111,43 +101,14 @@ ColumnLayout {
     spacing: 0
     Repeater {
         id: textLinesRepeater
-        property list<real> textLineOpacities: []
         model: ScriptModel {
             // Split by either double newlines or single newlines in a list
             values: root.fadeChunkSplitting ? root.shownText.split(/\n\n(?= {0,2})|\n(?= {0,2}[-\*])/g).filter(line => line.trim() !== "") : [root.shownText]
-            onValuesChanged: {
-                while (textLinesRepeater.textLineOpacities.length < values.length) {
-                    textLinesRepeater.textLineOpacities.push(root.messageData.done ? 1 : 0);
-                }
-            }
         }
         delegate: TextArea {
             id: textArea
             required property int index
             required property string modelData
-
-            // Fade in animation
-            visible: opacity > 0
-            opacity: fadeChunkSplitting ? (textLinesRepeater.textLineOpacities[index] ?? (root.messageData.done ? 1 : 0)) : 1
-            Connections {
-                target: root.messageData
-                function onDoneChanged() {
-                    if (root.messageData.done) {
-                        textLinesRepeater.textLineOpacities[textArea.index] = 1
-                    }
-                }
-            }
-            Connections {
-                target: textLinesRepeater.model
-                function onValuesChanged() {
-                    if (textLinesRepeater.model.values.length > textArea.index + 1) {
-                        textLinesRepeater.textLineOpacities[textArea.index] = 1
-                    }
-                }
-            }
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
 
             Layout.fillWidth: true
             readOnly: !editing
@@ -180,13 +141,6 @@ ColumnLayout {
                 cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : 
                     (enableMouseSelection || editing) ? Qt.IBeamCursor : Qt.ArrowCursor
             }
-
-            // Rectangle {
-            //     anchors.fill: parent
-            //     color: "#22786378"
-            //     border.width: 1
-            //     border.color: "#7E7E7E"
-            // }
         }
     }
 }

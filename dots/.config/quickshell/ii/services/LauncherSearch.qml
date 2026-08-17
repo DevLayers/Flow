@@ -16,6 +16,15 @@ Singleton {
     property string query: ""
     property int mprisTrigger: 0
 
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (!GlobalStates.overviewOpen) {
+                root.query = "";
+            }
+        }
+    }
+
     Component.onCompleted: Qt.callLater(_scheduleResultsUpdate)
 
     function ensurePrefix(prefix) {
