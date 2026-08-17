@@ -54,14 +54,14 @@ Item {
         Ai.setFunctionExposure(modes[(index + 1 + modes.length) % modes.length], false);
     }
 
-    MaterialShape {
+    Rectangle {
         id: pageCard
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         implicitHeight: pageColumn.implicitHeight + 36
         color: Appearance.colors.colLayer1
-        shape: MaterialShape.Shape.SoftBoom
+        radius: Appearance.rounding.large
 
         ColumnLayout {
             id: pageColumn

@@ -24,10 +24,6 @@ ColumnLayout {
 
     signal requestSend
     signal requestEscape
-    signal requestModels
-    signal requestHistory
-    signal requestTools
-    signal requestNewChat
 
     readonly property int maximumLines: 6
     readonly property int maximumCharacters: 12000
@@ -62,12 +58,6 @@ ColumnLayout {
         Ai.setWebMode(modes[(index + 1 + modes.length) % modes.length], false);
     }
 
-    function cycleFunctionExposure() {
-        const modes = ["none", "safe", "all"];
-        const index = modes.indexOf(Ai.functionExposure);
-        Ai.setFunctionExposure(modes[(index + 1 + modes.length) % modes.length], false);
-    }
-
     function pasteClipboard() {
         const value = String(Quickshell.clipboardText ?? "");
         if (value.length === 0)
@@ -88,12 +78,12 @@ ColumnLayout {
 
     Component.onCompleted: root.setDraft(Ai.draft)
 
-    MaterialShape {
+    Rectangle {
         id: composerSurface
         Layout.fillWidth: true
         implicitHeight: composerColumn.implicitHeight + 24
         color: Appearance.colors.colLayer1
-        shape: MaterialShape.Shape.SoftBoom
+        radius: Appearance.rounding.large
 
         ColumnLayout {
             id: composerColumn
@@ -108,10 +98,8 @@ ColumnLayout {
                 Repeater {
                     model: ScriptModel {
                         values: [
-                            { id: "model", icon: "auto_awesome", label: Ai.currentModelEntry?.title ?? Ai.currentModelId },
                             { id: "response", icon: "speed", label: Translation.tr("%1 response").arg(Ai.responseMode) },
-                            { id: "web", icon: "travel_explore", label: Translation.tr("Web %1").arg(Ai.webMode) },
-                            { id: "tools", icon: "construction", label: Translation.tr("Tools %1").arg(Ai.functionExposure) }
+                            { id: "web", icon: "travel_explore", label: Translation.tr("Web %1").arg(Ai.webMode) }
                         ]
                     }
 
@@ -126,17 +114,13 @@ ColumnLayout {
                         colRipple: Appearance.colors.colLayer2Active
                         onClicked: {
                             switch (profileButton.modelData.id) {
-                            case "model": root.requestModels(); break;
                             case "response": root.cycleResponseMode(); break;
                             case "web": root.cycleWebMode(); break;
-                            case "tools": root.cycleFunctionExposure(); break;
                             }
                         }
 
                         Accessible.name: profileButton.modelData.label
-                        Accessible.description: profileButton.modelData.id === "model"
-                            ? Translation.tr("Open model selection")
-                            : Translation.tr("Change %1").arg(profileButton.modelData.label)
+                        Accessible.description: Translation.tr("Change %1").arg(profileButton.modelData.label)
 
                         contentItem: RowLayout {
                             spacing: 5
@@ -163,56 +147,9 @@ ColumnLayout {
                         StyledToolTip {
                             text: profileButton.modelData.id === "response"
                                 ? Translation.tr("Cycle response mode")
-                                : profileButton.modelData.id === "web"
-                                    ? Translation.tr("Cycle web mode")
-                                    : profileButton.modelData.id === "tools"
-                                        ? Translation.tr("Cycle tool exposure")
-                                        : Translation.tr("Open model page")
+                                : Translation.tr("Cycle web mode")
                         }
                     }
-                }
-
-                RippleButton {
-                    buttonRadius: Appearance.rounding.full
-                    implicitWidth: 36
-                    implicitHeight: 32
-                    colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    colRipple: Appearance.colors.colLayer2Active
-                    onClicked: root.requestHistory()
-
-                    Accessible.name: Translation.tr("Chat history")
-
-                    contentItem: MaterialSymbol {
-                        text: "history"
-                        iconSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnLayer1
-                    }
-
-                    StyledToolTip { text: Translation.tr("History") }
-                }
-
-                RippleButton {
-                    buttonRadius: Appearance.rounding.full
-                    implicitWidth: 36
-                    implicitHeight: 32
-                    colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    colRipple: Appearance.colors.colLayer2Active
-                    onClicked: {
-                        Ai.newChat();
-                        root.requestNewChat();
-                    }
-
-                    Accessible.name: Translation.tr("New chat")
-
-                    contentItem: MaterialSymbol {
-                        text: "add_comment"
-                        iconSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnLayer1
-                    }
-
-                    StyledToolTip { text: Translation.tr("New chat") }
                 }
             }
 

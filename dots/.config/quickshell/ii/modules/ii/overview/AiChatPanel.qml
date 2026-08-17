@@ -17,7 +17,7 @@ import Quickshell.Io
 /**
  * Unified AI chat panel for the overview search.
  *
- * Layout: header (back + title + actions) → transcript → bottom bar (model chip + attach + send).
+ * Layout: header (back + title + navigation) → transcript → bottom composer.
  * The search bar above this panel acts as the text input — this panel is purely the
  * conversation surface, consistent with how bluetooth/clipboard/translator panels
  * sit below the search bar.
@@ -424,10 +424,6 @@ AiSearchSurface {
             Layout.bottomMargin: 6
             onRequestSend: root.requestSendMessage()
             onRequestEscape: root.handleComposerEscape()
-            onRequestModels: root.navigateTo("models")
-            onRequestHistory: root.navigateTo("history")
-            onRequestTools: root.navigateTo("tools")
-            onRequestNewChat: root.requestFocusComposer()
         }
 
     }
