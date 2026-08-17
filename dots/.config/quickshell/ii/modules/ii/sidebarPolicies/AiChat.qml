@@ -1203,7 +1203,11 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             Layout.fillWidth: true
             radius: Appearance.rounding.normal - root.padding
             color: Appearance.colors.colLayer2
-            implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.bottomMargin + spacing, 45) + (attachmentTray.implicitHeight + spacing + attachmentTray.anchors.topMargin)
+            // The room above the row belongs to the attachment tray, so with
+            // nothing attached it is given back: an empty tray still charging
+            // for its spacing left the whole composer sitting low in its own
+            // box, which reads as the buttons being off-centre.
+            implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.bottomMargin + spacing, 45) + (attachmentTray.implicitHeight > 0 ? attachmentTray.implicitHeight + spacing + attachmentTray.anchors.topMargin : 0)
             clip: true
 
             FastBlur {
@@ -1298,20 +1302,16 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 }
                 spacing: 0
 
-                FontMetrics {
-                    // The buttons beside the field line up with the middle of
-                    // its last line of text, not with its bottom edge: the
-                    // field's own padding sits below that line, so a button
-                    // flush with the bottom reads as sitting too low.
-                    id: composerTextMetrics
-                    font: messageInputField.font
-                }
-
                 ComposerButton {
                     // Attaching used to be a slash command with a path typed
                     // by hand, or a drag. Both are still there.
                     Layout.alignment: Qt.AlignBottom
-                    Layout.bottomMargin: Math.max(0, messageInputField.bottomPadding + composerTextMetrics.height / 2 - implicitHeight / 2)
+                    // The send button is the tallest of the three and, sitting flush
+                    // with the bottom of the row, lands on the middle of the
+                    // text beside it. The smaller ones are lifted onto that
+                    // same line rather than measured against the field, whose
+                    // own bottom edge sits below its last line of text.
+                    Layout.bottomMargin: (sendButton.implicitHeight - implicitHeight) / 2
                     Layout.leftMargin: 5
                     symbol: "attach_file"
                     tooltipText: Translation.tr("Attach files")
@@ -1320,7 +1320,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
                 ComposerButton {
                     Layout.alignment: Qt.AlignBottom
-                    Layout.bottomMargin: Math.max(0, messageInputField.bottomPadding + composerTextMetrics.height / 2 - implicitHeight / 2)
+                    Layout.bottomMargin: (sendButton.implicitHeight - implicitHeight) / 2
                     symbol: "screenshot_region"
                     tooltipText: Translation.tr("Send a part of the screen")
                     onTriggered: {
@@ -1545,7 +1545,6 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     readonly property bool stopping: Ai.isGenerating
 
                     Layout.alignment: Qt.AlignBottom
-                    Layout.bottomMargin: Math.max(0, messageInputField.bottomPadding + composerTextMetrics.height / 2 - implicitHeight / 2)
                     Layout.rightMargin: 5
                     implicitWidth: 40
                     implicitHeight: 40
