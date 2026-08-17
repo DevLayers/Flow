@@ -71,19 +71,30 @@ Item {
         return "";
     }
 
-    /** Headers and models in one flat list, so a single view draws both. */
+    /**
+     * Headers and models in one flat list, so a single view draws both.
+     *
+     * A group folded by its header keeps only the header, and says how many
+     * models it is hiding. A search folds nothing: a match that stayed hidden
+     * behind a header would read as no match at all.
+     */
     readonly property var rows: {
         const needle = root.query.trim().toLowerCase();
+        const folded = needle.length > 0 ? [] : Ai.collapsedModelGroups;
         const rows = [];
 
         if (needle.length === 0) {
             const recent = Ai.recentModelIds;
             if (recent.length > 0) {
+                const recentFolded = folded.includes("recent");
                 rows.push({
                     kind: "header",
-                    label: Translation.tr("Recently used")
+                    groupId: "recent",
+                    label: Translation.tr("Recently used"),
+                    collapsed: recentFolded,
+                    count: recent.length
                 });
-                for (let i = 0; i < recent.length; i++) {
+                for (let i = 0; !recentFolded && i < recent.length; i++) {
                     rows.push({
                         kind: "model",
                         model: Ai.catalog.models[recent[i]]
@@ -100,13 +111,17 @@ Item {
             const models = Array.from(provider.models).filter(model => root.matches(model, provider, needle));
             if (models.length === 0)
                 continue;
+            const providerFolded = folded.includes(providerIds[i]);
             rows.push({
                 kind: "header",
+                groupId: providerIds[i],
                 label: provider.name,
                 symbol: provider.materialIcon,
-                iconSource: provider.icon
+                iconSource: provider.icon,
+                collapsed: providerFolded,
+                count: models.length
             });
-            for (let j = 0; j < models.length; j++) {
+            for (let j = 0; !providerFolded && j < models.length; j++) {
                 rows.push({
                     kind: "model",
                     model: models[j]
@@ -230,39 +245,79 @@ Item {
                 active: rowItem.modelData.kind === "header"
                 visible: active
 
-                sourceComponent: RowLayout {
-                    spacing: 6
+                sourceComponent: RippleButton {
+                    id: headerButton
 
-                    Loader {
-                        active: (rowItem.modelData.iconSource ?? "").length > 0
-                        visible: active
-                        sourceComponent: CustomIcon {
-                            source: rowItem.modelData.iconSource
-                            width: Appearance.font.pixelSize.normal
-                            height: Appearance.font.pixelSize.normal
-                            colorize: true
+                    topPadding: 8
+                    bottomPadding: 2
+                    leftPadding: 4
+                    rightPadding: 4
+                    buttonRadius: Appearance.rounding.small
+                    colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colRipple: Appearance.colors.colLayer2Active
+                    onClicked: Ai.toggleModelGroupCollapsed(rowItem.modelData.groupId)
+
+                    contentItem: RowLayout {
+                        spacing: 6
+
+                        Loader {
+                            active: (rowItem.modelData.iconSource ?? "").length > 0
+                            visible: active
+                            sourceComponent: CustomIcon {
+                                source: rowItem.modelData.iconSource
+                                width: Appearance.font.pixelSize.normal
+                                height: Appearance.font.pixelSize.normal
+                                colorize: true
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
+
+                        Loader {
+                            active: (rowItem.modelData.iconSource ?? "").length === 0 && (rowItem.modelData.symbol ?? "").length > 0
+                            visible: active
+                            sourceComponent: MaterialSymbol {
+                                text: rowItem.modelData.symbol
+                                iconSize: Appearance.font.pixelSize.normal
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: rowItem.modelData.label
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
+                            elide: Text.ElideRight
+                        }
+
+                        StyledText {
+                            // Only worth saying while the models themselves
+                            // are out of sight.
+                            visible: rowItem.modelData.collapsed ?? false
+                            text: rowItem.modelData.count ?? 0
+                            font.pixelSize: Appearance.font.pixelSize.smaller
                             color: Appearance.colors.colSubtext
                         }
-                    }
 
-                    Loader {
-                        active: (rowItem.modelData.iconSource ?? "").length === 0 && (rowItem.modelData.symbol ?? "").length > 0
-                        visible: active
-                        sourceComponent: MaterialSymbol {
-                            text: rowItem.modelData.symbol
+                        MaterialSymbol {
+                            text: "expand_more"
                             iconSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colSubtext
+                            rotation: (rowItem.modelData.collapsed ?? false) ? -90 : 0
+
+                            Behavior on rotation {
+                                NumberAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animationCurves.standard
+                                }
+                            }
                         }
                     }
 
-                    StyledText {
-                        Layout.fillWidth: true
-                        Layout.topMargin: 8
-                        Layout.bottomMargin: 2
-                        text: rowItem.modelData.label
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colSubtext
-                        elide: Text.ElideRight
+                    StyledToolTip {
+                        text: (rowItem.modelData.collapsed ?? false) ? Translation.tr("Show these models") : Translation.tr("Fold this group away")
                     }
                 }
             }

@@ -1123,6 +1123,16 @@ Singleton {
         return remembered.filter(id => id !== root.currentModelId && root.catalog.models[id]);
     }
 
+    /** Groups the model picker keeps folded, by provider id or "recent". */
+    readonly property var collapsedModelGroups: Array.from(Persistent.states?.ai?.collapsedModelGroups ?? [])
+
+    function toggleModelGroupCollapsed(groupId: string) {
+        if (!Persistent.states?.ai)
+            return;
+        const folded = root.collapsedModelGroups;
+        Persistent.states.ai.collapsedModelGroups = folded.includes(groupId) ? folded.filter(id => id !== groupId) : folded.concat([groupId]);
+    }
+
     function rememberModel(modelId: string) {
         if (!Persistent.states?.ai)
             return;
