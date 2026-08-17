@@ -156,15 +156,17 @@ Rectangle {
         return (pStr.indexOf("RowLayout") !== -1 || pStr.indexOf("Row") !== -1) && pStr.indexOf("Column") === -1;
     }
 
-    topLeftRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    topRightRadius: isHorizontalLayout ? ((isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)) : ((isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall))
-    bottomLeftRadius: isHorizontalLayout ? ((isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)) : ((isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall))
-    bottomRightRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    readonly property real rFull: Appearance.rounding.scale === 0 ? 0 : Math.min(height / 2, Appearance.rounding.large)
 
-    Behavior on topLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on topRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on bottomLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on bottomRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
+    topLeftRadius: (isPressed || prevIsPressed) ? rFull : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    topRightRadius: (isPressed || prevIsPressed) ? rFull : (isHorizontalLayout ? (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall))
+    bottomLeftRadius: (isPressed || nextIsPressed) ? rFull : (isHorizontalLayout ? (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall))
+    bottomRightRadius: (isPressed || nextIsPressed) ? rFull : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
+
+    Behavior on topLeftRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on topRightRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on bottomLeftRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on bottomRightRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
 
     color: Appearance.colors.colTertiaryContainer
     Layout.fillWidth: true
