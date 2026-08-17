@@ -6,14 +6,22 @@ import ssl
 import sys
 import hashlib
 import uuid
+from pathlib import Path
 
 PORT = 53317
 MULTICAST_GROUP = "224.0.0.167"
+CERT_FILE = Path.home() / ".config" / "localsend-cli" / "cert.pem"
+KEY_FILE  = Path.home() / ".config" / "localsend-cli" / "key.pem"
 
-# Disable SSL verification for self-signed certificates used by LocalSend
+# Configure SSL context with mTLS client certificate for LocalSend v2
 ctx = ssl.create_default_context()
 ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
+if CERT_FILE.exists() and KEY_FILE.exists():
+    try:
+        ctx.load_cert_chain(CERT_FILE, KEY_FILE)
+    except Exception as e:
+        pass
 
 def get_local_ip():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -26,7 +34,18 @@ def get_local_ip():
 # Generate consistent fingerprint and device info
 def get_device_info():
     hostname = socket.gethostname()
-    fingerprint = hashlib.sha256(f"quickshell-{hostname}".encode()).hexdigest()
+    fingerprint = ""
+    if CERT_FILE.exists():
+        try:
+            from cryptography.x509 import load_pem_x509_certificate
+            from cryptography.hazmat.primitives import hashes
+            cert = load_pem_x509_certificate(CERT_FILE.read_bytes())
+            fingerprint = cert.fingerprint(hashes.SHA256()).hex()
+        except Exception:
+            pass
+    if not fingerprint:
+        fingerprint = hashlib.sha256(f"quickshell-{hostname}".encode()).hexdigest()
+
     return {
         "alias": f"quickshell@{hostname}",
         "version": "2.0",
