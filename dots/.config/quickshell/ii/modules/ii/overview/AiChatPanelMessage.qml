@@ -25,6 +25,7 @@ ColumnLayout {
     readonly property bool isUser: root.messageData?.role === "user"
     readonly property var messageBlocks: AiTranscriptRegistry.blocksFor(root.messageData)
     readonly property var sentFiles: Array.from(root.messageData?.attachments ?? [])
+    readonly property bool actionFocused: copyButton.activeFocus || regenerateButton.activeFocus
 
     spacing: 4
     Layout.fillWidth: true
@@ -377,8 +378,8 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         spacing: 2
-        opacity: messageHover.hovered ? 1.0 : 0.0
-        visible: opacity > 0
+        opacity: messageHover.hovered || root.actionFocused ? 1.0 : 0.0
+        visible: opacity > 0 || root.actionFocused
 
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -395,6 +396,7 @@ ColumnLayout {
         }
 
         RippleButton {
+            id: copyButton
             buttonRadius: Appearance.rounding.full
             colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
             colBackgroundHover: Appearance.colors.colLayer2Hover
@@ -408,15 +410,20 @@ ColumnLayout {
             onClicked: {
                 AiOutputController.copyText(root.messageData?.content ?? "");
             }
+
+            Accessible.name: Translation.tr("Copy message")
         }
 
         RippleButton {
+            id: regenerateButton
             visible: !root.isUser && (root.messageData?.done ?? false)
             buttonRadius: Appearance.rounding.full
             colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
             colBackgroundHover: Appearance.colors.colLayer2Hover
             colRipple: Appearance.colors.colLayer2Active
             onClicked: Ai.regenerate(root.messageId)
+
+            Accessible.name: Translation.tr("Regenerate response")
 
             contentItem: MaterialSymbol {
                 text: "refresh"

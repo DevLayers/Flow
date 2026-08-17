@@ -133,6 +133,11 @@ ColumnLayout {
                             }
                         }
 
+                        Accessible.name: profileButton.modelData.label
+                        Accessible.description: profileButton.modelData.id === "model"
+                            ? Translation.tr("Open model selection")
+                            : Translation.tr("Change %1").arg(profileButton.modelData.label)
+
                         contentItem: RowLayout {
                             spacing: 5
 
@@ -176,6 +181,8 @@ ColumnLayout {
                     colRipple: Appearance.colors.colLayer2Active
                     onClicked: root.requestHistory()
 
+                    Accessible.name: Translation.tr("Chat history")
+
                     contentItem: MaterialSymbol {
                         text: "history"
                         iconSize: Appearance.font.pixelSize.small
@@ -196,6 +203,8 @@ ColumnLayout {
                         Ai.newChat();
                         root.requestNewChat();
                     }
+
+                    Accessible.name: Translation.tr("New chat")
 
                     contentItem: MaterialSymbol {
                         text: "add_comment"
@@ -220,6 +229,8 @@ ColumnLayout {
                 persistentSelection: true
                 maximumLength: root.maximumCharacters
                 background: Item {}
+                Accessible.name: Translation.tr("AI message")
+                Accessible.description: Translation.tr("Multiline draft. Enter sends; Shift+Enter inserts a line break.")
 
                 onTextChanged: {
                     if (!root.syncingDraft)
@@ -249,6 +260,8 @@ ColumnLayout {
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     colRipple: Appearance.colors.colLayer2Active
                     onClicked: root.pasteClipboard()
+
+                    Accessible.name: Translation.tr("Paste clipboard")
 
                     contentItem: MaterialSymbol {
                         text: "content_paste"
@@ -281,6 +294,9 @@ ColumnLayout {
                         else
                             root.requestSend();
                     }
+
+                    Accessible.name: Ai.isGenerating ? Translation.tr("Stop response") : Translation.tr("Send message")
+                    Accessible.description: Ai.isGenerating ? Translation.tr("Stop the active response") : Translation.tr("Send the current draft")
 
                     contentItem: MaterialSymbol {
                         text: Ai.isGenerating ? "stop" : "arrow_upward"

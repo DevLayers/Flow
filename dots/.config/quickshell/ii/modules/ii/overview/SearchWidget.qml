@@ -430,6 +430,13 @@ Item {
             return;
         }
         if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
+            if (root.isAiMode) {
+                // The app result list is hidden while AI owns the surface;
+                // never toggle an action panel the user cannot see.
+                root.focusSearchInput();
+                event.accepted = true;
+                return;
+            }
             if (appResults.visible) {
                 root.requestToggleActions();
                 event.accepted = true;
@@ -443,6 +450,10 @@ Item {
 
         // Handle Backspace: focus and delete character if not focused
         if (event.key === Qt.Key_Backspace) {
+            if (root.isAiMode) {
+                root.focusSearchInput();
+                return;
+            }
             if (!searchBar.searchInput.activeFocus) {
                 root.focusSearchInput();
                 if (event.modifiers & Qt.ControlModifier) {

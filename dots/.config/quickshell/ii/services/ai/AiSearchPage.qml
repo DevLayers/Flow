@@ -23,6 +23,7 @@ Item {
 
     required property string pageId
     signal requestBack
+    property string pendingTrashId: ""
 
     readonly property var pageMeta: ({
         "models": { title: Translation.tr("Models"), subtitle: Translation.tr("Choose the model and inspect its capabilities."), icon: "auto_awesome" },
@@ -83,6 +84,8 @@ Item {
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     colRipple: Appearance.colors.colLayer2Active
                     onClicked: root.requestBack()
+
+                    Accessible.name: Translation.tr("Back")
 
                     contentItem: MaterialSymbol {
                         text: "arrow_back"
@@ -184,6 +187,8 @@ Item {
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     colRipple: Appearance.colors.colLayer2Active
                     onClicked: Ai.sessions.setRetentionDays((Ai.sessions.retentionDays ?? 30) >= 365 ? 30 : (Ai.sessions.retentionDays ?? 30) + 30)
+
+                    Accessible.name: Translation.tr("Change retention period")
 
                     contentItem: MaterialSymbol {
                         text: "schedule"
@@ -293,7 +298,9 @@ Item {
                             colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
                             colBackgroundHover: Appearance.colors.colLayer2Hover
                             colRipple: Appearance.colors.colLayer2Active
-                            onClicked: Ai.sessions.trash(sessionRow.modelData.id)
+                            onClicked: root.pendingTrashId = root.pendingTrashId === sessionRow.modelData.id ? "" : sessionRow.modelData.id
+
+                            Accessible.name: Translation.tr("Move chat to trash")
 
                             contentItem: MaterialSymbol {
                                 text: "delete"
@@ -302,6 +309,30 @@ Item {
                             }
 
                             StyledToolTip { text: Translation.tr("Move to trash") }
+                        }
+
+                        RippleButton {
+                            visible: root.pendingTrashId === sessionRow.modelData.id
+                            implicitWidth: 34
+                            implicitHeight: 34
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.m3colors.m3error
+                            colBackgroundHover: Appearance.m3colors.m3error
+                            colRipple: Appearance.colors.colLayer2Active
+                            onClicked: {
+                                Ai.sessions.trash(sessionRow.modelData.id);
+                                root.pendingTrashId = "";
+                            }
+
+                            Accessible.name: Translation.tr("Confirm moving chat to trash")
+
+                            contentItem: MaterialSymbol {
+                                text: "check"
+                                iconSize: Appearance.font.pixelSize.smallie
+                                color: Appearance.m3colors.m3onError
+                            }
+
+                            StyledToolTip { text: Translation.tr("Confirm trash") }
                         }
                     }
                 }
@@ -329,6 +360,8 @@ Item {
                     colRipple: Appearance.colors.colSecondaryContainerActive
                     onClicked: Ai.sessions.undoDelete()
 
+                    Accessible.name: Translation.tr("Undo trash")
+
                     contentItem: StyledText {
                         text: Translation.tr("Undo")
                         horizontalAlignment: Text.AlignHCenter
@@ -347,6 +380,8 @@ Item {
                         Ai.sessions.purge(Ai.sessions.deletedEntry?.id ?? "");
                         Ai.sessions.deletedEntry = null;
                     }
+
+                    Accessible.name: Translation.tr("Permanently purge chat")
 
                     contentItem: StyledText {
                         text: Translation.tr("Purge")

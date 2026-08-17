@@ -18,7 +18,9 @@ import qs.modules.common.widgets
  */
 Item {
     id: root
-
+    // Keep the host focusable so keyboard navigation remains local to Search.
+    focus: true
+    activeFocusOnTab: true
     property AiSearchNavigator navigator: AiSearchNavigator {}
     property bool reducedMotion: false
     property string pageTitle: root.navigator.currentPage
@@ -56,6 +58,33 @@ Item {
         target: root.navigator
         property: "reducedMotion"
         value: root.reducedMotion
+    }
+
+    Connections {
+        target: root.navigator
+        function onPageTransitionFinished(page) {
+            const title = page === "chat" ? Translation.tr("AI chat") : page;
+            AiAccessibilityAnnouncer.announce(Translation.tr("Opened %1").arg(title));
+        }
+    }
+
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Escape) {
+            if (!root.handleEscape())
+                return;
+            event.accepted = true;
+        } else if (event.key === Qt.Key_O && (event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)) {
+            Ai.newChat();
+            root.navigator.replace("chat");
+            event.accepted = true;
+        }
+    }
+
+    Item {
+        width: 1
+        height: 1
+        Accessible.name: AiAccessibilityAnnouncer.liveText
+        Accessible.description: Translation.tr("AI Search status")
     }
 
     Item {

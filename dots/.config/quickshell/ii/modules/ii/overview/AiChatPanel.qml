@@ -38,6 +38,13 @@ AiSearchSurface {
         composer.focusInput();
     }
 
+    function handleComposerEscape() {
+        if (!root.handleEscape())
+            root.requestBackToSearch();
+    }
+
+    // Focus is requested by the host when the inline page becomes active.
+
     readonly property var visibleMessageIds: Ai.messageIDs.filter(id => {
         const m = Ai.messageByID[id];
         return m && m.role !== Ai.interfaceRole && (m.visibleToUser ?? true);
@@ -94,6 +101,8 @@ AiSearchSurface {
                 colRipple: Appearance.colors.colLayer2Active
                 onClicked: root.requestBackToSearch()
 
+                Accessible.name: Translation.tr("Back to search")
+
                 contentItem: MaterialSymbol {
                     text: "arrow_back"
                     iconSize: Appearance.font.pixelSize.normal
@@ -114,6 +123,8 @@ AiSearchSurface {
                 colBackgroundHover: Appearance.colors.colLayer2Hover
                 colRipple: Appearance.colors.colLayer2Active
                 onClicked: root.requestContinueInSidebar()
+
+                Accessible.name: Translation.tr("Continue in sidebar")
 
                 contentItem: MaterialSymbol {
                     text: "open_in_new"
@@ -178,6 +189,8 @@ AiSearchSurface {
                             root.navigateTo(modelData.page);
                         }
                     }
+
+                    Accessible.name: modelData.tooltip
 
                     contentItem: MaterialSymbol {
                         text: modelData.icon
@@ -328,7 +341,7 @@ AiSearchSurface {
             Layout.topMargin: 6
             Layout.bottomMargin: 6
             onRequestSend: root.requestSendMessage()
-            onRequestEscape: root.requestBackToSearch()
+            onRequestEscape: root.handleComposerEscape()
             onRequestModels: root.navigateTo("models")
             onRequestHistory: root.navigateTo("history")
             onRequestTools: root.navigateTo("tools")
