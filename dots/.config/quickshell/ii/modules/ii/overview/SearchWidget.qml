@@ -158,10 +158,8 @@ Item {
     Connections {
         target: GlobalStates
         function onOverviewOpenChanged() {
-            if (!GlobalStates.overviewOpen) {
-                root.aiAutoEngaged = false;
-                root.aiModeLocked = false;
-            }
+            if (!GlobalStates.overviewOpen && (root.isAiMode || root.aiAutoEngaged || root.aiModeLocked))
+                root.resetAiSearchState(false);
         }
     }
     readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !root.isAnySpecialMode && root.searchingText === ""
@@ -374,14 +372,26 @@ Item {
         searchBar.animateWidth = true;
     }
 
-    // Leave AI chat and return to the plain search. Clears the query so the
-    // "&" prefix does not immediately re-enter AI mode.
-    function exitAiMode() {
+    // AI state belongs to the AI surface, never to the normal launcher. Clear
+    // both halves of the query synchronizer so a previous "&" handoff cannot
+    // immediately relatch the panel when the ordinary Search opens again.
+    // `Ai.draft` remains untouched: the AI panel alone owns that unsent text.
+    function resetAiSearchState(focusNormalSearch = false) {
         root.aiAutoEngaged = false;
         root.aiModeLocked = false;
+        root.aiDraftHydrated = false;
+        aiAutoEngageTimer.stop();
+        root.searchingText = "";
         LauncherSearch.query = "";
         searchBar.searchInput.text = "";
-        Qt.callLater(root.focusSearchInput);
+        if (focusNormalSearch)
+            Qt.callLater(root.focusSearchInput);
+    }
+
+    // Leave AI chat and return to the plain search without discarding an
+    // unsent AI draft. Sent drafts are cleared by Ai after submission starts.
+    function exitAiMode() {
+        root.resetAiSearchState(true);
     }
 
     // Send the current search bar text as a chat message. The search bar is

@@ -130,11 +130,16 @@ Singleton {
     property string submissionNotice: ""
     property int draftRevision: 0
     property bool restoringDraft: false
+    // Draft edits may happen before the isolated file has completed its first
+    // asynchronous load. Keep those mutations (including a deliberate clear)
+    // until the loaded snapshot is available, otherwise late hydration can
+    // bring an already-sent prompt back into the composer.
+    property var pendingDraftMutations: ({})
 
     onDraftChanged: {
         root.draftRevision += 1;
-        if (!root.restoringDraft && root.draftStore.loaded)
-            root.draftStore.setDraft(root.sessionDraftId(), root.draft);
+        if (!root.restoringDraft)
+            root.writeOrStageDraft(root.sessionDraftId(), root.draft);
     }
 
     function submissionOperationId(prefix) {
@@ -198,6 +203,8 @@ Singleton {
             profileFallback: profile.fallbackReason,
             profile: profile,
             draftRevisionAtSubmit: root.draftRevision,
+            draftSessionId: root.sessionDraftId(),
+            draftTextAtSubmit: root.draft,
             beforeSessionId: root.sessions.currentId,
             beforeSessionCreatedAt: root.sessionCreatedAt,
             baseMessageIDs: root.messageIDs.slice(),
@@ -453,9 +460,8 @@ Singleton {
         }
 
         if (root.draftRevision === pending.draftRevisionAtSubmit) {
-            const sentDraft = root.draft;
             root.draft = "";
-            root.draftStore.clearDraft(root.sessionDraftId(pending.beforeSessionId), sentDraft);
+            root.clearDraftForSession(pending.draftSessionId, pending.draftTextAtSubmit);
         }
         root.clearAttachments();
         root.submissionStateChanged(pending);
@@ -2625,14 +2631,53 @@ Singleton {
         return root.sessions.currentId.length > 0 ? root.sessions.currentId : root.newDraftId;
     }
 
+    function writeOrStageDraft(sessionId: string, text: string) {
+        const id = String(sessionId ?? "").trim();
+        if (id.length === 0)
+            return;
+        const value = String(text ?? "");
+        if (root.draftStore.loaded) {
+            root.draftStore.setDraft(id, value);
+            return;
+        }
+        root.pendingDraftMutations = Object.assign({}, root.pendingDraftMutations, {
+            [id]: value
+        });
+    }
+
+    function hasPendingDraftMutation(sessionId: string): bool {
+        const id = String(sessionId ?? "").trim();
+        return id.length > 0 && Object.prototype.hasOwnProperty.call(root.pendingDraftMutations, id);
+    }
+
+    function clearDraftForSession(sessionId: string, expectedText = ""): bool {
+        const id = String(sessionId ?? "").trim();
+        if (id.length === 0)
+            return false;
+        if (root.draftStore.loaded)
+            return root.draftStore.clearDraft(id, expectedText);
+        if (root.hasPendingDraftMutation(id) && expectedText.length > 0 && String(root.pendingDraftMutations[id]) !== expectedText)
+            return false;
+        root.writeOrStageDraft(id, "");
+        return true;
+    }
+
+    function flushPendingDraftMutations() {
+        const mutations = root.pendingDraftMutations;
+        root.pendingDraftMutations = ({});
+        Object.keys(mutations).forEach(id => root.draftStore.setDraft(id, String(mutations[id] ?? "")));
+    }
+
     function onDraftStoreReady() {
-        root.restoreDraft();
+        const currentSessionId = root.sessionDraftId();
+        const hasCurrentMutation = root.hasPendingDraftMutation(currentSessionId);
+        root.flushPendingDraftMutations();
+        if (!hasCurrentMutation)
+            root.restoreDraft();
     }
 
     function keepDraft() {
-        if (!root.draftStore.loaded)
-            return;
-        root.draftStore.setDraft(root.sessionDraftId(), root.draft);
+        root.writeOrStageDraft(root.sessionDraftId(), root.draft);
     }
 
     function restoreDraft() {
