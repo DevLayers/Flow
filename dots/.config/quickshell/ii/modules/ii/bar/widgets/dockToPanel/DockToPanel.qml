@@ -934,9 +934,62 @@ Item {
                 delegate: RippleButton {
                     id: winBtn
                     required property var modelData
+                    required property int index
                     implicitWidth: screencopyView.implicitWidth + 12
                     implicitHeight: screencopyView.implicitHeight + 36
                     buttonRadius: Appearance.rounding.small
+
+                    readonly property bool startAnim: previewPopup.opened && previewPopup.popupOpenProgress > 0.6
+
+                    // A preview can join while the popup is already open (new window
+                    // spawns); startAnim won't re-fire for it, so enter right away.
+                    Component.onCompleted: {
+                        if (startAnim) {
+                            Qt.callLater(function() {
+                                winBtnAnim.start();
+                            });
+                        }
+                    }
+
+                    onStartAnimChanged: {
+                        if (startAnim) {
+                            winBtn.opacity = 0.0;
+                            winBtn.scale = 0.85;
+                            winBtnTransform.y = 25;
+                            Qt.callLater(function() {
+                                winBtnAnim.start();
+                            });
+                        }
+                    }
+
+                    Connections {
+                        target: previewPopup
+                        function onPopupOpenProgressChanged() {
+                            if (previewPopup.popupOpenProgress === 0.0) {
+                                winBtnAnim.stop();
+                                winBtn.opacity = 0.0;
+                                winBtn.scale = 0.85;
+                                winBtnTransform.y = 25;
+                            }
+                        }
+                    }
+
+                    opacity: 0.0
+                    scale: 0.85
+                    transform: Translate {
+                        id: winBtnTransform
+                        y: 25
+                    }
+
+                    SequentialAnimation {
+                        id: winBtnAnim
+                        PauseAnimation { duration: 40 + winBtn.index * 60 }
+                        ParallelAnimation {
+                            NumberAnimation { target: winBtn; property: "opacity"; to: 1.0; duration: 300 }
+                            NumberAnimation { target: winBtn; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                            NumberAnimation { target: winBtnTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                        }
+                    }
 
                     onClicked: {
                         modelData?.activate();

@@ -285,11 +285,68 @@ MouseArea {
         popupRadius: Appearance.rounding.large
 
         contentItem: ColumnLayout {
+            id: recLayout
             spacing: 16
             implicitWidth: 320
 
+            readonly property bool startAnim: controlsPopup.opened && controlsPopup.popupOpenProgress > 0.6
+
+            onStartAnimChanged: {
+                if (startAnim) {
+                    recCard.opacity = 0.0;
+                    recCard.scale = 0.85;
+                    recCardTransform.y = 25;
+
+                    controlsRow.opacity = 0.0;
+                    controlsRow.scale = 0.85;
+                    controlsRowTransform.y = 25;
+
+                    Qt.callLater(function() {
+                        recCardAnim.start();
+                        controlsRowAnim.start();
+                    });
+                }
+            }
+
+            Connections {
+                target: controlsPopup
+                function onPopupOpenProgressChanged() {
+                    if (controlsPopup.popupOpenProgress === 0.0) {
+                        recCardAnim.stop();
+                        controlsRowAnim.stop();
+
+                        recCard.opacity = 0.0;
+                        recCard.scale = 0.85;
+                        recCardTransform.y = 25;
+
+                        controlsRow.opacity = 0.0;
+                        controlsRow.scale = 0.85;
+                        controlsRowTransform.y = 25;
+                    }
+                }
+            }
+
             HeroCard {
                 id: recCard
+                startAnim: recLayout.startAnim
+
+                opacity: 0.0
+                scale: 0.85
+                transform: Translate {
+                    id: recCardTransform
+                    y: 25
+                }
+
+                SequentialAnimation {
+                    id: recCardAnim
+                    PauseAnimation { duration: 40 }
+                    ParallelAnimation {
+                        NumberAnimation { target: recCard; property: "opacity"; to: 1.0; duration: 300 }
+                        NumberAnimation { target: recCard; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        NumberAnimation { target: recCardTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                    }
+                }
+
                 icon: indicator.isLoading ? "progress_activity" : (indicator.isPaused ? "pause_circle" : "videocam")
                 compactMode: true
                 adaptiveWidth: true
@@ -318,9 +375,27 @@ MouseArea {
 
             // Interactive Controls Row
             RowLayout {
+                id: controlsRow
                 Layout.fillWidth: true
                 spacing: 12
                 visible: !indicator.isLoading
+
+                opacity: 0.0
+                scale: 0.85
+                transform: Translate {
+                    id: controlsRowTransform
+                    y: 25
+                }
+
+                SequentialAnimation {
+                    id: controlsRowAnim
+                    PauseAnimation { duration: 100 }
+                    ParallelAnimation {
+                        NumberAnimation { target: controlsRow; property: "opacity"; to: 1.0; duration: 300 }
+                        NumberAnimation { target: controlsRow; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        NumberAnimation { target: controlsRowTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                    }
+                }
 
                 // Pause / Resume Button (Vibrant & fully rounded pill)
                 RippleButton {
