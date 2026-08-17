@@ -44,7 +44,7 @@ Item {
     readonly property real headerHeight: headerControlExtent + headerControlPadding * 2
     readonly property real canvasHeight: 380
     readonly property real composerHeight: headerControlExtent + headerControlPadding * 2
-    readonly property real columnSpacing: Appearance.rounding.small
+    readonly property real columnSpacing: Appearance.rounding.verysmall
 
     implicitWidth: 720
     implicitHeight: headerHeight + canvasHeight + composerHeight + columnSpacing * 2

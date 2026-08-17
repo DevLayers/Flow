@@ -612,7 +612,7 @@ Item {
                 return (materialSymbolsPanelLoader.item ? materialSymbolsPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isAiMode) {
                 const panelH = aiPanelLoader.item ? aiPanelLoader.item.implicitHeight : 520;
-                return panelH + (GlobalStates.searchConnectActive ? 16 : searchBar.verticalPadding * 2 + 10);
+                return panelH + 20;
             }
             return gridLayout.implicitHeight;
         }
@@ -663,7 +663,7 @@ Item {
                 Layout.minimumHeight: 0
                 Layout.leftMargin: 10
                 Layout.rightMargin: 10
-                Layout.topMargin: verticalPadding
+                Layout.topMargin: root.isAiMode ? 0 : verticalPadding
                 Layout.bottomMargin: root.isAiMode ? 0 : verticalPadding
                 Layout.row: root.overviewPosition == "bottom" ? 1 : 0
                 visible: !root.isAiMode
@@ -1528,7 +1528,8 @@ Item {
                 Layout.fillWidth: true
                 Layout.leftMargin: 10
                 Layout.rightMargin: 10
-                Layout.bottomMargin: searchBar.verticalPadding
+                Layout.topMargin: 10
+                Layout.bottomMargin: 10
                 Layout.preferredHeight: (root.isAiMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
                 height: Layout.preferredHeight
                 source: "AiChatPanel.qml"
