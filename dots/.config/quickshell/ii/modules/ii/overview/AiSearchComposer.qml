@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import Qt5Compat.GraphicalEffects
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import qs
@@ -30,12 +31,19 @@ ColumnLayout {
     readonly property real maximumEditorHeight: root.lineHeight * root.maximumLines + root.controlPadding * 2
     readonly property real controlExtent: Math.round(Appearance.font.pixelSize.huge * 2)
     readonly property real controlPadding: Appearance.rounding.small
-    readonly property real controlGap: Appearance.rounding.small
+    readonly property real controlGap: Appearance.rounding.verysmall
     readonly property real horizontalInset: Appearance.rounding.normal
-    readonly property real modelInset: Appearance.rounding.small
+    readonly property real chipPadding: Appearance.rounding.small
+    readonly property real iconTextGap: Appearance.rounding.verysmall
     readonly property real railSlideDistance: Math.max(root.controlExtent, Appearance.rounding.large)
     readonly property bool hasDraft: draftInput.text.trim().length > 0
-    readonly property bool longDraft: draftInput.contentHeight > root.lineHeight + root.controlPadding
+    readonly property real maximumCompactModelWidth: Math.max(root.controlExtent * 2, composerSurface.width * 0.45)
+    readonly property real compactDraftWidth: Math.max(0, composerStage.width - root.controlExtent * 2 - root.controlGap * 2 - modelButton.implicitWidth)
+    // The probe is always measured at the compact-row width. Unlike the live
+    // editor, its width never changes when this condition turns true, which
+    // prevents multiline expansion from feeding back into itself.
+    readonly property bool longDraft: compactDraftProbe.lineCount > 1
+    readonly property real expandedEditorHeight: Math.max(root.controlExtent, Math.min(root.maximumEditorHeight, draftInput.contentHeight + root.controlPadding * 2))
     readonly property string modelTitle: Ai.currentModelEntry?.title ?? Translation.tr("No model")
     readonly property string modelSymbol: Ai.currentModelEntry?.materialIcon ?? "auto_awesome"
     readonly property string modelIcon: Ai.currentModelEntry?.icon ?? ""
@@ -93,6 +101,22 @@ ColumnLayout {
         Ai.setWebMode(modes[(index + 1 + modes.length) % modes.length], false);
     }
 
+    function webModeLabel(mode) {
+        switch (mode) {
+        case "on": return Translation.tr("Web on");
+        case "auto": return Translation.tr("Web auto");
+        default: return Translation.tr("Web off");
+        }
+    }
+
+    function toolModeLabel(mode) {
+        switch (mode) {
+        case "safe": return Translation.tr("Tools safe");
+        case "none": return Translation.tr("Tools off");
+        default: return Translation.tr("Tools all");
+        }
+    }
+
     function cycleFunctionExposure() {
         const values = ["all", "safe", "none"];
         const index = values.indexOf(Ai.functionExposure);
@@ -123,8 +147,8 @@ ColumnLayout {
         if (railName === "actions") {
             return [
                 { id: "back", kind: "icon", icon: "chevron_left", tooltip: Translation.tr("Return to message") },
-                { id: "web", kind: "text", icon: "travel_explore", label: Translation.tr("Web search"), tooltip: Translation.tr("Web search: %1").arg(Ai.webMode) },
-                { id: "tools", kind: "text", icon: "service_toolbox", label: Translation.tr("Tools"), tooltip: Translation.tr("Tools: %1").arg(Ai.functionExposure) },
+                { id: "web", kind: "text", icon: "travel_explore", label: root.webModeLabel(Ai.webMode), tooltip: Translation.tr("Web search: %1").arg(Ai.webMode) },
+                { id: "tools", kind: "text", icon: "service_toolbox", label: root.toolModeLabel(Ai.functionExposure), tooltip: Translation.tr("Tools: %1").arg(Ai.functionExposure) },
                 { id: "paste", kind: "icon", icon: "content_paste", tooltip: Translation.tr("Paste clipboard") },
                 { id: "history", kind: "icon", icon: "history", tooltip: Translation.tr("Chat history") },
                 { id: "response", kind: "icon", icon: "speed", tooltip: Translation.tr("Response effort: %1").arg(Ai.responseMode) }
@@ -198,7 +222,7 @@ ColumnLayout {
         Layout.fillWidth: true
         implicitHeight: composerStage.implicitHeight + root.controlPadding * 2
         color: Appearance.colors.colLayer1
-        radius: Appearance.rounding.full
+        radius: root.longDraft ? Appearance.rounding.large : Appearance.rounding.full
         clip: true
         layer.enabled: true
         layer.effect: OpacityMask {
@@ -209,7 +233,7 @@ ColumnLayout {
             }
         }
 
-        Behavior on implicitHeight {
+        Behavior on radius {
             animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerSurface)
         }
 
@@ -221,8 +245,17 @@ ColumnLayout {
             }
             implicitHeight: root.activeRail === "composer" ? composerRail.implicitHeight : root.controlExtent
 
-            Behavior on implicitHeight {
-                animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerStage)
+            TextEdit {
+                id: compactDraftProbe
+                visible: false
+                width: root.compactDraftWidth
+                text: draftInput.text
+                wrapMode: TextEdit.Wrap
+                textFormat: TextEdit.PlainText
+                font.family: Appearance.font.family.main
+                font.pixelSize: Appearance.font.pixelSize.normal
+                font.weight: Font.DemiBold
+                font.variableAxes: Appearance.font.variableAxes.main
             }
 
             // ── Compact composer ──────────────────────────────
@@ -231,17 +264,26 @@ ColumnLayout {
                 id: composerRail
                 anchors.left: parent.left
                 anchors.right: parent.right
-                height: implicitHeight
-                implicitHeight: root.longDraft ? draftInput.height + root.controlGap + root.controlExtent : root.controlExtent
+                height: root.longDraft ? root.expandedEditorHeight + root.controlGap + root.controlExtent : root.controlExtent
+                implicitHeight: height
                 opacity: root.activeRail === "composer" ? 1 : 0
                 visible: opacity > 0.001
-                x: root.activeRail === "composer" ? 0 : -root.railSlideDistance
+
+                Behavior on height {
+                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerRail)
+                }
 
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(composerRail)
                 }
-                Behavior on x {
-                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerRail)
+
+                transform: Translate {
+                    id: composerRailSlide
+                    x: root.activeRail === "composer" ? 0 : -root.railSlideDistance
+
+                    Behavior on x {
+                        animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerRailSlide)
+                    }
                 }
 
                 StyledTextArea {
@@ -253,18 +295,31 @@ ColumnLayout {
                         leftMargin: root.longDraft ? root.horizontalInset : root.controlExtent + root.controlGap
                         rightMargin: root.longDraft ? root.horizontalInset : modelButton.implicitWidth + sendButton.implicitWidth + root.controlGap * 2
                     }
-                    height: root.longDraft
-                        ? Math.max(root.controlExtent, Math.min(root.maximumEditorHeight, contentHeight + root.controlPadding * 2))
-                        : root.controlExtent
+                    height: root.longDraft ? root.expandedEditorHeight : root.controlExtent
                     color: Appearance.colors.colOnLayer1
                     placeholderText: Translation.tr("Ask something")
                     wrapMode: TextEdit.Wrap
                     textFormat: TextEdit.PlainText
+                    verticalAlignment: root.longDraft ? TextEdit.AlignTop : TextEdit.AlignVCenter
+                    topPadding: root.longDraft ? root.controlPadding : 0
+                    bottomPadding: root.longDraft ? root.controlPadding : 0
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.DemiBold
                     selectByMouse: true
                     persistentSelection: true
                     background: Item {}
                     Accessible.name: Translation.tr("AI message")
                     Accessible.description: Translation.tr("Multiline draft. Enter sends; Shift+Enter inserts a line break.")
+
+                    Behavior on height {
+                        animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(draftInput)
+                    }
+                    Behavior on anchors.leftMargin {
+                        animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(draftInput)
+                    }
+                    Behavior on anchors.rightMargin {
+                        animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(draftInput)
+                    }
 
                     onTextChanged: {
                         const nextText = String(text ?? "");
@@ -300,15 +355,18 @@ ColumnLayout {
                     anchors {
                         left: parent.left
                         right: parent.right
-                        top: root.longDraft ? draftInput.bottom : parent.top
-                        topMargin: root.longDraft ? root.controlGap : 0
                     }
+                    y: root.longDraft ? root.expandedEditorHeight + root.controlGap : 0
                     height: root.controlExtent
                     spacing: root.controlGap
 
+                    Behavior on y {
+                        animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerActions)
+                    }
+
                     RailIconButton {
                         id: compactChevron
-                        icon: "chevron_right"
+                        symbol: "chevron_right"
                         tooltip: Translation.tr("Show chat controls")
                         active: false
                         onClicked: root.showRail("actions")
@@ -321,10 +379,10 @@ ColumnLayout {
 
                     RailTextButton {
                         id: modelButton
-                        icon: root.modelSymbol
+                        symbol: root.modelSymbol
                         customIcon: root.modelIcon
                         label: root.modelTitle
-                        maximumWidth: Math.max(root.controlExtent * 2, composerActions.width * 0.45)
+                        maximumWidth: root.maximumCompactModelWidth
                         active: true
                         tooltip: Translation.tr("Choose model: %1").arg(root.modelTitle)
                         onClicked: root.showRail("models")
@@ -371,7 +429,7 @@ ColumnLayout {
                 bottom: parent.bottom
                 right: parent.right
             }
-            width: root.controlExtent + root.horizontalInset
+            width: root.controlExtent * 2 + root.horizontalInset
             visible: root.activeRail === "models" || root.activeRail === "response"
             color: "transparent"
             gradient: Gradient {
@@ -381,11 +439,89 @@ ColumnLayout {
                     color: ColorUtils.transparentize(Appearance.colors.colLayer1)
                 }
                 GradientStop {
+                    position: 0.28
+                    color: ColorUtils.transparentize(Appearance.colors.colLayer1, 0.65)
+                }
+                GradientStop {
+                    position: 0.62
+                    color: ColorUtils.transparentize(Appearance.colors.colLayer1, 0.1)
+                }
+                GradientStop {
                     position: 1
                     color: Appearance.colors.colLayer1
                 }
             }
             z: 3
+        }
+
+        Item {
+            id: modelEdgeBlur
+            anchors {
+                top: parent.top
+                bottom: parent.bottom
+                right: parent.right
+            }
+            width: sendFade.width
+            visible: root.activeRail === "models"
+            z: 2
+            layer.enabled: visible
+            layer.effect: OpacityMask {
+                maskSource: modelEdgeBlurMask
+            }
+
+            ShaderEffectSource {
+                id: modelRailCapture
+                anchors.fill: parent
+                sourceItem: modelsRail
+                sourceRect: {
+                    const edgeOrigin = modelEdgeBlur.mapToItem(modelsRail, 0, 0);
+                    return Qt.rect(edgeOrigin.x, edgeOrigin.y, width, height);
+                }
+                live: modelEdgeBlur.visible
+                hideSource: false
+                visible: false
+            }
+
+            MultiEffect {
+                anchors.fill: parent
+                source: modelRailCapture
+                autoPaddingEnabled: false
+                blurEnabled: true
+                blurMax: root.controlExtent
+                blur: 0.6
+            }
+        }
+
+        Item {
+            id: modelEdgeBlurMask
+            x: modelEdgeBlur.x
+            y: modelEdgeBlur.y
+            width: modelEdgeBlur.width
+            height: modelEdgeBlur.height
+            visible: false
+
+            Rectangle {
+                anchors.fill: parent
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop {
+                        position: 0
+                        color: ColorUtils.transparentize(Appearance.colors.colLayer1)
+                    }
+                    GradientStop {
+                        position: 0.3
+                        color: ColorUtils.transparentize(Appearance.colors.colLayer1, 0.8)
+                    }
+                    GradientStop {
+                        position: 0.72
+                        color: Appearance.colors.colLayer1
+                    }
+                    GradientStop {
+                        position: 1
+                        color: Appearance.colors.colLayer1
+                    }
+                }
+            }
         }
 
         SendButton {
@@ -409,13 +545,17 @@ ColumnLayout {
         anchors.fill: parent
         opacity: root.activeRail === page.railName ? 1 : 0
         visible: opacity > 0.001
-        x: root.activeRail === page.railName ? 0 : -root.railSlideDistance
-
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(page)
         }
-        Behavior on x {
-            animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(page)
+
+        transform: Translate {
+            id: pageSlide
+            x: root.activeRail === page.railName ? 0 : -root.railSlideDistance
+
+            Behavior on x {
+                animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(pageSlide)
+            }
         }
 
         Flickable {
@@ -434,45 +574,53 @@ ColumnLayout {
 
                 Repeater {
                     model: root.railItems(page.railName)
-                    delegate: Loader {
+                    delegate: RailControl {
                         required property var modelData
-                        sourceComponent: modelData.kind === "text" ? textControl : iconControl
-                        Layout.preferredWidth: item?.implicitWidth ?? 0
-                        Layout.preferredHeight: item?.implicitHeight ?? 0
-                    }
-                }
-
-                Component {
-                    id: iconControl
-
-                    RailIconButton {
-                        icon: modelData.icon
-                        tooltip: modelData.tooltip
-                        active: root.railItemActive(page.railName, modelData)
-                        onClicked: root.activateRailItem(page.railName, modelData)
-                    }
-                }
-
-                Component {
-                    id: textControl
-
-                    RailTextButton {
-                        icon: modelData.icon
-                        customIcon: modelData.customIcon ?? ""
-                        label: modelData.label
-                        tooltip: modelData.tooltip
-                        active: root.railItemActive(page.railName, modelData)
-                        onClicked: root.activateRailItem(page.railName, modelData)
+                        railName: page.railName
+                        railItem: modelData
                     }
                 }
             }
         }
     }
 
+    component RailControl: Item {
+        id: railControl
+
+        required property string railName
+        required property var railItem
+        readonly property bool isTextControl: railItem?.kind === "text"
+
+        implicitWidth: isTextControl ? textControl.implicitWidth : iconControl.implicitWidth
+        implicitHeight: root.controlExtent
+
+        RailIconButton {
+            id: iconControl
+            anchors.fill: parent
+            visible: !railControl.isTextControl
+            symbol: String(railControl.railItem?.icon ?? "")
+            tooltip: String(railControl.railItem?.tooltip ?? "")
+            active: root.railItemActive(railControl.railName, railControl.railItem)
+            onClicked: root.activateRailItem(railControl.railName, railControl.railItem)
+        }
+
+        RailTextButton {
+            id: textControl
+            anchors.fill: parent
+            visible: railControl.isTextControl
+            symbol: String(railControl.railItem?.icon ?? "")
+            customIcon: String(railControl.railItem?.customIcon ?? "")
+            label: String(railControl.railItem?.label ?? "")
+            tooltip: String(railControl.railItem?.tooltip ?? "")
+            active: root.railItemActive(railControl.railName, railControl.railItem)
+            onClicked: root.activateRailItem(railControl.railName, railControl.railItem)
+        }
+    }
+
     component RailIconButton: RippleButton {
         id: iconButton
 
-        property string icon: ""
+        property string symbol: ""
         property string tooltip: ""
         property bool active: false
 
@@ -491,8 +639,9 @@ ColumnLayout {
         Accessible.name: iconButton.tooltip
 
         contentItem: MaterialSymbol {
-            text: iconButton.icon
-            iconSize: Appearance.font.pixelSize.normal
+            text: iconButton.symbol
+            iconSize: Appearance.font.pixelSize.larger
+            fill: 1
             color: iconButton.active ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
         }
 
@@ -504,14 +653,14 @@ ColumnLayout {
     component RailTextButton: RippleButton {
         id: textButton
 
-        property string icon: ""
+        property string symbol: ""
         property string label: ""
         property string tooltip: ""
         property string customIcon: ""
         property bool active: false
         property real maximumWidth: Number.POSITIVE_INFINITY
 
-        implicitWidth: Math.min(contentRow.implicitWidth + root.modelInset * 2, maximumWidth)
+        implicitWidth: Math.min(contentRow.implicitWidth + root.chipPadding * 2, maximumWidth)
         implicitHeight: root.controlExtent
         buttonRadius: Appearance.rounding.full
         toggled: textButton.active
@@ -527,7 +676,7 @@ ColumnLayout {
 
         contentItem: RowLayout {
             id: contentRow
-            spacing: root.modelInset
+            spacing: root.iconTextGap
 
             Loader {
                 Layout.alignment: Qt.AlignVCenter
@@ -535,8 +684,8 @@ ColumnLayout {
                 visible: active
                 sourceComponent: CustomIcon {
                     source: textButton.customIcon
-                    width: Appearance.font.pixelSize.normal
-                    height: Appearance.font.pixelSize.normal
+                    width: Appearance.font.pixelSize.larger
+                    height: Appearance.font.pixelSize.larger
                     colorize: true
                     color: textButton.active ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
                 }
@@ -545,8 +694,9 @@ ColumnLayout {
             MaterialSymbol {
                 Layout.alignment: Qt.AlignVCenter
                 visible: textButton.customIcon.length === 0
-                text: textButton.icon
-                iconSize: Appearance.font.pixelSize.normal
+                text: textButton.symbol
+                iconSize: Appearance.font.pixelSize.larger
+                fill: 1
                 color: textButton.active ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
             }
 
@@ -556,7 +706,8 @@ ColumnLayout {
                 text: textButton.label
                 elide: Text.ElideRight
                 maximumLineCount: 1
-                font.pixelSize: Appearance.font.pixelSize.small
+                font.pixelSize: Appearance.font.pixelSize.normal
+                font.weight: Font.Bold
                 color: textButton.active ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
             }
         }
@@ -567,10 +718,13 @@ ColumnLayout {
     }
 
     component SendButton: RailIconButton {
-        icon: Ai.isGenerating ? "stop" : "arrow_upward"
+        symbol: Ai.isGenerating ? "stop" : "send"
         tooltip: Ai.isGenerating ? Translation.tr("Stop response") : Translation.tr("Send message (Enter)")
-        active: !Ai.isGenerating
+        // Disabled send remains fully opaque; it changes to the neutral layer
+        // instead of inheriting RippleButton's generic disabled fade.
+        active: enabled && !Ai.isGenerating
         enabled: Ai.isGenerating || root.hasDraft
+        opacity: 1
         onClicked: {
             if (Ai.isGenerating)
                 Ai.stopGeneration();
