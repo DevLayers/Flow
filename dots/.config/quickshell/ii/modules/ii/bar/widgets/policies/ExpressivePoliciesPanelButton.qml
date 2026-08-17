@@ -108,7 +108,13 @@ Item {
                 width: root.vertical ? 16 : 14
                 height: root.vertical ? 16 : 14
                 visible: !Config.options.bar.useMaterialSymbolForTopLeftIcon
-                source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
+                source: {
+                    const icon = Config.options.bar.topLeftIcon;
+                    if (icon === 'distro') return SystemInfo.distroIcon;
+                    if (icon === 'docker') return 'docker.svg';
+                    if (icon.endsWith('.svg') || icon.endsWith('.png')) return icon;
+                    return `${icon}-symbolic`;
+                }
                 colorize: true
                 color: root.phoneIntegrationActive
                     ? Appearance.colors.colErrorContainer

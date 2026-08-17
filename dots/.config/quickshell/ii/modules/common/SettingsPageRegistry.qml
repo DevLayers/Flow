@@ -135,7 +135,7 @@ Singleton {
             "name": "Screenshots & Recording",
             "icon": "screenshot_region",
             "component": "modules/settings/configs/ScreenCaptureConfig.qml",
-            "subPages": [],
+            "subPages": ["widgets/ScreenRecordingConfig.qml"],
             "aliases": ["Region Selector", "Screenshot", "Screen recording", "Google Lens", "wf-recorder", "OBS"]
         },
         {
@@ -151,7 +151,11 @@ Singleton {
             "name": "Launcher",
             "icon": "search",
             "component": "modules/settings/configs/LauncherConfig.qml",
-            "subPages": [],
+            "subPages": [
+                "widgets/LauncherSuggestionsConfig.qml",
+                "widgets/LauncherPrefixesConfig.qml",
+                "widgets/LauncherAliasesConfig.qml"
+            ],
             "aliases": ["App Search", "Search Prefixes", "App Aliases"]
         },
         {

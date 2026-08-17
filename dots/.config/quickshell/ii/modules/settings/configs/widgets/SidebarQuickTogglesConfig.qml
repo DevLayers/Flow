@@ -110,7 +110,7 @@ ContentPage {
                 Config.options.sidebar.quickSliders.enable = checked;
             }
             StyledToolTip {
-                text: Translation.tr("Enabling this, the sliders will be fixed on top of the sidebar, disable this if you wan sliders to be inside a page.")
+                text: Translation.tr("Enabling this, the sliders will be fixed on top of the sidebar, disable this if you want sliders to be inside a page.")
             }
         }
 
@@ -161,6 +161,23 @@ ContentPage {
             checked: Config.options.sidebar.quickSliders.vertical
             onCheckedChanged: {
                 Config.options.sidebar.quickSliders.vertical = checked;
+            }
+        }
+    }
+
+    ContentSection {
+        title: Translation.tr("Volume & Media Dialog")
+        icon: "volume_up"
+
+        ConfigSwitch {
+            buttonIcon: "music_note"
+            text: Translation.tr("Show media player in volume dialog")
+            checked: Config.options.sidebar.volumeDialogMediaWidget
+            onCheckedChanged: {
+                Config.options.sidebar.volumeDialogMediaWidget = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Displays the current media player widget inside the volume popup dialog.")
             }
         }
     }

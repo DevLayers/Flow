@@ -52,8 +52,6 @@ RippleButton {
     colRipple: Appearance.colors.colLayer2Active
 
     readonly property int itemIndex: {
-        if (typeof index !== "undefined")
-            return index;
         var p = parent;
         if (!p)
             return 0;
@@ -89,16 +87,6 @@ RippleButton {
         var p = parent;
         if (!p)
             return 1;
-        if (typeof index !== "undefined" && p.children) {
-            var cardCount = 0;
-            for (var i = 0; i < p.children.length; ++i) {
-                if (typeof p.children[i].isFirst !== "undefined" || typeof p.children[i].topLeftRadius !== "undefined") {
-                    cardCount++;
-                }
-            }
-            if (cardCount > 0)
-                return cardCount;
-        }
         var children = p.children;
         var selfIdx = -1;
         for (var i = 0; i < children.length; ++i) {
@@ -135,8 +123,8 @@ RippleButton {
         return count;
     }
 
-    property bool isFirst: forceUniformRadius ? true : ((typeof index !== "undefined") ? (index === 0) : (itemIndex === 0))
-    property bool isLast: forceUniformRadius ? true : ((typeof index !== "undefined") ? (index === totalItems - 1) : (itemIndex === totalItems - 1))
+    property bool isFirst: forceUniformRadius ? true : (itemIndex === 0)
+    property bool isLast: forceUniformRadius ? true : (itemIndex === totalItems - 1)
 
     readonly property bool prevIsPressed: {
         var p = parent;

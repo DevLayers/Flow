@@ -11,7 +11,7 @@ ContentPage {
     forceWidth: false
 
     ContentSection {
-        title: Translation.tr("Notifications")
+        title: Translation.tr("Popups & Behavior")
         icon: "notifications"
 
         ConfigSpinBox {
@@ -56,13 +56,33 @@ ContentPage {
             }
         }
 
-        MonitorPicker {
+        ContentSubsection {
             visible: Config.options.notifications.monitor.enable
-            currentValue: Config.options.notifications.monitor.name
-            onSelected: (newValue) => {
-                Config.options.notifications.monitor.name = newValue;
+            title: Translation.tr("Target monitor")
+            icon: "tv"
+            Layout.fillWidth: true
+
+            MonitorPicker {
+                currentValue: Config.options.notifications.monitor.name
+                onSelected: (newValue) => {
+                    Config.options.notifications.monitor.name = newValue;
+                }
             }
         }
+    }
+
+    ContentSection {
+        title: Translation.tr("Position")
+        icon: "place"
+
+        NotificationPositionPicker {
+            Layout.fillWidth: true
+        }
+    }
+
+    ContentSection {
+        title: Translation.tr("Status Bar Indicator")
+        icon: "notifications_active"
 
         ConfigSwitch {
             buttonIcon: "counter_2"
@@ -72,75 +92,6 @@ ContentPage {
                 Config.options.bar.indicators.notifications.showUnreadCount = checked;
             }
         }
-
-        ContentSubsection {
-            title: Translation.tr("Notification indicator style")
-            icon: "notifications"
-
-            ConfigSelectionArray {
-                currentValue: Config.options.bar.styles.notification
-                onSelected: newValue => { Config.options.bar.styles.notification = newValue; }
-                options: [
-                    { displayName: Translation.tr("Default"),    icon: "style",     value: "default" },
-                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
-                ]
-            }
-        }
-
-        Rectangle {
-            id: positionCard
-
-            Layout.fillWidth: true
-            implicitHeight: positionLayout.implicitHeight + Appearance.font.pixelSize.large
-            radius: Appearance.rounding.normal
-            color: Appearance.colors.colLayer1
-
-            ColumnLayout {
-                id: positionLayout
-
-                anchors.fill: parent
-                anchors.margins: Appearance.font.pixelSize.small
-                spacing: Appearance.font.pixelSize.small
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Appearance.font.pixelSize.smallest
-
-                    MaterialSymbol {
-                        text: "place"
-                        iconSize: Appearance.font.pixelSize.huge
-                        color: Appearance.colors.colPrimary
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Appearance.font.pixelSize.smallest
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("Notification position")
-                            font.pixelSize: Appearance.font.pixelSize.huge
-                            font.weight: Font.DemiBold
-                            font.variableAxes: Appearance.font.variableAxes.titleRounded
-                            color: Appearance.colors.colOnLayer1
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("Choose the corner where new notifications will appear.")
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colSubtext
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-                }
-
-                NotificationPositionPicker {
-                    Layout.fillWidth: true
-                }
-            }
-        }
-
     }
 
     ContentSection {

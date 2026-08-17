@@ -61,6 +61,9 @@ Singleton {
         root.manualActiveAt = 0;
         root.firstEvaluation = true;
         root.persistState();
+        if (!root.automatic) {
+            root.disableTemperature();
+        }
         reEvaluate();
     }
 

@@ -377,6 +377,10 @@ Singleton {
             root.openSettingsPage(pageId);
         }
 
+        function openSubPage(pageId: string, subPage: string): void {
+            root.openSettingsPage(pageId, subPage || "");
+        }
+
     }
 
     IpcHandler {
@@ -888,3 +892,4 @@ Singleton {
         }
     }
 }
+

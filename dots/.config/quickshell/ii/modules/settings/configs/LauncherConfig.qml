@@ -5,168 +5,327 @@ import Quickshell.Widgets
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.settings.configs.widgets
-import qs.modules.waffle.looks
 import qs.services
 
-ContentPage {
-    id: page
+Item {
+    id: launcherRoot
+    anchors.fill: parent
 
-    forceWidth: false
+    property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
 
-    ContentSection {
-        icon: "tune"
-        title: Translation.tr("Search Behavior & Positioning")
+    ContentPage {
+        id: page
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
+        // ── Search Behavior & Positioning ────────────────────────────────────
+        ContentSection {
+            icon: "tune"
+            title: Translation.tr("Search Behavior & Positioning")
 
-            ConfigSwitch {
-                buttonIcon: "trending_up"
-                text: Translation.tr("Frequency-based ranking")
-                checked: Config.options.search.frecency
-                onCheckedChanged: {
-                    Config.options.search.frecency = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Sort apps by usage frequency and recency")
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "apps"
-                text: Translation.tr("Always list apps on empty query")
-                checked: Config.options.search.alwaysListApps
-                onCheckedChanged: {
-                    Config.options.search.alwaysListApps = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Opens the app list immediately when search is opened with no query, bypassing the workspace overview")
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "list"
-                text: Translation.tr("Show default actions without prefix")
-                checked: Config.options.search.prefix.showDefaultActionsWithoutPrefix
-                onCheckedChanged: {
-                    Config.options.search.prefix.showDefaultActionsWithoutPrefix = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Always show Command, Math, and Web Search at the bottom")
-                }
-            }
-
-            Item {
+            ColumnLayout {
                 Layout.fillWidth: true
-                implicitHeight: 8
-            }
+                spacing: 4
 
-            LauncherPreview {
-                Layout.fillWidth: true
-                baseWidth: Config.options.search.baseWidth
-                maxHeight: Config.options.search.baseHeight ?? 500
-                centered: Config.options.search.positionStyle === "center"
-                verticalRatio: Config.options.search.centerVerticalRatio
-            }
-
-            ConfigSlider {
-                buttonIcon: "search"
-                text: Translation.tr("Search base width (px)")
-                value: Config.options.search.baseWidth
-                from: 360
-                to: 1000
-                stepSize: 10
-                usePercentTooltip: false
-                onValueChanged: Config.options.search.baseWidth = value
-            }
-
-            ConfigSlider {
-                buttonIcon: "height"
-                text: Translation.tr("Search max height (px)")
-                value: Config.options.search.baseHeight ?? 500
-                from: 300
-                to: 900
-                stepSize: 10
-                usePercentTooltip: false
-                onValueChanged: Config.options.search.baseHeight = value
-            }
-
-            ConfigSwitch {
-                buttonIcon: "center_focus_strong"
-                text: Translation.tr("Center Search on Screen")
-                checked: Config.options.search.positionStyle === "center"
-                onCheckedChanged: {
-                    Config.options.search.positionStyle = checked ? "center" : "default";
+                ConfigSwitch {
+                    buttonIcon: "trending_up"
+                    text: Translation.tr("Frequency-based ranking")
+                    checked: Config.options.search.frecency
+                    onCheckedChanged: {
+                        Config.options.search.frecency = checked;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Sort apps by usage frequency and recency")
+                    }
                 }
-                StyledToolTip {
-                    text: Translation.tr("Center disables overview and forces zoom animation to prevent bugs")
+
+                ConfigSwitch {
+                    buttonIcon: "apps"
+                    text: Translation.tr("Always list apps on empty query")
+                    checked: Config.options.search.alwaysListApps
+                    onCheckedChanged: {
+                        Config.options.search.alwaysListApps = checked;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Opens the app list immediately when search is opened with no query, bypassing the workspace overview")
+                    }
                 }
-            }
 
-            ConfigSlider {
-                enabled: Config.options.search.positionStyle === "center"
-                buttonIcon: "vertical_align_center"
-                text: Translation.tr("Vertical Center Position (%)")
-                value: Math.round(Config.options.search.centerVerticalRatio * 100)
-                from: 10
-                to: 90
-                stepSize: 1
-                usePercentTooltip: true
-                onValueChanged: Config.options.search.centerVerticalRatio = value / 100
-            }
+                Item {
+                    Layout.fillWidth: true
+                    implicitHeight: 8
+                }
 
-            NoticeBox {
-                visible: Config.options.search.positionStyle === "center"
-                text: Translation.tr("Note: In Center mode, the Overview workspace previews are disabled and the open animation is fixed to zoom.")
-                materialIcon: "info"
+                LauncherPreview {
+                    Layout.fillWidth: true
+                    baseWidth: Config.options.search.baseWidth
+                    maxHeight: Config.options.search.baseHeight ?? 500
+                    centered: Config.options.search.positionStyle === "center"
+                    verticalRatio: Config.options.search.centerVerticalRatio
+                }
+
+                ConfigSlider {
+                    buttonIcon: "search"
+                    text: Translation.tr("Search base width (px)")
+                    value: Config.options.search.baseWidth
+                    from: 360
+                    to: 1000
+                    stepSize: 10
+                    usePercentTooltip: false
+                    onValueChanged: Config.options.search.baseWidth = value
+                }
+
+                ConfigSlider {
+                    buttonIcon: "height"
+                    text: Translation.tr("Search max height (px)")
+                    value: Config.options.search.baseHeight ?? 500
+                    from: 300
+                    to: 900
+                    stepSize: 10
+                    usePercentTooltip: false
+                    onValueChanged: Config.options.search.baseHeight = value
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "center_focus_strong"
+                    text: Translation.tr("Center Search on Screen")
+                    checked: Config.options.search.positionStyle === "center"
+                    onCheckedChanged: {
+                        Config.options.search.positionStyle = checked ? "center" : "default";
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Center disables overview and forces zoom animation to prevent bugs")
+                    }
+                }
+
+                ConfigSlider {
+                    enabled: Config.options.search.positionStyle === "center"
+                    buttonIcon: "vertical_align_center"
+                    text: Translation.tr("Vertical Center Position (%)")
+                    value: Math.round(Config.options.search.centerVerticalRatio * 100)
+                    from: 10
+                    to: 90
+                    stepSize: 1
+                    usePercentTooltip: true
+                    onValueChanged: Config.options.search.centerVerticalRatio = value / 100
+                }
+
+                NoticeBox {
+                    visible: Config.options.search.positionStyle === "center"
+                    text: Translation.tr("Note: In Center mode, the Overview workspace previews are disabled and the open animation is fixed to zoom.")
+                    materialIcon: "info"
+                }
+
+                HelperCodeBox {
+                    Layout.fillWidth: true
+                    icon: "search"
+                    title: Translation.tr("Open Search Only")
+                    text: Translation.tr("To open search directly without launching the overview screen, add this keybind to your ~/.config/hypr/custom/keybinds.lua file:")
+                    codeSnippet: 'hl.bind("CTRL + Space", hl.dsp.global("quickshell:searchOnlyToggle"), { description = "Shell: Open search only" })'
+                    snippetWrapMode: Text.Wrap
+                }
             }
         }
-    }
 
-    ContentSection {
-        icon: "extension"
-        title: Translation.tr("Search Features & Previews")
+        // ── Search Features (Chips Grid) ─────────────────────────────────────
+        ContentSection {
+            icon: "extension"
+            title: Translation.tr("Search Features & Previews")
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            ConfigSwitch {
-                buttonIcon: "terminal"
-                text: Translation.tr("Enable built-in system controls (:lock, :reboot...)")
-                checked: Config.options.search.enableSystemControls
-                onCheckedChanged: {
-                    Config.options.search.enableSystemControls = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Allows running commands like :lock, :reboot, :poweroff, :suspend, and :restart directly from search")
-                }
+            ContentSubsectionLabel {
+                text: Translation.tr("Active search integrations")
             }
 
-            ConfigSwitch {
-                buttonIcon: "calculate"
-                text: Translation.tr("Enable integrated math & unit converter previews")
-                checked: Config.options.search.enableMathPreview
-                onCheckedChanged: {
-                    Config.options.search.enableMathPreview = checked;
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                columnSpacing: 8
+                rowSpacing: 8
+
+                // 1. System Controls
+                RippleButton {
+                    id: btnSystemControls
+                    Layout.fillWidth: true
+                    implicitHeight: 48
+                    buttonRadius: Appearance.rounding.normal
+                    property bool active: Config.options.search.enableSystemControls
+                    colBackground: active ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                    colBackgroundHover: active ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                    colRipple: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
+                    onClicked: Config.options.search.enableSystemControls = !active
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: "terminal"
+                            iconSize: 20
+                            fill: btnSystemControls.active ? 1 : 0
+                            color: btnSystemControls.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("System Controls")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: btnSystemControls.active
+                            color: btnSystemControls.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: btnSystemControls.active ? "check_circle" : "radio_button_unchecked"
+                            iconSize: 18
+                            fill: btnSystemControls.active ? 1 : 0
+                            color: btnSystemControls.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Allows running commands like :lock, :reboot, :poweroff, :suspend directly from search")
+                    }
                 }
 
-                StyledToolTip {
-                    text: Translation.tr("Displays real-time answers for math expressions and unit conversions in the result list")
-                }
-            }
+                // 2. Math & Unit Converter
+                RippleButton {
+                    id: btnMathPreview
+                    Layout.fillWidth: true
+                    implicitHeight: 48
+                    buttonRadius: Appearance.rounding.normal
+                    property bool active: Config.options.search.enableMathPreview
+                    colBackground: active ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                    colBackgroundHover: active ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                    colRipple: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
+                    onClicked: Config.options.search.enableMathPreview = !active
 
-            ConfigSwitch {
-                buttonIcon: "blur_on"
-                text: Translation.tr("Blur file search result previews")
-                checked: Config.options.search.blurFileSearchResultPreviews
-                onCheckedChanged: {
-                    Config.options.search.blurFileSearchResultPreviews = checked;
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: "calculate"
+                            iconSize: 20
+                            fill: btnMathPreview.active ? 1 : 0
+                            color: btnMathPreview.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Math & Units")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: btnMathPreview.active
+                            color: btnMathPreview.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: btnMathPreview.active ? "check_circle" : "radio_button_unchecked"
+                            iconSize: 18
+                            fill: btnMathPreview.active ? 1 : 0
+                            color: btnMathPreview.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Displays real-time answers for math expressions and unit conversions in the result list")
+                    }
+                }
+
+                // 3. Blur File Search Result Previews
+                RippleButton {
+                    id: btnBlurFilePreviews
+                    Layout.fillWidth: true
+                    implicitHeight: 48
+                    buttonRadius: Appearance.rounding.normal
+                    property bool active: Config.options.search.blurFileSearchResultPreviews
+                    colBackground: active ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                    colBackgroundHover: active ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                    colRipple: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
+                    onClicked: Config.options.search.blurFileSearchResultPreviews = !active
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: "blur_on"
+                            iconSize: 20
+                            fill: btnBlurFilePreviews.active ? 1 : 0
+                            color: btnBlurFilePreviews.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Blur File Previews")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: btnBlurFilePreviews.active
+                            color: btnBlurFilePreviews.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: btnBlurFilePreviews.active ? "check_circle" : "radio_button_unchecked"
+                            iconSize: 18
+                            fill: btnBlurFilePreviews.active ? 1 : 0
+                            color: btnBlurFilePreviews.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Blurs file search result previews to protect privacy")
+                    }
+                }
+
+                // 4. Now Playing Media Bubble
+                RippleButton {
+                    id: btnNowPlaying
+                    Layout.fillWidth: true
+                    implicitHeight: 48
+                    buttonRadius: Appearance.rounding.normal
+                    property bool active: Config.options.search.showNowPlayingBubble
+                    colBackground: active ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                    colBackgroundHover: active ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                    colRipple: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
+                    onClicked: Config.options.search.showNowPlayingBubble = !active
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: "music_note"
+                            iconSize: 20
+                            fill: btnNowPlaying.active ? 1 : 0
+                            color: btnNowPlaying.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Now Playing")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: btnNowPlaying.active
+                            color: btnNowPlaying.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: btnNowPlaying.active ? "check_circle" : "radio_button_unchecked"
+                            iconSize: 18
+                            fill: btnNowPlaying.active ? 1 : 0
+                            color: btnNowPlaying.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Shows a floating media player bubble in the search launcher when music or video is playing")
+                    }
                 }
             }
 
@@ -180,829 +339,149 @@ ContentPage {
                 onValueChanged: {
                     Config.options.search.nonAppResultDelay = value;
                 }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "music_note"
-                text: Translation.tr("Show now playing media bubble")
-                checked: Config.options.search.showNowPlayingBubble
-                onCheckedChanged: {
-                    Config.options.search.showNowPlayingBubble = checked;
-                }
-
                 StyledToolTip {
-                    text: Translation.tr("Shows a floating media player bubble in the search launcher when media is playing")
+                    text: Translation.tr("Delay in milliseconds before showing non-application search results to keep app launching snappy")
                 }
             }
         }
-    }
 
-    ContentSection {
-        icon: "auto_awesome"
-        title: Translation.tr("Suggestions Panel (Empty Query)")
+        // ── AI Chat in Search ────────────────────────────────────────────────
+        ContentSection {
+            icon: "auto_awesome"
+            title: Translation.tr("AI Chat in Search")
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            ConfigSwitch {
-                buttonIcon: "auto_awesome"
-                text: Translation.tr("Enable Suggestions Panel")
-                checked: Config.options.search.suggestions.enable
-                onCheckedChanged: {
-                    Config.options.search.suggestions.enable = checked;
-                }
-            }
-
-            ConfigSwitch {
-                visible: Config.options.search.suggestions.enable
-                buttonIcon: "trending_up"
-                text: Translation.tr("Show Frecency Suggestions")
-                checked: Config.options.search.suggestions.showFrecency
-                onCheckedChanged: Config.options.search.suggestions.showFrecency = checked
-            }
-
-            ConfigSwitch {
-                visible: Config.options.search.suggestions.enable
-                buttonIcon: "apps"
-                text: Translation.tr("Show Applications Section")
-                checked: Config.options.search.suggestions.showApps
-                onCheckedChanged: Config.options.search.suggestions.showApps = checked
-            }
-
-            ConfigSwitch {
-                visible: Config.options.search.suggestions.enable
-                buttonIcon: "terminal"
-                text: Translation.tr("Show System Commands Section")
-                checked: Config.options.search.suggestions.showCommands
-                onCheckedChanged: Config.options.search.suggestions.showCommands = checked
-            }
-
-            ConfigSwitch {
-                visible: Config.options.search.suggestions.enable
-                buttonIcon: "keyboard_command_key"
-                text: Translation.tr("Show Aliases Section")
-                checked: Config.options.search.suggestions.showAliases
-                onCheckedChanged: Config.options.search.suggestions.showAliases = checked
-            }
-
-            ConfigSpinBox {
-                visible: Config.options.search.suggestions.enable
-                icon: "format_list_numbered"
-                text: Translation.tr("Max suggestions per section")
-                value: Config.options.search.suggestions.maxSuggestionsPerSection
-                from: 2
-                to: 10
-                stepSize: 1
-                onValueChanged: Config.options.search.suggestions.maxSuggestionsPerSection = value
-            }
-
-            HelperCodeBox {
+            ColumnLayout {
                 Layout.fillWidth: true
-                icon: "search"
-                title: Translation.tr("Open Search Only")
-                text: Translation.tr("To open search directly without launching the overview screen, add this keybind to your ~/.config/hypr/custom/keybinds.lua file:")
-                codeSnippet: 'hl.bind("CTRL + Space", hl.dsp.global("quickshell:searchOnlyToggle"), { description = "Shell: Open search only" })'
-                snippetWrapMode: Text.Wrap
-            }
-        }
-    }
+                spacing: 4
 
-    ContentSection {
-        icon: "tag"
-        title: Translation.tr("Search Prefixes")
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 2
-
-            Repeater {
-                model: [
-                    {
-                        "name": Translation.tr("Action"),
-                        "icon": "bolt",
-                        "prop": "action"
-                    },
-                    {
-                        "name": Translation.tr("App"),
-                        "icon": "apps",
-                        "prop": "app"
-                    },
-                    {
-                        "name": Translation.tr("Clipboard"),
-                        "icon": "content_paste",
-                        "prop": "clipboard"
-                    },
-                    {
-                        "name": Translation.tr("Emojis"),
-                        "icon": "mood",
-                        "prop": "emojis"
-                    },
-                    {
-                        "name": Translation.tr("Math"),
-                        "icon": "calculate",
-                        "prop": "math"
-                    },
-                    {
-                        "name": Translation.tr("Shell command"),
-                        "icon": "terminal",
-                        "prop": "shellCommand"
-                    },
-                    {
-                        "name": Translation.tr("Web search"),
-                        "icon": "public",
-                        "prop": "webSearch"
-                    },
-                    {
-                        "name": Translation.tr("Window search"),
-                        "icon": "layers",
-                        "prop": "windowSearch"
-                    },
-                    {
-                        "name": Translation.tr("File browser"),
-                        "icon": "folder",
-                        "prop": "fileBrowser"
-                    },
-                    {
-                        "name": Translation.tr("File search"),
-                        "icon": "search",
-                        "prop": "fileSearch"
-                    },
-                    {
-                        "name": Translation.tr("Bluetooth"),
-                        "icon": "bluetooth",
-                        "prop": "bluetooth"
-                    },
-                    {
-                        "name": Translation.tr("Translator"),
-                        "icon": "translate",
-                        "prop": "translator"
-                    },
-                    {
-                        "name": Translation.tr("Media Downloader"),
-                        "icon": "download",
-                        "prop": "mediaDownloader"
-                    },
-                    {
-                        "name": Translation.tr("Material Symbols"),
-                        "icon": "font_download",
-                        "prop": "materialSymbols"
-                    }
-                ]
-
-                delegate: Rectangle {
+                StyledText {
                     Layout.fillWidth: true
-                    height: 52
-                    color: Appearance.colors.colSurfaceContainerLow
-                    topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomLeftRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomRightRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    wrapMode: Text.Wrap
+                    text: Translation.tr("How search hands queries over to AI chat. The prefix trigger always works; the options below enable automatic triggers.")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                }
 
-                    ScrollAnimate {}
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 10
-                        anchors.bottomMargin: 2
-                        anchors.topMargin: 2
-                        spacing: 12
-
-                        Rectangle {
-                            width: 32
-                            height: 32
-                            radius: 16
-                            color: Appearance.colors.colSurfaceContainerHigh
-
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: modelData.icon
-                                iconSize: 18
-                                color: Appearance.colors.colOnSurface
-                            }
+                StyledComboBox {
+                    id: aiTriggerSelector
+                    buttonIcon: "auto_awesome"
+                    textRole: "displayName"
+                    model: [
+                        {
+                            displayName: Translation.tr("Prefix only"),
+                            value: "prefix"
+                        },
+                        {
+                            displayName: Translation.tr("Suggest \"Ask AI\" row"),
+                            value: "suggest"
+                        },
+                        {
+                            displayName: Translation.tr("Auto-open when nothing matches"),
+                            value: "auto"
                         }
-
-                        StyledText {
-                            text: modelData.name
-                            color: Appearance.colors.colOnSurface
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            Layout.preferredWidth: 120
-                        }
-
-                        TextField {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 36
-                            text: Config.options.search.prefix[modelData.prop]
-                            color: Appearance.colors.colOnSurface
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            onTextChanged: Config.options.search.prefix[modelData.prop] = text
-
-                            background: Rectangle {
-                                color: Appearance.colors.colSurfaceContainerHighest
-                                radius: Appearance.rounding.full
-                            }
-                        }
+                    ]
+                    currentIndex: {
+                        const trigger = (Config.options.search.ai && Config.options.search.ai.trigger) ? Config.options.search.ai.trigger : "prefix";
+                        const index = model.findIndex(item => item.value === trigger);
+                        return index !== -1 ? index : 0;
+                    }
+                    onActivated: index => {
+                        Config.options.search.ai.trigger = model[index].value;
                     }
                 }
             }
         }
-    }
 
-    ContentSection {
-        icon: "label"
-        title: Translation.tr("App Aliases")
+        // ── Advanced Subpages ────────────────────────────────────────────────
+        ContentSection {
+            icon: "settings_suggest"
+            title: Translation.tr("Launcher Extensions & Tools")
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 2
-
-            Repeater {
-                model: Config.options.search.aliases || []
-
-                delegate: Rectangle {
-                    id: aliasDelegate
-
-                    property bool isEditing: false
-
-                    Layout.fillWidth: true
-                    height: 60
-                    color: Appearance.colors.colSurfaceContainerLow
-                    topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomLeftRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomRightRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
-
-                    ScrollAnimate {}
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 8
-
-                        Rectangle {
-                            width: 36
-                            height: 36
-                            radius: 18
-                            color: modelData.type === "app" ? Appearance.colors.colPrimaryContainer : modelData.type === "folder" ? Appearance.colors.colSecondaryContainer : Appearance.colors.colTertiaryContainer
-
-                            Loader {
-                                anchors.centerIn: parent
-                                sourceComponent: modelData.type === "app" ? appIconComp : fallbackIconComp
-                            }
-
-                            Component {
-                                id: appIconComp
-
-                                WAppIcon {
-                                    iconName: modelData.target.replace(".desktop", "")
-                                    implicitSize: 20
-                                    tryCustomIcon: false
-                                }
-                            }
-
-                            Component {
-                                id: fallbackIconComp
-
-                                MaterialSymbol {
-                                    iconSize: 20
-                                    text: modelData.type === "folder" ? "folder" : modelData.type === "builtin" ? "explore" : "terminal"
-                                    color: modelData.type === "folder" ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnTertiaryContainer
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            color: Appearance.colors.colSurfaceContainerHigh
-                            radius: Appearance.rounding.verysmall
-                            implicitWidth: Math.max(40, aliasDelegate.isEditing ? aliasEditInput.implicitWidth + 16 : aliasText.implicitWidth + 16)
-                            implicitHeight: 26
-
-                            StyledText {
-                                id: aliasText
-
-                                visible: !aliasDelegate.isEditing
-                                anchors.centerIn: parent
-                                text: modelData.alias
-                                font.bold: true
-                                color: Appearance.colors.colPrimary
-                            }
-
-                            TextField {
-                                id: aliasEditInput
-
-                                visible: aliasDelegate.isEditing
-                                anchors.fill: parent
-                                text: modelData.alias
-                                color: Appearance.colors.colPrimary
-                                font.bold: true
-                                background: null
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                                font.pixelSize: Appearance.font.pixelSize.small
-                            }
-                        }
-
-                        StyledText {
-                            text: modelData.target
-                            color: Appearance.colors.colOnSurface
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                            font.pixelSize: Appearance.font.pixelSize.small
-                        }
-
-                        RippleButton {
-                            implicitWidth: 36
-                            implicitHeight: 36
-                            buttonRadius: 18
-                            colBackground: Appearance.colors.colSurfaceContainerHigh
-                            colBackgroundHover: aliasDelegate.isEditing ? Appearance.colors.colSuccessContainer : Appearance.colors.colPrimaryContainer
-                            onClicked: {
-                                if (aliasDelegate.isEditing) {
-                                    let newAlias = aliasEditInput.text.trim();
-                                    if (newAlias === "") {
-                                        aliasDelegate.isEditing = false;
-                                        return;
-                                    }
-                                    let newAliases = Array.from(Config.options.search.aliases || []);
-                                    let exists = newAliases.some((a, idx) => {
-                                        return a.alias === newAlias && idx !== index;
-                                    });
-                                    if (!exists) {
-                                        newAliases[index].alias = newAlias;
-                                        Config.options.search.aliases = newAliases;
-                                    }
-                                    aliasDelegate.isEditing = false;
-                                } else {
-                                    aliasDelegate.isEditing = true;
-                                    aliasEditInput.forceActiveFocus();
-                                }
-                            }
-
-                            contentItem: Item {
-                                anchors.fill: parent
-
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    iconSize: 18
-                                    text: aliasDelegate.isEditing ? "check" : "edit"
-                                    color: parent.parent.parent.hovered ? (aliasDelegate.isEditing ? Appearance.colors.colOnSuccessContainer : Appearance.colors.colOnPrimaryContainer) : (aliasDelegate.isEditing ? Appearance.colors.colSuccess : Appearance.colors.colPrimary)
-                                }
-                            }
-                        }
-
-                        RippleButton {
-                            implicitWidth: 36
-                            implicitHeight: 36
-                            buttonRadius: 18
-                            colBackground: Appearance.colors.colSurfaceContainerHigh
-                            colBackgroundHover: Appearance.colors.colErrorContainer
-                            onClicked: {
-                                let newAliases = Array.from(Config.options.search.aliases || []);
-                                newAliases.splice(index, 1);
-                                Config.options.search.aliases = newAliases;
-                            }
-
-                            contentItem: Item {
-                                anchors.fill: parent
-
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    iconSize: 18
-                                    text: "delete"
-                                    color: parent.parent.parent.hovered ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    ContentSection {
-        icon: "add_circle"
-        title: Translation.tr("Add New Alias")
-
-        ColumnLayout {
-            id: addAliasArea
-
-            property string selectedType: "app"
-            property string appFilter: ""
-            property var sortedApps: AppSearch.list.length > 0 ? AppSearch.frecencyQuery("") : []
-            readonly property var filteredApps: {
-                let list = sortedApps;
-                if (appFilter.trim() !== "") {
-                    let f = appFilter.toLowerCase();
-                    let res = list.filter(app => {
-                        return app.name.toLowerCase().includes(f) || app.id.toLowerCase().includes(f);
-                    });
-                    return res.slice(0, 12);
-                }
-                return list.slice(0, 8);
-            }
-
-            Layout.fillWidth: true
-            spacing: 12
-
-            Item {
+            ColumnLayout {
                 Layout.fillWidth: true
-                implicitHeight: typeSection.implicitHeight
+                spacing: 4
+
+                ServiceCard {
+                    cardIcon: "auto_awesome"
+                    cardHue: 45
+                    cardShape: "Cookie9Sided"
+                    title: Translation.tr("Suggestions Panel")
+                    description: Translation.tr("Configure empty-query suggestions (frecency, apps, commands, aliases)")
+                    onOpenCard: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherSuggestionsConfig.qml"))
+                }
+
+                ServiceCard {
+                    cardIcon: "tag"
+                    cardHue: 200
+                    cardShape: "Cookie12Sided"
+                    title: Translation.tr("Search Prefixes")
+                    description: Translation.tr("Customize query prefix triggers for apps, files, math, AI and web search")
+                    onOpenCard: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherPrefixesConfig.qml"))
+                }
+
+                ServiceCard {
+                    cardIcon: "label"
+                    cardHue: 280
+                    cardShape: "Clover4Leaf"
+                    title: Translation.tr("App Aliases")
+                    description: Translation.tr("Manage custom search keywords and shortcuts for apps, folders and commands")
+                    onOpenCard: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherAliasesConfig.qml"))
+                }
+            }
+        }
+
+        // ── Target Directories ───────────────────────────────────────────────
+        ContentSection {
+            icon: "folder"
+            title: Translation.tr("Directories & Targets")
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
 
                 ContentSubsection {
-                    id: typeSection
+                    title: Translation.tr("File search directory")
+                    icon: "folder_open"
+                    Layout.fillWidth: true
 
-                    title: Translation.tr("Alias Target Type")
-                    icon: "my_location"
-                    anchors.fill: parent
-
-                    ConfigSelectionArray {
-                        currentValue: addAliasArea.selectedType
-                        onSelected: newValue => {
-                            addAliasArea.selectedType = newValue;
-                        }
-                        options: [
-                            {
-                                "displayName": Translation.tr("App"),
-                                "icon": "apps",
-                                "value": "app"
-                            },
-                            {
-                                "displayName": Translation.tr("Folder"),
-                                "icon": "folder",
-                                "value": "folder"
-                            },
-                            {
-                                "displayName": Translation.tr("Command"),
-                                "icon": "terminal",
-                                "value": "command"
-                            },
-                            {
-                                "displayName": Translation.tr("Built-in"),
-                                "icon": "explore",
-                                "value": "builtin"
-                            }
-                        ]
+                    MaterialTextArea {
+                        Layout.fillWidth: true
+                        text: Config.options.search.fileSearchDirectory
+                        wrapMode: TextEdit.NoWrap
+                        onTextChanged: Config.options.search.fileSearchDirectory = text
                     }
                 }
             }
+        }
 
-            RowLayout {
+        // ── Related Settings ─────────────────────────────────────────────────
+        ContentSection {
+            icon: "link"
+            title: Translation.tr("Related settings")
+
+            Flow {
                 Layout.fillWidth: true
-                spacing: 2
+                spacing: 8
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 48
-                    color: Appearance.colors.colSecondaryContainer
-                    topLeftRadius: Appearance.rounding.full
-                    bottomLeftRadius: Appearance.rounding.full
-                    topRightRadius: Appearance.rounding.verysmall
-                    bottomRightRadius: Appearance.rounding.verysmall
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 20
-                        anchors.rightMargin: 12
-
-                        TextField {
-                            id: newAliasInput
-
-                            Layout.fillWidth: true
-                            placeholderText: Translation.tr("Alias (e.g. i)")
-                            placeholderTextColor: Qt.rgba(Appearance.colors.colOnSecondaryContainer.r, Appearance.colors.colOnSecondaryContainer.g, Appearance.colors.colOnSecondaryContainer.b, 0.5)
-                            color: Appearance.colors.colOnSecondaryContainer
-                            background: null
-                            font.pixelSize: Appearance.font.pixelSize.small
-                        }
-                    }
+                RelatedChip {
+                    pageId: "mediaMusic"
+                    label: Translation.tr("Media Downloader")
+                    sectionHighlight: Translation.tr("Download")
                 }
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 48
-                    color: Appearance.colors.colSecondaryContainer
-                    radius: Appearance.rounding.verysmall
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-
-                        TextField {
-                            id: newTargetInput
-
-                            Layout.fillWidth: true
-                            placeholderText: addAliasArea.selectedType === "builtin" ? Translation.tr("Select target below...") : Translation.tr("Target (e.g. app-id, path)")
-                            enabled: addAliasArea.selectedType !== "builtin"
-                            placeholderTextColor: Qt.rgba(Appearance.colors.colOnSecondaryContainer.r, Appearance.colors.colOnSecondaryContainer.g, Appearance.colors.colOnSecondaryContainer.b, 0.5)
-                            color: Appearance.colors.colOnSecondaryContainer
-                            background: null
-                            font.pixelSize: Appearance.font.pixelSize.small
-                        }
-                    }
-                }
-
-                RippleButton {
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 48
-                    topLeftRadius: Appearance.rounding.verysmall
-                    bottomLeftRadius: Appearance.rounding.verysmall
-                    topRightRadius: Appearance.rounding.full
-                    bottomRightRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colSecondaryContainer
-                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                    rippleColor: Appearance.colors.colSecondaryContainerActive
-                    onClicked: {
-                        if (newAliasInput.text.trim() === "" || newTargetInput.text.trim() === "")
-                            return;
-
-                        let newAliases = Array.from(Config.options.search.aliases || []);
-                        // Duplicate alias check
-                        let exists = newAliases.some(a => {
-                            return a.alias === newAliasInput.text.trim();
-                        });
-                        if (exists)
-                            return;
-
-                        newAliases.push({
-                            "alias": newAliasInput.text.trim(),
-                            "type": addAliasArea.selectedType,
-                            "target": newTargetInput.text.trim()
-                        });
-                        Config.options.search.aliases = newAliases;
-                        newAliasInput.text = "";
-                        newTargetInput.text = "";
-                    }
-
-                    contentItem: Item {
-                        anchors.fill: parent
-
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            text: "add"
-                            iconSize: 24
-                            color: Appearance.colors.colOnSecondaryContainer
-                        }
-                    }
-                }
-            }
-
-            Item {
-                Layout.fillWidth: true
-                implicitHeight: appsSection.implicitHeight
-
-                ContentSubsection {
-                    id: appsSection
-
-                    title: addAliasArea.selectedType === "app" ? Translation.tr("Search frequent apps for alias target") : (addAliasArea.selectedType === "builtin" ? Translation.tr("Select available built-in target") : Translation.tr("Enter path or command directly above"))
-                    icon: "search"
-                    anchors.fill: parent
-
-                    // App suggestion area
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-                        visible: addAliasArea.selectedType === "app"
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 44
-                            color: Appearance.colors.colSurfaceContainerHigh
-                            radius: 22
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 16
-                                anchors.rightMargin: 8
-                                spacing: 8
-
-                                MaterialSymbol {
-                                    text: "search"
-                                    iconSize: 18
-                                    color: appFilterInput.focus ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
-                                }
-
-                                TextField {
-                                    id: appFilterInput
-
-                                    Layout.fillWidth: true
-                                    placeholderText: Translation.tr("Type application name...")
-                                    placeholderTextColor: Appearance.colors.colOnSurfaceVariant
-                                    color: Appearance.colors.colOnSurface
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    background: null
-                                    clip: true
-                                    onTextChanged: addAliasArea.appFilter = text
-                                }
-
-                                IconToolbarButton {
-                                    visible: appFilterInput.text !== ""
-                                    text: "close"
-                                    implicitHeight: 28
-                                    implicitWidth: 28
-                                    colText: Appearance.colors.colOnSurfaceVariant
-                                    onClicked: appFilterInput.text = ""
-                                }
-                            }
-                        }
-
-                        Flow {
-                            Layout.fillWidth: true
-                            spacing: 8
-
-                            Repeater {
-                                model: addAliasArea.filteredApps
-
-                                delegate: Rectangle {
-                                    id: chip
-
-                                    color: chipMouse.containsMouse ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh
-                                    radius: 18
-                                    width: appLayout.implicitWidth + 24
-                                    height: 36
-
-                                    RowLayout {
-                                        id: appLayout
-
-                                        anchors.centerIn: parent
-                                        spacing: 6
-
-                                        WAppIcon {
-                                            iconName: modelData.icon
-                                            implicitSize: 16
-                                            tryCustomIcon: false
-                                        }
-
-                                        StyledText {
-                                            text: modelData.name
-                                            font.pixelSize: Appearance.font.pixelSize.small
-                                            font.bold: chipMouse.containsMouse
-                                            color: chipMouse.containsMouse ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: chipMouse
-
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            newTargetInput.text = modelData.id;
-                                            addAliasArea.selectedType = "app";
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Builtin suggestion area
-                    Flow {
-                        property var builtins: [
-                            {
-                                "id": "clipboard",
-                                "name": Translation.tr("Clipboard"),
-                                "icon": "content_paste"
-                            },
-                            {
-                                "id": "emojis",
-                                "name": Translation.tr("Emoji Picker"),
-                                "icon": "mood"
-                            },
-                            {
-                                "id": "math",
-                                "name": Translation.tr("Calculator Mode"),
-                                "icon": "calculate"
-                            },
-                            {
-                                "id": "bluetooth",
-                                "name": Translation.tr("Bluetooth Manager"),
-                                "icon": "bluetooth"
-                            },
-                            {
-                                "id": "translator",
-                                "name": Translation.tr("Translator"),
-                                "icon": "translate"
-                            },
-                            {
-                                "id": "settings",
-                                "name": Translation.tr("Settings"),
-                                "icon": "settings"
-                            }
-                        ]
-
-                        Layout.fillWidth: true
-                        spacing: 8
-                        visible: addAliasArea.selectedType === "builtin"
-
-                        Repeater {
-                            model: parent.builtins
-
-                            delegate: Rectangle {
-                                id: builtinChip
-
-                                property bool selected: newTargetInput.text === modelData.id
-
-                                color: selected ? Appearance.colors.colPrimaryContainer : (builtinMouse.containsMouse ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh)
-                                radius: 18
-                                width: builtinLayout.implicitWidth + 24
-                                height: 36
-
-                                RowLayout {
-                                    id: builtinLayout
-
-                                    anchors.centerIn: parent
-                                    spacing: 6
-
-                                    MaterialSymbol {
-                                        text: modelData.icon
-                                        iconSize: 16
-                                        color: builtinChip.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
-                                    }
-
-                                    StyledText {
-                                        text: modelData.name
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        color: builtinChip.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
-                                        font.bold: builtinChip.selected
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: builtinMouse
-
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        newTargetInput.text = modelData.id;
-                                        newAliasInput.forceActiveFocus();
-                                    }
-                                }
-                            }
-                        }
-                    }
+                RelatedChip {
+                    pageId: "clipboard"
+                    label: Translation.tr("Clipboard")
+                    sectionHighlight: Translation.tr("General")
                 }
             }
         }
     }
 
-    ContentSection {
-        icon: "folder"
-        title: Translation.tr("Directories & Targets")
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            ContentSubsection {
-                title: Translation.tr("Search engine base URL")
-                icon: "public"
-                Layout.fillWidth: true
-
-                MaterialTextArea {
-                    Layout.fillWidth: true
-                    text: Config.options.search.engineBaseUrl
-                    wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.engineBaseUrl = text
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("File search directory")
-                icon: "folder_open"
-                Layout.fillWidth: true
-
-                MaterialTextArea {
-                    Layout.fillWidth: true
-                    text: Config.options.search.fileSearchDirectory
-                    wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.fileSearchDirectory = text
-                }
-            }
-        }
-    }
-
-    ContentSection {
-        icon: "link"
-        title: Translation.tr("Related settings")
-
-        Flow {
-            Layout.fillWidth: true
-            spacing: 8
-
-            RelatedChip {
-                pageId: "mediaMusic"
-                label: Translation.tr("Media Downloader")
-                sectionHighlight: Translation.tr("Download")
-            }
-
-            RelatedChip {
-                pageId: "clipboard"
-                label: Translation.tr("Clipboard")
-                sectionHighlight: Translation.tr("General")
-            }
-        }
+    // Sub-page overlay (slides in from the right)
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }

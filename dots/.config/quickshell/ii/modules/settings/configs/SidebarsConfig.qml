@@ -184,15 +184,6 @@ Item {
                 }
             }
 
-            ConfigSwitch {
-                buttonIcon: "music_note"
-                text: Translation.tr("Show media player in volume dialog")
-                checked: Config.options.sidebar.volumeDialogMediaWidget
-                onCheckedChanged: {
-                    Config.options.sidebar.volumeDialogMediaWidget = checked;
-                }
-            }
-
             ContentSubsection {
                 title: Translation.tr("Sidebar position")
                 icon: "switch_right"
@@ -228,14 +219,14 @@ Item {
             title: Translation.tr("Quick Toggles & Sliders")
             icon: "tune"
 
-            ConfigSwitch {
-                buttonIcon: "tune"
-                text: Translation.tr("Quick toggles and slider settings")
-                checked: true
-                configPage: Qt.resolvedUrl("widgets/SidebarQuickTogglesConfig.qml")
-                StyledToolTip {
-                    text: Translation.tr("Click button text to configure quick toggle styles, column counts, 2x1 capsule sliders, and fixed sliders.")
-                }
+            ServiceCard {
+                usePrimaryContainer: true
+                cardIcon: "tune"
+                cardHue: 190
+                cardShape: "Cookie9Sided"
+                title: Translation.tr("Quick toggles and slider settings")
+                description: Translation.tr("Configure toggle styles, Android column count, capsule sliders, and fixed sliders")
+                onOpenCard: sidebarsRoot.activeSubPage = Qt.resolvedUrl("widgets/SidebarQuickTogglesConfig.qml")
             }
         }
 
