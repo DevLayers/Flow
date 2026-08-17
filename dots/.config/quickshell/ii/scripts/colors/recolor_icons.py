@@ -20,6 +20,8 @@ import tempfile
 import configparser
 import glob
 import hashlib
+import fcntl
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -600,6 +602,33 @@ def create_lowercase_symlinks(theme_path):
 
 # ── Main Generation ─────────────────────────────────────────────────────────
 def generate():
+    # Rapid wallpaper switching spawns overlapping recolor processes that race
+    # on the shared .new staging dir and on the final rename, so an older
+    # palette can land after a newer one. Serialize runs with a lock and let
+    # only the newest queued run do the work: each process stamps the pending
+    # token; one that finds a newer stamp after acquiring the lock exits, and
+    # the stamping run regenerates with the colors current at its turn.
+    token = uuid.uuid4().hex
+    token_path = TARGET_THEME_PATH + ".pending"
+    try:
+        with open(token_path, 'w') as f:
+            f.write(token)
+    except Exception:
+        pass
+
+    with open(TARGET_THEME_PATH + ".lock", 'w') as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            with open(token_path) as f:
+                if f.read().strip() != token:
+                    print("A newer recolor run is queued; leaving the work to it.")
+                    return
+        except Exception:
+            pass
+        _generate_locked()
+
+
+def _generate_locked():
     global TARGET_THEME_PATH
     config = get_config()
     colors = get_icon_colors()
