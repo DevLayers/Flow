@@ -116,6 +116,8 @@ Item {
                 LauncherSearch.query = "";
             }
             root.aiModeLocked = true;
+            // Focus the AI composer immediately so the user can type without clicking
+            Qt.callLater(root.focusSearchInput);
         } else {
             root.aiDraftHydrated = false;
         }
@@ -484,9 +486,19 @@ Item {
             return;
         }
 
-        // Prevent Esc and Backspace from registering
-        if (event.key === Qt.Key_Escape)
+        // ESC: in AI mode, delegate to panel (closes history first, then exits AI mode)
+        if (event.key === Qt.Key_Escape) {
+            if (root.isAiMode) {
+                if (aiPanelLoader.item && aiPanelLoader.item.handleEscape()) {
+                    // panel handled it (e.g. closed history)
+                } else {
+                    root.exitAiMode();
+                }
+                event.accepted = true;
+            }
+            // In non-AI mode, let the event propagate to OverviewWindow for closing
             return;
+        }
 
         // Handle Backspace: focus and delete character if not focused
         if (event.key === Qt.Key_Backspace) {
@@ -541,7 +553,7 @@ Item {
 
     StyledRectangularShadow {
         target: searchWidgetContent
-        visible: !root.isAiMode && !GlobalStates.searchConnectActive && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
+        visible: !GlobalStates.searchConnectActive && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
         opacity: root.shadowOpacity
         offset: Qt.vector2d(0.0, 0.0)
     }
@@ -552,8 +564,8 @@ Item {
         anchors.centerIn: parent
         width: GlobalStates.searchConnectActive ? parent.width : implicitWidth
         height: GlobalStates.searchConnectActive ? parent.height : implicitHeight
-        clip: !root.isAiMode
-        layer.enabled: !root.isAiMode && !GlobalStates.searchConnectActive
+        clip: true
+        layer.enabled: !GlobalStates.searchConnectActive
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: searchWidgetContent.width
@@ -598,12 +610,14 @@ Item {
                 return (mediaDownloaderPanelLoader.item ? mediaDownloaderPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isMaterialSymbolsMode)
                 return (materialSymbolsPanelLoader.item ? materialSymbolsPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            if (root.isAiMode)
-                return aiPanelLoader.item ? aiPanelLoader.item.implicitHeight : 520;
+            if (root.isAiMode) {
+                const panelH = aiPanelLoader.item ? aiPanelLoader.item.implicitHeight : 520;
+                return panelH + (GlobalStates.searchConnectActive ? 16 : searchBar.verticalPadding * 2 + 10);
+            }
             return gridLayout.implicitHeight;
         }
-        radius: root.isAiMode ? 0 : Appearance.rounding.windowRounding
-        color: (GlobalStates.searchConnectActive || root.isAiMode) ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
+        radius: Appearance.rounding.windowRounding
+        color: GlobalStates.searchConnectActive ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
 
         Behavior on implicitWidth {
             id: searchWidthBehavior
@@ -647,9 +661,9 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.isAiMode ? 0 : implicitHeight
                 Layout.minimumHeight: 0
-                Layout.leftMargin: root.isAiMode ? 0 : 10
-                Layout.rightMargin: root.isAiMode ? 0 : 10
-                Layout.topMargin: root.isAiMode ? 0 : verticalPadding
+                Layout.leftMargin: 10
+                Layout.rightMargin: 10
+                Layout.topMargin: verticalPadding
                 Layout.bottomMargin: root.isAiMode ? 0 : verticalPadding
                 Layout.row: root.overviewPosition == "bottom" ? 1 : 0
                 visible: !root.isAiMode
@@ -707,7 +721,10 @@ Item {
                 }
 
                 onNavigateUp: {
-                    if (root.isBluetoothMode) {
+                    if (root.isAiMode) {
+                        if (aiPanelLoader.item && typeof aiPanelLoader.item.navigateUp === "function")
+                            aiPanelLoader.item.navigateUp();
+                    } else if (root.isBluetoothMode) {
                         if (bluetoothPanelLoader.item)
                             bluetoothPanelLoader.item.navigateUp();
                     } else if (root.isClipboardMode) {
@@ -732,7 +749,10 @@ Item {
                 }
 
                 onNavigateDown: {
-                    if (root.isBluetoothMode) {
+                    if (root.isAiMode) {
+                        if (aiPanelLoader.item && typeof aiPanelLoader.item.navigateDown === "function")
+                            aiPanelLoader.item.navigateDown();
+                    } else if (root.isBluetoothMode) {
                         if (bluetoothPanelLoader.item)
                             bluetoothPanelLoader.item.navigateDown();
                     } else if (root.isClipboardMode) {
@@ -1506,6 +1526,9 @@ Item {
                 active: root.isAiMode || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
+                Layout.leftMargin: 10
+                Layout.rightMargin: 10
+                Layout.bottomMargin: searchBar.verticalPadding
                 Layout.preferredHeight: (root.isAiMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
                 height: Layout.preferredHeight
                 source: "AiChatPanel.qml"

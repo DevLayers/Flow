@@ -55,6 +55,26 @@ Item {
         composer.focusInput();
     }
 
+    function navigateUp() {
+        if (root.historyOpen) {
+            sessionList.contentY = Math.max(0, sessionList.contentY - 64);
+            return;
+        }
+        if (messageList.contentHeight > messageList.height)
+            messageList.contentY = Math.max(0, messageList.contentY - 64);
+    }
+
+    function navigateDown() {
+        if (root.historyOpen) {
+            sessionList.contentY = Math.min(
+                Math.max(0, sessionList.contentHeight - sessionList.height),
+                sessionList.contentY + 64);
+            return;
+        }
+        if (messageList.contentHeight > messageList.height)
+            messageList.contentY = Math.min(messageList.contentHeight - messageList.height, messageList.contentY + 64);
+    }
+
     function captureHandoffState() {
         const anchor = {
             messageId: "",
