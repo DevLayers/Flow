@@ -227,12 +227,23 @@ ColumnLayout {
                 textFormat: TextEdit.PlainText
                 selectByMouse: true
                 persistentSelection: true
-                maximumLength: root.maximumCharacters
                 background: Item {}
                 Accessible.name: Translation.tr("AI message")
                 Accessible.description: Translation.tr("Multiline draft. Enter sends; Shift+Enter inserts a line break.")
 
                 onTextChanged: {
+                    const nextText = String(text ?? "");
+                    if (nextText.length > root.maximumCharacters) {
+                        const boundedText = nextText.slice(0, root.maximumCharacters);
+                        if (boundedText !== nextText) {
+                            root.syncingDraft = true;
+                            text = boundedText;
+                            root.syncingDraft = false;
+                            if (!root.syncingDraft)
+                                Ai.draft = boundedText;
+                            return;
+                        }
+                    }
                     if (!root.syncingDraft)
                         Ai.draft = text;
                 }
