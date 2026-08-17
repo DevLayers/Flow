@@ -11,9 +11,12 @@ ApiStrategy {
         // alt=sse makes the stream a sequence of `data: {...}` lines instead
         // of a pretty-printed JSON array, so it is framed like every other
         // provider and no reassembly is needed.
-        const result = model.endpoint + `?alt=sse&key=\$\{${apiKeyEnvVarName}\}`;
-        // console.log("[AI] Endpoint: " + result);
-        return result;
+        //
+        // The key used to ride in the query string, where the shell never
+        // expanded it — the URL reaches curl in single quotes — so Gemini was
+        // handed the name of the variable and refused every request. It goes
+        // in a header now, the way the other providers send theirs.
+        return model.endpoint + "?alt=sse";
     }
 
     /**
@@ -172,8 +175,9 @@ ApiStrategy {
     }
 
     function buildAuthorizationHeader(apiKeyEnvVarName: string): string {
-        // Gemini doesn't use Authorization header, key is in URL
-        return "";
+        // Gemini has no Authorization header of its own; this is the header
+        // form of the `key` parameter. Double quotes, so the shell fills it in.
+        return `-H "x-goog-api-key: \$\{${apiKeyEnvVarName}\}"`;
     }
 
     function parseResponseLine(line, message) {

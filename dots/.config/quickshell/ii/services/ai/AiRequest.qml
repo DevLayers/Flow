@@ -151,8 +151,17 @@ Scope {
         const scriptFilePath = CF.FileUtils.trimFileProtocol(root.scriptPath);
         // Written before the script that reads it, and rewritten on every
         // attempt: a retry re-runs the attachment step over a fresh body.
+        //
+        // The path is dropped first because these files are deleted once the
+        // request ends, and a view still pointing at the old path writes
+        // nothing when asked for bytes it believes are already there — the
+        // script is the same every time, so from the second request on there
+        // was no file left to run and curl was never reached at all. The views
+        // write synchronously; see below for why that matters here.
+        bodyFile.path = "";
         bodyFile.path = Qt.resolvedUrl(root.bodyPath);
         bodyFile.setText(JSON.stringify(root.requestData));
+        scriptFile.path = "";
         scriptFile.path = Qt.resolvedUrl(scriptFilePath);
         scriptFile.setText(root.buildScript());
         // Rebuilt every launch: a key must never outlive the model it
@@ -194,6 +203,26 @@ Scope {
         content += "curl --no-buffer -sS" + ` --connect-timeout ${root.connectTimeout}` + (root.requestTimeout > 0 ? ` --max-time ${root.requestTimeout}` : "") + ` -w '\\n${root.statusMarker}%{http_code}@@\\n'` + ` ${quotedEndpoint}` + ` ${headerString}` + (authHeader ? ` ${authHeader}` : "") + ` --data-binary @${quotedBody}` + "\n";
 
         return content;
+    }
+
+    /**
+     * One line of curl's output. Everything here assumes a single line; see
+     * the parser below for why that has to be arranged rather than assumed.
+     */
+    function readLine(data: string) {
+        if (data.startsWith(root.statusMarker)) {
+            root.httpStatus = parseInt(data.slice(root.statusMarker.length)) || 0;
+            return;
+        }
+        if (data.startsWith(root.attachmentErrorMarker)) {
+            root.attachmentError = data.slice(root.attachmentErrorMarker.length);
+            return;
+        }
+        if (data.length === 0)
+            return;
+        if (root.requestTimeout > 0)
+            watchdog.restart();
+        root.line(data);
     }
 
     function retryable(): bool {
@@ -239,12 +268,27 @@ Scope {
         root.finished(reason, status, code);
     }
 
+    // Both are written synchronously, because the process below is started the
+    // moment the write returns. An asynchronous write has not necessarily
+    // reached the disk by then, and bash handed a script that is still empty
+    // reads no command, calls no curl and exits cleanly — a request that
+    // reported neither an answer nor a failure.
+    //
+    // Read errors are not printed: the path is reassigned before every write,
+    // which makes each of them try to read a file the previous request deleted.
+    // A write that fails is still worth hearing about.
     FileView {
         id: scriptFile
+        blockWrites: true
+        printErrors: false
+        onSaveFailed: error => console.log(`[AiRequest] Could not write the request script: ${error}`)
     }
 
     FileView {
         id: bodyFile
+        blockWrites: true
+        printErrors: false
+        onSaveFailed: error => console.log(`[AiRequest] Could not write the request body: ${error}`)
     }
 
     Timer {
@@ -266,21 +310,23 @@ Scope {
     Process {
         id: requestProc
 
+        // A chunk is not one line. When several lines arrive in the same read
+        // they can be handed over glued together, newlines and all, and which
+        // way it falls changes from one request to the next. The status is only
+        // recognisable at the start of a line, so a glued chunk lost it and the
+        // request ended without ever knowing what the server answered.
         stdout: SplitParser {
+            onRead: data => data.split("\n").forEach(line => root.readLine(line))
+        }
+
+        // curl runs with -sS, which keeps it quiet but still says what went
+        // wrong. That went nowhere before, which is why a request that failed
+        // outside HTTP left nothing at all to read.
+        stderr: SplitParser {
             onRead: data => {
-                if (data.startsWith(root.statusMarker)) {
-                    root.httpStatus = parseInt(data.slice(root.statusMarker.length)) || 0;
+                if (data.trim().length === 0)
                     return;
-                }
-                if (data.startsWith(root.attachmentErrorMarker)) {
-                    root.attachmentError = data.slice(root.attachmentErrorMarker.length);
-                    return;
-                }
-                if (data.length === 0)
-                    return;
-                if (root.requestTimeout > 0)
-                    watchdog.restart();
-                root.line(data);
+                console.log(`[AiRequest] ${data}`);
             }
         }
 
@@ -305,7 +351,11 @@ Scope {
                 retryTimer.restart();
                 return;
             }
-            const ok = exitCode === 0 && (root.httpStatus === 0 || (root.httpStatus >= 200 && root.httpStatus < 300));
+            // Every request is made by curl with `-w`, so an answer always
+            // carries a status. No status means the request never happened,
+            // which used to pass for success and told a key that was never
+            // sent anywhere that it works.
+            const ok = exitCode === 0 && root.httpStatus >= 200 && root.httpStatus < 300;
             root.finish(ok ? "done" : "error", root.httpStatus, exitCode);
         }
     }

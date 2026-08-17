@@ -1362,6 +1362,10 @@ Singleton {
                 root.keyTestMessage = Translation.tr("The key is valid but out of quota for now.");
             else if (kind === "network" || kind === "timeout")
                 root.keyTestMessage = Translation.tr("Could not reach the provider.");
+            else if (status === 0)
+                // Nothing answered because nothing was asked: the request
+                // itself failed to run. "HTTP 0" said none of that.
+                root.keyTestMessage = Translation.tr("The request could not be sent (exit code %1).").arg(code);
             else
                 root.keyTestMessage = Translation.tr("The provider answered with HTTP %1.").arg(status);
         }
