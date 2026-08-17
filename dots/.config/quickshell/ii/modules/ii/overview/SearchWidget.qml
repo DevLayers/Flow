@@ -616,7 +616,7 @@ Item {
             }
             return gridLayout.implicitHeight;
         }
-        radius: Appearance.rounding.windowRounding
+        radius: root.isAiMode ? Appearance.rounding.large : Appearance.rounding.windowRounding
         color: GlobalStates.searchConnectActive ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
 
         Behavior on implicitWidth {
@@ -637,6 +637,15 @@ Item {
             enabled: !root.inNotchMode
             NumberAnimation {
                 id: heightAnim
+                duration: Appearance.animation.elementMoveSmall.duration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+            }
+        }
+
+        Behavior on radius {
+            enabled: !root.inNotchMode
+            NumberAnimation {
                 duration: Appearance.animation.elementMoveSmall.duration
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel

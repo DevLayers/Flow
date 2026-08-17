@@ -222,7 +222,7 @@ ColumnLayout {
         Layout.fillWidth: true
         implicitHeight: composerStage.implicitHeight + root.controlPadding * 2
         color: Appearance.colors.colLayer1
-        radius: root.longDraft ? Appearance.rounding.large : Appearance.rounding.windowRounding
+        radius: root.longDraft ? Appearance.rounding.large : Appearance.rounding.full
         clip: true
         layer.enabled: true
         layer.effect: OpacityMask {
