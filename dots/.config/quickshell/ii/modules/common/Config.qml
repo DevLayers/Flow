@@ -529,7 +529,7 @@ Singleton {
     // (background widget placementStrategy, which also accepts undocumented
     // aliases) is left out on purpose.
     readonly property var enumConstraints: ({
-            "panelFamily": ["ii", "waffle"],
+            "panelFamily": ["ii", "tablet", "waffle"],
             "policies.ai": [0, 1, 2],
             "policies.weeb": [0, 1, 2],
             "policies.wallpapers": [0, 1],
@@ -861,7 +861,7 @@ Singleton {
             // migrateRaw(). Never default this to currentConfigVersion.
             property int configVersion: 0
 
-            property string panelFamily: "ii" // "ii", "waffle"
+            property string panelFamily: "ii" // "ii", "tablet", "waffle"
 
             property JsonObject policies: JsonObject {
                 property int ai: 1 // 0: No | 1: Yes | 2: Local

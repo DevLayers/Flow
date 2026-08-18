@@ -12,6 +12,7 @@ import qs.modules.common.functions
 import qs.modules.ii.wrappedFrame
 import qs.modules.ii.bar.shared
 import qs.modules.ii.bar
+import qs.modules.tablet.sidebarDashboard
 
 // Encapsulates the two PanelWindows (space-reserver + main bar)
 // and all autohide / fullscreen detection logic.
@@ -22,26 +23,30 @@ Scope {
     required property ShellScreen screen
     required property int monitorIndex
     property real sizeScale: 1.0
+    property bool forceTop: false
 
+    readonly property bool isBottom: !root.forceTop && Config.options.bar.bottom
     readonly property real effectiveBaseBarHeight: Appearance.sizes.baseBarHeight * root.sizeScale
     readonly property real effectiveBarHeight: Appearance.sizes.barHeight * root.sizeScale
     readonly property bool lockUsesFade: Config.options.appearance.fakeScreenRounding === 3
     readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
     readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
     readonly property real lockSlideDistance: root.effectiveBarHeight + Appearance.rounding.screenRounding
-    readonly property real lockSlideOffsetY: Config.options.bar.bottom ? lockSlideDistance : -lockSlideDistance
+    readonly property real lockSlideOffsetY: root.isBottom ? lockSlideDistance : -lockSlideDistance
 
     // ── Space reserver (reserves space so windows don't overlap bar) ──────────
     PanelWindow {
         id: barSpaceReserver
         screen: root.screen
         anchors {
-            top: !Config.options.bar.bottom
-            bottom: Config.options.bar.bottom
+            top: !root.isBottom
+            bottom: root.isBottom
             left: true
             right: true
         }
-        exclusionMode: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) ? ExclusionMode.Ignore : ExclusionMode.Normal
+        exclusionMode: (root.forceTop && TabletDashboardGestureController.progress > 0.05)
+            ? ExclusionMode.Ignore
+            : ((Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) ? ExclusionMode.Ignore : ExclusionMode.Normal)
 
         property real targetZone: root.effectiveBaseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
         property real minZone: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : 0
@@ -169,17 +174,23 @@ Scope {
         MouseArea {
             id: hoverRegion
             hoverEnabled: true
-            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
+            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (
+                root.forceTop
+                    ? Math.max(0.0, 1.0 - TabletDashboardGestureController.progress * 1.5)
+                    : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
+            )
             transform: Translate {
-                y: root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress
+                y: root.forceTop
+                    ? -root.effectiveBarHeight * TabletDashboardGestureController.progress
+                    : (root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress)
             }
             anchors {
                 left: parent.left
                 right: parent.right
-                top: !Config.options.bar.bottom ? parent.top : undefined
-                bottom: Config.options.bar.bottom ? parent.bottom : undefined
+                top: !root.isBottom ? parent.top : undefined
+                bottom: root.isBottom ? parent.bottom : undefined
                 rightMargin: (Config.options.interactions.deadPixelWorkaround.enable) * 1
-                bottomMargin: (Config.options.interactions.deadPixelWorkaround.enable && Config.options.bar.bottom) * 1
+                bottomMargin: (Config.options.interactions.deadPixelWorkaround.enable && root.isBottom) * 1
             }
             height: root.effectiveBarHeight + Appearance.rounding.screenRounding
 
@@ -214,7 +225,7 @@ Scope {
                 }
                 states: State {
                     name: "bottom"
-                    when: Config.options.bar.bottom
+                    when: root.isBottom
                     AnchorChanges {
                         target: barContent
                         anchors {
@@ -246,7 +257,7 @@ Scope {
 
                 states: State {
                     name: "bottom"
-                    when: Config.options.bar.bottom
+                    when: root.isBottom
                     AnchorChanges {
                         target: roundDecorators
                         anchors {
@@ -272,7 +283,7 @@ Scope {
                         corner: RoundCorner.CornerEnum.TopLeft
                         states: State {
                             name: "bottom"
-                            when: Config.options.bar.bottom
+                            when: root.isBottom
                             PropertyChanges {
                                 leftCorner.corner: RoundCorner.CornerEnum.BottomLeft
                             }
@@ -282,15 +293,15 @@ Scope {
                         id: rightCorner
                         anchors {
                             right: parent.right
-                            top: !Config.options.bar.bottom ? parent.top : undefined
-                            bottom: Config.options.bar.bottom ? parent.bottom : undefined
+                            top: !root.isBottom ? parent.top : undefined
+                            bottom: root.isBottom ? parent.bottom : undefined
                         }
                         implicitSize: Appearance.rounding.screenRounding
                         color: barRoot.showBarBackground ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                         corner: RoundCorner.CornerEnum.TopRight
                         states: State {
                             name: "bottom"
-                            when: Config.options.bar.bottom
+                            when: root.isBottom
                             PropertyChanges {
                                 rightCorner.corner: RoundCorner.CornerEnum.BottomRight
                             }

@@ -46,6 +46,8 @@ Scope {
 
     property Component horizontalBarComponent: defaultHorizontalBarComponent
     property Component overviewComponent: defaultOverviewComponent
+    property Component sidebarDashboardComponent: defaultSidebarDashboardComponent
+    property Component screenCornersComponent: defaultScreenCornersComponent
 
     Component {
         id: defaultHorizontalBarComponent
@@ -55,6 +57,16 @@ Scope {
     Component {
         id: defaultOverviewComponent
         Overview {}
+    }
+
+    Component {
+        id: defaultSidebarDashboardComponent
+        SidebarDashboard {}
+    }
+
+    Component {
+        id: defaultScreenCornersComponent
+        ScreenCorners {}
     }
 
     property bool barExtraCondition: true
@@ -75,7 +87,7 @@ Scope {
     }
 
     PanelLoader {
-        extraCondition: !Config.options.bar.vertical && root.barExtraCondition && !GlobalStates.connectModeActive
+        extraCondition: (Config.options.panelFamily === "tablet" || !Config.options.bar.vertical) && root.barExtraCondition && !GlobalStates.connectModeActive
         component: root.horizontalBarComponent
     }
     PanelLoader {
@@ -129,7 +141,10 @@ Scope {
 
     PanelLoader { component: Polkit {} }
     PanelLoader { component: RegionSelector {} }
-    PanelLoader { component: ScreenCorners {} }
+    PanelLoader {
+        extraCondition: root.screenCornersComponent !== null
+        component: root.screenCornersComponent
+    }
     PanelLoader { component: ScreenTranslator {} }
     PanelLoader { component: ColorPickerPopup {} }
     PanelLoader { component: SessionScreen {} }
@@ -139,10 +154,10 @@ Scope {
     }
     PanelLoader {
         extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
-        component: SidebarDashboard {}
+        component: root.sidebarDashboardComponent
     }
     PanelLoader {
-        extraCondition: Config.options.bar.vertical && root.barExtraCondition && !GlobalStates.connectModeActive
+        extraCondition: Config.options.bar.vertical && root.barExtraCondition && !GlobalStates.connectModeActive && Config.options.panelFamily !== "tablet"
         component: VerticalBar {}
     }
     PanelLoader { component: WallpaperSelector {} }

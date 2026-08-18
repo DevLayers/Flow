@@ -11,6 +11,8 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.bar.core
 
+import qs.modules.tablet.sidebarDashboard
+
 // Bar entry point — one BarWindow per monitor.
 // Window/autohide/exclusiveZone logic lives in bar/core/BarWindow.qml.
 Scope {
@@ -19,6 +21,7 @@ Scope {
     // Panel-family override. Desktop ii keeps 1.0; TabletFamily can request
     // larger geometry without changing persistent Config values.
     property real sizeScale: 1.0
+    property bool forceTop: false
 
     Variants {
         id: barVariant
@@ -34,11 +37,14 @@ Scope {
             // Destroying the PanelWindow here makes Wayland recompute the layer
             // geometry in the same frame as the lock animation, which produces a
             // visible slide when wrapped frame is enabled.
-            active: GlobalStates.barOpen && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
+            active: GlobalStates.barOpen &&
+                    !GlobalStates.connectModeActive &&
+                    !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
             component: BarWindow {
                 screen: barLoader.modelData
                 monitorIndex: barLoader.monitorIndex
                 sizeScale: bar.sizeScale
+                forceTop: bar.forceTop
             }
         }
     }

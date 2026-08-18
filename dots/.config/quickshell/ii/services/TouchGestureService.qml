@@ -8,6 +8,7 @@ import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.tablet.sidebarDashboard
 
 Singleton {
     id: root
@@ -571,7 +572,9 @@ Singleton {
         switch (origin) {
         case "leftEdge": return bindings.leftEdge ? bindings.leftEdge : "none";
         case "rightEdge": return bindings.rightEdge ? bindings.rightEdge : "none";
-        case "topEdge": return bindings.topEdge ? bindings.topEdge : "none";
+        case "topEdge":
+            if (Config.options.panelFamily === "tablet") return "sidebarRight";
+            return bindings.topEdge ? bindings.topEdge : "none";
         case "bottomEdge": return bindings.bottomEdge ? bindings.bottomEdge : "none";
         case "topLeftCorner": return bindings.topLeftCorner ? bindings.topLeftCorner : "none";
         case "topRightCorner": return bindings.topRightCorner ? bindings.topRightCorner : "none";
@@ -699,6 +702,10 @@ Singleton {
 
         console.log("[TouchGestures] Gesture START on", screenName, ":", origin, "action:", actionId, "startX:", px.toFixed(0), "startY:", py.toFixed(0));
         gestureStarted(screenName, origin, actionId, px, py);
+
+        if (Config.options.panelFamily === "tablet" && origin === "topEdge") {
+            TabletDashboardGestureController.startTracking(screenName);
+        }
     }
 
     function onTouchMove(event) {
@@ -747,6 +754,13 @@ Singleton {
         progress = Math.max(0, Math.min(1, primaryTravel / commitDist));
 
         gestureProgressChanged(activeScreenName, activeOrigin, activeActionId, progress, primaryTravel);
+
+        if (Config.options.panelFamily === "tablet" && activeOrigin === "topEdge") {
+            var screen = Quickshell.screens.find(s => s.name === activeScreenName) || Quickshell.primaryScreen;
+            var targetDist = screen ? screen.height * 0.60 : 600;
+            var p = Math.max(0.0, Math.min(1.0, primaryTravel / Math.max(1, targetDist)));
+            TabletDashboardGestureController.updateProgress(p, currentVelocity());
+        }
     }
 
     function onTouchUp(event) {
@@ -769,6 +783,13 @@ Singleton {
         var velThreshold = (root.opts && root.opts.velocityThreshold) ? root.opts.velocityThreshold : 650;
 
         var vel = currentVelocity();
+
+        if (Config.options.panelFamily === "tablet" && activeOrigin === "topEdge") {
+            TabletDashboardGestureController.endTracking(vel);
+            enterCooldown();
+            return;
+        }
+
         var distanceCommit = primaryTravel >= commitDist;
         var flickCommit = primaryTravel >= minDist && vel >= velThreshold;
 
@@ -812,6 +833,9 @@ Singleton {
         if (gestureState === root.stateTracking || gestureState === root.stateQualified) {
             console.log("[TouchGestures] Gesture CANCELLED:", reason);
             gestureCancelled(activeScreenName, activeOrigin, activeActionId);
+            if (Config.options.panelFamily === "tablet" && activeOrigin === "topEdge") {
+                TabletDashboardGestureController.cancelTracking();
+            }
         }
         resetGestureState();
     }

@@ -1,0 +1,4 @@
+singleton TabletDashboardGestureController 1.0 TabletDashboardGestureController.qml
+TabletSidebarDashboard 1.0 TabletSidebarDashboard.qml
+TabletDashboardContent 1.0 TabletDashboardContent.qml
+SystemButtonRow 1.0 SystemButtonRow.qml
