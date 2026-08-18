@@ -34,7 +34,7 @@ Item {
     property int activityMetricIndex: 0
     property int performanceViewIndex: 0
 
-    readonly property var driveOptions: Config.options.googleDrive
+    readonly property var driveOptions: (Persistent.ready ? Persistent.states.googleDrive : null) || Config.options.googleDrive
     readonly property list<var> activityGranularities: [
         { key: "day", value: "day", displayName: Translation.tr("Last 7 days"), selectorName: Translation.tr("7 days"), icon: "today" },
         { key: "week", value: "week", displayName: Translation.tr("Last 8 weeks"), selectorName: Translation.tr("8 weeks"), icon: "date_range" },
@@ -815,10 +815,12 @@ Item {
     }
 
     function saveCredentials() {
-        // Save to Gnome Keyring via KeyringStorage
-        KeyringStorage.setNestedField(["apiKeys", "ticktick_client_id"], root.tempClientId);
-        KeyringStorage.setNestedField(["apiKeys", "ticktick_client_secret"], root.tempClientSecret);
-        KeyringStorage.setNestedField(["apiKeys", "ticktick_access_token"], root.tempAccessToken);
+        // Save to Gnome Keyring via KeyringStorage in a single batch write
+        KeyringStorage.setNestedFields([
+            { path: ["apiKeys", "ticktick_client_id"], value: root.tempClientId },
+            { path: ["apiKeys", "ticktick_client_secret"], value: root.tempClientSecret },
+            { path: ["apiKeys", "ticktick_access_token"], value: root.tempAccessToken }
+        ]);
 
         // Backup to .env
         backupEnvProc.command = ["python3", Quickshell.shellPath("scripts/ticktick/backup_env.py"), root.tempClientId, root.tempClientSecret, root.tempAccessToken];

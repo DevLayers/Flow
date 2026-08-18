@@ -273,7 +273,7 @@ ContentPage {
             spacing: 2
 
             Repeater {
-                model: Config.options.search.aliases || []
+                model: (Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []
                 delegate: Rectangle {
                     id: aliasDelegate
                     ScrollAnimate {}
@@ -285,8 +285,8 @@ ContentPage {
 
                     topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                     topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomLeftRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomRightRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomLeftRadius: index === (((Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases) || []).length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomRightRadius: index === (((Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases) || []).length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                     RowLayout {
                         anchors.fill: parent
@@ -380,11 +380,16 @@ ContentPage {
                                         aliasDelegate.isEditing = false;
                                         return;
                                     }
-                                    let newAliases = Array.from(Config.options.search.aliases || []);
+                                    let newAliases = Array.from((Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []);
                                     let exists = newAliases.some((a, idx) => a.alias === newAlias && idx !== index);
                                     if (!exists) {
                                         newAliases[index].alias = newAlias;
-                                        Config.options.search.aliases = newAliases;
+                                        if (Persistent.ready) {
+                                            Persistent.states.search.aliases = newAliases;
+                                        }
+                                        if (Config.ready) {
+                                            Config.options.search.aliases = newAliases;
+                                        }
                                     }
                                     aliasDelegate.isEditing = false;
                                 } else {
@@ -410,9 +415,14 @@ ContentPage {
                                 }
                             }
                             onClicked: {
-                                let newAliases = Array.from(Config.options.search.aliases || []);
+                                let newAliases = Array.from((Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []);
                                 newAliases.splice(index, 1);
-                                Config.options.search.aliases = newAliases;
+                                if (Persistent.ready) {
+                                    Persistent.states.search.aliases = newAliases;
+                                }
+                                if (Config.ready) {
+                                    Config.options.search.aliases = newAliases;
+                                }
                             }
                         }
                     }
@@ -561,7 +571,7 @@ ContentPage {
                     onClicked: {
                         if (newAliasInput.text.trim() === "" || newTargetInput.text.trim() === "")
                             return;
-                        let newAliases = Array.from(Config.options.search.aliases || []);
+                        let newAliases = Array.from((Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []);
                         // Duplicate alias check
                         let exists = newAliases.some(a => a.alias === newAliasInput.text.trim());
                         if (exists)
@@ -572,7 +582,12 @@ ContentPage {
                             type: addAliasArea.selectedType,
                             target: newTargetInput.text.trim()
                         });
-                        Config.options.search.aliases = newAliases;
+                        if (Persistent.ready) {
+                            Persistent.states.search.aliases = newAliases;
+                        }
+                        if (Config.ready) {
+                            Config.options.search.aliases = newAliases;
+                        }
                         newAliasInput.text = "";
                         newTargetInput.text = "";
                     }

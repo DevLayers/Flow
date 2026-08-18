@@ -61,14 +61,14 @@ Item {
                 spacing: 2
 
                 NoticeBox {
-                    visible: !(Config.options.search.aliases && Config.options.search.aliases.length > 0)
+                    visible: !((Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases) && (Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases).length > 0)
                     Layout.fillWidth: true
                     materialIcon: "info"
                     text: Translation.tr("No aliases configured yet. Use the form below to create shortcuts for your favorite apps, folders, and commands.")
                 }
 
                 Repeater {
-                    model: Config.options.search.aliases || []
+                    model: (Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []
 
                     delegate: Rectangle {
                         id: aliasDelegate
@@ -80,8 +80,8 @@ Item {
                         color: Appearance.colors.colSurfaceContainerLow
                         topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                         topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                        bottomLeftRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
-                        bottomRightRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomLeftRadius: index === ((Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases).length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomRightRadius: index === ((Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases).length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                         ScrollAnimate {}
 
@@ -174,13 +174,18 @@ Item {
                                             aliasDelegate.isEditing = false;
                                             return;
                                         }
-                                        let newAliases = Array.from(Config.options.search.aliases || []);
+                                        let newAliases = Array.from((Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []);
                                         let exists = newAliases.some((a, idx) => {
                                             return a.alias === newAlias && idx !== index;
                                         });
                                         if (!exists) {
                                             newAliases[index].alias = newAlias;
-                                            Config.options.search.aliases = newAliases;
+                                            if (Persistent.ready) {
+                                                Persistent.states.search.aliases = newAliases;
+                                            }
+                                            if (Config.ready) {
+                                                Config.options.search.aliases = newAliases;
+                                            }
                                         }
                                         aliasDelegate.isEditing = false;
                                     } else {
@@ -208,9 +213,14 @@ Item {
                                 colBackground: Appearance.colors.colSurfaceContainerHigh
                                 colBackgroundHover: Appearance.colors.colErrorContainer
                                 onClicked: {
-                                    let newAliases = Array.from(Config.options.search.aliases || []);
+                                    let newAliases = Array.from((Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []);
                                     newAliases.splice(index, 1);
-                                    Config.options.search.aliases = newAliases;
+                                    if (Persistent.ready) {
+                                        Persistent.states.search.aliases = newAliases;
+                                    }
+                                    if (Config.ready) {
+                                        Config.options.search.aliases = newAliases;
+                                    }
                                 }
 
                                 contentItem: Item {
@@ -367,7 +377,7 @@ Item {
                             if (newAliasInput.text.trim() === "" || newTargetInput.text.trim() === "")
                                 return;
 
-                            let newAliases = Array.from(Config.options.search.aliases || []);
+                            let newAliases = Array.from((Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []);
                             let exists = newAliases.some(a => {
                                 return a.alias === newAliasInput.text.trim();
                             });
@@ -379,7 +389,12 @@ Item {
                                 "type": addAliasArea.selectedType,
                                 "target": newTargetInput.text.trim()
                             });
-                            Config.options.search.aliases = newAliases;
+                            if (Persistent.ready) {
+                                Persistent.states.search.aliases = newAliases;
+                            }
+                            if (Config.ready) {
+                                Config.options.search.aliases = newAliases;
+                            }
                             newAliasInput.text = "";
                             newTargetInput.text = "";
                         }

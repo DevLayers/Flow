@@ -3,6 +3,48 @@ import json
 import os
 import sys
 import glob
+import re
+
+SENSITIVE_KEY_NAMES = {
+    "password", "passwd", "secret", "clientsecret", "token", "accesstoken",
+    "refreshtoken", "idtoken", "sessiontoken", "apikey", "credentials",
+    "credential", "authorization", "cookie", "cookies"
+}
+
+def _normalize_key(key: str) -> str:
+    return key.lower().replace('_', '').replace('-', '')
+
+def is_sensitive_key(key: str) -> bool:
+    norm_k = _normalize_key(key)
+    if norm_k in SENSITIVE_KEY_NAMES:
+        return True
+    if any(norm_k.endswith(s) for s in ("apikey", "secret", "token", "password", "passwd")):
+        return True
+    return False
+
+def remove_secrets_and_userdata(data):
+    if isinstance(data, dict):
+        cleaned = {}
+        for k, v in data.items():
+            if k == 'googleDrive':
+                continue
+            if is_sensitive_key(k):
+                continue
+            if k == 'search' and isinstance(v, dict):
+                search_copy = {}
+                for sk, sv in v.items():
+                    if sk == 'aliases':
+                        continue
+                    if is_sensitive_key(sk):
+                        continue
+                    search_copy[sk] = remove_secrets_and_userdata(sv)
+                cleaned[k] = search_copy
+                continue
+            cleaned[k] = remove_secrets_and_userdata(v)
+        return cleaned
+    elif isinstance(data, list):
+        return [remove_secrets_and_userdata(x) for x in data]
+    return data
 
 def sanitize_val(val, home_dir):
     if isinstance(val, dict):
@@ -11,7 +53,8 @@ def sanitize_val(val, home_dir):
         return [sanitize_val(x, home_dir) for x in val]
     elif isinstance(val, str):
         if home_dir and home_dir in val:
-            return val.replace(home_dir, '$HOME')
+            val = val.replace(home_dir, '$HOME')
+        val = re.sub(r'/(?:var/)?home/[^/\s"\']+', '$HOME', val)
         return val
     return val
 
@@ -28,13 +71,22 @@ def normalize_path_field(data, section_name, field_name, home_dir, fallback=None
     if path.startswith('file://'):
         path = path[7:]
 
-    if path == '$HOME' or path.startswith('$HOME' + os.sep):
+    if path == '$HOME' or path.startswith('$HOME' + os.sep) or path.startswith('$HOME/'):
         section[field_name] = path
         return
 
-    if home_dir and (path == home_dir or path.startswith(home_dir + os.sep)):
+    if home_dir and (path == home_dir or path.startswith(home_dir + os.sep) or path.startswith(home_dir + '/')):
         section[field_name] = '$HOME' + path[len(home_dir):]
-    elif os.path.isabs(path) and fallback:
+        return
+
+    # Check for foreign /home/<user> or /var/home/<user>
+    matched_home = re.match(r'^/(?:var/)?home/[^/]+(/.*)?$', path)
+    if matched_home:
+        subpath = matched_home.group(1) or ''
+        section[field_name] = '$HOME' + subpath
+        return
+
+    if os.path.isabs(path) and fallback:
         section[field_name] = fallback
     else:
         section[field_name] = path
@@ -67,6 +119,8 @@ def reset_monitor_bindings(data):
         notifications['monitor']['name'] = ''
 
 def sanitize_data(data, home_dir):
+    data = remove_secrets_and_userdata(data)
+
     if 'appearance' in data and isinstance(data['appearance'], dict):
         icons = data['appearance'].get('icons')
         if isinstance(icons, dict):
@@ -78,6 +132,7 @@ def sanitize_data(data, home_dir):
     # Keep user paths portable when a preset is imported by another account.
     normalize_path_field(data, 'screenRecord', 'savePath', home_dir, '$HOME/Videos')
     normalize_path_field(data, 'screenSnip', 'savePath', home_dir, '$HOME/Pictures/Screenshots')
+    normalize_path_field(data, 'localsend', 'downloadPath', home_dir, '$HOME/Downloads')
 
     # Monitor connector names are local to the source machine.
     reset_monitor_bindings(data)

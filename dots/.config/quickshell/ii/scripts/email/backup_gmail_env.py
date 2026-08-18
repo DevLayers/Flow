@@ -46,6 +46,10 @@ def main():
 
     with open(env_path, "w") as f:
         f.writelines(new_lines)
+    try:
+        os.chmod(env_path, 0o600)
+    except Exception:
+        pass
 
     print("Success")
 

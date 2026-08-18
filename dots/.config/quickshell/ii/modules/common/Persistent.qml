@@ -26,9 +26,103 @@ Singleton {
     // Increased from 3000 to 5000 to match Config.qml.
     property int writeGuardDelay: 5000
 
+    property bool applyingPersistentState: false
+
+    function tryMigrateAndSyncUserData() {
+        if (!root.ready || !Config.ready || root.applyingPersistentState) return;
+
+        root.applyingPersistentState = true;
+        try {
+            // One-shot migration from Config to Persistent if never migrated
+            if (root.states.migrations.presetUserDataVersion < 1) {
+                // Search aliases
+                if (Config.options.search && Config.options.search.aliases && Config.options.search.aliases.length > 0) {
+                    if (!root.states.search.aliases || root.states.search.aliases.length === 0) {
+                        root.states.search.aliases = Array.from(Config.options.search.aliases);
+                    }
+                }
+
+                // Google Drive
+                if (Config.options.googleDrive) {
+                    const src = Config.options.googleDrive;
+                    const dst = root.states.googleDrive;
+                    if (src.enabled !== undefined) dst.enabled = src.enabled;
+                    if (src.syncInterval) dst.syncInterval = src.syncInterval;
+                    if (src.syncOnBoot !== undefined) dst.syncOnBoot = src.syncOnBoot;
+                    if (src.syncOnNetworkChange !== undefined) dst.syncOnNetworkChange = src.syncOnNetworkChange;
+                    if (src.bandwidthLimitKbps !== undefined) dst.bandwidthLimitKbps = src.bandwidthLimitKbps;
+                    if (src.pauseOnMeteredConnection !== undefined) dst.pauseOnMeteredConnection = src.pauseOnMeteredConnection;
+                    if (src.backupFolders && src.backupFolders.length > 0) dst.backupFolders = Array.from(src.backupFolders);
+                    if (src.excludePatterns && src.excludePatterns.length > 0) dst.excludePatterns = Array.from(src.excludePatterns);
+                    if (src.driveBasePath !== undefined) dst.driveBasePath = src.driveBasePath;
+                    if (src.notifyOnComplete !== undefined) dst.notifyOnComplete = src.notifyOnComplete;
+                    if (src.notifyOnError !== undefined) dst.notifyOnError = src.notifyOnError;
+                    if (src.keepVersions !== undefined) dst.keepVersions = src.keepVersions;
+                    if (src.deleteRemoteOrphans !== undefined) dst.deleteRemoteOrphans = src.deleteRemoteOrphans;
+                    if (src.onlyModifiedSinceLastSync !== undefined) dst.onlyModifiedSinceLastSync = src.onlyModifiedSinceLastSync;
+                    if (src.lastSyncTime) dst.lastSyncTime = src.lastSyncTime;
+                    if (src.lastSyncStatus) dst.lastSyncStatus = src.lastSyncStatus;
+                    if (src.lastSyncFileCount !== undefined) dst.lastSyncFileCount = src.lastSyncFileCount;
+                    if (src.lastSyncSizeMb !== undefined) dst.lastSyncSizeMb = src.lastSyncSizeMb;
+                    if (src.syncHistory && src.syncHistory.length > 0) dst.syncHistory = Array.from(src.syncHistory);
+                    if (src.totalDriveUsageMb !== undefined) dst.totalDriveUsageMb = src.totalDriveUsageMb;
+                    if (src.driveQuotaMb !== undefined) dst.driveQuotaMb = src.driveQuotaMb;
+                    if (src.driveBackupUsageMb !== undefined) dst.driveBackupUsageMb = src.driveBackupUsageMb;
+                }
+
+                root.states.migrations.presetUserDataVersion = 1;
+            }
+
+            // Sync Persistent values to Config.options as a compatibility mirror
+            if (Config.options.search) {
+                Config.options.search.aliases = Array.from(root.states.search.aliases || []);
+            }
+            if (Config.options.googleDrive) {
+                const src = root.states.googleDrive;
+                const dst = Config.options.googleDrive;
+                dst.enabled = src.enabled;
+                dst.syncInterval = src.syncInterval;
+                dst.syncOnBoot = src.syncOnBoot;
+                dst.syncOnNetworkChange = src.syncOnNetworkChange;
+                dst.bandwidthLimitKbps = src.bandwidthLimitKbps;
+                dst.pauseOnMeteredConnection = src.pauseOnMeteredConnection;
+                dst.backupFolders = Array.from(src.backupFolders || []);
+                dst.excludePatterns = Array.from(src.excludePatterns || []);
+                dst.driveBasePath = src.driveBasePath;
+                dst.notifyOnComplete = src.notifyOnComplete;
+                dst.notifyOnError = src.notifyOnError;
+                dst.keepVersions = src.keepVersions;
+                dst.deleteRemoteOrphans = src.deleteRemoteOrphans;
+                dst.onlyModifiedSinceLastSync = src.onlyModifiedSinceLastSync;
+                dst.lastSyncTime = src.lastSyncTime;
+                dst.lastSyncStatus = src.lastSyncStatus;
+                dst.lastSyncFileCount = src.lastSyncFileCount;
+                dst.lastSyncSizeMb = src.lastSyncSizeMb;
+                dst.syncHistory = Array.from(src.syncHistory || []);
+                dst.totalDriveUsageMb = src.totalDriveUsageMb;
+                dst.driveQuotaMb = src.driveQuotaMb;
+                dst.driveBackupUsageMb = src.driveBackupUsageMb;
+            }
+        } finally {
+            root.applyingPersistentState = false;
+        }
+    }
+
+    Connections {
+        target: Config
+        function onReadyChanged() {
+            if (Config.ready && root.ready) {
+                root.tryMigrateAndSyncUserData();
+            }
+        }
+    }
+
     onReadyChanged: {
         root.previousHyprlandInstanceSignature = root.states.hyprlandInstanceSignature;
         root.states.hyprlandInstanceSignature = Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || "";
+        if (root.ready && Config.ready) {
+            root.tryMigrateAndSyncUserData();
+        }
     }
 
     Timer {
@@ -84,7 +178,12 @@ Singleton {
         blockWrites: root.blockWrites
         onFileChanged: fileReloadTimer.restart()
         onAdapterUpdated: { if (root.ready && !root.blockWrites) fileWriteTimer.restart(); }
-        onLoaded: root.ready = true
+        onLoaded: {
+            root.ready = true;
+            if (Config.ready) {
+                root.tryMigrateAndSyncUserData();
+            }
+        }
         onLoadFailed: error => {
             console.log("Failed to load persistent states file:", error);
             if (error != FileViewError.FileNotFound) {
@@ -107,6 +206,39 @@ Singleton {
             id: persistentStatesJsonAdapter
 
             property string hyprlandInstanceSignature: ""
+
+            property JsonObject migrations: JsonObject {
+                property int presetUserDataVersion: 0
+            }
+
+            property JsonObject search: JsonObject {
+                property list<var> aliases: []
+            }
+
+            property JsonObject googleDrive: JsonObject {
+                property bool enabled: false
+                property string syncInterval: "3d" // "1h", "4h", "1d", "2d", "3d"
+                property bool syncOnBoot: true
+                property bool syncOnNetworkChange: false
+                property int bandwidthLimitKbps: 0
+                property bool pauseOnMeteredConnection: true
+                property list<string> backupFolders: []
+                property list<string> excludePatterns: ["*.tmp", "*.swp", "*.lock", "node_modules/", ".git/", "__pycache__/"]
+                property string driveBasePath: ""
+                property bool notifyOnComplete: true
+                property bool notifyOnError: true
+                property int keepVersions: 3
+                property bool deleteRemoteOrphans: false
+                property bool onlyModifiedSinceLastSync: false
+                property string lastSyncTime: ""
+                property string lastSyncStatus: ""
+                property int lastSyncFileCount: 0
+                property real lastSyncSizeMb: 0.0
+                property list<var> syncHistory: []
+                property real totalDriveUsageMb: 0.0
+                property real driveQuotaMb: 0.0
+                property real driveBackupUsageMb: 0.0
+            }
 
             property JsonObject ai: JsonObject {
                 property string provider: "google" // AI providers such as google, open router, mistral

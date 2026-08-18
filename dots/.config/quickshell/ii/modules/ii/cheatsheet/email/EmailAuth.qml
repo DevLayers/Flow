@@ -46,6 +46,10 @@ Item {
     }
 
     function saveGmailCredentials() {
+        KeyringStorage.setNestedFields([
+            { path: ["apiKeys", "gmail_client_id"], value: EmailService.tempGmailClientId },
+            { path: ["apiKeys", "gmail_client_secret"], value: EmailService.tempGmailClientSecret }
+        ]);
         saveGmailCredentialsProc.running = false;
         saveGmailCredentialsProc.running = true;
     }

@@ -543,6 +543,7 @@ Singleton {
             "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
             "appearance.colorEngine": ["vynx", "fork"],
             "background.zoomOutStyle": [0, 1, 2],
+            "background.overviewBackgroundStyle": ["", "gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional"],
             "background.mediaMode.visualizerMode": [0, 1, 2, 3],
             "background.mediaMode.syllable.textHighlightStyle": [0, 1],
             "bar.cornerStyle": [0, 1, 2, 3],
@@ -821,6 +822,9 @@ Singleton {
                 return;
             migrateRoundingConfig();
             syncAppLaunchAnimation();
+            if (Persistent.ready) {
+                Persistent.tryMigrateAndSyncUserData();
+            }
         }
         onLoadFailed: error => {
             if (error != FileViewError.FileNotFound) {
@@ -1994,6 +1998,9 @@ Singleton {
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
                 property bool windowZoomOnOverview: true // fake window scale-out during overview (GNOME-like)
                 property bool windowZoomLiveCapture: true // keep screencopy live instead of freezing on overview open
+                // Semantic style name. Empty keeps the legacy numeric setting
+                // active until the user chooses a new preset in Settings.
+                property string overviewBackgroundStyle: ""
                 property bool cheatsheetZoomOut: true
                 property bool overviewZoomOut: true
                 property bool workspaceBlur: false
@@ -2018,7 +2025,8 @@ Singleton {
                 property bool wpeDisableParallax: false
                 property bool wpeNoFullscreenPause: false
                 property bool wpePauseWhenWindowsOpen: false
-                property int zoomOutStyle: 2 // 0: Blurred Backing | 1: Mirrored Plane
+                // Deprecated compatibility mapping: 0 -> gnome, 1 -> soft-focus, 2 -> camera-push.
+                property int zoomOutStyle: 2
                 property bool blurWhenWindowsOpen: true
                 property int blurWhenWindowsOpenRadius: 41
                 property JsonObject gradientBlur: JsonObject {
