@@ -10,8 +10,8 @@ import qs.modules.common.widgets
 
 Item {
     id: sysTrayRoot
-    implicitWidth: gridLayout.implicitWidth
-    implicitHeight: gridLayout.implicitHeight
+    implicitWidth: hasItems ? gridLayout.implicitWidth : 0
+    implicitHeight: hasItems ? gridLayout.implicitHeight : 0
     property bool vertical: false
     property bool invertSide: false
     property bool trayOverflowOpen: false
