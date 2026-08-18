@@ -59,11 +59,56 @@ Singleton {
     property bool overviewOpen: false
     property bool searchOnlyMode: false
 
-    // scaleValue: animated 1.0 → ~0.85 during overview open (zoomOutStyle 0 only)
-    // originX/Y: scale transform center in screen coordinates
+    // Legacy Gnome-like window transition state.  These values intentionally
+    // remain global because the transition layer and the focused background
+    // share the same transform clock in the original implementation.
     property real overviewZoomScale: 1.0
     property real overviewZoomOriginX: 0.5
     property real overviewZoomOriginY: 0.5
+
+    // Shared trigger state for the per-monitor overview background controllers.
+    // Scratchpad is derived here so wallpaper, widgets, blur and transitions do
+    // not implement subtly different versions of the same predicate.
+    readonly property bool scratchpadOpen: {
+        const monitors = HyprlandData.monitors;
+        if (!monitors)
+            return false;
+        return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
+    }
+    readonly property bool overviewBackgroundActive: {
+        const background = Config.options && Config.options.background;
+        return Boolean(background && background.zoomOutEnabled && (root.overviewOpen || root.cheatsheetOpen || root.scratchpadOpen));
+    }
+
+    // BackgroundRoot owns one controller per monitor. Other background surfaces
+    // retrieve that same object instead of reimplementing its preset formulas.
+    property var overviewBackgroundControllers: ({})
+
+    function registerOverviewBackgroundController(screenName, controller) {
+        if (!screenName || !controller)
+            return;
+        const next = ({})
+        for (const key in root.overviewBackgroundControllers)
+            next[key] = root.overviewBackgroundControllers[key];
+        next[screenName] = controller;
+        root.overviewBackgroundControllers = next;
+    }
+
+    function unregisterOverviewBackgroundController(screenName, controller) {
+        if (!screenName || root.overviewBackgroundControllers[screenName] !== controller)
+            return;
+        const next = ({})
+        for (const key in root.overviewBackgroundControllers) {
+            if (key !== screenName)
+                next[key] = root.overviewBackgroundControllers[key];
+        }
+        root.overviewBackgroundControllers = next;
+    }
+
+    function overviewBackgroundControllerFor(screenName) {
+        return root.overviewBackgroundControllers[screenName] ?? null;
+    }
+
     property bool regionSelectorOpen: false
     property bool searchOpen: false
     property bool screenLocked: false
@@ -892,4 +937,3 @@ Singleton {
         }
     }
 }
-

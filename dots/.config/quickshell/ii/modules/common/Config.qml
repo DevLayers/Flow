@@ -543,7 +543,7 @@ Singleton {
             "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
             "appearance.colorEngine": ["vynx", "fork"],
             "background.zoomOutStyle": [0, 1, 2],
-            "background.overviewBackgroundStyle": ["", "gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional"],
+            "background.overviewBackgroundStyle": ["", "gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"],
             "background.mediaMode.visualizerMode": [0, 1, 2, 3],
             "background.mediaMode.syllable.textHighlightStyle": [0, 1],
             "bar.cornerStyle": [0, 1, 2, 3],
@@ -2001,6 +2001,8 @@ Singleton {
                 // Semantic style name. Empty keeps the legacy numeric setting
                 // active until the user chooses a new preset in Settings.
                 property string overviewBackgroundStyle: ""
+                property bool materialShapeShadow: false
+                property real materialShapeScale: 1.0
                 property bool cheatsheetZoomOut: true
                 property bool overviewZoomOut: true
                 property bool workspaceBlur: false

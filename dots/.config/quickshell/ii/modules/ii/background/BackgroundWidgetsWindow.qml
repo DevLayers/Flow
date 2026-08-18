@@ -25,6 +25,8 @@ PanelWindow {
     required property var widgetStateManager
 
     screen: modelData
+    readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
+    readonly property bool isGnomeLikeOverview: overviewController && overviewController.isGnomeLike
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Bottom
     WlrLayershell.namespace: "quickshell:backgroundWidgets"
@@ -229,35 +231,28 @@ PanelWindow {
         }
     }
 
-    readonly property bool scratchpadOpen: GlobalStates.scratchpadOpen ?? false
-    readonly property bool wallpaperZoomedOut: Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen) && (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name == screen.name : false)
+    readonly property bool overviewOpen: GlobalStates.overviewOpen
 
     OverviewZoomController {
-        id: ovZoom
-        wallpaperZoomedOut: bgWidgetsWindow.wallpaperZoomedOut
+        id: gnomeOverviewController
+        wallpaperZoomedOut: bgWidgetsWindow.isGnomeLikeOverview
+            && GlobalStates.overviewBackgroundActive
+            && bgWidgetsWindow.isMonitorFocused
         minSafeScale: bgWidgetsWindow.minSafeScale
         zoomOutCoverScale: 1.05
         screenWidth: bgWidgetsWindow.screen.width
         screenHeight: bgWidgetsWindow.screen.height
     }
 
-    property var zoomLevels: ({
-            "in": {
-                default: 1.04,
-                zoomed: 1
-            },
-            "out": {
-                default: 1,
-                zoomed: 1.01
-            }
-        })
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
-    readonly property bool overviewOpen: GlobalStates.overviewOpen
-
-    property real defaultRatio: zoomInStyle ? zoomLevels.in.default : zoomLevels.out.default
-    property real zoomedRatio: zoomInStyle ? zoomLevels.in.zoomed : zoomLevels.out.zoomed
+    readonly property var zoomLevels: ({
+        "in": { default: 1.04, zoomed: 1 },
+        "out": { default: 1, zoomed: 1.01 }
+    })
+    readonly property real defaultRatio: zoomInStyle ? zoomLevels.in.default : zoomLevels.out.default
+    readonly property real zoomedRatio: zoomInStyle ? zoomLevels.in.zoomed : zoomLevels.out.zoomed
 
     // overviewOpen also flips true for the plain search bar (searchOnlyMode, or when the
     // window-thumbnail grid is disabled/replaced by config); only suppress the blur when
@@ -269,7 +264,11 @@ PanelWindow {
         id: transformContainer
         anchors.fill: parent
 
-        opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "") ? 0.0 : 1.0
+        opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
+            ? 0.0
+            : (bgWidgetsWindow.isGnomeLikeOverview
+                ? 1.0
+                : (bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.opacityMultiplier : 1.0))
         visible: opacity > 0
         Behavior on opacity {
             NumberAnimation {
@@ -280,14 +279,36 @@ PanelWindow {
         antialiasing: true
         smooth: true
 
-        transform: Scale {
-            origin.x: ovZoom.scaleOriginX
-            origin.y: ovZoom.scaleOriginY
-            xScale: ovZoom.scaleValue
-            yScale: ovZoom.scaleValue
-        }
+        transform: [
+            Scale {
+                origin.x: bgWidgetsWindow.isGnomeLikeOverview
+                    ? gnomeOverviewController.scaleOriginX
+                    : (bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.scaleOriginX : bgWidgetsWindow.width / 2)
+                origin.y: bgWidgetsWindow.isGnomeLikeOverview
+                    ? gnomeOverviewController.scaleOriginY
+                    : (bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.scaleOriginY : bgWidgetsWindow.height / 2)
+                xScale: bgWidgetsWindow.isGnomeLikeOverview
+                    ? gnomeOverviewController.scaleValue
+                    : (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsScale ? bgWidgetsWindow.overviewController.scale : 1.0)
+                yScale: bgWidgetsWindow.isGnomeLikeOverview
+                    ? gnomeOverviewController.scaleValue
+                    : (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsScale ? bgWidgetsWindow.overviewController.scale : 1.0)
+            },
+            Translate {
+                x: !bgWidgetsWindow.isGnomeLikeOverview
+                    && bgWidgetsWindow.overviewController
+                    && bgWidgetsWindow.overviewController.followWidgetsTranslation
+                    ? bgWidgetsWindow.overviewController.translateX : 0
+                y: !bgWidgetsWindow.isGnomeLikeOverview
+                    && bgWidgetsWindow.overviewController
+                    && bgWidgetsWindow.overviewController.followWidgetsTranslation
+                    ? bgWidgetsWindow.overviewController.translateY : 0
+            }
+        ]
 
-        scale: !videoEffectsDisabled && showOpeningAnimation && overviewOpen && isScrollingLayout ? zoomedRatio : 1.0
+        scale: bgWidgetsWindow.isGnomeLikeOverview
+            ? (!videoEffectsDisabled && showOpeningAnimation && overviewOpen && isScrollingLayout ? zoomedRatio : defaultRatio)
+            : 1.0
         Behavior on scale {
             animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(transformContainer)
         }
