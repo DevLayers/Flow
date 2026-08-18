@@ -456,6 +456,10 @@ ColumnLayout {
             }
 
             Accessible.name: Translation.tr("Copy message")
+
+            StyledToolTip {
+                text: Translation.tr("Copy message")
+            }
         }
 
         RippleButton {
@@ -473,6 +477,10 @@ ColumnLayout {
                 text: "refresh"
                 iconSize: Appearance.font.pixelSize.smallie
                 color: Appearance.colors.colSubtext
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Regenerate response")
             }
         }
 
