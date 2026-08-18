@@ -72,7 +72,7 @@ Scope {
                 sessionLock.animateIn();
                 sessionSleep.animateIn();
                 sessionLogout.animateIn();
-                sessionTaskManager.animateIn();
+                sessionOledSaver.animateIn();
                 sessionHibernate.animateIn();
                 sessionShutdown.animateIn();
                 sessionReboot.animateIn();
@@ -84,7 +84,7 @@ Scope {
                 sessionLock.animateOut();
                 sessionSleep.animateOut();
                 sessionLogout.animateOut();
-                sessionTaskManager.animateOut();
+                sessionOledSaver.animateOut();
                 sessionHibernate.animateOut();
                 sessionShutdown.animateOut();
                 sessionReboot.animateOut();
@@ -249,17 +249,21 @@ Scope {
                                 sessionRoot.subtitle = buttonText;
                         }
                         KeyNavigation.left: sessionSleep
-                        KeyNavigation.right: sessionTaskManager
+                        KeyNavigation.right: sessionOledSaver
                         KeyNavigation.down: sessionReboot
                     }
                     SessionActionButton {
-                        id: sessionTaskManager
+                        id: sessionOledSaver
                         animIndex: 3
-                        buttonIcon: "browse_activity"
-                        buttonText: Translation.tr("Task Manager")
+                        buttonIcon: "tv_off"
+                        buttonText: Translation.tr("OLED Saver")
                         onClicked: {
-                            Session.launchTaskManager();
                             sessionRoot.hide();
+                            const name = Hyprland.focusedMonitor?.name || (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
+                            if (name) {
+                                const monitors = GlobalStates.oledSaverMonitors;
+                                GlobalStates.oledSaverMonitors = monitors.includes(name) ? monitors.filter(n => n !== name) : [...monitors, name];
+                            }
                         }
                         onFocusChanged: {
                             if (focus)
@@ -332,7 +336,7 @@ Scope {
                             if (focus)
                                 sessionRoot.subtitle = buttonText;
                         }
-                        KeyNavigation.up: sessionTaskManager
+                        KeyNavigation.up: sessionOledSaver
                         KeyNavigation.left: sessionReboot
                     }
                 }

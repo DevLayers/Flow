@@ -98,7 +98,7 @@ RippleButton { // Right sidebar button
             }
             Loader {
                 id: notificationUnreadCount
-                sourceComponent: Config.options.bar.styles.notification === "expressive" ? expressiveNotificationComp : defaultNotificationComp
+                sourceComponent: (Config.options.bar.styles.dashboard === "expressive") ? expressiveNotificationComp : defaultNotificationComp
             }
             Component {
                 id: defaultNotificationComp

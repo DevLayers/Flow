@@ -81,14 +81,42 @@ Singleton {
         updateCpuUsageHistory()
     }
 
-	property bool gpuMonitoringEnabled: false
-	onGpuMonitoringEnabledChanged: {
-		if (!gpuMonitoringEnabled) {
+	property bool resourcePopupMonitoringEnabled: false
+	property bool gpuMonitoringEnabled: resourcePopupMonitoringEnabled
+
+	readonly property int popupSampleIntervalMs: 1000
+	readonly property int popupHistoryWindowMs: 12000
+
+	readonly property int effectiveResourceInterval: resourcePopupMonitoringEnabled
+		? popupSampleIntervalMs
+		: (Config.options?.resources?.updateInterval ?? 1000)
+
+	readonly property int effectiveGpuInterval: resourcePopupMonitoringEnabled
+		? popupSampleIntervalMs
+		: (Config.options?.resources?.gpuInterval ?? 3000)
+
+	signal cpuSampled(real usage)
+	signal gpuSampled(real usage)
+
+	function requestGpuSample() {
+		if (!resourcePopupMonitoringEnabled) return
+		if (root.gpuVendor === "nvidia" || root.gpuVendor === "intel") {
+			if (!gpuMonitorProc.running) {
+				gpuMonitorProc.running = true
+			}
+		}
+	}
+
+	onResourcePopupMonitoringEnabledChanged: {
+		if (resourcePopupMonitoringEnabled) {
+			requestGpuSample()
+		} else {
 			gpuUsage = 0
 			gpuTemp = 0
 			previousIntelGpuSample = null
 		}
 	}
+
 
     // ── GPU vendor detection ────────────────────────────────────────
     // Detected once on boot. Drives which subsystem we poll for stats.
@@ -136,7 +164,7 @@ Singleton {
     // reuses FileView instances that just reload files in-place.
 	Timer {
         id: cpuRamTimer
-		interval: 1
+		interval: root.effectiveResourceInterval
 		running: true
 		repeat: true
 		onTriggered: {
@@ -173,22 +201,24 @@ Singleton {
 				previousCpuStats = { total, idle }
 			}
 
+			root.cpuSampled(root.cpuUsage)
+
 			// AMD GPU stats via sysfs (zero-cost, no fork)
-			if (root.gpuVendor === "amd" && root.gpuMonitoringEnabled) {
+			if (root.gpuVendor === "amd" && root.resourcePopupMonitoringEnabled) {
 				if (root.amdUsagePath) {
 					amdUsageFileView.reload()
 					const usage = Number(amdUsageFileView.text().trim() || 0)
-					root.gpuUsage = usage / 100
+					root.gpuUsage = Math.max(0, Math.min(1, usage / 100))
 				}
 				if (root.amdTempPath) {
 					amdTempFileView.reload()
 					const rawTemp = Number(amdTempFileView.text().trim() || 0)
 					root.gpuTemp = rawTemp > 1000 ? rawTemp / 1000 : rawTemp
 				}
+				root.gpuSampled(root.gpuUsage)
 			}
 
 			root.updateHistories()
-			interval = Config.options?.resources?.updateInterval ?? 3000
 		}
 	}
 
@@ -228,8 +258,13 @@ Singleton {
         id: gpuModelProc
         command: ["bash", "-c",
             "detect_nvidia() { " +
-            "  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then " +
-            "    echo 'NVIDIA|'$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null); return 0; " +
+            "  if command -v nvidia-smi >/dev/null 2>&1; then " +
+            "    name=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -n1); " +
+            "    if [ -n \"$name\" ]; then echo \"NVIDIA|$name\"; return 0; fi; " +
+            "    if lspci 2>/dev/null | grep -iq nvidia; then " +
+            "      model=$(lspci 2>/dev/null | grep -i -m1 nvidia | sed 's/.*: //'); " +
+            "      echo \"NVIDIA|$model\"; return 0; " +
+            "    fi; " +
             "  fi; return 1; " +
             "}; " +
             "detect_amd() { " +
@@ -426,6 +461,9 @@ Singleton {
             maxBusy = Math.max(maxBusy, classBusy[cls])
         }
         gpuUsage = Math.min(1, maxBusy)
+        if (prev) {
+            root.gpuSampled(root.gpuUsage)
+        }
     }
 
     Process {
@@ -486,10 +524,24 @@ Singleton {
                     root.parseIntelGpuSample(out)
                     return
                 }
-                const parts = out.split(/[\s,]+/)
-                if (parts.length >= 2) {
-                    root.gpuUsage = Number(parts[0]) / 100
-                    root.gpuTemp = Number(parts[1])
+                if (root.gpuVendor === "nvidia") {
+                    const lines = out.split("\n")
+                    for (const rawLine of lines) {
+                        const line = rawLine.trim()
+                        if (!line) continue
+                        const parts = line.split(/[\s,]+/)
+                        if (parts.length >= 2) {
+                            const rawUsage = Number(parts[0])
+                            const rawTemp = Number(parts[1])
+                            if (Number.isFinite(rawUsage) && Number.isFinite(rawTemp)) {
+                                const usageClamped = Math.max(0, Math.min(100, rawUsage))
+                                root.gpuUsage = usageClamped / 100
+                                root.gpuTemp = rawTemp
+                                root.gpuSampled(root.gpuUsage)
+                                break
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -500,15 +552,13 @@ Singleton {
 
     Timer {
         id: gpuMonitorTimer
-        interval: 2000
+        interval: root.effectiveGpuInterval
         repeat: true
-        running: root.gpuMonitoringEnabled && (root.gpuVendor === "nvidia" || root.gpuVendor === "intel")
+        running: root.resourcePopupMonitoringEnabled && (root.gpuVendor === "nvidia" || root.gpuVendor === "intel")
         onTriggered: {
-            if (!root.gpuMonitoringEnabled) return
+            if (!root.resourcePopupMonitoringEnabled) return
             if (root.gpuVendor !== "nvidia" && root.gpuVendor !== "intel") return
-            gpuMonitorProc.running = false
-            gpuMonitorProc.running = true
-            interval = Config.options?.resources?.gpuInterval ?? 3000
+            root.requestGpuSample()
         }
     }
 }

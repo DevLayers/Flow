@@ -45,7 +45,7 @@ Rectangle {
 
     property bool isFirst: itemIndex === 0
     property bool isLast: itemIndex === totalItems - 1
-    readonly property bool isPressed: false
+    readonly property bool isPressed: mouseArea.pressed
 
     readonly property bool prevIsPressed: {
         var p = parent;

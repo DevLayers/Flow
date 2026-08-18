@@ -22,9 +22,16 @@ Singleton {
     readonly property list<BrightnessMonitor> monitors: Quickshell.screens.map(screen => monitorComp.createObject(root, {
             screen
         }))
+    // Hyprland's follow_mouse=1 keeps focusedMonitor aligned with the output
+    // under the pointer, including when a global shortcut is used.
+    readonly property var targetScreen: Quickshell.screens.find(screen => screen.name === (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "")) || Quickshell.screens[0] || null
 
     function getMonitorForScreen(screen: ShellScreen): var {
         return monitors.find(m => m.screen === screen);
+    }
+
+    function getTargetMonitor(): var {
+        return root.getMonitorForScreen(root.targetScreen);
     }
 
     function increaseBrightness(): void {
@@ -34,15 +41,13 @@ Singleton {
             return;
         }
 
-        const focusedName = Hyprland.focusedMonitor.name;
-        const monitor = monitors.find(m => focusedName === m.screen.name);
+        const monitor = root.getTargetMonitor();
         if (monitor)
             monitor.setBrightness(monitor.brightness + 0.05);
     }
 
     function decreaseBrightness(): void {
-        const focusedName = Hyprland.focusedMonitor.name;
-        const monitor = monitors.find(m => focusedName === m.screen.name);
+        const monitor = root.getTargetMonitor();
         if (monitor && monitor.brightness > 0)
             monitor.setBrightness(monitor.brightness - 0.05);
         else
@@ -88,10 +93,6 @@ Singleton {
         onExited: root.ddcDetectFinished()
     }
 
-    Process {
-        id: setProc
-    }
-
     component BrightnessMonitor: QtObject {
         id: monitor
 
@@ -120,7 +121,7 @@ Singleton {
             }
         }
         onMultipliedBrightnessChanged: {
-            if (monitor.animationEnabled)
+            if (monitor.animateChanges)
                 syncBrightness();
             else
                 setTimer.restart();
@@ -149,6 +150,8 @@ Singleton {
             }
         }
 
+        readonly property Process setProc: Process {}
+
         // We need a delay for DDC monitors because they can be quite slow and might act weird with rapid changes
         property var setTimer: Timer {
             id: setTimer
@@ -162,13 +165,13 @@ Singleton {
             const brightnessValue = Math.max(monitor.multipliedBrightness, 0);
             if (isDdc) {
                 const rawValueRounded = Math.max(Math.floor(brightnessValue * monitor.rawMaxBrightness), 1);
-                setProc.exec(["ddcutil", "-b", busNum, "setvcp", "10", rawValueRounded]);
+                monitor.setProc.exec(["ddcutil", "-b", busNum, "setvcp", "10", rawValueRounded]);
             } else {
                 const valuePercentNumber = Math.floor(brightnessValue * 100);
                 let valuePercent = `${valuePercentNumber}%`;
                 if (valuePercentNumber == 0)
                     valuePercent = "1"; // Prevent fully black
-                setProc.exec(["brightnessctl", "--class", "backlight", "s", valuePercent, "--quiet"]);
+                monitor.setProc.exec(["brightnessctl", "--class", "backlight", "s", valuePercent, "--quiet"]);
             }
         }
 
@@ -250,11 +253,11 @@ Singleton {
         target: "brightness"
 
         function increment() {
-            onPressed: root.increaseBrightness();
+            root.increaseBrightness();
         }
 
         function decrement() {
-            onPressed: root.decreaseBrightness();
+            root.decreaseBrightness();
         }
     }
 

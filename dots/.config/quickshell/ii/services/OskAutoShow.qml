@@ -36,6 +36,12 @@ Singleton {
     // An activate that arrived without a preceding touch. Kept briefly in case the
     // helper's touch line lands just after it.
     property real pendingActivateMs: -Infinity
+    // Whether a text field is currently focused at the protocol level. Unlike
+    // GlobalStates.oskOpen, this doesn't flip when we hide the keyboard for a touch
+    // outside its bounds — the field stays focused, and no new `activate` line will
+    // ever arrive to tell us that. Without this, a second tap in the same field would
+    // be silently dropped instead of raising the keyboard back up.
+    property bool textInputActive: false
 
     function show() {
         hideTimer.stop();
@@ -74,17 +80,25 @@ Singleton {
 
         // The helper's touch line normally precedes activate, but the two arrive on
         // different threads — honour a very recent activate that missed its window.
-        if (!GlobalStates.oskOpen && now - root.pendingActivateMs <= 300) {
+        // Also re-show for a field that's still focused: it won't send another
+        // activate just because we hid the keyboard out from under it.
+        if (!GlobalStates.oskOpen && (root.textInputActive || now - root.pendingActivateMs <= 300)) {
             root.pendingActivateMs = -Infinity;
             root.show();
             return;
         }
 
         if (!GlobalStates.oskOpen || !(root.opts?.hideOnTouchOutside ?? true)) return;
+        // A still-focused field's own area counts as "outside keyboard bounds" too —
+        // e.g. tapping it again to move the cursor. Let `deactivate` drive hiding
+        // instead of guessing from touch position while the field is still active.
+        if (root.textInputActive) return;
         if (root.outsideKeyboard(x, y)) root.scheduleHide();
     }
 
     function onActivate() {
+        root.textInputActive = true;
+
         // Tapping straight from one text field into another emits deactivate then
         // activate; cancelling the pending hide keeps the keyboard from flickering.
         hideTimer.stop();
@@ -105,6 +119,7 @@ Singleton {
             root.onActivate();
             break;
         case "deactivate":
+            root.textInputActive = false;
             root.scheduleHide();
             break;
         case "touch":
@@ -151,6 +166,7 @@ Singleton {
             root.hideNow();
             root.lastPointerMs = -Infinity;
             root.pendingActivateMs = -Infinity;
+            root.textInputActive = false;
         }
     }
 }

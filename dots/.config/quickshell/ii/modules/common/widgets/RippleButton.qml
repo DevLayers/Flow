@@ -26,13 +26,18 @@ Button {
     property var backClickAction
     property var enteredAction
     property var exitedAction
+    property var pressedAction
+    property var positionChangedAction
+    property var canceledAction
 
     property bool useDynamicRadius: false
 
     readonly property int itemIndex: {
-        if (!useDynamicRadius) return 0;
+        if (!useDynamicRadius)
+            return 0;
         var p = parent;
-        if (!p) return 0;
+        if (!p)
+            return 0;
         var children = p.children;
         var selfIdx = -1;
         for (var i = 0; i < children.length; ++i) {
@@ -41,8 +46,9 @@ Button {
                 break;
             }
         }
-        if (selfIdx === -1) return 0;
-        
+        if (selfIdx === -1)
+            return 0;
+
         var startIdx = 0;
         for (var i = selfIdx - 1; i >= 0; --i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -50,7 +56,7 @@ Button {
                 break;
             }
         }
-        
+
         var idx = 0;
         for (var i = startIdx; i < selfIdx; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
@@ -61,9 +67,11 @@ Button {
     }
 
     readonly property int totalItems: {
-        if (!useDynamicRadius) return 1;
+        if (!useDynamicRadius)
+            return 1;
         var p = parent;
-        if (!p) return 1;
+        if (!p)
+            return 1;
         var children = p.children;
         var selfIdx = -1;
         for (var i = 0; i < children.length; ++i) {
@@ -72,8 +80,9 @@ Button {
                 break;
             }
         }
-        if (selfIdx === -1) return 1;
-        
+        if (selfIdx === -1)
+            return 1;
+
         var startIdx = 0;
         for (var i = selfIdx - 1; i >= 0; --i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -81,7 +90,7 @@ Button {
                 break;
             }
         }
-        
+
         var endIdx = children.length - 1;
         for (var i = selfIdx + 1; i < children.length; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -89,7 +98,7 @@ Button {
                 break;
             }
         }
-        
+
         var count = 0;
         for (var i = startIdx; i <= endIdx; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
@@ -103,9 +112,11 @@ Button {
     property bool isLast: useDynamicRadius ? (itemIndex === totalItems - 1) : false
 
     readonly property bool prevIsPressed: {
-        if (!useDynamicRadius) return false;
+        if (!useDynamicRadius)
+            return false;
         var p = parent;
-        if (!p) return false;
+        if (!p)
+            return false;
         var children = p.children;
         var selfIdx = -1;
         for (var i = 0; i < children.length; ++i) {
@@ -114,8 +125,9 @@ Button {
                 break;
             }
         }
-        if (selfIdx <= 0) return false;
-        
+        if (selfIdx <= 0)
+            return false;
+
         var startIdx = 0;
         for (var i = selfIdx - 1; i >= 0; --i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -123,7 +135,7 @@ Button {
                 break;
             }
         }
-        
+
         for (var i = selfIdx - 1; i >= startIdx; --i) {
             var child = children[i];
             if (child.visible && typeof child.topLeftRadius !== "undefined") {
@@ -134,9 +146,11 @@ Button {
     }
 
     readonly property bool nextIsPressed: {
-        if (!useDynamicRadius) return false;
+        if (!useDynamicRadius)
+            return false;
         var p = parent;
-        if (!p) return false;
+        if (!p)
+            return false;
         var children = p.children;
         var selfIdx = -1;
         for (var i = 0; i < children.length; ++i) {
@@ -145,8 +159,9 @@ Button {
                 break;
             }
         }
-        if (selfIdx === -1 || selfIdx >= children.length - 1) return false;
-        
+        if (selfIdx === -1 || selfIdx >= children.length - 1)
+            return false;
+
         var endIdx = children.length - 1;
         for (var i = selfIdx + 1; i < children.length; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -154,7 +169,7 @@ Button {
                 break;
             }
         }
-        
+
         for (var i = selfIdx + 1; i <= endIdx; ++i) {
             var child = children[i];
             if (child.visible && typeof child.topLeftRadius !== "undefined") {
@@ -166,7 +181,8 @@ Button {
 
     readonly property bool isHorizontalLayout: {
         var p = parent;
-        if (!p) return false;
+        if (!p)
+            return false;
         var pStr = p.toString();
         return (pStr.indexOf("RowLayout") !== -1 || pStr.indexOf("Row") !== -1) && pStr.indexOf("Column") === -1;
     }
@@ -178,10 +194,22 @@ Button {
     property real bottomLeftRadius: useDynamicRadius ? ((isPressed || nextIsPressed) ? rFull : (isHorizontalLayout ? (isFirst ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4) : (isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4))) : buttonEffectiveRadius
     property real bottomRightRadius: useDynamicRadius ? ((isPressed || nextIsPressed) ? rFull : (isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4)) : buttonEffectiveRadius
 
-    Behavior on topLeftRadius { enabled: root.useDynamicRadius; animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on topRightRadius { enabled: root.useDynamicRadius; animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on bottomLeftRadius { enabled: root.useDynamicRadius; animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on bottomRightRadius { enabled: root.useDynamicRadius; animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on topLeftRadius {
+        enabled: root.useDynamicRadius
+        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    Behavior on topRightRadius {
+        enabled: root.useDynamicRadius
+        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    Behavior on bottomLeftRadius {
+        enabled: root.useDynamicRadius
+        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    Behavior on bottomRightRadius {
+        enabled: root.useDynamicRadius
+        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
 
     property color colBackground: ColorUtils.transparentize(Appearance?.colors.colLayer1Hover, 1) || "transparent"
     property color colBackgroundHover: Appearance?.colors.colLayer1Hover ?? "#E5DFED"
@@ -191,6 +219,8 @@ Button {
     property color colBackgroundToggledActive: Appearance?.colors.colPrimaryActive ?? colBackgroundToggledHover
     property color colRipple: Appearance?.colors.colLayer1Active ?? "#D6CEE2"
     property color colRippleToggled: Appearance?.colors.colPrimaryActive ?? "#D6CEE2"
+    property real borderWidth: 0
+    property color borderColor: Appearance?.colors.colOutline ?? "transparent"
 
     Behavior on buttonEffectiveRadius {
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -233,12 +263,17 @@ Button {
         anchors.fill: parent
         hoverEnabled: root.hoverEnabled
         cursorShape: root.pointingHandCursor ? Qt.PointingHandCursor : Qt.ArrowCursor
-        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton | Qt.BackButton | Qt.ExtraButton1
+        // Only controls with an explicit side-button action should consume
+        // it. Other buttons leave the gesture available to SettingsWindow's
+        // local history handler without depending on a global singleton.
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton | (root.backClickAction ? Qt.BackButton | Qt.ExtraButton1 : Qt.NoButton)
         onEntered: {
-            if (root.enteredAction) root.enteredAction()
+            if (root.enteredAction)
+                root.enteredAction();
         }
         onExited: {
-            if (root.exitedAction) root.exitedAction()
+            if (root.exitedAction)
+                root.exitedAction();
         }
         onPressed: event => {
             if (event.button === Qt.RightButton) {
@@ -257,11 +292,16 @@ Button {
                 return;
             }
             root.down = true;
+            if (root.pressedAction)
+                root.pressedAction(event);
             if (root.downAction)
                 root.downAction();
             if (!root.rippleEnabled)
                 return;
-            const { x, y } = event;
+            const {
+                x,
+                y
+            } = event;
             startRipple(x, y);
         }
         onReleased: event => {
@@ -275,8 +315,14 @@ Button {
                 return;
             rippleFadeAnim.restart();
         }
+        onPositionChanged: event => {
+            if (root.positionChangedAction)
+                root.positionChangedAction(event);
+        }
         onCanceled: event => {
             root.down = false;
+            if (root.canceledAction)
+                root.canceledAction(event);
             if (!root.rippleEnabled)
                 return;
             rippleFadeAnim.restart();
@@ -296,9 +342,21 @@ Button {
         property real x
         property real y
         property real radius
-        PropertyAction { target: ripple; property: "x"; value: rippleAnim.x }
-        PropertyAction { target: ripple; property: "y"; value: rippleAnim.y }
-        PropertyAction { target: ripple; property: "opacity"; value: 1 }
+        PropertyAction {
+            target: ripple
+            property: "x"
+            value: rippleAnim.x
+        }
+        PropertyAction {
+            target: ripple
+            property: "y"
+            value: rippleAnim.y
+        }
+        PropertyAction {
+            target: ripple
+            property: "opacity"
+            value: 1
+        }
         ParallelAnimation {
             RippleAnim {
                 target: ripple
@@ -317,6 +375,8 @@ Button {
         bottomRightRadius: root.bottomRightRadius
         implicitHeight: 30
         color: root.buttonColor
+        border.width: root.borderWidth
+        border.color: root.borderColor
         Behavior on color {
             animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
         }
@@ -348,9 +408,18 @@ Button {
             RadialGradient {
                 anchors.fill: parent
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: root.rippleColor }
-                    GradientStop { position: 0.3; color: root.rippleColor }
-                    GradientStop { position: 0.5; color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0) }
+                    GradientStop {
+                        position: 0.0
+                        color: root.rippleColor
+                    }
+                    GradientStop {
+                        position: 0.3
+                        color: root.rippleColor
+                    }
+                    GradientStop {
+                        position: 0.5
+                        color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
+                    }
                 }
             }
             transform: Translate {

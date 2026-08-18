@@ -47,6 +47,10 @@ Scope {
     ]
 
     function triggerOsd() {
+        if (Config.ready && Config.options.osd && Config.options.osd.hideWhenFullscreen && Notifications.focusedWindowFullscreen)
+            return;
+        if (!root.currentIndicator)
+            root.currentIndicator = "volume";
         GlobalStates.osdVolumeOpen = true;
         osdTimeout.restart();
     }
@@ -59,6 +63,14 @@ Scope {
         onTriggered: {
             GlobalStates.osdVolumeOpen = false;
             root.protectionMessage = "";
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        ignoreUnknownSignals: true
+        function onOsdInteraction() {
+            root.triggerOsd();
         }
     }
 

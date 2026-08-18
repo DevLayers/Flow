@@ -20,6 +20,10 @@ depends=(
   python-dbus
   # ── Python GObject introspection (GLib mainloop in monitor.py)
   python-gobject
+  # ── APK parsing (launcher icons in the Android app list)
+  python-pyaxmlparser
+  # ── Image handling (icon cropping/resizing in android_icon_extractor.py)
+  python-pillow
   # ── Clipboard (wl-copy for install guide copy buttons) ──
   wl-clipboard
   # ── Notifications (notify-send for battery alerts) ───────

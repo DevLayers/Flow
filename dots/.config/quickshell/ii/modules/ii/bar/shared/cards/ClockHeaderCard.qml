@@ -45,35 +45,11 @@ Rectangle {
         }
     }
 
-    Connections {
-        target: root
-        function onPopupOpenProgressChanged() {
-            if (root && root.popupOpenProgress === 0.0) {
-                clockCircleAnim.stop();
-                clockHandAnim.stop();
-                timeAnim.stop();
-                ampmAnim.stop();
-                dayAnim.stop();
-                dateAnim.stop();
-
-                clockCircle.opacity = 0.0;
-                clockCircleTranslate.x = -50;
-                clockHand.opacity = 0.0;
-                timeText.opacity = 0.0;
-                timeText.scale = 0.9;
-                ampmText.opacity = 0.0;
-                ampmText.scale = 0.9;
-                dayText.opacity = 0.0;
-                dayText.translateX = 20;
-                dateText.opacity = 0.0;
-                dateText.translateX = 20;
-            }
-        }
-    }
-
-    // Clip content to card's rounded borders using OpacityMask
+    // Keep rounded clipping for the oversized clock artwork. Render the mask
+    // layer at 2x so the popup scale does not enlarge a low-resolution card.
     layer.enabled: true
     layer.smooth: true
+    layer.textureSize: Qt.size(Math.max(1, Math.ceil(width * 2)), Math.max(1, Math.ceil(height * 2)))
     layer.effect: OpacityMask {
         maskSource: Rectangle {
             width: root.width
@@ -272,64 +248,7 @@ Rectangle {
         }
     }
 
-    // Inner shadow mask canvas to create a solid frame with a rounded rectangle cutout matching the card
-    Canvas {
-        id: shadowMaskCanvas
-        x: -80
-        y: -80
-        // Expand the canvas bounds significantly to prevent the drop shadow blur from being clipped
-        width: root.width + 160
-        height: root.height + 160
-        visible: false
 
-        onPaint: {
-            var ctx = getContext("2d");
-            ctx.reset();
-            ctx.fillStyle = "black";
-            ctx.beginPath();
-            
-            // Outer rectangle covering the expanded canvas size
-            ctx.rect(0, 0, width, height);
-            
-            // Inner rounded rectangle matching the card's position and rounding
-            var rx = 80;
-            var ry = 80;
-            var rw = root.width;
-            var rh = root.height;
-            var r = root.radius;
-            
-            ctx.moveTo(rx + r, ry);
-            ctx.arcTo(rx, ry, rx, ry + r, r);
-            ctx.lineTo(rx, ry + rh - r);
-            ctx.arcTo(rx, ry + rh, rx + r, ry + rh, r);
-            ctx.lineTo(rx + rw - r, ry + rh);
-            ctx.arcTo(rx + rw, ry + rh, rx + rw, ry + rh - r, r);
-            ctx.lineTo(rx + rw, ry + r);
-            ctx.arcTo(rx + rw, ry, rx + rw - r, ry, r);
-            ctx.lineTo(rx + r, ry);
-            
-            ctx.closePath();
-            ctx.fill("evenodd");
-        }
-
-        onWidthChanged: requestPaint()
-        onHeightChanged: requestPaint()
-    }
-
-    // DropShadow casting inward from the mask frame, creating the inner shadow effect
-    DropShadow {
-        id: innerShadow
-        x: -80
-        y: -80
-        width: shadowMaskCanvas.width
-        height: shadowMaskCanvas.height
-        source: shadowMaskCanvas
-        radius: 40 // high radius for soft blur
-        samples: 81 // high samples for smooth blur
-        color: Qt.rgba(0, 0, 0, 0.25) // high opacity, deep shadow
-        horizontalOffset: 0
-        verticalOffset: 0
-    }
 
     // Right-side time & date information
     ColumnLayout {

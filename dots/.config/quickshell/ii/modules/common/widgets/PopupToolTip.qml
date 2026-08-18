@@ -20,7 +20,8 @@ Item {
         tooltipLoader.item?.anchor.updateAnchor();
     }
 
-    readonly property bool internalVisibleCondition: (extraVisibleCondition && (parent.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition
+    readonly property bool internalVisibleCondition: Config.options.bar.tooltips.enableTooltips
+        && ((extraVisibleCondition && (parent.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition)
 
     // PopupAnchor dereferences whatever it is handed without a null check, so the tooltip
     // window must not exist at all while we have nothing valid to anchor it to. That happens
@@ -42,7 +43,7 @@ Item {
     Loader {
         id: tooltipLoader
         anchors.fill: parent
-        active: root.internalVisibleCondition && root.hostWindow !== null && root.parent !== null
+        active: Config.options.bar.tooltips.enableTooltips && root.internalVisibleCondition && root.hostWindow !== null && root.parent !== null
         sourceComponent: PopupWindow {
             id: tooltipWindow
             visible: true

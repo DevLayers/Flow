@@ -506,6 +506,7 @@ Item {
                                 required property int index
 
                                 Layout.fillWidth: true
+                                Layout.fillHeight: false
                                 bounce: true
                                 buttonText: modelData.label
                                 toggled: root.selectedType === modelData.id

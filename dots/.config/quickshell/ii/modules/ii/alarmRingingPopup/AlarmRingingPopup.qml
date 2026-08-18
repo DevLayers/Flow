@@ -31,14 +31,6 @@ Scope {
             right: true
         }
 
-        // Catch dismiss keys
-        Keys.onPressed: event => {
-            if (event.key === Qt.Key_Escape || event.key === Qt.Key_Space || event.key === Qt.Key_Return) {
-                AlarmService.stopRinging();
-                event.accepted = true;
-            }
-        }
-
         // Center card container
         Rectangle {
             id: centerCard
@@ -47,6 +39,15 @@ Scope {
             height: 350
             radius: Appearance.rounding.large
             color: ColorUtils.transparentize(Appearance.colors.colSurfaceContainerHigh, 0.15)
+            focus: popupWindow.visible
+
+            // Catch dismiss keys
+            Keys.onPressed: event => {
+                if (event.key === Qt.Key_Escape || event.key === Qt.Key_Space || event.key === Qt.Key_Return) {
+                    AlarmService.stopRinging();
+                    event.accepted = true;
+                }
+            }
 
             ColumnLayout {
                 anchors.fill: parent

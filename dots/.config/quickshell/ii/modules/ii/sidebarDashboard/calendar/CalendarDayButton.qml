@@ -52,7 +52,7 @@ RippleButton {
 
     SequentialAnimation {
         id: entranceAnim
-        PauseAnimation { duration: (button.gridRow + button.gridCol) * 28 }
+        PauseAnimation { duration: Math.max(0, Math.round(((button.gridRow ?? 0) + (button.gridCol ?? 0)) * 28)) }
         ParallelAnimation {
             NumberAnimation { target: button; property: "_entranceOpacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
             NumberAnimation { target: button; property: "_entranceScale"; from: 0.82; to: 1.0; duration: 280; easing.type: Easing.OutBack }

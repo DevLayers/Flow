@@ -212,8 +212,6 @@ Item {
             implicitSize: dropContainer._cornerRadius
             color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
             corner: RoundCorner.CornerEnum.BottomRight
-            extendHorizontal: true
-            extendVertical: true
             anchors.right: parent.left
             anchors.bottom: parent.bottom
         }
@@ -224,8 +222,6 @@ Item {
             implicitSize: dropContainer._cornerRadius
             color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
             corner: RoundCorner.CornerEnum.BottomLeft
-            extendHorizontal: true
-            extendVertical: true
             anchors.left: parent.right
             anchors.bottom: parent.bottom
         }

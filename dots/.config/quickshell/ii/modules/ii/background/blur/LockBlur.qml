@@ -12,9 +12,11 @@ Item {
     required property real baseScale
     required property bool lockAnimationActive
 
+    property bool wallpaperIsVideo: false
+
     Loader {
         id: blurLoader
-        active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || opacityAnim.running)
+        active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || opacityAnim.running) && !lockBlurRoot.wallpaperIsVideo
         anchors.fill: parent
         opacity: GlobalStates.screenLocked ? 1.0 : 0.0
         Behavior on opacity {

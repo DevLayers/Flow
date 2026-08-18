@@ -150,6 +150,8 @@ PROTECTED_PATTERNS=(
     "scripts/hyprland/workspace_compactor"
     "scripts/hyprland/workspace_profile_manager"
     "scripts/osk/osk_autoshow"
+    "scripts/appStats/app_stats"
+    "scripts/touchGestures/touch_gestures"
 )
 
 # ── The fork's Hyprland config ───────────────────────────────────────────────
@@ -699,18 +701,23 @@ ui_die() {
     exit "${3:-1}"
 }
 
-# ui_confirm <question> — honours --yes, refuses to hang on a non-interactive stdin.
+# ui_confirm <question> [default] — honours --yes, refuses to hang on a
+# non-interactive stdin. Pass "yes" as the second argument to make a bare Enter
+# accept; anything else keeps the cautious no-by-default behaviour.
 ui_confirm() {
     [[ "$OPT_ASSUME_YES" == true ]] && return 0
     if [[ ! -t 0 ]]; then
         ui_die "Confirmation required" "stdin is not a terminal — re-run with --yes"
     fi
+    local default_yes=false hint='(y/N)'
+    [[ "${2:-}" == "yes" ]] && { default_yes=true; hint='(Y/n)'; }
     ui_clear_line
-    printf '  %s%-*s%s %s %s(y/N)%s ' \
-        "$C_WARN" "$G_W" "$G_WARN" "$C_RST" "$1" "$C_SUB" "$C_RST"
+    printf '  %s%-*s%s %s %s%s%s ' \
+        "$C_WARN" "$G_W" "$G_WARN" "$C_RST" "$1" "$C_SUB" "$hint" "$C_RST"
     local reply
     read -r reply || reply=""
     printf '\n'
+    [[ -z "$reply" && "$default_yes" == true ]] && return 0
     [[ "$reply" =~ ^[Yy]$ ]]
 }
 
@@ -1483,6 +1490,30 @@ start_quickshell() {
     return 0
 }
 
+open_welcome_after_start() {
+    local attempt
+    local ipc_bin=""
+
+    if have qs; then
+        ipc_bin="qs"
+    elif have quickshell; then
+        ipc_bin="quickshell"
+    else
+        ui_warn "Welcome couldn't be opened via IPC, you can open it using SUPER + ALT + SHIFT + /."
+        return 0
+    fi
+
+    for attempt in {1..50}; do
+        if "$ipc_bin" -c ii ipc call welcome open >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 0.2
+    done
+
+    ui_warn "Welcome couldn't be opened via IPC, you can open it using SUPER + ALT + SHIFT + /."
+    return 0
+}
+
 restart_quickshell() {
     [[ "$OPT_RESTART" == true ]] || {
         ui_note "Restart skipped (--no-restart)."
@@ -1573,6 +1604,32 @@ remove_cli() {
 # The pipeline
 #══════════════════════════════════════════════════════════════════════════════
 
+backup_hyprland_config() {
+    local dest="$XDG_CONFIG_HOME/hypr"
+    [[ -d "$dest" ]] || return 0
+
+    local stamp backup_dir entry
+    stamp="$(date +%Y%m%d_%H%M%S)"
+    backup_dir="$dest/hyprland_backup_$stamp"
+    mkdir -p "$backup_dir" || {
+        ui_warn "Could not create Hyprland backup directory: $(tilde "$backup_dir")"
+        return 1
+    }
+
+    # Keep the backup inside ~/.config/hypr without recursively copying older
+    # backups into the new one.
+    while IFS= read -r -d '' entry; do
+        cp -a "$entry" "$backup_dir/" || {
+            ui_warn "Could not back up Hyprland config entry: $(basename "$entry")"
+            return 1
+        }
+    done < <(find "$dest" -mindepth 1 -maxdepth 1 -print0 2>/dev/null | while IFS= read -r -d '' entry; do
+        [[ "$(basename "$entry")" == hyprland_backup_* ]] || printf '%s\0' "$entry"
+    done)
+
+    ui_note "Hyprland backup: $(tilde "$backup_dir")"
+}
+
 # install_hypr_config <repo_root>
 #
 # Overlays the fork's dots/.config/hypr onto ~/.config/hypr. An overlay and not
@@ -1604,11 +1661,12 @@ install_hypr_config() {
             ui_note "Left $(tilde "$dest") alone. Pass --hypr to install it."
             return 0
         fi
-        ui_confirm "Also install this fork's Hyprland config into $(tilde "$dest")?" || {
+        ui_confirm "Also install this fork's Hyprland config into $(tilde "$dest")?" yes || {
             ui_note "Left $(tilde "$dest") alone."
             return 0
         }
     fi
+    backup_hyprland_config || return 1
 
     ui_step "Hyprland"
     local backup_dir="" added=0 replaced=0 seeded=0 kept=0 same=0
@@ -1691,6 +1749,19 @@ install_hypr_config() {
 apply_config() {
     local url="$1" branch="$2" fork="$3" verb="$4"
     local head="" source_dir="" dirty=""
+    local target_managed=false
+    if [[ -e "$TARGET_DIR" || -L "$TARGET_DIR" ]]; then
+        # The directory may already exist because the base installer created
+        # it, or because the user copied a fork over it by hand.  Neither case
+        # proves that this setup script has deployed this tree before.  Only
+        # our deployment markers are reliable evidence of a managed target.
+        if [[ -f "$TARGET_DIR/.active-fork" ||
+            -f "$TARGET_DIR/.active-remote" ||
+            -f "$TARGET_DIR/.active-local" ||
+            -f "$TARGET_DIR/.active-commit" ]]; then
+            target_managed=true
+        fi
+    fi
 
     if [[ -n "$LOCAL_SRC" ]]; then
         # A local deploy has no remote to speak of, so everything the state
@@ -1727,7 +1798,7 @@ apply_config() {
     if [[ "$OPT_ASSUME_YES" != true ]]; then
         local with="$fork/$branch"
         [[ -n "$LOCAL_SRC" ]] && with="$(tilde "$LOCAL_SRC")"
-        ui_confirm "Replace $(tilde "$TARGET_DIR") with $with?" || {
+        ui_confirm "Replace $(tilde "$TARGET_DIR") with $with?" yes || {
             ui_note "Cancelled."
             return 0
         }
@@ -1816,7 +1887,19 @@ apply_config() {
     fi
 
     handle_base_config "$verb"
+
+    # A fresh install is opened explicitly through the running shell's IPC.
+    # Updates and fork switches keep the Welcome closed.
+    local fresh_deploy=false
+    if [[ "$verb" == "install" || ( "$verb" == "apply" && "$target_managed" != true ) ]]; then
+        fresh_deploy=true
+    fi
+
     start_quickshell
+
+    if [[ "$fresh_deploy" == true ]]; then
+        open_welcome_after_start
+    fi
 
     local summary="$fork/$branch${head:+ @ ${head:0:8}}"
     [[ -n "$LOCAL_SRC" ]] && summary="local $G_ARROW $(tilde "$LOCAL_SRC")"

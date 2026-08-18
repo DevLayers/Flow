@@ -58,9 +58,11 @@ MouseArea {
     }
 
     StyledPopup {
+        id: sharePopup
         hoverTarget: indicator
         animate: false
         contentItem: HeroCard {
+            startAnim: sharePopup.opened && sharePopup.popupOpenProgress > 0.6
             compactMode: true
             anchors.centerIn: parent
             icon: "cast_connected"

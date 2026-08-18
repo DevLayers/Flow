@@ -10,8 +10,10 @@ ToolTip {
     property bool extraVisibleCondition: true
     property bool alternativeVisibleCondition: false
 
-    readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.sessionOpen
-    readonly property bool internalVisibleCondition: ((extraVisibleCondition && (parent.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition) && sidebarOpen
+    readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.sessionOpen || GlobalStates.usageOpen
+    readonly property bool internalVisibleCondition: Config.options.bar.tooltips.enableTooltips
+        && ((extraVisibleCondition && (parent.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition)
+        && sidebarOpen
     verticalPadding: 5
     horizontalPadding: 10
     background: null
@@ -24,13 +26,14 @@ ToolTip {
     
 
     delay: 0
+    enabled: Config.options.bar.tooltips.enableTooltips
     visible: internalVisibleCondition
     
     contentItem: StyledToolTipContent {
         id: contentItem
         font: root.font
         text: root.text
-        shown: root.internalVisibleCondition
+        shown: root.visible
         horizontalPadding: root.horizontalPadding
         verticalPadding: root.verticalPadding
     }

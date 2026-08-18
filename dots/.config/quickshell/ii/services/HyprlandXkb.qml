@@ -4,15 +4,19 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
-import qs.modules.common
 
 /**
  * Exposes the active Hyprland Xkb keyboard layout name and code for indicators.
+ *
+ * It only reports. It used to also write the layout into the on-screen keyboard's config on every
+ * switch, which meant the keyboard could never be pinned to a layout and the config file carried a
+ * value nobody chose; the keyboard reads this service directly instead.
  */
 Singleton {
     id: root
     // You can read these
     property list<string> layoutCodes: []
+    property list<string> layoutVariants: []
     property var cachedLayoutCodes: ({})
     property string currentLayoutName: ""
     property string currentLayoutCode: ""
@@ -81,10 +85,24 @@ Singleton {
         stdout: StdioCollector {
             id: devicesCollector
             onStreamFinished: {
-                const parsedOutput = JSON.parse(devicesCollector.text);
-                const hyprlandKeyboard = parsedOutput["keyboards"].find(kb => kb.main === true);
-                root.layoutCodes = hyprlandKeyboard["layout"].split(",");
-                root.currentLayoutName = hyprlandKeyboard["active_keymap"];
+                let parsedOutput;
+                try {
+                    parsedOutput = JSON.parse(devicesCollector.text);
+                } catch (error) {
+                    console.warn("[HyprlandXkb] Could not parse Hyprland devices:", error);
+                    return;
+                }
+
+                const hyprlandKeyboard = (parsedOutput["keyboards"] ?? [])
+                    .find(kb => kb.main === true);
+                if (!hyprlandKeyboard)
+                    return;
+
+                const layoutValue = String(hyprlandKeyboard["layout"] ?? "");
+                const variantValue = String(hyprlandKeyboard["variant"] ?? "");
+                root.layoutCodes = layoutValue.length > 0 ? layoutValue.split(",") : [];
+                root.layoutVariants = variantValue.length > 0 ? variantValue.split(",") : [];
+                root.currentLayoutName = String(hyprlandKeyboard["active_keymap"] ?? "");
                 // console.log("[HyprlandXkb] Fetched | Layouts (multiple: " + (root.layoutCodes.length > 1) + "): "
                 //     + root.layoutCodes.join(", ") + " | Active: " + root.currentLayoutName);
             }
@@ -107,9 +125,6 @@ Singleton {
                 // Update when layout might have changed
                 const dataString = event.data;
                 root.currentLayoutName = dataString.substring(dataString.indexOf(",") + 1);
-
-                // Update layout for on-screen keyboard (osk)
-                Config.options.osk.layout = root.currentLayoutName.split(" (")[0];
             } else if (event.name == "configreloaded") {
                 // Mark layout code list to be updated when config is reloaded
                 root.needsLayoutRefresh = true;

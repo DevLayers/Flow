@@ -21,7 +21,9 @@ Scope {
 
             // Horizontal Bar Space Reserver Loader
             Loader {
-                active: !Config.options.bar.vertical && GlobalStates.barOpen && !GlobalStates.screenLocked && GlobalStates.isScreenAllowedForBar(monitorScope.modelData)
+                // Keep the reserver mapped while the shared lock transition
+                // runs so the compositor does not rebuild layer geometry.
+                active: !Config.options.bar.vertical && GlobalStates.barOpen && GlobalStates.isScreenAllowedForBar(monitorScope.modelData)
                 sourceComponent: PanelWindow {
                     id: hBarSpaceReserver
                     screen: monitorScope.modelData
@@ -50,7 +52,7 @@ Scope {
 
             // Vertical Bar Space Reserver Loader
             Loader {
-                active: Config.options.bar.vertical && GlobalStates.barOpen && !GlobalStates.screenLocked && GlobalStates.isScreenAllowedForBar(monitorScope.modelData)
+                active: Config.options.bar.vertical && GlobalStates.barOpen && GlobalStates.isScreenAllowedForBar(monitorScope.modelData)
                 sourceComponent: PanelWindow {
                     id: vBarSpaceReserver
                     screen: monitorScope.modelData

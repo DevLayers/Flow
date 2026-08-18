@@ -1103,16 +1103,37 @@ ContentPage {
 
             Repeater {
                 model: monitorConfig.profiles
-                delegate: MonitorProfileCard {
-                    profileName: modelData.name
-                    isActive: modelData.isActive
-                    onApplyClicked: {
-                        monitorConfig.applyProfile(modelData.name);
-                        Quickshell.execDetached(["notify-send", "Monitors", Translation.tr(`Profile '${modelData.name}' applied!`)]);
+                delegate: Loader {
+                    id: profileCardLoader
+                    required property var modelData
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 65
+                    source: Qt.resolvedUrl("MonitorProfileCard.qml")
+
+                    Binding {
+                        target: profileCardLoader.item
+                        property: "profileName"
+                        value: profileCardLoader.modelData.name
+                        when: profileCardLoader.item !== null
                     }
-                    onDeleteClicked: {
-                        monitorConfig.deleteProfile(modelData.name);
-                        Quickshell.execDetached(["notify-send", "Monitors", Translation.tr(`Profile '${modelData.name}' deleted!`)]);
+
+                    Binding {
+                        target: profileCardLoader.item
+                        property: "isActive"
+                        value: profileCardLoader.modelData.isActive
+                        when: profileCardLoader.item !== null
+                    }
+
+                    Connections {
+                        target: profileCardLoader.item
+                        function onApplyClicked() {
+                            monitorConfig.applyProfile(profileCardLoader.modelData.name);
+                            Quickshell.execDetached(["notify-send", "Monitors", Translation.tr(`Profile '${profileCardLoader.modelData.name}' applied!`)]);
+                        }
+                        function onDeleteClicked() {
+                            monitorConfig.deleteProfile(profileCardLoader.modelData.name);
+                            Quickshell.execDetached(["notify-send", "Monitors", Translation.tr(`Profile '${profileCardLoader.modelData.name}' deleted!`)]);
+                        }
                     }
                 }
             }
@@ -1239,6 +1260,23 @@ ContentPage {
             }
             StyledToolTip {
                 text: Translation.tr("How much longer the \"Esc or click to exit\" hint stays up after the cursor hides")
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "crop"
+        title: Translation.tr("Edge & Interaction Tweaks")
+
+        ConfigSwitch {
+            buttonIcon: "crop"
+            text: Translation.tr("Enable 1-pixel screen edge workaround")
+            checked: Config.options.interactions.deadPixelWorkaround.enable ?? false
+            onCheckedChanged: {
+                Config.options.interactions.deadPixelWorkaround.enable = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Compensates for 1-pixel margin discrepancies on the right and bottom screen edges in Hyprland.")
             }
         }
     }

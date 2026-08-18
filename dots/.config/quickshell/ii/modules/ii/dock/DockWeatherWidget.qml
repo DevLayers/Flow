@@ -19,13 +19,17 @@ Item {
     property int delegateIndex: -1
 
     readonly property real buttonSize: Appearance.sizes.dockButtonSize
-    readonly property real dotMargin: (Config.options?.dock.height ?? 60) * 0.2
-    readonly property real slotSize: buttonSize + dotMargin * 2
+    readonly property real dotMargin: root.dockContent?.dotMargin ?? Math.max(1, Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2)
+    readonly property real dotMarginV: root.dockContent?.dotMarginV ?? root.dotMargin
+    readonly property real slotSize: root.dockContent?.buttonSlotSize ?? (buttonSize + dotMargin * 2)
+    readonly property real slotHeight: root.dockContent
+        ? (root.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight)
+        : (buttonSize + dotMarginV * 2)
     readonly property real fixedSlots: isVertical ? 2.5 : 3
     readonly property real fixedLength: fixedSlots * slotSize
 
     implicitWidth: root.isVertical ? root.slotSize : root.fixedLength
-    implicitHeight: root.isVertical ? root.slotSize : root.slotSize
+    implicitHeight: root.isVertical ? root.slotSize : root.slotHeight
 
     // ── Drag overlay (reorder support) ─────────────────────────────────────
     MouseArea {
@@ -39,8 +43,16 @@ Item {
         property real pressCoord: 0
         property bool dragActive: false
 
-        onEntered: root.weatherHovered = true
-        onExited: root.weatherHovered = false
+        onEntered: {
+            root.weatherHovered = true;
+            if (root.dockContent)
+                root.dockContent.onButtonEntered(root);
+        }
+        onExited: {
+            root.weatherHovered = false;
+            if (root.dockContent)
+                root.dockContent.onButtonExited(root);
+        }
 
         onPressed: (event) => {
             if (event.button === Qt.LeftButton) {
@@ -131,8 +143,11 @@ Item {
     Rectangle {
         id: bgRect
         anchors.fill: parent
-        anchors.margins: root.dotMargin
-        radius: Appearance.rounding.windowRounding + 12
+        anchors.leftMargin: root.dotMargin
+        anchors.rightMargin: root.dotMargin
+        anchors.topMargin: root.dotMarginV
+        anchors.bottomMargin: root.dotMarginV
+        radius: (Config.options?.dock?.widgetRadius ?? -1) >= 0 ? Config.options.dock.widgetRadius : (Appearance.rounding.windowRounding + 12)
         clip: true
 
         // Ensure children like the weather icon are properly clipped by the radius

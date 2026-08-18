@@ -8,12 +8,14 @@ import qs.modules.common.widgets
 SectionCard {
     id: inDayForecastCard
     property int forecastCardHeight: 125
-    
+
     // Internal animation control
     property bool startAnim: false
 
     onStartAnimChanged: {
         if (startAnim) {
+            flickable.contentX = 0;
+
             // Reset all cards
             for (var i = 0; i < dayRepeater.count; i++) {
                 var item = dayRepeater.itemAt(i);
@@ -40,7 +42,6 @@ SectionCard {
     Flickable {
         id: flickable
         Layout.fillWidth: true
-        Layout.rightMargin: -inDayForecastCard.margins
         Layout.preferredHeight: inDayForecastCard.forecastCardHeight
         contentWidth: rowLayout.implicitWidth
         clip: true
@@ -78,6 +79,10 @@ SectionCard {
                     property int cardAnimDelay: 0
                     
                     function startCardAnim() {
+                        // Force a real running:false->true transition; calling start() while
+                        // already running (e.g. popup reopened before the previous entrance
+                        // animation finished) is a no-op and leaves the card stuck invisible.
+                        cardAnim.stop();
                         cardAnim.start();
                     }
 
@@ -160,10 +165,6 @@ SectionCard {
                         }
                     }
                 }
-            }
-            // Beautiful spacer at the end of scroll to maintain margins symmetry
-            Item {
-                Layout.preferredWidth: inDayForecastCard.margins - rowLayout.spacing
             }
         }
     }

@@ -16,7 +16,53 @@ import "../../bar/shared/cards"
 
 WindowDialog {
     id: root
+    // Dashboard keeps the historical sidebar-close behaviour. Other hosts
+    // (for example Welcome) can keep their owner untouched.
+    property bool closeOwningSidebarOnDetails: true
+    property bool showDetailsAction: true
+
+    signal detailsRequested()
+
     backgroundHeight: 600
+
+    function prepareForOpen() {
+        if (!Bluetooth.defaultAdapter)
+            return;
+        if (BluetoothStatus.enabled) {
+            Bluetooth.defaultAdapter.startDiscovery();
+            return;
+        }
+        // Powering on is asynchronous, so defer the scan until the adapter is up.
+        root._scanWhenEnabled = true;
+        BluetoothStatus.setEnabled(true);
+    }
+
+    function cleanupAfterClose() {
+        root._scanWhenEnabled = false;
+        if (Bluetooth.defaultAdapter?.discovering)
+            Bluetooth.defaultAdapter.stopDiscovery();
+    }
+
+    property bool _scanWhenEnabled: false
+
+    Connections {
+        target: BluetoothStatus
+        function onEnabledChanged() {
+            if (!BluetoothStatus.enabled || !root._scanWhenEnabled)
+                return;
+            root._scanWhenEnabled = false;
+            Bluetooth.defaultAdapter?.startDiscovery();
+        }
+    }
+
+    onShowChanged: {
+        if (show)
+            root.prepareForOpen();
+        else
+            root.cleanupAfterClose();
+    }
+
+    Component.onDestruction: root.cleanupAfterClose()
 
     readonly property var connectedDevices: BluetoothStatus.friendlyDeviceList.filter(d => d.connected)
     readonly property var savedDevices: BluetoothStatus.friendlyDeviceList.filter(d => d.paired && !d.connected)
@@ -40,9 +86,7 @@ WindowDialog {
         StyledSwitch {
             checked: Bluetooth.defaultAdapter?.enabled ?? false
             onToggled: {
-                if (Bluetooth.defaultAdapter) {
-                    Bluetooth.defaultAdapter.enabled = checked;
-                }
+                BluetoothStatus.setEnabled(checked);
             }
         }
     }
@@ -364,6 +408,7 @@ WindowDialog {
         // Details button with only a border and no fill
         RippleButton {
             id: detailsBtn
+            visible: root.showDetailsAction
             buttonRadius: Appearance.rounding.full
             colBackground: "transparent"
             colBackgroundHover: "transparent"
@@ -397,7 +442,9 @@ WindowDialog {
             }
             onClicked: {
                 Quickshell.execDetached(["bash", "-c", `${Config.options.apps.bluetooth}`]);
-                GlobalStates.sidebarRightOpen = false;
+                root.detailsRequested();
+                if (root.closeOwningSidebarOnDetails)
+                    GlobalStates.sidebarRightOpen = false;
             }
         }
 

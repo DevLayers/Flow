@@ -17,8 +17,37 @@ Item {
 
     readonly property string iconPath: {
         const _ = TaskbarApps.iconThemeRevision;
-        let iconStr = root.desktopEntry && root.desktopEntry.icon ? root.desktopEntry.icon : TaskbarApps.getCachedIcon(root.appId);
-        return Quickshell.iconPath(iconStr, "image-missing").toString();
+        
+        // 1. Try desktopEntry.icon directly if valid
+        if (root.desktopEntry && root.desktopEntry.icon) {
+            let path = Quickshell.iconPath(root.desktopEntry.icon, "").toString();
+            if (path !== "" && !path.includes("image-missing"))
+                return path;
+        }
+
+        // 2. Try guessIcon on appId
+        if (root.appId) {
+            let guessed = TaskbarApps.getCachedIcon(root.appId);
+            if (guessed && guessed !== "image-missing") {
+                let path = Quickshell.iconPath(guessed, "").toString();
+                if (path !== "" && !path.includes("image-missing"))
+                    return path;
+            }
+        }
+
+        // 3. Try guessIcon on desktopEntry.icon
+        if (root.desktopEntry && root.desktopEntry.icon) {
+            let guessed = AppSearch.guessIcon(root.desktopEntry.icon);
+            if (guessed && guessed !== "image-missing") {
+                let path = Quickshell.iconPath(guessed, "").toString();
+                if (path !== "" && !path.includes("image-missing"))
+                    return path;
+            }
+        }
+
+        // 4. Final fallback
+        let fallbackStr = root.desktopEntry?.icon || root.appId || "image-missing";
+        return Quickshell.iconPath(fallbackStr, "image-missing").toString();
     }
 
     // Detect if the icon is truly from the active system theme dynamically
@@ -49,7 +78,7 @@ Item {
         anchors.fill: parent
         shapeString: Config.options.dock.shapeMask
         visible: Config.options.dock.enableShapeMask && !root.isThemedIcon
-        color: Appearance.colors.colPrimaryContainer
+        color: root.isRunning ? Appearance.colors.colPrimaryContainer : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 0.6)
 
         Behavior on color {
             ColorAnimation {
@@ -72,7 +101,11 @@ Item {
             visible: !Config.options.dock.monochromeIcons
             opacity: root.iconOpacity
 
-            // Force reload when icon theme regenerates
+            // Force reload when icon theme regenerates; cache: false so the reload
+            // re-decodes from disk instead of resurrecting a stale cached pixmap,
+            // async so the re-decode doesn't stall the UI thread
+            asynchronous: true
+            backer.cache: false
             backer.sourceSize: Qt.size(parent.width + TaskbarApps.iconThemeRevision, parent.height + TaskbarApps.iconThemeRevision)
 
             layer.enabled: Config.options.dock.enableShapeMask && root.isThemedIcon
@@ -96,7 +129,7 @@ Item {
 
     Loader {
         active: Config.options.dock.monochromeIcons
-        anchors.fill: parent
+        anchors.fill: iconContentWrapper
         sourceComponent: Item {
             Desaturate {
                 id: monoDesat

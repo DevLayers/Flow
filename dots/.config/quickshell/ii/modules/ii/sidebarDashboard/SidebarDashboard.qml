@@ -11,6 +11,11 @@ Scope {
     id: root
     property int sidebarWidth: Appearance.sizes.sidebarWidth
 
+    // Keep the lightweight panel controller alive, but make the expensive dashboard
+    // tree obey the user's keep-alive preference.
+    readonly property bool keepContentLoaded: Config.ready && Config.options.sidebar.keepRightSidebarLoaded
+    readonly property bool contentWanted: GlobalStates.sidebarRightOpen || root.keepContentLoaded
+
     readonly property bool isOnRight: {
         const pos = Config.options.sidebar.position;
         return pos === "default" || pos === "right"; 
@@ -38,7 +43,32 @@ Scope {
             exclusiveZone: 0
             implicitWidth: sidebarWidth
             WlrLayershell.namespace: root.isOnRight ? "quickshell:sidebarRight" : "quickshell:sidebarLeft"
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+            // Hyprland hands pointer focus to any layer surface that maps asking for keyboard
+            // interactivity, no matter where the cursor really is, and only re-evaluates it on the
+            // next pointer event — so the click meant to close the sidebar again gets spent
+            // restoring focus instead. Mapping exclusive and downgrading to on-demand right after
+            // makes Hyprland re-evaluate pointer focus itself, handing it back to whatever is
+            // actually under the cursor, while the sidebar keeps its keyboard focus.
+            // The downgrade has to happen after the surface is mapped, so it's driven by
+            // Hyprland's own openlayer event; the timer is only a fallback if that never arrives.
+            property bool keyboardExclusive: true
+            WlrLayershell.keyboardFocus: panelWindow.keyboardExclusive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
+
+            Connections {
+                target: Hyprland
+                function onRawEvent(event) {
+                    if (!panelWindow.keyboardExclusive) return;
+                    if (event.name !== "openlayer") return;
+                    if (event.data !== panelWindow.WlrLayershell.namespace) return;
+                    panelWindow.keyboardExclusive = false;
+                }
+            }
+
+            Timer {
+                id: keyboardFocusDowngrade
+                interval: 200
+                onTriggered: panelWindow.keyboardExclusive = false
+            }
             color: "transparent"
 
             anchors {
@@ -50,8 +80,11 @@ Scope {
 
             onVisibleChanged: {
                 if (visible) {
+                    keyboardFocusDowngrade.restart();
                     GlobalFocusGrab.addDismissable(panelWindow);
                 } else {
+                    keyboardFocusDowngrade.stop();
+                    panelWindow.keyboardExclusive = true;
                     GlobalFocusGrab.removeDismissable(panelWindow);
                 }
             }
@@ -66,7 +99,7 @@ Scope {
             Loader {
                 id: sidebarContentLoader
 
-                active: GlobalStates.sidebarRightOpen || Config?.options.sidebar.keepRightSidebarLoaded
+                active: root.contentWanted
                 sourceComponent: SidebarDashboardContent {}
                 
                 width: root.sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin

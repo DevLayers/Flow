@@ -127,6 +127,7 @@ Item {
     }
 
     property bool showNumbersByMs: false
+    readonly property bool numbersByInteractionVisible: showNumbersByMs && !GlobalStates.screenLocked && !GlobalStates.workspaceRestoreInProgress
     Timer {
         id: showNumbersTimer
         interval: (Config.options.bar.workspaces.showNumberDelay ?? 100)
@@ -699,11 +700,20 @@ Item {
                                     anchors {
                                         left: parent.left
                                         top: parent.top
-                                        leftMargin: root.showNumbersByMs ? 15 : 2
-                                        topMargin: root.showNumbersByMs ? 15 : 2
+                                        leftMargin: root.numbersByInteractionVisible ? 15 : 2
+                                        topMargin: root.numbersByInteractionVisible ? 15 : 2
                                     }
                                     source: modelData.icon
-                                    implicitSize: (root.individualIconBoxHeight * root.iconRatio) * (root.showNumbersByMs ? 1 / 1.5 : 1)
+                                    implicitSize: (root.individualIconBoxHeight * root.iconRatio) * (root.numbersByInteractionVisible ? 1 / 1.5 : 1)
+
+                                    // Force reload when the icon theme regenerates; decode at the stable
+                                    // base size so hover animations don't re-decode every frame, async
+                                    // so the re-decode doesn't stall the UI thread
+                                    asynchronous: true
+                                    backer.cache: false
+                                    backer.sourceSize: Qt.size(
+                                        root.individualIconBoxHeight * root.iconRatio + TaskbarApps.iconThemeRevision,
+                                        root.individualIconBoxHeight * root.iconRatio + TaskbarApps.iconThemeRevision)
 
                                     Behavior on anchors.leftMargin {
                                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -754,7 +764,7 @@ Item {
         Item {
             id: scratchpadPositionHelper
             readonly property real indicatorSize: root.individualIconBoxHeight + 2
-            readonly property Item activeItem: contentLayout.children[root.workspaceIndexInGroup]
+            readonly property Item activeItem: (contentLayout.children && root.workspaceIndexInGroup >= 0 && root.workspaceIndexInGroup < contentLayout.children.length) ? contentLayout.children[root.workspaceIndexInGroup] : null
 
             x: activeItem ? root.vertical ? contentLayout.x + (contentLayout.width - indicatorSize) / 2 : activeItem.x + contentLayout.x + (activeItem.width - indicatorSize) / 2 : 0
             y: activeItem ? root.vertical ? activeItem.y + contentLayout.y + (activeItem.height - indicatorSize) / 2 : contentLayout.y + (contentLayout.height - indicatorSize) / 2 : 0
@@ -841,7 +851,7 @@ Item {
     }
 
     component WorkspaceBackgroundIndicator: Rectangle {
-        property bool showNumbers: Config.options.bar.workspaces.alwaysShowNumbers || root.showNumbersByMs
+        property bool showNumbers: !GlobalStates.screenLocked && !GlobalStates.workspaceRestoreInProgress && (Config.options.bar.workspaces.alwaysShowNumbers || root.numbersByInteractionVisible)
         property int workspaceValue
         property bool activeWorkspace
         property color indColor: (activeWorkspace) ? Appearance.m3colors.m3onPrimary : (root.workspaceOccupied[index] ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer1Inactive)
@@ -850,7 +860,9 @@ Item {
         width: root.workspaceDotSize
         height: width
         radius: width / 2
-        visible: layout.implicitHeight + 8 < root.iconBoxWrapperSize || root.showNumbersByMs
+        visible: layout.implicitHeight + 8 < root.iconBoxWrapperSize
+            || Config.options.bar.workspaces.alwaysShowNumbers
+            || root.numbersByInteractionVisible
         color: !showNumbers ? indColor : "transparent"
 
         Behavior on color {
@@ -867,7 +879,7 @@ Item {
             elide: Text.ElideRight
             color: indColor
             Behavior on opacity {
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(this)
             }
         }
     }

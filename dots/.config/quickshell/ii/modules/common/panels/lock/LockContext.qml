@@ -24,6 +24,11 @@ Scope {
     readonly property int fingerprintMaxTries: 3
     property int fingerprintTriesLeft: fingerprintMaxTries
     signal fingerprintFailed()
+    // Held from hypridle's before_sleep_cmd until after_sleep_cmd, so nothing
+    // re-arms the reader while the system is on its way into suspend.
+    property bool fingerSuspendInhibit: false
+    property int fingerRetries: 0
+    readonly property int fingerMaxRetries: 5
     property var targetAction: LockContext.ActionEnum.Unlock
     property bool alsoInhibitIdle: false
 
@@ -70,31 +75,62 @@ Scope {
     }
 
     function tryFingerUnlock() {
-        if (root.fingerprintsConfigured) {
-            // Each start() is a fresh PAM transaction, so pam_fprintd's
-            // internal try counter resets too.
-            root.fingerprintTriesLeft = root.fingerprintMaxTries;
-            fingerPam.start();
-        }
+        if (!root.fingerprintsConfigured || root.fingerSuspendInhibit)
+            return;
+        // Each start() is a fresh PAM transaction, so pam_fprintd's
+        // internal try counter resets too.
+        root.fingerprintTriesLeft = root.fingerprintMaxTries;
+        fingerPam.start();
+    }
+
+    // hypridle's before_sleep_cmd calls this. Suspending with a verify in
+    // flight crashes some readers' drivers (egismoc), and the lock itself may
+    // still be arming the reader when this lands, so latch the inhibit rather
+    // than just aborting: whichever order they arrive in, nothing re-arms.
+    function suspendFingerUnlock() {
+        root.fingerSuspendInhibit = true;
+        stopFingerPam();
+        fingerInhibitFailsafeTimer.restart();
+    }
+
+    // Failsafe for an aborted suspend, where after_sleep_cmd never runs and
+    // would otherwise leave the reader inhibited until the next unlock.
+    Timer {
+        id: fingerInhibitFailsafeTimer
+        interval: 20000
+        onTriggered: root.restartFingerUnlock()
     }
 
     // The refocus signal also fires from hypridle's after_sleep_cmd. A verify
-    // that was in flight across suspend is dead (some readers even crash
-    // fprintd), so trade it for a fresh transaction. No-op when unlocked or
-    // without fingerprints.
+    // that was in flight across suspend is dead, so trade it for a fresh
+    // transaction. No-op when unlocked or without fingerprints.
     onShouldReFocus: restartFingerUnlock()
 
     function restartFingerUnlock() {
+        fingerInhibitFailsafeTimer.stop();
+        root.fingerSuspendInhibit = false;
+        root.fingerRetries = 0;
         if (!root.fingerprintsConfigured || !GlobalStates.screenLocked)
             return;
         stopFingerPam();
+        scheduleFingerRetry();
+    }
+
+    // The reader USB-resets a second or two after "PM: suspend exit" and fprintd
+    // may still be coming back, so a single fixed delay races them. Back off
+    // instead, and give up rather than hammering a reader that is really gone.
+    function scheduleFingerRetry() {
+        if (!root.fingerprintsConfigured || !GlobalStates.screenLocked)
+            return;
+        if (root.fingerSuspendInhibit || root.fingerRetries >= root.fingerMaxRetries)
+            return;
+        fingerRestartTimer.interval = Math.min(1000 * Math.pow(2, root.fingerRetries), 8000);
+        root.fingerRetries++;
         fingerRestartTimer.restart();
     }
 
     Timer {
         id: fingerRestartTimer
-        // Long enough for the aborted transaction to end and a crashed
-        // fprintd to be restarted by systemd
         interval: 1000
         onTriggered: {
             if (GlobalStates.screenLocked)
@@ -103,6 +139,7 @@ Scope {
     }
 
     function stopFingerPam() {
+        fingerRestartTimer.stop();
         if (fingerPam.active) {
             fingerPam.abort();
         }
@@ -159,18 +196,28 @@ Scope {
         // pam_fprintd sends an error-type conversation message per failed
         // scan; timeouts ("Verification timed out") must not count as tries.
         onPamMessage: {
+            // Any message at all proves the reader came up and is armed, so the
+            // backoff ladder starts over: idle timeouts must keep re-arming
+            // forever, only a reader that never answers should give up.
+            root.fingerRetries = 0;
             if (this.messageIsError && this.message.includes("Failed to match")) {
                 root.fingerprintTriesLeft = Math.max(0, root.fingerprintTriesLeft - 1);
                 root.fingerprintFailed();
             }
         }
 
+        // pam_fprintd reports an unavailable or busy reader as
+        // PAM_AUTHINFO_UNAVAIL, which Quickshell surfaces here and not on
+        // completed(). Without this the prompt dies silently whenever a start
+        // lands while the reader is mid-USB-reset after a resume.
+        onError: root.scheduleFingerRetry()
+
         onCompleted: result => {
             if (result == PamResult.Success) {
                 root.unlocked(root.targetAction);
                 stopFingerPam();
             } else if (result == PamResult.Error) { // if timeout or etc..
-                tryFingerUnlock()
+                root.scheduleFingerRetry();
             }
         }
     }

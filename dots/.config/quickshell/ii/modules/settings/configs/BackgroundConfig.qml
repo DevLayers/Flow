@@ -8,577 +8,239 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 
-ContentPage {
-    id: page
+Item {
+    id: backgroundRoot
+    anchors.fill: parent
 
-    forceWidth: false
+    property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
 
-    ContentSection {
-        title: Translation.tr("Parallax Engine")
-        icon: "sync_alt"
+    ContentPage {
+        id: page
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
 
-        ConfigSwitch {
-            buttonIcon: "unfold_more_double"
-            text: Translation.tr("Vertical movement")
-            checked: Config.options.background.parallax.vertical
-            onCheckedChanged: {
-                HyprlandSettings.changeAnimation("workspaces", checked ? "slidevert" : "slide");
-                Config.options.background.parallax.vertical = checked;
-            }
+        readonly property bool videoWallpaper: {
+            const background = Config.options && Config.options.background ? Config.options.background : null;
+            if (!background)
+                return false;
+            return background.useWallpaperEngine === true || Wallpapers.isVideoFile(background.wallpaperPath || "");
         }
 
-        ConfigSwitch {
-            buttonIcon: "counter_1"
-            text: Translation.tr("Depends on workspace")
-            checked: Config.options.background.parallax.enableWorkspace
-            onCheckedChanged: {
-                Config.options.background.parallax.enableWorkspace = checked;
+        ContentSection {
+            title: Translation.tr("Parallax Engine")
+            icon: "sync_alt"
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: page.videoWallpaper
+                materialIcon: "movie"
+                text: Translation.tr("Video wallpaper active: window blur and parallax are disabled automatically; only the Default zoom style is available.")
             }
-        }
 
-        ConfigSwitch {
-            buttonIcon: "loop"
-            text: Translation.tr("Loop wallpaper")
-            checked: Config.options.background.parallax.loop
-            onCheckedChanged: {
-                Config.options.background.parallax.loop = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "swap_horiz"
-            text: Translation.tr("Invert horizontal movement")
-            checked: Config.options.background.parallax.invertHorizontal
-            onCheckedChanged: {
-                Config.options.background.parallax.invertHorizontal = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "swap_vert"
-            text: Translation.tr("Invert vertical movement")
-            checked: Config.options.background.parallax.invertVertical
-            onCheckedChanged: {
-                Config.options.background.parallax.invertVertical = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "side_navigation"
-            text: Translation.tr("Depends on sidebars")
-            checked: Config.options.background.parallax.enableSidebar
-            onCheckedChanged: {
-                Config.options.background.parallax.enableSidebar = checked;
-            }
-        }
-
-        ConfigSlider {
-            buttonIcon: "speed"
-            text: Translation.tr("Parallax movement intensity")
-            visible: Config.options.background.parallax.enableWorkspace
-            usePercentTooltip: false
-            from: 1
-            to: 10
-            stepSize: 1
-            value: Config.options.background.parallax.intensity ?? 4
-            onValueChanged: {
-                Config.options.background.parallax.intensity = value;
-            }
-        }
-
-        ConfigSlider {
-            buttonIcon: "loupe"
-            text: Translation.tr("Preferred wallpaper zoom (%)")
-            from: 100
-            to: 150
-            stepSize: 1
-            value: Config.options.background.parallax.workspaceZoom * 100
-            onValueChanged: {
-                Config.options.background.parallax.workspaceZoom = value / 100;
-            }
-        }
-    }
-
-    ContentSection {
-        title: Translation.tr("Transition Animations")
-        icon: "animation"
-
-        ConfigSwitch {
-            buttonIcon: "blur_on"
-            text: Translation.tr("Animate wallpaper changes")
-            checked: Config.options.background.animateWallpaperChanges
-            onCheckedChanged: {
-                Config.options.background.animateWallpaperChanges = checked;
-            }
-        }
-
-        ContentSubsection {
-            visible: Config.options.background.animateWallpaperChanges
-            title: Translation.tr("Transition style")
-            icon: "style"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.background.wallpaperAnimation
-                onSelected: newValue => {
-                    Config.options.background.wallpaperAnimation = newValue;
+            ConfigSwitch {
+                buttonIcon: "counter_1"
+                text: Translation.tr("Depends on workspace")
+                enabled: !page.videoWallpaper
+                checked: Config.options.background.parallax.enableWorkspace
+                configPage: Qt.resolvedUrl("widgets/ParallaxConfig.qml")
+                onCheckedChanged: {
+                    Config.options.background.parallax.enableWorkspace = checked;
                 }
-                options: [
-                    {
-                        "displayName": Translation.tr("Random"),
-                        "icon": "shuffle",
-                        "value": "random"
-                    },
-                    {
-                        "displayName": Translation.tr("Crossfade"),
-                        "icon": "blur_on",
-                        "value": ""
-                    },
-                    {
-                        "displayName": Translation.tr("Circle Pit"),
-                        "icon": "circle",
-                        "value": "circlePit"
-                    },
-                    {
-                        "displayName": Translation.tr("Circle Select"),
-                        "icon": "radio_button_checked",
-                        "value": "circleSelect"
-                    },
-                    {
-                        "displayName": Translation.tr("Magic"),
-                        "icon": "auto_awesome",
-                        "value": "magic"
-                    },
-                    {
-                        "displayName": Translation.tr("Peel"),
-                        "icon": "sticky_note_2",
-                        "value": "Peel"
-                    },
-                    {
-                        "displayName": Translation.tr("Transition"),
-                        "icon": "swap_horiz",
-                        "value": "transition"
-                    },
-                    {
-                        "displayName": Translation.tr("Pixelate"),
-                        "icon": "grid_on",
-                        "value": "pixelate"
-                    },
-                    {
-                        "displayName": Translation.tr("Stripes"),
-                        "icon": "view_column",
-                        "value": "stripes"
+                StyledToolTip {
+                    text: Translation.tr("Click button text to configure parallax movement directions, sidebars, and intensity.")
+                }
+            }
+
+            ConfigSlider {
+                buttonIcon: "loupe"
+                text: Translation.tr("Preferred wallpaper zoom (%)")
+                enabled: !page.videoWallpaper
+                usePercentTooltip: true
+                from: 100
+                to: 150
+                stepSize: 1
+                value: Math.round((Config.options.background.parallax.workspaceZoom ?? 1.07) * 100)
+                onValueChanged: {
+                    Config.options.background.parallax.workspaceZoom = value / 100;
+                }
+            }
+        }
+
+        ContentSection {
+            title: Translation.tr("Wallpaper Transitions")
+            icon: "animation"
+
+            ConfigSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Animate wallpaper changes")
+                enabled: !page.videoWallpaper
+                checked: Config.options.background.animateWallpaperChanges ?? true
+                onCheckedChanged: {
+                    Config.options.background.animateWallpaperChanges = checked;
+                }
+            }
+
+            ContentSubsection {
+                visible: (Config.options.background.animateWallpaperChanges ?? true) && !page.videoWallpaper
+                title: Translation.tr("Transition shader effect")
+                icon: "style"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.background.wallpaperAnimation ?? ""
+                    onSelected: newValue => {
+                        Config.options.background.wallpaperAnimation = newValue;
                     }
-                ]
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "blur_circular"
-            text: Translation.tr("Blur wallpaper when a window is open")
-            checked: Config.options.background.blurWhenWindowsOpen
-            onCheckedChanged: {
-                Config.options.background.blurWhenWindowsOpen = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Experimental - Blur the wallpaper and widgets when a window is open on the current workspace.")
-            }
-        }
-
-        ConfigSlider {
-            buttonIcon: "lens_blur"
-            text: Translation.tr("Blur intensity when a window is open")
-            visible: Config.options.background.blurWhenWindowsOpen
-            usePercentTooltip: true
-            from: 0
-            to: 100
-            stepSize: 1
-            value: Config.options.background.blurWhenWindowsOpenRadius ?? 80
-            onValueChanged: {
-                Config.options.background.blurWhenWindowsOpenRadius = value;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "zoom_in_map"
-            text: Translation.tr("Zoom animation when overview/cheatsheet is open (Experimental)")
-            checked: Config.options.background.zoomOutEnabled
-            onCheckedChanged: {
-                Config.options.background.zoomOutEnabled = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Experimental - Scale windows with wallpaper when Overview/Cheatsheet is opened, this is a work in progress, expect bugs and a lags on low end hardware.")
-            }
-        }
-
-        ContentSubsection {
-            visible: Config.options.background.zoomOutEnabled
-            title: Translation.tr("Zoom background style")
-            icon: "style"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.background.zoomOutStyle
-                onSelected: newValue => {
-                    Config.options.background.zoomOutStyle = newValue;
+                    options: [
+                        {
+                            displayName: Translation.tr("Crossfade"),
+                            icon: "blur_on",
+                            value: ""
+                        },
+                        {
+                            displayName: Translation.tr("Random"),
+                            icon: "shuffle",
+                            value: "random"
+                        },
+                        {
+                            displayName: Translation.tr("Circle Pit"),
+                            icon: "circle",
+                            value: "circlePit"
+                        },
+                        {
+                            displayName: Translation.tr("Circle Select"),
+                            icon: "radio_button_checked",
+                            value: "circleSelect"
+                        },
+                        {
+                            displayName: Translation.tr("Magic"),
+                            icon: "auto_awesome",
+                            value: "magic"
+                        },
+                        {
+                            displayName: Translation.tr("Peel"),
+                            icon: "sticky_note_2",
+                            value: "Peel"
+                        },
+                        {
+                            displayName: Translation.tr("Transition"),
+                            icon: "swap_horiz",
+                            value: "transition"
+                        },
+                        {
+                            displayName: Translation.tr("Pixelate"),
+                            icon: "grid_on",
+                            value: "pixelate"
+                        },
+                        {
+                            displayName: Translation.tr("Stripes"),
+                            icon: "view_column",
+                            value: "stripes"
+                        }
+                    ]
                 }
-                options: [
-                    {
-                        "displayName": Translation.tr("Gnome Like"),
-                        "icon": "blur_on",
-                        "value": 0
-                    },
-                    {
-                        "displayName": Translation.tr("Default"),
-                        "icon": "grid_view",
-                        "value": 1
-                    },
-                    {
-                        "displayName": Translation.tr("Zoom In"),
-                        "icon": "zoom_in",
-                        "value": 2
-                    }
-                ]
             }
         }
 
-        ConfigSwitch {
-            visible: Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0
-            buttonIcon: "open_with"
-            text: Translation.tr("Scale windows with wallpaper (Experimental)")
-            checked: Config.options.background.windowZoomOnOverview
-            onCheckedChanged: {
-                Config.options.background.windowZoomOnOverview = checked;
-            }
+        ContentSection {
+            title: Translation.tr("Background Blur")
+            icon: "grain"
 
-            StyledToolTip {
-                text: Translation.tr("Shows scaled ScreencopyView of windows zooming out with the wallpaper when the overview opens.\nWindows on the active workspace follow the wallpaper zoom animation.\nWorkspace switching slides the window previews alongside the workspace animation.")
-            }
-        }
-
-        ConfigSwitch {
-            visible: Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0 && Config.options.background.windowZoomOnOverview
-            buttonIcon: "videocam"
-            text: Translation.tr("Keep screencopy live (no freeze)")
-            checked: Config.options.background.windowZoomLiveCapture
-            onCheckedChanged: {
-                Config.options.background.windowZoomLiveCapture = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("When enabled, window previews stay live instead of freezing on overview open.\nDisable for better performance (freezes capture on open).")
-            }
-        }
-    }
-    KeyboardShortcutBox {
-        Layout.fillWidth: true
-        text: Translation.tr("Toggle Media Mode")
-        keys: ["Super", "Z"]
-    }
-
-    ContentSection {
-        title: Translation.tr("Media Mode Background")
-        icon: "music_note"
-
-        NoticeBox {
-            Layout.fillWidth: true
-            isFirst: true
-            text: Translation.tr("These settings apply exclusively to the full-screen Media Mode background overlay.")
-        }
-
-        ConfigSwitch {
-
-            buttonIcon: "lyrics"
-
-            text: Translation.tr("Show synchronized lyrics panel")
-            checked: Config.options.background.mediaMode.showLyrics ?? true
-            onCheckedChanged: {
-                Config.options.background.mediaMode.showLyrics = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "tune"
-            text: Translation.tr("Show top media player switcher bar")
-            checked: Config.options.background.mediaMode.showPlayerSwitcher ?? true
-            onCheckedChanged: {
-                Config.options.background.mediaMode.showPlayerSwitcher = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "graphic_eq"
-            text: Translation.tr("Show audio visualizers")
-            checked: (Config.options.background.mediaMode.visualizerMode ?? 1) > 0
-            onCheckedChanged: {
-                Config.options.background.mediaMode.visualizerMode = checked ? 1 : 0;
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Default visualizer mode")
-            icon: "equalizer"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.background.mediaMode.visualizerMode ?? 1
-                onSelected: newValue => {
-                    Config.options.background.mediaMode.visualizerMode = newValue;
+            ConfigSwitch {
+                buttonIcon: "blur_on"
+                text: Translation.tr("Blur wallpaper when window open (Experimental)")
+                enabled: !page.videoWallpaper
+                checked: Config.options.background.blurWhenWindowsOpen
+                onCheckedChanged: {
+                    Config.options.background.blurWhenWindowsOpen = checked;
                 }
-                options: [
-                    {
-                        "displayName": Translation.tr("Off"),
-                        "icon": "equalizer",
-                        "value": 0
-                    },
-                    {
-                        "displayName": Translation.tr("Waves"),
-                        "icon": "waves",
-                        "value": 1
-                    },
-                    {
-                        "displayName": Translation.tr("Bars"),
-                        "icon": "bar_chart",
-                        "value": 2
-                    },
-                    {
-                        "displayName": Translation.tr("Radial"),
-                        "icon": "blur_circular",
-                        "value": 3
-                    }
-                ]
-            }
-        }
 
-        ConfigSwitch {
-            buttonIcon: "linear_scale"
-            text: Translation.tr("Show track progress seekbar")
-            checked: Config.options.background.mediaMode.showSeekBar ?? true
-            onCheckedChanged: {
-                Config.options.background.mediaMode.showSeekBar = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "volume_up"
-            text: Translation.tr("Show volume slider control")
-            checked: Config.options.background.mediaMode.showVolumeSlider ?? true
-            onCheckedChanged: {
-                Config.options.background.mediaMode.showVolumeSlider = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "animation"
-            text: Translation.tr("Enable background animation")
-            checked: Config.options.background.mediaMode.backgroundAnimation.enable
-            onCheckedChanged: {
-                Config.options.background.mediaMode.backgroundAnimation.enable = checked;
-            }
-        }
-
-        ConfigSpinBox {
-            enabled: Config.options.background.mediaMode.backgroundAnimation.enable
-            icon: "speed"
-            text: Translation.tr("Speed scale")
-            value: Config.options.background.mediaMode.backgroundAnimation.speedScale
-            from: 0
-            to: 100
-            stepSize: 5
-            onValueChanged: {
-                Config.options.background.mediaMode.backgroundAnimation.speedScale = value;
-            }
-
-            MouseArea {
-                id: spinBoxMouseArea
-
-                z: -1
-                anchors.fill: parent
-                hoverEnabled: true
-            }
-
-            StyledToolTip {
-                extraVisibleCondition: spinBoxMouseArea.containsMouse
-                text: Translation.tr("1: very slow | 10: default | 20: 2x speed...")
-            }
-        }
-
-        ConfigSpinBox {
-            icon: "opacity"
-            text: Translation.tr("Background album art opacity (%)")
-            value: Config.options.background.mediaMode.backgroundOpacity
-            from: 0
-            to: 100
-            stepSize: 10
-            onValueChanged: {
-                Config.options.background.mediaMode.backgroundOpacity = value;
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Background shape")
-            icon: "category"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.background.mediaMode.backgroundShape
-                onSelected: newValue => {
-                    Config.options.background.mediaMode.backgroundShape = newValue;
+                StyledToolTip {
+                    text: Translation.tr("Experimental - Blur the wallpaper and widgets when a window is open on the current workspace.")
                 }
-                options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map(icon => {
-                    return {
-                        "displayName": "",
-                        "shape": icon,
-                        "value": icon
-                    };
-                })
             }
-        }
 
-        ConfigSwitch {
-            buttonIcon: "format_color_fill"
-            text: Translation.tr("Change shell color to match album art")
-            checked: Config.options.background.mediaMode.changeShellColor
-            onCheckedChanged: {
-                Config.options.background.mediaMode.changeShellColor = checked;
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Text highlight style")
-            icon: "highlight"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.background.mediaMode.syllable.textHighlightStyle
-                onSelected: newValue => {
-                    Config.options.background.mediaMode.syllable.textHighlightStyle = newValue;
+            ConfigSlider {
+                buttonIcon: "lens_blur"
+                text: Translation.tr("Blur intensity when a window is open")
+                enabled: !page.videoWallpaper
+                visible: Config.options.background.blurWhenWindowsOpen
+                usePercentTooltip: true
+                from: 0
+                to: 100
+                stepSize: 1
+                value: Config.options.background.blurWhenWindowsOpenRadius ?? 80
+                onValueChanged: {
+                    Config.options.background.blurWhenWindowsOpenRadius = value;
                 }
-                options: [
-                    {
-                        "displayName": Translation.tr("Vertical"),
-                        "icon": "vertical_distribute",
-                        "value": 0
-                    },
-                    {
-                        "displayName": Translation.tr("Horizontal"),
-                        "icon": "horizontal_distribute",
-                        "value": 1
-                    }
-                ]
             }
         }
 
-        ConfigSwitch {
-            buttonIcon: "monitor"
-            text: Translation.tr("Toggle per monitor")
-            checked: Config.options.background.mediaMode.togglePerMonitor
-            onCheckedChanged: {
-                Config.options.background.mediaMode.togglePerMonitor = checked;
-            }
-        }
-
-        // ── Music Video Background ──────────────────────────────────────────────
-
-        ConfigSwitch {
-            buttonIcon: "play_circle"
-            text: Translation.tr("Replace blurred background with music video")
-            checked: Config.options.background.mediaMode.musicVideo.enable ?? false
-            onCheckedChanged: {
-                Config.options.background.mediaMode.musicVideo.enable = checked;
-            }
-        }
-
-        StyledText {
+        KeyboardShortcutBox {
             Layout.fillWidth: true
-            text: Translation.tr("Searches YouTube for the official music video and plays it behind the media mode overlay. Requires mpvpaper and yt-dlp.")
-            font.pixelSize: Appearance.font.pixelSize.smallest
-            color: Appearance.colors.colSubtext
-            wrapMode: Text.Wrap
+            text: Translation.tr("Toggle Media Mode")
+            keys: ["Super", "Z"]
         }
 
-        ConfigSpinBox {
-            icon: "high_quality"
-            text: Translation.tr("Maximum video resolution (px)")
-            value: Config.options.background.mediaMode.musicVideo.maxResolution ?? 1080
-            from: 360
-            to: 4320
-            stepSize: 360
-            onValueChanged: {
-                Config.options.background.mediaMode.musicVideo.maxResolution = value;
+        ContentSection {
+            title: Translation.tr("Media Mode Background")
+            icon: "music_note"
+
+            NoticeBox {
+                Layout.fillWidth: true
+                isFirst: true
+                text: Translation.tr("These settings apply exclusively to the full-screen Media Mode background overlay.")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "music_note"
+                text: Translation.tr("Media mode background overlay")
+                checked: Config.options.background.mediaMode.showLyrics ?? true
+                configPage: Qt.resolvedUrl("widgets/MediaModeBackgroundConfig.qml")
+                onCheckedChanged: {
+                    Config.options.background.mediaMode.showLyrics = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Click button text to configure lyrics, visualizers, album art opacity, and music video settings.")
+                }
             }
         }
 
-        ConfigSpinBox {
-            icon: "opacity"
-            text: Translation.tr("Background dim opacity (%)")
-            value: Config.options.background.mediaMode.musicVideo.dimOpacity ?? 60
-            from: 0
-            to: 100
-            stepSize: 10
-            onValueChanged: {
-                Config.options.background.mediaMode.musicVideo.dimOpacity = value;
-            }
-        }
-
-        ConfigSpinBox {
-            icon: "timer"
-            text: Translation.tr("Video color sampling interval (ms)")
-            value: Config.options.background.mediaMode.musicVideo.videoSamplingInterval ?? 200
-            from: 100
-            to: 5000
-            stepSize: 100
-            onValueChanged: {
-                Config.options.background.mediaMode.musicVideo.videoSamplingInterval = value;
-            }
-        }
-
-        StyledText {
+        ShortcutBox {
             Layout.fillWidth: true
-            text: Translation.tr("How much to dim the overlay so the video is visible. 0 = fully transparent, 100 = opaque (hides video).")
-            font.pixelSize: Appearance.font.pixelSize.smallest
-            color: Appearance.colors.colSubtext
-            wrapMode: Text.Wrap
+            value: Translation.tr("Desktop Clock Widget settings")
+            targetPageId: "widgets"
+            targetSectionTitle: Translation.tr("Widget Manager")
         }
 
-        ConfigSwitch {
-            buttonIcon: "visibility"
-            text: Translation.tr("Dim background overlay")
-            checked: Config.options.background.mediaMode.musicVideo.dimBackground ?? true
-            onCheckedChanged: {
-                Config.options.background.mediaMode.musicVideo.dimBackground = checked;
+        ContentSection {
+            icon: "link"
+            title: Translation.tr("Related settings")
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: 8
+
+                RelatedChip {
+                    pageId: "windows"
+                    label: Translation.tr("Window blur")
+                    sectionHighlight: Translation.tr("Transparency & Blur")
+                }
+
+                RelatedChip {
+                    pageId: "lockScreen"
+                    label: Translation.tr("Lock screen blur")
+                    sectionHighlight: Translation.tr("Blur style")
+                }
             }
         }
     }
 
-    ShortcutBox {
-        Layout.fillWidth: true
-        value: Translation.tr("Desktop Clock Widget settings")
-        targetPageId: "widgets"
-        targetSectionTitle: Translation.tr("Widget Manager")
-    }
-
-    ContentSection {
-        icon: "link"
-        title: Translation.tr("Related settings")
-
-        Flow {
-            Layout.fillWidth: true
-            spacing: 8
-
-            RelatedChip {
-                pageId: "windows"
-                label: Translation.tr("Window blur")
-                sectionHighlight: Translation.tr("Transparency & Blur")
-            }
-
-            RelatedChip {
-                pageId: "lockScreen"
-                label: Translation.tr("Lock screen blur")
-                sectionHighlight: Translation.tr("Blur style")
-            }
-        }
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }

@@ -17,6 +17,41 @@ Item {
     anchors.fill: parent
     property var visitedTabs: ({})
 
+    // Policy controls must be handled at the content boundary as well as by
+    // the surrounding PanelWindow/TopLayer. The active tab can contain a
+    // TextEdit, which otherwise consumes Ctrl+D/P/O before the window-level
+    // Keys handler sees it.
+    Keys.priority: Keys.BeforeItem
+    Keys.onPressed: event => {
+        if ((event.modifiers & Qt.ControlModifier) === 0)
+            return;
+
+        const controller = root.scopeRoot;
+        if (event.key === Qt.Key_O) {
+            if (controller && typeof controller.togglePoliciesExtended === "function")
+                controller.togglePoliciesExtended();
+            else
+                GlobalStates.policiesExtended = !GlobalStates.policiesExtended;
+        } else if (event.key === Qt.Key_D) {
+            if (controller && typeof controller.togglePoliciesDetach === "function")
+                controller.togglePoliciesDetach();
+            else
+                GlobalStates.policiesDetached = !GlobalStates.policiesDetached;
+        } else if (event.key === Qt.Key_P) {
+            if (controller && typeof controller.togglePoliciesPin === "function")
+                controller.togglePoliciesPin();
+            else
+                GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
+        } else if (event.key === Qt.Key_PageDown) {
+            swipeView.incrementCurrentIndex();
+        } else if (event.key === Qt.Key_PageUp) {
+            swipeView.decrementCurrentIndex();
+        } else {
+            return;
+        }
+        event.accepted = true;
+    }
+
     // Toggles from Config
     property bool aiChatEnabled: Config.options.policies.ai !== 0
     property bool translatorEnabled: Config.options.policies.translator !== 0
@@ -169,15 +204,19 @@ Item {
         }
     }
 
-    Keys.onPressed: event => {
-        if (event.modifiers === Qt.ControlModifier) {
-            if (event.key === Qt.Key_PageDown) {
-                swipeView.incrementCurrentIndex();
-                event.accepted = true;
-            } else if (event.key === Qt.Key_PageUp) {
-                swipeView.decrementCurrentIndex();
-                event.accepted = true;
-            }
+    // Nothing in the focus chain hands focus down to the tab contents, so the AI chat
+    // input never gets it on its own. Focus it explicitly when the sidebar opens on that
+    // tab, when the user switches to it, and when its Loader finishes activating.
+    function focusAiInput() {
+        if (!GlobalStates.sidebarLeftOpen) return;
+        if (root.activeTabs[swipeView.currentIndex]?.icon !== "neurology") return;
+        swipeView.currentItem?.item?.forceActiveFocus();
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSidebarLeftOpenChanged() {
+            if (GlobalStates.sidebarLeftOpen) Qt.callLater(root.focusAiInput);
         }
     }
 
@@ -279,6 +318,8 @@ Item {
                     if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.triggerContentEntrance === "function") {
                         swipeView.currentItem.item.triggerContentEntrance();
                     }
+
+                    Qt.callLater(root.focusAiInput);
                 }
 
                 Component.onCompleted: {
@@ -312,8 +353,22 @@ Item {
                         }
 
                         onLoaded: {
-                            if (item)
+                            if (item) {
                                 item.anchors.fill = this;
+
+                                // Opening the sidebar and changing policy toggles can
+                                // activate this Loader asynchronously. In that case
+                                // the open/index handlers may run before AiChat exists,
+                                // leaving its entrance-only content at opacity 0.
+                                if (isCurrent && GlobalStates.sidebarLeftOpen) {
+                                    Qt.callLater(function() {
+                                        if (tabDelegate.item && tabDelegate.isCurrent && GlobalStates.sidebarLeftOpen && typeof tabDelegate.item.triggerContentEntrance === "function") {
+                                            tabDelegate.item.triggerContentEntrance();
+                                        }
+                                    });
+                                    Qt.callLater(root.focusAiInput);
+                                }
+                            }
                         }
 
                         readonly property bool isCurrent: swipeView.currentIndex === index

@@ -29,7 +29,6 @@ RippleButton {
     }
 
     readonly property int itemIndex: {
-        if (typeof index !== "undefined") return index;
         var p = parent;
         if (!p) return 0;
         var children = p.children;
@@ -44,7 +43,7 @@ RippleButton {
         
         var startIdx = 0;
         for (var i = selfIdx - 1; i >= 0; --i) {
-            if (children[i].visible && (typeof children[i].topLeftRadius === "undefined" && typeof children[i].isFirst === "undefined")) {
+            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
                 startIdx = i + 1;
                 break;
             }
@@ -52,7 +51,7 @@ RippleButton {
         
         var idx = 0;
         for (var i = startIdx; i < selfIdx; ++i) {
-            if (children[i].visible && (typeof children[i].topLeftRadius !== "undefined" || typeof children[i].isFirst !== "undefined")) {
+            if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
                 idx++;
             }
         }
@@ -62,15 +61,6 @@ RippleButton {
     readonly property int totalItems: {
         var p = parent;
         if (!p) return 1;
-        if (typeof index !== "undefined" && p.children) {
-            var cardCount = 0;
-            for (var i = 0; i < p.children.length; ++i) {
-                if (typeof p.children[i].isFirst !== "undefined" || typeof p.children[i].topLeftRadius !== "undefined") {
-                    cardCount++;
-                }
-            }
-            if (cardCount > 0) return cardCount;
-        }
         var children = p.children;
         var selfIdx = -1;
         for (var i = 0; i < children.length; ++i) {
@@ -83,7 +73,7 @@ RippleButton {
         
         var startIdx = 0;
         for (var i = selfIdx - 1; i >= 0; --i) {
-            if (children[i].visible && (typeof children[i].topLeftRadius === "undefined" && typeof children[i].isFirst === "undefined")) {
+            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
                 startIdx = i + 1;
                 break;
             }
@@ -91,7 +81,7 @@ RippleButton {
         
         var endIdx = children.length - 1;
         for (var i = selfIdx + 1; i < children.length; ++i) {
-            if (children[i].visible && (typeof children[i].topLeftRadius === "undefined" && typeof children[i].isFirst === "undefined")) {
+            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
                 endIdx = i - 1;
                 break;
             }
@@ -99,15 +89,15 @@ RippleButton {
         
         var count = 0;
         for (var i = startIdx; i <= endIdx; ++i) {
-            if (children[i].visible && (typeof children[i].topLeftRadius !== "undefined" || typeof children[i].isFirst !== "undefined")) {
+            if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
                 count++;
             }
         }
         return count;
     }
 
-    property bool isFirst: (typeof index !== "undefined") ? (index === 0) : (itemIndex === 0)
-    property bool isLast: (typeof index !== "undefined") ? (index === totalItems - 1) : (itemIndex === totalItems - 1)
+    property bool isFirst: itemIndex === 0
+    property bool isLast: itemIndex === totalItems - 1
 
     readonly property bool prevIsPressed: {
         var p = parent;
@@ -183,14 +173,23 @@ RippleButton {
 
     onClicked: root.openCard()
 
+    property bool usePrimaryContainer: false
+    property color shapeColorOverride: "transparent"
+    property color symbolColorOverride: "transparent"
+
     property color normalColor: Appearance.colors.colLayer2
 
     colBackground: normalColor
     colBackgroundHover: Appearance.colors.colLayer2Hover
     colRipple: Appearance.colors.colLayer2Active
 
-    readonly property color _tint: ColorUtils.categoryContainer(root.cardHue, Appearance.m3colors.m3primaryFixed, 0.5)
-    readonly property color _onTint: ColorUtils.categoryOnColor(root._tint, root.cardHue)
+    readonly property color _tint: shapeColorOverride !== "transparent" && shapeColorOverride.a > 0
+        ? shapeColorOverride
+        : (usePrimaryContainer ? Appearance.colors.colPrimaryContainer : ColorUtils.categoryContainer(root.cardHue, Appearance.m3colors.m3primaryFixed, 0.5))
+
+    readonly property color _onTint: symbolColorOverride !== "transparent" && symbolColorOverride.a > 0
+        ? symbolColorOverride
+        : (usePrimaryContainer ? Appearance.colors.colOnPrimaryContainer : ColorUtils.categoryOnColor(root._tint, root.cardHue))
 
     ScrollAnimate {}
 

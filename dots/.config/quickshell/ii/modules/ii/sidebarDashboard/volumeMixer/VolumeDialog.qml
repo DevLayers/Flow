@@ -12,6 +12,11 @@ import Quickshell.Services.Pipewire
 WindowDialog {
     id: root
     property bool isSink: true
+    property bool closeOwningSidebarOnDetails: true
+    property bool showDetailsAction: true
+
+    signal detailsRequested()
+
     backgroundHeight: 600
 
     VolumeDialogContent {
@@ -27,6 +32,7 @@ WindowDialog {
         // Details button with only a border and no fill
         RippleButton {
             id: detailsBtn
+            visible: root.showDetailsAction
             buttonRadius: Appearance.rounding.full
             colBackground: "transparent"
             colBackgroundHover: "transparent"
@@ -60,7 +66,9 @@ WindowDialog {
             }
             onClicked: {
                 Quickshell.execDetached(["bash", "-c", `${Config.options.apps.volumeMixer}`]);
-                GlobalStates.sidebarRightOpen = false;
+                root.detailsRequested();
+                if (root.closeOwningSidebarOnDetails)
+                    GlobalStates.sidebarRightOpen = false;
             }
         }
 

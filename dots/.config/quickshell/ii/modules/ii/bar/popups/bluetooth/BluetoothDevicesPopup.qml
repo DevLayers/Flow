@@ -1,3 +1,4 @@
+import qs
 import qs.modules.ii.bar.shared
 import qs.modules.common
 import qs.modules.common.functions
@@ -9,57 +10,15 @@ import QtQuick.Layouts
 StyledPopup {
     id: root
     stickyHover: true
+    readonly property bool sidebarOccludesPopup:
+        (root.notifIsLeft && GlobalStates.effectiveLeftOpen)
+        || (root.notifIsRight && GlobalStates.effectiveRightOpen)
 
-    Connections {
-        target: GlobalStates
-        function onDashboardPanelOpenChanged() {
-            if (GlobalStates.dashboardPanelOpen) {
-                root._stickyActive = false;
-                root._clickActive = false;
-            }
-        }
-        function onPoliciesPanelOpenChanged() {
-            if (GlobalStates.policiesPanelOpen) {
-                root._stickyActive = false;
-                root._clickActive = false;
-            }
-        }
-    }
+    active: !sidebarOccludesPopup && (_computedActive || _isClosing)
+
 
     readonly property bool notifIsLeft: (Config.options.notifications.position ?? "top_right").endsWith("left")
     readonly property bool notifIsRight: (Config.options.notifications.position ?? "top_right").endsWith("right")
-
-    customPosition: true
-
-    anchorTop: !Config.options.bar.vertical && !Config.options.bar.bottom
-    anchorBottom: !Config.options.bar.vertical && Config.options.bar.bottom
-    anchorLeft: Config.options.bar.vertical ? (Config.options.bar.bottom ? false : true) : notifIsRight
-    anchorRight: Config.options.bar.vertical ? (Config.options.bar.bottom ? true : false) : notifIsLeft
-
-    customMarginTop: Config.options.bar.vertical || Config.options.bar.bottom ? 0 : Appearance.sizes.barHeight
-    customMarginBottom: Config.options.bar.vertical || !Config.options.bar.bottom ? 0 : Appearance.sizes.barHeight
-    customMarginLeft: {
-        if (Config.options.bar.vertical) {
-            return Config.options.bar.bottom ? 0 : Appearance.sizes.verticalBarWindowWidth;
-        }
-        if (notifIsRight) {
-            var frameThickness = Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0;
-            var barGaps = Config.options.bar.cornerStyle !== 0 ? Appearance.sizes.hyprlandGapsOut : 0;
-            return frameThickness + barGaps + 4;
-        }
-        return 0;
-    }
-    customMarginRight: {
-        if (Config.options.bar.vertical) {
-            return Config.options.bar.bottom ? Appearance.sizes.verticalBarWindowWidth : 0;
-        }
-        if (notifIsLeft) {
-            var frameThickness = Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0;
-            var barGaps = Config.options.bar.cornerStyle !== 0 ? Appearance.sizes.hyprlandGapsOut : 0;
-            return frameThickness + barGaps + 4;
-        }
-        return 0;
-    }
 
     readonly property bool hasDevices: BluetoothStatus.connectedDevices.length > 0
 

@@ -658,7 +658,7 @@ Item {
             anchors.fill: parent
             anchors.margins: 10
             spacing: 10
-            opacity: root.showOverlay ? 0.0 : 1.0
+            opacity: (root.showOverlay || root.activeSubPage.toString() !== "") ? 0.0 : 1.0
             visible: opacity > 0.0
 
             Behavior on opacity {
@@ -788,6 +788,14 @@ Item {
                 id: actionsRow
                 Layout.fillWidth: true
                 visible: !root.emptyStateVisible
+            }
+
+            // ───────── NAVIGATION CARDS (Contacts / Android Apps) ─────
+            PhoneNavigationCards {
+                id: navCards
+                Layout.fillWidth: true
+                visible: !root.emptyStateVisible
+                onRequestOpenSubPage: (url) => root.openSubPage(url)
             }
 
             // ───────── NOTIFICATIONS ─────────

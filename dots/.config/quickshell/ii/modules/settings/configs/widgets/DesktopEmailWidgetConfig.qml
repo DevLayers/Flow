@@ -50,6 +50,7 @@ ContentPage {
             Layout.fillWidth: true
             implicitHeight: 250
             visible: !Config.isWidgetActive("email_inbox")
+                && !Config.isWidgetActive("email_inbox_2x1")
 
             PagePlaceholder {
                 anchors.fill: parent
@@ -64,6 +65,7 @@ ContentPage {
             Layout.fillWidth: true
             spacing: 4
             visible: Config.isWidgetActive("email_inbox")
+                || Config.isWidgetActive("email_inbox_2x1")
 
             ContentSubsectionLabel {
                 text: Translation.tr("Visual Options")

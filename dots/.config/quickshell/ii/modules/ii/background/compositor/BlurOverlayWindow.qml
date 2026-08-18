@@ -24,22 +24,6 @@ PanelWindow {
         right: true
     }
 
-    readonly property bool barVertical: Config.options.bar.vertical
-    readonly property bool barBottom: Config.options.bar.bottom
-    readonly property int barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
-    readonly property int gap: Appearance.gapsOut
-    readonly property bool barEffective: GlobalStates.barOpen && !GlobalStates.screenLocked
-
-    readonly property int baseMargin: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : gap
-    readonly property real leftSidebarOffset: (GlobalStates.policiesPinned && !GlobalStates.policiesDetached && GlobalStates.animatedLeftSidebarWidth > 0 && screen && screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
-    readonly property real rightSidebarOffset: 0
-
-    // Shrink margins when closing to prevent compositor layer order race conditions from blurring top panels
-    readonly property int marginLeft: isActive ? 0 : Math.max(baseMargin, (barEffective && barVertical && !barBottom) ? barSize : 0, leftSidebarOffset)
-    readonly property int marginRight: isActive ? 0 : Math.max(baseMargin, (barEffective && barVertical && barBottom) ? barSize : 0, rightSidebarOffset)
-    readonly property int marginTop: isActive ? 0 : Math.max(baseMargin, (barEffective && !barVertical && !barBottom) ? barSize : 0)
-    readonly property int marginBottom: isActive ? 0 : Math.max(baseMargin, (barEffective && !barVertical && barBottom) ? barSize : 0)
-
     mask: Region {
         item: overlayDimRect
     }
@@ -52,17 +36,10 @@ PanelWindow {
 
     Rectangle {
         id: overlayDimRect
-        x: blurOverlayWindow.marginLeft
-        y: blurOverlayWindow.marginTop
-        width: parent.width - blurOverlayWindow.marginLeft - blurOverlayWindow.marginRight
-        height: parent.height - blurOverlayWindow.marginTop - blurOverlayWindow.marginBottom
+        anchors.fill: parent
         color: Qt.rgba(0, 0, 0, 0.25)
         opacity: blurOverlayWindow.isActive ? 1.0 : 0.0
-        radius: {
-            if (Config.options.appearance.fakeScreenRounding > 0)
-                return Appearance.rounding.screenRounding;
-            return 0;
-        }
+        radius: 0
 
         Behavior on opacity {
             NumberAnimation {

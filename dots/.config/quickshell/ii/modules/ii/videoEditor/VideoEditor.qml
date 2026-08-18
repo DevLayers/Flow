@@ -31,7 +31,9 @@ FloatingWindow {
         // (loops: MediaPlayer.Infinite) with no visible window to stop it.
         source: root.visible && GlobalStates.videoEditorPath !== "" ? "file://" + encodeURI(GlobalStates.videoEditorPath) : ""
         videoOutput: videoOutput
-        audioOutput: AudioOutput {}
+        audioOutput: AudioOutput {
+            volume: root.muteAudio ? 0 : 1
+        }
         loops: MediaPlayer.Infinite
         
         onPositionChanged: {
@@ -62,13 +64,60 @@ FloatingWindow {
         }
     }
 
+    Process {
+        id: probeProcess
+        running: false
+        stdout: SplitParser {
+            onRead: data => root.handleProbeLine(data)
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0 || Number(root.videoMetadata.duration || 0) <= 0) root.metadataLoading = false
+        }
+    }
+
+    Process {
+        id: thumbnailProcess
+        running: false
+        stdout: SplitParser {
+            onRead: data => root.handleThumbnailLine(data)
+        }
+    }
+
+    Process {
+        id: estimateProcess
+        running: false
+        stdout: SplitParser {
+            onRead: data => {
+                try {
+                    const result = JSON.parse(String(data || "").trim())
+                    if (result.ok) {
+                        root.estimatedOutputSize = Number(result.estimatedSize || 0)
+                        root.estimatedOutputLow = Number(result.low || 0)
+                        root.estimatedOutputHigh = Number(result.high || 0)
+                    }
+                } catch (error) {
+                    console.warn("[VideoEditor] Invalid estimate response:", data)
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: estimateTimer
+        interval: Appearance.animation.elementMoveFast.duration
+        repeat: false
+        onTriggered: root.startEstimate()
+    }
+
     Connections {
         target: GlobalStates
         function onVideoEditorPathChanged() {
             if (GlobalStates.videoEditorPath !== "") {
                 sizeProcess.running = true
+                root.loadMetadata()
             } else {
                 root.currentFileSize = 0
+                root.loadMetadata()
             }
         }
     }
@@ -82,10 +131,23 @@ FloatingWindow {
             compressionPercent = 100
             isCompressMode = false
             sizeProcess.running = true
+            root.loadMetadata()
         } else {
             player.stop()
+            probeProcess.running = false
+            thumbnailProcess.running = false
+            estimateProcess.running = false
         }
     }
+
+    onCompressionPercentChanged: root.scheduleEstimate()
+    onIsCompressModeChanged: root.scheduleEstimate()
+    onStartTimeChanged: root.scheduleEstimate()
+    onEndTimeChanged: root.scheduleEstimate()
+    onCropXChanged: root.scheduleEstimate()
+    onCropYChanged: root.scheduleEstimate()
+    onCropWChanged: root.scheduleEstimate()
+    onCropHChanged: root.scheduleEstimate()
 
     property real cropX: 0
     property real cropY: 0
@@ -98,6 +160,144 @@ FloatingWindow {
     property real currentFileSize: 0
     property real compressionPercent: 100
     property bool isCompressMode: false
+    property var videoMetadata: ({})
+    property list<var> thumbnailPaths: []
+    property bool metadataLoading: false
+    property bool infoPopupOpen: false
+    property real estimatedOutputSize: 0
+    property real estimatedOutputLow: 0
+    property real estimatedOutputHigh: 0
+    property int rotation: 0
+    property bool flipHorizontal: false
+    property bool flipVertical: false
+    property bool muteAudio: false
+
+    function formatBytes(bytes) {
+        const size = Number(bytes || 0)
+        if (size <= 0) return "—"
+        const units = ["B", "KiB", "MiB", "GiB"]
+        const index = Math.min(units.length - 1, Math.floor(Math.log(size) / Math.log(1024)))
+        return `${(size / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`
+    }
+
+    function formatDuration(seconds) {
+        const total = Math.max(0, Math.round(Number(seconds || 0)))
+        const hours = Math.floor(total / 3600)
+        const minutes = Math.floor((total % 3600) / 60)
+        const remainder = total % 60
+        const pad = value => ("0" + value).slice(-2)
+        return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(remainder)}` : `${pad(minutes)}:${pad(remainder)}`
+    }
+
+    function metadataResolution() {
+        const video = root.videoMetadata.video || {}
+        return Number(video.width || 0) > 0 ? `${video.width} × ${video.height}` : "—"
+    }
+
+    function metadataFps() {
+        const fps = Number((root.videoMetadata.video || {}).fps || 0)
+        return fps > 0 ? `${fps.toFixed(fps % 1 === 0 ? 0 : 2)} FPS` : "—"
+    }
+
+    function metadataBitrate() {
+        const bitrate = Number((root.videoMetadata.format || {}).bitrate || (root.videoMetadata.video || {}).bitrate || 0)
+        if (bitrate <= 0) return "—"
+        return bitrate >= 1000000 ? `${(bitrate / 1000000).toFixed(2)} Mbps` : `${Math.round(bitrate / 1000)} kbps`
+    }
+
+    function crfForCompressionPercent() {
+        return Math.round(18 + (100 - Math.max(10, Math.min(100, root.compressionPercent))) * 0.35)
+    }
+
+    function exportSpec(replace) {
+        const uiWidth = Math.max(1, videoOutput.contentRect.width)
+        const uiHeight = Math.max(1, videoOutput.contentRect.height)
+        return {
+            input: GlobalStates.videoEditorPath,
+            startSeconds: root.startTime / 1000,
+            endSeconds: root.effectiveEndTime / 1000,
+            crop: {
+                x: root.cropW > 0 ? root.cropX : 0,
+                y: root.cropH > 0 ? root.cropY : 0,
+                w: root.cropW > 0 ? root.cropW : uiWidth,
+                h: root.cropH > 0 ? root.cropH : uiHeight,
+                uiW: uiWidth,
+                uiH: uiHeight
+            },
+            crf: root.crfForCompressionPercent(),
+            preset: "fast",
+            rotation: root.rotation,
+            flipHorizontal: root.flipHorizontal,
+            flipVertical: root.flipVertical,
+            mute: root.muteAudio,
+            replaceOriginal: replace,
+            outputPath: ""
+        }
+    }
+
+    function loadMetadata() {
+        if (GlobalStates.videoEditorPath === "") {
+            root.videoMetadata = ({})
+            root.thumbnailPaths = []
+            root.metadataLoading = false
+            return
+        }
+        root.metadataLoading = true
+        root.videoMetadata = ({})
+        root.thumbnailPaths = []
+        root.estimatedOutputSize = 0
+        root.estimatedOutputLow = 0
+        root.estimatedOutputHigh = 0
+        probeProcess.running = false
+        probeProcess.command = ["python3", Directories.processVideoScriptPath, "probe", GlobalStates.videoEditorPath]
+        probeProcess.running = true
+    }
+
+    function handleProbeLine(line) {
+        const text = String(line || "").trim()
+        if (!text) return
+        try {
+            const data = JSON.parse(text)
+            if (data.ok) {
+                root.videoMetadata = data
+                root.currentFileSize = Number(data.size || root.currentFileSize)
+                root.metadataLoading = false
+                thumbnailProcess.running = false
+                thumbnailProcess.command = ["python3", Directories.processVideoScriptPath, "thumbnails", GlobalStates.videoEditorPath, "8", Directories.tempImages]
+                thumbnailProcess.running = true
+                root.scheduleEstimate()
+            }
+        } catch (error) {
+            console.warn("[VideoEditor] Invalid probe response:", text)
+        }
+    }
+
+    function handleThumbnailLine(line) {
+        try {
+            const data = JSON.parse(String(line || "").trim())
+            if (data.event !== "thumbnail") return
+            const paths = root.thumbnailPaths.slice()
+            paths[data.index] = data.path
+            root.thumbnailPaths = paths
+        } catch (error) {
+            console.warn("[VideoEditor] Invalid thumbnail response:", line)
+        }
+    }
+
+    function scheduleEstimate() {
+        if (root.metadataLoading || root.videoMetadata.duration === undefined || root.isCompressMode === false) return
+        root.estimatedOutputSize = 0
+        root.estimatedOutputLow = 0
+        root.estimatedOutputHigh = 0
+        estimateTimer.restart()
+    }
+
+    function startEstimate() {
+        if (GlobalStates.videoEditorPath === "" || Number(root.videoMetadata.duration || 0) <= 0) return
+        estimateProcess.running = false
+        estimateProcess.command = ["python3", Directories.processVideoScriptPath, "estimate", JSON.stringify(root.exportSpec(false))]
+        estimateProcess.running = true
+    }
 
     function applyPreset(ratio) {
         let vW = videoOutput.contentRect.width
@@ -123,24 +323,17 @@ FloatingWindow {
         cropY = (vH - cropH) / 2
     }
 
+    function resetTransformations() {
+        root.rotation = 0
+        root.flipHorizontal = false
+        root.flipVertical = false
+        root.muteAudio = false
+    }
+
     function save(replace) {
         if (videoOutput.contentRect.width <= 0) return
-        
-        let args = [
-            Directories.processVideoScriptPath,
-            GlobalStates.videoEditorPath,
-            Math.round(cropW),
-            Math.round(cropH),
-            Math.round(cropX),
-            Math.round(cropY),
-            Math.round(startTime),
-            Math.round(effectiveEndTime),
-            Math.round(videoOutput.contentRect.width),
-            Math.round(videoOutput.contentRect.height),
-            replace ? "1" : "0",
-            Math.round(compressionPercent)
-        ]
-        Quickshell.execDetached(args)
+
+        Quickshell.execDetached(["python3", Directories.processVideoScriptPath, "export", JSON.stringify(root.exportSpec(replace))])
         GlobalStates.videoEditorOpen = false
     }
 
@@ -203,11 +396,34 @@ FloatingWindow {
                 }
 
                 Item { Layout.fillWidth: true }
+
+                RippleButton {
+                    id: infoButton
+                    enabled: GlobalStates.videoEditorPath !== "" && !root.metadataLoading
+                    Layout.preferredWidth: 52
+                    Layout.preferredHeight: 52
+                    Layout.minimumWidth: 52
+                    Layout.minimumHeight: 52
+                    buttonRadius: 26
+                    colBackground: root.infoPopupOpen ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+                    contentItem: Item {
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "info"
+                            iconSize: 24
+                            color: root.infoPopupOpen ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                        }
+                    }
+                    onClicked: root.infoPopupOpen = !root.infoPopupOpen
+                }
                 
                 RippleButton {
                     id: closeBtn
-                    width: 52
-                    height: 52
+                    Layout.leftMargin: Appearance.rounding.verysmall
+                    Layout.preferredWidth: 52
+                    Layout.preferredHeight: 52
+                    Layout.minimumWidth: 52
+                    Layout.minimumHeight: 52
                     buttonRadius: 26
                     colBackground: Appearance.colors.colSurfaceContainerHighest
                     contentItem: Item {
@@ -248,6 +464,19 @@ FloatingWindow {
                     width: parent.width
                     height: parent.height
                     fillMode: VideoOutput.PreserveAspectFit
+                    transform: [
+                        Rotation {
+                            angle: root.rotation
+                            origin.x: videoOutput.width / 2
+                            origin.y: videoOutput.height / 2
+                        },
+                        Scale {
+                            xScale: root.flipHorizontal ? -1 : 1
+                            yScale: root.flipVertical ? -1 : 1
+                            origin.x: videoOutput.width / 2
+                            origin.y: videoOutput.height / 2
+                        }
+                    ]
 
                     Item {
                         anchors.fill: parent
@@ -416,7 +645,35 @@ FloatingWindow {
                             color: Appearance.colors.colSurfaceContainer
                             border.width: 1
                             border.color: Appearance.colors.colLayer0Border
-                            Rectangle { anchors.fill: parent; anchors.margins: 4; radius: 8; color: Appearance.colors.colLayer1 }
+                            Rectangle {
+                                id: timelineTrack
+                                anchors.fill: parent
+                                anchors.margins: 4
+                                radius: 8
+                                color: Appearance.colors.colLayer1
+
+                                Row {
+                                    anchors.fill: parent
+                                    visible: root.thumbnailPaths.length > 0
+                                    clip: true
+                                    Repeater {
+                                        model: root.thumbnailPaths
+                                        delegate: Item {
+                                            required property var modelData
+                                            width: timelineTrack.width / Math.max(1, root.thumbnailPaths.length)
+                                            height: timelineTrack.height
+                                            clip: true
+                                            Image {
+                                                anchors.fill: parent
+                                                source: modelData ? "file://" + encodeURI(modelData) : ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                asynchronous: true
+                                                smooth: true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             MouseArea {
                                 anchors.fill: parent
                                 onPressed: (mouse) => {
@@ -505,7 +762,9 @@ FloatingWindow {
                                 color: Appearance.colors.colOnSurfaceVariant
                             }
                             StyledText { 
-                                text: `${(root.currentFileSize / (1024*1024)).toFixed(1)} MB ➔ ${((root.currentFileSize * (root.compressionPercent/100)) / (1024*1024)).toFixed(1)} MB`
+                                text: root.estimatedOutputSize > 0
+                                    ? `${root.formatBytes(root.currentFileSize)} ➔ ${root.formatBytes(root.estimatedOutputSize)}`
+                                    : `${root.formatBytes(root.currentFileSize)} ➔ ${Translation.tr("calculating…")}`
                                 font.pixelSize: 16
                                 font.weight: Font.Bold
                                 color: Appearance.colors.colOnSurface
@@ -570,6 +829,64 @@ FloatingWindow {
                                     }
                                 }
                             }
+
+                            RowLayout {
+                                spacing: 8
+                                Layout.topMargin: 4
+
+                                RippleButton {
+                                    implicitWidth: 44
+                                    implicitHeight: 44
+                                    buttonRadius: 22
+                                    colBackground: Appearance.colors.colSurfaceContainerHighest
+                                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "restart_alt"; iconSize: 20; color: Appearance.colors.colOnSurface }
+                                    StyledToolTip { text: Translation.tr("Reset transformations") }
+                                    onClicked: root.resetTransformations()
+                                }
+
+                                RippleButton {
+                                    implicitWidth: 44
+                                    implicitHeight: 44
+                                    buttonRadius: 22
+                                    colBackground: root.rotation !== 0 ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+                                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "rotate_right"; iconSize: 20; color: root.rotation !== 0 ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface }
+                                    StyledToolTip { text: Translation.tr("Rotate 90°") }
+                                    onClicked: root.rotation = (root.rotation + 90) % 360
+                                }
+
+                                RippleButton {
+                                    implicitWidth: 44
+                                    implicitHeight: 44
+                                    buttonRadius: 22
+                                    toggled: root.flipHorizontal
+                                    colBackground: root.flipHorizontal ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+                                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "flip"; iconSize: 20; color: root.flipHorizontal ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface }
+                                    StyledToolTip { text: Translation.tr("Flip horizontal") }
+                                    onClicked: root.flipHorizontal = !root.flipHorizontal
+                                }
+
+                                RippleButton {
+                                    implicitWidth: 44
+                                    implicitHeight: 44
+                                    buttonRadius: 22
+                                    toggled: root.flipVertical
+                                    colBackground: root.flipVertical ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+                                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "flip"; iconSize: 20; color: root.flipVertical ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface }
+                                    StyledToolTip { text: Translation.tr("Flip vertical") }
+                                    onClicked: root.flipVertical = !root.flipVertical
+                                }
+
+                                RippleButton {
+                                    implicitWidth: 44
+                                    implicitHeight: 44
+                                    buttonRadius: 22
+                                    toggled: root.muteAudio
+                                    colBackground: root.muteAudio ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+                                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: root.muteAudio ? "volume_off" : "volume_up"; iconSize: 20; color: root.muteAudio ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface }
+                                    StyledToolTip { text: Translation.tr("Mute audio") }
+                                    onClicked: root.muteAudio = !root.muteAudio
+                                }
+                            }
                         }
 
                         Item { Layout.fillWidth: true }
@@ -627,6 +944,62 @@ FloatingWindow {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        Rectangle {
+            id: infoPopup
+            visible: root.infoPopupOpen && GlobalStates.videoEditorPath !== ""
+            z: 20
+            anchors.top: parent.top
+            anchors.topMargin: 30 + infoButton.height + 8
+            anchors.right: parent.right
+            anchors.rightMargin: 30
+            width: 300
+            height: infoLayout.implicitHeight + 40
+            radius: Appearance.rounding.large
+            color: Appearance.colors.colSurfaceContainerHigh
+
+            StyledRectangularShadow { target: infoPopup }
+
+            ColumnLayout {
+                id: infoLayout
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 8
+
+                StyledText {
+                    text: Translation.tr("Original video")
+                    font.pixelSize: 17
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnSurface
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    StyledText { text: Translation.tr("Duration"); color: Appearance.colors.colOnSurfaceVariant; Layout.fillWidth: true }
+                    StyledText { text: root.formatDuration(root.videoMetadata.duration !== undefined ? root.videoMetadata.duration : player.duration / 1000); color: Appearance.colors.colOnSurface; font.weight: Font.Medium }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    StyledText { text: Translation.tr("FPS"); color: Appearance.colors.colOnSurfaceVariant; Layout.fillWidth: true }
+                    StyledText { text: root.metadataFps(); color: Appearance.colors.colOnSurface; font.weight: Font.Medium }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    StyledText { text: Translation.tr("Resolution"); color: Appearance.colors.colOnSurfaceVariant; Layout.fillWidth: true }
+                    StyledText { text: root.metadataResolution(); color: Appearance.colors.colOnSurface; font.weight: Font.Medium }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    StyledText { text: Translation.tr("Bitrate"); color: Appearance.colors.colOnSurfaceVariant; Layout.fillWidth: true }
+                    StyledText { text: root.metadataBitrate(); color: Appearance.colors.colOnSurface; font.weight: Font.Medium }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    StyledText { text: Translation.tr("Size"); color: Appearance.colors.colOnSurfaceVariant; Layout.fillWidth: true }
+                    StyledText { text: root.formatBytes(root.videoMetadata.size || root.currentFileSize); color: Appearance.colors.colOnSurface; font.weight: Font.Medium }
                 }
             }
         }

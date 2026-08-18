@@ -13,6 +13,8 @@ MouseArea {
     property bool isDirectory: fileModelData.fileIsDir
 
     property bool shouldLoad: true
+    property bool isApplied: false
+    property string appliedLabel: ""
 
     property bool isVideo: {
         const path = fileModelData.fileName.toLowerCase();
@@ -83,7 +85,7 @@ MouseArea {
 
                 Loader {
                     id: thumbnailShadowLoader
-                    active: thumbnailImageLoader.active && thumbnailImageLoader.item.status === Image.Ready && root.shouldLoad
+                    active: thumbnailImageLoader.active && thumbnailImageLoader.item && thumbnailImageLoader.item.status === Image.Ready && root.shouldLoad
                     anchors.fill: thumbnailImageLoader
                     sourceComponent: StyledRectangularShadow {
                         target: thumbnailImageLoader
@@ -98,34 +100,38 @@ MouseArea {
                     active: root.useThumbnail && root.shouldLoad
                     sourceComponent: ThumbnailImage {
                         id: thumbnailImage
-                        generateThumbnail: false
-                        sourcePath: fileModelData.filePath
+                        generateThumbnail: root.isVideo
+                        sourcePath: String(fileModelData.filePath || "")
+                        thumbnailService: Wallpapers
 
                         cache: false
                         fillMode: Image.PreserveAspectCrop
                         clip: true
-
-                        Connections {
-                            target: Wallpapers
-                            function onThumbnailGenerated(directory) {
-                                if (thumbnailImage.status !== Image.Error) return;
-                                if (FileUtils.parentDirectory(thumbnailImage.sourcePath) !== FileUtils.trimFileProtocol(directory)) return;
-                                thumbnailImage.source = "";
-                                thumbnailImage.source = thumbnailImage.thumbnailPath;
-                            }
-                            function onThumbnailGeneratedFile(filePath) {
-                                if (thumbnailImage.status !== Image.Error) return;
-                                if (Qt.resolvedUrl(thumbnailImage.sourcePath) !== Qt.resolvedUrl(filePath)) return;
-                                thumbnailImage.source = "";
-                                thumbnailImage.source = thumbnailImage.thumbnailPath;
-                            }
-                        }
 
                         layer.enabled: true
                         layer.effect: OpacityMask {
                             maskSource: Rectangle {
                                 width: wallpaperItemImageContainer.width
                                 height: wallpaperItemImageContainer.height
+                                radius: Appearance.rounding.small
+                            }
+                        }
+                    }
+                }
+
+                Loader {
+                    id: videoThumbnailFallbackLoader
+                    anchors.fill: thumbnailImageLoader
+                    active: root.isVideo && root.shouldLoad && thumbnailImageLoader.active && thumbnailImageLoader.item && thumbnailImageLoader.item.status === Image.Error
+                    sourceComponent: StyledImage {
+                        source: `${Directories.assetsPath}/images/default_wallpaper.png`
+                        fillMode: Image.PreserveAspectCrop
+                        clip: true
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: videoThumbnailFallbackLoader.width
+                                height: videoThumbnailFallbackLoader.height
                                 radius: Appearance.rounding.small
                             }
                         }
@@ -163,6 +169,37 @@ MouseArea {
 
                         onClicked: {
                             root.moreOptionsRequested(fileModelData);
+                        }
+                    }
+                }
+
+                Pill {
+                    id: appliedBadge
+                    z: 2
+                    visible: root.isApplied && !root.isDirectory
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.margins: Appearance.sizes.wallpaperSelectorItemMargins
+                    implicitHeight: Appearance.font.pixelSize.huge + Appearance.sizes.wallpaperSelectorItemPadding * 2
+                    implicitWidth: appliedBadgeContent.implicitWidth + Appearance.sizes.wallpaperSelectorItemPadding * 2
+                    color: Appearance.colors.colPrimary
+
+                    RowLayout {
+                        id: appliedBadgeContent
+                        anchors.centerIn: parent
+                        spacing: Appearance.sizes.wallpaperSelectorItemPadding / 2
+
+                        MaterialSymbol {
+                            text: "check_circle"
+                            iconSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnPrimary
+                        }
+
+                        StyledText {
+                            text: root.appliedLabel
+                            color: Appearance.colors.colOnPrimary
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            font.weight: Font.Medium
                         }
                     }
                 }

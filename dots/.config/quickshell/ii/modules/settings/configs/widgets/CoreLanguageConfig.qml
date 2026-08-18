@@ -46,41 +46,66 @@ ContentPage {
     }
 
     // Translator languages model
-    property var languages: ["auto"]
-    property var languagesModel: [{ "displayName": "auto", "value": "auto" }]
+    property list<string> languages: ["auto"]
+    property list<var> languagesModel: [{ "displayName": "auto", "value": "auto" }]
+    property bool languageLoadRequested: false
+
+    function loadLanguages() {
+        if (root.languageLoadRequested || getLanguagesProc.running)
+            return;
+
+        root.languageLoadRequested = true;
+        getLanguagesProc.bufferList = [];
+        getLanguagesProc.running = true;
+    }
+
+    // The page is loaded through an async sub-page Loader. Wait until the
+    // object tree is complete before changing the ComboBox model.
+    Timer {
+        id: languageLoadTimer
+        interval: 0
+        running: true
+        onTriggered: root.loadLanguages()
+    }
 
     Process {
         id: getLanguagesProc
         command: ["trans", "-list-languages", "-no-bidi"]
-        property var bufferList: ["auto"]
-        running: true
+        property list<string> bufferList: []
+        running: false
         stdout: SplitParser {
-                onRead: data => {
-                    getLanguagesProc.bufferList.push(data.trim());
+            onRead: data => {
+                const lines = String(data).split(/\r?\n/);
+                for (const line of lines) {
+                    const language = line.trim();
+                    if (language.length > 0)
+                        getLanguagesProc.bufferList.push(language);
                 }
             }
-            onExited: (exitCode, exitStatus) => {
-                let langs = getLanguagesProc.bufferList.filter(lang => lang.trim().length > 0 && lang !== "auto").sort((a, b) => a.localeCompare(b));
-                langs.unshift("auto");
-                root.languages = langs;
-                
-                let modelList = [];
-                for (let i = 0; i < langs.length; i++) {
-                    modelList.push({
-                        "displayName": langs[i],
-                        "value": langs[i]
-                    });
-                }
-                root.languagesModel = modelList;
-                getLanguagesProc.bufferList = [];
-            }
         }
-    
-        Process {
-            id: translationProc
-            property string locale: ""
-            command: [Directories.aiTranslationScriptPath, translationProc.locale]
+        onExited: exitCode => {
+            if (exitCode !== 0)
+                return;
+
+            const languages = Array.from(new Set(getLanguagesProc.bufferList))
+                .filter(language => language !== "auto")
+                .sort((a, b) => a.localeCompare(b));
+            languages.unshift("auto");
+
+            root.languages = languages;
+            root.languagesModel = languages.map(language => ({
+                "displayName": language,
+                "value": language
+            }));
+            getLanguagesProc.bufferList = [];
         }
+    }
+
+    Process {
+        id: translationProc
+        property string locale: ""
+        command: [Directories.aiTranslationScriptPath, translationProc.locale]
+    }
 
     ContentSection {
         icon: "neurology"

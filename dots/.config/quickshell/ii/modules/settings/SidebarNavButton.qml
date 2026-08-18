@@ -51,14 +51,14 @@ Item {
     implicitHeight: itemHeight
 
     // ── Radius helpers ─────────────────────────────────────────────────────
-    readonly property real _rFull:             itemHeight / 2
-    readonly property real _topLeftRadius:     _rFull
-    readonly property real _topRightRadius:    _rFull
-    readonly property real _bottomLeftRadius:  _rFull
+    readonly property real _rFull: itemHeight / 2
+    readonly property real _topLeftRadius: _rFull
+    readonly property real _topRightRadius: _rFull
+    readonly property real _bottomLeftRadius: _rFull
     readonly property real _bottomRightRadius: _rFull
 
     // ── Signal ─────────────────────────────────────────────────────────────
-    signal clicked()
+    signal clicked
 
     // ── Background ─────────────────────────────────────────────────────────
     Rectangle {
@@ -66,28 +66,28 @@ Item {
         anchors.fill: parent
         antialiasing: true
 
-        topLeftRadius:     root._topLeftRadius
-        topRightRadius:    root._topRightRadius
-        bottomLeftRadius:  root._bottomLeftRadius
+        topLeftRadius: root._topLeftRadius
+        topRightRadius: root._topRightRadius
+        bottomLeftRadius: root._bottomLeftRadius
         bottomRightRadius: root._bottomRightRadius
 
-        color: isActive
-            ? (mouseArea.pressed
-                ? Appearance.colors.colPrimaryActive
-                : mouseArea.containsMouse
-                    ? Appearance.colors.colPrimaryHover
-                    : Appearance.colors.colPrimary)
-            : (mouseArea.pressed
-                ? Appearance.colors.colLayer2Active
-                : mouseArea.containsMouse
-                    ? Appearance.colors.colLayer2Hover
-                    : Appearance.colors.colLayer2)
+        color: isActive ? (mouseArea.pressed ? Appearance.colors.colPrimaryActive : mouseArea.containsMouse ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary) : (mouseArea.pressed ? Appearance.colors.colLayer2Active : mouseArea.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2)
 
-        Behavior on color            { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(btnBg) }
-        Behavior on topLeftRadius    { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg) }
-        Behavior on topRightRadius   { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg) }
-        Behavior on bottomLeftRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg) }
-        Behavior on bottomRightRadius{ animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg) }
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(btnBg)
+        }
+        Behavior on topLeftRadius {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg)
+        }
+        Behavior on topRightRadius {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg)
+        }
+        Behavior on bottomLeftRadius {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg)
+        }
+        Behavior on bottomRightRadius {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg)
+        }
     }
 
     // ── Content ────────────────────────────────────────────────────────────
@@ -102,34 +102,33 @@ Item {
         // Circle icon container
         Rectangle {
             id: iconCircle
-            implicitWidth:  root.itemHeight - 8
+            implicitWidth: root.itemHeight - 8
             implicitHeight: root.itemHeight - 8
             radius: width / 2
             Layout.alignment: Qt.AlignVCenter
             Layout.leftMargin: 4
 
-            color: isActive
-                ? Qt.rgba(1, 1, 1, 0.18)
-                : Qt.rgba(
-                    Appearance.colors.colOnLayer2.r,
-                    Appearance.colors.colOnLayer2.g,
-                    Appearance.colors.colOnLayer2.b,
-                    0.10
-                  )
+            color: isActive ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(Appearance.colors.colOnLayer2.r, Appearance.colors.colOnLayer2.g, Appearance.colors.colOnLayer2.b, 0.10)
 
-            Behavior on color { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
 
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: root.iconName
                 iconSize: 18
                 fill: isActive ? 1 : 0
-                color: isActive
-                    ? Appearance.colors.colOnPrimary
-                    : Appearance.colors.colOnLayer2
+                color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
 
-                Behavior on color { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
-                Behavior on fill  { NumberAnimation { duration: 150 } }
+                Behavior on color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                }
+                Behavior on fill {
+                    NumberAnimation {
+                        duration: 150
+                    }
+                }
             }
         }
 
@@ -140,11 +139,11 @@ Item {
             elide: Text.ElideRight
             font.pixelSize: Appearance.font.pixelSize.small
             font.weight: isActive ? Font.DemiBold : Font.Normal
-            color: isActive
-                ? Appearance.colors.colOnPrimary
-                : Appearance.colors.colOnLayer2
+            color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
 
-            Behavior on color { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
         }
     }
 

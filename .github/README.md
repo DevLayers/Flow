@@ -15,6 +15,14 @@ It aims to provide a state-of-the-art Linux desktop experience by strictly adher
 > [!NOTE]
 > This repository is a work in progress. Some modules, like the Gmail client, require manual setup of API keys.
 
+## Requirements
+
+- **Hyprland 0.56.1 or newer**
+- **Matugen 4.1.0 or newer**
+
+> [!NOTE]
+> Matugen **4.1.0+ is the supported/recommended version**. The lightweight scheme-switching path still detects Matugen 3 and avoids the Matugen 4-only `--source-color-index` option, preserving scheme changes on older installations. On Fedora, the installer enables `avengemedia/danklinux` to source the current Matugen package.
+
 ## Installation
 
 ### Default installation
@@ -50,6 +58,7 @@ Please refer to the **[upstream ii-vynx wiki](https://github.com/vaguesyntax/ii-
 - **[pc-trade](https://github.com/pctrade):** Some design and features inspo.
 - **[so-do-i-look-like-him](https://github.com/so-do-i-look-like-him):** Installation bug fixes.
 - **[asteriau](https://github.com/asteriau):** Cheatsheet keybinds animations.
+- **[hnpf](https://github.com/hnpf):** Nothing widgets design
 - **[gowall](https://github.com/Achno/gowall):** Dynamic icons theme system.
 - **[hyprmon](https://github.com/erans/hyprmon):** Monitor management in settings.
 - **[Quickshell](https://quickshell.org/):** Widget system.

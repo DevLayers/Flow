@@ -17,14 +17,36 @@ Singleton {
     property bool gpsActive: Config.options.bar.weather.enableGPS
     readonly property string city: Config.options.bar.weather.city
 
-    onUseUSCSChanged: getData(true)
-    onCityChanged: getData(true)
+    // Config settling at startup flips city/units from their defaults, which looks
+    // identical to a user changing them. WeatherPopup already fetches on its own at
+    // startup, so a forced fetch here would bypass the rate limit and double up.
+    // Coalesce, then only force when the request differs from what was last fetched.
+    readonly property string fetchKey: `${root.city}|${root.useUSCS}|${root.gpsActive}`
+    property string lastFetchedKey: ""
+
+    function requestRefetch() {
+        refetchDebounce.restart();
+    }
+
+    Timer {
+        id: refetchDebounce
+        interval: 250
+        repeat: false
+        onTriggered: {
+            if (root.fetchKey === root.lastFetchedKey)
+                return;
+            root.getData(true);
+        }
+    }
+
+    onUseUSCSChanged: requestRefetch()
+    onCityChanged: requestRefetch()
     onGpsActiveChanged: {
         if (root.gpsActive) {
             positionSource.start();
         } else {
             positionSource.stop();
-            getData(true);
+            requestRefetch();
         }
     }
     onFetchIntervalChanged: {
@@ -230,6 +252,7 @@ Singleton {
             return;
         }
         lastFetchTimestamp = now;
+        root.lastFetchedKey = root.fetchKey;
 
         if (root.gpsActive && root.location.valid) {
             // If GPS is active and we have a valid position, fetch weather for it directly
@@ -326,7 +349,7 @@ Singleton {
             positionSource.start();
             fallbackTimer.start();
         } else {
-            root.getData(true);
+            root.requestRefetch();
         }
     }
 
@@ -380,7 +403,8 @@ Singleton {
         running: Config.options.bar.weather.enable
         repeat: true
         interval: root.fetchInterval
-        triggeredOnStart: true
+        // No triggeredOnStart: the initial fetch is owned by Component.onCompleted
+        // (or by the GPS/fallback path), otherwise startup fetches twice.
         onTriggered: root.getData()
     }
 }

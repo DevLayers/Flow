@@ -15,9 +15,18 @@ Item {
 
     readonly property var geniusApiKey: KeyringStorage.keyringData?.apiKeys?.genius
 
+    property string _lastQueryKey: ""
+
     function fetchLyrics(artist, title) {
-        console.log("[Genius Lyrics] Fetching lyrics for", artist, "-", title)
-        fetchLyricsProcess.command = ["node", Directories.geniusLyricsScriptPath, root.geniusApiKey, artist, title]
+        if (!title && !artist) return;
+        const queryArtist = artist ?? ""
+        const queryTitle = title ?? ""
+        const key = queryArtist + "::" + queryTitle
+        if (key === _lastQueryKey && fetchLyricsProcess.running) return;
+        _lastQueryKey = key
+        console.log("[Genius Lyrics] Fetching lyrics for", queryArtist, "-", queryTitle)
+        fetchLyricsProcess.running = false
+        fetchLyricsProcess.command = ["node", Directories.geniusLyricsScriptPath, root.geniusApiKey, queryArtist, queryTitle]
         fetchLyricsProcess.running = true
     }
 

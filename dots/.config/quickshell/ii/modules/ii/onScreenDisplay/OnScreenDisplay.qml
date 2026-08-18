@@ -39,6 +39,7 @@ Scope {
     }
 
     property string currentIndicator: "volume"
+    readonly property bool isDisplayIndicator: currentIndicator === "brightness" || currentIndicator === "gamma"
     property var indicators: [
         {
             id: "volume",
@@ -70,8 +71,7 @@ Scope {
                 return Audio.sink.audio.muted ? 0 : Audio.sink.audio.volume;
             return 0;
         } else if (currentIndicator === "brightness") {
-            let focusedScreen = Quickshell.screens.find(s => s.name === (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "")) || Quickshell.screens[0] || null;
-            let brightnessMonitor = Brightness.getMonitorForScreen(focusedScreen);
+            let brightnessMonitor = Brightness.getTargetMonitor();
             return brightnessMonitor ? brightnessMonitor.brightness : 0.5;
         } else if (currentIndicator === "playerVolume") {
             return MprisController.activePlayer ? MprisController.activePlayer.volume : 0;
@@ -125,8 +125,7 @@ Scope {
                 }
             }
         } else if (currentIndicator === "brightness") {
-            let focusedScreen = Quickshell.screens.find(s => s.name === (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "")) || Quickshell.screens[0] || null;
-            let brightnessMonitor = Brightness.getMonitorForScreen(focusedScreen);
+            let brightnessMonitor = Brightness.getTargetMonitor();
             if (brightnessMonitor) {
                 brightnessMonitor.setBrightness(newValue);
             }
@@ -149,12 +148,17 @@ Scope {
     function triggerOsd() {
         if (Config.ready && Config.options.osd && !Config.options.osd.enable)
             return;
-        // If the OSD was fully closed (not just closing), reset expansion state
-        // so the next open always starts collapsed. This prevents stale state
-        // from a previous session when the Loader reuses the same PanelWindow.
-        if (!GlobalStates.osdVolumeOpen && osdLoader.item) {
-            osdLoader.item.isExpanded = false;
-            osdLoader.item.expandedProgress = 0.0;
+        if (Config.ready && Config.options.osd && Config.options.osd.hideWhenFullscreen && Notifications.focusedWindowFullscreen)
+            return;
+        if (!root.currentIndicator)
+            root.currentIndicator = "volume";
+        root.isClosing = false;
+        if (osdLoader.item) {
+            osdLoader.item.openedProgress = 1.0;
+            if (!GlobalStates.osdVolumeOpen) {
+                osdLoader.item.isExpanded = false;
+                osdLoader.item.expandedProgress = 0.0;
+            }
         }
         GlobalStates.osdVolumeOpen = true;
         osdTimeout.restart();
@@ -284,7 +288,7 @@ Scope {
 
     Loader {
         id: osdLoader
-        active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !(Config.ready && Config.options.bar.floatingNotch.enable)
+        active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
 
         sourceComponent: PanelWindow {
             id: osdRoot
@@ -314,9 +318,9 @@ Scope {
                     } else {
                         return slidersW + osdGroupSpacing + osdRowSpacing;
                     }
-                } else if (root.currentIndicator === "brightness") {
+                } else if (root.isDisplayIndicator) {
                     var kbd = KeyboardBacklight.available ? 1 : 0;
-                    var n = 2 + kbd; // 2 extra sliders (Gamma, Nightlight) + optional KeyboardBacklight
+                    var n = 2 + kbd; // 2 complementary display sliders + optional KeyboardBacklight
                     return n * osdButtonHeight + 2 * osdGroupSpacing + (n - 1) * osdRowSpacing;
                 }
                 return 0;
@@ -359,9 +363,9 @@ Scope {
 
                 // Check toggled state of neighbors
                 // Note: In RightToLeft layout, _leftNeighbor is physically to the RIGHT, and _rightNeighbor is physically to the LEFT.
-                readonly property bool isSelfToggled: toggledState || toggled || (activated !== undefined && activated)
-                readonly property bool prevIsToggled: _leftNeighbor ? (_leftNeighbor.isSelfToggled || _leftNeighbor.toggledState || _leftNeighbor.toggled || (_leftNeighbor.activated !== undefined && _leftNeighbor.activated)) : false
-                readonly property bool nextIsToggled: _rightNeighbor ? (_rightNeighbor.isSelfToggled || _rightNeighbor.toggledState || _rightNeighbor.toggled || (_rightNeighbor.activated !== undefined && _rightNeighbor.activated)) : false
+                readonly property bool isSelfToggled: morphToggle.toggledState === true || morphToggle.toggled === true || morphToggle.activated === true
+                readonly property bool prevIsToggled: _leftNeighbor ? (_leftNeighbor.isSelfToggled || _leftNeighbor.toggledState === true || _leftNeighbor.toggled === true || _leftNeighbor.activated === true) : false
+                readonly property bool nextIsToggled: _rightNeighbor ? (_rightNeighbor.isSelfToggled || _rightNeighbor.toggledState === true || _rightNeighbor.toggled === true || _rightNeighbor.activated === true) : false
 
                 // Physical Left side radius:
                 readonly property real leftRadiusCalc: osdRoot.isLeftPosition
@@ -851,7 +855,7 @@ Scope {
                             // (1c) Brightness Top Row Layout (dark mode, nightlight, auto nightlight)
                             RowLayout {
                                 id: brightnessTopRow
-                                visible: root.currentIndicator === "brightness"
+                                visible: root.isDisplayIndicator
                                 spacing: 4 * osdRoot.expandedProgress
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: osdButtonHeight
@@ -1032,10 +1036,10 @@ Scope {
                                 }
                             }
 
-                            // (1b) Original Top button (for brightness/gamma/keyboard indicators)
+                            // (1b) Original Top button (for keyboard/audio indicators)
                             OsdTopButton {
                                 id: topButton
-                                visible: root.currentIndicator !== "volume" && root.currentIndicator !== "brightness"
+                                visible: root.currentIndicator !== "volume" && !root.isDisplayIndicator
                                 currentIndicator: root.currentIndicator
                                 expandedProgress: osdRoot.expandedProgress
                                 buttonHeight: osdButtonHeight
@@ -1319,7 +1323,7 @@ Scope {
                             // (7c) Brightness Bottom Row Layout (keyboard backlight, gamma reset, collapse)
                             RowLayout {
                                 id: brightnessBottomRow
-                                visible: root.currentIndicator === "brightness"
+                                visible: root.isDisplayIndicator
                                 spacing: 4 * osdRoot.expandedProgress
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: osdButtonHeight
@@ -1508,7 +1512,7 @@ Scope {
                                 Layout.alignment: Qt.AlignRight
                                 Layout.preferredHeight: osdCollapseButtonHeight
                                 Layout.preferredWidth: osdCollapseButtonHeight + (parent.width - osdCollapseButtonHeight) * osdRoot.expandedProgress
-                                visible: root.currentIndicator !== "volume" && root.currentIndicator !== "brightness"
+                                visible: root.currentIndicator !== "volume" && !root.isDisplayIndicator
                                     onClicked: {
                                         osdRoot.isExpanded = !osdRoot.isExpanded;
                                         root.triggerOsd();

@@ -4,13 +4,14 @@ import Quickshell
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 ContentPage {
     id: page
     forceWidth: false
 
     ContentSection {
-        title: Translation.tr("Notifications")
+        title: Translation.tr("Popups & Behavior")
         icon: "notifications"
 
         ConfigSpinBox {
@@ -55,13 +56,33 @@ ContentPage {
             }
         }
 
-        MonitorPicker {
+        ContentSubsection {
             visible: Config.options.notifications.monitor.enable
-            currentValue: Config.options.notifications.monitor.name
-            onSelected: (newValue) => {
-                Config.options.notifications.monitor.name = newValue;
+            title: Translation.tr("Target monitor")
+            icon: "tv"
+            Layout.fillWidth: true
+
+            MonitorPicker {
+                currentValue: Config.options.notifications.monitor.name
+                onSelected: (newValue) => {
+                    Config.options.notifications.monitor.name = newValue;
+                }
             }
         }
+    }
+
+    ContentSection {
+        title: Translation.tr("Position")
+        icon: "place"
+
+        NotificationPositionPicker {
+            Layout.fillWidth: true
+        }
+    }
+
+    ContentSection {
+        title: Translation.tr("Status Bar Indicator")
+        icon: "notifications_active"
 
         ConfigSwitch {
             buttonIcon: "counter_2"
@@ -69,36 +90,6 @@ ContentPage {
             checked: Config.options.bar.indicators.notifications.showUnreadCount
             onCheckedChanged: {
                 Config.options.bar.indicators.notifications.showUnreadCount = checked;
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Notification indicator style")
-            icon: "notifications"
-
-            ConfigSelectionArray {
-                currentValue: Config.options.bar.styles.notification
-                onSelected: newValue => { Config.options.bar.styles.notification = newValue; }
-                options: [
-                    { displayName: Translation.tr("Default"),    icon: "style",     value: "default" },
-                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
-                ]
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Notification position")
-            icon: "place"
-
-            ConfigSelectionArray {
-                currentValue: Config.options.notifications.position
-                onSelected: newValue => { Config.options.notifications.position = newValue; }
-                options: [
-                    { displayName: Translation.tr("Top Left"),     icon: "north_west", value: "top_left" },
-                    { displayName: Translation.tr("Top Right"),    icon: "north_east", value: "top_right" },
-                    { displayName: Translation.tr("Bottom Left"),  icon: "south_west", value: "bottom_left" },
-                    { displayName: Translation.tr("Bottom Right"), icon: "south_east", value: "bottom_right" }
-                ]
             }
         }
     }

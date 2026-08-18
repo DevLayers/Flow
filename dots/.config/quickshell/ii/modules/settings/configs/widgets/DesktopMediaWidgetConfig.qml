@@ -49,7 +49,7 @@ ContentPage {
         Item {
             Layout.fillWidth: true
             implicitHeight: 250
-            visible: !Config.isWidgetActive("media_circular") && !Config.isWidgetActive("media_expressive")
+            visible: !Config.isWidgetActive("media_circular")
 
             PagePlaceholder {
                 anchors.fill: parent
@@ -63,7 +63,7 @@ ContentPage {
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
-            visible: Config.isWidgetActive("media_circular") || Config.isWidgetActive("media_expressive")
+            visible: Config.isWidgetActive("media_circular")
 
             Item { Layout.preferredHeight: 16; visible: Config.isWidgetActive("media_circular") }
 

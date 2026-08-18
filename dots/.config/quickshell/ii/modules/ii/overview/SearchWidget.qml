@@ -64,8 +64,7 @@ Item {
     readonly property bool isTranslatorMode: root.searchingText.startsWith(Config.options.search.prefix.translator)
     readonly property bool isMediaDownloaderMode: Config.options.mediaDownloader.enabled && root.searchingText.startsWith(Config.options.search.prefix.mediaDownloader)
     readonly property bool isMaterialSymbolsMode: root.searchingText.startsWith(Config.options.search.prefix.materialSymbols)
-    readonly property bool isEmojiMode: root.searchingText.startsWith(Config.options.search.prefix.emojis)
-    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode || root.isEmojiMode
+    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
     readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !root.isAnySpecialMode && root.searchingText === ""
     readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
     property bool showResults: searchingText != "" || isAnySpecialMode || alwaysListAppsMode || (searchingText === "" && LauncherSearch.results.length > 0)
@@ -81,6 +80,15 @@ Item {
 
     // Suppress item transitions during panel open/close to avoid flicker
     property bool suppressItemTransitions: true
+    // Keep list movement animations for settled results, not for every keypress.
+    // Reordering delegates while the fuzzy search is still changing competes
+    // with text input on the GUI thread.
+    Timer {
+        id: typingTransitionTimer
+        interval: 140
+        repeat: false
+        onTriggered: root.suppressItemTransitions = false
+    }
 
     Connections {
         target: GlobalStates
@@ -129,14 +137,14 @@ Item {
     // Track animation state via Connections to the animation IDs
     property bool _heightAnimating: false
     property bool _widthAnimating: false
-    
+
     Connections {
         target: heightAnim
         function onRunningChanged() {
             root._heightAnimating = heightAnim.running;
         }
     }
-    
+
     Connections {
         target: widthAnim
         function onRunningChanged() {
@@ -301,8 +309,6 @@ Item {
             let bottomMargin = GlobalStates.searchConnectActive ? 16 : 10;
             if (root.showSuggestionsPanel)
                 return (suggestionsPanelLoader.item ? suggestionsPanelLoader.item.implicitHeight : (Config.options.search.baseHeight ?? 500)) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            if (root.isEmojiMode)
-                return (emojiPanelLoader.item ? emojiPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isBluetoothMode)
                 return (bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isClipboardMode)
@@ -670,54 +676,42 @@ Item {
                             return;
                         }
 
-                        // Build Map of existing keys for O(1) index lookup
-                        const modelKeyMap = new Map();
-                        for (let i = 0; i < resultModel.count; i++) {
-                            modelKeyMap.set(resultModel.get(i).key, i);
-                        }
+                        const currentKeys = [];
+                        for (let i = 0; i < resultModel.count; i++)
+                            currentKeys.push(resultModel.get(i).key);
 
-                        const newKeys = new Set(newItems.map(x => x.key));
+                        const newKeys = newItems.map(item => item.key);
+                        const newKeySet = new Set(newKeys);
 
-                        // 1. Remove items no longer in newKeys (from end to start to avoid index drift)
-                        for (let i = resultModel.count - 1; i >= 0; i--) {
-                            const key = resultModel.get(i).key;
-                            if (!newKeys.has(key)) {
+                        // Remove stale rows from the end so model indexes remain valid.
+                        for (let i = currentKeys.length - 1; i >= 0; i--) {
+                            if (!newKeySet.has(currentKeys[i])) {
                                 resultModel.remove(i);
+                                currentKeys.splice(i, 1);
                             }
                         }
 
-                        // Rebuild key index map after removals
-                        modelKeyMap.clear();
-                        for (let i = 0; i < resultModel.count; i++) {
-                            modelKeyMap.set(resultModel.get(i).key, i);
-                        }
+                        // Move/insert each desired row once. The old implementation
+                        // rebuilt a full index map after every operation.
+                        for (let newIndex = 0; newIndex < newItems.length; newIndex++) {
+                            const item = newItems[newIndex];
+                            const currentIndex = currentKeys.indexOf(item.key);
 
-                        // 2. Insert new items and update order/properties
-                        for (let ni = 0; ni < newItems.length; ni++) {
-                            const item = newItems[ni];
-                            const currentPos = modelKeyMap.has(item.key) ? modelKeyMap.get(item.key) : -1;
-
-                            if (currentPos === -1) {
-                                const insertAt = Math.min(ni, resultModel.count);
-                                resultModel.insert(insertAt, {
+                            if (currentIndex === -1) {
+                                resultModel.insert(newIndex, {
                                     key: item.key,
                                     modelRef: item
                                 });
-                                // Refresh key map indices
-                                modelKeyMap.clear();
-                                for (let i = 0; i < resultModel.count; i++) {
-                                    modelKeyMap.set(resultModel.get(i).key, i);
-                                }
-                            } else {
-                                if (currentPos !== ni && ni < resultModel.count) {
-                                    resultModel.move(currentPos, ni, 1);
-                                    modelKeyMap.clear();
-                                    for (let i = 0; i < resultModel.count; i++) {
-                                        modelKeyMap.set(resultModel.get(i).key, i);
-                                    }
-                                }
-                                resultModel.setProperty(ni, "modelRef", item);
+                                currentKeys.splice(newIndex, 0, item.key);
+                            } else if (currentIndex !== newIndex) {
+                                resultModel.move(currentIndex, newIndex, 1);
+                                const movedKey = currentKeys.splice(currentIndex, 1)[0];
+                                currentKeys.splice(newIndex, 0, movedKey);
                             }
+
+                            const row = resultModel.get(newIndex);
+                            if (row.modelRef !== item)
+                                resultModel.setProperty(newIndex, "modelRef", item);
                         }
                     }
 
@@ -727,9 +721,14 @@ Item {
                             root.loadedResultsCount = 50;
                             if (appResults.count > 0)
                                 appResults.currentIndex = 0;
-                            // User is typing — enable item transitions now
+
+                            // Defer movement animations until typing settles. This
+                            // keeps the input path free of overlapping ListView work.
+                            root.suppressItemTransitions = true;
                             if (root.searchingText !== "")
-                                root.suppressItemTransitions = false;
+                                typingTransitionTimer.restart();
+                            else
+                                typingTransitionTimer.stop();
                         }
                     }
 
@@ -758,6 +757,8 @@ Item {
                             // When query is emptied, instantly clear model and cancel debounce for instant height shrink
                             if (root.searchingText === "") {
                                 resultsDebounce.stop();
+                                typingTransitionTimer.stop();
+                                root.suppressItemTransitions = true;
                                 resultModel.clear();
                                 return;
                             }
@@ -900,14 +901,14 @@ Item {
                     spacing: 8
                     visible: opacity > 0
                     opacity: root.showSkeletons ? 1.0 : 0.0
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    Behavior on opacity {
+                        enabled: !root.inNotchMode
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
                     }
-                }
 
                     Repeater {
                         model: 4
@@ -980,7 +981,7 @@ Item {
                 active: root.isClipboardMode || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
-                Layout.preferredHeight: item ? item.implicitHeight : 520
+                Layout.preferredHeight: (root.isClipboardMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
                 height: Layout.preferredHeight
                 source: "ClipboardPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
@@ -1017,7 +1018,7 @@ Item {
                 active: root.isBluetoothMode || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
-                Layout.preferredHeight: item ? item.implicitHeight : 520
+                Layout.preferredHeight: (root.isBluetoothMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
                 height: Layout.preferredHeight
                 source: "BluetoothPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
@@ -1054,7 +1055,7 @@ Item {
                 active: root.isTranslatorMode || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
-                Layout.preferredHeight: item ? item.implicitHeight : 520
+                Layout.preferredHeight: (root.isTranslatorMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
                 height: Layout.preferredHeight
                 source: "TranslatorPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
@@ -1102,7 +1103,7 @@ Item {
                 active: root.isMediaDownloaderMode || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
-                Layout.preferredHeight: item ? item.implicitHeight : 520
+                Layout.preferredHeight: (root.isMediaDownloaderMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
                 height: Layout.preferredHeight
                 source: "MediaDownloaderPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
@@ -1140,7 +1141,7 @@ Item {
                 visible: opacity > 0.01
                 Layout.preferredWidth: 380
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredHeight: item ? item.implicitHeight : 520
+                Layout.preferredHeight: (root.isMaterialSymbolsMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
                 height: Layout.preferredHeight
                 source: "MaterialSymbolsPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
@@ -1173,41 +1174,11 @@ Item {
             }
 
             Loader {
-                id: emojiPanelLoader
-                active: root.isEmojiMode || opacity > 0.01
-                visible: opacity > 0.01
-                Layout.fillWidth: true
-                Layout.preferredHeight: item ? item.implicitHeight : 520
-                height: Layout.preferredHeight
-                source: "EmojiPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
-
-                opacity: root.isEmojiMode ? 1.0 : 0.0
-                transform: Translate {
-                    y: (1.0 - emojiPanelLoader.opacity) * 16
-                }
-                layer.enabled: opacity > 0.001 && opacity < 0.999
-                layer.effect: MultiEffect {
-                    blurEnabled: (1.0 - parent.opacity) > 0.001
-                    blurMax: 32.0
-                    blur: (1.0 - parent.opacity) * 0.5
-                }
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-            }
-
-            Loader {
                 id: suggestionsPanelLoader
                 active: root.showSuggestionsPanel || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
-                Layout.preferredHeight: item ? item.implicitHeight : (Config.options.search.baseHeight ?? 500)
+                Layout.preferredHeight: (root.showSuggestionsPanel || opacity > 0.01) ? (item ? item.implicitHeight : (Config.options.search.baseHeight ?? 500)) : 0
                 height: Layout.preferredHeight
                 source: "SuggestionsPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1

@@ -12,6 +12,7 @@ Item {
     property alias iconText: symbol.text
     property bool isActive: false
     property bool forceHovered: false
+    property var altAction: null
 
     readonly property real baseSize: (vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.baseBarHeight) - 14
     implicitWidth: vertical ? baseSize : (hovered ? baseSize + 28 : baseSize)
@@ -66,6 +67,13 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: (e) => root.clicked(e)
+        acceptedButtons: Qt.LeftButton | (root.altAction ? Qt.RightButton : Qt.NoButton)
+        onClicked: (e) => {
+            if (e.button === Qt.RightButton) {
+                if (root.altAction) root.altAction();
+                return;
+            }
+            root.clicked(e);
+        }
     }
 }

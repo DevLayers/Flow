@@ -21,7 +21,7 @@ Rectangle {
             }
         }
         if (selfIdx === -1) return 0;
-        
+
         var startIdx = 0;
         for (var i = selfIdx - 1; i >= 0; --i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -29,7 +29,7 @@ Rectangle {
                 break;
             }
         }
-        
+
         var idx = 0;
         for (var i = startIdx; i < selfIdx; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
@@ -51,7 +51,7 @@ Rectangle {
             }
         }
         if (selfIdx === -1) return 1;
-        
+
         var startIdx = 0;
         for (var i = selfIdx - 1; i >= 0; --i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -59,7 +59,7 @@ Rectangle {
                 break;
             }
         }
-        
+
         var endIdx = children.length - 1;
         for (var i = selfIdx + 1; i < children.length; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
@@ -67,7 +67,7 @@ Rectangle {
                 break;
             }
         }
-        
+
         var count = 0;
         for (var i = startIdx; i <= endIdx; ++i) {
             if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
@@ -80,7 +80,14 @@ Rectangle {
     property bool isFirst: itemIndex === 0
     property bool isLast: itemIndex === totalItems - 1
 
-    readonly property bool isPressed: false
+    readonly property bool isPressed: {
+        for (var i = 0; i < buttonRow.children.length; ++i) {
+            var child = buttonRow.children[i];
+            if (child.isPressed === true || (child.down !== undefined && child.down === true))
+                return true;
+        }
+        return false;
+    }
 
     readonly property bool prevIsPressed: {
         var p = parent;
@@ -142,15 +149,24 @@ Rectangle {
         return false;
     }
 
-    topLeftRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    topRightRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    bottomLeftRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    bottomRightRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    readonly property bool isHorizontalLayout: {
+        var p = parent;
+        if (!p) return false;
+        var pStr = p.toString();
+        return (pStr.indexOf("RowLayout") !== -1 || pStr.indexOf("Row") !== -1) && pStr.indexOf("Column") === -1;
+    }
 
-    Behavior on topLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on topRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on bottomLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on bottomRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
+    readonly property real rFull: Appearance.rounding.scale === 0 ? 0 : Math.min(height / 2, Appearance.rounding.large)
+
+    topLeftRadius: (isPressed || prevIsPressed) ? rFull : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    topRightRadius: (isPressed || prevIsPressed) ? rFull : (isHorizontalLayout ? (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall))
+    bottomLeftRadius: (isPressed || nextIsPressed) ? rFull : (isHorizontalLayout ? (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall))
+    bottomRightRadius: (isPressed || nextIsPressed) ? rFull : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
+
+    Behavior on topLeftRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on topRightRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on bottomLeftRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on bottomRightRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
 
     color: Appearance.colors.colTertiaryContainer
     Layout.fillWidth: true
@@ -160,7 +176,7 @@ Rectangle {
     RowLayout {
         id: mainRowLayout
         anchors.fill: parent
-        anchors.margins: 18
+        anchors.margins: 16
         spacing: 14
 
         MaterialShapeWrappedMaterialSymbol {

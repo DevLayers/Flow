@@ -155,7 +155,7 @@ MouseArea {
                                 StyledText {
                                     anchors.centerIn: parent
                                     font.pixelSize: 10
-                                    font.weight: Font.Bold
+                                    font.weight: Font.DemiBold
                                     text: batteryProgress.text
                                     color: (root.isLow && !root.effectivelyCharging) ? Appearance.m3colors.m3onError : root.colText
                                 }

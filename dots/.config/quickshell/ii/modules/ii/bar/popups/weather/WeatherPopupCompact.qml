@@ -12,8 +12,10 @@ import qs.modules.ii.bar
 StyledPopup {
     id: root
     popupRadius: Appearance.rounding.large
+    animate: false // We have to disable the animation if we have only one card
     contentItem: HeroCard {
         id: weatherHero
+        startAnim: root.opened && root.popupOpenProgress > 0.6
         anchors.centerIn: parent
         Layout.minimumWidth: 320
         margins: 20

@@ -13,6 +13,8 @@ ComboBox {
     hoverEnabled: true
 
     property string buttonIcon: ""
+    property real popupWidth: 0
+    property bool iconOnly: false
     property real buttonRadius: Appearance.rounding.full
     property real topLeftRadius: buttonRadius
     property real topRightRadius: buttonRadius
@@ -50,6 +52,7 @@ ComboBox {
     }
 
     indicator: MaterialSymbol {
+        visible: !root.iconOnly
         x: root.width - width - 16
         y: root.height / 2 - height / 2
         text: "keyboard_arrow_down"
@@ -70,11 +73,11 @@ ComboBox {
             id: buttonLayout
             anchors.fill: parent
             spacing: 8
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
+            anchors.leftMargin: root.iconOnly ? 12 : 16
+            anchors.rightMargin: root.iconOnly ? 12 : 16
 
             Loader {
-                Layout.alignment: Qt.AlignVCenter
+                Layout.alignment: root.iconOnly ? Qt.AlignHCenter : Qt.AlignVCenter
                 active: root.buttonIcon.length > 0 || (root.currentIndex >= 0 && typeof root.model[root.currentIndex] === 'object' && root.model[root.currentIndex]?.icon)
                 visible: active
                 sourceComponent: MaterialSymbol {
@@ -91,6 +94,7 @@ ComboBox {
 
             StyledText {
                 Layout.fillWidth: true
+                visible: !root.iconOnly
                 Layout.alignment: Qt.AlignVCenter
                 color: Appearance.colors.colOnSecondaryContainer
                 text: root.displayText
@@ -105,6 +109,7 @@ ComboBox {
     delegate: ItemDelegate {
         id: itemDelegate
         width: ListView.view ? ListView.view.width : root.width
+        height: 40
         implicitHeight: 40
 
         required property var model
@@ -171,15 +176,27 @@ ComboBox {
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
             }
+
+        }
+
+        StyledToolTip {
+            text: itemDelegate.model[root.textRole] || ""
+            extraVisibleCondition: itemDelegate.hovered && root.popup.visible
         }
     }
 
     popup: Popup {
         id: popupRoot
         y: root.height + 4
-        width: root.width
+        width: root.popupWidth > 0 ? root.popupWidth : root.width
         height: Math.min(listView.contentHeight + topPadding + bottomPadding, 300)
         padding: 8
+
+        onOpened: {
+            if (root.currentIndex >= 0 && listView) {
+                listView.positionViewAtIndex(root.currentIndex, ListView.Center);
+            }
+        }
 
         transformOrigin: Item.Top
 
@@ -263,51 +280,8 @@ ComboBox {
             spacing: 2
             model: root.popup.visible ? root.delegateModel : null
             currentIndex: root.highlightedIndex
-
-            add: Transition {
-                ParallelAnimation {
-                    NumberAnimation {
-                        property: "opacity"
-                        from: 0
-                        to: 1
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.OutCubic
-                    }
-                    NumberAnimation {
-                        property: "y"
-                        from: -10
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.OutCubic
-                    }
-                }
-            }
-
-            remove: Transition {
-                ParallelAnimation {
-                    NumberAnimation {
-                        property: "opacity"
-                        from: 1
-                        to: 0
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.InCubic
-                    }
-                    NumberAnimation {
-                        property: "y"
-                        to: 10
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.InCubic
-                    }
-                }
-            }
-
-            displaced: Transition {
-                NumberAnimation {
-                    properties: "x,y"
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.standardDecel
-                }
-            }
+            animatePopulate: false
+            animateAppearance: false
         }
     }
 }

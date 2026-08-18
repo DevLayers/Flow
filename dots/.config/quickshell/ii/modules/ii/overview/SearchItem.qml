@@ -546,6 +546,7 @@ RippleButton {
                         visible: !root.actionPanelOpen
 
                         RowLayout {
+                            id: titleRow
                             visible: !root.entry?.isMath
                             Layout.fillWidth: true
                             Rectangle {
@@ -595,7 +596,7 @@ RippleButton {
                                 model: root.query == root.itemName ? [] : root.urls
                                 Favicon {
                                     required property var modelData
-                                    size: parent.height
+                                    size: Math.max(1, titleRow.height)
                                     url: modelData
                                 }
                             }
@@ -770,7 +771,7 @@ RippleButton {
                                     font.pixelSize: 9
                                     font.family: Appearance.font.family.main
                                     font.weight: Font.Bold
-                                    color: Appearance.colors.colOnSurfaceVariant
+                                    color: Appearance.colors.colOnSurfaceContainer
                                 }
                             }
                             Rectangle {
@@ -786,7 +787,7 @@ RippleButton {
                                     font.pixelSize: 9
                                     font.family: Appearance.font.family.main
                                     font.weight: Font.Bold
-                                    color: Appearance.colors.colOnSurfaceVariant
+                                    color: Appearance.colors.colOnSurfaceContainer
                                 }
                             }
                         }

@@ -22,16 +22,12 @@ Item {
 
     property var pinnedItems: TrayService.pinnedItems
     property var unpinnedItems: TrayService.unpinnedItems
-    onPinnedItemsChanged: updateVisibility()
-    onUnpinnedItemsChanged: updateVisibility()
+    readonly property bool hasItems: pinnedItems.length > 0 || unpinnedItems.length > 0
+    visible: hasItems
 
-    function updateVisibility() {
-        const hasAnyItems = pinnedItems.length > 0 || unpinnedItems.length > 0;
-        sysTrayRoot.visible = hasAnyItems;
-
-        if (unpinnedItems.length === 0) {
+    onUnpinnedItemsChanged: {
+        if (unpinnedItems.length === 0)
             closeOverflowMenu();
-        }
     }
 
     readonly property var overflowWindow: trayOverflowLayout.QsWindow ? trayOverflowLayout.QsWindow.window : null
@@ -139,8 +135,52 @@ Item {
                     columnSpacing: 10
                     rowSpacing: 10
 
+                    readonly property bool startAnim: overflowPopup.opened && overflowPopup.popupOpenProgress > 0.6
+
+                    onStartAnimChanged: {
+                        if (startAnim) {
+                            trayOverflowLayout.opacity = 0.0;
+                            trayOverflowLayout.scale = 0.85;
+                            trayOverflowTransform.y = 25;
+                            Qt.callLater(function() {
+                                trayOverflowAnim.start();
+                            });
+                        }
+                    }
+
+                    Connections {
+                        target: overflowPopup
+                        function onPopupOpenProgressChanged() {
+                            if (overflowPopup.popupOpenProgress === 0.0) {
+                                trayOverflowAnim.stop();
+                                trayOverflowLayout.opacity = 0.0;
+                                trayOverflowLayout.scale = 0.85;
+                                trayOverflowTransform.y = 25;
+                            }
+                        }
+                    }
+
+                    opacity: 0.0
+                    scale: 0.85
+                    transform: Translate {
+                        id: trayOverflowTransform
+                        y: 25
+                    }
+
+                    SequentialAnimation {
+                        id: trayOverflowAnim
+                        PauseAnimation { duration: 40 }
+                        ParallelAnimation {
+                            NumberAnimation { target: trayOverflowLayout; property: "opacity"; to: 1.0; duration: 300 }
+                            NumberAnimation { target: trayOverflowLayout; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                            NumberAnimation { target: trayOverflowTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                        }
+                    }
+
                     Repeater {
-                        model: sysTrayRoot.unpinnedItems
+                        model: ScriptModel {
+                            values: sysTrayRoot.unpinnedItems
+                        }
 
                         delegate: SysTrayItem {
                             required property SystemTrayItem modelData

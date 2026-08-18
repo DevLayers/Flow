@@ -312,7 +312,7 @@ Item {
         } else {
             root.isEnabling = false;
         }
-        adapter.enabled = !adapter.enabled;
+        BluetoothStatus.toggle();
     }
 
     function navigateUp() {

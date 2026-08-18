@@ -26,6 +26,9 @@ Singleton {
     property string clientSecret: ""
     property string accessToken: ""
 
+    property bool _envLoading: false
+    property bool _envLoaded: false
+
     readonly property string apiBase: "https://api.ticktick.com/open/v1"
     readonly property string envPath: Quickshell.shellPath(".env")
 
@@ -99,9 +102,13 @@ Singleton {
         if (KeyringStorage.loaded) {
             let kr = KeyringStorage.keyringData?.apiKeys;
             if (kr && kr.ticktick_access_token) {
+                const tokenChanged = root.accessToken !== (kr.ticktick_access_token || "");
                 root.clientId = kr.ticktick_client_id || "";
                 root.clientSecret = kr.ticktick_client_secret || "";
                 root.accessToken = kr.ticktick_access_token || "";
+                // Keyring emits both loadedChanged and dataChanged; only act on a real change
+                if (!tokenChanged)
+                    return;
                 console.log("[TickTick] Credentials loaded from Gnome Keyring.");
                 if (root.available) {
                     root.refresh();
@@ -114,11 +121,18 @@ Singleton {
     }
 
     function loadEnv() {
+        // The keyring signals re-enter loadCredentials after startup; the .env file
+        // only needs reading once per session.
+        if (root._envLoading || root._envLoaded)
+            return;
+        root._envLoading = true;
         loadEnvProcess.command[2] = `cat "${FileUtils.trimFileProtocol(root.envPath)}" 2>/dev/null || echo ""`;
         loadEnvProcess.running = true;
     }
 
     function parseEnv(text) {
+        root._envLoading = false;
+        root._envLoaded = true;
         let lines = text.split("\n");
         let envClientId = "";
         let envClientSecret = "";

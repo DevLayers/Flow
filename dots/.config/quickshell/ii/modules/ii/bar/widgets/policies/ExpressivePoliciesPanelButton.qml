@@ -6,6 +6,7 @@ import qs.modules.common.widgets
 
 Item {
     id: root
+    readonly property string screenName: root.QsWindow?.window?.screen?.name ?? ""
     property bool vertical: false
     property bool showPing: false
     property bool aiChatEnabled: Config.options.policies.ai !== 0
@@ -79,7 +80,7 @@ Item {
             : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryActive : Appearance.colors.colTertiaryActive)
 
         onPressed: {
-            GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
+            GlobalStates.toggleLeftSidebar(root.screenName);
         }
 
         MaterialShape {
@@ -107,7 +108,13 @@ Item {
                 width: root.vertical ? 16 : 14
                 height: root.vertical ? 16 : 14
                 visible: !Config.options.bar.useMaterialSymbolForTopLeftIcon
-                source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
+                source: {
+                    const icon = Config.options.bar.topLeftIcon;
+                    if (icon === 'distro') return SystemInfo.distroIcon;
+                    if (icon === 'docker') return 'docker.svg';
+                    if (icon.endsWith('.svg') || icon.endsWith('.png')) return icon;
+                    return `${icon}-symbolic`;
+                }
                 colorize: true
                 color: root.phoneIntegrationActive
                     ? Appearance.colors.colErrorContainer

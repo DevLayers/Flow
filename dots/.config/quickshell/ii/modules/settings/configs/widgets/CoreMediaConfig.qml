@@ -70,10 +70,6 @@ ContentPage {
             }
         }
 
-        ConfigSwitch {
-            }
-        }
-
         ContentSubsectionLabel { text: Translation.tr("Music Recognition") }
 
         ConfigSpinBox {

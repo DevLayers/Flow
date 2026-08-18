@@ -216,12 +216,41 @@ ColumnLayout {
                             StyledText {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
-                                anchors.right: exportButton.left
+                                anchors.right: updateButton.left
                                 anchors.rightMargin: 10
                                 text: model.name
                                 color: Appearance.colors.colOnLayer1
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 elide: Text.ElideRight
+                            }
+
+                            RippleButton {
+                                    id: updateButton
+                                    anchors.right: exportButton.left
+                                    anchors.rightMargin: 5
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    implicitWidth: 30
+                                    implicitHeight: 30
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: Appearance.colors.colTertiaryContainer
+                                    colBackgroundHover: Appearance.colors.colTertiaryContainerHover
+                                    colRipple: Appearance.colors.colTertiaryContainerActive
+
+                                    contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "save"
+                                    iconSize: 16
+                                    color: Appearance.colors.colOnTertiaryContainer
+                                }
+
+                                    onClicked: {
+                                    Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh update "${model.name}"`]);
+                                    refreshTimer.restart();
+                                }
+
+                                    StyledToolTip {
+                                    text: Translation.tr("Save settings to this preset")
+                                }
                             }
 
                             RippleButton {
@@ -272,7 +301,7 @@ ColumnLayout {
                                 }
 
                                 onClicked: {
-                                    Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh export "${model.name}"`]);
+                                    Quickshell.execDetached([Directories.scriptPath + "/presets.sh", "export", String(model.name)]);
                                 }
 
                                 StyledToolTip {

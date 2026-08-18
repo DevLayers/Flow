@@ -83,8 +83,7 @@ WindowDialog {
                 Behavior on color { ColorAnimation { duration: 150 } }
             }
             onClicked: {
-                GlobalStates.settingsPendingPageName = "privacy"
-                GlobalStates.settingsOpen = true
+                GlobalStates.openSettingsPage("privacy")
                 root.dismiss()
             }
         }

@@ -20,7 +20,7 @@ Scope {
 
     Loader {
         id: overviewVariantsLoader
-        active: !GlobalStates.searchConnectActive
+        active: !GlobalStates.searchConnectActive && !GlobalStates.floatingNotchOwnsSearch
         sourceComponent: Component {
             Variants {
                 id: overviewVariant
@@ -35,7 +35,17 @@ Scope {
                     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
                     property int monitorIndex: overviewVariant.variantModel.indexOf(modelData)
                     property bool monitorIsFocused: (Hyprland.focusedMonitor?.name === monitor?.name) || (Hyprland.focusedMonitor?.id == monitorIndex)
-                    active: monitorIsFocused
+                    // Keep the focused window alive while it is visible or
+                    // while its closing animation still has pixels on screen.
+                    // The Scope and IPC shortcuts remain loaded, but this
+                    // expensive per-monitor PanelWindow is destroyed otherwise.
+                    property bool visualActive: false
+                    active: monitorIsFocused && (GlobalStates.overviewOpen || visualActive)
+
+                    onMonitorIsFocusedChanged: {
+                        if (!monitorIsFocused)
+                            visualActive = false;
+                    }
 
                     component: PanelWindow {
                         id: root
@@ -58,8 +68,94 @@ Scope {
                         property int animDurationExit: Math.round(260 * Appearance.animMultiplier)
                         property list<real> animCurveEnter: Appearance.animationCurves.expressiveFastSpatial
                         property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
+                        readonly property bool overviewShouldShow: LauncherSearch.query === ""
+                            && !GlobalStates.searchOnlyMode
+                            && !GlobalStates.searchCenterMode
+                            && !Config.options.search.suggestions.enable
+                            && (Config?.options.overview.enable ?? true)
+                        property real overviewRevealProgress: 1.0
+                        property real overviewFadeProgress: 1.0
+                        property bool _overviewRevealInitialized: false
+
+                        ParallelAnimation {
+                            id: overviewRevealAnim
+                            NumberAnimation {
+                                target: root
+                                property: "overviewRevealProgress"
+                                from: 0.0
+                                to: 1.0
+                                duration: root.animDurationEnter
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: root.animCurveEnter
+                            }
+                            NumberAnimation {
+                                target: root
+                                property: "overviewFadeProgress"
+                                from: 0.0
+                                to: 1.0
+                                duration: root.animDurationEnter
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+
+                        function syncOverviewReveal() {
+                            if (!root._overviewRevealInitialized)
+                                return;
+
+                            const shouldShow = root.overviewShouldShow;
+                            overviewRevealAnim.stop();
+
+                            if (!GlobalStates.overviewOpen) {
+                                root.overviewRevealProgress = shouldShow ? 1.0 : 0.0;
+                                root.overviewFadeProgress = shouldShow ? 1.0 : 0.0;
+                                return;
+                            }
+
+                            if (!shouldShow) {
+                                root.overviewRevealProgress = 0.0;
+                                root.overviewFadeProgress = 0.0;
+                                return;
+                            }
+
+                            // Force a real 0 -> 1 transition. This is intentionally
+                            // explicit instead of relying on a Behavior over a binding.
+                            root.overviewRevealProgress = 0.0;
+                            root.overviewFadeProgress = 0.0;
+                            Qt.callLater(() => {
+                                if (GlobalStates.overviewOpen && LauncherSearch.query === "" && root.overviewShouldShow)
+                                    overviewRevealAnim.start();
+                            });
+                        }
+
+                        function consumePendingSearchQuery() {
+                            if (!GlobalStates.activeSearchQuery)
+                                return;
+                            root.setSearchingText(GlobalStates.activeSearchQuery);
+                            GlobalStates.activeSearchQuery = "";
+                        }
+
+                        Connections {
+                            target: LauncherSearch
+                            function onQueryChanged() {
+                                root.syncOverviewReveal();
+                            }
+                        }
+
+                        Component.onCompleted: {
+                            realOverviewLoader.visualActive = true;
+                            root.overviewRevealProgress = root.overviewShouldShow && LauncherSearch.query === "" ? 1.0 : 0.0;
+                            root.overviewFadeProgress = root.overviewRevealProgress;
+                            root._overviewRevealInitialized = true;
+                            root.consumePendingSearchQuery();
+                        }
 
                         visible: GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0
+                        onVisibleChanged: {
+                            if (root.visible)
+                                realOverviewLoader.visualActive = true;
+                            else if (!GlobalStates.overviewOpen)
+                                realOverviewLoader.visualActive = false;
+                        }
 
                         mask: Region {
                             item: GlobalStates.overviewOpen ? contentItem : null
@@ -90,6 +186,7 @@ Scope {
                                     if (!overviewScope.dontAutoCancelSearch) {
                                         searchWidget.cancelSearch();
                                     }
+                                    root.consumePendingSearchQuery();
                                     delayedGrabTimer.start();
                                 }
                             }
@@ -98,11 +195,8 @@ Scope {
                         HyprlandFocusGrab {
                             id: grab
                             windows: [root]
-                            property bool canBeActive: root.monitorIsFocused
+                            property bool canBeActive: root.monitorIsFocused || GlobalStates.overviewOpen
                             active: false
-                            onCleared: () => {
-                                GlobalStates.overviewOpen = false;
-                            }
                         }
 
                         Keys.onPressed: event => {
@@ -312,18 +406,18 @@ Scope {
                                 anchors.top: root.isBottomBar ? undefined : searchWidgetWrapper.bottom
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout
-                                opacity: searchWidgetWrapper.slideOpacity
+                                opacity: root.overviewShouldShow ? searchWidgetWrapper.slideOpacity * root.overviewFadeProgress : 0.0
 
-                                layer.enabled: true
+                                layer.enabled: overviewLoader.opacity < 0.999
                                 layer.effect: MultiEffect {
-                                    blurEnabled: true
+                                    blurEnabled: overviewLoader.opacity < 0.999
                                     blurMax: 64.0
                                     blur: (1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * 1.0
                                 }
 
                                 transform: [
                                     Translate {
-                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY
+                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
                                     },
                                     Scale {
                                         origin.x: overviewLoader.implicitWidth / 2
@@ -335,7 +429,7 @@ Scope {
 
                                 sourceComponent: OverviewWidget {
                                     panelWindow: root
-                                    visible: (root.searchingText == "") && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable
+                                    visible: root.overviewShouldShow && root.overviewFadeProgress > 0.001
                                     monitorIndex: root.monitorIndex
                                 }
                             }
@@ -344,18 +438,18 @@ Scope {
                                 id: scrollingOverviewLoader
                                 anchors.fill: parent
                                 active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout
-                                opacity: searchWidgetWrapper.slideOpacity
+                                opacity: root.overviewShouldShow ? searchWidgetWrapper.slideOpacity * root.overviewFadeProgress : 0.0
 
-                                layer.enabled: true
+                                layer.enabled: scrollingOverviewLoader.opacity < 0.999
                                 layer.effect: MultiEffect {
-                                    blurEnabled: true
+                                    blurEnabled: scrollingOverviewLoader.opacity < 0.999
                                     blurMax: 64.0
                                     blur: (1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * 1.0
                                 }
 
                                 transform: [
                                     Translate {
-                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY
+                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
                                     },
                                     Scale {
                                         origin.x: scrollingOverviewLoader.width / 2
@@ -368,7 +462,7 @@ Scope {
                                 sourceComponent: ScrollingOverviewWidget {
                                     anchors.fill: parent
                                     panelWindow: root
-                                    visible: (root.searchingText == "") && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable
+                                    visible: root.overviewShouldShow && root.overviewFadeProgress > 0.001
                                     monitorIndex: root.monitorIndex
                                 }
                             }
@@ -380,49 +474,42 @@ Scope {
     }
 
     onSetSearchingTextRequested: text => {
-        if (GlobalStates.searchConnectActive) {
+        if (GlobalStates.searchConnectActive || GlobalStates.floatingNotchOwnsSearch) {
             GlobalStates.activeSearchQuery = text;
         }
     }
 
-    function toggleClipboard() {
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch) {
+    function togglePrefixedSearch(prefix) {
+        GlobalStates.superReleaseMightTrigger = false;
+        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
             GlobalStates.overviewOpen = false;
             return;
         }
         overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(Config.options.search.prefix.clipboard);
-        GlobalStates.overviewOpen = true;
+        if (GlobalStates.overviewOpen) {
+            overviewScope.setSearchingTextRequested(prefix);
+        } else {
+            // The default overview is lazy-loaded. Keep the prefix until its
+            // PanelWindow exists so the first shortcut press is not lost.
+            GlobalStates.activeSearchQuery = prefix;
+            GlobalStates.overviewOpen = true;
+        }
+    }
+
+    function toggleClipboard() {
+        togglePrefixedSearch(Config.options.search.prefix.clipboard);
     }
 
     function toggleEmojis() {
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch) {
-            GlobalStates.overviewOpen = false;
-            return;
-        }
-        overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(Config.options.search.prefix.emojis);
-        GlobalStates.overviewOpen = true;
+        togglePrefixedSearch(Config.options.search.prefix.emojis);
     }
 
     function toggleBluetooth() {
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch) {
-            GlobalStates.overviewOpen = false;
-            return;
-        }
-        overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(Config.options.search.prefix.bluetooth);
-        GlobalStates.overviewOpen = true;
+        togglePrefixedSearch(Config.options.search.prefix.bluetooth);
     }
 
     function toggleMaterialSymbols() {
-        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch) {
-            GlobalStates.overviewOpen = false;
-            return;
-        }
-        overviewScope.dontAutoCancelSearch = true;
-        overviewScope.setSearchingTextRequested(Config.options.search.prefix.materialSymbols);
-        GlobalStates.overviewOpen = true;
+        togglePrefixedSearch(Config.options.search.prefix.materialSymbols);
     }
 
     IpcHandler {
@@ -447,15 +534,19 @@ Scope {
             GlobalStates.superReleaseMightTrigger = false;
         }
         function clipboardToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleClipboard();
         }
         function bluetoothToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleBluetooth();
         }
         function materialSymbolsToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleMaterialSymbols();
         }
         function searchOnlyToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
             if (GlobalStates.overviewOpen) {
                 GlobalStates.overviewOpen = false;
             } else {
@@ -543,6 +634,7 @@ Scope {
         description: "Toggle clipboard query on overview widget"
 
         onPressed: {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleClipboard();
         }
     }
@@ -552,6 +644,7 @@ Scope {
         description: "Toggle emoji query on overview widget"
 
         onPressed: {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleEmojis();
         }
     }
@@ -561,6 +654,7 @@ Scope {
         description: "Toggle Material Symbols search on overview widget"
 
         onPressed: {
+            GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleMaterialSymbols();
         }
     }

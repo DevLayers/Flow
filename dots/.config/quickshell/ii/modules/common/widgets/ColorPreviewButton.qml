@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 import qs.services
@@ -10,6 +9,7 @@ import qs.modules.common.functions
 
 RippleButton {
     id: root
+
     readonly property string builtInThemeDirectory: Directories.defaultThemes
     readonly property string customThemeDirectory: Directories.customThemes
 
@@ -24,24 +24,27 @@ RippleButton {
     readonly property string customThemeFilePath: customThemeDirectory + "/" + colorScheme + ".json"
     readonly property string customThemeCommand: `jq -r '.primary, .primary_container, .secondary' ${customThemeFilePath}`
 
-    readonly property string wallpaperPath: (Config.options && Config.options.background && Config.options.background.wallpaperPath) ? Config.options.background.wallpaperPath : ""
+    readonly property string wallpaperPath: (Config.options && Config.options.background && Config.options.background.wallpaperPath)
+        ? Config.options.background.wallpaperPath : ""
     readonly property string activeWallpaperPath: {
-        if (Config.options && Config.options.background && Config.options.background.useWallpaperEngine) {
+        if (Config.options && Config.options.background && Config.options.background.useWallpaperEngine)
             return "/tmp/wpe_screenshot.png";
-        }
         return wallpaperPath;
     }
-    readonly property string scriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/generate_colors_material.py`)
+    readonly property string scriptPath: FileUtils.trimFileProtocol(
+        `${Directories.scriptPath}/colors/generate_colors_material.py`)
+    readonly property string resolvedScheme: colorScheme === "scheme-auto"
+        ? "scheme-tonal-spot" : colorScheme
+    readonly property string fullCommand: activeWallpaperPath !== ""
+        ? `${scriptPath} --path "${activeWallpaperPath}" --scheme ${resolvedScheme} --preview`
+        : ""
 
-    readonly property string resolvedScheme: root.colorScheme === "scheme-auto" ? "scheme-tonal-spot" : root.colorScheme
-    property string fullCommand: root.activeWallpaperPath !== "" ? `${root.scriptPath} --path ${root.activeWallpaperPath} --scheme ${root.resolvedScheme} --preview` : ""
-
-    // Primary/secondary/tertiary colors
+    // Widget color previews receive their colors directly and do not need a
+    // process. Keep this interface compatible with WidgetsConfig.qml.
     property color previewPrimary: "transparent"
     property color previewSecondary: "transparent"
     property color previewTertiary: "transparent"
     property bool usePreviewColors: false
-
     property color primaryColor: usePreviewColors ? previewPrimary : "transparent"
     property color secondaryColor: usePreviewColors ? previewSecondary : "transparent"
     property color tertiaryColor: usePreviewColors ? previewTertiary : "transparent"
@@ -51,66 +54,89 @@ RippleButton {
 
     property bool isWidgetScheme: false
     property bool widgetSchemeToggled: false
-    readonly property bool toggled: isWidgetScheme ? widgetSchemeToggled : (Config.options.appearance.palette.type === root.colorScheme)
+    readonly property bool toggled: isWidgetScheme
+        ? widgetSchemeToggled
+        : Config.options.appearance.palette.type === colorScheme
+    property bool expressiveSelection: false
     readonly property bool sharpMode: Config.options.appearance.sharpMode
 
     colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-    colBackgroundHover: toggled ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
-    colRipple: toggled ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
+    colBackgroundHover: toggled
+        ? Appearance.colors.colPrimaryContainerHover
+        : Appearance.colors.colLayer2Hover
+    colRipple: toggled
+        ? Appearance.colors.colPrimaryContainerActive
+        : Appearance.colors.colLayer2Active
 
     buttonRadius: Appearance.rounding.small
+
+    scale: (root.down ? 0.96 : (root.hovered ? 1.01 : 1.0))
+        * (root.expressiveSelection && root.toggled ? 1.03 : 1.0)
 
     Layout.fillWidth: true
     implicitHeight: 64
 
     onClicked: {
-        if (isWidgetScheme) {
+        if (isWidgetScheme)
             return;
-        }
+
         if (customTheme) {
-            Config.options.appearance.palette.type = root.colorScheme;
-            const themePath = FileUtils.trimFileProtocol(root.customThemeFilePath);
+            Config.options.appearance.palette.type = colorScheme;
+            const themePath = FileUtils.trimFileProtocol(customThemeFilePath);
             const targetPath = FileUtils.trimFileProtocol(Directories.generatedMaterialThemePath);
-            const script = FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/recolor_icons.py`);
-            Quickshell.execDetached(["bash", "-c", `cp "${themePath}" "${targetPath}" && python3 "${script}"`]);
+            const script = FileUtils.trimFileProtocol(
+                `${Directories.scriptPath}/colors/recolor_icons.py`);
+            Quickshell.execDetached([
+                "bash", "-c", `cp "${themePath}" "${targetPath}" && python3 "${script}"`
+            ]);
         } else if (builtInTheme) {
-            Config.options.appearance.palette.type = root.colorScheme;
-            const themePath = FileUtils.trimFileProtocol(root.builtInThemeFilePath);
+            Config.options.appearance.palette.type = colorScheme;
+            const themePath = FileUtils.trimFileProtocol(builtInThemeFilePath);
             const targetPath = FileUtils.trimFileProtocol(Directories.generatedMaterialThemePath);
-            const script = FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/recolor_icons.py`);
-            Quickshell.execDetached(["bash", "-c", `cp "${themePath}" "${targetPath}" && python3 "${script}"`]);
+            const script = FileUtils.trimFileProtocol(
+                `${Directories.scriptPath}/colors/recolor_icons.py`);
+            Quickshell.execDetached([
+                "bash", "-c", `cp "${themePath}" "${targetPath}" && python3 "${script}"`
+            ]);
         } else {
-            Config.options.appearance.palette.type = root.colorScheme;
-            Quickshell.execDetached(["bash", "-c", `env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH=$HOME/.local/bin:$HOME/.cargo/bin:$PATH ${Directories.wallpaperSwitchScriptPath} --type ${root.colorScheme} --noswitch > /tmp/switchwall_button.log 2>&1`]);
+            Config.options.appearance.palette.type = colorScheme;
+            Config.options.appearance.palette.accentColor = "";
+            Config.saveOptionsNow();
+            Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --noswitch`]);
         }
     }
 
-    property var effectiveCommand: root.customTheme ? root.customThemeCommand : root.builtInTheme ? root.builtInThemeCommand : root.fullCommand
+    readonly property string effectiveCommand: customTheme
+        ? customThemeCommand
+        : builtInTheme ? builtInThemeCommand : fullCommand
 
-    onShouldLoadChanged: {
-        if (shouldLoad && !loaded && root.effectiveCommand !== "") {
+    function startColorFetch() {
+        if (shouldLoad && !loaded && effectiveCommand !== "")
             colorFetchProcess.running = true;
-        }
     }
+
+    onShouldLoadChanged: root.startColorFetch()
 
     onWallpaperPathChanged: {
-        if (shouldLoad && root.effectiveCommand !== "") {
+        if (shouldLoad && effectiveCommand !== "") {
             loaded = false;
             colorFetchProcess.running = true;
         }
     }
 
-    readonly property string wpeId: (Config.options && Config.options.background) ? Config.options.background.wallpaperEngineId : ""
+    readonly property string wpeId: (Config.options && Config.options.background)
+        ? Config.options.background.wallpaperEngineId : ""
     onWpeIdChanged: {
-        if (shouldLoad && root.effectiveCommand !== "") {
+        if (shouldLoad && effectiveCommand !== "") {
             loaded = false;
             colorFetchProcess.running = true;
         }
     }
 
-    property bool useWpe: (Config.options && Config.options.background) ? Config.options.background.useWallpaperEngine : false
+    property bool useWpe: (Config.options && Config.options.background)
+        ? Config.options.background.useWallpaperEngine : false
     onUseWpeChanged: {
-        if (shouldLoad && root.effectiveCommand !== "") {
+        if (shouldLoad && effectiveCommand !== "") {
             loaded = false;
             colorFetchProcess.running = true;
         }
@@ -124,7 +150,6 @@ RippleButton {
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    //console.log("[ColorPreviewButton] Command:", root.effectiveCommand)
                     if (root.customTheme || root.builtInTheme) {
                         const colors = this.text.trim().split("\n");
                         root.primaryColor = colors[0] || "transparent";
@@ -132,7 +157,6 @@ RippleButton {
                         root.tertiaryColor = colors[2] || "transparent";
                     } else {
                         const data = JSON.parse(this.text);
-
                         root.primaryColor = data.primary || "transparent";
                         root.secondaryColor = data.primary_container || "transparent";
                         root.tertiaryColor = data.secondary || "transparent";
@@ -140,8 +164,8 @@ RippleButton {
 
                     root.loaded = true;
                     myCanvas.requestPaint();
-                } catch (e) {
-                    console.log("[ColorPreviewButton] Parse error:", this.text);
+                } catch (error) {
+                    console.warn("[ColorPreviewButton] Preview parse failed:", error);
                 }
             }
         }
@@ -168,17 +192,15 @@ RippleButton {
             id: myCanvas
             anchors.centerIn: parent
             anchors.margins: 8
-
             implicitWidth: root.implicitHeight - 16
             implicitHeight: root.implicitHeight - 16
-
             antialiasing: true
 
             onPaint: {
-                var ctx = getContext("2d");
-                var centerX = width / 2;
-                var centerY = height / 2;
-                var radius = width / 2;
+                const ctx = getContext("2d");
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const radius = width / 2;
 
                 ctx.reset();
 

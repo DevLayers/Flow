@@ -8,7 +8,7 @@ GridLayout {
     Layout.fillWidth: true
 
     property var model: []
-    property var currentValues: ({ })
+    property var currentValues: ({})
     property int gridColumns: Math.max(1, Math.floor(parent ? parent.width / 280 : 280))
     property int cardSpacing: 12
 
@@ -27,11 +27,7 @@ GridLayout {
             Layout.minimumWidth: 210
             implicitHeight: rowLayout.implicitHeight + 24
             radius: pressed ? Appearance.rounding.large : Appearance.rounding.normal
-            color: pressed
-                ? Appearance.colors.colLayer2Active
-                : (hoverHandler.hovered
-                    ? Appearance.colors.colLayer2Hover
-                    : Appearance.colors.colLayer2)
+            color: pressed ? Appearance.colors.colLayer2Active : (hoverHandler.hovered ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2)
             border.width: 0
 
             required property var modelData
@@ -106,7 +102,9 @@ GridLayout {
                     verticalAlignment: Text.AlignVCenter
                 }
 
-                Item { Layout.fillWidth: true }
+                Item {
+                    Layout.fillWidth: true
+                }
 
                 ConfigSelectionArray {
                     Layout.alignment: Qt.AlignVCenter | Qt.AlignRight

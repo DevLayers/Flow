@@ -2,6 +2,7 @@ pragma Singleton
 
 import qs.modules.common
 import qs.modules.common.functions
+import QtQuick
 import Quickshell
 
 /**
@@ -44,9 +45,18 @@ Singleton {
         }
     ]
 
-    // Deduped list to fix double icons, pre-sorted alphabetically to avoid sorting on every query
+    // Deduped list to fix double icons, pre-sorted alphabetically to avoid sorting on every query.
+    // Deduped through a Set rather than findIndex per entry: this rebuilds on every
+    // desktop entry rescan, and the quadratic version made each rescan a visible hitch.
     readonly property list<DesktopEntry> list: {
-        var arr = Array.from(DesktopEntries.applications.values).filter((app, index, self) => index === self.findIndex(t => (t.id === app.id)));
+        const seen = new Set();
+        const arr = [];
+        for (const app of DesktopEntries.applications.values) {
+            if (seen.has(app.id))
+                continue;
+            seen.add(app.id);
+            arr.push(app);
+        }
         arr.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         return arr;
     }
@@ -146,10 +156,30 @@ Singleton {
         });
     }
 
+    // Quickshell.iconPath() walks the icon theme on disk and caches nothing, and
+    // guessIcon calls it up to eight times for a single name it fails to resolve.
+    property var _iconExistsCache: ({})
+
     function iconExists(iconName) {
         if (!iconName || iconName.length == 0)
             return false;
-        return (Quickshell.iconPath(iconName, true).length > 0) && !iconName.includes("image-missing");
+        const cached = _iconExistsCache[iconName];
+        if (cached !== undefined)
+            return cached;
+
+        const result = (Quickshell.iconPath(iconName, true).length > 0) && !iconName.includes("image-missing");
+        _iconExistsCache[iconName] = result;
+        return result;
+    }
+
+    // A rescan can bring in entries whose icons were not on disk when a name was last
+    // guessed, so both caches are dropped rather than left to answer from before.
+    Connections {
+        target: DesktopEntries
+        function onApplicationsChanged() {
+            root._iconExistsCache = ({});
+            root._iconCache = ({});
+        }
     }
 
     function getReverseDomainNameAppName(str) {
@@ -185,10 +215,23 @@ Singleton {
             return substitutions[str.toLowerCase()];
 
         // Handle common variations for user's requested apps
-        if (str.includes("android-studio"))
+        if (str.includes("android-studio") && iconExists("android-studio"))
             return "android-studio";
-        if (str.includes("zen-browser") || str.includes("zen"))
-            return "zen";
+        if (str.includes("zen")) {
+            if (iconExists("zen-browser")) return "zen-browser";
+            if (iconExists("zen")) return "zen";
+        }
+        if (str.includes("prism")) {
+            if (iconExists("prismlauncher")) return "prismlauncher";
+            if (iconExists("prism_launcher")) return "prism_launcher";
+            if (iconExists("org.prismlauncher.PrismLauncher")) return "org.prismlauncher.PrismLauncher";
+        }
+        if (str.includes("helium") && iconExists("helium"))
+            return "helium";
+        if (str.includes("zed")) {
+            if (iconExists("dev.zed.Zed")) return "dev.zed.Zed";
+            if (iconExists("zed")) return "zed";
+        }
 
         // Try to see if there's a themed icon matching the name (for absolute path icons)
         // This is important for apps like Zen Browser where the .desktop has an absolute path
@@ -198,6 +241,10 @@ Singleton {
             nameWithoutExt = str.slice(0, -8);
         if (iconExists(nameWithoutExt))
             return nameWithoutExt;
+
+        const noUnderscores = nameWithoutExt.replace(/_/g, "");
+        if (iconExists(noUnderscores))
+            return noUnderscores;
 
         // Quickshell's desktop entry lookup
         const entry = DesktopEntries.byId(str);

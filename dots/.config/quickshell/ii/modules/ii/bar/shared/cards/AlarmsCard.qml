@@ -14,13 +14,6 @@ Rectangle {
     color: Appearance.colors.colSurfaceContainerHighest
     clip: true
 
-    Behavior on implicitHeight {
-        NumberAnimation {
-            duration: 250
-            easing.type: Easing.OutCubic
-        }
-    }
-
     // Internal animation control
     property bool startAnim: false
 
@@ -61,37 +54,6 @@ Rectangle {
                     }
                 }
             });
-        }
-    }
-
-    Connections {
-        target: root
-        function onPopupOpenProgressChanged() {
-            if (root && root.popupOpenProgress === 0.0) {
-                alarmIconAnim.stop();
-                alarmsTitleAnim.stop();
-                alarmsCountAnim.stop();
-                deleteBtnAnim.stop();
-                addBtnAnim.stop();
-
-                alarmIcon.scale = 0.8;
-                alarmIconRotation.angle = -10;
-                alarmsTitle.opacity = 0.0;
-                alarmsCount.opacity = 0.0;
-                deleteButton.scale = 0.8;
-                deleteButton.opacity = 0.0;
-                addButton.scale = 0.8;
-                addButton.opacity = 0.0;
-                
-                for (var k = 0; k < listView.count; k++) {
-                    var resetItem = listView.itemAtIndex(k);
-                    if (resetItem) {
-                        resetItem.stopCardAnim();
-                        resetItem.cardOpacity = 0.0;
-                        resetItem.cardTranslateX = 80;
-                    }
-                }
-            }
         }
     }
 
@@ -641,9 +603,11 @@ Rectangle {
                 MaterialTextField {
                     id: hourInput
                     Layout.preferredWidth: 64
+                    Layout.minimumWidth: 64
                     placeholderText: "HH"
                     text: root.editTimeHour
                     inputMethodHints: Qt.ImhDigitsOnly
+                    wrapMode: TextEdit.NoWrap
                 }
 
                 StyledText {
@@ -657,17 +621,21 @@ Rectangle {
                 MaterialTextField {
                     id: minuteInput
                     Layout.preferredWidth: 64
+                    Layout.minimumWidth: 64
                     placeholderText: "MM"
                     text: root.editTimeMinute
                     inputMethodHints: Qt.ImhDigitsOnly
+                    wrapMode: TextEdit.NoWrap
                 }
 
                 // Label Field
                 MaterialTextField {
                     id: labelInput
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 80
                     placeholderText: Translation.tr("Alarm Label")
                     text: root.editLabel
+                    wrapMode: TextEdit.NoWrap
                 }
             }
 

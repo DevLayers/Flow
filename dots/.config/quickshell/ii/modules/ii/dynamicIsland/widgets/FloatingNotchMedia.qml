@@ -44,6 +44,16 @@ Item {
         return root;
     }
 
+    readonly property real notchBottomRadius: {
+        var p = root.parent;
+        while (p) {
+            if (p.notchBackground && p.notchBackground.bottomRadius !== undefined)
+                return p.notchBackground.bottomRadius;
+            p = p.parent;
+        }
+        return Appearance.rounding.windowRounding;
+    }
+
     readonly property int elementHeight: Math.max(20, Math.min(42, root.height - 10))
     readonly property int barWidth: Math.max(4, Math.min(8, elementHeight / 5))
 
@@ -618,7 +628,7 @@ Item {
         Rectangle {
             id: contractedMaskRect
             anchors.fill: parent
-            radius: Appearance.rounding.small
+            radius: Math.max(0, root.notchBottomRadius - 4)
             visible: false
         }
 
@@ -932,7 +942,7 @@ Item {
         Rectangle {
             id: maskRect
             anchors.fill: parent
-            radius: Appearance.rounding.windowRounding
+            radius: Math.max(0, root.notchBottomRadius - 4)
             visible: false
         }
 

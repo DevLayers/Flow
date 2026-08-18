@@ -33,6 +33,12 @@ Scope {
                 "name": Translation.tr("Elements")
             });
         }
+        if (Config.options.cheatsheet.enableAminoAcids) {
+            list.push({
+                "icon": "biotech",
+                "name": Translation.tr("Amino acids")
+            });
+        }
         if (Config.options.cheatsheet.enableCommands) {
             list.push({
                 "icon": "terminal",
@@ -57,9 +63,9 @@ Scope {
     Connections {
         target: GlobalStates
         function onCheatsheetOpenChanged() {
-            if (GlobalStates.cheatsheetOpen && !root.activeState) {
+            if (GlobalStates.cheatsheetOpen) {
                 root.requestOpen();
-            } else if (!GlobalStates.cheatsheetOpen && root.activeState) {
+            } else {
                 root.requestClose();
             }
         }
@@ -79,12 +85,16 @@ Scope {
     function requestOpen() {
         closeTimer.stop();
         root.activeState = true;
-        GlobalStates.cheatsheetOpen = true;
+        if (!GlobalStates.cheatsheetOpen) {
+            GlobalStates.cheatsheetOpen = true;
+        }
     }
 
     function requestClose() {
-        GlobalStates.cheatsheetOpen = false;
-        closeTimer.start();
+        if (GlobalStates.cheatsheetOpen) {
+            GlobalStates.cheatsheetOpen = false;
+        }
+        closeTimer.restart();
     }
 
     function requestToggle() {
@@ -97,11 +107,14 @@ Scope {
 
     Loader {
         id: cheatsheetLoader
+        // The Cheatsheet is a burst-use surface. Keep it alive while open, but
+        // release its complete window tree after the close animation instead
+        // of retaining every tab for the lifetime of the shell.
         active: root.activeState
 
         sourceComponent: PanelWindow {
             id: cheatsheetRoot
-            visible: cheatsheetLoader.active
+            visible: root.activeState
 
             Connections {
                 target: root
@@ -146,7 +159,13 @@ Scope {
             onVisibleChanged: {
                 if (visible) {
                     initialFocusTimer.restart();
+                    registerGrabTimer.restart();
+                    animInTimer.restart();
+                    return;
                 }
+                registerGrabTimer.stop();
+                GlobalFocusGrab.removeDismissable(cheatsheetRoot);
+                cheatsheetBackground.animateIn = false;
             }
 
             Timer {
@@ -163,7 +182,12 @@ Scope {
             }
 
             Component.onCompleted: {
+                // Built ahead of time while hidden: onVisibleChanged drives the
+                // open from here on.
+                if (!visible)
+                    return;
                 registerGrabTimer.start();
+                animInTimer.start();
             }
             Component.onDestruction: {
                 registerGrabTimer.stop();
@@ -221,10 +245,9 @@ Scope {
                     property bool animateIn: false
 
                     Timer {
-                        id: animDelayTimer
-                        interval: 80
+                        id: animInTimer
+                        interval: 0
                         repeat: false
-                        running: true
                         onTriggered: cheatsheetBackground.animateIn = true
                     }
 
@@ -435,12 +458,10 @@ Scope {
                                     easing.type: Easing.OutCubic
                                 }
 
-                                // Timetable, Email & Workspaces: lazy — load only when first visited
-                                property bool _lazy: modelData.icon === "calendar_month" || modelData.icon === "mail" || modelData.icon === "dashboard"
-                                property bool _wasSeen: false
-                                active: !_lazy || swipeView.currentIndex === index || _wasSeen
-                                onActiveChanged: if (active)
-                                    _wasSeen = true
+                                // Only the visible tab owns a component tree. The
+                                // old _wasSeen/preloadIndex feedback loop kept all
+                                // tabs resident and made Loader.active unstable.
+                                active: swipeView.currentIndex === index
 
                                 onStatusChanged: {
                                     if (status === Loader.Ready && swipeView.currentIndex === index && cheatsheetRoot.visible) {
@@ -448,7 +469,9 @@ Scope {
                                     }
                                 }
 
-                                asynchronous: _lazy
+                                // Synchronous on purpose: async incubation paces object
+                                // creation across frames, which on a downclocked CPU
+                                // costs far more waiting than the build itself.
                                 source: {
                                     switch (modelData.icon) {
                                     case "calendar_month":
@@ -457,6 +480,8 @@ Scope {
                                         return "CheatsheetKeybinds.qml";
                                     case "experiment":
                                         return "CheatsheetPeriodicTable.qml";
+                                    case "biotech":
+                                        return "CheatsheetAminoAcids.qml";
                                     case "terminal":
                                         return "commands/CheatsheetCommands.qml";
                                     case "dashboard":
@@ -467,35 +492,12 @@ Scope {
                                         return "";
                                     }
                                 }
-
-                                // Loading indicator for async tabs
-                                Rectangle {
-                                    anchors.fill: parent
-                                    color: "transparent"
-                                    visible: tabDelegate._lazy && tabDelegate.status !== Loader.Ready
-                                    MaterialLoadingIndicator {
-                                        anchors.centerIn: parent
-                                    }
-                                }
                             }
                         }
                     }
                 }
             }
             }
-        }
-    }
-
-    IpcHandler {
-        target: "cheatsheet"
-        function toggle(): void {
-            root.requestToggle();
-        }
-        function close(): void {
-            root.requestClose();
-        }
-        function open(): void {
-            root.requestOpen();
         }
     }
 

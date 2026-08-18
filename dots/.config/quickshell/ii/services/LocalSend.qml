@@ -50,6 +50,21 @@ Singleton {
         return Config.ready
     }
 
+    function getEffectiveDownloadPath(): string {
+        let path = root.downloadPath || ""
+        path = path.replace(/^file:\/\//, "").trim()
+        if (path.startsWith("~/")) {
+            path = Directories.home.toString().replace(/^file:\/\//, "") + path.substring(1)
+        } else if (path.startsWith("$HOME/")) {
+            path = Directories.home.toString().replace(/^file:\/\//, "") + path.substring(5)
+        }
+        const currentHome = Directories.home.toString().replace(/^file:\/\//, "")
+        if (!path || !path.startsWith("/") || (path.startsWith("/home/") && !path.startsWith(currentHome))) {
+            path = Directories.localSendDownloadPath.replace(/^file:\/\//, "")
+        }
+        return path
+    }
+
     function addDroppedFile(fileUrl: string): void {
         const cleanPath = fileUrl.toString().replace(/^file:\/\//, "")
         const name = cleanPath.split("/").pop() || "unknown"
@@ -186,7 +201,7 @@ Singleton {
     Process {
         id: checkAvailabilityProc
         running: true
-        command: ["bash", "-lc", "which localsend-cli"]
+        command: ["bash", "-c", "command -v localsend-cli >/dev/null 2>&1 || test -x \"$HOME/.local/bin/localsend-cli\""]
         environment: ({
             "PATH": Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin"
         })
@@ -290,8 +305,8 @@ Singleton {
                     if (event.event === "completed" || event.event === "saved" || event.event === "done") {
                         root.clearDroppedFiles()
                         root.sendCompleted()
-                    } else if (event.event === "cancelled" || event.error) {
-                        root.sendFailed(event.error || "Transfer cancelled")
+                    } else if (event.event === "cancelled" || event.event === "error" || event.error) {
+                        root.sendFailed(event.message || event.error || "Transfer failed")
                     }
                 } catch (e) {
                     console.log("[LocalSend] Failed to parse send line:", line, e)
@@ -419,8 +434,9 @@ Singleton {
         interval: 500
         onTriggered: {
             const cliPath = Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin/localsend-cli"
-            receiveProc.command = [cliPath, "receive", "--interactive-json", "--output", root.downloadPath]
-            console.log("[LocalSend] Starting receive server with output dir:", root.downloadPath)
+            const effectiveDownloadPath = root.getEffectiveDownloadPath()
+            receiveProc.command = [cliPath, "receive", "--interactive-json", "--output", effectiveDownloadPath]
+            console.log("[LocalSend] Starting receive server with output dir:", effectiveDownloadPath)
             receiveProc.running = true
         }
     }
@@ -513,7 +529,7 @@ Singleton {
             return JSON.stringify({
                 available: root.available,
                 running: root.serverRunning,
-                downloadPath: root.downloadPath
+                downloadPath: root.getEffectiveDownloadPath()
             })
         }
     }

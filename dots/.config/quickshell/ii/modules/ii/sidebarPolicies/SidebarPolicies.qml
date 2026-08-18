@@ -12,7 +12,8 @@ import Quickshell.Hyprland
 
 Scope { // Scope
     id: root
-    property bool detach: false
+    // Keep the native and connect implementations on one state graph.
+    property bool detach: GlobalStates.policiesDetached
     property bool pin: GlobalStates.policiesPinned
     property Component contentComponent: SidebarPoliciesContent {}
     property Item sidebarContent
@@ -25,9 +26,23 @@ Scope { // Scope
         return pos === "default" || pos === "left"; 
     }
 
+    readonly property string policyMonitorName: isOnLeft ? GlobalStates.effectiveLeftMonitor : GlobalStates.effectiveRightMonitor
+    readonly property real sidebarWidth: GlobalStates.policiesWidth
+    readonly property real topBarOffset: !Config.options.bar.vertical && !Config.options.bar.bottom && GlobalStates.barOpen ? Appearance.sizes.barHeight : 0
+    readonly property real bottomBarOffset: !Config.options.bar.vertical && Config.options.bar.bottom && GlobalStates.barOpen ? Appearance.sizes.barHeight : 0
+    readonly property real leftBarOffset: Config.options.bar.vertical && !Config.options.bar.bottom && isOnLeft && GlobalStates.barOpen ? Appearance.sizes.verticalBarWindowWidth : 0
+    readonly property real rightBarOffset: Config.options.bar.vertical && Config.options.bar.bottom && !isOnLeft && GlobalStates.barOpen ? Appearance.sizes.verticalBarWindowWidth : 0
+
+    function togglePoliciesExtended() {
+        GlobalStates.policiesExtended = !GlobalStates.policiesExtended;
+    }
+
+    function togglePoliciesDetach() {
+        GlobalStates.policiesDetached = !GlobalStates.policiesDetached;
+    }
+
     function toggleDetach() {
-        if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
-        root.detach = !root.detach;
+        togglePoliciesDetach();
     }
 
     Process { // Dodge cursor away, pin, move cursor back
@@ -65,74 +80,58 @@ Scope { // Scope
     }
 
     function togglePin() {
-        if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
         if (!GlobalStates.policiesPinned) pinWithFunnyHyprlandWorkaroundProc.doIt()
         else GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
     }
 
+    function togglePoliciesPin() {
+        // The virtual reserver in connect mode does not need the native
+        // cursor workaround used by a real PanelWindow.
+        if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) {
+            GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
+            return;
+        }
+        togglePin();
+    }
+
+    // Reattaches the content to whichever window is currently up. Safe to call before
+    // either side is ready, so the window loading and the content being built no longer
+    // have to happen in a particular order.
+    function attachContent() {
+        if (!root.sidebarContent) return;
+        const window = root.detach ? detachedSidebarLoader.item : sidebarLoader.item;
+        if (!window) return;
+        window.contentParent.children = [root.sidebarContent];
+    }
+
     Component.onCompleted: {
-        if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
         root.sidebarContent = contentComponent.createObject(null, {
             "scopeRoot": root,
         });
-        sidebarLoader.item.contentParent.children = [root.sidebarContent];
+        root.attachContent();
     }
 
     onDetachChanged: {
-        if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
-        if (root.detach) {
-            GlobalFocusGrab.removeDismissable(sidebarLoader.item) // Remove sidebar from the focus grab system
-            sidebarContent.parent = null; // Detach content from sidebar
-            sidebarLoader.active = false; // Unload sidebar
-            detachedSidebarLoader.active = true; // Load detached window
-            Qt.callLater(() => {
-                if (detachedSidebarLoader.item) {
-                    detachedSidebarLoader.item.contentParent.children = [sidebarContent];
-                }
-            });
-        } else {
-            sidebarContent.parent = null; // Detach content from window
-            detachedSidebarLoader.active = false; // Unload detached window
-            sidebarLoader.active = true; // Load sidebar
-            Qt.callLater(() => {
-                if (sidebarLoader.item) {
-                    sidebarLoader.item.contentParent.children = [sidebarContent];
-                }
-            });
-        }
+        if (sidebarContent)
+            sidebarContent.parent = null;
+        if (root.detach && sidebarLoader.item)
+            GlobalFocusGrab.removeDismissable(sidebarLoader.item);
+        // Loader.active is bound to root.detach. Reparent after the selected
+        // window has had a chance to be created or destroyed.
+        Qt.callLater(root.attachContent);
     }
 
     Loader {
         id: sidebarLoader
-        active: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
-        
+        active: (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate) && !root.detach
+        onLoaded: root.attachContent()
+
         sourceComponent: PanelWindow {
             id: panelWindow
             visible: GlobalStates.sidebarLeftOpen
             
-            property bool extend: false
             readonly property real sidebarWidth: {
-                if (panelWindow.extend) return Appearance.sizes.sidebarWidthExtended;
-
-                const p = Config.options.policies;
-                let activeCount = 0;
-                if (p.ai !== 0) activeCount++;
-                if (p.translator !== 0) activeCount++;
-                if (p.player !== 0) activeCount++;
-                if (p.wallpapers !== 0) activeCount++;
-                if (p.weeb !== 0 && p.weeb !== 2) activeCount++;
-                if (p.phone !== 0) activeCount++;
-
-                // Keep Room for the toolbar with all tab buttons. Each
-                // ToolbarTabButton is ~130px (10 padding + 22 icon + 6 spacing
-                // + ~85 text + 10 padding). Plus 4 spacing between buttons,
-                // plus 16 internal toolbar padding, plus 24 sidebar padding.
-                // 160 per extra tab is a safe margin that accommodates
-                // translated strings that are wider than English (e.g.,
-                // "Inteligência", "Papéis de parede").
-                const minTabs = 3;
-                const perTabWidth = 160;
-                return Appearance.sizes.sidebarWidth + Math.max(0, activeCount - minTabs) * perTabWidth;
+                return root.sidebarWidth;
             }
             
             property var contentParent: sidebarLeftBackground
@@ -145,8 +144,50 @@ Scope { // Scope
             exclusiveZone: root.pin ? sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin : 0
             implicitWidth: sidebarWidth
             WlrLayershell.namespace: root.isOnLeft ? "quickshell:sidebarLeft" : "quickshell:sidebarRight"
-            // Hyprland 0.49: OnDemand is Exclusive, Exclusive just breaks click-outside-to-close
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+            // Hyprland hands pointer focus to any layer surface that maps asking for keyboard
+            // interactivity, no matter where the cursor really is, and only re-evaluates it on the
+            // next pointer event — so the click meant to close the sidebar again gets spent
+            // restoring focus instead. Mapping exclusive and downgrading to on-demand right after
+            // makes Hyprland re-evaluate pointer focus itself, handing it back to whatever is
+            // actually under the cursor, while the sidebar keeps its keyboard focus.
+            // The downgrade has to happen after the surface is mapped, so it's driven by
+            // Hyprland's own openlayer event; the timer is only a fallback if that never arrives.
+            property bool keyboardExclusive: true
+            WlrLayershell.keyboardFocus: panelWindow.keyboardExclusive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
+
+            // Window shortcuts are resolved before a focused TextEdit can consume
+            // Ctrl+D when its text selection is active.
+            Shortcut {
+                sequence: "Ctrl+D"
+                enabled: panelWindow.visible
+                onActivated: root.togglePoliciesDetach()
+            }
+            Shortcut {
+                sequence: "Ctrl+O"
+                enabled: panelWindow.visible
+                onActivated: root.togglePoliciesExtended()
+            }
+            Shortcut {
+                sequence: "Ctrl+P"
+                enabled: panelWindow.visible
+                onActivated: root.togglePoliciesPin()
+            }
+
+            Connections {
+                target: Hyprland
+                function onRawEvent(event) {
+                    if (!panelWindow.keyboardExclusive) return;
+                    if (event.name !== "openlayer") return;
+                    if (event.data !== panelWindow.WlrLayershell.namespace) return;
+                    panelWindow.keyboardExclusive = false;
+                }
+            }
+
+            Timer {
+                id: keyboardFocusDowngrade
+                interval: 200
+                onTriggered: panelWindow.keyboardExclusive = false
+            }
             color: "transparent"
 
             anchors {
@@ -156,14 +197,27 @@ Scope { // Scope
                 bottom: true
             }
 
+            // exclusiveZone changes compositor layout, not the surface's own
+            // geometry. A pinned sidebar therefore needs explicit margins to
+            // avoid covering the bar visually.
+            margins {
+                top: root.pin ? root.topBarOffset : 0
+                bottom: root.pin ? root.bottomBarOffset : 0
+                left: root.pin ? root.leftBarOffset : 0
+                right: root.pin ? root.rightBarOffset : 0
+            }
+
             mask: Region {
                 item: sidebarLeftBackground
             }
 
             onVisibleChanged: {
                 if (visible) {
+                    keyboardFocusDowngrade.restart();
                     GlobalFocusGrab.addDismissable(panelWindow);
                 } else {
+                    keyboardFocusDowngrade.stop();
+                    panelWindow.keyboardExclusive = true;
                     GlobalFocusGrab.removeDismissable(panelWindow);
                 }
             }
@@ -262,13 +316,13 @@ Scope { // Scope
                     if (event.key === Qt.Key_Escape) {
                         panelWindow.hide();
                     }
-                    if (event.modifiers === Qt.ControlModifier) {
+                    if ((event.modifiers & Qt.ControlModifier) !== 0) {
                         if (event.key === Qt.Key_O) {
-                            panelWindow.extend = !panelWindow.extend;
+                            root.togglePoliciesExtended();
                         } else if (event.key === Qt.Key_D) {
                             root.toggleDetach();
                         } else if (event.key === Qt.Key_P) {
-                            root.togglePin();
+                            root.togglePoliciesPin();
                         }
                         event.accepted = true;
                     }
@@ -329,7 +383,8 @@ Scope { // Scope
     
     Loader {
         id: detachedSidebarLoader
-        active: false
+        active: root.detach && (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate)
+        onLoaded: root.attachContent()
 
         sourceComponent: FloatingWindow {
             id: detachedSidebarRoot
@@ -337,11 +392,56 @@ Scope { // Scope
             color: "transparent"
 
             visible: GlobalStates.sidebarLeftOpen
+            screen: Quickshell.screens.find(s => s.name === root.policyMonitorName)
+                ?? Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name)
+                ?? Quickshell.screens[0]
+                ?? null
+            width: root.sidebarWidth
+            height: detachedSidebarRoot.screen ? Math.max(0, detachedSidebarRoot.screen.height - root.topBarOffset - root.bottomBarOffset - Appearance.sizes.hyprlandGapsOut * 2) : 0
+
+            Shortcut {
+                sequence: "Ctrl+D"
+                enabled: detachedSidebarRoot.visible
+                onActivated: root.togglePoliciesDetach()
+            }
+            Shortcut {
+                sequence: "Ctrl+O"
+                enabled: detachedSidebarRoot.visible
+                onActivated: root.togglePoliciesExtended()
+            }
+            Shortcut {
+                sequence: "Ctrl+P"
+                enabled: detachedSidebarRoot.visible
+                onActivated: root.togglePoliciesPin()
+            }
+
             onVisibleChanged: {
                 if (visible) {
-                    if (!root.pin) GlobalFocusGrab.addDismissable(panelWindow);
+                    if (!root.pin) GlobalFocusGrab.addDismissable(detachedSidebarRoot);
                 } else {
-                    GlobalFocusGrab.removeDismissable(panelWindow);
+                    GlobalFocusGrab.removeDismissable(detachedSidebarRoot);
+                }
+            }
+
+            Component.onDestruction: GlobalFocusGrab.removeDismissable(detachedSidebarRoot)
+
+            Connections {
+                target: root
+                function onPinChanged() {
+                    if (!detachedSidebarRoot.visible)
+                        return;
+                    if (root.pin)
+                        GlobalFocusGrab.removeDismissable(detachedSidebarRoot);
+                    else
+                        GlobalFocusGrab.addDismissable(detachedSidebarRoot);
+                }
+            }
+
+            Connections {
+                target: GlobalFocusGrab
+                function onDismissed() {
+                    if (!root.pin)
+                        GlobalStates.sidebarLeftOpen = false;
                 }
             }
             
@@ -352,9 +452,13 @@ Scope { // Scope
                 color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
 
                 Keys.onPressed: (event) => {
-                    if (event.modifiers === Qt.ControlModifier) {
+                    if ((event.modifiers & Qt.ControlModifier) !== 0) {
                         if (event.key === Qt.Key_D) {
                             root.toggleDetach();
+                        } else if (event.key === Qt.Key_O) {
+                            root.togglePoliciesExtended();
+                        } else if (event.key === Qt.Key_P) {
+                            root.togglePoliciesPin();
                         }
                         event.accepted = true;
                     }
@@ -370,8 +474,7 @@ Scope { // Scope
         description: "Detach left sidebar into a window/Attach it back"
 
         onPressed: {
-            if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
-            root.detach = !root.detach;
+            root.toggleDetach();
         }
     }
 

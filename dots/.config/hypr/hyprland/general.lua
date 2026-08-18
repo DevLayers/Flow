@@ -6,33 +6,122 @@ hl.monitor({
     scale = "1"
 })
 
+-- Window and workspace gestures
 hl.gesture({
-    fingers = 3,
+    fingers = 4,
     direction = "swipe",
     action = "move"
 })
 hl.gesture({
-    fingers = 3,
+    fingers = 4,
     direction = "pinch",
-    action = "fullscreen"
+    action = "float"
 })
 hl.gesture({
-    fingers = 4,
+    fingers = 3,
     direction = "horizontal",
     action = "workspace"
 })
+
+-- Scratchpad gestures
+-- Canonical pair: toggle_special("special") and workspace "special:special" both
+-- resolve the workspace by name, so they always target the same workspace ID.
+-- (A bare "special" move target bypasses the name lookup and can create a second
+-- workspace with the same name but a different ID.)
+local SCRATCH_TOGGLE = "special"
+local SCRATCH_WS = "special:special"
+
+-- Window object, not an address string: the weak ref expires when the window
+-- closes (fields read as nil), whereas addresses are heap pointers that can be
+-- reused by a later window.
+local last_sent = nil
+
+local function in_scratchpad(win)
+    local ws = win and win.workspace
+    return ws ~= nil and ws.name == SCRATCH_WS
+end
+
+-- Manual filter instead of hl.get_windows({ workspace = ... }): resolving a
+-- workspace selector can create the workspace as a side effect.
+local function any_scratchpad_window()
+    for _, w in ipairs(hl.get_windows()) do
+        if in_scratchpad(w) then return w end
+    end
+    return nil
+end
+
+local function show_scratchpad_and_refocus()
+    hl.dispatch(hl.dsp.workspace.toggle_special(SCRATCH_TOGGLE))
+    if in_scratchpad(last_sent) then
+        hl.dispatch(hl.dsp.focus({ window = last_sent }))
+    else
+        last_sent = nil
+    end
+end
+
+local function handle_scratchpad_gesture(direction)
+    local monitor = hl.get_active_monitor()
+    if not monitor then return end
+
+    local special = monitor.active_special_workspace
+    local scratch_visible = special ~= nil and special.name == SCRATCH_WS
+
+    if direction == "up" then
+        if scratch_visible then
+            local win = hl.get_active_window()
+            if in_scratchpad(win) then
+                -- Retrieve the focused window to the regular workspace; the
+                -- scratchpad auto-hides via binds:hide_special_on_workspace_change.
+                if monitor.active_workspace then
+                    hl.dispatch(hl.dsp.window.move({ workspace = monitor.active_workspace, window = win }))
+                    if last_sent and last_sent.address == win.address then
+                        last_sent = nil
+                    end
+                end
+            else
+                -- Focus is on a regular window below the overlay: focus the
+                -- scratchpad (last-sent window if still there, else any of its
+                -- windows); if the scratchpad is empty, hide it.
+                local target = in_scratchpad(last_sent) and last_sent or any_scratchpad_window()
+                if target then
+                    hl.dispatch(hl.dsp.focus({ window = target }))
+                else
+                    hl.dispatch(hl.dsp.workspace.toggle_special(SCRATCH_TOGGLE))
+                end
+            end
+        else
+            -- Also replaces any other visible special workspace with the scratchpad.
+            show_scratchpad_and_refocus()
+        end
+    elseif direction == "down" then
+        if special then
+            -- Hide whichever special workspace is visible (name is "special:<name>").
+            hl.dispatch(hl.dsp.workspace.toggle_special(string.sub(special.name, 9)))
+        else
+            local win = hl.get_active_window()
+            if win then
+                hl.dispatch(hl.dsp.window.move({ workspace = SCRATCH_WS, window = win, follow = false }))
+                -- Record only if the move actually landed the window there.
+                if in_scratchpad(win) then
+                    last_sent = win
+                end
+            end
+        end
+    end
+end
+
 hl.gesture({
-    fingers = 4,
+    fingers = 3,
     direction = "up",
     action = function()
-        hl.dispatch(hl.dsp.global("quickshell:overviewWorkspacesToggle"))
+        handle_scratchpad_gesture("up")
     end
 })
 hl.gesture({
-    fingers = 4,
+    fingers = 3,
     direction = "down",
     action = function()
-        hl.dispatch(hl.dsp.global("quickshell:overviewWorkspacesToggle"))
+        handle_scratchpad_gesture("down")
     end
 })
 
@@ -77,7 +166,10 @@ hl.config({
         blur = {
             enabled = true,
             xray = false,
-            special = false,
+            -- Let Hyprland blur the desktop behind special workspaces (the scratchpad).
+            -- This is compositor-side blur, so the background stays smooth without
+            -- creating a fullscreen blur window in Quickshell.
+            special = true,
             new_optimizations = true,
             size = 10,
             passes = 3,
@@ -151,33 +243,37 @@ hl.curve("stall", {
     type = "bezier",
     points = {{1, -0.1}, {0.7, 0.85}}
 })
+hl.curve("iiAppOpen", {
+    type = "bezier",
+    points = {{0.05, 0.9}, {0.1, 1}}
+})
 -- Configs
 -- windows
 hl.animation({
     leaf = "windowsIn",
     enabled = true,
-    speed = 3,
-    bezier = "emphasizedDecel",
-    style = "popin 80%"
+    speed = 3.2,
+    bezier = "iiAppOpen",
+    style = "popin 20%"
 })
 hl.animation({
     leaf = "fadeIn",
     enabled = true,
-    speed = 3,
-    bezier = "emphasizedDecel"
+    speed = 3.2,
+    bezier = "iiAppOpen"
 })
 hl.animation({
     leaf = "windowsOut",
     enabled = true,
-    speed = 2,
-    bezier = "emphasizedDecel",
-    style = "popin 90%"
+    speed = 3.2,
+    bezier = "iiAppOpen",
+    style = "popin 60%"
 })
 hl.animation({
     leaf = "fadeOut",
     enabled = true,
-    speed = 2,
-    bezier = "emphasizedDecel"
+    speed = 3.2,
+    bezier = "iiAppOpen"
 })
 hl.animation({
     leaf = "windowsMove",

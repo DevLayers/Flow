@@ -10,6 +10,10 @@ Item {
 
     property alias contentY: page.contentY
     property url activeSubPage: ""
+    signal navigationChanged()
+    readonly property var navigationPath: activeSubPage.toString() === "" ? [] : [activeSubPage.toString()]
+
+    onActiveSubPageChanged: root.navigationChanged()
 
     function openSubPage(url) {
         root.activeSubPage = Qt.resolvedUrl(url);
@@ -17,6 +21,10 @@ Item {
 
     function closeSubPage() {
         root.activeSubPage = "";
+    }
+
+    function restoreNavigationPath(path) {
+        root.activeSubPage = Array.isArray(path) && path.length > 0 ? path[0] : "";
     }
 
     Component.onCompleted: {
@@ -270,6 +278,18 @@ Item {
         }
     }
 
+    // Keep the page underneath from receiving hover/click events while the
+    // sub-page is open or completing its close animation.
+    MouseArea {
+        anchors.fill: parent
+        z: 9
+        enabled: subPageOverlay.enabled
+        visible: subPageOverlay.enabled
+        hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        onPressed: event => event.accepted = true
+    }
+
     Item {
         id: subPageOverlay
         width: parent.width
@@ -299,7 +319,7 @@ Item {
                 overlayActive = true;
         }
 
-        enabled: isOpen
+        enabled: isOpen || overlayActive
 
         Loader {
             id: subPageLoader

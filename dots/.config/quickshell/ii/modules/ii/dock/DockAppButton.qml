@@ -16,40 +16,110 @@ DockButton {
     property int lastFocused: -1
 
     readonly property real dockHeight: Config.options?.dock.height ?? 60
-    property int dotMargin: Math.round(dockHeight * 0.2) - 2
-    property int dotMarginV: Math.round(dockHeight * 0.12) - 2
+    // The delegate wrapper owns the dock geometry. Keep the button on that
+    // same slot so its indicator can sit outside the icon without shifting it.
+    readonly property real slotWidth: root.dockContent?.buttonSlotSize ?? root.buttonSize
+    readonly property real slotHeight: root.dockContent ? (root.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight) : root.buttonSize
 
     readonly property var desktopEntry: appToplevel ? TaskbarApps.getCachedDesktopEntry(appToplevel.appId) : null
     property bool isVertical: dockContent?.isVertical ?? false
 
     readonly property bool appIsActive: focusedWindowIndex >= 0
     readonly property int focusedWindowIndex: {
-        if (!appToplevel || !appToplevel.toplevels) return -1
+        if (!appToplevel || !appToplevel.toplevels)
+            return -1;
         for (let i = 0; i < appToplevel.toplevels.length; i++) {
-            if (appToplevel.toplevels[i].activated) return i
+            if (appToplevel.toplevels[i].activated)
+                return i;
         }
-        return -1
+        return -1;
     }
 
     readonly property bool appIsRunning: appToplevel && appToplevel.toplevels && appToplevel.toplevels.length > 0
 
     property bool _pressed: false
 
-    width: buttonSize + dotMargin * 2
-    height: buttonSize + dotMarginV * 2
+    readonly property real magScale: root.dockMagnificationScale
 
-    opacity: 1.0
-    z: 0
-    scale: _pressed ? 0.88 : 1.0
-
-    Behavior on scale {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    transformOrigin: {
+        let pos = root.dockPos;
+        if (pos === "top")
+            return Item.Top;
+        if (pos === "left")
+            return Item.Left;
+        if (pos === "right")
+            return Item.Right;
+        return Item.Bottom;
     }
+
+    // ── App Launch Bounce Customization Tokens ──
+    readonly property bool enableLaunchBounce: Config.options?.dock?.enableLaunchBounce ?? true
+    readonly property real bounceHeight: Config.options?.dock?.bounceHeight ?? 18
+    readonly property int bounceDuration: 280
+    readonly property int maxBounceCycles: 3
+
+    property real launchBounceY: 0
+    readonly property string dockPos: dockContent?.dockPos ?? "bottom"
+
+    readonly property real effectiveBounceOffset: {
+        if (root.dockPos === "top")
+            return -root.launchBounceY;
+        if (root.dockPos === "left")
+            return -root.launchBounceY;
+        return root.launchBounceY;
+    }
+
+    transform: Translate {
+        x: root.isVertical ? root.effectiveBounceOffset : 0
+        y: !root.isVertical ? root.effectiveBounceOffset : 0
+    }
+
+    SequentialAnimation {
+        id: launchBounceAnim
+        loops: root.maxBounceCycles
+
+        NumberAnimation {
+            target: root
+            property: "launchBounceY"
+            from: 0
+            to: -root.bounceHeight
+            duration: Math.round(root.bounceDuration * 0.45)
+            easing.type: Easing.OutQuad
+        }
+        NumberAnimation {
+            target: root
+            property: "launchBounceY"
+            from: -root.bounceHeight
+            to: 0
+            duration: Math.round(root.bounceDuration * 0.55)
+            easing.type: Easing.InQuad
+        }
+    }
+
+    function triggerLaunchBounce() {
+        if (!enableLaunchBounce)
+            return;
+        launchBounceAnim.stop();
+        launchBounceY = 0;
+        launchBounceAnim.start();
+    }
+
+    onAppIsRunningChanged: {
+        if (appIsRunning && launchBounceAnim.running) {
+            launchBounceAnim.loops = 1;
+        }
+    }
+
+    scale: (_pressed ? 0.88 : 1.0) * magScale
+    z: magScale > 1.01 ? Math.round(magScale * 100) : 1
+    width: root.slotWidth
+    height: root.slotHeight
 
     // Hover-only MouseArea for running apps (shows preview popup)
     Loader {
+        id: hoverAreaLoader
         anchors.fill: parent
-        active: appIsRunning
+        active: true
         sourceComponent: MouseArea {
             id: hoverArea
             anchors.fill: parent
@@ -57,14 +127,14 @@ DockButton {
             acceptedButtons: Qt.NoButton
             cursorShape: Qt.PointingHandCursor
             onEntered: {
-                if (dockContent?.suppressHover) return
-                dockContent.lastHoveredButton = root
-                dockContent.buttonHovered = true
-                lastFocused = appToplevel.toplevels.length - 1
+                if (dockContent?.suppressHover)
+                    return;
+                dockContent?.onButtonEntered(root);
+                if (appIsRunning && appToplevel?.toplevels)
+                    lastFocused = appToplevel.toplevels.length - 1;
             }
             onExited: {
-                if (dockContent?.lastHoveredButton === root)
-                    dockContent.buttonHovered = false
+                dockContent?.onButtonExited(root);
             }
         }
     }
@@ -83,60 +153,66 @@ DockButton {
             property real pressCoord: 0
             property bool dragActive: false
 
-            onPressed: (event) => {
-                root._pressed = true
+            onPressed: event => {
+                root._pressed = true;
                 if (event.button === Qt.LeftButton) {
-                    pressCoord = root.isVertical ? event.y : event.x
+                    pressCoord = root.isVertical ? event.y : event.x;
                 }
             }
-            onPositionChanged: (event) => {
-                if (!pressed) return
-                var cur = root.isVertical ? event.y : event.x
-                var dist = Math.abs(cur - pressCoord)
+            onPositionChanged: event => {
+                if (!pressed)
+                    return;
+                var cur = root.isVertical ? event.y : event.x;
+                var dist = Math.abs(cur - pressCoord);
                 // Only allow drag when delegateIndex >= 0 (reorderable items)
                 if (!dragActive && dist > 5 && root.delegateIndex >= 0) {
-                    dragActive = true
-                    root._pressed = false
+                    dragActive = true;
+                    root._pressed = false;
                     if (dockContent) {
-                        dockContent.buttonHovered = false
-                        dockContent.startItemDrag(root.delegateIndex, dragOverlay, event.x, event.y)
+                        dockContent.buttonHovered = false;
+                        dockContent.startItemDrag(root.delegateIndex, dragOverlay, event.x, event.y);
                     }
                 }
                 if (dragActive) {
-                    if (dockContent) dockContent.moveItemDrag(dragOverlay, event.x, event.y)
+                    if (dockContent)
+                        dockContent.moveItemDrag(dragOverlay, event.x, event.y);
                 }
             }
-            onReleased: (event) => {
-                root._pressed = false
+            onReleased: event => {
+                root._pressed = false;
                 if (dragActive) {
-                    dragActive = false
-                    if (dockContent) dockContent.endItemDrag()
-                    return
+                    dragActive = false;
+                    if (dockContent)
+                        dockContent.endItemDrag();
+                    return;
                 }
                 if (event.button === Qt.RightButton) {
                     if (dockContent) {
-                        dockContent.buttonHovered = false
-                        dockContent.lastHoveredButton = null
+                        dockContent.buttonHovered = false;
+                        dockContent.lastHoveredButton = null;
                     }
-                    dockContextMenu.open()
-                    return
+                    dockContextMenu.open();
+                    return;
                 }
                 if (event.button === Qt.MiddleButton) {
-                    root.desktopEntry?.execute()
-                    return
+                    root.triggerLaunchBounce();
+                    root.desktopEntry?.execute();
+                    return;
                 }
                 if (!appToplevel || appToplevel.toplevels.length === 0) {
-                    root.desktopEntry?.execute()
-                    return
+                    root.triggerLaunchBounce();
+                    root.desktopEntry?.execute();
+                    return;
                 }
-                lastFocused = (lastFocused + 1) % appToplevel.toplevels.length
-                appToplevel.toplevels[lastFocused].activate()
+                lastFocused = (lastFocused + 1) % appToplevel.toplevels.length;
+                appToplevel.toplevels[lastFocused].activate();
             }
             onCanceled: {
-                root._pressed = false
+                root._pressed = false;
                 if (dragActive) {
-                    dragActive = false
-                    if (dockContent) dockContent.cancelDrag()
+                    dragActive = false;
+                    if (dockContent)
+                        dockContent.cancelDrag();
                 }
             }
         }
@@ -144,10 +220,10 @@ DockButton {
 
     altAction: () => {
         if (dockContent) {
-            dockContent.buttonHovered = false
-            dockContent.lastHoveredButton = null
+            dockContent.buttonHovered = false;
+            dockContent.lastHoveredButton = null;
         }
-        dockContextMenu.open()
+        dockContextMenu.open();
     }
 
     DockContextMenu {
@@ -160,20 +236,44 @@ DockButton {
     Connections {
         target: dockContextMenu
         function onActiveChanged() {
-            if (!dockContent) return
+            if (!dockContent)
+                return;
             if (dockContextMenu.active)
-                dockContent.registerContextMenuOpen()
+                dockContent.registerContextMenuOpen();
             else
-                dockContent.registerContextMenuClose()
+                dockContent.registerContextMenuClose();
+        }
+    }
+
+    Connections {
+        target: Notifications
+        function onNotify(notif) {
+            if (!notif)
+                return;
+            var targetName = (root.desktopEntry?.name ?? root.appToplevel?.appId ?? "").toLowerCase();
+            var appName = (notif.appName || "").toLowerCase();
+            if (targetName !== "" && appName !== "" && (appName === targetName || targetName.includes(appName) || appName.includes(targetName))) {
+                root.triggerLaunchBounce();
+            }
         }
     }
 
     // Safety: if this button is destroyed while menu is open, clean up the counter
     Component.onDestruction: {
         if (dockContent && dockContextMenu.active)
-            dockContent.registerContextMenuClose()
+            dockContent.registerContextMenuClose();
     }
 
-    DockAppIcon {}
-    DockAppIndicator {}
+    DockAppIndicator {
+        z: -1
+    }
+    DockAppIcon {
+        z: 0
+        anchors.centerIn: parent
+    }
+
+    DockTooltip {
+        text: root.desktopEntry?.name ?? (root.appToplevel?.appId ?? "")
+        showTooltip: (Config.options?.dock?.enableAppTooltip ?? false) && (hoverAreaLoader.item?.containsMouse ?? false)
+    }
 }

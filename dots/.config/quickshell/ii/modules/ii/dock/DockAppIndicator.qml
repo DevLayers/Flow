@@ -6,20 +6,23 @@ import qs.modules.common.widgets
 
 Item {
     id: indicatorContainer
-    visible: root.appIsRunning
+    readonly property bool isAdaptiveMode: Config.options?.dock?.enableShapeMask ?? false
+
+    visible: root.appIsRunning && !isAdaptiveMode
 
     readonly property int totalCount: root.appToplevel ? root.appToplevel.toplevels.length : 0
     readonly property int maxVisibleDots: 5
     readonly property int visibleCount: Math.min(totalCount, maxVisibleDots)
     readonly property int focusedIndex: root.focusedWindowIndex
 
-    readonly property real countDotHeight: Math.round(root.dockHeight * 0.07)
+    readonly property real countDotHeight: Math.max(3, Math.round(root.dockHeight * 0.06))
     readonly property real baseDotW: countDotHeight
     readonly property real baseDotH: countDotHeight
 
     readonly property real dotSpacing: 3
     readonly property real pitchX: root.isVertical ? 0 : (baseDotW + dotSpacing)
     readonly property real pitchY: root.isVertical ? (baseDotH + dotSpacing) : 0
+    readonly property real indicatorMargin: Math.max(1, (root.dockContent?.dotMarginV ?? 1) * 0.35)
 
     readonly property int windowStart: {
         if (totalCount <= maxVisibleDots) return 0
@@ -32,8 +35,19 @@ Item {
 
     width: root.isVertical ? baseDotW : (visibleCount * baseDotW + Math.max(0, visibleCount - 1) * dotSpacing)
     height: root.isVertical ? (visibleCount * baseDotH + Math.max(0, visibleCount - 1) * dotSpacing) : baseDotH
-    x: root.isVertical ? (root.dockPos === "left" ? (root.dotMargin - width) / 2 : parent.width - width - (root.dotMargin - width) / 2) : (parent.width - width) / 2
-    y: root.isVertical ? (parent.height - height) / 2 : (root.dockPos === "top" ? (root.dotMargin - height) / 2 : parent.height - height - (root.dotMargin - height) / 2)
+
+    // Anchored outside the icon area (below the icon in horizontal dock, or beside it in vertical dock)
+    anchors.horizontalCenter: root.isVertical ? undefined : parent.horizontalCenter
+    anchors.verticalCenter: root.isVertical ? parent.verticalCenter : undefined
+    anchors.bottom: !root.isVertical && root.dockPos !== "top" ? parent.bottom : undefined
+    anchors.top: !root.isVertical && root.dockPos === "top" ? parent.top : undefined
+    anchors.left: root.isVertical && root.dockPos === "right" ? parent.left : undefined
+    anchors.right: root.isVertical && root.dockPos !== "right" ? parent.right : undefined
+
+    anchors.bottomMargin: indicatorMargin
+    anchors.topMargin: indicatorMargin
+    anchors.leftMargin: indicatorMargin
+    anchors.rightMargin: indicatorMargin
 
     Repeater {
         model: indicatorContainer.visibleCount

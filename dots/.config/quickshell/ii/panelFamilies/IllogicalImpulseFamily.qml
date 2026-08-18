@@ -34,13 +34,16 @@ import qs.modules.ii.localSendPopup
 import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
 import qs.modules.ii.topLayer
+import qs.modules.ii.tilingAssistant
+import qs.modules.ii.usage
 import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
+import qs.modules.ii.touchGestures
 
 Scope {
     property bool barExtraCondition: true
-    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical)
+    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3
     readonly property bool barBot: Config.options.bar.bottom
     readonly property bool barVert: Config.options.bar.vertical
 
@@ -68,6 +71,10 @@ Scope {
         component: Cheatsheet {}
     }
     PanelLoader {
+        extraCondition: Config.options.appStats.overlayEnabled
+        component: Usage {}
+    }
+    PanelLoader {
         extraCondition: Config.options.dock.enable
         component: Dock {}
     }
@@ -78,7 +85,12 @@ Scope {
         component: MediaControls {}
     }
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable && GlobalStates.bluetoothConnectionPopupOpen
+        // The Scope must stay loaded so the onDeviceConnected trigger inside
+        // BluetoothConnectionPopup.qml is alive; the inner LazyLoader gates the
+        // actual PanelWindow on GlobalStates.bluetoothConnectionPopupOpen.
+        // (df1e26966 gated this PanelLoader on the same flag, creating a
+        // chicken-and-egg that prevented the popup from ever appearing.)
+        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
         component: BluetoothConnectionPopup {}
     }
     PanelLoader {
@@ -90,15 +102,15 @@ Scope {
         component: LocalSendPopup {}
     }
     PanelLoader {
-        extraCondition: !(Config.ready && Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableNotification)
+        extraCondition: !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableNotification)
         component: NotificationPopup {}
     }
     PanelLoader {
-        extraCondition: !(Config.ready && Config.options.osd.style === "minimalist")
+        extraCondition: !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
         component: OnScreenDisplay {}
     }
     PanelLoader {
-        extraCondition: Config.ready && Config.options.osd.style === "minimalist"
+        extraCondition: (Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
         component: MinimalistOsd {}
     }
     PanelLoader {
@@ -175,6 +187,18 @@ Scope {
         component: ScreenshotOverlay {}
     }
     PanelLoader {
+        extraCondition: Config.options.tiling.enable
+        component: TilingOverlay {}
+    }
+    PanelLoader {
+        extraCondition: Config.options.tiling.enable
+        component: LayoutHint {}
+    }
+    PanelLoader {
+        extraCondition: Config.options.tiling.enable && Config.options.tiling.overlay.stackIndicator
+        component: TilingStackBadges {}
+    }
+    PanelLoader {
         extraCondition: GlobalStates.connectModeActive
         component: TopLayer {}
     }
@@ -184,5 +208,11 @@ Scope {
             console.log("[IllogicalImpulseFamily] DynamicIsland PanelLoader - Config.ready:", Config.ready, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable, "centerInBar:", Config.options.bar.floatingNotch.centerInBar);
         }
         component: DynamicIsland {}
+    }
+    readonly property var _touchGestureService: TouchGestureService
+
+    PanelLoader {
+        extraCondition: Config.ready && Boolean(Config.options && Config.options.interactions && Config.options.interactions.touchGestures && Config.options.interactions.touchGestures.enable)
+        component: TouchGestures {}
     }
 }

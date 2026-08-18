@@ -97,7 +97,9 @@ Item {
             root._prevModelKey = key;
         }
     }
-    readonly property bool showNumbers: Config.options.bar.workspaces.alwaysShowNumbers || root.showNumbersByMs
+    readonly property bool numbersByInteractionVisible: showNumbersByMs && !GlobalStates.screenLocked && !GlobalStates.workspaceRestoreInProgress
+    readonly property bool showNumbers: !GlobalStates.screenLocked && !GlobalStates.workspaceRestoreInProgress
+        && (Config.options.bar.workspaces.alwaysShowNumbers || root.numbersByInteractionVisible)
 
     // ── Implicit Size ─────────────────────────────────────────────────────────
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : container.implicitWidth
@@ -441,9 +443,9 @@ Item {
 
                             Behavior on opacity {
                                 NumberAnimation {
-                                    duration: Appearance.animation.elementMoveFast.duration
-                                    easing.type: Appearance.animation.elementMoveFast.type
-                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                    duration: Appearance.animation.elementMoveSlow.duration
+                                    easing.type: Appearance.animation.elementMoveSlow.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveSlow.bezierCurve
                                 }
                             }
                             Behavior on color {

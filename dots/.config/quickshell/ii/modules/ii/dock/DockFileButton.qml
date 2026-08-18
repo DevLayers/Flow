@@ -22,26 +22,30 @@ DockButton {
     property string filePath: ""
 
     property int buttonSize: Appearance.sizes.dockButtonSize
-    property int dotMargin: Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2
-    property int dotMarginV: Math.round((Config.options?.dock.height ?? 60) * 0.12) - 2
+    readonly property real dotMargin: root.dockContent?.dotMargin ?? Math.max(1, Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2)
+    readonly property real dotMarginV: root.dockContent?.dotMarginV ?? root.dotMargin
+    readonly property real slotWidth: root.dockContent?.buttonSlotSize ?? (root.buttonSize + root.dotMargin * 2)
+    readonly property real slotHeight: root.dockContent
+        ? (root.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight)
+        : (root.buttonSize + root.dotMarginV * 2)
 
     readonly property bool isVertical: dockContent?.isVertical ?? false
 
     readonly property string fileName: {
-        const parts = filePath.split("/").filter(s => s.length > 0)
-        return parts[parts.length - 1] ?? filePath
+        const parts = filePath.split("/").filter(s => s.length > 0);
+        return parts[parts.length - 1] ?? filePath;
     }
 
     readonly property string containingDir: {
-        const idx = filePath.lastIndexOf("/")
-        return idx > 0 ? filePath.substring(0, idx) : filePath
+        const idx = filePath.lastIndexOf("/");
+        return idx > 0 ? filePath.substring(0, idx) : filePath;
     }
 
     readonly property string mimeIcon: dockContent?.mimeIconFromPath(filePath) ?? "insert_drive_file"
 
     readonly property bool isDirectory: {
-        const lastPart = filePath.toString().split("/").filter(s => s).pop() ?? ""
-        return !lastPart.includes(".") || filePath.endsWith("/")
+        const lastPart = filePath.toString().split("/").filter(s => s).pop() ?? "";
+        return !lastPart.includes(".") || filePath.endsWith("/");
     }
 
     readonly property bool isImage: /\.(png|jpe?g|webp|gif|svg|bmp|ico)$/i.test(filePath)
@@ -52,28 +56,29 @@ DockButton {
         id: mimeQueryProcess
         command: ["xdg-mime", "query", "filetype", root.filePath]
         stdout: SplitParser {
-            onRead: (line) => {
-                const mime = line.trim()
-                if (mime !== "") root.cachedXdgIcon = mime.replace("/", "-")
+            onRead: line => {
+                const mime = line.trim();
+                if (mime !== "")
+                    root.cachedXdgIcon = mime.replace("/", "-");
             }
         }
     }
 
     Component.onCompleted: {
         if (!root.isImage && root.filePath !== "" && !root.isDirectory)
-            mimeQueryProcess.running = true
+            mimeQueryProcess.running = true;
     }
 
     onFilePathChanged: {
         if (!root.isImage && root.filePath !== "" && !root.isDirectory) {
-            root.cachedXdgIcon = ""
-            mimeQueryProcess.running = true
+            root.cachedXdgIcon = "";
+            mimeQueryProcess.running = true;
         }
     }
 
     readonly property string resolvedXdgIcon: {
-        TaskbarApps.iconThemeRevision
-        const dirs = TaskbarApps.xdgUserDirs
+        TaskbarApps.iconThemeRevision;
+        const dirs = TaskbarApps.xdgUserDirs;
 
         if (root.isDirectory) {
             const map = {
@@ -84,26 +89,35 @@ DockButton {
                 [dirs.videos]: "folder-videos",
                 [dirs.desktop]: "folder-desktop",
                 [dirs.publicshare]: "folder-publicshare",
-                [dirs.templates]: "folder-templates",
-            }
-            return Quickshell.iconPath(map[filePath.toString()] ?? "folder", "folder")
+                [dirs.templates]: "folder-templates"
+            };
+            return Quickshell.iconPath(map[filePath.toString()] ?? "folder", "folder");
         }
 
-        if (root.isImage) return ""
+        if (root.isImage)
+            return "";
         if (root.cachedXdgIcon !== "")
-            return Quickshell.iconPath(root.cachedXdgIcon, "text-x-generic")
-        return Quickshell.iconPath("text-x-generic", "application-x-generic")
+            return Quickshell.iconPath(root.cachedXdgIcon, "text-x-generic");
+        return Quickshell.iconPath("text-x-generic", "application-x-generic");
     }
 
-    width: buttonSize + dotMargin * 2
-    height: buttonSize + dotMarginV * 2
-    opacity: 1.0
-    z: 0
-    scale: _pressed ? 0.88 : 1.0
+    width: root.slotWidth
+    height: root.slotHeight
+    readonly property real magScale: root.dockMagnificationScale
 
-    Behavior on scale {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    transformOrigin: {
+        let pos = root.dockContent?.dockPos ?? "bottom";
+        if (pos === "top")
+            return Item.Top;
+        if (pos === "left")
+            return Item.Left;
+        if (pos === "right")
+            return Item.Right;
+        return Item.Bottom;
     }
+
+    scale: (_pressed ? 0.88 : 1.0) * magScale
+    z: Math.round(magScale * 10)
 
     property bool _pressed: false
     property bool fileHovered: false
@@ -116,15 +130,14 @@ DockButton {
         acceptedButtons: Qt.NoButton
         cursorShape: Qt.PointingHandCursor
         onEntered: {
-            root.fileHovered = true
-            if (dockContent?.suppressHover) return
-            dockContent.lastHoveredButton = root
-            dockContent.buttonHovered = true
+            root.fileHovered = true;
+            if (dockContent?.suppressHover)
+                return;
+            dockContent?.onButtonEntered(root);
         }
         onExited: {
-            root.fileHovered = false
-            if (dockContent?.lastHoveredButton === root)
-                dockContent.buttonHovered = false
+            root.fileHovered = false;
+            dockContent?.onButtonExited(root);
         }
     }
 
@@ -142,54 +155,70 @@ DockButton {
             property real pressCoord: 0
             property bool dragActive: false
 
-            onPressed: (event) => {
-                root._pressed = true
+            onPressed: event => {
+                root._pressed = true;
                 if (event.button === Qt.LeftButton) {
-                    pressCoord = root.isVertical ? event.y : event.x
+                    pressCoord = root.isVertical ? event.y : event.x;
                 }
             }
-            onPositionChanged: (event) => {
-                if (!pressed || event.button !== Qt.LeftButton) return
-                var cur = root.isVertical ? event.y : event.x
-                var dist = Math.abs(cur - pressCoord)
+            onPositionChanged: event => {
+                if (!pressed || event.button !== Qt.LeftButton)
+                    return;
+                var cur = root.isVertical ? event.y : event.x;
+                var dist = Math.abs(cur - pressCoord);
                 if (!dragActive && dist > 5) {
-                    dragActive = true
-                    root._pressed = false
+                    dragActive = true;
+                    root._pressed = false;
                     if (dockContent) {
-                        dockContent.buttonHovered = false
-                        dockContent.lastHoveredButton = null
-                        dockContent.startItemDrag(root.delegateIndex, dragOverlay, event.x, event.y)
+                        dockContent.buttonHovered = false;
+                        dockContent.lastHoveredButton = null;
+                        dockContent.startItemDrag(root.delegateIndex, dragOverlay, event.x, event.y);
                     }
                 }
                 if (dragActive) {
-                    if (dockContent) dockContent.moveItemDrag(dragOverlay, event.x, event.y)
+                    if (dockContent)
+                        dockContent.moveItemDrag(dragOverlay, event.x, event.y);
                 }
             }
-            onReleased: (event) => {
-                root._pressed = false
+            onReleased: event => {
+                root._pressed = false;
                 if (dragActive) {
-                    dragActive = false
-                    if (dockContent) dockContent.endItemDrag()
-                    return
+                    dragActive = false;
+                    if (dockContent)
+                        dockContent.endItemDrag();
+                    return;
                 }
                 if (event.button === Qt.RightButton) {
                     if (dockContent) {
-                        dockContent.buttonHovered = false
-                        dockContent.lastHoveredButton = null
+                        dockContent.buttonHovered = false;
+                        dockContent.lastHoveredButton = null;
                     }
-                    fileContextMenu.open()
-                    return
+                    fileContextMenu.open();
+                    return;
                 }
-                Quickshell.execDetached({ command: ["xdg-open", root.filePath] })
+                if (root.isDirectory) {
+                    stackPopup.open();
+                    return;
+                }
+                Quickshell.execDetached({
+                    command: ["xdg-open", root.filePath]
+                });
             }
             onCanceled: {
-                root._pressed = false
+                root._pressed = false;
                 if (dragActive) {
-                    dragActive = false
-                    if (dockContent) dockContent.cancelDrag()
+                    dragActive = false;
+                    if (dockContent)
+                        dockContent.cancelDrag();
                 }
             }
         }
+    }
+
+    DockStackPopup {
+        id: stackPopup
+        folderPath: root.filePath
+        anchorItem: root
     }
 
     DockFileContextMenu {
@@ -201,18 +230,19 @@ DockButton {
     Connections {
         target: fileContextMenu
         function onActiveChanged() {
-            if (!dockContent) return
+            if (!dockContent)
+                return;
             if (fileContextMenu.active)
-                dockContent.registerContextMenuOpen()
+                dockContent.registerContextMenuOpen();
             else
-                dockContent.registerContextMenuClose()
+                dockContent.registerContextMenuClose();
         }
     }
 
     // Safety: if this button is destroyed while menu is open, clean up the counter
     Component.onDestruction: {
         if (dockContent && fileContextMenu.active)
-            dockContent.registerContextMenuClose()
+            dockContent.registerContextMenuClose();
     }
 
     DockTooltip {
@@ -273,12 +303,17 @@ DockButton {
                 color: Appearance.colors.colOnLayer0
             }
 
-            Kirigami.Icon {
-                anchors.centerIn: parent
+            IconImage {
+                id: xdgIconImage
+                anchors.fill: parent
                 visible: !root.isImage && root.resolvedXdgIcon !== ""
-                width: root.buttonSize
-                height: root.buttonSize
                 source: root.resolvedXdgIcon
+
+                // Force reload when the icon theme regenerates
+                asynchronous: true
+                backer.cache: false
+                backer.sourceSize: Qt.size(xdgIconImage.actualSize + TaskbarApps.iconThemeRevision,
+                                           xdgIconImage.actualSize + TaskbarApps.iconThemeRevision)
             }
 
             MaterialSymbol {

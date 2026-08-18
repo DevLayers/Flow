@@ -10,6 +10,25 @@ Singleton {
 
     property bool smartTray: Config.options.tray.filterPassive
 
+    // SystemTray.items is populated asynchronously. Copy its values whenever the
+    // ObjectModel changes, so the filtered properties receive a new JS array and
+    // cannot remain bound to a stale in-place list.
+    property var allItems: []
+
+    function refreshItems() {
+        const values = SystemTray.items.values;
+        root.allItems = values ? values.slice() : [];
+    }
+
+    Connections {
+        target: SystemTray.items
+        function onValuesChanged() {
+            root.refreshItems();
+        }
+    }
+
+    Component.onCompleted: root.refreshItems()
+
     function getItemKey(item) {
         if (!item) return "";
         var baseId = item.id || "";
@@ -20,16 +39,16 @@ Singleton {
         return baseId;
     }
 
-    property list<var> itemsInUserList: SystemTray.items.values.filter(i => {
-        if (!i || i.id === undefined) return false;
+    property var itemsInUserList: root.allItems.filter(i => {
+        if (!i) return false;
         var key = root.getItemKey(i);
         var pins = Config.options.tray.pinnedItems || [];
         var isPinned = pins.includes(key) || pins.includes(i.id);
         return isPinned && (!smartTray || i.status !== Status.Passive);
     })
 
-    property list<var> itemsNotInUserList: SystemTray.items.values.filter(i => {
-        if (!i || i.id === undefined) return false;
+    property var itemsNotInUserList: root.allItems.filter(i => {
+        if (!i) return false;
         var key = root.getItemKey(i);
         var pins = Config.options.tray.pinnedItems || [];
         var isPinned = pins.includes(key) || pins.includes(i.id);
@@ -37,8 +56,8 @@ Singleton {
     })
 
     property bool invertPins: Config.options.tray.invertPinnedItems
-    property list<var> pinnedItems: invertPins ? itemsNotInUserList : itemsInUserList
-    property list<var> unpinnedItems: invertPins ? itemsInUserList : itemsNotInUserList
+    property var pinnedItems: invertPins ? itemsNotInUserList : itemsInUserList
+    property var unpinnedItems: invertPins ? itemsInUserList : itemsNotInUserList
 
     function getTooltipForItem(item) {
         if (!item) return "";
@@ -112,4 +131,3 @@ Singleton {
     }
 
 }
-

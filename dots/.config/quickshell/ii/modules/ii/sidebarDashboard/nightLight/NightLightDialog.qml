@@ -13,8 +13,8 @@ import Quickshell.Hyprland
 
 WindowDialog {
     id: root
-    property var screen: root.QsWindow.window?.screen
-    property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
+    property var screen: Brightness.targetScreen
+    property var brightnessMonitor: Brightness.getTargetMonitor()
     backgroundHeight: 700
 
     WindowDialogTitle {

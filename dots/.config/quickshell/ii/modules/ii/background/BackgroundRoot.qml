@@ -24,7 +24,7 @@ PanelWindow {
     required property var modelData
     required property var widgetStateManager
 
-    property bool anyWidgetIsDragging: widgetStateManager ? widgetStateManager.draggingActive : false
+    property bool anyWidgetIsDragging: (widgetStateManager?.draggingActive) ?? false
     property real baseWallpaperScale: 1 // Calculated scale from wallpaper size
     property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
     property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
@@ -59,6 +59,7 @@ PanelWindow {
         verticalParallax: bgRoot.verticalParallax
         parallaxFrozen: lockAnim.parallaxFrozen
         wallpaperCentered: lockAnim.wallpaperCentered
+        wallpaperIsVideo: bgRoot.videoEffectsDisabled
         activeWorkspaceId: {
             let activeId = bgRoot.monitor && bgRoot.monitor.activeWorkspace ? bgRoot.monitor.activeWorkspace.id : 1;
             return activeId > 1000000 ? (2147483647 - activeId) : activeId;
@@ -102,8 +103,12 @@ PanelWindow {
 
     // Hide when fullscreen
     property var workspacesForMonitor: Hyprland.workspaces.values.filter(function(workspace) { return workspace.monitor && workspace.monitor.name == monitor.name; })
-    property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(function(workspace) { return ((workspace.toplevels.values.filter(function(window) { return window.wayland && window.wayland.fullscreen; })[0] != undefined) && workspace.active); })[0]
-    property bool isFullscreen: activeWorkspaceWithFullscreen != undefined
+    readonly property bool isFullscreen: {
+        const wl = HyprlandData.windowList;
+        const monitorData = HyprlandData.monitors.find(m => m.name === (monitor ? monitor.name : ""));
+        const activeWsId = monitorData?.activeWorkspace?.id;
+        return wl.some(w => w.workspace?.id === activeWsId && w.fullscreen === 3);
+    }
     property var activeWorkspace: workspacesForMonitor.filter(function(workspace) { return workspace.active; })[0]
     property bool hasWindowsInActiveWorkspace: {
         if (activeWorkspace == undefined) return false;
@@ -125,7 +130,7 @@ PanelWindow {
     // Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
     readonly property bool isMonitorFocused: (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : "")
-    readonly property bool loopEnabled: Config.options.background.parallax.loop
+    readonly property bool loopEnabled: !wallpaperIsVideo && Config.options.background.parallax.loop
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
     readonly property int chunkSize: {
         let intensity = Config.options.background.parallax.intensity;
@@ -163,15 +168,19 @@ PanelWindow {
     property string lightModeWallpaperPath: Config.options && Config.options.background && Config.options.background.lightModeWallpaperPath ? Config.options.background.lightModeWallpaperPath : ""
     property bool wallpaperIsVideo: {
         const path = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
-        return path !== "" && (path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mkv") || path.endsWith(".avi") || path.endsWith(".mov"));
+        return Wallpapers.isVideoFile(path);
     }
+    readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
     property string wallpaperPath: {
         if (!Appearance.m3colors.darkmode && useSeparateLightModeWallpaper && lightModeWallpaperPath !== "") {
             return lightModeWallpaperPath;
         }
-        const rawPath = wallpaperIsVideo
-            ? (Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "")
-            : (Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "");
+        if (wallpaperIsVideo) {
+            const thumb = Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "";
+            if (thumb !== "") return thumb;
+            return "";
+        }
+        const rawPath = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
         if (rawPath !== "")
             return rawPath;
         return `${Directories.assetsPath}/images/default_wallpaper.png`;
@@ -190,7 +199,7 @@ PanelWindow {
         return enabled && sensitiveWallpaper && sensitiveNetwork;
     }
     property real wallpaperToScreenRatio: Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height)
-    property real preferredWallpaperScale: Config.options.background.parallax.workspaceZoom
+    property real preferredWallpaperScale: videoEffectsDisabled ? 1.0 : Config.options.background.parallax.workspaceZoom
     property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
     property real movableYSpace: ((wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
 
@@ -202,7 +211,7 @@ PanelWindow {
         return Math.max(screen.width / w, screen.height / h);
     }
 
-    readonly property bool verticalParallax: (Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical
+    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical)
     // Colors
     property bool shouldBlur: (GlobalStates.screenLocked && Config.options.lock.blur.enable)
     property color dominantColor: Appearance.colors.colPrimary // Default, to be changed
@@ -212,6 +221,23 @@ PanelWindow {
             return CF.ColorUtils.mix(Appearance.colors.colOnLayer0, Appearance.colors.colPrimary, 0.75);
         return (GlobalStates.screenLocked && shouldBlur) ? Appearance.colors.colOnLayer0 : CF.ColorUtils.colorWithLightness(Appearance.colors.colPrimary, (dominantColorIsDark ? 0.8 : 0.12));
     }
+    // Video Wallpaper Parallax via mpv IPC
+    readonly property real videoPanX: (0.5 - parallax.effectiveValueX) * 0.08
+    readonly property real videoPanY: (0.5 - parallax.effectiveValueY) * 0.08
+
+    onVideoPanXChanged: bgRoot.sendMpvPan()
+    onVideoPanYChanged: bgRoot.sendMpvPan()
+
+    function sendMpvPan() {
+        if (!bgRoot.wallpaperIsVideo || !bgRoot.screen) return;
+        const sock = "/tmp/mpvpaper-" + bgRoot.screen.name + ".sock";
+        const px = videoPanX.toFixed(4);
+        const py = videoPanY.toFixed(4);
+        const cmdX = '{"command":["set_property","video-pan-x",' + px + ']}';
+        const cmdY = '{"command":["set_property","video-pan-y",' + py + ']}';
+        Quickshell.execDetached(["bash", "-c", "printf '%s\\n%s\\n' '" + cmdX + "' '" + cmdY + "' | socat - UNIX-CONNECT:" + sock + " >/dev/null 2>&1"]);
+    }
+
     Behavior on colText {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }
@@ -232,12 +258,12 @@ PanelWindow {
     property real defaultRatio: zoomInStyle ? zoomLevels.in.default : zoomLevels.out.default
     property real zoomedRatio: zoomInStyle ? zoomLevels.in.zoomed : zoomLevels.out.zoomed
 
-    readonly property bool zoomInStyle: Config.options.overview.scrollingStyle.zoomStyle === "in"
+    readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
 
     property bool overviewOpen: GlobalStates.overviewOpen
 
-    property real scaleAnimated: GlobalStates.overviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
+    property real scaleAnimated: !videoEffectsDisabled && GlobalStates.overviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
     Behavior on scaleAnimated {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
@@ -245,7 +271,10 @@ PanelWindow {
     // Layer props
     screen: modelData
     exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.layer: bgRoot.mediaModeOpen ? WlrLayer.Overlay : WlrLayer.Bottom
+    // Keep the wallpaper below the dedicated widgets surface. Both used to be
+    // mapped in WlrLayer.Bottom, where Hyprland's map order could leave the
+    // wallpaper above the widgets after startup or a reload.
+    WlrLayershell.layer: bgRoot.mediaModeOpen ? WlrLayer.Overlay : WlrLayer.Background
     WlrLayershell.keyboardFocus: bgRoot.mediaModeOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     WlrLayershell.namespace: "quickshell:background"
     anchors {
@@ -273,16 +302,9 @@ PanelWindow {
         const height = bgRoot.wallpaperHeight;
         const screenW = bgRoot.screen.width;
         const screenH = bgRoot.screen.height;
-        if (width <= 0 || height <= 0) return;
+        if (width <= 0 || height <= 0 || screenW <= 0 || screenH <= 0) return;
         
-        let targetScale = 1.0;
-        if (Config.options.background.scaleLargeWallpapers) {
-            if (width <= screenW || height <= screenH) {
-                targetScale = Math.max(screenW / width, screenH / height);
-            } else {
-                targetScale = Math.min(bgRoot.preferredWallpaperScale, width / screenW, height / screenH);
-            }
-        }
+        let targetScale = bgRoot.preferredWallpaperScale;
         
         if (Config.options.background.blurWhenWindowsOpen || Config.options.lock.blur.enable) {
             targetScale *= 1.03;
@@ -298,6 +320,22 @@ PanelWindow {
     }
 
     property bool mediaModeOpen: mediaModeLoader.active && MprisController.activePlayer
+
+    function restoreWallpaperColors() {
+        if (Config.options.appearance.palette.type.startsWith("scheme")
+                && !GlobalStates.mediaModeActive
+                && bgRoot.isMonitorFocused) {
+            // Restore only after the global close has completed and all loader
+            // destruction handlers have balanced mediaModeCount.
+            Quickshell.execDetached([
+                Directories.wallpaperSwitchScriptPath,
+                "--noswitch",
+                "--color", "clear",
+                "--mode", Appearance.m3colors.darkmode ? "dark" : "light"
+            ]);
+        }
+    }
+
     function applyCurrentWallpaper() {
         if (useSeparateLightModeWallpaper && !Appearance.m3colors.darkmode && lightModeWallpaperPath !== "") {
             Wallpapers.applyLightModeWallpaper(lightModeWallpaperPath);
@@ -306,20 +344,18 @@ PanelWindow {
         }
     }
 
+    Connections {
+        target: GlobalStates
+        function onMediaModeActiveChanged() {
+            if (!GlobalStates.mediaModeActive) {
+                LyricsService.shellColorChanged = false;
+                bgRoot.restoreWallpaperColors();
+            }
+        }
+    }
+
     onMediaModeOpenChanged: {
         if (!mediaModeOpen) {
-            LyricsService.shellColorChanged = false;
-            // Only restore colors if they were changed during media mode.
-            // Use --noswitch to regenerate palette from current wallpaper
-            // without re-setting it at the compositor level (avoids visual glitch
-            // of wallpaper being re-applied on top of widgets).
-            // Run only on the focused monitor to avoid duplicate script launches.
-            if (Config.options.appearance.palette.type.startsWith("scheme")
-                    && LyricsService.mediaModeOpenCount <= 0
-                    && bgRoot.isMonitorFocused) {
-                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--noswitch", "--mode", Appearance.m3colors.darkmode ? "dark" : "light"]);
-            }
-
             // Force widgets window to re-stack after our layer transition from
             // WlrLayer.Overlay → WlrLayer.Bottom. Without this, the compositor
             // re-stacks us at the top of the Bottom layer, covering the widgets
@@ -361,10 +397,10 @@ PanelWindow {
             movableXSpace: bgRoot.movableXSpace
             movableYSpace: bgRoot.movableYSpace
             minSafeScale: bgRoot.minSafeScale
-            parallaxX: parallax.parallaxX
-            parallaxY: parallax.parallaxY
-            effectiveValueX: parallax.effectiveValueX
-            effectiveValueY: parallax.effectiveValueY
+            parallaxX: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxX
+            parallaxY: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxY
+            effectiveValueX: bgRoot.videoEffectsDisabled ? 0.5 : parallax.effectiveValueX
+            effectiveValueY: bgRoot.videoEffectsDisabled ? 0.5 : parallax.effectiveValueY
             scaleValue: ovZoom.scaleValue
             scaleOriginX: ovZoom.scaleOriginX
             scaleOriginY: ovZoom.scaleOriginY
@@ -374,12 +410,6 @@ PanelWindow {
             lockAnimationActive: bgRoot.lockAnimationActive
             hasWindowsInActiveWorkspace: bgRoot.hasWindowsInActiveWorkspace
             widgetStateManager: bgRoot.widgetStateManager
-        }
-
-        BarGradientOverlay {
-            sourceItem: wallpaperImage.clipRectItem
-            screenWidth: bgRoot.screen.width
-            screenHeight: bgRoot.screen.height
         }
 
         GlobalShortcut {

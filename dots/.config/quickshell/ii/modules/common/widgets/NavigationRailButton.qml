@@ -17,17 +17,37 @@ TabButton {
 
     property bool expanded: false
     property bool showToggledHighlight: true
-    readonly property real visualWidth: root.expanded ? root.baseSize + 20 + itemText.implicitWidth : root.baseSize
+    readonly property real visualWidth: {
+        const contentWidth = root.baseSize + 20 + itemText.implicitWidth;
+        return root.expanded && root.fillExpandedWidth ? Math.max(root.width, contentWidth) : (root.expanded ? contentWidth : root.baseSize);
+    }
 
     property real baseSize: 56
     property real baseHighlightHeight: 32
     property real iconSize: 24
+    property real groupSpacing: 0
+    property bool useDynamicRadius: false
+    property bool groupFirst: false
+    property bool groupLast: false
+    property bool fillExpandedWidth: false
+    property int textPixelSize: 14
+    property color colBackground: ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, 1)
+    property color colBackgroundHover: Appearance.colors.colLayer1Hover
+    property color colBackgroundActive: Appearance.colors.colLayer1Active
+    property color colBackgroundToggled: Appearance.colors.colSecondaryContainer
+    property color colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+    property color colBackgroundToggledActive: Appearance.colors.colSecondaryContainerActive
+    property color colRipple: Appearance.colors.colLayer1Active
+    property color colRippleToggled: Appearance.colors.colSecondaryContainerActive
+    property color colText: Appearance.colors.colOnLayer1
+    property color colTextToggled: Appearance.m3colors.m3onSecondaryContainer
     property real highlightCollapsedTopMargin: 8
     padding: 0
 
     // The navigation item’s target area always spans the full width of the
     // nav rail, even if the item container hugs its contents.
     Layout.fillWidth: true
+    Layout.topMargin: root.groupSpacing
     // implicitWidth: contentItem.implicitWidth
     implicitHeight: baseSize
 
@@ -41,24 +61,28 @@ TabButton {
             top: parent.top
             bottom: parent.bottom
             left: parent.left
-            right: undefined
+            right: root.expanded && root.fillExpandedWidth ? parent.right : undefined
         }
-        
+
         implicitWidth: root.visualWidth
-        implicitHeight: root.expanded ? itemIconBackground.implicitHeight : itemIconBackground.implicitHeight + itemText.implicitHeight 
+        implicitHeight: root.expanded ? itemIconBackground.implicitHeight : itemIconBackground.implicitHeight + itemText.implicitHeight
 
         Rectangle {
             id: itemBackground
             anchors.top: itemIconBackground.top
             anchors.left: itemIconBackground.left
             anchors.bottom: itemIconBackground.bottom
+            width: root.expanded && root.fillExpandedWidth ? buttonContent.width : root.visualWidth
             implicitWidth: root.visualWidth
-            radius: Appearance.rounding.full
-            color: toggled ? 
-                root.showToggledHighlight ?
-                    (root.down ? Appearance.colors.colSecondaryContainerActive : root.hovered ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
-                    : ColorUtils.transparentize(Appearance.colors.colSecondaryContainer) :
-                (root.down ? Appearance.colors.colLayer1Active : root.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1))
+            readonly property real fullRadius: Math.min(height / 2, Appearance.rounding.large)
+            readonly property real topRadius: root.groupFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
+            readonly property real bottomRadius: root.groupLast ? Appearance.rounding.large : Appearance.rounding.verysmall
+
+            topLeftRadius: root.useDynamicRadius ? ((root.toggled || root.down) ? fullRadius : topRadius) : Appearance.rounding.full
+            topRightRadius: root.useDynamicRadius ? ((root.toggled || root.down) ? fullRadius : topRadius) : Appearance.rounding.full
+            bottomLeftRadius: root.useDynamicRadius ? ((root.toggled || root.down) ? fullRadius : bottomRadius) : Appearance.rounding.full
+            bottomRightRadius: root.useDynamicRadius ? ((root.toggled || root.down) ? fullRadius : bottomRadius) : Appearance.rounding.full
+            color: root.toggled && root.showToggledHighlight ? (root.down ? root.colBackgroundToggledActive : root.hovered ? root.colBackgroundToggledHover : root.colBackgroundToggled) : (root.down ? root.colBackgroundActive : root.hovered ? root.colBackgroundHover : root.colBackground)
 
             states: State {
                 name: "expanded"
@@ -94,6 +118,22 @@ TabButton {
             Behavior on color {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
             }
+            Behavior on topLeftRadius {
+                enabled: root.useDynamicRadius
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on topRightRadius {
+                enabled: root.useDynamicRadius
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on bottomLeftRadius {
+                enabled: root.useDynamicRadius
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on bottomRightRadius {
+                enabled: root.useDynamicRadius
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
         }
 
         Item {
@@ -112,7 +152,7 @@ TabButton {
                 fill: toggled ? 1 : 0
                 font.weight: (toggled || root.hovered) ? Font.DemiBold : Font.Normal
                 text: buttonIcon
-                color: toggled ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer1
+                color: toggled ? root.colTextToggled : root.colText
 
                 Behavior on color {
                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
@@ -160,9 +200,8 @@ TabButton {
                 }
             }
             text: buttonText
-            font.pixelSize: 14
-            color: Appearance.colors.colOnLayer1
+            font.pixelSize: root.textPixelSize
+            color: root.toggled ? root.colTextToggled : root.colText
         }
     }
-
 }

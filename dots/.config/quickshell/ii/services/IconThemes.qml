@@ -40,13 +40,8 @@ Singleton {
         command: ["python3", Directories.scriptPath + "/colors/recolor_icons.py"]
 
         onRunningChanged: {
-            if (!running && exitCode === 0) {
-                // Instantly refresh all icons system-wide using our reactivity
-                TaskbarApps.iconThemeRevision += 1;
-                
-                if (root.reloadOnFinish) {
-                    Quickshell.reload();
-                }
+            if (!running && exitCode === 0 && root.reloadOnFinish) {
+                Quickshell.reload();
             }
         }
     }
@@ -55,8 +50,10 @@ Singleton {
         path: Directories.home + "/.local/share/icons/DynamicTheme.colhash"
         watchChanges: true
         onFileChanged: {
-            // Background generation finished and written out new colors hash.
-            TaskbarApps.iconThemeRevision += 1;
+            // DynamicTheme is atomically replaced before the hash is written.
+            // A single bounded toggle is enough to invalidate icon bindings without
+            // making sourceSize grow after every theme change.
+            TaskbarApps.iconThemeRevision = 1 - TaskbarApps.iconThemeRevision;
         }
     }
 

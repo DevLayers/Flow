@@ -10,36 +10,52 @@ Item {
     id: root
     property int entranceTrigger: -1
     property var tabButtonList: [
-        {"name": Translation.tr("Pomodoro"), "icon": "search_activity"},
-        {"name": Translation.tr("Stopwatch"), "icon": "timer"}
+        {
+            "name": Translation.tr("Pomodoro"),
+            "icon": "search_activity"
+        },
+        {
+            "name": Translation.tr("Stopwatch"),
+            "icon": "timer"
+        }
     ]
+    property int selectedTab: Math.max(0, Math.min(root.tabButtonList.length - 1,
+        Persistent.states.sidebar.bottomGroup.timerTab))
+
+    function selectTab(index) {
+        if (index < 0 || index >= root.tabButtonList.length || root.selectedTab === index)
+            return;
+
+        root.selectedTab = index;
+        Persistent.states.sidebar.bottomGroup.timerTab = index;
+    }
 
     // These are keybinds for stopwatch and pomodoro
-    Keys.onPressed: (event) => {
+    Keys.onPressed: event => {
         if ((event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp) && event.modifiers === Qt.NoModifier) { // Switch tabs
             if (event.key === Qt.Key_PageDown) {
                 tabBar.incrementCurrentIndex();
             } else if (event.key === Qt.Key_PageUp) {
                 tabBar.decrementCurrentIndex();
             }
-            event.accepted = true
+            event.accepted = true;
         } else if (event.key === Qt.Key_Space || event.key === Qt.Key_S) { // Pause/resume with Space or S
             if (tabBar.currentIndex === 0) {
-                TimerService.togglePomodoro()
+                TimerService.togglePomodoro();
             } else {
-                TimerService.toggleStopwatch()
+                TimerService.toggleStopwatch();
             }
-            event.accepted = true
+            event.accepted = true;
         } else if (event.key === Qt.Key_R) { // Reset with R
             if (tabBar.currentIndex === 0) {
-                TimerService.resetPomodoro()
+                TimerService.resetPomodoro();
             } else {
-                TimerService.stopwatchReset()
+                TimerService.stopwatchReset();
             }
-            event.accepted = true
+            event.accepted = true;
         } else if (event.key === Qt.Key_L) { // Record lap with L
-            TimerService.stopwatchRecordLap()
-            event.accepted = true
+            TimerService.stopwatchRecordLap();
+            event.accepted = true;
         }
     }
 
@@ -49,32 +65,56 @@ Item {
 
         Toolbar {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredHeight: 48
+            Layout.preferredHeight: 52
             enableShadow: false
             colBackground: Appearance.colors.colSurfaceContainer
             ToolbarTabBar {
                 id: tabBar
                 tabButtonList: root.tabButtonList
-                currentIndex: swipeView.currentIndex
-                onCurrentIndexChanged: {
-                    if (currentIndex >= 0 && currentIndex < root.tabButtonList.length)
-                        swipeView.currentIndex = currentIndex;
-                }
+                requestOnly: true
+                currentIndex: root.selectedTab
+                onIndexSelected: root.selectTab(index)
             }
         }
 
         SwipeView {
             id: swipeView
+            property bool initialized: false
             Layout.topMargin: 10
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 10
             clip: true
-            currentIndex: tabBar.currentIndex
+            currentIndex: root.selectedTab
+            Component.onCompleted: initialized = true
+            onCurrentIndexChanged: {
+                if (initialized && currentIndex !== root.selectedTab)
+                    root.selectTab(currentIndex);
+            }
 
-            // Tabs
-            PomodoroTimer { entranceTrigger: root.entranceTrigger }
-            Stopwatch { entranceTrigger: root.entranceTrigger }
+            // Tabs: only the selected timer owns its visual tree.
+            Loader {
+                active: root.selectedTab === 0
+                asynchronous: true
+                sourceComponent: PomodoroTimer {
+                    entranceTrigger: root.entranceTrigger
+                }
+            }
+            Loader {
+                active: root.selectedTab === 1
+                asynchronous: true
+                sourceComponent: Stopwatch {
+                    entranceTrigger: root.entranceTrigger
+                }
+            }
+        }
+    }
+
+    Connections {
+        target: root
+        function onSelectedTabChanged() {
+            if (swipeView.currentIndex !== root.selectedTab)
+                swipeView.currentIndex = root.selectedTab;
         }
     }
 }

@@ -62,7 +62,11 @@ Scope {
                 onDismissed: GlobalStates.videoEditorPopupOpen = false
                 onEditRequested: {
                     GlobalStates.videoEditorPopupOpen = false
-                    GlobalStates.videoEditorOpen = true
+                    if (Config.options.screenRecord.openInLosslessCut) {
+                        GlobalStates.launchLosslessCut(GlobalStates.videoEditorPath)
+                    } else {
+                        GlobalStates.videoEditorOpen = true
+                    }
                 }
             }
         }

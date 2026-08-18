@@ -28,7 +28,7 @@ Singleton {
     property WifiAccessPoint wifiConnectTarget
     property WifiAccessPoint wifiErrorTarget
     readonly property list<WifiAccessPoint> wifiNetworks: []
-    readonly property WifiAccessPoint active: wifiNetworks.find(n => n.active) ?? null
+    readonly property WifiAccessPoint active: wifiNetworks.find(n => n && n.active) ?? null
     readonly property list<var> friendlyWifiNetworks: [...wifiNetworks].sort((a, b) => {
         if (a.active && !b.active)
             return -1;
@@ -441,12 +441,12 @@ Singleton {
 
                 const rNetworks = root.wifiNetworks;
 
-                const destroyed = rNetworks.filter(rn => !wifiNetworks.find(n => n.frequency === rn.frequency && n.ssid === rn.ssid && n.bssid === rn.bssid));
+                const destroyed = rNetworks.filter(rn => rn && !wifiNetworks.find(n => n && n.frequency === rn.frequency && n.ssid === rn.ssid && n.bssid === rn.bssid));
                 for (const network of destroyed)
                     rNetworks.splice(rNetworks.indexOf(network), 1).forEach(n => n.destroy());
 
                 for (const network of wifiNetworks) {
-                    const match = rNetworks.find(n => n.frequency === network.frequency && n.ssid === network.ssid && n.bssid === network.bssid);
+                    const match = rNetworks.find(n => n && n.frequency === network.frequency && n.ssid === network.ssid && n.bssid === network.bssid);
                     if (match) {
                         match.lastIpcObject = network;
                     } else {

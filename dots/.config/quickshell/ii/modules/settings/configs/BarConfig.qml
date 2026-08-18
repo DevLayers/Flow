@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -13,6 +15,26 @@ Item {
     property alias contentY: page.contentY
     // ── Active sub-page URL ("" = none) ───────────────────────────────────
     property alias activeSubPage: subPageOverlay.activeSubPage
+
+    property string autoSwitchNoticeMessage: ""
+
+    Timer {
+        id: autoSwitchNoticeTimer
+        interval: 6000
+        repeat: false
+        onTriggered: {
+            barConfigRoot.autoSwitchNoticeMessage = "";
+        }
+    }
+
+    function triggerAutoSwitchNotice(msg: string) {
+        autoSwitchNoticeMessage = msg;
+        autoSwitchNoticeTimer.restart();
+    }
+
+    function openWidgetPage(componentId) {
+        page.openWidgetPage(componentId);
+    }
 
     // ── Main content page ─────────────────────────────────────────────────
     ContentPage {
@@ -53,45 +75,52 @@ Item {
                 // Locked to Default when centerInBar active
                 NoticeBox {
                     Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.centerInBar
+                    visible: ShellModePolicy.barPositionLocked
                     materialIcon: "lock"
                     text: Translation.tr("Shell mode is locked to Default while 'Dynamic Island in bar center' is active. The search runs independently of the Dynamic Island in this mode.")
                 }
 
                 ConfigSelectionArray {
                     id: shellStyleSelector
+
                     currentValue: Config.options.sidebar.sidebarStyle
-                    onSelected: newValue => {
-                        Config.options.sidebar.sidebarStyle = newValue;
+                    onSelected: (newValue) => {
+                        if (newValue === "connect" && Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) {
+                            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island at top/bottom is incompatible with Connect mode. Bar corner style was automatically set to Hug."));
+                        }
+                        ShellModePolicy.setMode(newValue);
                     }
                     options: {
-                        const centerLocked = Config.options.bar.floatingNotch.centerInBar;
-                        var opts = [
-                            {
-                                "displayName": Translation.tr("Default"),
-                                "icon": "view_sidebar",
-                                "value": "default"
-                            },
-                            {
-                                "displayName": Translation.tr("Connect"),
-                                "icon": "phone_android",
-                                "value": "connect",
-                                "enabled": !centerLocked
-                            }
-                        ];
-                        if (Config.options.bar.floatingNotch.enable && Config.options.sidebar.sidebarStyle === "connect") {
-                            opts[0].enabled = false;
-                        }
+                        var opts = [{
+                            "displayName": Translation.tr("Default"),
+                            "icon": "view_sidebar",
+                            "value": "default"
+                        }, {
+                            "displayName": Translation.tr("Connect"),
+                            "icon": "phone_android",
+                            "value": "connect",
+                            "enabled": ShellModePolicy.canSelectConnect
+                        }];
+                        opts[0].enabled = ShellModePolicy.canSelectDefault;
+
                         return opts;
                     }
                 }
+
             }
 
             NoticeBox {
                 Layout.fillWidth: true
-                visible: Config.options.bar.floatingNotch.enable && Config.options.sidebar.sidebarStyle === "connect"
+                visible: barConfigRoot.autoSwitchNoticeMessage.length > 0
+                materialIcon: "info"
+                text: barConfigRoot.autoSwitchNoticeMessage
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: ShellModePolicy.defaultBlockedReasonKey.length > 0
                 materialIcon: "water_drop"
-                text: Translation.tr("Default shell mode is not available while the Floating Dynamic Island is active. Disable it first to switch back.")
+                text: Translation.tr(ShellModePolicy.defaultBlockedReasonKey)
 
                 ShortcutBox {
                     targetPageId: "dynamicIsland"
@@ -100,6 +129,7 @@ Item {
                     text: Translation.tr("Go to Dynamic Island settings")
                     linkText: Translation.tr("Go there")
                 }
+
             }
 
             NoticeBox {
@@ -107,6 +137,7 @@ Item {
                 visible: Config.options.bar.autoHide.enable
                 text: Translation.tr("Bar auto-hide is not supported by Search Connect Mode yet. Disable auto-hide to use the drop search.")
             }
+
         }
 
         // ── Position and Style ───────────────────────────────────────────
@@ -121,46 +152,49 @@ Item {
                 // Locked when centerInBar: must be Top
                 NoticeBox {
                     Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.centerInBar
+                    visible: ShellModePolicy.barPositionLocked
                     materialIcon: "lock"
                     text: Translation.tr("Bar position is locked to Top while 'Dynamic Island in bar center' is active. Disable that feature first to change position.")
                 }
 
                 ConfigSelectionArray {
                     currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
-                    onSelected: newValue => {
-                        Config.options.bar.bottom = (newValue & 1) !== 0;
-                        Config.options.bar.vertical = (newValue & 2) !== 0;
+                    onSelected: (newValue) => {
+                        const isVertical = (newValue & 2) !== 0;
+                        if (!isVertical && Config.options.bar.cornerStyle === 3 && Config.options.sidebar.sidebarStyle === "connect") {
+                            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island is only supported in vertical orientation in Connect mode. Shell mode was automatically switched to Default."));
+                        }
+                        ShellModePolicy.setBarPosition(newValue);
                     }
                     options: {
-                        const locked = Config.options.bar.floatingNotch.centerInBar;
-                        return [
-                            {
-                                "displayName": Translation.tr("Top"),
-                                "icon": "arrow_upward",
-                                "value": 0
-                            },
-                            {
-                                "displayName": Translation.tr("Left"),
-                                "icon": "arrow_back",
-                                "value": 2,
-                                "enabled": !locked
-                            },
-                            {
-                                "displayName": Translation.tr("Bottom"),
-                                "icon": "arrow_downward",
-                                "value": 1,
-                                "enabled": !locked
-                            },
-                            {
-                                "displayName": Translation.tr("Right"),
-                                "icon": "arrow_forward",
-                                "value": 3,
-                                "enabled": !locked
-                            }
-                        ];
+                        const locked = ShellModePolicy.barPositionLocked;
+                        return [{
+                            "displayName": Translation.tr("Top"),
+                            "icon": "arrow_upward",
+                            "value": 0
+                        }, {
+                            "displayName": Translation.tr("Left"),
+                            "icon": "arrow_back",
+                            "value": 2,
+                            "enabled": !locked
+                        }, {
+                            "displayName": Translation.tr("Bottom"),
+                            "icon": "arrow_downward",
+                            "value": 1,
+                            "enabled": !locked
+                        }, {
+                            "displayName": Translation.tr("Right"),
+                            "icon": "arrow_forward",
+                            "value": 3,
+                            "enabled": !locked
+                        }];
                     }
                 }
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Bar dimensions")
+                Layout.topMargin: 4
             }
 
             ConfigSpinBox {
@@ -201,33 +235,33 @@ Item {
 
                 ConfigSelectionArray {
                     id: cornerStyleSelector
+
                     currentValue: Config.options.bar.cornerStyle
-                    onSelected: newValue => {
+                    onSelected: (newValue) => {
+                        if (newValue === 3 && !Config.options.bar.vertical && Config.options.sidebar.sidebarStyle === "connect") {
+                            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island at top/bottom cannot be used in Connect mode. Shell mode was automatically switched to Default."));
+                            Config.options.sidebar.sidebarStyle = "default";
+                        }
                         Config.options.bar.cornerStyle = newValue;
                     }
                     options: {
-                        var opts = [
-                            {
-                                "displayName": Translation.tr("Hug"),
-                                "icon": "line_curve",
-                                "value": 0
-                            },
-                            {
-                                "displayName": Translation.tr("Float"),
-                                "icon": "page_header",
-                                "value": 1
-                            },
-                            {
-                                "displayName": Translation.tr("Rect"),
-                                "icon": "toolbar",
-                                "value": 2
-                            },
-                            {
-                                "displayName": Translation.tr("Dynamic Island"),
-                                "icon": "water_drop",
-                                "value": 3
-                            }
-                        ];
+                        var opts = [{
+                            "displayName": Translation.tr("Hug"),
+                            "icon": "line_curve",
+                            "value": 0
+                        }, {
+                            "displayName": Translation.tr("Float"),
+                            "icon": "page_header",
+                            "value": 1
+                        }, {
+                            "displayName": Translation.tr("Rect"),
+                            "icon": "toolbar",
+                            "value": 2
+                        }, {
+                            "displayName": Translation.tr("Dynamic Island"),
+                            "icon": "water_drop",
+                            "value": 3
+                        }];
                         if (Config.options.bar.barBackgroundStyle === 3) {
                             opts[2].enabled = false;
                             opts[3].enabled = false;
@@ -235,6 +269,25 @@ Item {
                         return opts;
                     }
                 }
+            }
+
+            ConfigSwitch {
+                visible: Config.options.bar.cornerStyle === 1
+                buttonIcon: "shadow"
+                text: Translation.tr("Show shadow in Float style")
+                checked: Config.options.bar.floatStyleShadow ?? true
+                onCheckedChanged: {
+                    Config.options.bar.floatStyleShadow = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows a subtle drop shadow behind the bar when floating.")
+                }
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Dynamic Island behavior")
+                visible: Config.options.bar.cornerStyle === 3
+                Layout.topMargin: 4
             }
 
             ConfigSwitch {
@@ -271,27 +324,29 @@ Item {
 
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.barGroupStyle
-                    onSelected: newValue => {
+                    onSelected: (newValue) => {
                         Config.options.bar.barGroupStyle = newValue;
                     }
-                    options: [
-                        {
-                            "displayName": Translation.tr("Pills"),
-                            "icon": "location_chip",
-                            "value": 0
-                        },
-                        {
-                            "displayName": Translation.tr("Island"),
-                            "icon": "shadow",
-                            "value": 1
-                        },
-                        {
-                            "displayName": Translation.tr("Transparent"),
-                            "icon": "opacity",
-                            "value": 2
-                        }
-                    ]
+                    options: [{
+                        "displayName": Translation.tr("Pills"),
+                        "icon": "location_chip",
+                        "value": 0
+                    }, {
+                        "displayName": Translation.tr("Island"),
+                        "icon": "shadow",
+                        "value": 1
+                    }, {
+                        "displayName": Translation.tr("Transparent"),
+                        "icon": "opacity",
+                        "value": 2
+                    }]
                 }
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Group color")
+                visible: Config.options.bar.barGroupStyle !== 2
+                Layout.topMargin: 4
             }
 
             ConfigSwitch {
@@ -316,59 +371,61 @@ Item {
                 // Locked when centerInBar: only Transparent(0) or Islands(3) allowed
                 NoticeBox {
                     Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.centerInBar
+                    visible: ShellModePolicy.barPositionLocked
                     materialIcon: "lock"
                     text: Translation.tr("Bar background is locked to Transparent or Islands while 'Dynamic Island in bar center' is active. Visible and Adaptive options are unavailable.")
                 }
 
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.barBackgroundStyle
-                    onSelected: newValue => {
+                    onSelected: (newValue) => {
                         Config.options.bar.barBackgroundStyle = newValue;
-                        if (newValue === 3 && (Config.options.bar.cornerStyle === 2 || Config.options.bar.cornerStyle === 3)) {
+                        if (newValue === 3 && (Config.options.bar.cornerStyle === 2 || Config.options.bar.cornerStyle === 3))
                             Config.options.bar.cornerStyle = 0;
-                        }
+
                         if (newValue === 3) {
                             let centerList = Config.options.bar.layouts.center;
-                            let hasCentered = centerList.some(item => item.centered);
-                            if (hasCentered) {
-                                Config.options.bar.layouts.center = centerList.map(item => ({
-                                            id: item.id,
-                                            centered: false,
-                                            visible: item.visible
-                                        }));
-                            }
+                            let hasCentered = centerList.some((item) => {
+                                return item.centered;
+                            });
+                            if (hasCentered)
+                                Config.options.bar.layouts.center = centerList.map((item) => {
+                                return ({
+                                    "id": item.id,
+                                    "centered": false,
+                                    "visible": item.visible
+                                });
+                            });
                         }
                     }
-
                     options: {
-                        const locked = Config.options.bar.floatingNotch.centerInBar;
-                        return [
-                            {
-                                "displayName": Translation.tr("Visible"),
-                                "icon": "visibility",
-                                "value": 1,
-                                "enabled": !locked
-                            },
-                            {
-                                "displayName": Translation.tr("Adaptive"),
-                                "icon": "masked_transitions",
-                                "value": 2,
-                                "enabled": !locked
-                            },
-                            {
-                                "displayName": Translation.tr("Transparent"),
-                                "icon": "opacity",
-                                "value": 0
-                            },
-                            {
-                                "displayName": Translation.tr("Islands"),
-                                "icon": "grid_view",
-                                "value": 3
-                            }
-                        ];
+                        const locked = ShellModePolicy.barPositionLocked;
+                        return [{
+                            "displayName": Translation.tr("Visible"),
+                            "icon": "visibility",
+                            "value": 1,
+                            "enabled": !locked
+                        }, {
+                            "displayName": Translation.tr("Adaptive"),
+                            "icon": "masked_transitions",
+                            "value": 2,
+                            "enabled": !locked
+                        }, {
+                            "displayName": Translation.tr("Transparent"),
+                            "icon": "opacity",
+                            "value": 0
+                        }, {
+                            "displayName": Translation.tr("Islands"),
+                            "icon": "grid_view",
+                            "value": 3
+                        }];
                     }
                 }
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Bar effects")
+                Layout.topMargin: 4
             }
 
             ConfigSwitch {
@@ -401,14 +458,23 @@ Item {
             ConfigSwitch {
                 buttonIcon: "filter_drama"
                 text: Translation.tr("Bar drop-shadow")
-                checked: Config.options.bar.dropShadow
+                enabled: !ShellModePolicy.barDropShadowBlocked
+                checked: Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
                 onCheckedChanged: {
-                    Config.options.bar.dropShadow = checked;
+                    if (!ShellModePolicy.barDropShadowBlocked)
+                        Config.options.bar.dropShadow = checked;
                 }
 
                 StyledToolTip {
                     text: Translation.tr("Shows a soft drop shadow underneath the status bar")
                 }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: ShellModePolicy.barDropShadowBlocked
+                materialIcon: "lock"
+                text: Translation.tr("Bar drop-shadow is disabled while Connect mode and transparency are both active to keep the bar color consistent with Sidebar Policies.")
             }
 
             ContentSubsection {
@@ -418,31 +484,26 @@ Item {
 
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.expressiveColorTheme
-                    onSelected: newValue => {
+                    onSelected: (newValue) => {
                         Config.options.bar.expressiveColorTheme = newValue;
                     }
-                    options: [
-                        {
-                            "displayName": Translation.tr("Content"),
-                            "icon": "brush",
-                            "value": "content"
-                        },
-                        {
-                            "displayName": Translation.tr("Vibrant"),
-                            "icon": "brush",
-                            "value": "primary"
-                        },
-                        {
-                            "displayName": Translation.tr("Secondary"),
-                            "icon": "brush",
-                            "value": "secondary"
-                        },
-                        {
-                            "displayName": Translation.tr("Surface"),
-                            "icon": "brush",
-                            "value": "surface"
-                        }
-                    ]
+                    options: [{
+                        "displayName": Translation.tr("Content"),
+                        "icon": "brush",
+                        "value": "content"
+                    }, {
+                        "displayName": Translation.tr("Vibrant"),
+                        "icon": "brush",
+                        "value": "primary"
+                    }, {
+                        "displayName": Translation.tr("Secondary"),
+                        "icon": "brush",
+                        "value": "secondary"
+                    }, {
+                        "displayName": Translation.tr("Surface"),
+                        "icon": "brush",
+                        "value": "surface"
+                    }]
                 }
             }
 
@@ -454,47 +515,41 @@ Item {
                 // Locked when centerInBar: Wrapped(3)/Edge(4) break the visual
                 NoticeBox {
                     Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.centerInBar
+                    visible: ShellModePolicy.barPositionLocked
                     materialIcon: "lock"
                     text: Translation.tr("Wrapped Frame and Edge modes are locked while 'Dynamic Island in bar center' is active. They would render floating above the island, causing visual conflicts.")
                 }
 
                 ConfigSelectionArray {
                     currentValue: Config.options.appearance.fakeScreenRounding
-                    onSelected: newValue => {
+                    onSelected: (newValue) => {
                         Config.options.appearance.fakeScreenRounding = newValue;
                     }
                     options: {
-                        const locked = Config.options.bar.floatingNotch.centerInBar;
-                        return [
-                            {
-                                "displayName": Translation.tr("No"),
-                                "icon": "close",
-                                "value": 0
-                            },
-                            {
-                                "displayName": Translation.tr("Yes"),
-                                "icon": "check",
-                                "value": 1
-                            },
-                            {
-                                "displayName": Translation.tr("When not fullscreen"),
-                                "icon": "fullscreen_exit",
-                                "value": 2
-                            },
-                            {
-                                "displayName": Translation.tr("Wrapped"),
-                                "icon": "capture",
-                                "value": 3,
-                                "enabled": !locked
-                            },
-                            {
-                                "displayName": Translation.tr("Edge"),
-                                "icon": "border_bottom",
-                                "value": 4,
-                                "enabled": !locked
-                            }
-                        ];
+                        const locked = ShellModePolicy.barPositionLocked;
+                        return [{
+                            "displayName": Translation.tr("No"),
+                            "icon": "close",
+                            "value": 0
+                        }, {
+                            "displayName": Translation.tr("Yes"),
+                            "icon": "check",
+                            "value": 1
+                        }, {
+                            "displayName": Translation.tr("When not fullscreen"),
+                            "icon": "fullscreen_exit",
+                            "value": 2
+                        }, {
+                            "displayName": Translation.tr("Wrapped"),
+                            "icon": "capture",
+                            "value": 3,
+                            "enabled": !locked
+                        }, {
+                            "displayName": Translation.tr("Edge"),
+                            "icon": "border_bottom",
+                            "value": 4,
+                            "enabled": !locked
+                        }];
                     }
                 }
             }
@@ -512,306 +567,228 @@ Item {
                 }
             }
 
-            ContentSubsectionLabel {
-                text: Translation.tr("Top Left Brand Icon")
-            }
-
-            ConfigSwitch {
-                buttonIcon: "text_fields"
-                text: Translation.tr("Use Material Symbol for top-left icon")
-                checked: Config.options.bar.useMaterialSymbolForTopLeftIcon
-                onCheckedChanged: {
-                    Config.options.bar.useMaterialSymbolForTopLeftIcon = checked;
-                }
-            }
-
-            ConfigTextField {
-                id: topLeftIconField
-                text: Translation.tr("Top-left icon identifier")
-                icon: "image"
-                tooltip: Translation.tr("If not using Material Symbol, enter a preset SVG name (e.g. arch, fedora) or a Material Symbol name if the switch above is on.")
-                placeholderText: Translation.tr("Identifier...")
-                Component.onCompleted: {
-                    inputText = Config.options.bar.topLeftIcon;
-                }
-                textField.onTextChanged: {
-                    var val = textField.text.trim();
-                    if (val !== "" && textField.activeFocus)
-                        Config.options.bar.topLeftIcon = val;
-                }
-
-                Connections {
-                    function onTopLeftIconChanged() {
-                        topLeftIconField.textField.text = Config.options.bar.topLeftIcon;
-                    }
-
-                    target: Config.options.bar
-                }
-            }
-        }
-
-        // ── Layout ────────────────────────────────────────────────────────
-        ContentSection {
-            icon: "view_stream"
-            title: Translation.tr("Layout")
-
             ContentSubsection {
-                title: Translation.tr("Left layout widgets")
-                icon: "align_horizontal_left"
-                tooltip: Translation.tr("Top layout in vertical mode")
-
-                ConfigListView {
-                    barSection: 0
-                    listModel: Config.options.bar.layouts.left
-                    onUpdated: newList => {
-                        Config.options.bar.layouts.left = newList;
-                    }
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Center layout widgets")
-                icon: "align_horizontal_center"
-                tooltip: Translation.tr("Center the component with the button")
-                NoticeBox {
-                    Layout.fillWidth: true
-                    visible: Config.options.bar.barBackgroundStyle === 3
-                    materialIcon: "grid_view"
-                    text: Translation.tr("Widget centering is disabled when Islands bar background is active. All center widgets follow the island layout automatically.")
-                }
-
-                // CenterInBar lock: center widgets must be hidden
-                NoticeBox {
-                    Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.centerInBar
-                    materialIcon: "lock"
-                    text: Translation.tr("Center widgets are locked while 'Dynamic Island in bar center' is active. The Dynamic Island occupies the center of the bar — adding visible widgets here would conflict with it.")
-                }
-
-                ConfigListView {
-                    barSection: 1
-                    listModel: Config.options.bar.layouts.center
-                    // Disable editing center when centerInBar is active
-                    enabled: !Config.options.bar.floatingNotch.centerInBar
-                    opacity: Config.options.bar.floatingNotch.centerInBar ? 0.4 : 1.0
-                    onUpdated: newList => {
-                        Config.options.bar.layouts.center = newList;
-                    }
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Right layout widgets")
-                icon: "align_horizontal_right"
-                tooltip: Translation.tr("Bottom layout in vertical mode")
-
-                ConfigListView {
-                    barSection: 2
-                    listModel: Config.options.bar.layouts.right
-                    onUpdated: newList => {
-                        Config.options.bar.layouts.right = newList;
-                    }
-                }
-            }
-        }
-
-        // ── Behavior ──────────────────────────────────────────────────────
-        ContentSection {
-            icon: "tune"
-            title: Translation.tr("Behavior")
-
-            ConfigSwitch {
-                buttonIcon: "visibility_off"
-                text: Translation.tr("Automatically hide")
-                checked: Config.options.bar.autoHide.enable
-                // Locked when centerInBar: DI would lose its anchor if bar auto-hides
-                enabled: !Config.options.bar.floatingNotch.centerInBar
-                onCheckedChanged: {
-                    Config.options.bar.autoHide.enable = checked;
-                }
-
-                StyledToolTip {
-                    text: Config.options.bar.floatingNotch.centerInBar
-                        ? Translation.tr("Auto-hide is locked while 'Dynamic Island in bar center' is active.")
-                        : Translation.tr("Automatically hide the bar when not in use")
-                }
-            }
-
-            ContentSubsectionLabel {
-                text: Translation.tr("Scroll Actions")
-            }
-
-            ConfigSwitch {
-                buttonIcon: "volume_up"
-                text: Translation.tr("Scroll to change volume")
-                checked: Config.options.bar.enableVolumeScroll
-                onCheckedChanged: {
-                    Config.options.bar.enableVolumeScroll = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Enable or disable scrolling on the bar to change volume")
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "brightness_5"
-                text: Translation.tr("Scroll to change brightness")
-                checked: Config.options.bar.enableBrightnessScroll
-                onCheckedChanged: {
-                    Config.options.bar.enableBrightnessScroll = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Enable or disable scrolling on the bar to change brightness")
-                }
-            }
-
-            ContentSubsectionLabel {
-                text: Translation.tr("Tooltips & Popups")
-            }
-
-            ConfigSwitch {
-                buttonIcon: "ads_click"
-                text: Translation.tr("Click to show tooltips")
-                checked: Config.options.bar.tooltips.clickToShow
-                onCheckedChanged: {
-                    Config.options.bar.tooltips.clickToShow = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("You will not be able to use the buttons on some popups if you enable this option.")
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "compress"
-                text: Translation.tr("Compact popups")
-                checked: Config.options.bar.tooltips.compactPopups
-                onCheckedChanged: {
-                    Config.options.bar.tooltips.compactPopups = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "colorize"
-                text: Translation.tr("Enable color picker popup")
-                checked: Config.options.bar.tooltips.enableColorPickerPopup
-                onCheckedChanged: {
-                    Config.options.bar.tooltips.enableColorPickerPopup = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "bluetooth"
-                text: Translation.tr("Enable Bluetooth connection popup")
-                checked: Config.options.bar.tooltips.enableBluetoothConnectionPopup
-                onCheckedChanged: {
-                    Config.options.bar.tooltips.enableBluetoothConnectionPopup = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "keyboard"
-                text: Translation.tr("Enable keyboard layout transition popup")
-                checked: Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup
-                onCheckedChanged: {
-                    Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup = checked;
-                }
-            }
-        }
-
-        // ── Monitors ──────────────────────────────────────────────────────
-        ContentSection {
-            icon: "monitor"
-            title: Translation.tr("Monitors")
-
-            ConfigSwitch {
-                buttonIcon: "desktop_windows"
-                text: Translation.tr("Only show bar on single monitor")
-                checked: Config.options.bar.onlyShowOnSingleMonitor
-                onCheckedChanged: {
-                    Config.options.bar.onlyShowOnSingleMonitor = checked;
-                    if (checked && Config.options.bar.singleMonitorName === "" && Quickshell.screens.length > 0)
-                        Config.options.bar.singleMonitorName = Quickshell.screens[0].name;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Display the bar on only one chosen monitor instead of all monitors")
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Selected Monitor")
-                icon: "settings_input_hdmi"
-                visible: Config.options.bar.onlyShowOnSingleMonitor
-
-                MonitorPicker {
-                    currentValue: Config.options.bar.singleMonitorName
-                    onSelected: newValue => {
-                        Config.options.bar.singleMonitorName = newValue;
-                    }
-                }
-            }
-        }
-
-        // ── Widgets ───────────────────────────────────────────────────────
-        // Every bar component that carries its own settings page gets a card,
-        // so per-widget settings are reachable without right-clicking the bar.
-        ContentSection {
-            icon: "widgets"
-            title: Translation.tr("Widgets")
-
-            StyledText {
+                id: brandIconAccordion
+                title: Translation.tr("Top-left brand icon")
+                icon: "brand_family"
+                collapsible: true
+                expanded: false
                 Layout.fillWidth: true
-                text: Translation.tr("Settings for the individual widgets that can sit on the bar. Right-clicking a widget on the bar opens the same page.")
-                color: Appearance.colors.colOnLayer1
-                opacity: 0.75
-                font.pixelSize: Appearance.font.pixelSize.small
-                wrapMode: Text.Wrap
-            }
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
+                headerExtra: Component {
+                    RowLayout {
+                        spacing: 6
 
-                Repeater {
-                    model: BarComponentRegistry.allComponents.filter(c => {
-                        return c.configPage || c.pageId;
-                    })
+                        CustomIcon {
+                            visible: !Config.options.bar.useMaterialSymbolForTopLeftIcon
+                            width: 18
+                            height: 18
+                            source: {
+                                const icon = Config.options.bar.topLeftIcon;
+                                if (icon === 'distro') return SystemInfo.distroIcon;
+                                if (icon === 'docker') return 'docker.svg';
+                                if (icon.endsWith('.svg') || icon.endsWith('.png')) return icon;
+                                return `${icon}-symbolic`;
+                            }
+                            colorize: true
+                            color: Appearance.colors.colOnLayer2
+                        }
 
-                    delegate: ServiceCard {
-                        required property var modelData
-                        required property int index
+                        MaterialSymbol {
+                            visible: Config.options.bar.useMaterialSymbolForTopLeftIcon
+                            text: Config.options.bar.topLeftIcon
+                            iconSize: 18
+                            fill: 1
+                            color: Appearance.colors.colOnLayer2
+                        }
+                    }
+                }
 
-                        cardIcon: modelData.icon ?? "widgets"
-                        cardHue: 210
-                        cardShape: "Cookie4Sided"
-                        title: Translation.tr(modelData.title)
-                        description: Translation.tr("Widget settings")
-                        onOpenCard: {
-                            page.openWidgetPage(modelData.id);
+                Loader {
+                    id: brandIconContentLoader
+                    active: brandIconAccordion.expanded
+                    visible: active
+                    Layout.fillWidth: true
+
+                    sourceComponent: ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        ContentSubsection {
+                            title: Translation.tr("Preset icons")
+                            icon: "image"
+                            Layout.fillWidth: true
+
+                            ConfigSelectionArray {
+                                enabled: !Config.options.bar.useMaterialSymbolForTopLeftIcon
+                                opacity: enabled ? 1.0 : 0.4
+                                currentValue: Config.options.bar.useMaterialSymbolForTopLeftIcon ? "" : Config.options.bar.topLeftIcon
+                                onSelected: (newValue) => {
+                                    Config.options.bar.topLeftIcon = newValue;
+                                }
+                                options: [
+                                    { "displayName": Translation.tr("Distro"), "symbol": SystemInfo.distroIcon, "value": "distro" },
+                                    { "displayName": "Arch", "symbol": "arch-symbolic", "value": "arch" },
+                                    { "displayName": "CachyOS", "symbol": "cachyos-symbolic", "value": "cachyos" },
+                                    { "displayName": "EndeavourOS", "symbol": "endeavouros-symbolic", "value": "endeavouros" },
+                                    { "displayName": "Fedora", "symbol": "fedora-symbolic", "value": "fedora" },
+                                    { "displayName": "Red Hat", "symbol": "redhat-symbolic", "value": "redhat" },
+                                    { "displayName": "Debian", "symbol": "debian-symbolic", "value": "debian" },
+                                    { "displayName": "Ubuntu", "symbol": "ubuntu-symbolic", "value": "ubuntu" },
+                                    { "displayName": "Mint", "symbol": "mint-symbolic", "value": "mint" },
+                                    { "displayName": "Pop!_OS", "symbol": "popos-symbolic", "value": "popos" },
+                                    { "displayName": "Manjaro", "symbol": "manjaro-symbolic", "value": "manjaro" },
+                                    { "displayName": "NixOS", "symbol": "nixos-symbolic", "value": "nixos" },
+                                    { "displayName": "openSUSE", "symbol": "opensuse-symbolic", "value": "opensuse" },
+                                    { "displayName": "Gentoo", "symbol": "gentoo-symbolic", "value": "gentoo" },
+                                    { "displayName": "Void", "symbol": "void-symbolic", "value": "void" },
+                                    { "displayName": "Alpine", "symbol": "alpine-symbolic", "value": "alpine" },
+                                    { "displayName": "Kali", "symbol": "kali-symbolic", "value": "kali" },
+                                    { "displayName": "FreeBSD", "symbol": "freebsd-symbolic", "value": "freebsd" },
+                                    { "displayName": "SteamOS", "symbol": "steamos-symbolic", "value": "steamos" },
+                                    { "displayName": "Linux", "symbol": "linux-symbolic", "value": "linux" },
+                                    { "displayName": "Android", "symbol": "android-symbolic", "value": "android" },
+                                    { "displayName": "Apple", "symbol": "apple-symbolic", "value": "apple" },
+                                    { "displayName": "Windows", "symbol": "microsoft-symbolic", "value": "microsoft" },
+                                    { "displayName": "Spark", "symbol": "spark-symbolic", "value": "spark" },
+                                    { "displayName": "Nyarch", "symbol": "nyarch-symbolic", "value": "nyarch" },
+                                    { "displayName": "Docker", "symbol": "docker.svg", "value": "docker" },
+                                    { "displayName": "Flatpak", "symbol": "flatpak-symbolic", "value": "flatpak" },
+                                    { "displayName": "GitHub", "symbol": "github-symbolic", "value": "github" },
+                                    { "displayName": "Desktop", "symbol": "desktop-symbolic", "value": "desktop" },
+                                    { "displayName": "Crosshair", "symbol": "crosshair-symbolic", "value": "crosshair" },
+                                    { "displayName": "Cloudflare", "symbol": "cloudflare-dns-symbolic", "value": "cloudflare-dns" },
+                                    { "displayName": "Gemini", "symbol": "google-gemini-symbolic", "value": "google-gemini" },
+                                    { "displayName": "DeepSeek", "symbol": "deepseek-symbolic", "value": "deepseek" },
+                                    { "displayName": "OpenAI", "symbol": "openai-symbolic", "value": "openai" },
+                                    { "displayName": "Mistral", "symbol": "mistral-symbolic", "value": "mistral" },
+                                    { "displayName": "Ollama", "symbol": "ollama-symbolic", "value": "ollama" },
+                                    { "displayName": "OpenRouter", "symbol": "openrouter-symbolic", "value": "openrouter" }
+                                ]
+                            }
+                        }
+
+                        ConfigSwitch {
+                            buttonIcon: "text_fields"
+                            text: Translation.tr("Use Material Symbol for top-left icon")
+                            checked: Config.options.bar.useMaterialSymbolForTopLeftIcon
+                            onCheckedChanged: {
+                                Config.options.bar.useMaterialSymbolForTopLeftIcon = checked;
+                            }
+                        }
+
+                        NoticeBox {
+                            visible: Config.options.bar.useMaterialSymbolForTopLeftIcon
+                            Layout.fillWidth: true
+                            materialIcon: "info"
+                            text: Translation.tr("Browse thousands of Google Material Symbols to customize your top-left bar icon.")
+
+                            RippleButton {
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Appearance.colors.colTertiary
+                                colBackgroundHover: Appearance.colors.colTertiaryHover
+                                colRipple: Appearance.colors.colTertiaryActive
+                                implicitHeight: 32
+                                implicitWidth: linkRow.implicitWidth + 20
+                                onClicked: Quickshell.execDetached(["xdg-open", "https://fonts.google.com/icons"])
+
+                                RowLayout {
+                                    id: linkRow
+                                    anchors.centerIn: parent
+                                    spacing: 6
+
+                                    StyledText {
+                                        text: Translation.tr("Open Icons Page")
+                                        color: Appearance.colors.colOnTertiary
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        font.bold: true
+                                    }
+
+                                    MaterialSymbol {
+                                        text: "open_in_new"
+                                        iconSize: 14
+                                        color: Appearance.colors.colOnTertiary
+                                    }
+                                }
+                            }
+                        }
+
+                        ConfigTextField {
+                            id: topLeftIconField
+                            visible: Config.options.bar.useMaterialSymbolForTopLeftIcon
+                            text: Translation.tr("Material Symbol name")
+                            icon: "search"
+                            tooltip: Translation.tr("Type any Google Material Symbol identifier (e.g. spark, terminal, favorite, home).")
+                            placeholderText: Translation.tr("e.g. spark, terminal, favorite...")
+                            Component.onCompleted: {
+                                inputText = Config.options.bar.topLeftIcon;
+                            }
+                            textField.onTextChanged: {
+                                var val = textField.text.trim();
+                                if (val !== "" && textField.activeFocus)
+                                    Config.options.bar.topLeftIcon = val;
+                            }
+
+                            Connections {
+                                function onTopLeftIconChanged() {
+                                    topLeftIconField.textField.text = Config.options.bar.topLeftIcon;
+                                }
+
+                                target: Config.options.bar
+                            }
                         }
                     }
                 }
             }
         }
 
+        ProgressiveSectionLoader {
+            id: layoutSectionLoader
+            source: Qt.resolvedUrl("sections/BarLayoutSection.qml")
+            active: false
+            estimatedHeight: 620
+            sectionTitle: Translation.tr("Layout")
+            prioritizeOnViewport: true
+            prioritizeOnSearch: true
+        }
+
+        ProgressiveSectionLoader {
+            id: behaviorSectionLoader
+            source: Qt.resolvedUrl("sections/BarBehaviorSection.qml")
+            active: false
+            estimatedHeight: 270
+            sectionTitle: Translation.tr("Behavior")
+            prioritizeOnViewport: true
+            prioritizeOnSearch: true
+        }
+
+        ProgressiveSectionLoader {
+            id: monitorsSectionLoader
+            source: Qt.resolvedUrl("sections/BarMonitorsSection.qml")
+            active: false
+            estimatedHeight: 210
+            sectionTitle: Translation.tr("Monitors")
+            prioritizeOnViewport: true
+            prioritizeOnSearch: true
+        }
+
+        // ── Widgets & Waffle Sub-Page ─────────────────────────────────────────
         ContentSection {
-            icon: "grid_view"
-            title: Translation.tr("Waffle")
+            icon: "widgets"
+            title: Translation.tr("Widgets & Waffle")
 
             ServiceCard {
-                cardIcon: "build"
-                cardHue: 276
-                cardShape: "Cookie4Sided"
-                title: Translation.tr("Waffle tweaks")
-                description: Translation.tr("Optional tweaks for the Waffle panel family")
+                cardIcon: "widgets"
+                cardHue: 210
+                cardShape: "circle"
+                title: Translation.tr("Widgets & Waffle Settings")
+                description: Translation.tr("Configure individual bar widgets and Waffle panel tweaks")
                 onOpenCard: {
-                    barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/WaffleTweaksConfig.qml");
+                    barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/BarWidgetsWaffleConfig.qml");
                 }
             }
         }
+
     }
 
     // ── Sub-page overlay (slides in from the right) ───────────────────────
@@ -821,4 +798,5 @@ Item {
         anchors.fill: parent
         z: 10
     }
+
 }

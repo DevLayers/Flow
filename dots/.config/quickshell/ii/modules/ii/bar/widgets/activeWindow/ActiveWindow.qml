@@ -25,17 +25,19 @@ Item {
     property int maxPopupWidth: 600
     readonly property int fixedSize: Config.options.bar.activeWindow.customSize
 
-    readonly property bool shouldShowActiveWindow: root.activeWindow?.activated && (
+    readonly property bool activeWindowOpen: (ToplevelManager.toplevels?.values ?? []).includes(root.activeWindow)
+
+    readonly property bool shouldShowActiveWindow: !!(root.activeWindow?.activated && root.activeWindowOpen && (
         Config.options.bar.activeWindow.showOnAllMonitors
             || (root.focusingThisMonitor && root.biggestWindow)
-    )
+    ))
 
     property string appClassText: root.shouldShowActiveWindow ?
-                root.activeWindow?.appId : (root.biggestWindow?.class) ?? Translation.tr("Desktop")
+                (root.activeWindow?.appId ?? "") : (root.biggestWindow?.class) ?? Translation.tr("Desktop")
 
     property string appTitleText: root.shouldShowActiveWindow ?
-                root.activeWindow?.title : (root.biggestWindow?.title) ?? `${Translation.tr("Workspace")} ${monitor?.activeWorkspace?.id ?? 1}`
-    
+                (root.activeWindow?.title ?? "") : (root.biggestWindow?.title) ?? `${Translation.tr("Workspace")} ${monitor?.activeWorkspace?.id ?? 1}`
+
     implicitHeight: root.vertical && isFixedSize ? fixedSize : (root.vertical ? Math.max(classText.implicitWidth, titleText.implicitWidth) + 20 : Appearance.sizes.baseBarHeight)
     implicitWidth: !root.vertical && isFixedSize ? fixedSize : (root.vertical ? Appearance.sizes.verticalBarWidth : Math.min(Math.max(classText.implicitWidth, titleText.implicitWidth) + 20, maxSize))
     clip: true

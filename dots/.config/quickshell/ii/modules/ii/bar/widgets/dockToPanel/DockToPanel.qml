@@ -47,7 +47,13 @@ Item {
     readonly property real windowControlsHeight: 30
     readonly property bool isVertical: root.vertical
     property Item hoveredSlot: null
+    // ── Magnification Customization Tokens ──
     readonly property bool enableMacOsMagnification: Config.options?.dockToPanel?.enableMacOsMagnification ?? false
+    readonly property real macOsMagnificationScale: Config.options?.dockToPanel?.macOsMagnificationScale ?? 1.6
+    readonly property real magInfluenceRadius: Config.options?.dockToPanel?.magInfluenceRadius ?? 2.5
+    readonly property string magCurveType: Config.options?.dockToPanel?.magCurveType ?? "parabolic"
+    readonly property real magGaussianSigma: 1.1
+
     readonly property int magTransformOrigin: {
         let pos = root.dockEffectivePosition;
         if (pos === "top") return Item.Top;
@@ -57,12 +63,9 @@ Item {
         return Item.Center;
     }
 
-    readonly property real macOsMagnificationScale: Config.options?.dockToPanel?.macOsMagnificationScale ?? 1.6
-
     function _getSlotMagScale(targetSlot) {
         if (!enableMacOsMagnification || !buttonHovered || !hoveredSlot) return 1.0;
         let maxScale = macOsMagnificationScale;
-        if (targetSlot === hoveredSlot) return maxScale;
         let children = [];
         for (let i = 0; i < flow.children.length; i++) {
             let child = flow.children[i];
@@ -71,15 +74,27 @@ Item {
         let myIdx = children.indexOf(targetSlot);
         let hvdIdx = children.indexOf(hoveredSlot);
         if (myIdx < 0 || hvdIdx < 0) return 1.0;
+
         let dist = Math.abs(myIdx - hvdIdx);
-        if (dist === 1) return 1.0 + (maxScale - 1.0) * 0.45;
-        if (dist === 2) return 1.0 + (maxScale - 1.0) * 0.10;
-        return 1.0;
+        let radius = magInfluenceRadius;
+        if (dist >= radius) return 1.0;
+
+        let factor = 0.0;
+        if (magCurveType === "gaussian") {
+            let sigma = magGaussianSigma;
+            let val = Math.exp(-(dist * dist) / (2.0 * sigma * sigma));
+            let cutoff = Math.exp(-(radius * radius) / (2.0 * sigma * sigma));
+            factor = Math.max(0.0, (val - cutoff) / (1.0 - cutoff));
+        } else {
+            factor = 0.5 * (1.0 + Math.cos((Math.PI * dist) / radius));
+        }
+
+        return 1.0 + (maxScale - 1.0) * factor;
     }
 
     Timer {
         id: hoverGraceTimer
-        interval: 250
+        interval: 150
         onTriggered: {
             root.buttonHovered = false;
             root.hoveredSlot = null;
@@ -397,7 +412,7 @@ Item {
                     property var    appEntry:     TaskbarApps.apps.find(a => a.appId === appId) ?? null
                     property var    appToplevel:  appEntry
                     property var    appToplevels: appEntry?.toplevels ?? []
-                    property var    deskEntry:    DesktopEntries.heuristicLookup(appId)
+                    property var    deskEntry:    TaskbarApps.getCachedDesktopEntry(appId)
                     property string appTitle:     deskEntry?.name ?? appId
                     property bool   appActive:    appToplevels.find(t => t.activated) !== undefined
                     readonly property bool isScratchpadApp: root.scratchpadOpen && TaskbarApps.normalizeAppId(appId) === root.scratchpadAppId
@@ -698,7 +713,7 @@ Item {
 
                     property var activeToplevels: modelData.toplevels ?? []
                     property var appToplevel: modelData
-                    property string appTitle: DesktopEntries.heuristicLookup(modelData.appId)?.name ?? modelData.appId
+                    property string appTitle: TaskbarApps.getCachedDesktopEntry(modelData.appId)?.name ?? modelData.appId
                     property bool appIsActive: activeToplevels.find(t => t.activated) !== undefined
                     readonly property bool isScratchpadApp: root.scratchpadOpen && TaskbarApps.normalizeAppId(modelData.appId) === root.scratchpadAppId
                     readonly property bool hovered: root.lastHoveredButton === activeSlot && root.buttonHovered
@@ -919,9 +934,62 @@ Item {
                 delegate: RippleButton {
                     id: winBtn
                     required property var modelData
+                    required property int index
                     implicitWidth: screencopyView.implicitWidth + 12
                     implicitHeight: screencopyView.implicitHeight + 36
                     buttonRadius: Appearance.rounding.small
+
+                    readonly property bool startAnim: previewPopup.opened && previewPopup.popupOpenProgress > 0.6
+
+                    // A preview can join while the popup is already open (new window
+                    // spawns); startAnim won't re-fire for it, so enter right away.
+                    Component.onCompleted: {
+                        if (startAnim) {
+                            Qt.callLater(function() {
+                                winBtnAnim.start();
+                            });
+                        }
+                    }
+
+                    onStartAnimChanged: {
+                        if (startAnim) {
+                            winBtn.opacity = 0.0;
+                            winBtn.scale = 0.85;
+                            winBtnTransform.y = 25;
+                            Qt.callLater(function() {
+                                winBtnAnim.start();
+                            });
+                        }
+                    }
+
+                    Connections {
+                        target: previewPopup
+                        function onPopupOpenProgressChanged() {
+                            if (previewPopup.popupOpenProgress === 0.0) {
+                                winBtnAnim.stop();
+                                winBtn.opacity = 0.0;
+                                winBtn.scale = 0.85;
+                                winBtnTransform.y = 25;
+                            }
+                        }
+                    }
+
+                    opacity: 0.0
+                    scale: 0.85
+                    transform: Translate {
+                        id: winBtnTransform
+                        y: 25
+                    }
+
+                    SequentialAnimation {
+                        id: winBtnAnim
+                        PauseAnimation { duration: 40 + winBtn.index * 60 }
+                        ParallelAnimation {
+                            NumberAnimation { target: winBtn; property: "opacity"; to: 1.0; duration: 300 }
+                            NumberAnimation { target: winBtn; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                            NumberAnimation { target: winBtnTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                        }
+                    }
 
                     onClicked: {
                         modelData?.activate();

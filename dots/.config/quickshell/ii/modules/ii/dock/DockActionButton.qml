@@ -10,6 +10,8 @@ DockButton {
 
     property var dockContent: null
     property int delegateIndex: -1
+    property string actionId: ""
+    property int trashCount: 0
     property int symbolSize: Math.round(root.buttonSize * 0.5)
     property string symbolName: ""
     property string toggledSymbolName: ""
@@ -27,8 +29,81 @@ DockButton {
     property bool _pressed: false
     readonly property bool isDragging: dragActive || fileDropActive
 
-    background.implicitWidth: 0
-    background.implicitHeight: 0
+    readonly property real magScale: root.dockMagnificationScale
+    readonly property real slotWidth: root.dockContent?.buttonSlotSize ?? root.buttonSize
+    readonly property real slotHeight: root.dockContent
+        ? (root.dockContent.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight)
+        : root.buttonSize
+
+    width: root.slotWidth
+    height: root.slotHeight
+
+    transformOrigin: {
+        let pos = root.dockContent?.dockPos ?? "bottom";
+        if (pos === "top")
+            return Item.Top;
+        if (pos === "left")
+            return Item.Left;
+        if (pos === "right")
+            return Item.Right;
+        return Item.Bottom;
+    }
+
+    // ── Launch Bounce Customization Tokens ──
+    readonly property bool enableLaunchBounce: Config.options?.dock?.enableLaunchBounce ?? true
+    readonly property real bounceHeight: Config.options?.dock?.bounceHeight ?? 18
+    readonly property int bounceDuration: 280
+    readonly property int maxBounceCycles: 3
+
+    property real launchBounceY: 0
+    readonly property string dockPos: dockContent?.dockPos ?? "bottom"
+
+    readonly property real effectiveBounceOffset: {
+        if (root.dockPos === "top") return -root.launchBounceY;
+        if (root.dockPos === "left") return -root.launchBounceY;
+        return root.launchBounceY;
+    }
+
+    transform: Translate {
+        x: root.dockContent?.isVertical ? root.effectiveBounceOffset : 0
+        y: !root.dockContent?.isVertical ? root.effectiveBounceOffset : 0
+    }
+
+    SequentialAnimation {
+        id: launchBounceAnim
+        loops: root.maxBounceCycles
+
+        NumberAnimation {
+            target: root
+            property: "launchBounceY"
+            from: 0
+            to: -root.bounceHeight
+            duration: Math.round(root.bounceDuration * 0.45)
+            easing.type: Easing.OutQuad
+        }
+        NumberAnimation {
+            target: root
+            property: "launchBounceY"
+            from: -root.bounceHeight
+            to: 0
+            duration: Math.round(root.bounceDuration * 0.55)
+            easing.type: Easing.InQuad
+        }
+    }
+
+    function triggerLaunchBounce() {
+        if (!enableLaunchBounce) return;
+        launchBounceAnim.stop();
+        launchBounceY = 0;
+        launchBounceAnim.start();
+    }
+
+    onClicked: {
+        triggerLaunchBounce();
+    }
+
+    scale: (_pressed ? 0.88 : 1.0) * magScale
+    z: Math.round(magScale * 10)
 
     Loader {
         anchors.fill: parent
@@ -37,47 +112,73 @@ DockButton {
         sourceComponent: MouseArea {
             id: actionDragOverlay
             anchors.fill: parent
-            acceptedButtons: Qt.LeftButton
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             preventStealing: true
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             property real pressCoord: 0
             property bool dragActive: false
 
-            onPressed: (event) => {
-                pressCoord = root.dockContent?.isVertical ? event.y : event.x
-                root._pressed = true
+            onEntered: {
+                if (root.dockContent?.suppressHover)
+                    return;
+                root.dockContent?.onButtonEntered(root);
             }
-            onPositionChanged: (event) => {
-                if (!pressed) return
-                var cur = root.dockContent?.isVertical ? event.y : event.x
-                var dist = Math.abs(cur - pressCoord)
+            onExited: {
+                root.dockContent?.onButtonExited(root);
+            }
+
+            onPressed: event => {
+                if (event.button === Qt.LeftButton) {
+                    pressCoord = root.dockContent?.isVertical ? event.y : event.x;
+                }
+                root._pressed = true;
+            }
+            onPositionChanged: event => {
+                if (!pressed || event.button !== Qt.LeftButton)
+                    return;
+                var cur = root.dockContent?.isVertical ? event.y : event.x;
+                var dist = Math.abs(cur - pressCoord);
                 if (!dragActive && dist > 5 && root.dockContent) {
-                    dragActive = true
-                    root._pressed = false
-                    root.dockContent.startItemDrag(root.delegateIndex, actionDragOverlay, event.x, event.y)
+                    dragActive = true;
+                    root._pressed = false;
+                    root.dockContent.startItemDrag(root.delegateIndex, actionDragOverlay, event.x, event.y);
                 }
                 if (dragActive && root.dockContent) {
-                    root.dockContent.moveItemDrag(actionDragOverlay, event.x, event.y)
+                    root.dockContent.moveItemDrag(actionDragOverlay, event.x, event.y);
                 }
             }
-            onReleased: {
-                root._pressed = false
+            onReleased: event => {
+                root._pressed = false;
                 if (dragActive) {
-                    dragActive = false
-                    if (root.dockContent) root.dockContent.endItemDrag()
-                } else {
-                    root.clicked()
+                    dragActive = false;
+                    if (root.dockContent)
+                        root.dockContent.endItemDrag();
+                    return;
                 }
+                if (event.button === Qt.RightButton) {
+                    if (root.actionId === "trash") {
+                        trashContextMenu.open();
+                    }
+                    return;
+                }
+                root.clicked();
             }
             onCanceled: {
-                root._pressed = false
+                root._pressed = false;
                 if (dragActive) {
-                    dragActive = false
-                    if (root.dockContent) root.dockContent.cancelDrag()
+                    dragActive = false;
+                    if (root.dockContent)
+                        root.dockContent.cancelDrag();
                 }
             }
         }
+    }
+
+    DockTrashContextMenu {
+        id: trashContextMenu
+        trashCount: root.trashCount
+        anchorItem: root
     }
 
     contentItem: Item {
@@ -97,38 +198,24 @@ DockButton {
             rotation: root.dragOver ? 90 : (root.isDragging ? 45 : 0)
             color: {
                 if (root.isDragging) {
-                    return root._pressed ? Appearance.colors.colSecondaryContainerActive :
-                           root.hovered ? Appearance.colors.colSecondaryContainerHover :
-                           Appearance.colors.colSecondaryContainer
+                    return root._pressed ? Appearance.colors.colSecondaryContainerActive : root.hovered ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer;
                 }
                 if (root.toggled) {
-                    return root._pressed ? Appearance.colors.colPrimaryActive :
-                           root.hovered ? Appearance.colors.colPrimaryHover :
-                           Appearance.colors.colPrimary
+                    return root._pressed ? Appearance.colors.colPrimaryActive : root.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary;
                 }
-                return root._pressed ? Appearance.colors.colLayer1Active :
-                       root.hovered ? Appearance.colors.colLayer1Hover :
-                       "transparent"
+                return root._pressed ? Appearance.colors.colLayer1Active : root.hovered ? Appearance.colors.colLayer1Hover : "transparent";
             }
-            text: root.fileDropActive ? root.fileDropIcon
-                : root.dragActive ? root.dragSymbol
-                : root.symbolName
+            text: root.fileDropActive ? root.fileDropIcon : root.dragActive ? root.dragSymbol : root.symbolName
             fill: root.symbolFill
-            iconSize: root.isDragging
-                ? Math.round(root.buttonSize * 0.4)
-                : root.symbolSize
-            colSymbol: root.isDragging
-                ? Appearance.colors.colOnSecondaryContainer
-                : (root.toggled ? root.activeColor : root.inactiveColor)
+            iconSize: root.isDragging ? Math.round(root.buttonSize * 0.4) : root.symbolSize
+            colSymbol: root.isDragging ? Appearance.colors.colOnSecondaryContainer : (root.toggled ? root.activeColor : root.inactiveColor)
         }
 
         // Custom image (for trash icon, etc.)
         Image {
             visible: root.customImageSource !== ""
             source: root.customImageSource
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.topMargin: root.buttonSize * 0.08 // Back to previous stable position
+            anchors.centerIn: parent
             width: root.buttonSize * 1.0 // Standard size
             height: root.buttonSize * 1.0
             fillMode: Image.PreserveAspectFit

@@ -93,6 +93,9 @@ Scope {
 
             // Unlock the screen before exiting, or the compositor will display a
             // fallback lock you can't interact with.
+            // Suppress workspace numbers before screenLocked changes so the
+            // temporary lock workspace ID cannot flash during unlock.
+            GlobalStates.workspaceRestoreInProgress = true;
             GlobalStates.screenLocked = false;
 
             // Reset
@@ -130,7 +133,7 @@ Scope {
             lockContext.shouldReFocus();
         }
         function fingerStop(): void {
-            lockContext.stopFingerPam();
+            lockContext.suspendFingerUnlock();
         }
     }
 
@@ -148,7 +151,7 @@ Scope {
         description: "Stops the lock screen's fingerprint prompt. Meant for hypridle's before_sleep_cmd:" + " suspending with a fingerprint operation in flight crashes some readers' drivers"
 
         onPressed: {
-            lockContext.stopFingerPam();
+            lockContext.suspendFingerUnlock();
         }
     }
 

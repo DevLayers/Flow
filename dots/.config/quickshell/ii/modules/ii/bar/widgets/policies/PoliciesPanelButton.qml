@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -7,6 +8,7 @@ import qs.modules.common.widgets
 RippleButton {
     id: leftSidebarButton
 
+    readonly property string screenName: QsWindow.window?.screen?.name ?? ""
     property bool showPing: false
 
     property real buttonPadding: 5
@@ -29,7 +31,7 @@ RippleButton {
     toggled: GlobalStates.sidebarLeftOpen
 
     onPressed: {
-        GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
+        GlobalStates.toggleLeftSidebar(screenName);
     }
 
     Connections {
@@ -62,8 +64,13 @@ RippleButton {
         anchors.centerIn: parent
         width: 16
         height: 16
-        visible: !Config.options.bar.useMaterialSymbolForTopLeftIcon
-        source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
+        source: {
+            const icon = Config.options.bar.topLeftIcon;
+            if (icon === 'distro') return SystemInfo.distroIcon;
+            if (icon === 'docker') return 'docker.svg';
+            if (icon.endsWith('.svg') || icon.endsWith('.png')) return icon;
+            return `${icon}-symbolic`;
+        }
         colorize: true
         color: leftSidebarButton.toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer0
 

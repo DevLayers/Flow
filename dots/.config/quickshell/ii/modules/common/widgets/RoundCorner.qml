@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import qs.modules.common
 
 Item {
     id: root
@@ -26,27 +27,13 @@ Item {
     property bool isLeft: isTopLeft || isBottomLeft
     property bool isRight: isTopRight || isBottomRight
 
-    property bool extendHorizontal: false
-    property bool extendVertical: false
-
-    readonly property int offsetX: (extendHorizontal && isLeft) ? 1 : 0
-    readonly property int offsetY: (extendVertical && isTop) ? 1 : 0
-
     Shape {
         id: shape
-        width: parent.width + (extendHorizontal ? 1 : 0)
-        height: parent.height + (extendVertical ? 1 : 0)
-        antialiasing: true
         anchors {
             top: root.isTop ? parent.top : undefined
             bottom: root.isBottom ? parent.bottom : undefined
             left: root.isLeft ? parent.left : undefined
             right: root.isRight ? parent.right : undefined
-
-            topMargin: (extendVertical && root.isTop) ? -1 : 0
-            bottomMargin: (extendVertical && root.isBottom) ? -1 : 0
-            leftMargin: (extendHorizontal && root.isLeft) ? -1 : 0
-            rightMargin: (extendHorizontal && root.isRight) ? -1 : 0
         }
         layer.enabled: true
         layer.smooth: true
@@ -62,18 +49,18 @@ Item {
                 case RoundCorner.CornerEnum.TopLeft:
                 case RoundCorner.CornerEnum.BottomLeft: return 0;
                 case RoundCorner.CornerEnum.TopRight:
-                case RoundCorner.CornerEnum.BottomRight: return root.implicitSize + (extendHorizontal ? 1 : 0);
+                case RoundCorner.CornerEnum.BottomRight: return root.implicitSize;
             }
             startY: switch (root.corner) {
                 case RoundCorner.CornerEnum.TopLeft:
                 case RoundCorner.CornerEnum.TopRight: return 0;
                 case RoundCorner.CornerEnum.BottomLeft:
-                case RoundCorner.CornerEnum.BottomRight: return root.implicitSize + (extendVertical ? 1 : 0);
+                case RoundCorner.CornerEnum.BottomRight: return root.implicitSize;
             }
             PathAngleArc {
                 moveToStart: false
-                centerX: (isLeft ? root.implicitSize : 0) + offsetX
-                centerY: (isTop ? root.implicitSize : 0) + offsetY
+                centerX: root.implicitSize - shapePath.startX
+                centerY: root.implicitSize - shapePath.startY
                 radiusX: root.implicitSize
                 radiusY: root.implicitSize
                 startAngle: switch (root.corner) {
@@ -90,5 +77,5 @@ Item {
             }
         }
     }
-
 }
+

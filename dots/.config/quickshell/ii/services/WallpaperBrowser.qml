@@ -19,8 +19,9 @@ Singleton {
     property string unsplashApiToken: KeyringStorage.keyringData?.apiKeys?.wallpapers_unsplash ?? ""
     property string wallhavenApiToken: Config.options.wallhaven?.apiKey ?? ""  
     property string failMessage: Translation.tr("That didn't work. Tips:\n- Check your search query\n- Try different keywords\n- Check your API key under settings")  
-    property var responses: []  
-    property int runningRequests: 0  
+    property var responses: []
+    property int runningRequests: 0
+    property string errorMessage: ""
     property var providerList: ["unsplash", "wallhaven"]  
     property var currentProvider: Config.options.wallpapers.service ?? "wallhaven" // defaulting to wallhaven bc it doesnt require api key
 
@@ -147,7 +148,9 @@ Singleton {
     }  
   
     function clearResponses() {  
-        responses = []  
+        responses = []
+        root.currentSearchTags = []
+        root.errorMessage = ""
     }  
   
     function addSystemMessage(message) {  
@@ -296,6 +299,7 @@ Singleton {
         if (imageId === "") {
             root.currentSearchTags = tags;
         }
+        root.errorMessage = "";
         var url = constructRequestUrl(tags, limit, page, imageId)  
         console.log("[Wallpapers] Making request to " + url)  
   
@@ -321,11 +325,12 @@ Singleton {
                     } */
 
                     newResponse.images = response  
-                    newResponse.message = response.length > 0 ? "" : root.failMessage  
+                    newResponse.message = response.length > 0 ? "" : root.failMessage
                       
                 } catch (e) {  
                     console.log("[Wallpapers] Failed to parse response: " + e)  
                     newResponse.message = root.failMessage  
+                    root.errorMessage = root.failMessage;
                 } finally {  
                     root.runningRequests--;  
                     root.responses = [...root.responses, newResponse]  
@@ -333,7 +338,8 @@ Singleton {
             }  
             else if (xhr.readyState === XMLHttpRequest.DONE) {  
                 console.log("[Wallpapers] Request failed with status: " + xhr.status)  
-                newResponse.message = root.failMessage  
+                newResponse.message = root.failMessage
+                root.errorMessage = root.failMessage;
                 root.runningRequests--;  
                 root.responses = [...root.responses, newResponse]  
             }  
@@ -350,6 +356,8 @@ Singleton {
             xhr.send()  
         } catch (error) {  
             console.log("Could not set headers:", error)  
+            root.errorMessage = root.failMessage;
+            root.runningRequests = Math.max(0, root.runningRequests - 1);
         }     
     }  
   

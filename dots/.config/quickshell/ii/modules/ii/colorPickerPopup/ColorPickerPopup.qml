@@ -14,6 +14,9 @@ Scope {
 
     readonly property bool notifIsLeft: (Config.options.notifications.position ?? "top_right").endsWith("left")
     readonly property bool notifIsRight: (Config.options.notifications.position ?? "top_right").endsWith("right")
+    readonly property bool sidebarOccludesPopup:
+        (root.notifIsLeft && GlobalStates.effectiveLeftOpen)
+        || (root.notifIsRight && GlobalStates.effectiveRightOpen)
 
     // Native Process avoids qs ipc call round-trip from external shell
     Process {
@@ -51,27 +54,31 @@ Scope {
     }
 
     Connections {
-        target: GlobalStates
-        function onDashboardPanelOpenChanged() {
-            if (GlobalStates.dashboardPanelOpen) {
+        target: Config.options.bar.tooltips
+        function onEnablePopupsChanged() {
+            if (!Config.options.bar.tooltips.enablePopups)
                 GlobalStates.colorPickerPopupOpen = false;
-            }
         }
-        function onPoliciesPanelOpenChanged() {
-            if (GlobalStates.policiesPanelOpen) {
+        function onEnableColorPickerPopupChanged() {
+            if (!Config.options.bar.tooltips.enableColorPickerPopup)
                 GlobalStates.colorPickerPopupOpen = false;
-            }
         }
     }
+
 
     LazyLoader {
         id: popupLoader
         active: GlobalStates.colorPickerPopupOpen
+            && Config.options.bar.tooltips.enablePopups
+            && Config.options.bar.tooltips.enableColorPickerPopup
 
         component: PanelWindow {
             id: popupWindow
             color: "transparent"
-            visible: Quickshell.screens.length > 0 && true
+            visible: Quickshell.screens.length > 0
+                && Config.options.bar.tooltips.enablePopups
+                && Config.options.bar.tooltips.enableColorPickerPopup
+                && !root.sidebarOccludesPopup
             screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
 
             WlrLayershell.namespace: "quickshell:colorPickerPopup"

@@ -14,6 +14,7 @@ import qs.modules.common
 Singleton {
     id: root
     property var windowList: []
+    property bool windowListLoaded: false
     property var addresses: []
     property var windowByAddress: ({})
     property var workspaces: []
@@ -117,11 +118,30 @@ Singleton {
         }
     }
 
+    // Window titles can change at very high frequency (browsers,
+    // terminals, media applications, etc.). Debounce these events
+    // and refresh only the client/window list after title activity settles.
+    Timer {
+        id: windowTitleUpdateDebounce
+        interval: 250
+        repeat: false
+        onTriggered: root.updateWindowList()
+    }
+
     Connections {
         target: Hyprland
 
         function onRawEvent(event) {
             // console.log("Hyprland raw event:", event.name);
+
+            // Keep window titles eventually consistent without causing
+            // repeated hyprctl calls during continuous title changes.
+            if (event.name === "windowtitle"
+                    || event.name === "windowtitlev2") {
+                windowTitleUpdateDebounce.restart();
+                return;
+            }
+
             switch (event.name) {
                 case "workspace":
                 case "workspacev2":
@@ -130,6 +150,7 @@ Singleton {
                 case "activespecialv2":
                     root.updateMonitors();
                     root.updateWorkspaces();
+                    root.updateWindowList();
                     break;
 
                 case "activewindow":
@@ -176,6 +197,7 @@ Singleton {
             id: clientsCollector
             onStreamFinished: {
                 root.windowList = JSON.parse(clientsCollector.text)
+                root.windowListLoaded = true;
                 let tempWinByAddress = {};
                 for (var i = 0; i < root.windowList.length; ++i) {
                     var win = root.windowList[i];
@@ -308,13 +330,18 @@ Singleton {
     Connections {
         target: Config.ready ? Config.options.bar.workspaces : null
         ignoreUnknownSignals: true
-        function onWorkspaceMapChanged() { root.syncWorkspaceMap(); }
+
+        function onWorkspaceMapChanged() {
+            root.syncWorkspaceMap();
+        }
+
         function onUseWorkspaceMapChanged() {
             root.syncWorkspaceMap();
             const useMap = Config.options.bar.workspaces.useWorkspaceMap;
             const shown = Config.options.bar.workspaces.shown || 10;
             root.syncWorkspaceGroupSize(useMap ? shown : 10);
         }
+
         function onShownChanged() {
             root.syncWorkspaceMap();
             const useMap = Config.options.bar.workspaces.useWorkspaceMap;

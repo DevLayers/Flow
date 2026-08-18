@@ -106,6 +106,25 @@ getactivemonitor() {
     echo "$active"
 }
 
+# Actually try to encode one frame with the given hardware codec, rather than
+# trusting `ffmpeg -encoders` (which only reflects what ffmpeg was compiled
+# with, not whether the hardware/driver behind it is actually present).
+test_encoder() {
+    local codec="$1"
+    case "$codec" in
+        h264_vaapi|hevc_vaapi)
+            [ -e /dev/dri/renderD128 ] || return 1
+            ffmpeg -y -v error -init_hw_device vaapi=va:/dev/dri/renderD128 -filter_hw_device va \
+                -f lavfi -i testsrc=size=128x128:rate=1 -frames:v 1 -vf format=nv12,hwupload \
+                -c:v "$codec" -f null - &>/dev/null
+            ;;
+        *)
+            ffmpeg -y -v error -f lavfi -i testsrc=size=128x128:rate=1 -frames:v 1 \
+                -c:v "$codec" -f null - &>/dev/null
+            ;;
+    esac
+}
+
 get_best_codec() {
     # If the user explicitly chose a CPU codec:
     if [[ "$REC_CODEC" == "libx264" || "$REC_CODEC" == "libx265" ]]; then
@@ -125,19 +144,19 @@ get_best_codec() {
 
     # If the user explicitly chose a GPU codec:
     if [[ "$REC_CODEC" != "auto" ]]; then
-        # Check if the chosen encoder is compiled in ffmpeg
-        if ffmpeg -encoders 2>/dev/null | grep -q "$REC_CODEC"; then
+        if ffmpeg -encoders 2>/dev/null | grep -q "$REC_CODEC" && test_encoder "$REC_CODEC"; then
             echo "$REC_CODEC"
             return
         fi
     fi
 
-    # If "auto" or the chosen GPU codec is not available, auto-detect:
-    if ffmpeg -encoders 2>/dev/null | grep -q "h264_nvenc"; then
+    # If "auto" or the chosen GPU codec doesn't actually work, auto-detect by
+    # probing each hardware encoder in turn:
+    if ffmpeg -encoders 2>/dev/null | grep -q "h264_nvenc" && test_encoder "h264_nvenc"; then
         echo "h264_nvenc"
-    elif ffmpeg -encoders 2>/dev/null | grep -q "h264_vaapi" && [ -e /dev/dri/renderD128 ]; then
+    elif ffmpeg -encoders 2>/dev/null | grep -q "h264_vaapi" && test_encoder "h264_vaapi"; then
         echo "h264_vaapi"
-    elif ffmpeg -encoders 2>/dev/null | grep -q "h264_amf"; then
+    elif ffmpeg -encoders 2>/dev/null | grep -q "h264_amf" && test_encoder "h264_amf"; then
         echo "h264_amf"
     else
         echo "libx264"
@@ -168,20 +187,35 @@ updatestate() {
 
 toggle_pause() {
     local current_paused=$(jq -r ".screenRecord.paused" "$STATE_FILE" 2>/dev/null)
-    
+    local target_paused="true"
     if [[ "$current_paused" == "true" ]]; then
-        jq ".screenRecord.paused = false" "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
-        notify-send "Recording Resumed" -a 'Recorder' &
-    else
-        jq ".screenRecord.paused = true" "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
-        notify-send "Recording Paused" -a 'Recorder' &
+        target_paused="false"
     fi
 
-    if pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; then
-        # Try to toggle pause via our new python script
-        python3 "$(dirname "$0")/obs_pause.py" 2>/dev/null
-    elif pgrep wf-recorder > /dev/null; then
-        pkill -USR1 wf-recorder
+    # Act on the recorder FIRST, and only mirror the new state if it worked. A failed
+    # pause that still flips the state file leaves the UI lying about the recording.
+    if [[ "$REC_SERVICE" == "obs" ]] && { pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; }; then
+        python3 "$(dirname "$0")/obs_pause.py" 2>/dev/null || return
+    elif pgrep -x wf-recorder > /dev/null; then
+        # wf-recorder has no pause feature and installs no SIGUSR1 handler, so the
+        # default action applies: SIGUSR1 terminates it. That is why pausing used to
+        # end the recording. Suspending the process instead keeps the encoder and the
+        # output file alive; the paused span shows up as a still frame in the video.
+        if [[ "$target_paused" == "true" ]]; then
+            pkill -STOP -x wf-recorder || return
+        else
+            pkill -CONT -x wf-recorder || return
+        fi
+    else
+        return
+    fi
+
+    if [[ "$target_paused" == "true" ]]; then
+        jq ".screenRecord.paused = true" "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+        notify-send "Recording Paused" -a 'Recorder' &
+    else
+        jq ".screenRecord.paused = false" "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+        notify-send "Recording Resumed" -a 'Recorder' &
     fi
 }
 
@@ -229,6 +263,9 @@ fi
 if pgrep wf-recorder > /dev/null; then
     notify-send "Recording Stopped" "Stopped" -a 'Recorder' &
     updatestate false
+    # A paused recorder is SIGSTOPped: it cannot run its shutdown handler (and would
+    # never flush the file) until it is resumed, so always continue it before killing.
+    pkill -CONT -x wf-recorder 2>/dev/null
     pkill wf-recorder &
     exit 0
 fi
@@ -388,7 +425,11 @@ else
     CODEC_OPTS=("-c" "$CODEC" "-r" "$REC_FRAMERATE" "-p" "b=${REC_BITRATE}M")
     
     if [[ "$CODEC" == "h264_vaapi" || "$CODEC" == "hevc_vaapi" ]]; then
-        CODEC_OPTS+=("-d" "/dev/dri/renderD128" "--pixel-format" "nv12")
+        # Do NOT force --pixel-format nv12 here: it makes wf-recorder insert a
+        # scale_vaapi conversion step that some VAAPI drivers (e.g. Intel Xe/Arc)
+        # refuse with "Failed to configure graph filter: Function not implemented".
+        # Letting wf-recorder auto-negotiate the pixel format works everywhere.
+        CODEC_OPTS+=("-d" "/dev/dri/renderD128")
     elif [[ "$CODEC" == "h264_amf" || "$CODEC" == "hevc_amf" ]]; then
         CODEC_OPTS+=("--pixel-format" "nv12")
     elif [[ "$CODEC" == "h264_nvenc" || "$CODEC" == "hevc_nvenc" ]]; then

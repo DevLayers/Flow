@@ -19,7 +19,9 @@ MouseArea { // Notification group area
     property bool expanded: false
     property bool popup: false
     property real zoom: 1.0
-    property int lazyLimit: 2
+    // Keep only the latest collapsed preview; the count button still exposes
+    // the full group and expansion reveals the remaining notifications.
+    property int lazyLimit: 1
     property int entranceTrigger: -1
     property int globalIndex: 0
 
@@ -68,7 +70,7 @@ MouseArea { // Notification group area
             }
         } else {
             lazyLoadTimer.stop();
-            lazyLimit = 2;
+            lazyLimit = 1;
         }
     }
 
@@ -87,13 +89,12 @@ MouseArea { // Notification group area
     }
     property real padding: 10 * zoom
     implicitHeight: background.implicitHeight
-    // Fix: scale on root so the ListView's allocated space matches the visual size.
-    // When scale was on the child (background), ListView allocated full implicitHeight
-    // but rendered the item smaller — next item was positioned correctly in layout but
-    // appeared to overlap the shrunken card above it.
-    scale: _entranceDone ? 1.0 : _entranceScale
+    // Popup groups may use the scale entrance animation. Sidebar groups must stay
+    // at layout scale 1.0: their parent ListView owns the delegate geometry, and
+    // a transient scale there can make the next group paint over this one.
+    scale: popup ? (_entranceDone ? 1.0 : _entranceScale) : 1.0
     Behavior on scale {
-        enabled: !entranceAnim.running
+        enabled: popup && !entranceAnim.running
         NumberAnimation {
             duration: 350
             easing.type: Easing.OutBack
@@ -262,7 +263,9 @@ MouseArea { // Notification group area
         }
 
         clip: true
-        implicitHeight: root.expanded ? row.implicitHeight + padding * 2 : Math.min(80 * root.zoom, row.implicitHeight + padding * 2)
+        // Reserve the height of every visible preview; expanded groups grow with
+        // the full Column + Repeater body as lazy loading adds more delegates.
+        implicitHeight: row.implicitHeight + root.padding * 2
 
         Behavior on implicitHeight {
             id: implicitHeightAnim
@@ -379,30 +382,46 @@ MouseArea { // Notification group area
                     }
                 }
 
-                StyledListView { // Notification body (expanded)
+                Column { // Notification body (expanded)
                     id: notificationsColumn
-                    implicitHeight: contentHeight
                     Layout.fillWidth: true
                     spacing: expanded ? 5 : 3
-                    // clip: true
-                    interactive: false
+
+                    // This content is not independently scrollable: the outer
+                    // notification center owns scrolling. Using a nested ListView
+                    // here made implicitHeight depend on its estimated contentHeight;
+                    // during rapid model updates it could report one delegate while
+                    // two were already painted, so the outer ListView placed the next
+                    // group too early. A positioner derives its height directly from
+                    // the delegates and keeps both layout levels synchronized.
+                    property int dragIndex: -1
+                    property real dragDistance: 0
+
+                    function resetDrag() {
+                        dragIndex = -1;
+                        dragDistance = 0;
+                    }
+
                     Behavior on spacing {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
-                    model: ScriptModel {
-                        values: root.notifications.slice().reverse().slice(0, root.lazyLimit)
-                    }
-                    delegate: NotificationItem {
-                        required property int index
-                        required property var modelData
-                        notificationObject: modelData
-                        expanded: root.expanded
-                        zoom: root.zoom
-                        onlyNotification: (root.notificationCount === 1)
-                        opacity: (!root.expanded && index == 1 && root.notificationCount > 2) ? 0.5 : 1
-                        visible: root.expanded || (index < 2)
-                        anchors.left: parent?.left
-                        anchors.right: parent?.right
+
+                    Repeater {
+                        model: ScriptModel {
+                            values: root.notifications.slice().reverse().slice(0, root.lazyLimit)
+                        }
+                        delegate: NotificationItem {
+                            required property int index
+                            required property var modelData
+                            width: notificationsColumn.width
+                            height: implicitHeight
+                            qmlParent: notificationsColumn
+                            notificationObject: modelData
+                            expanded: root.expanded
+                            zoom: root.zoom
+                            onlyNotification: (root.notificationCount === 1)
+                            visible: root.expanded || (index < 1)
+                        }
                     }
                 }
             }

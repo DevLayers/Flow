@@ -27,22 +27,81 @@ Item {
         return Config.options.background.wallpaperPath;
     }
 
+    readonly property bool usesWallpaperEnginePreview: targetMode === "desktop" && Config.options.background.useWallpaperEngine
+    readonly property bool usesVideoPreview: !usesWallpaperEnginePreview && Wallpapers.isVideoFile(effectivePath.toLowerCase())
+    readonly property string defaultPreviewPath: `${Directories.assetsPath}/images/default_wallpaper.png`
+
     StyledImage {
         id: wallpaperPreview
         anchors.fill: parent
         fillMode: Image.PreserveAspectCrop
+        visible: !wallpaperSelectorRoot.usesVideoPreview
         source: {
-            if (targetMode === "desktop" && Config.options.background.useWallpaperEngine) {
+            if (wallpaperSelectorRoot.usesWallpaperEnginePreview) {
                 return "file:///tmp/wpe_screenshot.png?t=" + Config.options.background.wallpaperEngineId;
             }
-            return wallpaperSelectorRoot.effectivePath !== "" ? wallpaperSelectorRoot.effectivePath : `${Directories.assetsPath}/images/default_wallpaper.png`
+            return wallpaperSelectorRoot.effectivePath !== "" ? wallpaperSelectorRoot.effectivePath : wallpaperSelectorRoot.defaultPreviewPath
         }
-        cache: false
+        cache: !wallpaperSelectorRoot.usesWallpaperEnginePreview
         layer.enabled: true
         layer.effect: OpacityMask {
             maskSource: Rectangle {
-                width: 360
-                height: 200
+                width: wallpaperPreview.width
+                height: wallpaperPreview.height
+                radius: Appearance.rounding.normal
+            }
+        }
+    }
+
+    StyledImage {
+        id: wallpaperPreviewFallback
+        anchors.fill: parent
+        visible: !wallpaperSelectorRoot.usesVideoPreview && wallpaperPreview.status === Image.Error
+        source: wallpaperSelectorRoot.defaultPreviewPath
+        fillMode: Image.PreserveAspectCrop
+        cache: true
+        layer.enabled: true
+        layer.effect: OpacityMask {
+            maskSource: Rectangle {
+                width: wallpaperPreviewFallback.width
+                height: wallpaperPreviewFallback.height
+                radius: Appearance.rounding.normal
+            }
+        }
+    }
+
+    ThumbnailImage {
+        id: videoPreview
+        anchors.fill: parent
+        visible: wallpaperSelectorRoot.usesVideoPreview
+        sourcePath: wallpaperSelectorRoot.effectivePath
+        thumbnailService: Wallpapers
+        generateThumbnail: wallpaperSelectorRoot.usesVideoPreview
+        cache: false
+        fillMode: Image.PreserveAspectCrop
+        clip: true
+        layer.enabled: true
+        layer.effect: OpacityMask {
+            maskSource: Rectangle {
+                width: videoPreview.width
+                height: videoPreview.height
+                radius: Appearance.rounding.normal
+            }
+        }
+    }
+
+    StyledImage {
+        id: videoPreviewFallback
+        anchors.fill: parent
+        visible: wallpaperSelectorRoot.usesVideoPreview && videoPreview.status !== Image.Ready
+        source: wallpaperSelectorRoot.defaultPreviewPath
+        fillMode: Image.PreserveAspectCrop
+        cache: true
+        layer.enabled: true
+        layer.effect: OpacityMask {
+            maskSource: Rectangle {
+                width: videoPreviewFallback.width
+                height: videoPreviewFallback.height
                 radius: Appearance.rounding.normal
             }
         }
@@ -71,6 +130,7 @@ Item {
         color: Appearance.colors.colPrimary
         iconSize: 40
         z: -1
+        visible: false
     }
 
     Rectangle {

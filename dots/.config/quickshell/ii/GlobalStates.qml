@@ -67,6 +67,15 @@ Singleton {
     property bool regionSelectorOpen: false
     property bool searchOpen: false
     property bool screenLocked: false
+    // Shared transition clock for the bar and wrapped-frame visuals. Their
+    // PanelWindows stay mapped while this runs; each layer chooses fade or
+    // slide based on whether the wrapped frame is active.
+    property real lockBarTransitionProgress: screenLocked ? 1.0 : 0.0
+    Behavior on lockBarTransitionProgress {
+        // Use the non-overshooting effects curve for opacity. Spatial curves
+        // overshoot and make a fade look like an abrupt blink.
+        animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(root)
+    }
     property bool lockScreenCentered: false
     property bool lockAnimationActive: false
     property bool workspaceRestoreInProgress: false
@@ -79,6 +88,7 @@ Singleton {
     signal lockScreenRipple(x: real, y: real)
     property bool sessionOpen: false
     property bool superDown: false
+    property bool usageOpen: false
     property bool superReleaseMightTrigger: true
     property bool wallpaperSelectorOpen: false
     property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
@@ -89,6 +99,8 @@ Singleton {
     property string videoEditorPath: ""
     property bool screenshotOverlayOpen: false
     property string screenshotOverlayImagePath: ""
+    // Monitor that owns the current screenshot preview overlay.
+    property string screenshotOverlayMonitor: ""
     property real screenshotOverlayRegionX: 0
     property real screenshotOverlayRegionY: 0
     property real screenshotOverlayRegionW: 0
@@ -97,6 +109,12 @@ Singleton {
     property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""
     property string settingsPendingPageName: ""
+    // Welcome is an in-process window. Keep its lifecycle in the shared state
+    // graph so first-run, keybinds and Settings deep links all use one owner.
+    property bool welcomeOpen: false
+    // A serial makes repeated requests observable even when the same page is
+    // requested twice while Settings is already visible.
+    property int settingsNavigationRequest: 0
     property string activeLeftSidebarMonitor: ""
     property string activeRightSidebarMonitor: ""
 
@@ -219,7 +237,7 @@ Singleton {
     property bool mediaWidgetHovered: false
     property Timer mediaWidgetHoverTimer: Timer {
         id: mediaWidgetHoverTimer
-        interval: 4000
+        interval: 400
         repeat: false
         onTriggered: {
             root.mediaWidgetHovered = false;
@@ -242,7 +260,7 @@ Singleton {
     function pickColor(hex) {
         if (hex && hex.startsWith("#")) {
             root.colorPickerPopupColor = hex;
-            if (Config.options && Config.options.bar && Config.options.bar.tooltips && Config.options.bar.tooltips.enableColorPickerPopup) {
+            if (Config.options && Config.options.bar && Config.options.bar.tooltips && Config.options.bar.tooltips.enablePopups && Config.options.bar.tooltips.enableColorPickerPopup) {
                 root.colorPickerPopupOpen = false;
                 Qt.callLater(() => {
                     root.colorPickerPopupOpen = true;
@@ -262,8 +280,19 @@ Singleton {
         }
     }
 
+    function launchLosslessCut(path) {
+        root.videoEditorPath = path;
+        root.videoEditorPopupOpen = false;
+        root.videoEditorOpen = false;
+        Quickshell.execDetached(["gio", "launch", Directories.losslessCutDesktopPath, path]);
+    }
+
     function launchVideoEditor(path) {
         root.videoEditorPath = path;
+        // The "Recording Finished" prompt is opt-out: keep the path around so the
+        // editor can still be opened manually, just don't pop anything up.
+        if (!Config.options.screenRecord.showEditPrompt)
+            return;
         root.videoEditorPopupOpen = true;
     }
 
@@ -282,6 +311,57 @@ Singleton {
         root.settingsOpen = true;
     }
 
+    function openSettingsPage(pageId, subPageId, sectionId) {
+        const targetSubPage = subPageId || "";
+        if (!pageId || pageId === "") {
+            root.settingsPendingPageName = "";
+            root.settingsPendingSubPage = targetSubPage;
+            root.settingsOpen = true;
+            return;
+        }
+
+        if (SettingsPageRegistry.pageIndexById(pageId) < 0)
+            return;
+
+        root.settingsPendingPageName = pageId;
+        root.settingsPendingSubPage = targetSubPage;
+        root.settingsNavigationRequest += 1;
+        root.settingsOpen = true;
+    }
+
+    function consumePendingSettingsPage() {
+        const pending = root.settingsPendingPageName;
+        root.settingsPendingPageName = "";
+        return pending;
+    }
+
+    function toggleWelcome() {
+        root.welcomeOpen = !root.welcomeOpen;
+    }
+
+    function openWelcome() {
+        root.welcomeOpen = true;
+    }
+
+    function closeWelcome() {
+        root.welcomeOpen = false;
+    }
+
+    function toggleCheatsheet() {
+        root.cheatsheetOpen = !root.cheatsheetOpen;
+    }
+
+    function openCheatsheet() {
+        if (root.cheatsheetOpen) {
+            root.cheatsheetOpen = false;
+        }
+        root.cheatsheetOpen = true;
+    }
+
+    function closeCheatsheet() {
+        root.cheatsheetOpen = false;
+    }
+
     IpcHandler {
         target: "settings"
 
@@ -292,6 +372,74 @@ Singleton {
         function open(): void {
             root.openSettings();
         }
+
+        function openPage(pageId: string): void {
+            root.openSettingsPage(pageId);
+        }
+
+        function openSubPage(pageId: string, subPage: string): void {
+            root.openSettingsPage(pageId, subPage || "");
+        }
+
+    }
+
+    IpcHandler {
+        target: "welcome"
+
+        function toggle(): void {
+            root.toggleWelcome();
+        }
+
+        function open(): void {
+            root.openWelcome();
+        }
+
+        function close(): void {
+            root.closeWelcome();
+        }
+    }
+
+    IpcHandler {
+        target: "cheatsheet"
+
+        function toggle(): void {
+            root.toggleCheatsheet();
+        }
+
+        function open(): void {
+            root.openCheatsheet();
+        }
+
+        function close(): void {
+            root.closeCheatsheet();
+        }
+    }
+
+    IpcHandler {
+        target: "osd"
+
+        function trigger(): void {
+            root.osdCurrentIndicator = "volume";
+            root.osdVolumeOpen = true;
+            root.osdInteraction();
+        }
+
+        function toggle(): void {
+            root.osdVolumeOpen = !root.osdVolumeOpen;
+            if (root.osdVolumeOpen) {
+                root.osdInteraction();
+            }
+        }
+
+        function hide(): void {
+            root.osdVolumeOpen = false;
+        }
+
+        function open(): void {
+            root.osdCurrentIndicator = "volume";
+            root.osdVolumeOpen = true;
+            root.osdInteraction();
+        }
     }
 
     GlobalShortcut {
@@ -300,24 +448,7 @@ Singleton {
         onPressed: root.toggleSettings()
     }
 
-    readonly property bool connectModeActive: {
-        if (!Config.ready)
-            return false;
-        const style = Config.options.sidebar.sidebarStyle || "default";
-        if (style !== "connect")
-            return false;
-
-        // Connect style is disabled if the bar background style is Transparent
-        if (Config.options.bar.barBackgroundStyle === 0)
-            return false;
-
-        // Works in all rounding modes except Edge (4)
-        if (Config.options.appearance.fakeScreenRounding === 4)
-            return false;
-
-        // All corner styles now supported: 0 (Hug), 1 (Float), 2 (Rect), 3 (Dynamic Island)
-        return true;
-    }
+    readonly property bool connectModeActive: ShellModePolicy.connectModeActive
 
     // In Float mode (cornerStyle 1), sidebars remain as separate PanelWindows
     // rather than being embedded in the TopLayer. Only search/OSD are integrated.
@@ -343,6 +474,20 @@ Singleton {
         return true;
     }
 
+    // The floating Dynamic Island is the sole owner of the search surface
+    // while it is enabled. Its PanelWindow chooses the configured target
+    // monitor, so ownership must not depend on the monitor that opened it.
+    readonly property bool floatingNotchOwnsSearch: {
+        if (!Config.ready || !root.overviewOpen)
+            return false;
+
+        const notch = Config.options.bar.floatingNotch;
+        if (!notch || !notch.enable || notch.centerInBar)
+            return false;
+
+        return true;
+    }
+
     readonly property bool osdConnectActive: {
         if (!connectModeActive)
             return false;
@@ -354,7 +499,7 @@ Singleton {
     function enforceSidebarStyle() {
         if (!Config.ready)
             return;
-        if (Config.options.bar.barBackgroundStyle === 0 && Config.options.sidebar.sidebarStyle === "connect") {
+        if (ShellModePolicy.shouldForceDefault) {
             Config.options.sidebar.sidebarStyle = "default";
         }
     }
@@ -747,3 +892,4 @@ Singleton {
         }
     }
 }
+

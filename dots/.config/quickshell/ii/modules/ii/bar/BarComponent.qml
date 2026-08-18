@@ -44,6 +44,7 @@ Item {
     property var originalIndex: index
     property bool vertical: false
     property bool widgetSelfVisible: true
+    property bool highlighted: false
 
     // ── Smooth Slide and Move Animations ──────────────────────────────────────
     property real oldX: x

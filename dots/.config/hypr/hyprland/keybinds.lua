@@ -19,7 +19,7 @@ hl.bind("SUPER_R", hl.dsp.global("quickshell:workspaceNumber"), { ignore_mods = 
 hl.bind("SUPER_L", hl.dsp.global("quickshell:workspaceNumber"), { ignore_mods = true, transparent = true, release = true })
 hl.bind("SUPER_R", hl.dsp.global("quickshell:workspaceNumber"), { ignore_mods = true, transparent = true, release = true })
 hl.bind("SUPER + Tab", hl.dsp.global("quickshell:overviewWorkspacesToggle"), { description = "Shell: Toggle overview" })
-hl.bind("CTRL + Space", hl.dsp.global("quickshell:searchOnlyToggle"), { description = "Shell: Open search only" })
+-- hl.bind("CTRL + Space", hl.dsp.global("quickshell:searchOnlyToggle"), { description = "Shell: Open search only" }) -- Disabled by default for those who play games
 hl.bind("SUPER + V", hl.dsp.global("quickshell:overviewClipboardToggle"))
 hl.bind("SUPER + Period", hl.dsp.global("quickshell:overviewEmojiToggle"))
 hl.bind("SUPER + A", hl.dsp.global("quickshell:sidebarLeftToggle"), { description = "Shell: Toggle left sidebar" })
@@ -28,13 +28,17 @@ hl.bind("SUPER + B", hl.dsp.global("quickshell:sidebarLeftToggle"))
 hl.bind("SUPER + O", hl.dsp.global("quickshell:sidebarLeftToggle"))
 hl.bind("SUPER + N", hl.dsp.global("quickshell:sidebarRightToggle"), { description = "Shell: Toggle right sidebar" })
 hl.bind("SUPER + Slash", hl.dsp.global("quickshell:cheatsheetToggle"), { description = "Shell: Toggle cheatsheet" })
+hl.bind("SUPER + U", hl.dsp.global("quickshell:usageToggle"), { description = "Shell: Toggle app usage stats" })
 hl.bind("SUPER + K", hl.dsp.global("quickshell:oskToggle"), { description = "Shell: Toggle on-screen keyboard" })
-hl.bind("SUPER + M", hl.dsp.global("quickshell:ControlsToggle"), { description = "Shell: Toggle media controls" })
+hl.bind("SUPER + M", hl.dsp.global("quickshell:mediaControlsToggle"), { description = "Shell: Toggle media controls" })
 hl.bind("SUPER + G", hl.dsp.global("quickshell:overlayToggle"), { description = "Shell: Toggle widget overlay" })
 hl.bind("CTRL + ALT + Delete", hl.dsp.global("quickshell:sessionToggle"), { description = "Shell: Toggle session menu" })
 hl.bind("SUPER + J", hl.dsp.global("quickshell:barToggle"), { description = "Shell: Toggle bar" })
 hl.bind("CTRL + ALT + Delete", hl.dsp.exec_cmd(qsIsAlive .. " || pkill wlogout || wlogout -p layer-shell"))
-hl.bind("SHIFT + SUPER + ALT + Slash", hl.dsp.exec_cmd("qs -p $HOME/.config/quickshell/$qsConfig/welcome.qml"))
+hl.bind("SHIFT + SUPER + ALT + Slash", hl.dsp.exec_cmd("qs -c ii ipc call welcome toggle"), { description = "Shell: Toggle welcome" })
+
+-- Toggle keyboard layout safely without triggering search release
+hl.bind("SUPER + Space", hl.dsp.exec_cmd("hyprctl switchxkblayout all next"), { description = "Switch keyboard layout" })
 
 hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd(qsIpcCall .. " brightness increment || brightnessctl s 5%+"),
     { locked = true, repeating = true })
@@ -116,6 +120,11 @@ hl.bind("SUPER + SHIFT + ALT + mouse:273", hl.dsp.exec_cmd(hyprScripts .. "/ai/p
 hl.bind("SUPER + mouse:272", hl.dsp.window.drag(), { mouse = true, description = "Window: Move" })
 hl.bind("SUPER + mouse:274", hl.dsp.window.drag(), { mouse = true })
 hl.bind("SUPER + mouse:273", hl.dsp.window.resize(), { mouse = true, description = "Window: Resize" })
+--# Tiling assistant: report the drag to the shell alongside Hyprland's own move
+--# and resize, so the zone overlay knows a window is being dragged
+hl.bind("SUPER + mouse:272", hl.dsp.global("quickshell:tilingDragMove"))   -- # [hidden]
+hl.bind("SUPER + mouse:274", hl.dsp.global("quickshell:tilingDragMove"))   -- # [hidden]
+hl.bind("SUPER + mouse:273", hl.dsp.global("quickshell:tilingDragResize")) -- # [hidden]
 --#/# bind = SUPER, ←/↑/→/↓,, # Focus in direction
 for i = 1, 6 do
     local arrowkey = { "Left", "Right", "Up", "Down", "BracketLeft", "BracketRight" }
@@ -128,6 +137,19 @@ for i = 1, 4 do
     local focusdir = { "l", "r", "u", "d" }
     hl.bind("SUPER + SHIFT + " .. arrowkey[i], hl.dsp.window.move({ direction = focusdir[i] }))
 end
+--# Tiling assistant: walk the focused window through the tiling zones, leaving
+--# the move-in-direction above to Hyprland's own layout
+--#/# bind = SUPER + ALT, ←/↑/→/↓,, # Quick-tile in direction (again at the edge to untile)
+for i = 1, 4 do
+    local arrowkey = { "Left", "Right", "Up", "Down" }
+    hl.bind("SUPER + ALT + " .. arrowkey[i], hl.dsp.global("quickshell:tilingTile" .. arrowkey[i]))
+end
+--# Tiling assistant: swap the focused monitor between zone layouts without
+--# opening settings
+--#/# bind = SUPER + ALT, Tab,, # Next tiling layout
+hl.bind("SUPER + ALT + Tab", hl.dsp.global("quickshell:tilingLayoutCycle"))
+--#/# bind = SUPER + ALT + SHIFT, Tab,, # Previous tiling layout
+hl.bind("SUPER + ALT + SHIFT + Tab", hl.dsp.global("quickshell:tilingLayoutCyclePrev"))
 
 -- hl.bind("ALT + F4",
 --     function() hl.exec_cmd(
@@ -273,7 +295,7 @@ for i = 1, 4 do
 end
 --#/# bind = SUPER, Scroll ↑/↓,, # Focus left/right
 for i = 1, 4 do
-    local key = { "SUPER + mouse_up", "SUPER + mouse_down" }
+    local key = { "SUPER + mouse_down", "SUPER + mouse_up" }
     local keycombos = { key[1], key[2], "CTRL + " .. key[1], "CTRL + " .. key[2] }
     local prefix = { "+", "-", "r+", "r-" }
     hl.bind(keycombos[i], hl.dsp.focus({ workspace = prefix[i] .. "1" }))

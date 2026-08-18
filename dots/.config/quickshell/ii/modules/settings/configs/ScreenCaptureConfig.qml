@@ -8,335 +8,337 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 
-ContentPage {
-    id: page
+Item {
+    id: screenCaptureRoot
+    anchors.fill: parent
 
-    forceWidth: false
+    property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
 
-    // ── Selection ─────────────────────────────────────────────────────────
-    ContentSection {
-        title: Translation.tr("Selection")
-        icon: "highlight_alt"
+    ContentPage {
+        id: page
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
 
-        ConfigSwitch {
-            buttonIcon: "monitor"
-            text: Translation.tr("Show only on focused monitor")
-            checked: Config.options.regionSelector.showOnlyOnFocusedMonitor
-            onCheckedChanged: {
-                Config.options.regionSelector.showOnlyOnFocusedMonitor = checked;
-            }
-        }
-
-        ContentSubsectionLabel {
-            text: Translation.tr("Hint target regions")
-        }
-
-        ConfigSwitch {
-            buttonIcon: "desktop_windows"
-            text: Translation.tr("Windows")
-            checked: Config.options.regionSelector.targetRegions.windows
-            onCheckedChanged: {
-                Config.options.regionSelector.targetRegions.windows = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "layers"
-            text: Translation.tr("Layers")
-            checked: Config.options.regionSelector.targetRegions.layers
-            onCheckedChanged: {
-                Config.options.regionSelector.targetRegions.layers = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "article"
-            text: Translation.tr("Content")
-            checked: Config.options.regionSelector.targetRegions.content
-            onCheckedChanged: {
-                Config.options.regionSelector.targetRegions.content = checked;
-            }
-        }
-
-    }
-
-    // ── Google Lens ───────────────────────────────────────────────────────
-    ContentSection {
-        title: Translation.tr("Google Lens")
-        icon: "search"
-
-        ContentSubsection {
-            title: Translation.tr("Selection mode")
+        // ── Selection ─────────────────────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Selection")
             icon: "highlight_alt"
-            Layout.fillWidth: true
 
-            ConfigSelectionArray {
-                currentValue: Config.options.search.imageSearch.useCircleSelection ? "circle" : "rectangles"
-                onSelected: (newValue) => {
-                    Config.options.search.imageSearch.useCircleSelection = (newValue === "circle");
+            ConfigSwitch {
+                buttonIcon: "monitor"
+                text: Translation.tr("Show only on focused monitor")
+                checked: Config.options.regionSelector.showOnlyOnFocusedMonitor
+                onCheckedChanged: {
+                    Config.options.regionSelector.showOnlyOnFocusedMonitor = checked;
                 }
-                options: [{
-                    "displayName": Translation.tr("Rectangular selection"),
-                    "value": "rectangles",
-                    "icon": "activity_zone"
-                }, {
-                    "displayName": Translation.tr("Circle to Search"),
-                    "value": "circle",
-                    "icon": "gesture"
-                }]
             }
 
-        }
+            ContentSubsectionLabel {
+                text: Translation.tr("Hint target regions")
+            }
 
-        ContentSubsectionLabel {
-            text: Translation.tr("Rectangular selection")
-            visible: !Config.options.search.imageSearch.useCircleSelection
-        }
+            // Multi-select tiles for target region hints (Windows · Layers · Content)
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
 
-        ConfigSwitch {
-            visible: !Config.options.search.imageSearch.useCircleSelection
-            buttonIcon: "border_inner"
-            text: Translation.tr("Show aim lines")
-            checked: Config.options.regionSelector.rect.showAimLines
-            onCheckedChanged: {
-                Config.options.regionSelector.rect.showAimLines = checked;
+                // 1. Windows
+                RippleButton {
+                    id: btnWindows
+                    Layout.fillWidth: true
+                    implicitHeight: 46
+                    buttonRadius: Appearance.rounding.normal
+                    property bool active: Config.options.regionSelector.targetRegions.windows
+                    colBackground: active ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                    colBackgroundHover: active ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                    colRipple: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
+                    onClicked: Config.options.regionSelector.targetRegions.windows = !active
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: "desktop_windows"
+                            iconSize: 20
+                            fill: btnWindows.active ? 1 : 0
+                            color: btnWindows.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Windows")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: btnWindows.active
+                            color: btnWindows.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: btnWindows.active ? "check_circle" : "radio_button_unchecked"
+                            iconSize: 18
+                            fill: btnWindows.active ? 1 : 0
+                            color: btnWindows.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Enable region snapping for Hyprland app windows")
+                    }
+                }
+
+                // 2. Layers
+                RippleButton {
+                    id: btnLayers
+                    Layout.fillWidth: true
+                    implicitHeight: 46
+                    buttonRadius: Appearance.rounding.normal
+                    property bool active: Config.options.regionSelector.targetRegions.layers
+                    colBackground: active ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                    colBackgroundHover: active ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                    colRipple: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
+                    onClicked: Config.options.regionSelector.targetRegions.layers = !active
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: "layers"
+                            iconSize: 20
+                            fill: btnLayers.active ? 1 : 0
+                            color: btnLayers.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Layers")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: btnLayers.active
+                            color: btnLayers.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: btnLayers.active ? "check_circle" : "radio_button_unchecked"
+                            iconSize: 18
+                            fill: btnLayers.active ? 1 : 0
+                            color: btnLayers.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Enable region snapping for Wayland layer surfaces (bars, docks, popups)")
+                    }
+                }
+
+                // 3. Content
+                RippleButton {
+                    id: btnContent
+                    Layout.fillWidth: true
+                    implicitHeight: 46
+                    buttonRadius: Appearance.rounding.normal
+                    property bool active: Config.options.regionSelector.targetRegions.content
+                    colBackground: active ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                    colBackgroundHover: active ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                    colRipple: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
+                    onClicked: Config.options.regionSelector.targetRegions.content = !active
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: "article"
+                            iconSize: 20
+                            fill: btnContent.active ? 1 : 0
+                            color: btnContent.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Content")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: btnContent.active
+                            color: btnContent.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: btnContent.active ? "check_circle" : "radio_button_unchecked"
+                            iconSize: 18
+                            fill: btnContent.active ? 1 : 0
+                            color: btnContent.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Enable region snapping for detected on-screen visual content boxes")
+                    }
+                }
             }
         }
 
-        ContentSubsectionLabel {
-            text: Translation.tr("Circle selection")
-            visible: Config.options.search.imageSearch.useCircleSelection
-        }
+        // ── Google Lens ───────────────────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Google Lens")
+            icon: "search"
 
-        ConfigSpinBox {
-            visible: Config.options.search.imageSearch.useCircleSelection
-            icon: "line_weight"
-            text: Translation.tr("Stroke width")
-            value: Config.options.regionSelector.circle.strokeWidth
-            from: 1
-            to: 20
-            stepSize: 1
-            onValueChanged: {
-                Config.options.regionSelector.circle.strokeWidth = value;
+            ContentSubsection {
+                title: Translation.tr("Selection mode")
+                icon: "highlight_alt"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.search.imageSearch.useCircleSelection ? "circle" : "rectangles"
+                    onSelected: (newValue) => {
+                        Config.options.search.imageSearch.useCircleSelection = (newValue === "circle");
+                    }
+                    options: [{
+                        "displayName": Translation.tr("Rectangular selection"),
+                        "value": "rectangles",
+                        "icon": "activity_zone"
+                    }, {
+                        "displayName": Translation.tr("Circle to Search"),
+                        "value": "circle",
+                        "icon": "gesture"
+                    }]
+                }
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Rectangular selection")
+                visible: !Config.options.search.imageSearch.useCircleSelection
+            }
+
+            ConfigSwitch {
+                visible: !Config.options.search.imageSearch.useCircleSelection
+                buttonIcon: "border_inner"
+                text: Translation.tr("Show aim lines")
+                checked: Config.options.regionSelector.rect.showAimLines
+                onCheckedChanged: {
+                    Config.options.regionSelector.rect.showAimLines = checked;
+                }
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Circle selection")
+                visible: Config.options.search.imageSearch.useCircleSelection
+            }
+
+            ConfigSpinBox {
+                visible: Config.options.search.imageSearch.useCircleSelection
+                icon: "line_weight"
+                text: Translation.tr("Stroke width")
+                value: Config.options.regionSelector.circle.strokeWidth
+                from: 1
+                to: 20
+                stepSize: 1
+                onValueChanged: {
+                    Config.options.regionSelector.circle.strokeWidth = value;
+                }
+            }
+
+            ConfigSpinBox {
+                visible: Config.options.search.imageSearch.useCircleSelection
+                icon: "padding"
+                text: Translation.tr("Padding")
+                value: Config.options.regionSelector.circle.padding
+                from: 0
+                to: 100
+                stepSize: 1
+                onValueChanged: {
+                    Config.options.regionSelector.circle.padding = value;
+                }
             }
         }
 
-        ConfigSpinBox {
-            visible: Config.options.search.imageSearch.useCircleSelection
-            icon: "padding"
-            text: Translation.tr("Padding")
-            value: Config.options.regionSelector.circle.padding
-            from: 0
-            to: 100
-            stepSize: 1
-            onValueChanged: {
-                Config.options.regionSelector.circle.padding = value;
+        // ── Editor & screenshots ──────────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Editor & Screenshots")
+            icon: "transform"
+
+            ConfigSwitch {
+                buttonIcon: "edit"
+                text: Translation.tr("Enable built-in right click screenshot editor")
+                checked: Config.options.regionSelector.annotation.enableInlineEditor
+                onCheckedChanged: {
+                    Config.options.regionSelector.annotation.enableInlineEditor = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Enable this if you want to use the built-in screenshot editor when using right click to select area, replacing swappy.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "photo_library"
+                text: Translation.tr("Show screenshot preview overlay")
+                checked: Config.options.regionSelector.enableOverlay
+                onCheckedChanged: {
+                    Config.options.regionSelector.enableOverlay = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows a Pixel-style preview overlay at the bottom-left after taking a screenshot, with quick actions to save, edit, or delete.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "notifications"
+                text: Translation.tr("Show copy notifications")
+                checked: Config.options.regionSelector.copyNotification
+                onCheckedChanged: {
+                    Config.options.regionSelector.copyNotification = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows a system notification when a screenshot is copied to the clipboard.")
+                }
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Screenshot path")
+            }
+
+            MaterialTextArea {
+                Layout.fillWidth: true
+                placeholderText: Translation.tr("Screenshot path")
+                text: Config.options.screenSnip.savePath
+                wrapMode: TextEdit.Wrap
+                onTextChanged: {
+                    Config.options.screenSnip.savePath = text;
+                }
             }
         }
 
+        // ── Recording Subpage Entry ──────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Screen Recording")
+            icon: "screen_record"
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                ServiceCard {
+                    cardIcon: "screen_record"
+                    cardHue: 345
+                    cardShape: "Circle"
+                    title: Translation.tr("Recording Settings")
+                    description: Translation.tr("Configure recorder provider (OBS / wf-recorder), video quality, and post-recording actions.")
+                    onOpenCard: subPageOverlay.open(Qt.resolvedUrl("widgets/ScreenRecordingConfig.qml"))
+                }
+            }
+        }
     }
 
-    // ── Editor & screenshots ──────────────────────────────────────────────
-    ContentSection {
-        title: Translation.tr("Editor & screenshots")
-        icon: "transform"
-
-        ConfigSwitch {
-            buttonIcon: "edit"
-            text: Translation.tr("Enable built-in right click screenshot editor")
-            checked: Config.options.regionSelector.annotation.enableInlineEditor
-            onCheckedChanged: {
-                Config.options.regionSelector.annotation.enableInlineEditor = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Enable this if you want to use the built-in screenshot editor when using right click to select are, replacing swappy.")
-            }
-
-        }
-
-        ConfigSwitch {
-            buttonIcon: "photo_library"
-            text: Translation.tr("Show screenshot preview overlay")
-            checked: Config.options.regionSelector.enableOverlay
-            onCheckedChanged: {
-                Config.options.regionSelector.enableOverlay = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Shows a Pixel-style preview overlay at the bottom-left after taking a screenshot, with quick actions to save, edit, or delete.")
-            }
-
-        }
-
-        ContentSubsectionLabel {
-            text: Translation.tr("Screenshot path")
-        }
-
-        MaterialTextArea {
-            Layout.fillWidth: true
-            placeholderText: Translation.tr("Screenshot path")
-            text: Config.options.screenSnip.savePath
-            wrapMode: TextEdit.Wrap
-            onTextChanged: {
-                Config.options.screenSnip.savePath = text;
-            }
-        }
-
+    // Sub-page overlay (slides in from the right)
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
-
-    // ── Recording ─────────────────────────────────────────────────────────
-    ContentSection {
-        title: Translation.tr("Recording")
-        icon: "screen_record"
-
-        ContentSubsectionLabel {
-            text: Translation.tr("Video record path")
-        }
-
-        MaterialTextArea {
-            Layout.fillWidth: true
-            placeholderText: Translation.tr("Video record path")
-            text: Config.options.screenRecord.savePath
-            wrapMode: TextEdit.Wrap
-            onTextChanged: {
-                Config.options.screenRecord.savePath = text;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "videocam"
-            text: Translation.tr("Use OBS for recording")
-            checked: Config.options.screenRecord.service === "obs"
-            onCheckedChanged: {
-                Config.options.screenRecord.service = checked ? "obs" : "wf-recorder";
-            }
-        }
-
-        NoticeBox {
-            Layout.fillWidth: true
-            visible: Config.options.screenRecord.service === "obs"
-            text: Translation.tr("OBS WebSocket Setup:\n1. Open OBS Studio -> Tools -> WebSocket Server Settings.\n2. Enable WebSocket server (default port: 4455).\n3. Disable Authentication (uncheck 'Enable Authentication') OR set the OBS_API_PASSWORD environment variable.\n4. When starting recording, a screen picker portal dialog will appear to select the recording source/screen.")
-        }
-
-        ConfigSwitch {
-            buttonIcon: "notifications"
-            text: Translation.tr("Show recording notifications")
-            checked: Config.options.screenRecord.showNotifications
-            onCheckedChanged: {
-                Config.options.screenRecord.showNotifications = checked;
-            }
-        }
-
-        ContentSubsectionLabel {
-            text: Translation.tr("Local recorder settings (wf-recorder)")
-            visible: Config.options.screenRecord.service === "wf-recorder"
-        }
-
-        ConfigSwitch {
-            buttonIcon: "bolt"
-            text: Translation.tr("GPU Hardware Acceleration")
-            checked: Config.options.screenRecord.useGpu
-            visible: Config.options.screenRecord.service === "wf-recorder"
-            onCheckedChanged: {
-                Config.options.screenRecord.useGpu = checked;
-            }
-        }
-
-        ContentSubsectionLabel {
-            text: Translation.tr("Video Codec")
-            visible: Config.options.screenRecord.service === "wf-recorder"
-        }
-
-        StyledComboBox {
-            id: recorderCodecSelector2
-
-            buttonIcon: "movie"
-            textRole: "displayName"
-            visible: Config.options.screenRecord.service === "wf-recorder"
-            model: [{
-                "displayName": Translation.tr("Auto (Recommended)"),
-                "value": "auto"
-            }, {
-                "displayName": "H264 (NVIDIA GPU - NVENC)",
-                "value": "h264_nvenc"
-            }, {
-                "displayName": "H264 (Intel/AMD GPU - VAAPI)",
-                "value": "h264_vaapi"
-            }, {
-                "displayName": "H264 (AMD GPU - AMF)",
-                "value": "h264_amf"
-            }, {
-                "displayName": "H264 (CPU - Compatibility)",
-                "value": "libx264"
-            }, {
-                "displayName": "HEVC (NVIDIA GPU - NVENC)",
-                "value": "hevc_nvenc"
-            }, {
-                "displayName": "HEVC (Intel/AMD GPU - VAAPI)",
-                "value": "hevc_vaapi"
-            }, {
-                "displayName": "HEVC (AMD GPU - AMF)",
-                "value": "hevc_amf"
-            }, {
-                "displayName": "HEVC (CPU - Compatibility)",
-                "value": "libx265"
-            }]
-            currentIndex: {
-                const index = model.findIndex((item) => {
-                    return item.value === Config.options.screenRecord.codec;
-                });
-                return index !== -1 ? index : 0;
-            }
-            onActivated: (index) => {
-                Config.options.screenRecord.codec = model[index].value;
-            }
-
-            StyledToolTip {
-                parent: recorderCodecSelector2
-                text: Translation.tr("Auto automatically selects the best hardware encoder on your system. NVENC is for Nvidia, VA-API is for Intel/AMD, and AMF is for AMD. CPU encodes via software and uses more resources.")
-            }
-
-        }
-
-        ConfigSlider {
-            buttonIcon: "speed"
-            text: Translation.tr("Bitrate (Mbps)")
-            value: Config.options.screenRecord.bitrate
-            from: 1
-            to: 50
-            stepSize: 1
-            usePercentTooltip: false
-            visible: Config.options.screenRecord.service === "wf-recorder"
-            onValueChanged: {
-                Config.options.screenRecord.bitrate = value;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Higher bitrate increases video quality but uses more disk space. 6-12 Mbps is ideal for 1080p recording.")
-            }
-
-        }
-
-        ConfigSlider {
-            buttonIcon: "av_timer"
-            text: Translation.tr("Target Frame Rate (FPS)")
-            value: Config.options.screenRecord.framerate
-            from: 15
-            to: 120
-            stepSize: 5
-            usePercentTooltip: false
-            visible: Config.options.screenRecord.service === "wf-recorder"
-            onValueChanged: {
-                Config.options.screenRecord.framerate = value;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Target frames per second for the recording. 60 FPS is standard for smooth desktop recordings.")
-            }
-
-        }
-
-    }
-
 }

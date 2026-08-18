@@ -29,7 +29,7 @@ Scope {
         id: cornerPanelWindow
         property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
         property bool fullscreen
-        visible: (Config.options.appearance.fakeScreenRounding === 1 || Config.options.appearance.fakeScreenRounding === 2) || Config.options.sidebar.cornerOpen.enable
+        visible: Config.ready && ((Config.options.appearance.fakeScreenRounding === 1 || Config.options.appearance.fakeScreenRounding === 2) || Config.options.sidebar.cornerOpen.enable)
         property var corner
 
         readonly property bool isTopLeft: corner === RoundCorner.CornerEnum.TopLeft
@@ -41,7 +41,7 @@ Scope {
         readonly property bool isLeft: isTopLeft || isBottomLeft
         readonly property bool isRight: isTopRight || isBottomRight
 
-        readonly property bool isCornerOpenActive: Config.options.sidebar.cornerOpen.enable && (Config.options.sidebar.cornerOpen.bottom == cornerPanelWindow.isBottom)
+        readonly property bool isCornerOpenActive: Config.ready && Config.options.sidebar.cornerOpen.enable && (Config.options.sidebar.cornerOpen.bottom == cornerPanelWindow.isBottom)
 
         exclusionMode: ExclusionMode.Ignore
         Component.onCompleted: {

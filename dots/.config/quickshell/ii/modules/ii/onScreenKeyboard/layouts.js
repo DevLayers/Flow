@@ -310,3 +310,231 @@ const byName = {
         ]
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deck layouts
+//
+// Everything above is the classic on-screen keyboard's data and stays as it is.
+// What follows is the schema the deck keyboard uses, kept side by side with it.
+//
+// ydotool injects evdev keycodes and the compositor applies the xkb layout on top, so the
+// keycode of a physical position never changes: a layout is a pure relabelling of one fixed
+// geometry. Hence a single row definition plus one glyph table per layout.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Every row is exactly deckUnits wide, cluster included, so the columns line up down the deck.
+// The arrows are full-size keys rather than the half-height pair a real board uses, which costs
+// the extra half unit over a 15u board - Esc, Backspace, Enter and Caps absorb it.
+const deckUnits = 15.5;
+const deckClusterUnits = 3; // The arrow cluster claims the last 3 units of the bottom two rows
+const deckFnRowScale = 0.62; // The F-row is shorter than a full row
+const deckDefaultCode = "us";
+
+// A key is { role, u, code, ... }:
+//   role "key"     - { base, shift, altgr } glyphs, one per level; altgr may be null
+//   role "mod"     - a latching modifier, labelled
+//   role "special" - a plain tap with a fixed label (Esc, Tab, arrows, ...)
+//   role "space"   - the space bar, carrying the layout badge
+//   role "action"  - no keycode; drives the UI instead (pin, hide)
+function deckLevelKey(u, code, glyphs) {
+    const levels = glyphs[code] ?? [String(code), null, null];
+    return { role: "key", u: u, code: code, base: levels[0], shift: levels[1], altgr: levels[2] };
+}
+
+function deckMod(u, code, label) {
+    return { role: "mod", u: u, code: code, label: label };
+}
+
+function deckSpecial(u, code, label) {
+    return { role: "special", u: u, code: code, label: label };
+}
+
+function deckSpace(u, code, badge) {
+    return { role: "space", u: u, code: code, label: "Space", badge: badge };
+}
+
+function deckAction(u, action, label) {
+    return { role: "action", u: u, action: action, label: label };
+}
+
+// Stamps each key with the offset of its left edge, in units. The deck places its keys at those
+// offsets rather than leaning on a positioner: a grid this fixed has nothing to negotiate, and
+// explicit coordinates cannot drift out of step when a layout swap rebuilds the rows.
+function deckPlace(row) {
+    let at = 0;
+    row.forEach(key => {
+        key.at = at;
+        at += key.u;
+    });
+    return row;
+}
+
+// keycode -> [base, shift, altgr], dumped from `xkbcli compile-keymap --layout <code>`, so every
+// glyph is what the compositor actually produces here. Dead keys show their spacing form, and a
+// null AltGr means the layout has no third level on that key.
+const deckGlyphs = {
+    fr: {
+        // digits
+        41: ["²", "~", "¬"], 2: ["&", "1", "¹"], 3: ["é", "2", "~"], 4: ["\"", "3", "#"],
+        5: ["'", "4", "{"], 6: ["(", "5", "["], 7: ["-", "6", "|"], 8: ["è", "7", "`"],
+        9: ["_", "8", "\\"], 10: ["ç", "9", "^"], 11: ["à", "0", "@"], 12: [")", "°", "]"],
+        13: ["=", "+", "}"],
+        // upper
+        16: ["a", "A", "æ"], 17: ["z", "Z", "«"], 18: ["e", "E", "€"], 19: ["r", "R", "¶"],
+        20: ["t", "T", "ŧ"], 21: ["y", "Y", "←"], 22: ["u", "U", "↓"], 23: ["i", "I", "→"],
+        24: ["o", "O", "ø"], 25: ["p", "P", "þ"], 26: ["^", "¨", "¨"], 27: ["$", "£", "¤"],
+        // home
+        30: ["q", "Q", "@"], 31: ["s", "S", "ß"], 32: ["d", "D", "ð"], 33: ["f", "F", "đ"],
+        34: ["g", "G", "ŋ"], 35: ["h", "H", "ħ"], 36: ["j", "J", "◌̉"], 37: ["k", "K", "ĸ"],
+        38: ["l", "L", "ł"], 39: ["m", "M", "µ"], 40: ["ù", "%", "^"], 43: ["*", "µ", "`"],
+        // lower
+        86: ["<", ">", "|"], 44: ["w", "W", "ł"], 45: ["x", "X", "»"], 46: ["c", "C", "¢"],
+        47: ["v", "V", "„"], 48: ["b", "B", "“"], 49: ["n", "N", "”"], 50: [",", "?", "´"],
+        51: [";", ".", "•"], 52: [":", "/", "·"], 53: ["!", "§", "◌̣"],
+    },
+    us: {
+        // digits
+        41: ["`", "~", null], 2: ["1", "!", null], 3: ["2", "@", null], 4: ["3", "#", null],
+        5: ["4", "$", null], 6: ["5", "%", null], 7: ["6", "^", null], 8: ["7", "&", null],
+        9: ["8", "*", null], 10: ["9", "(", null], 11: ["0", ")", null], 12: ["-", "_", null],
+        13: ["=", "+", null],
+        // upper
+        16: ["q", "Q", null], 17: ["w", "W", null], 18: ["e", "E", null], 19: ["r", "R", null],
+        20: ["t", "T", null], 21: ["y", "Y", null], 22: ["u", "U", null], 23: ["i", "I", null],
+        24: ["o", "O", null], 25: ["p", "P", null], 26: ["[", "{", null], 27: ["]", "}", null],
+        // home
+        30: ["a", "A", null], 31: ["s", "S", null], 32: ["d", "D", null], 33: ["f", "F", null],
+        34: ["g", "G", null], 35: ["h", "H", null], 36: ["j", "J", null], 37: ["k", "K", null],
+        38: ["l", "L", null], 39: [";", ":", null], 40: ["'", "\"", null], 43: ["\\", "|", null],
+        // lower
+        86: ["<", ">", "|"], 44: ["z", "Z", null], 45: ["x", "X", null], 46: ["c", "C", null],
+        47: ["v", "V", null], 48: ["b", "B", null], 49: ["n", "N", null], 50: ["m", "M", null],
+        51: [",", "<", null], 52: [".", ">", null], 53: ["/", "?", null],
+    },
+    de: {
+        // digits
+        41: ["^", "°", "′"], 2: ["1", "!", "¹"], 3: ["2", "\"", "²"], 4: ["3", "§", "³"],
+        5: ["4", "$", "¼"], 6: ["5", "%", "½"], 7: ["6", "&", "¬"], 8: ["7", "/", "{"],
+        9: ["8", "(", "["], 10: ["9", ")", "]"], 11: ["0", "=", "}"], 12: ["ß", "?", "\\"],
+        13: ["´", "`", "¸"],
+        // upper
+        16: ["q", "Q", "@"], 17: ["w", "W", "ſ"], 18: ["e", "E", "€"], 19: ["r", "R", "¶"],
+        20: ["t", "T", "ŧ"], 21: ["z", "Z", "←"], 22: ["u", "U", "↓"], 23: ["i", "I", "→"],
+        24: ["o", "O", "ø"], 25: ["p", "P", "þ"], 26: ["ü", "Ü", "¨"], 27: ["+", "*", "~"],
+        // home
+        30: ["a", "A", "æ"], 31: ["s", "S", "ſ"], 32: ["d", "D", "ð"], 33: ["f", "F", "đ"],
+        34: ["g", "G", "ŋ"], 35: ["h", "H", "ħ"], 36: ["j", "J", "◌̣"], 37: ["k", "K", "ĸ"],
+        38: ["l", "L", "ł"], 39: ["ö", "Ö", "˝"], 40: ["ä", "Ä", "^"], 43: ["#", "'", "’"],
+        // lower
+        86: ["<", ">", "|"], 44: ["y", "Y", "»"], 45: ["x", "X", "«"], 46: ["c", "C", "¢"],
+        47: ["v", "V", "„"], 48: ["b", "B", "“"], 49: ["n", "N", "”"], 50: ["m", "M", "µ"],
+        51: [",", ";", "·"], 52: [".", ":", "…"], 53: ["-", "_", "–"],
+    },
+    ru: {
+        // digits
+        41: ["ё", "Ё", null], 2: ["1", "!", null], 3: ["2", "\"", null], 4: ["3", "№", null],
+        5: ["4", ";", null], 6: ["5", "%", null], 7: ["6", ":", null], 8: ["7", "?", null],
+        9: ["8", "*", "₽"], 10: ["9", "(", null], 11: ["0", ")", null], 12: ["-", "_", null],
+        13: ["=", "+", null],
+        // upper
+        16: ["й", "Й", null], 17: ["ц", "Ц", null], 18: ["у", "У", null], 19: ["к", "К", null],
+        20: ["е", "Е", null], 21: ["н", "Н", null], 22: ["г", "Г", null], 23: ["ш", "Ш", null],
+        24: ["щ", "Щ", null], 25: ["з", "З", null], 26: ["х", "Х", null], 27: ["ъ", "Ъ", null],
+        // home
+        30: ["ф", "Ф", null], 31: ["ы", "Ы", null], 32: ["в", "В", null], 33: ["а", "А", null],
+        34: ["п", "П", null], 35: ["р", "Р", null], 36: ["о", "О", null], 37: ["л", "Л", null],
+        38: ["д", "Д", null], 39: ["ж", "Ж", null], 40: ["э", "Э", null], 43: ["\\", "/", null],
+        // lower
+        86: ["/", "|", "|"], 44: ["я", "Я", null], 45: ["ч", "Ч", null], 46: ["с", "С", null],
+        47: ["м", "М", null], 48: ["и", "И", null], 49: ["т", "Т", null], 50: ["ь", "Ь", null],
+        51: ["б", "Б", null], 52: ["ю", "Ю", null], 53: [".", ",", null],
+    }
+};
+
+const deckMeta = {
+    fr: { name: "French", short: "FR", description: "AZERTY" },
+    us: { name: "English (US)", short: "US", description: "QWERTY" },
+    de: { name: "German", short: "DE", description: "QWERTZ" },
+    ru: { name: "Russian", short: "RU", description: "ЙЦУКЕН" }
+};
+
+// [keycode, label, units]
+const deckFnKeys = [
+    [1, "Esc", 1.5], [59, "F1"], [60, "F2"], [61, "F3"], [62, "F4"], [63, "F5"], [64, "F6"],
+    [65, "F7"], [66, "F8"], [67, "F9"], [68, "F10"], [87, "F11"], [88, "F12"], [99, "PrtSc"],
+    [111, "Del"]
+];
+
+// Rows 5 and 6 end here instead of in a right Shift and a Menu key. Pin and Hide take the two dead
+// corners of the inverted T, so the panel needs no control rail of its own.
+const deckCluster = {
+    top: deckPlace([deckAction(1, "pin", "Pin"), deckSpecial(1, 103, "↑"), deckAction(1, "hide", "Hide")]),
+    bottom: deckPlace([deckSpecial(1, 105, "←"), deckSpecial(1, 108, "↓"), deckSpecial(1, 106, "→")])
+};
+
+function deckRows(glyphs, badge) {
+    const key = (code, u) => deckLevelKey(u ?? 1, code, glyphs);
+    return [
+        deckFnKeys.map(entry => deckSpecial(entry[2] ?? 1, entry[0], entry[1])),
+        [41, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(code => key(code))
+            .concat([deckSpecial(2.5, 14, "⌫")]),
+        [deckSpecial(1.5, 15, "Tab")]
+            .concat([16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27].map(code => key(code)))
+            .concat([deckSpecial(2, 28, "⏎")]),
+        [deckSpecial(2.5, 58, "Caps")]
+            .concat([30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40].map(code => key(code)))
+            .concat([key(43, 2)]),
+        [deckMod(1.5, 42, "Shift")]
+            .concat([86, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53].map(code => key(code))),
+        [
+            deckMod(1.5, 29, "Ctrl"), deckMod(1.25, 125, "Super"), deckMod(1.25, 56, "Alt"),
+            deckSpace(6, 57, badge), deckMod(1.25, 100, "AltGr"), deckMod(1.25, 97, "Ctrl")
+        ]
+    ].map(deckPlace);
+}
+
+function buildDeck(code) {
+    const meta = deckMeta[code];
+    return {
+        xkb: code,
+        name: meta.name,
+        short: meta.short,
+        description: meta.description,
+        units: deckUnits,
+        clusterUnits: deckClusterUnits,
+        fnRowScale: deckFnRowScale,
+        rows: deckRows(deckGlyphs[code], meta.short),
+        cluster: deckCluster
+    };
+}
+
+const byXkbCode = {
+    fr: buildDeck("fr"),
+    us: buildDeck("us"),
+    de: buildDeck("de"),
+    ru: buildDeck("ru")
+};
+
+/**
+ * The key of the deck an xkb code ("fr") or a layout name ("French") names, or null when no deck
+ * covers it. Hyprland glues a variant onto its layout ("frazerty"), so a leading two-letter match
+ * counts as well: the variant only moves a few glyphs, and the base table beats no keyboard at all.
+ */
+function deckCodeFor(codeOrName) {
+    if (!codeOrName) return null;
+    const name = String(codeOrName);
+    const code = name.toLowerCase();
+    if (byXkbCode.hasOwnProperty(code)) return code;
+    const named = Object.keys(byXkbCode).find(key => byXkbCode[key].name === name);
+    if (named) return named;
+    const head = code.slice(0, 2);
+    return byXkbCode.hasOwnProperty(head) ? head : null;
+}
+
+/**
+ * Resolves a deck from an xkb code ("fr") or a layout name ("French"), falling back to US.
+ * Deciding what to pass - the live layout or a pinned one - is the caller's job.
+ */
+function deckFor(codeOrName) {
+    return byXkbCode[deckCodeFor(codeOrName) ?? deckDefaultCode];
+}

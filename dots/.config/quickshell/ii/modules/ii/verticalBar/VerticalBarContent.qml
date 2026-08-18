@@ -56,7 +56,6 @@ Item { // Bar content region
     readonly property var centerList: centerIdx === -1 ? fullModel.slice() : [fullModel[centerIdx]]
     readonly property var rightList: centerIdx === -1 ? root._emptyLayout : fullModel.slice(centerIdx + 1)
 
-
     BarThemes {
         id: barThemes
     }
@@ -68,11 +67,7 @@ Item { // Bar content region
     readonly property string barEdge: Config.options.bar.bottom ? "right" : "left"
     readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
-    property color islandFillColor: Config.options.bar.expressiveColors
-        ? root.activeTheme.barBackground
-        : Appearance.colors.colLayer0
-
-
+    property color islandFillColor: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
 
     // Background
     Rectangle {
@@ -95,13 +90,13 @@ Item { // Bar content region
             const screenHeight = root.screen ? root.screen.height : 1080;
             const frameThick = root.frameThickness;
             const maxAllowedHeight = screenHeight - 2 * frameThick - 64; // 32px padding on top/bottom
-            
+
             const topH = topSectionLayout.implicitHeight;
             const centerH = centerSectionLayout.implicitHeight;
             const bottomH = bottomSectionLayout.implicitHeight;
-            
+
             const remaining = maxAllowedHeight - 24 - topH - centerH - bottomH;
-            
+
             if (Config.options.bar.dynamicIslandLoadBalance) {
                 return Math.min(60, Math.max(8, Math.floor(remaining / 2)));
             } else {
@@ -115,7 +110,9 @@ Item { // Bar content region
         height: root.isDynamicIsland ? (Math.max(islandSections.implicitHeight + 24, 200)) : parent.height
 
         color: root.isIslandMode ? "transparent" : barBackground.actualColor
-        property real baseRadius: root.isDynamicIsland ? width / 2 : (Config.options.bar.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.full : 0)
+        readonly property real availablePillExtension: Math.max(0, width - root.frameThickness)
+        readonly property real islandRadius: Math.min(Appearance.rounding.screenRounding, Math.floor(availablePillExtension / 2))
+        property real baseRadius: root.isDynamicIsland ? islandRadius : (Config.options.bar.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.full : 0)
 
         // In vertical mode (Left/Right), the edges touching the screen are left/right.
         // For Left bar (bottom: false): left edges are 0.
@@ -136,7 +133,7 @@ Item { // Bar content region
             }
         }
 
-        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow
+        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -151,9 +148,7 @@ Item { // Bar content region
         anchors.bottom: barBackground.top
         anchors.left: Config.options.bar.bottom ? undefined : barBackground.left
         anchors.right: Config.options.bar.bottom ? barBackground.right : undefined
-        implicitSize: barBackground.baseRadius
-        extendHorizontal: false
-        extendVertical: false
+        implicitSize: barBackground.islandRadius
         color: barBackground.color
         corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.BottomRight : RoundCorner.CornerEnum.BottomLeft
         visible: root.isDynamicIsland && root.showBarBackground
@@ -164,15 +159,14 @@ Item { // Bar content region
         anchors.top: barBackground.bottom
         anchors.left: Config.options.bar.bottom ? undefined : barBackground.left
         anchors.right: Config.options.bar.bottom ? barBackground.right : undefined
-        implicitSize: barBackground.baseRadius
-        extendHorizontal: false
-        extendVertical: false
+        implicitSize: barBackground.islandRadius
         color: barBackground.color
         corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.TopLeft
         visible: root.isDynamicIsland && root.showBarBackground
         anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
         anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
     }
+
 
     // ── Islands (barBackgroundStyle === 3) ────────────────────────────────────
     // Pill islands for Float/Rect styles.
@@ -181,16 +175,20 @@ Item { // Bar content region
         z: -9
         visible: root.isIslandMode && !root.isHugIslandMode && (Config.options.bar.layouts.left || []).length > 0
         anchors {
-            left: parent.left; leftMargin: 4
-            right: parent.right; rightMargin: 4
-            top: topSection.top; topMargin: -6
-            bottom: topSection.bottom; bottomMargin: -6
+            left: parent.left
+            leftMargin: 4
+            right: parent.right
+            rightMargin: 4
+            top: topSection.top
+            topMargin: -6
+            bottom: topSection.bottom
+            bottomMargin: -6
         }
         color: root.islandFillColor
         radius: Appearance.rounding.full
 
         // GPU: only allocate FBO when island is actually visible (no widgets = invisible = no shadow needed)
-        layer.enabled: topIsland.visible && Config.options.bar.dropShadow
+        layer.enabled: topIsland.visible && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -208,16 +206,20 @@ Item { // Bar content region
         z: -9
         visible: root.isIslandMode && !root.isHugIslandMode && (root.leftList.length > 0 || root.centerList.length > 0 || root.rightList.length > 0)
         anchors {
-            left: parent.left; leftMargin: 4
-            right: parent.right; rightMargin: 4
-            top: middleSection.top; topMargin: -6
-            bottom: middleSection.bottom; bottomMargin: -6
+            left: parent.left
+            leftMargin: 4
+            right: parent.right
+            rightMargin: 4
+            top: middleSection.top
+            topMargin: -6
+            bottom: middleSection.bottom
+            bottomMargin: -6
         }
         color: root.islandFillColor
         radius: Appearance.rounding.full
 
         // GPU: only allocate FBO when island is actually visible
-        layer.enabled: middleIsland.visible && Config.options.bar.dropShadow
+        layer.enabled: middleIsland.visible && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -235,16 +237,20 @@ Item { // Bar content region
         z: -9
         visible: root.isIslandMode && !root.isHugIslandMode && (Config.options.bar.layouts.right || []).length > 0
         anchors {
-            left: parent.left; leftMargin: 4
-            right: parent.right; rightMargin: 4
-            top: bottomSection.top; topMargin: -6
-            bottom: bottomSection.bottom; bottomMargin: -6
+            left: parent.left
+            leftMargin: 4
+            right: parent.right
+            rightMargin: 4
+            top: bottomSection.top
+            topMargin: -6
+            bottom: bottomSection.bottom
+            bottomMargin: -6
         }
         color: root.islandFillColor
         radius: Appearance.rounding.full
 
         // GPU: only allocate FBO when island is actually visible
-        layer.enabled: bottomIsland.visible && Config.options.bar.dropShadow
+        layer.enabled: bottomIsland.visible && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -266,7 +272,7 @@ Item { // Bar content region
         role: "first"
         fillColor: barBackground.actualColor
 
-        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -276,7 +282,8 @@ Item { // Bar content region
 
         anchors {
             top: parent.top
-            bottom: topSection.bottom; bottomMargin: -6
+            bottom: topSection.bottom
+            bottomMargin: -6
             left: parent.left
             right: parent.right
         }
@@ -290,7 +297,7 @@ Item { // Bar content region
         role: "middle"
         fillColor: barBackground.actualColor
 
-        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -299,8 +306,10 @@ Item { // Bar content region
         }
 
         anchors {
-            top: middleSection.top; topMargin: -6
-            bottom: middleSection.bottom; bottomMargin: -6
+            top: middleSection.top
+            topMargin: -6
+            bottom: middleSection.bottom
+            bottomMargin: -6
             left: parent.left
             right: parent.right
         }
@@ -314,7 +323,7 @@ Item { // Bar content region
         role: "last"
         fillColor: barBackground.actualColor
 
-        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isHugIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -323,7 +332,8 @@ Item { // Bar content region
         }
 
         anchors {
-            top: bottomSection.top; topMargin: -6
+            top: bottomSection.top
+            topMargin: -6
             bottom: parent.bottom
             left: parent.left
             right: parent.right
@@ -418,8 +428,10 @@ Item { // Bar content region
         height: (root.height - middleSection.height) / 2
         width: Appearance.sizes.verticalBarWindowWidth
 
-        onScrollDown: if (Config.options.bar.enableBrightnessScroll) Brightness.decreaseBrightness()
-        onScrollUp: if (Config.options.bar.enableBrightnessScroll) Brightness.increaseBrightness()
+        onScrollDown: if (Config.options.bar.enableBrightnessScroll)
+            Brightness.decreaseBrightness()
+        onScrollUp: if (Config.options.bar.enableBrightnessScroll)
+            Brightness.increaseBrightness()
         onMovedAway: GlobalStates.osdBrightnessOpen = false
         onPressed: event => {
             if (event.button === Qt.LeftButton)
@@ -460,8 +472,10 @@ Item { // Bar content region
             const lh = middleLeftColumn.implicitHeight;
             const rh = middleRightColumn.implicitHeight;
             let total = ch;
-            if (lh > 0) total += lh + 4;
-            if (rh > 0) total += rh + 4;
+            if (lh > 0)
+                total += lh + 4;
+            if (rh > 0)
+                total += rh + 4;
             return Math.max(1, total);
         }
         height: middleChildrenHeight
@@ -556,8 +570,10 @@ Item { // Bar content region
         }
         implicitWidth: Appearance.sizes.baseVerticalBarWidth
 
-        onScrollDown: if (Config.options.bar.enableVolumeScroll) Audio.decrementVolume()
-        onScrollUp: if (Config.options.bar.enableVolumeScroll) Audio.incrementVolume()
+        onScrollDown: if (Config.options.bar.enableVolumeScroll)
+            Audio.decrementVolume()
+        onScrollUp: if (Config.options.bar.enableVolumeScroll)
+            Audio.incrementVolume()
         onMovedAway: GlobalStates.osdVolumeOpen = false
         onPressed: event => {
             if (event.button === Qt.LeftButton) {

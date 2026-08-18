@@ -7,26 +7,23 @@ import Quickshell.Widgets
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
-ContentPage {
-    id: page
+Item {
+    id: soundAlertsRoot
+    anchors.fill: parent
 
-    forceWidth: false
+    property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
+
+    ContentPage {
+        id: page
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
 
     // Pick up freshly installed themes whenever the page is opened
     Component.onCompleted: SoundService.rescan()
-
-    readonly property var customizableEvents: [
-        { key: "notifications", icon: "notifications", label: Translation.tr("Notifications") },
-        { key: "volumeChange", icon: "volume_up", label: Translation.tr("Volume change") },
-        { key: "battery", icon: "battery_alert", label: Translation.tr("Battery & power") },
-        { key: "screenshot", icon: "photo_camera", label: Translation.tr("Screenshot shutter") },
-        { key: "pomodoro", icon: "av_timer", label: Translation.tr("Pomodoro") },
-        { key: "alarm", icon: "alarm", label: Translation.tr("Alarm ring") },
-        { key: "session", icon: "login", label: Translation.tr("Login") },
-        { key: "devices", icon: "bluetooth_connected", label: Translation.tr("Device connections") },
-        { key: "lock", icon: "lock", label: Translation.tr("Screen lock") }
-    ]
 
     property string fileDialogTarget: "" // "" = install archive, else custom-sound category key
 
@@ -49,6 +46,8 @@ ContentPage {
     ContentSection {
         icon: "volume_up"
         title: Translation.tr("System sounds")
+
+        SoundStatusHeader {}
 
         ConfigSwitch {
             buttonIcon: "music_note"
@@ -157,130 +156,13 @@ ContentPage {
         title: Translation.tr("Events")
 
         ConfigSwitch {
-            buttonIcon: "notifications"
-            text: Translation.tr("Notifications")
-            checked: Config.options.sounds.notifications
-            onCheckedChanged: {
-                Config.options.sounds.notifications = checked;
-            }
-
+            buttonIcon: "notifications_active"
+            text: Translation.tr("Event sound triggers")
+            checked: true
+            subPageOnly: true
+            configPage: Qt.resolvedUrl("widgets/SoundEventsConfig.qml")
             StyledToolTip {
-                text: Translation.tr("Play a sound when a notification arrives. Muted in Do Not Disturb mode.")
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "volume_up"
-            text: Translation.tr("Volume change")
-            checked: Config.options.sounds.volumeChange
-            onCheckedChanged: {
-                Config.options.sounds.volumeChange = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "battery_alert"
-            text: Translation.tr("Battery & power")
-            checked: Config.options.sounds.battery
-            onCheckedChanged: {
-                Config.options.sounds.battery = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Charger plug/unplug, battery low and battery full.")
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "photo_camera"
-            text: Translation.tr("Screenshot shutter")
-            checked: Config.options.sounds.screenshot
-            onCheckedChanged: {
-                Config.options.sounds.screenshot = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "bluetooth_connected"
-            text: Translation.tr("Device connections")
-            checked: Config.options.sounds.devices
-            onCheckedChanged: {
-                Config.options.sounds.devices = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Bluetooth devices connecting/disconnecting and KDE Connect phone reachability.")
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "lock"
-            text: Translation.tr("Screen lock & unlock")
-            checked: Config.options.sounds.lock
-            onCheckedChanged: {
-                Config.options.sounds.lock = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "av_timer"
-            text: Translation.tr("Pomodoro")
-            checked: Config.options.sounds.pomodoro
-            onCheckedChanged: {
-                Config.options.sounds.pomodoro = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "alarm"
-            text: Translation.tr("Alarm ring")
-            checked: Config.options.sounds.alarm
-            onCheckedChanged: {
-                Config.options.sounds.alarm = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Rings even when system sounds are disabled, so the master switch can't silence your alarm.")
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "waves"
-            text: Translation.tr("Gentle wake (alarm fade-in)")
-            enabled: Config.options.sounds.alarm
-            checked: Config.options.sounds.alarmFadeIn
-            onCheckedChanged: {
-                Config.options.sounds.alarmFadeIn = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("The alarm starts silent and ramps up to full volume instead of blasting instantly.")
-            }
-        }
-
-        ConfigSpinBox {
-            visible: Config.options.sounds.alarm && Config.options.sounds.alarmFadeIn
-            icon: "schedule"
-            text: Translation.tr("Fade-in duration (seconds)")
-            value: Config.options.sounds.alarmFadeInSeconds
-            from: 5
-            to: 120
-            stepSize: 5
-            onValueChanged: {
-                Config.options.sounds.alarmFadeInSeconds = value;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "login"
-            text: Translation.tr("Login")
-            checked: Config.options.sounds.session
-            onCheckedChanged: {
-                Config.options.sounds.session = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Play a welcome sound when the shell starts.")
+                text: Translation.tr("Click button text to configure sound effects for notifications, battery, volume, lock, screenshot, and alarms.")
             }
         }
     }
@@ -300,10 +182,15 @@ ContentPage {
         title: Translation.tr("Custom sounds")
         tooltip: Translation.tr("Override the theme sound for any event with your own audio file.")
 
-        Repeater {
-            model: page.customizableEvents
-
-            CustomSoundRow {}
+        ConfigSwitch {
+            buttonIcon: "tune"
+            text: Translation.tr("Custom sound overrides")
+            checked: true
+            subPageOnly: true
+            configPage: Qt.resolvedUrl("widgets/CustomSoundsConfig.qml")
+            StyledToolTip {
+                text: Translation.tr("Choose a custom audio file for each shell sound event.")
+            }
         }
     }
 
@@ -451,7 +338,7 @@ ContentPage {
     component AppSoundRulesEditor: ColumnLayout {
         id: editor
 
-        readonly property var conf: Config.options.sounds.notificationApps
+        readonly property var conf: Config.options.sounds
         readonly property string query: searchField.text.trim()
 
         function ruleFor(name) {
@@ -502,9 +389,9 @@ ContentPage {
         spacing: 8
 
         ConfigSelectionArray {
-            currentValue: editor.conf.defaultPolicy
+            currentValue: editor.conf.notificationDefaultPolicy
             onSelected: newValue => {
-                editor.conf.defaultPolicy = newValue;
+                editor.conf.notificationDefaultPolicy = newValue;
             }
             options: [
                 {
@@ -587,215 +474,36 @@ ContentPage {
         }
     }
 
-    component CustomSoundRow: Rectangle {
-        id: customRow
-
-        required property var modelData
-        readonly property string customPath: Config.options.sounds.custom[modelData.key] ?? ""
-        readonly property bool hasCustom: customPath !== ""
-
-        Layout.fillWidth: true
-        implicitHeight: customRowLayout.implicitHeight + 16
-        radius: Appearance.rounding.verysmall
-        color: Appearance.colors.colLayer2Base
-
-        RowLayout {
-            id: customRowLayout
-
-            anchors {
-                left: parent.left
-                right: parent.right
-                verticalCenter: parent.verticalCenter
-                leftMargin: 12
-                rightMargin: 8
-            }
-            spacing: 10
-
-            MaterialSymbol {
-                text: customRow.modelData.icon
-                iconSize: Appearance.font.pixelSize.huge
-                color: Appearance.colors.colOnLayer2
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignLeft
-                text: customRow.modelData.label
-                elide: Text.ElideRight
-                color: Appearance.colors.colOnLayer2
-            }
-
-            StyledText {
-                visible: customRow.hasCustom
-                Layout.maximumWidth: 320
-                text: customRow.customPath
-                elide: Text.ElideMiddle
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
-            }
-
-            RippleButton {
-                visible: customRow.hasCustom
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: "transparent"
-                onClicked: SoundService.previewFile(customRow.customPath)
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "play_arrow"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnLayer2
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Play custom sound")
-                }
-            }
-
-            RippleButton {
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: "transparent"
-                onClicked: {
-                    page.fileDialogTarget = customRow.modelData.key;
-                    fileDialog.open();
-                }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "folder_open"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnLayer2
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Choose a custom sound file")
-                }
-            }
-
-            RippleButton {
-                visible: customRow.hasCustom
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: "transparent"
-                onClicked: Config.options.sounds.custom[customRow.modelData.key] = ""
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "close"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnLayer2
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Reset to theme sound")
-                }
-            }
-        }
-    }
-
     ContentSection {
         icon: "alarm"
-        title: Translation.tr("Alarm Settings")
+        title: Translation.tr("Alarm & Audio Controls")
 
         ConfigSwitch {
-            buttonIcon: "fullscreen"
-            text: Translation.tr("Fullscreen ringing popup")
-            checked: Config.options.time.alarms.useFullscreenPopup
-            onCheckedChanged: {
-                Config.options.time.alarms.useFullscreenPopup = checked;
-            }
-
+            buttonIcon: "alarm"
+            text: Translation.tr("Alarm popup display")
+            checked: true
+            subPageOnly: true
+            configPage: Qt.resolvedUrl("widgets/AlarmAudioConfig.qml")
             StyledToolTip {
-                text: Translation.tr("Shows a full-screen overlay when an alarm is ringing. If disabled, a notification will be used instead.")
+                text: Translation.tr("Configure the alarm popup, world clocks, and alarm section visibility.")
             }
         }
-
-        ConfigSwitch {
-            buttonIcon: "pace"
-            text: Translation.tr("Show analog clock in popup")
-            checked: Config.options.time.alarms.showAnalogClock
-            onCheckedChanged: {
-                Config.options.time.alarms.showAnalogClock = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Show or hide the decorative analog clock in the bar clock widget popup.")
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "public"
-            text: Translation.tr("Show world clocks in popup")
-            checked: Config.options.time.alarms.showWorldClocks
-            onCheckedChanged: {
-                Config.options.time.alarms.showWorldClocks = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Show or hide the world clocks section in the bar clock widget popup.")
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "notifications_active"
-            text: Translation.tr("Show alarms section in popup")
-            checked: Config.options.time.alarms.showAlarmsSection
-            onCheckedChanged: {
-                Config.options.time.alarms.showAlarmsSection = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Show or hide the alarms card in the bar clock widget popup.")
-            }
-        }
-    }
-
-    ContentSection {
-        icon: "volume_up"
-        title: Translation.tr("Audio Controls")
 
         ConfigSwitch {
             buttonIcon: "hearing"
-            text: Translation.tr("Earbang protection")
+            text: Translation.tr("Earbang & volume limits")
             checked: Config.options.audio.protection.enable
+            configPage: Qt.resolvedUrl("widgets/AudioProtectionConfig.qml")
             onCheckedChanged: {
                 Config.options.audio.protection.enable = checked;
             }
-
-            StyledToolTip {
-                text: Translation.tr("Prevents abrupt increments and restricts volume limit")
-            }
         }
+    }
+}
 
-        ConfigSpinBox {
-            enabled: Config.options.audio.protection.enable
-            icon: "arrow_warm_up"
-            text: Translation.tr("Max allowed volume increase")
-            value: Config.options.audio.protection.maxAllowedIncrease
-            from: 0
-            to: 100
-            stepSize: 2
-            onValueChanged: {
-                Config.options.audio.protection.maxAllowedIncrease = value;
-            }
-        }
-
-        ConfigSpinBox {
-            enabled: Config.options.audio.protection.enable
-            icon: "vertical_align_top"
-            text: Translation.tr("Volume limit")
-            value: Config.options.audio.protection.maxAllowed
-            from: 0
-            to: 154
-            stepSize: 2
-            onValueChanged: {
-                Config.options.audio.protection.maxAllowed = value;
-            }
-        }
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }

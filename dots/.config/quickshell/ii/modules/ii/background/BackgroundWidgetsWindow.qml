@@ -41,12 +41,12 @@ PanelWindow {
     property var workspacesForMonitor: Hyprland.workspaces.values.filter(function (workspace) {
         return workspace.monitor && workspace.monitor.name == monitor.name;
     })
-    property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(function (workspace) {
-        return ((workspace.toplevels.values.filter(function (window) {
-                    return window.wayland && window.wayland.fullscreen;
-                })[0] != undefined) && workspace.active);
-    })[0]
-    property bool isFullscreen: activeWorkspaceWithFullscreen != undefined
+    readonly property bool isFullscreen: {
+        const wl = HyprlandData.windowList;
+        const monitorData = HyprlandData.monitors.find(m => m.name === (monitor ? monitor.name : ""));
+        const activeWsId = monitorData?.activeWorkspace?.id;
+        return wl.some(w => w.workspace?.id === activeWsId && w.fullscreen === 3);
+    }
     property var activeWorkspace: workspacesForMonitor.filter(function (workspace) {
         return workspace.active;
     })[0]
@@ -106,7 +106,7 @@ PanelWindow {
     // Monitor & Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
     readonly property bool isMonitorFocused: (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : "")
-    readonly property bool loopEnabled: Config.options.background.parallax.loop
+    readonly property bool loopEnabled: !wallpaperIsVideo && Config.options.background.parallax.loop
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
     readonly property int chunkSize: {
         let intensity = Config.options.background.parallax.intensity;
@@ -143,8 +143,9 @@ PanelWindow {
     // Wallpaper options & bounds
     property bool wallpaperIsVideo: {
         const path = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
-        return path !== "" && (path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mkv") || path.endsWith(".avi") || path.endsWith(".mov"));
+        return Wallpapers.isVideoFile(path);
     }
+    readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
     property string wallpaperPath: {
         const rawPath = wallpaperIsVideo ? (Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "") : (Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "");
         if (rawPath !== "")
@@ -174,7 +175,7 @@ PanelWindow {
     }
 
     property real wallpaperToScreenRatio: Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height)
-    property real preferredWallpaperScale: Config.options.background.parallax.workspaceZoom
+    property real preferredWallpaperScale: videoEffectsDisabled ? 1.0 : Config.options.background.parallax.workspaceZoom
     property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
     property real movableYSpace: ((wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
 
@@ -186,24 +187,17 @@ PanelWindow {
         return Math.max(screen.width / w, screen.height / h);
     }
 
-    readonly property bool verticalParallax: (Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical
+    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical)
 
     function recalcWallpaperScale() {
         const width = bgWidgetsWindow.wallpaperWidth;
         const height = bgWidgetsWindow.wallpaperHeight;
         const screenW = bgWidgetsWindow.screen.width;
         const screenH = bgWidgetsWindow.screen.height;
-        if (width <= 0 || height <= 0)
+        if (width <= 0 || height <= 0 || screenW <= 0 || screenH <= 0)
             return;
 
-        let targetScale = 1.0;
-        if (Config.options.background.scaleLargeWallpapers) {
-            if (width <= screenW || height <= screenH) {
-                targetScale = Math.max(screenW / width, screenH / height);
-            } else {
-                targetScale = Math.min(bgWidgetsWindow.preferredWallpaperScale, width / screenW, height / screenH);
-            }
-        }
+        let targetScale = bgWidgetsWindow.preferredWallpaperScale;
 
         if (Config.options.background.blurWhenWindowsOpen || Config.options.lock.blur.enable) {
             targetScale *= 1.03;
@@ -228,13 +222,14 @@ PanelWindow {
         verticalParallax: bgWidgetsWindow.verticalParallax
         parallaxFrozen: lockAnim.parallaxFrozen
         wallpaperCentered: lockAnim.wallpaperCentered
+        wallpaperIsVideo: bgWidgetsWindow.videoEffectsDisabled
         activeWorkspaceId: {
             let activeId = bgWidgetsWindow.monitor && bgWidgetsWindow.monitor.activeWorkspace ? bgWidgetsWindow.monitor.activeWorkspace.id : 1;
             return activeId > 1000000 ? (2147483647 - activeId) : activeId;
         }
     }
 
-    readonly property bool scratchpadOpen: GlobalStates.scratchpadOpen
+    readonly property bool scratchpadOpen: GlobalStates.scratchpadOpen ?? false
     readonly property bool wallpaperZoomedOut: Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen) && (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name == screen.name : false)
 
     OverviewZoomController {
@@ -256,7 +251,7 @@ PanelWindow {
                 zoomed: 1.01
             }
         })
-    readonly property bool zoomInStyle: Config.options.overview.scrollingStyle.zoomStyle === "in"
+    readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property bool overviewOpen: GlobalStates.overviewOpen
@@ -268,7 +263,7 @@ PanelWindow {
     // window-thumbnail grid is disabled/replaced by config); only suppress the blur when
     // the grid of window thumbnails is actually what's covering the background.
     readonly property bool overviewGridVisible: overviewOpen && Config.options.overview.enable && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
-    readonly property bool windowBlurActive: Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !overviewGridVisible
+    readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !overviewGridVisible
 
     Item {
         id: transformContainer
@@ -292,7 +287,7 @@ PanelWindow {
             yScale: ovZoom.scaleValue
         }
 
-        scale: showOpeningAnimation && overviewOpen && isScrollingLayout ? zoomedRatio : 1.0
+        scale: !videoEffectsDisabled && showOpeningAnimation && overviewOpen && isScrollingLayout ? zoomedRatio : 1.0
         Behavior on scale {
             animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(transformContainer)
         }
@@ -302,6 +297,7 @@ PanelWindow {
             layer.enabled: false
             antialiasing: true
             smooth: true
+            gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
 
             anchors {
                 left: parent.left
@@ -310,7 +306,7 @@ PanelWindow {
                 bottom: parent.bottom
                 horizontalCenter: undefined
                 verticalCenter: undefined
-                readonly property real parallaxFactor: Config.options.background.parallax.widgetsFactor
+                readonly property real parallaxFactor: videoEffectsDisabled ? 1.0 : Config.options.background.parallax.widgetsFactor
                 leftMargin: {
                     const xOnWallpaper = bgWidgetsWindow.movableXSpace;
                     const extraMove = (parallax.effectiveValueX * 2 * bgWidgetsWindow.movableXSpace) * (parallaxFactor - 1);
@@ -322,10 +318,18 @@ PanelWindow {
                     return yOnWallpaper - extraMove;
                 }
                 Behavior on leftMargin {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    }
                 }
                 Behavior on topMargin {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    }
                 }
             }
             width: parent.width

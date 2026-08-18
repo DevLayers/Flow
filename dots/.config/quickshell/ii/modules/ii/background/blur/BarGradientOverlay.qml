@@ -10,6 +10,8 @@ Item {
     anchors.fill: parent
 
     required property var sourceItem
+    required property real parallaxX
+    required property real parallaxY
     required property int screenWidth
     required property int screenHeight
 
@@ -53,7 +55,12 @@ Item {
             ShaderEffectSource {
                 id: barBlurShaderSource
                 sourceItem: barOverlayRoot.sourceItem
-                sourceRect: Qt.rect(barBlurOverlay.overlayX, barBlurOverlay.overlayY, barBlurOverlay.overlayW, barBlurOverlay.overlayH)
+                sourceRect: Qt.rect(
+                    barBlurOverlay.overlayX - barOverlayRoot.parallaxX,
+                    barBlurOverlay.overlayY - barOverlayRoot.parallaxY,
+                    barBlurOverlay.overlayW,
+                    barBlurOverlay.overlayH
+                )
                 width: barBlurOverlay.overlayW
                 height: barBlurOverlay.overlayH
                 // Only capture while the overlay is actually on screen. A permanently
@@ -67,6 +74,7 @@ Item {
             MultiEffect {
                 anchors.fill: parent
                 source: barBlurShaderSource
+                autoPaddingEnabled: false
                 blurEnabled: true
                 blurMax: 64
                 blur: 0.35

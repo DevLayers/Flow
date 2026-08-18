@@ -205,27 +205,31 @@ Item {
                 id: card1Transform
                 y: 0
             }
+            readonly property bool isRunning: KdeConnectService.scrcpyRunning || PhoneScrcpyService.mirrorRunning
+            readonly property bool isLaunching: KdeConnectService.scrcpyLaunching || PhoneScrcpyService.mirrorLaunching
+            readonly property string launchErr: PhoneScrcpyService.mirrorLaunchError || KdeConnectService.scrcpyLaunchError
+
             iconName: "smart_display"
             iconShape: MaterialShape.Shape.Cookie9Sided
-            title: root._scrcpyPresent ? (KdeConnectService.scrcpyRunning ? Translation.tr("scrcpy Mirror") : Translation.tr("Open scrcpy Mirror")) : Translation.tr("Install scrcpy")
+            title: root._scrcpyPresent ? (isRunning ? Translation.tr("scrcpy Mirror") : (isLaunching ? Translation.tr("Connecting scrcpy…") : Translation.tr("Open scrcpy Mirror"))) : Translation.tr("Install scrcpy")
             subtitle: {
                 if (!root._scrcpyPresent)
                     return Translation.tr("Click to see missing dependencies and install guide");
                 if (!root._deviceOnline)
                     return Translation.tr("Pair a reachable device to mirror its screen");
-                if (KdeConnectService.scrcpyLaunchError.length > 0)
-                    return KdeConnectService.scrcpyLaunchError.split("\n")[0];
-                if (!KdeConnectService.adbReachable && !KdeConnectService.scrcpyRunning)
-                    return Translation.tr("Connect via USB (ADB debugging) or set wireless IP in settings");
-                if (KdeConnectService.scrcpyRunning)
+                if (launchErr.length > 0)
+                    return launchErr.split("\n")[0];
+                if (isRunning)
                     return Translation.tr("Mirror is running · click to focus window");
-                if (KdeConnectService.scrcpyLaunching)
+                if (isLaunching)
                     return Translation.tr("Launching scrcpy…");
+                if (!KdeConnectService.adbReachable)
+                    return Translation.tr("Connect via USB (ADB debugging) or set wireless IP in settings");
                 return Translation.tr("Launches a floating SDL window for the active phone");
             }
-            state: !root._scrcpyPresent ? "unavailable" : !root._deviceOnline ? "offline" : KdeConnectService.scrcpyLaunchError.length > 0 ? "offline" : KdeConnectService.scrcpyRunning ? "active" : KdeConnectService.scrcpyLaunching ? "connecting" : "ready"
-            detailLine: KdeConnectService.scrcpyRunning ? Translation.tr("Active for %1").arg(root._fmtElapsed(KdeConnectService.scrcpyElapsedMs)) : ""
-            dropEnabled: KdeConnectService.scrcpyRunning && root._deviceOnline
+            state: !root._scrcpyPresent ? "unavailable" : !root._deviceOnline ? "offline" : launchErr.length > 0 ? "offline" : isRunning ? "active" : isLaunching ? "connecting" : "ready"
+            detailLine: isRunning ? Translation.tr("Active for %1").arg(root._fmtElapsed(PhoneScrcpyService.mirrorElapsedMs || KdeConnectService.scrcpyElapsedMs)) : ""
+            dropEnabled: isRunning && root._deviceOnline
             onFilesDropped: urls => {
                 urls.forEach(url => {
                     const file = String(url).replace(/^file:\/\//, "");
@@ -258,18 +262,18 @@ Item {
             lastError: ""
             onClicked: {
                 if (root._scrcpyPresent) {
-                    if (KdeConnectService.scrcpyRunning) {
-                        // Stop scrcpy — kill existing instance.
+                    if (KdeConnectService.scrcpyRunning || PhoneScrcpyService.mirrorRunning) {
+                        PhoneScrcpyService.stopMirror();
                         KdeConnectService.killScrcpy();
-                    } else if (!KdeConnectService.scrcpyLaunching) {
-                        KdeConnectService.launchScrcpy(KdeConnectService.activeDeviceId);
+                    } else if (!KdeConnectService.scrcpyLaunching && !PhoneScrcpyService.mirrorLaunching) {
+                        PhoneScrcpyService.launchMirror();
                     }
                 } else {
-                    // Open the install guide popup showing missing deps.
                     root._openInstallGuide(KdeConnectService.scrcpyMissingDeps, Translation.tr("scrcpy Mirror — Missing Dependencies"));
                 }
             }
             onStopClicked: {
+                PhoneScrcpyService.stopMirror();
                 if (KdeConnectService.scrcpyRunning)
                     KdeConnectService.killScrcpy();
             }

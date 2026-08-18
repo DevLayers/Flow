@@ -15,10 +15,21 @@ StyledPopup {
     id: root
     popupRadius: Appearance.rounding.large
     stickyHover: true
-    animateHeight: false
+
+    readonly property int graphPointCount: 13
+    property list<real> cpuGraphHistory: []
+    property list<real> gpuGraphHistory: []
 
     onActiveChanged: {
-        ResourceUsage.gpuMonitoringEnabled = active;
+        ResourceUsage.resourcePopupMonitoringEnabled = active;
+        if (active) {
+            cpuGraphHistory = [];
+            gpuGraphHistory = [];
+            ResourceUsage.requestGpuSample();
+        } else {
+            cpuGraphHistory = [];
+            gpuGraphHistory = [];
+        }
     }
 
     // String cleanup functions
@@ -34,13 +45,10 @@ StyledPopup {
         if (!model || model === "--")
             return "--";
 
-        // Remove revision info like (rev xx)
         var cleaned = model.replace(/\(rev\s+[a-f0-9]+\)/gi, "").trim();
         var baseModel = "";
 
-        // If it is an AMD GPU (contains Advanced Micro Devices, AMD, or ATI)
         if (/Advanced Micro Devices|AMD|ATI/i.test(cleaned)) {
-            // Find all bracket matches using ES5 compatible regex iteration
             var rx = /\[([^\]]+)\]/g;
             var match;
             var modelBracket = "";
@@ -52,13 +60,11 @@ StyledPopup {
             }
 
             if (modelBracket) {
-                // If it is something like [Radeon RX Vega M GL Graphics] or [Radeon 680M]
                 if (modelBracket.indexOf("/") !== -1) {
                     modelBracket = modelBracket.split("/")[0].trim();
                 }
                 baseModel = modelBracket;
             } else {
-                // Fallback: If no model brackets, remove the vendor prefix
                 var modelOnly = cleaned.replace(/Advanced Micro Devices, Inc\.\s*\[AMD\/ATI\]/gi, "").trim();
                 if (modelOnly.toLowerCase() === "amd/ati" || modelOnly.length === 0) {
                     baseModel = "Radeon Graphics";
@@ -84,7 +90,6 @@ StyledPopup {
             baseModel = cleaned;
         }
 
-        // Apply formatting/stripping system to make the text beautifully short in the UI
         var stripped = baseModel.replace(/NVIDIA|GeForce|AMD|Radeon|Laptop GPU|Graphics|Corporation/gi, "").replace(/\s+/g, " ").trim();
         if (stripped.length > 0) {
             stripped = stripped.replace(/^[\/\-\s]+/, "").trim();
@@ -99,6 +104,34 @@ StyledPopup {
         id: contentLayout
         spacing: 12
         implicitWidth: 380
+
+        Connections {
+            target: ResourceUsage
+            function onCpuSampled(usage) {
+                if (!root.active) return;
+                if (root.cpuGraphHistory.length === 0) {
+                    root.cpuGraphHistory = [usage, usage];
+                } else {
+                    let hist = [...root.cpuGraphHistory, usage];
+                    if (hist.length > root.graphPointCount) {
+                        hist.shift();
+                    }
+                    root.cpuGraphHistory = hist;
+                }
+            }
+            function onGpuSampled(usage) {
+                if (!root.active) return;
+                if (root.gpuGraphHistory.length === 0) {
+                    root.gpuGraphHistory = [usage, usage];
+                } else {
+                    let hist = [...root.gpuGraphHistory, usage];
+                    if (hist.length > root.graphPointCount) {
+                        hist.shift();
+                    }
+                    root.gpuGraphHistory = hist;
+                }
+            }
+        }
 
         readonly property bool startAnim: root.opened && root.popupOpenProgress > 0.6
 
@@ -564,7 +597,7 @@ StyledPopup {
             Rectangle {
                 id: cpuCard
                 Layout.fillWidth: true
-                implicitHeight: 165
+                implicitHeight: 195
                 radius: Appearance.rounding.large
                 color: Appearance.colors.colSurfaceContainerHigh
 
@@ -580,14 +613,12 @@ StyledPopup {
                         cpuLabel.opacity = 0.0;
                         cpuValue.opacity = 0.0;
                         cpuValue.scale = 0.9;
-                        cpuProgress.width = 0;
 
                         Qt.callLater(function () {
                             cpuIconAnim.start();
                             cpuTempAnim.start();
                             cpuLabelAnim.start();
                             cpuValueAnim.start();
-                            cpuProgressAnim.start();
                         });
                     }
                 }
@@ -785,33 +816,25 @@ StyledPopup {
                             }
                         }
 
-                        Item {
+                        Rectangle {
+                            id: cpuGraphBg
                             Layout.fillWidth: true
-                            implicitHeight: 4
-
-                            StyledProgressBar {
-                                id: cpuProgress
-                                width: parent.width
-                                height: 4
-                                value: ResourceUsage.cpuUsage
-                                wavy: true
-                                highlightColor: Appearance.colors.colPrimary
-                                trackColor: Appearance.colors.colLayer0Border
-
-                                SequentialAnimation {
-                                    id: cpuProgressAnim
-                                    PauseAnimation {
-                                        duration: 220
-                                    }
-                                    NumberAnimation {
-                                        target: cpuProgress
-                                        property: "width"
-                                        from: 0
-                                        to: cpuProgress.parent.width
-                                        duration: 450
-                                        easing.type: Easing.OutCubic
-                                    }
+                            implicitHeight: 48
+                            radius: Appearance.rounding.small
+                            color: Appearance.colors.colSecondaryContainer
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: Rectangle {
+                                    width: cpuGraphBg.width
+                                    height: cpuGraphBg.height
+                                    radius: cpuGraphBg.radius
                                 }
+                            }
+                            Graph {
+                                anchors.fill: parent
+                                values: root.cpuGraphHistory
+                                points: root.graphPointCount
+                                alignment: Graph.Alignment.Right
                             }
                         }
                     }
@@ -822,7 +845,7 @@ StyledPopup {
             Rectangle {
                 id: gpuCard
                 Layout.fillWidth: true
-                implicitHeight: 165
+                implicitHeight: 195
                 radius: Appearance.rounding.large
                 color: Appearance.colors.colSurfaceContainerHigh
 
@@ -838,14 +861,12 @@ StyledPopup {
                         gpuLabel.opacity = 0.0;
                         gpuValue.opacity = 0.0;
                         gpuValue.scale = 0.9;
-                        gpuProgress.width = 0;
 
                         Qt.callLater(function () {
                             gpuIconAnim.start();
                             gpuTempAnim.start();
                             gpuLabelAnim.start();
                             gpuValueAnim.start();
-                            gpuProgressAnim.start();
                         });
                     }
                 }
@@ -1043,33 +1064,25 @@ StyledPopup {
                             }
                         }
 
-                        Item {
+                        Rectangle {
+                            id: gpuGraphBg
                             Layout.fillWidth: true
-                            implicitHeight: 4
-
-                            StyledProgressBar {
-                                id: gpuProgress
-                                width: parent.width
-                                height: 4
-                                value: ResourceUsage.gpuUsage
-                                wavy: true
-                                highlightColor: Appearance.colors.colPrimary
-                                trackColor: Appearance.colors.colLayer0Border
-
-                                SequentialAnimation {
-                                    id: gpuProgressAnim
-                                    PauseAnimation {
-                                        duration: 220
-                                    }
-                                    NumberAnimation {
-                                        target: gpuProgress
-                                        property: "width"
-                                        from: 0
-                                        to: gpuProgress.parent.width
-                                        duration: 450
-                                        easing.type: Easing.OutCubic
-                                    }
+                            implicitHeight: 48
+                            radius: Appearance.rounding.small
+                            color: Appearance.colors.colSecondaryContainer
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: Rectangle {
+                                    width: gpuGraphBg.width
+                                    height: gpuGraphBg.height
+                                    radius: gpuGraphBg.radius
                                 }
+                            }
+                            Graph {
+                                anchors.fill: parent
+                                values: root.gpuGraphHistory
+                                points: root.graphPointCount
+                                alignment: Graph.Alignment.Right
                             }
                         }
                     }

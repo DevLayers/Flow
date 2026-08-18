@@ -29,7 +29,9 @@ Button {
     property real clickedWidth: baseWidth + (isAtSide ? 10 : 20)
     property real clickedHeight: baseHeight
     property var parentGroup: root.parent
+    property int clickIndex: parentGroup?.clickIndex ?? -1
     property int indexInParent: {
+        if (clickIndex < 0 && !root.isPressed) return -1;
         var p = parentGroup;
         if (!p || !p.children) return -1;
         for (var i = 0; i < p.children.length; ++i) {
@@ -37,21 +39,20 @@ Button {
         }
         return -1;
     }
-    property int clickIndex: parentGroup?.clickIndex ?? -1
     property bool isAtSide: {
+        if (clickIndex < 0 && !root.isPressed) return false;
         var p = parentGroup;
         if (!p || !p.children) return false;
         return indexInParent === 0 || indexInParent === (p.children.length - 1);
     }
 
     readonly property bool isNeighborPressed: {
-        var p = parentGroup;
-        if (!p || p.clickIndex === undefined || p.clickIndex < 0) return false;
-        return Math.abs(indexInParent - p.clickIndex) === 1;
+        if (clickIndex < 0) return false;
+        return Math.abs(indexInParent - clickIndex) === 1;
     }
 
-    Layout.fillWidth: (clickIndex - 1 <= indexInParent && indexInParent <= clickIndex + 1)
-    Layout.fillHeight: (clickIndex - 1 <= indexInParent && indexInParent <= clickIndex + 1)
+    Layout.fillWidth: (clickIndex >= 0 && clickIndex - 1 <= indexInParent && indexInParent <= clickIndex + 1)
+    Layout.fillHeight: (clickIndex >= 0 && clickIndex - 1 <= indexInParent && indexInParent <= clickIndex + 1)
     implicitWidth: (root.isPressed && bounce) ? clickedWidth : (isNeighborPressed && bounce ? Math.max(16, baseWidth - 6) : baseWidth)
     implicitHeight: (root.isPressed && bounce) ? clickedHeight : baseHeight
 

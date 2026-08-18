@@ -196,8 +196,8 @@ Singleton {
         property color colOnSurface: m3colors.m3onSurface
         property color colOnSurfaceVariant: m3colors.m3onSurfaceVariant
         // Misc
-        property color colTooltip: m3colors.m3inverseSurface
-        property color colOnTooltip: m3colors.m3inverseOnSurface
+        property color colTooltip: m3colors.m3surfaceContainerHigh
+        property color colOnTooltip: m3colors.m3onSurface
         property color colScrim: ColorUtils.transparentize(m3colors.m3scrim, 0.5)
         property color colShadow: ColorUtils.transparentize(m3colors.m3shadow, 0.7)
         property color colOutline: m3colors.m3outline
@@ -247,37 +247,51 @@ Singleton {
         return colors.colPrimary;
     }
 
+    function pushBorderColor(): void {
+        let colorStr = root.activeBorderColor.toString();
+        let rgb = "";
+        if (colorStr.startsWith("#")) {
+            let hex = colorStr.substring(1);
+            rgb = hex.length === 8 ? hex.substring(2) : hex;
+        }
+        if (rgb === "")
+            return;
+        let hyprColor = "rgba(" + rgb + "AA)";
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
+    }
+
+    function pushBorderSize(): void {
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (root.borderless ? "0" : root.borderWidth) + " } })"]);
+    }
+
+    Timer {
+        id: hyprctlBorderTimer
+        interval: 100
+        repeat: false
+        onTriggered: {
+            if (!Config.ready)
+                return;
+            root.pushBorderColor();
+        }
+    }
+
     onActiveBorderColorChanged: {
         if (Config.ready) {
-            let colorStr = activeBorderColor.toString();
-            let rgb = "";
-            if (colorStr.startsWith("#")) {
-                let hex = colorStr.substring(1);
-                if (hex.length === 8) {
-                    rgb = hex.substring(2); // AARRGGBB -> RRGGBB
-                } else {
-                    rgb = hex; // RRGGBB -> RRGGBB
-                }
-            }
-
-            if (rgb !== "") {
-                let hyprColor = "rgba(" + rgb + "AA)";
-                Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
-            }
+            hyprctlBorderTimer.restart();
         }
     }
 
     property bool borderless: Config.options.appearance.borderless ?? false
     onBorderlessChanged: {
         if (Config.ready) {
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (borderless ? "0" : borderWidth) + " } })"]);
+            root.pushBorderSize();
         }
     }
 
     property int borderWidth: Config.options.appearance.borderWidth ?? 2
     onBorderWidthChanged: {
         if (Config.ready && !borderless) {
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + borderWidth + " } })"]);
+            root.pushBorderSize();
         }
     }
     property int blurSize: Config.options.appearance.blurSize ?? 8
@@ -289,55 +303,111 @@ Singleton {
 
     property real ignoreAlpha: Config.options.appearance.ignoreAlpha ?? 0.2
 
+    // Hyprland ignores pixels with opacity <= ignore_alpha. The bar and both
+    // Dynamic Island variants use colLayer0, whose opacity follows the
+    // configured background transparency. Keep the threshold below that
+    // rendered opacity, otherwise the entire island is excluded from blur.
+    readonly property real barIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+
     onIgnoreAlphaChanged: {
         if (Config.ready) {
             var a = root.ignoreAlpha;
+            var barA = root.barIgnoreAlpha;
             var script = "";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|.*[pP]opup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true, ignore_alpha = 0.0 }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1 }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:notificationPopup' }, noanim = true }) ";
             script += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
             Quickshell.execDetached(["hyprctl", "eval", script]);
         }
     }
 
+    property bool _isApplyingRules: false
+    // Border size, border colour, gaps, rounding and blur only exist at runtime:
+    // a config reload throws them away and puts the Lua file's values back. So a
+    // reload arriving mid-cooldown cannot simply be ignored — nothing would ever
+    // push them again, and the window borders would stay wrong for the rest of
+    // the session. Remember it instead and re-apply once the cooldown lapses.
+    property bool _rulesReapplyPending: false
+
+    // The border is the only part of this the user can see, and one write can make
+    // Hyprland reload several times over, so waiting out the rule cooldown leaves
+    // the focus border missing for seconds. Two `hyprctl` calls are cheap enough to
+    // put on their own near-instant cooldown; the rest can take its time.
+    property bool _isApplyingBorder: false
+    property bool _borderReapplyPending: false
+
+    Timer {
+        id: hyprlandBorderCooldownTimer
+        interval: 150
+        repeat: false
+        onTriggered: {
+            root._isApplyingBorder = false;
+            if (!root._borderReapplyPending)
+                return;
+            root._borderReapplyPending = false;
+            root.applyHyprlandBorder();
+        }
+    }
+
+    function applyHyprlandBorder() {
+        if (!Config.ready)
+            return;
+        if (root._isApplyingBorder) {
+            root._borderReapplyPending = true;
+            return;
+        }
+        root._isApplyingBorder = true;
+        hyprlandBorderCooldownTimer.restart();
+        root.pushBorderSize();
+        root.pushBorderColor();
+    }
+
+    Timer {
+        id: hyprlandRuleCooldownTimer
+        interval: 3000
+        repeat: false
+        onTriggered: {
+            root._isApplyingRules = false;
+            if (!root._rulesReapplyPending)
+                return;
+            root._rulesReapplyPending = false;
+            root.applyHyprlandRules();
+        }
+    }
+
     function applyHyprlandRules() {
-        if (!Config.ready) return;
+        if (!Config.ready || root._isApplyingRules)
+            return;
+        root._isApplyingRules = true;
+        hyprlandRuleCooldownTimer.restart();
+
         Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + root.windowRounding + " } })"]);
         Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
         var a = root.ignoreAlpha;
+        var barA = root.barIgnoreAlpha;
         var bs = "";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|cheatsheet|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|.*[pP]opup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true, ignore_alpha = 0.0 }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1 }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:notificationPopup' }, noanim = true }) ";
         bs += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
         Quickshell.execDetached(["hyprctl", "eval", bs]);
 
-        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (root.borderless ? "0" : root.borderWidth) + " } })"]);
-
-        let colorStr = activeBorderColor.toString();
-        let rgb = "";
-        if (colorStr.startsWith("#")) {
-            let hex = colorStr.substring(1);
-            if (hex.length === 8) {
-                rgb = hex.substring(2);
-            } else {
-                rgb = hex;
-            }
-        }
-
-        if (rgb !== "") {
-            let hyprColor = "rgba(" + rgb + "AA)";
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
-        }
+        root.applyHyprlandBorder();
 
         if (Config.options.appearance.gapsIn !== undefined) {
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + Config.options.appearance.gapsIn + "' } })"]);
@@ -353,6 +423,11 @@ Singleton {
     Connections {
         target: HyprlandConfig
         function onReloaded() {
+            root.applyHyprlandBorder();
+            if (root._isApplyingRules) {
+                root._rulesReapplyPending = true;
+                return;
+            }
             root.applyHyprlandRules();
         }
     }
@@ -586,6 +661,44 @@ Singleton {
             }
         }
 
+        // Continuous magnification follows a moving pointer target, so it
+        // uses a spring instead of restarting a one-shot easing curve.
+        property QtObject dockMagnificationScale: QtObject {
+            property QtObject fast: QtObject {
+                property real spring: 5.2
+                property real damping: 0.36
+                property real mass: 0.82
+                property real epsilon: 0.002
+            }
+            property QtObject balanced: QtObject {
+                property real spring: 3.8
+                property real damping: 0.34
+                property real mass: 0.95
+                property real epsilon: 0.002
+            }
+            property QtObject smooth: QtObject {
+                property real spring: 2.8
+                property real damping: 0.38
+                property real mass: 1.1
+                property real epsilon: 0.002
+            }
+            property int hoverExitGrace: 90
+        }
+
+        // Retained for discrete magnification feedback in secondary popups.
+        property QtObject dockMagnification: QtObject {
+            property int duration: Math.round(220 * root.animMultiplier)
+            property int type: Easing.OutBack
+            property real overshoot: 1.35
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.dockMagnification.duration
+                    easing.type: root.animation.dockMagnification.type
+                    easing.overshoot: root.animation.dockMagnification.overshoot
+                }
+            }
+        }
+
         property QtObject scroll: QtObject {
             property int duration: Math.round(200 * root.animMultiplier)
             property int type: Easing.BezierSpline
@@ -623,6 +736,13 @@ Singleton {
         property real verticalBarWindowWidth: Config.options.bar.cornerStyle === 1 ? (baseVerticalBarWidth + root.sizes.hyprlandGapsOut * 2) : baseVerticalBarWidth
         property real wallpaperSelectorWidth: 1200
         property real wallpaperSelectorHeight: 690
+        property real wallpaperSelectorSidebarWidth: 180
+        property real wallpaperSelectorSidebarButtonHeight: 48
+        property real wallpaperSelectorSidebarHorizontalPadding: 6
+        property real wallpaperSelectorSidebarButtonSpacing: 3
+        property real wallpaperSelectorSidebarGroupSpacing: 10
+        property real wallpaperSelectorSearchWidth: 300
+        property real wallpaperSelectorSortDialogWidth: 280
         property real wallpaperSelectorItemMargins: 8
         property real wallpaperSelectorItemPadding: 6
         property int dockButtonSize: Math.round((Config.options?.dock.height ?? 60) * 0.85)

@@ -17,16 +17,16 @@ Singleton {
     property bool levenshteinSearch: (Config.options?.search.levenshtein ?? false) || (Config.options?.search.algorithm === "levenshtein")
     property real scoreThreshold: 0.2
     property list<string> entries: []
-    readonly property var preparedEntries: entries.map(a => ({
+    readonly property var preparedEntries: entries.slice(0, 150).map(a => ({
         name: Fuzzy.prepare(`${a.replace(/^\s*\S+\s+/, "")}`),
         entry: a
     }))
 
     signal clipboardUpdated()
 
-    // Computed filtered lists for 3-column clipboard panel
-    readonly property var textEntries: entries.filter(e => !entryIsImage(e) && !isPinned(e))
-    readonly property var imageEntries: entries.filter(e => entryIsImage(e) && !isPinned(e))
+    // Computed filtered lists for 3-column clipboard panel (capped to avoid memory fragmentation)
+    readonly property var textEntries: entries.slice(0, 200).filter(e => !entryIsImage(e) && !isPinned(e))
+    readonly property var imageEntries: entries.slice(0, 200).filter(e => entryIsImage(e) && !isPinned(e))
 
     /**
      * Classify clipboard entry content for smart rendering.

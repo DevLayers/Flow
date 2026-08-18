@@ -1,9 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.common.functions
 
 Flow {
     id: root
@@ -15,6 +13,7 @@ Flow {
 
     property int clickIndex: -1
     property real calculatedWidth: 0
+    property bool _widthUpdateScheduled: false
 
     function updateWidth() {
         if (!repeater) return;
@@ -26,6 +25,15 @@ Flow {
             }
         }
         root.calculatedWidth = Math.max(0, w - root.spacing);
+    }
+
+    function scheduleWidthUpdate() {
+        if (root._widthUpdateScheduled) return;
+        root._widthUpdateScheduled = true;
+        Qt.callLater(() => {
+            root._widthUpdateScheduled = false;
+            root.updateWidth();
+        });
     }
 
     Layout.preferredWidth: calculatedWidth
@@ -69,9 +77,8 @@ Flow {
             opacity: isOptionEnabled ? 1.0 : 0.5
             mouseArea.cursorShape: isOptionEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             
-            onImplicitWidthChanged: root.updateWidth()
-            Component.onCompleted: root.updateWidth()
-            Component.onDestruction: root.updateWidth()
+            onImplicitWidthChanged: root.scheduleWidthUpdate()
+            Component.onCompleted: root.scheduleWidthUpdate()
             
             color: isOptionEnabled ? (toggled ? 
                 (down ? colBackgroundToggledActive : 
@@ -117,9 +124,10 @@ Flow {
             }
 
             Loader {
-                active: modelData.tooltip !== undefined && modelData.tooltip !== ""
+                active: paletteButton.modelData.tooltip !== undefined && paletteButton.modelData.tooltip !== ""
                 sourceComponent: StyledToolTip {
-                    text: modelData.tooltip || ""
+                    parent: paletteButton
+                    text: paletteButton.modelData.tooltip ?? ""
                 }
             }
         }

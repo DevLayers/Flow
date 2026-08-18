@@ -158,7 +158,7 @@ Item { // Window
         anchors.fill: parent
         captureSource: (root.toplevel && Config.options.overview.showWindowPreviews) ? root.toplevel : null
         // Performance: live false to avoid continuous screencopy overhead
-        live: false
+        live: Config.options.background.windowZoomLiveCapture
         z: 1
 
         // Color overlay for interactions

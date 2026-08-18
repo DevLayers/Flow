@@ -613,7 +613,8 @@ command: ["bash", "-c",
                     }
                     enabled: !actionProc.running
                     onClicked: {
-                        page.runAction("update", ["update", "--yes", "--keep-config"]);
+                        page.runAction("update", ["update", "--yes", "--keep-config",
+                            Config.options.update.replaceHyprConfig ? "--hypr" : "--no-hypr"]);
                     }
                 }
 
@@ -655,6 +656,21 @@ command: ["bash", "-c",
                     }
 
                     Behavior on opacity { NumberAnimation { duration: 200 } }
+                }
+            }
+
+            // ── Toggle: whether the update also overlays this fork's Hyprland config ──
+            ConfigSwitch {
+                id: replaceHyprConfigSwitch
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                buttonIcon: "settings_applications"
+                text: Translation.tr("Also replace Hyprland config")
+                checked: Config.options.update.replaceHyprConfig
+                onCheckedChanged: Config.options.update.replaceHyprConfig = checked
+
+                StyledToolTip {
+                    text: Translation.tr("When enabled, updating also overlays this fork's ~/.config/hypr onto yours (custom/ is never touched, and anything replaced is backed up first). Disable to update only the Quickshell config.")
                 }
             }
 
@@ -923,10 +939,12 @@ command: ["bash", "-c",
                 readonly property bool isFirst: index === 0
                 readonly property bool isLast: index === commitsRepeater.count - 1
 
-                topLeftRadius: isLast ? Appearance.rounding.large : Appearance.rounding.verysmall
-                topRightRadius: isLast ? Appearance.rounding.large : Appearance.rounding.verysmall
-                bottomLeftRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
-                bottomRightRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
+                // ChangelogService returns newest-first: the first delegate
+                // owns the top outer corners and the last owns the bottom.
+                topLeftRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
+                topRightRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
+                bottomLeftRadius: isLast ? Appearance.rounding.large : Appearance.rounding.verysmall
+                bottomRightRadius: isLast ? Appearance.rounding.large : Appearance.rounding.verysmall
 
 
                 readonly property string commitHash: model.hash
@@ -1038,11 +1056,11 @@ command: ["bash", "-c",
             text: Translation.tr("Free Settings memory after closing")
             checked: Config.options.settingsApp.unloadAfterSeconds > 0
             onCheckedChanged: {
-                Config.options.settingsApp.unloadAfterSeconds = checked ? 300 : 0;
+                Config.options.settingsApp.unloadAfterSeconds = checked ? 5 : 0;
             }
 
             StyledToolTip {
-                text: Translation.tr("When enabled, the Settings app is removed from memory 5 minutes after it is closed. The next opening will have a short cold-start delay.")
+                text: Translation.tr("When enabled, the Settings app is removed from memory 5 seconds after it is closed. The next opening will have a short cold-start delay.")
             }
         }
     }

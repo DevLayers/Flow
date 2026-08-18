@@ -15,7 +15,7 @@ Item {
 
     Loader {
         id: desatLoader
-        active: Config.options.lock.desaturate.enable && (GlobalStates.screenLocked || desaturationAnim.running)
+        active: Config.options.lock.desaturate.enable && (GlobalStates.screenLocked || (desatLoader.status === Loader.Ready && desatLoader.item && desatLoader.item.saturation !== 0.0))
         anchors.fill: parent
         sourceComponent: MultiEffect {
             source: lockDesatRoot.sourceItem

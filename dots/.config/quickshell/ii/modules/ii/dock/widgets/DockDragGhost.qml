@@ -76,6 +76,7 @@ Item {
                             case "overview": return "apps"
                             case "media": return "music_note"
                             case "weather": return "cloud"
+                            case "sports": return "sports_soccer"
                             default: return "drag_indicator"
                         }
                     }

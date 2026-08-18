@@ -10,6 +10,9 @@ Item {
     property real baseWidth: 600
     property bool forceWidth: false
     property real bottomContentPadding: 100
+    readonly property bool scrollFadeEnabled: Config.options?.appearance?.scrollFadeMask ?? true
+    readonly property bool settingsPerformanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
+    readonly property bool allowScrollFade: root.scrollFadeEnabled && !root.settingsPerformanceMode
 
     property alias contentY: flickable.contentY
     property alias atYBeginning: flickable.atYBeginning
@@ -35,55 +38,77 @@ Item {
         anchors.right: parent.right
         clip: true
 
-        layer.enabled: true
-        layer.effect: OpacityMask {
-            maskSource: Item {
-                id: maskRoot
-                width: flickable.width
-                height: flickable.height
+        // Performance Mode leaves the entire mask subtree unloaded, including
+        // the offscreen layer texture. Normal Mode retains the existing fade.
+        layer.enabled: root.allowScrollFade && flickable.contentHeight > flickable.height
+        layer.effect: fadeMaskLoader.item
 
-                property bool fadeEnabled: Config.options?.appearance?.scrollFadeMask ?? true
-                property color topFadeColor: (fadeEnabled && !flickable.atYBeginning) ? "transparent" : "white"
-                property color bottomFadeColor: (fadeEnabled && !flickable.atYEnd) ? "transparent" : "white"
+        Loader {
+            id: fadeMaskLoader
+            active: root.allowScrollFade
+            sourceComponent: fadeMaskComponent
+        }
 
-                Behavior on topFadeColor {
-                    ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
-                }
-                Behavior on bottomFadeColor {
-                    ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
-                }
+        Component {
+            id: fadeMaskComponent
 
-                Column {
-                    anchors.fill: parent
-                    spacing: 0
+            OpacityMask {
+                maskSource: Item {
+                    id: maskRoot
+                    width: flickable.width
+                    height: flickable.height
 
-                    Rectangle {
-                        width: parent.width
-                        height: Math.min(36, parent.height / 2)
-                        topLeftRadius: Appearance.rounding.normal
-                        topRightRadius: Appearance.rounding.normal
-                        color: "transparent"
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: maskRoot.topFadeColor }
-                            GradientStop { position: 1.0; color: "white" }
+                    property bool fadeEnabled: root.allowScrollFade
+                    property color topFadeColor: (fadeEnabled && !flickable.atYBeginning) ? "transparent" : "white"
+                    property color bottomFadeColor: (fadeEnabled && !flickable.atYEnd) ? "transparent" : "white"
+
+                    Behavior on topFadeColor {
+                        ColorAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+                    Behavior on bottomFadeColor {
+                        ColorAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                         }
                     }
 
-                    Rectangle {
-                        width: parent.width
-                        height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
-                        color: "white"
-                    }
+                    Column {
+                        anchors.fill: parent
+                        spacing: 0
 
-                    Rectangle {
-                        width: parent.width
-                        height: Math.min(36, parent.height / 2)
-                        bottomLeftRadius: Appearance.rounding.normal
-                        bottomRightRadius: Appearance.rounding.normal
-                        color: "transparent"
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: "white" }
-                            GradientStop { position: 1.0; color: maskRoot.bottomFadeColor }
+                        Rectangle {
+                            width: parent.width
+                            height: Math.min(36, parent.height / 2)
+                            topLeftRadius: Appearance.rounding.normal
+                            topRightRadius: Appearance.rounding.normal
+                            color: "transparent"
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: maskRoot.topFadeColor }
+                                GradientStop { position: 1.0; color: "white" }
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
+                            color: "white"
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: Math.min(36, parent.height / 2)
+                            bottomLeftRadius: Appearance.rounding.normal
+                            bottomRightRadius: Appearance.rounding.normal
+                            color: "transparent"
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: "white" }
+                                GradientStop { position: 1.0; color: maskRoot.bottomFadeColor }
+                            }
                         }
                     }
                 }

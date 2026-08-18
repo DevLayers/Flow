@@ -57,6 +57,24 @@ Singleton {
             "configPage": "widgets/DesktopHoriClockConfig.qml"
         },
         {
+            "widgetId": "clock_nothing",
+            "name": Translation.tr("Nothing Digital Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/NothingDigitalClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A 1x1 Nothing OS styled digital clock widget with Ndot dot-matrix typography, stacked hours/minutes, AM/PM chip, and date."),
+            "configPage": "widgets/DesktopNothingClockConfig.qml"
+        },
+        {
+            "widgetId": "nothing_wheel_clock",
+            "name": Translation.tr("Nothing Wheel Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/NothingWheelClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("NothingOS style clock widget with date header, big hours, 3-dot indicator, and minute wheel."),
+            "configPage": "widgets/DesktopNothingWheelClockConfig.qml"
+        },
+        {
             "widgetId": "nagasaki_text",
             "name": Translation.tr("Nagasaki Text Clock"),
             "category": "Clock",
@@ -93,6 +111,15 @@ Singleton {
             "configPage": "widgets/DesktopWearOSClockWidgetConfig.qml"
         },
         {
+            "widgetId": "wearos_arc_clock",
+            "name": Translation.tr("WearOS Arc Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/WearOSArcClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A circular 1x1 clock inspired by Wear OS with customizable arc gauges, date-minutes vertical capsule selector, calendar/to-do bottom text, and premium glass reflections."),
+            "configPage": "widgets/DesktopWearOSArcClockConfig.qml"
+        },
+        {
             "widgetId": "concentric_clock",
             "name": Translation.tr("Concentric Clock"),
             "category": "Clock",
@@ -120,16 +147,48 @@ Singleton {
             "configPage": "widgets/DesktopScallopDotClockConfig.qml"
         },
         {
+            "widgetId": "scallop_number_clock",
+            "name": Translation.tr("Scallop Number Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/ScallopNumberClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A Scallop clock face with outer 5-minute step numbers, inner 1-12 hour numbers, and a center date badge."),
+            "configPage": "widgets/DesktopScallopNumberClockConfig.qml"
+        },
+        {
+            "widgetId": "circle_pointer_clock",
+            "name": Translation.tr("Circle Pointer Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/CirclePointerClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A concentric circle clock featuring outer minute step numbers, an intermediate circle with a smooth minute pointer tab, and a central two-digit hour circle."),
+            "configPage": "widgets/DesktopCirclePointerClockConfig.qml"
+        },
+        {
+            "widgetId": "triple_ring_clock",
+            "name": Translation.tr("Triple Ring Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/TripleRingClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A concentric disc clock face with three rotating rings for hours, minutes, and seconds, and a fixed 3 o'clock readout pointer arrow."),
+            "configPage": "widgets/DesktopTripleRingClockConfig.qml"
+        },
+        {
+            "widgetId": "grid_card_clock",
+            "name": Translation.tr("Grid Card Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/GridCardClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("A stylized background clock with vertically stretched typography based on Material 3 cards.")
+        },
+        {
             "widgetId": "clock_expressive_card",
             "name": Translation.tr("Expressive Card Clock"),
             "category": "Clock",
             "qmlPath": Qt.resolvedUrl("clock/ExpressiveCardClockWidget.qml"),
             "icon": "schedule",
-            "description": Translation.tr("A 1x1 clock with big time, month/day, temp & weather icon and expressive background."),
-            "configPage": "widgets/DesktopClockWidgetConfig.qml"
+            "description": Translation.tr("A 1x1 clock with big time, month/day, temp & weather icon and expressive background.")
         },
-
-
         {
             "widgetId": "circular_media",
             "name": Translation.tr("Circular Media (Watch)"),
@@ -163,8 +222,7 @@ Singleton {
             "category": "Media",
             "qmlPath": Qt.resolvedUrl("media/AndroidMediaWidget.qml"),
             "icon": "play_circle",
-            "description": Translation.tr("Beautiful Android style media player widget with dynamic colors, artwork, lyrics, and visualizer."),
-            "configPage": "widgets/DesktopMediaWidgetConfig.qml"
+            "description": Translation.tr("Beautiful Android style media player widget with dynamic colors, artwork, lyrics, and visualizer.")
         },
         {
             "widgetId": "media_cd",
@@ -174,6 +232,15 @@ Singleton {
             "icon": "album",
             "description": Translation.tr("1x1 CD media player widget with top cutout album art circle, equalizer icon, song details, and line progress slider."),
             "configPage": "widgets/DesktopCdMediaConfig.qml"
+        },
+        {
+            "widgetId": "nothing_ring_media",
+            "name": Translation.tr("Nothing Ring Media 1x1"),
+            "category": "Media",
+            "qmlPath": Qt.resolvedUrl("media/NothingRingMediaWidget.qml"),
+            "icon": "graphic_eq",
+            "description": Translation.tr("1x1 Nothing OS style circular progress media widget with empty state support."),
+            "configPage": "widgets/DesktopNothingRingMediaConfig.qml"
         },
         {
             "widgetId": "weather_default",
@@ -237,6 +304,72 @@ Singleton {
             "icon": "sunny",
             "description": Translation.tr("Circular weather widget with inner Cookie12Sided shape."),
             "configPage": "widgets/DesktopWeatherCircleConfig.qml"
+        },
+        {
+            "widgetId": "nothing_weather_circle",
+            "name": Translation.tr("Nothing Weather Circle"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/NothingWeatherWidget.qml"),
+            "icon": "cloud",
+            "description": Translation.tr("NothingOS style dot-matrix circular weather widget."),
+            "configPage": "widgets/DesktopNothingWeatherConfig.qml"
+        },
+        {
+            "widgetId": "volume_mute_pill",
+            "name": Translation.tr("Volume Mute Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/VolumeMutePillWidget.qml"),
+            "icon": "volume_off",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for volume mute."),
+            "configPage": "widgets/DesktopVolumeMuteConfig.qml"
+        },
+        {
+            "widgetId": "wifi_pill",
+            "name": Translation.tr("Wi-Fi Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/WifiPillWidget.qml"),
+            "icon": "wifi",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for Wi-Fi.")
+        },
+        {
+            "widgetId": "bluetooth_pill",
+            "name": Translation.tr("Bluetooth Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/BluetoothPillWidget.qml"),
+            "icon": "bluetooth",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for Bluetooth.")
+        },
+        {
+            "widgetId": "mic_pill",
+            "name": Translation.tr("Microphone Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/MicPillWidget.qml"),
+            "icon": "mic",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for microphone mute.")
+        },
+        {
+            "widgetId": "dark_mode_pill",
+            "name": Translation.tr("Dark Mode Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/DarkModePillWidget.qml"),
+            "icon": "dark_mode",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for Dark Mode.")
+        },
+        {
+            "widgetId": "screen_record_pill",
+            "name": Translation.tr("Screen Record Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/ScreenRecordPillWidget.qml"),
+            "icon": "videocam",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for screen recording.")
+        },
+        {
+            "widgetId": "easy_effects_pill",
+            "name": Translation.tr("EasyEffects Pill 1x0.5"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/EasyEffectsPillWidget.qml"),
+            "icon": "graphic_eq",
+            "description": Translation.tr("1x0.5 system quick toggle pill widget for EasyEffects.")
         },
         {
             "widgetId": "weather_typography",
@@ -320,13 +453,22 @@ Singleton {
             "configPage": "widgets/DesktopCalendarUpcoming3DaysConfig.qml"
         },
         {
-            "widgetId": "photo_default",
+            "widgetId": "photo",
             "name": Translation.tr("Photo"),
             "category": "Photo",
             "qmlPath": Qt.resolvedUrl("photo/PhotoWidget.qml"),
             "icon": "image",
             "description": Translation.tr("Display a personal photo on your desktop."),
             "configPage": "widgets/DesktopPhotoWidgetConfig.qml"
+        },
+        {
+            "widgetId": "photo_1x1",
+            "name": Translation.tr("Photo 1x1"),
+            "category": "Photo",
+            "qmlPath": Qt.resolvedUrl("photo/Photo1x1Widget.qml"),
+            "icon": "image",
+            "description": Translation.tr("Compact 1x1 Photo widget masked inside any customizable MaterialShape."),
+            "configPage": "widgets/DesktopPhoto1x1Config.qml"
         },
         {
             "widgetId": "photo_weather_2x1",
@@ -509,6 +651,24 @@ Singleton {
             "configPage": "widgets/DesktopQuickActionsConfig.qml"
         },
         {
+            "widgetId": "android_search_bar",
+            "name": Translation.tr("Android Search Bar"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/AndroidSearchBarWidget.qml"),
+            "icon": "search",
+            "description": Translation.tr("0.5x2 Android Pixel search bar with Google logo, inner search pill, and customizable filled action buttons."),
+            "configPage": "widgets/DesktopAndroidSearchBarConfig.qml"
+        },
+        {
+            "widgetId": "search_pill",
+            "name": Translation.tr("Search Pill"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/SearchPillWidget.qml"),
+            "icon": "auto_awesome",
+            "description": Translation.tr("Wide search pill with a dynamic sparkle action and three configurable provider buttons."),
+            "configPage": "widgets/DesktopSearchPillConfig.qml"
+        },
+        {
             "widgetId": "quote",
             "name": Translation.tr("Quote"),
             "category": "Utility",
@@ -534,6 +694,69 @@ Singleton {
             "icon": "dashboard",
             "description": Translation.tr("Android-inspired context widget combining media, calendar, sports, and current weather."),
             "configPage": "widgets/DesktopAtAGlanceConfig.qml"
+        },
+        {
+            "widgetId": "resource_cpu_pill",
+            "name": Translation.tr("CPU Resource Pill"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/CpuPillWidget.qml"),
+            "icon": "memory",
+            "description": Translation.tr("Capsule pill widget displaying real-time CPU usage percentage, temperature, and progress fill."),
+            "configPage": "widgets/DesktopCpuPillConfig.qml"
+        },
+        {
+            "widgetId": "resource_ram_pill",
+            "name": Translation.tr("RAM Resource Pill"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/RamPillWidget.qml"),
+            "icon": "memory_alt",
+            "description": Translation.tr("Capsule pill widget displaying real-time RAM memory usage, GB stats, and progress fill."),
+            "configPage": "widgets/DesktopRamPillConfig.qml"
+        },
+        {
+            "widgetId": "resource_disk_pill",
+            "name": Translation.tr("Disk Resource Pill"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/DiskPillWidget.qml"),
+            "icon": "hard_drive",
+            "description": Translation.tr("Capsule pill widget displaying real-time Disk storage usage, GB stats, and progress fill."),
+            "configPage": "widgets/DesktopDiskPillConfig.qml"
+        },
+        {
+            "widgetId": "resource_fill_cards",
+            "name": Translation.tr("Resource Fill Cards"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/ResourceFillCardsWidget.qml"),
+            "icon": "donut_large",
+            "description": Translation.tr("Dynamic 1x1 fill cards widget combining CPU Usage, RAM Memory, and Disk Storage. Scales horizontally or vertically per active toggle (1x1, 2x1, or 3x1)."),
+            "configPage": "widgets/DesktopResourceFillCardsConfig.qml"
+        },
+        {
+            "widgetId": "resource_nothing_disk",
+            "name": Translation.tr("Nothing Storage Widget"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/NothingDiskWidget.qml"),
+            "icon": "hard_drive",
+            "description": Translation.tr("Nothing OS styled 1x0.5 storage widget with segmented progress bar and Ndot font."),
+            "configPage": ""
+        },
+        {
+            "widgetId": "resource_nothing_cpu",
+            "name": Translation.tr("Nothing CPU Widget"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/NothingCpuWidget.qml"),
+            "icon": "memory",
+            "description": Translation.tr("Nothing OS styled 1x0.5 CPU usage widget with segmented progress bar and Ndot font."),
+            "configPage": ""
+        },
+        {
+            "widgetId": "resource_nothing_ram",
+            "name": Translation.tr("Nothing RAM Widget"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/NothingRamWidget.qml"),
+            "icon": "memory_alt",
+            "description": Translation.tr("Nothing OS styled 1x0.5 RAM memory widget with segmented progress bar and Ndot font."),
+            "configPage": ""
         },
     ]
 

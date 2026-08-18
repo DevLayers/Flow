@@ -41,7 +41,7 @@ Item {
         color: root.isIslandMode ? "transparent" : root.actualColor
         radius: 0
 
-        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow
+        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -52,7 +52,7 @@ Item {
 
     Rectangle {
         id: bottomShadowGradient
-        visible: !root.isIslandMode && Config.options.bar.dropShadow && !Config.options.bar.autoHide.enable
+        visible: !root.isIslandMode && Config.options.bar.dropShadow && !Config.options.bar.autoHide.enable && !ShellModePolicy.barDropShadowBlocked
         anchors {
             bottom: barBackground.bottom
             left: barBackground.left
@@ -75,7 +75,7 @@ Item {
         role: "first"
         fillColor: root.actualColor
 
-        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -99,7 +99,7 @@ Item {
         role: "middle"
         fillColor: root.actualColor
 
-        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -123,7 +123,7 @@ Item {
         role: "last"
         fillColor: root.actualColor
 
-        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)

@@ -10,6 +10,13 @@ Item {
     id: root
 
     property list<var> sections: []
+    property var fileSources: ({})
+    property var fileImportsBySource: ({})
+    property bool settingsActive: false
+    property bool indexing: false
+    property bool indexed: false
+
+    signal indexReady
 
     property string currentSearch: ""
     onCurrentSearchChanged: {
@@ -17,53 +24,111 @@ Item {
     }
 
     function startIndexing() {
+        if (!root.settingsActive || root.indexing)
+            return;
+
         sections = [];
+        fileSources = ({});
+        fileImportsBySource = ({});
+        root.indexed = false;
+        root.indexing = true;
         let configRoot = FileUtils.trimFileProtocol(Directories.config) + "/quickshell/ii/";
         let basePath = configRoot + "modules/settings/configs/";
 
-        // Manifest comes from SettingsPageRegistry: every searchable page plus
-        // the widget sub-pages it hosts. Adding or moving a page is a
-        // one-place change in the registry.
         let files = [];
         let ids = [];
+        let subPages = [];
         for (let p of SettingsPageRegistry.pages) {
             if (p.searchable === false)
                 continue;
             files.push(configRoot + p.component);
             ids.push(p.id);
+            subPages.push("");
             for (let sub of (p.subPages ?? [])) {
                 files.push(basePath + sub);
                 ids.push(p.id);
+                subPages.push(sub);
+            }
+            // Progressive settings sections live outside the page file, but
+            // are not sub-pages. Index them with an empty subPage so a search
+            // result navigates to the parent page and waits for the section's
+            // own lazy loader instead of trying to open the source as a page.
+            for (let source of (p.searchSources ?? [])) {
+                files.push(basePath + source);
+                ids.push(p.id);
+                subPages.push("");
             }
         }
 
-        pageFile.start(files, ids);
+        pageFile.start(files, ids, subPages);
         listPresetsSearchProc.running = false;
         listPresetsSearchProc.running = true;
+
+        if (files.length === 0) {
+            root.indexing = false;
+            root.indexed = true;
+            root.indexReady();
+        }
     }
 
-    Component.onCompleted: startIndexing()
+    function setSettingsActive(active) {
+        root.settingsActive = active;
+        if (!active) {
+            root.clearIndex();
+        }
+    }
+
+    function ensureIndexing() {
+        if (!root.settingsActive || root.indexing || root.indexed)
+            return;
+        root.startIndexing();
+    }
+
+    function clearIndex() {
+        root.indexing = false;
+        root.indexed = false;
+        root.sections = [];
+        root.fileSources = ({});
+        root.fileImportsBySource = ({});
+        root.currentSearch = "";
+        pageFile.cancel();
+        listPresetsSearchProc.running = false;
+    }
 
     Connections {
         target: Translation
         function onLanguageCodeChanged() {
-            startIndexing();
+            if (root.settingsActive && (root.indexed || root.indexing)) {
+                root.clearIndex();
+                root.startIndexing();
+            }
         }
     }
 
     FileView {
         id: pageFile
-        blockLoading: true
+        printErrors: false
 
         property var files: []
         property var pageIds: []
+        property var subPages: []
         property int currentIndex: 0
 
-        function start(filesArray, idsArray) {
+        function start(filesArray, idsArray, subPagesArray) {
+            pageFile.cancel();
             files = filesArray;
             pageIds = idsArray;
+            subPages = subPagesArray || [];
             currentIndex = 0;
             loadNext();
+        }
+
+        function cancel() {
+            files = [];
+            pageIds = [];
+            subPages = [];
+            currentIndex = 0;
+            path = "";
         }
 
         function loadNext() {
@@ -72,10 +137,38 @@ Item {
             path = files[currentIndex];
         }
 
+        function finishIndexing() {
+            root.indexing = false;
+            root.indexed = true;
+            path = "";
+            files = [];
+            pageIds = [];
+            subPages = [];
+            currentIndex = 0;
+            root.indexReady();
+        }
+
         onLoaded: {
-            root.indexQmlFile(text(), pageIds[currentIndex]);
+            if (currentIndex >= files.length || !root.indexing)
+                return;
+            root.indexQmlFile(text(), pageIds[currentIndex], subPages[currentIndex]);
             currentIndex++;
-            Qt.callLater(() => loadNext());
+            if (currentIndex >= files.length) {
+                finishIndexing();
+            } else {
+                Qt.callLater(() => loadNext());
+            }
+        }
+
+        onLoadFailed: {
+            if (currentIndex >= files.length || !root.indexing)
+                return;
+            currentIndex++;
+            if (currentIndex >= files.length) {
+                finishIndexing();
+            } else {
+                Qt.callLater(() => loadNext());
+            }
         }
     }
 
@@ -105,9 +198,6 @@ Item {
             if (section.pageId === "presets") {
                 if (section.searchStrings.indexOf(name) === -1) {
                     section.searchStrings.push(name);
-                    let combined = (section.title + " " + section.searchStrings.join(" ")).toLowerCase();
-                    section._tokens = tokenize(combined);
-                    section._searchText = combined;
                 }
             }
         }
@@ -126,27 +216,52 @@ Item {
     }
 
     function extractWidgets(text) {
+        return extractWidgetsWithOffset(text, 0);
+    }
+
+    function extractWidgetsWithOffset(text, baseOffset, sourceKey) {
         let items = [];
-        let types = ["ConfigSwitch", "ConfigSpinBox", "ConfigSelectionArray", "ConfigTextField", "ConfigSlider", "ConfigComboBox", "ConfigWallpaperSelector", "ConfigLightDarkToggle", "ConfigPresetsView"];
+        let types = [
+            "ConfigSwitch", "ConfigSpinBox", "ConfigSelectionArray", "ConfigTextField",
+            "ConfigSlider", "ConfigComboBox", "ConfigWallpaperSelector", "ConfigLightDarkToggle",
+            "ConfigPresetsView", "HelperLinkBox", "NoticeBox", "ShortcutBox",
+            "MaterialTextField", "Flow", "RowLayout", "ColumnLayout", "ServiceCard",
+            "RippleButtonWithIcon", "ConfigListView", "ColorPreviewButton", "StyledComboBox",
+            "MonitorPicker"
+        ];
         for (let t of types) {
             let blocks = extractBlocks(text, t);
             for (let b of blocks) {
-                let textProp = extractProperty(b.inner, "text") || extractProperty(b.inner, "title") || extractProperty(b.inner, "tooltip");
+                let textProp = extractProperty(b.inner, "text")
+                            || extractProperty(b.inner, "title")
+                            || extractProperty(b.inner, "tooltip")
+                            || extractProperty(b.inner, "value")
+                            || extractProperty(b.inner, "placeholderText")
+                            || extractProperty(b.inner, "description");
                 items.push({
                     type: t,
                     text: textProp,
-                    full: b.full
+                    sourceKey: sourceKey,
+                    sourceStart: b.start + baseOffset,
+                    sourceEnd: b.end + baseOffset
                 });
             }
         }
         return items;
     }
 
-    function indexQmlFile(qmlText, pageId) {
+    function indexQmlFile(qmlText, pageId, subPage) {
         if (!qmlText) return;
-        
+
+        const sourceKey = pageFile.files[pageFile.currentIndex];
         let fileImports = extractImports(qmlText);
         let sectionsExtracted = extractBlocks(qmlText, "ContentSection");
+
+        if (sectionsExtracted.length === 0)
+            return;
+
+        root.fileSources[sourceKey] = qmlText;
+        root.fileImportsBySource[sourceKey] = fileImports;
 
         for (let sectionBlock of sectionsExtracted) {
             let sectionText = sectionBlock.inner;
@@ -158,28 +273,37 @@ Item {
             let sectionSubsections = [];
 
             // 1. extract subsections
-            let subsections = extractBlocks(sectionText, "ContentSubsection");
+            let subsections = extractBlocks(sectionText, "ContentSubsection", sectionBlock.innerStart);
             for (let subBlock of subsections) {
                 let subTitle = extractProperty(subBlock.inner, "title");
                 let subIcon = extractProperty(subBlock.inner, "icon");
                 
-                let subItems = extractWidgets(subBlock.inner);
+                let subItems = extractWidgetsWithOffset(subBlock.inner, subBlock.innerStart, sourceKey);
 
                 sectionSubsections.push({
                     title: subTitle,
                     icon: subIcon,
                     items: subItems,
-                    full: subBlock.full
+                    sourceStart: subBlock.start,
+                    sourceEnd: subBlock.end
                 });
-
-                // remove the subsection from sectionText to avoid double counting
-                sectionText = sectionText.replace(subBlock.full, "");
             }
 
             // 2. extract remaining widgets from sectionText
-            sectionItems = sectionItems.concat(extractWidgets(sectionText));
+            const allSectionItems = extractWidgetsWithOffset(sectionText, sectionBlock.innerStart, sourceKey);
+            for (let item of allSectionItems) {
+                let belongsToSubsection = false;
+                for (let sub of subsections) {
+                    if (item.sourceStart >= sub.start && item.sourceEnd <= sub.end) {
+                        belongsToSubsection = true;
+                        break;
+                    }
+                }
+                if (!belongsToSubsection)
+                    sectionItems.push(item);
+            }
 
-            // collect all search strings for scoring (excluding individual item texts to prevent them from matching the whole section)
+            // collect all search strings for scoring
             if (title) searchStrings.push(title);
             for (let sub of sectionSubsections) {
                 if (sub.title) searchStrings.push(sub.title);
@@ -187,17 +311,19 @@ Item {
 
             registerSection({
                 pageId: pageId,
+                subPage: subPage || "",
                 title: title || "Unknown",
                 icon: icon || "",
                 searchStrings: searchStrings,
                 items: sectionItems,
                 subsections: sectionSubsections,
-                fileImports: fileImports
+                sourceKey: sourceKey
             });
         }
     }
 
-    function extractBlocks(text, type) {
+    function extractBlocks(text, type, baseOffset) {
+        baseOffset = baseOffset || 0;
         let results = [];
         let i = 0;
 
@@ -205,7 +331,6 @@ Item {
             let index = text.indexOf(type, i);
             if (index === -1) break;
             
-            // Check if it's a whole word match (to avoid partial matches if any)
             let prevChar = index > 0 ? text[index - 1] : ' ';
             if (/[a-zA-Z0-9_]/.test(prevChar)) {
                 i = index + type.length;
@@ -215,7 +340,6 @@ Item {
             let braceStart = text.indexOf("{", index);
             if (braceStart === -1) break;
             
-            // Validate that between type and brace there are only spaces or nothing
             let between = text.substring(index + type.length, braceStart).trim();
             if (between !== "") {
                 i = index + type.length;
@@ -234,7 +358,6 @@ Item {
                     inString = true;
                     stringChar = ch;
                 } else if (inString && ch === stringChar) {
-                    // Check for escape character
                     if (text[j-1] !== '\\') {
                         inString = false;
                     }
@@ -247,13 +370,26 @@ Item {
             }
 
             let block = text.substring(braceStart + 1, j - 1);
-            let fullMatch = text.substring(index, j);
-            results.push({ inner: block, full: fullMatch });
+            results.push({
+                inner: block,
+                innerStart: baseOffset + braceStart + 1,
+                start: baseOffset + index,
+                end: baseOffset + j
+            });
 
             i = j;
         }
 
         return results;
+    }
+
+    function getBlockSource(item) {
+        if (!item || !item.sourceKey)
+            return "";
+        const source = root.fileSources[item.sourceKey];
+        if (!source || item.sourceStart === undefined || item.sourceEnd === undefined)
+            return "";
+        return source.substring(item.sourceStart, item.sourceEnd);
     }
 
     function extractProperty(block, prop) {
@@ -293,9 +429,6 @@ Item {
         data.searchStrings = searchStringsKeys.map(s => Translation.tr(s));
 
         let combined = (titleKey + " " + searchStringsKeys.join(" ") + " " + data.title + " " + data.searchStrings.join(" ")).toLowerCase();
-        data._tokens = tokenize(combined);
-        data._searchText = combined;
-
         sections.push(data);
     }
 
@@ -389,9 +522,12 @@ Item {
 
             if (sectionMatches) {
                 results.push({
+                    pageId: section.pageId,
+                    subPage: section.subPage || "",
                     title: section.title,
                     icon: section.icon,
-                    fileImports: section.fileImports,
+                    fileImports: root.fileImportsBySource[section.sourceKey] || "",
+                    sourceKey: section.sourceKey,
                     items: matchedItems,
                     subsections: matchedSubsections,
                     score: sectionScore
@@ -407,13 +543,12 @@ Item {
         return getSearchResult(text);
     }
     
-    // Fallback for old behaviour just in case
     function getSearchResult(query) {
         if (!query || query.trim() === "") return [];
         let dyn = getDynamicSearchResults(query);
         let flat = [];
         for (let r of dyn) {
-            flat.push({ pageIndex: 0, matchedString: r.title, score: r.score }); // dummy for old compatibility if needed
+            flat.push({ pageIndex: 0, matchedString: r.title, score: r.score });
         }
         return flat;
     }

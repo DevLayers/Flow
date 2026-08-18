@@ -32,6 +32,7 @@ Item {
     required property real movableXSpace
     required property real movableYSpace
     required property real minSafeScale
+    readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
 
     required property real parallaxX
     required property real parallaxY
@@ -41,6 +42,9 @@ Item {
     required property real scaleOriginX
     required property real scaleOriginY
     required property real scaleProgress
+
+    readonly property real effectiveParallaxX: videoEffectsDisabled ? 0 : (wallpaperZoomedOut ? wallpaperPlanes.centeredX : parallaxX)
+    readonly property real effectiveParallaxY: videoEffectsDisabled ? 0 : (wallpaperZoomedOut ? wallpaperPlanes.centeredY : parallaxY)
 
     required property bool anyWidgetIsDragging
     required property bool mediaModeOpen
@@ -54,7 +58,7 @@ Item {
 
     // Calculations
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
-    readonly property bool zoomInStyle: Config.options.overview.scrollingStyle.zoomStyle === "in"
+    readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
     readonly property bool overviewOpen: GlobalStates.overviewOpen
 
@@ -72,12 +76,12 @@ Item {
     readonly property real defaultRatio: zoomInStyle ? zoomLevels.in.default : zoomLevels.out.default
     readonly property real zoomedRatio: zoomInStyle ? zoomLevels.in.zoomed : zoomLevels.out.zoomed
 
-    property real scaleAnimated: overviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
+    property real scaleAnimated: !videoEffectsDisabled && overviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
     Behavior on scaleAnimated {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(wallpaperImageRoot)
     }
 
-    scale: showOpeningAnimation && overviewOpen && isScrollingLayout ? zoomedRatio : defaultRatio
+    scale: !videoEffectsDisabled && showOpeningAnimation && overviewOpen && isScrollingLayout ? zoomedRatio : defaultRatio
     opacity: mediaModeOpen ? 0 : 1
 
     Behavior on opacity {
@@ -98,7 +102,7 @@ Item {
         imageSource: !wallpaperSafetyTriggered ? wallpaperPath : ""
         animated: Config.options.background.animateWallpaperChanges
         fillMode: Image.PreserveAspectCrop
-        visible: Config.options.background.zoomOutStyle !== 2 && !wallpaperSafetyTriggered
+        visible: Config.options.background.zoomOutStyle !== 2 && !wallpaperSafetyTriggered && !wallpaperIsVideo && !Config.options.background.useWallpaperEngine
         opacity: 1.0
         mipmap: false
         antialiasing: false
@@ -113,8 +117,8 @@ Item {
         // GPU: only instantiate MultiEffect when zoomed-out state is active.
         // Previously always-loaded (active:true) with opacity controlling visibility —
         // the shader + texture stayed resident on GPU even at idle.
-        active: wallpaperImageRoot.wallpaperZoomedOut
-        opacity: wallpaperImageRoot.wallpaperZoomedOut ? 1.0 : 0.0
+        active: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperImageRoot.videoEffectsDisabled
+        opacity: wallpaperImageRoot.wallpaperZoomedOut && !wallpaperImageRoot.videoEffectsDisabled ? 1.0 : 0.0
         Behavior on opacity {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(wallpaperImageRoot)
         }
@@ -242,18 +246,8 @@ Item {
                     },
                     Translate {
                         id: parallaxTranslate
-                        x: {
-                            if (Config.options.background.zoomOutStyle === 1) {
-                                return 0;
-                            }
-                            return wallpaperImageRoot.wallpaperZoomedOut ? wallpaperPlanes.centeredX : parallaxX;
-                        }
-                        y: {
-                            if (Config.options.background.zoomOutStyle === 1) {
-                                return 0;
-                            }
-                            return wallpaperImageRoot.wallpaperZoomedOut ? wallpaperPlanes.centeredY : parallaxY;
-                        }
+                        x: Config.options.background.zoomOutStyle === 1 ? 0 : wallpaperImageRoot.effectiveParallaxX
+                        y: Config.options.background.zoomOutStyle === 1 ? 0 : wallpaperImageRoot.effectiveParallaxY
                         Behavior on x {
                             NumberAnimation {
                                 duration: Math.round(450 * Appearance.animMultiplier)
@@ -277,11 +271,10 @@ Item {
                         id: wallpaper
                         anchors.fill: parent
 
-                        visible: opacity > 0 && !wallpaperIsVideo
-                        opacity: (wallpaper.status === Image.Ready && !wallpaperIsVideo) ? 1 : 0
-                        // GPU: cap sourceSize to screen resolution — loading > native res wastes VRAM with no visual gain.
-                        // Clamp to max 110% of screen (enough for parallax headroom).
-                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.min(Math.round(screen.width * preferredWallpaperScale), Math.round(screen.width * 1.1)) : 1920, screen.height > 0 ? Math.min(Math.round(screen.height * preferredWallpaperScale), Math.round(screen.height * 1.1)) : 1080) : Qt.size(-1, -1)
+                        visible: opacity > 0
+                        opacity: (wallpaper.status === Image.Ready && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
+                        // GPU: cap sourceSize to screen resolution with dynamic zoom headroom — loading > needed res wastes VRAM with no visual gain.
+                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
 
                         imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
                         animated: Config.options.background.animateWallpaperChanges
@@ -310,8 +303,8 @@ Item {
                             }
                         }
 
-                        // GPU: same sourceSize cap as main wallpaper
-                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.min(Math.round(screen.width * preferredWallpaperScale), Math.round(screen.width * 1.1)) : 1920, screen.height > 0 ? Math.min(Math.round(screen.height * preferredWallpaperScale), Math.round(screen.height * 1.1)) : 1080) : Qt.size(-1, -1)
+                        // GPU: same dynamic sourceSize cap as main wallpaper
+                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
                         imageSource: (isActive && !wallpaperSafetyTriggered) ? wallpaperImageRoot.lockscreenWallpaperPath : ""
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation
@@ -344,6 +337,7 @@ Item {
                     sourceItem: wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+                    wallpaperIsVideo: wallpaperImageRoot.wallpaperIsVideo || Config.options.background.useWallpaperEngine
                 }
 
                 LockDesaturate {
@@ -368,12 +362,21 @@ Item {
                 }
 
                 WindowBlur {
+                    id: windowBlur
                     anchors.fill: parent
                     sourceItem: wallpaperVisualContainer
                     hasWindowsInActiveWorkspace: wallpaperImageRoot.hasWindowsInActiveWorkspace
                     overviewOpen: wallpaperImageRoot.overviewOpen
                 }
             }
+        }
+
+        BarGradientOverlay {
+            sourceItem: wallpaperVisualContainer
+            parallaxX: wallpaperImageRoot.effectiveParallaxX
+            parallaxY: wallpaperImageRoot.effectiveParallaxY
+            screenWidth: wallpaperImageRoot.screen.width
+            screenHeight: wallpaperImageRoot.screen.height
         }
     }
 }

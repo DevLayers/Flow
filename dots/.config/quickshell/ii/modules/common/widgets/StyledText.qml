@@ -7,7 +7,10 @@ Text {
     property real animationDistanceX: 0
     property real animationDistanceY: 6
 
-    renderType: Text.NativeRendering
+    // NativeRendering rasterizes glyphs before parent transforms. Popup content
+    // uses fractional monitor scaling, so that bitmap becomes jagged when
+    // enlarged. QtRendering keeps glyphs transformable at the final scale.
+    renderType: Text.QtRendering
     verticalAlignment: Text.AlignVCenter
     property bool shouldUseNumberFont: /^[0-9\s.,]+$/.test(root.text.trim())
     property var defaultFont: shouldUseNumberFont ? Appearance.font.family.numbers : Appearance.font.family.main

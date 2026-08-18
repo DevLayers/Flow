@@ -105,7 +105,7 @@ Item {
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: root.paused ? "pause" : "videocam"
-                    iconSize: Appearance.font.pixelSize.medium
+                    iconSize: Appearance.font.pixelSize.normal
                     color: Appearance.colors.colOnError
                 }
             }
@@ -213,7 +213,7 @@ Item {
                     implicitHeight: 36
                     MaterialSymbol {
                         text: "stop"
-                        iconSize: Appearance.font.pixelSize.medium
+                        iconSize: Appearance.font.pixelSize.normal
                         color: Appearance.colors.colOnErrorContainer
                         fill: 1
                         anchors.centerIn: parent
@@ -239,7 +239,7 @@ Item {
                     implicitHeight: 36
                     MaterialSymbol {
                         text: root.paused ? "play_arrow" : "pause"
-                        iconSize: Appearance.font.pixelSize.medium
+                        iconSize: Appearance.font.pixelSize.normal
                         color: Appearance.colors.colOnSecondaryContainer
                         fill: 1
                         anchors.centerIn: parent

@@ -18,6 +18,9 @@ Scope { // Scope
     // the helper has to be listening before the keyboard has ever been shown.
     readonly property bool autoShowEnabled: OskAutoShow.enabled
 
+    // The deck is the keyboard now; the classic one stays available for anyone who wants it back.
+    readonly property bool useDeck: (Config.options?.osk.style ?? "deck") === "deck"
+
     component OskControlButton: GroupButton { // Pin button
         baseWidth: 40
         baseHeight: 40
@@ -27,8 +30,24 @@ Scope { // Scope
     }
 
     Loader {
+        id: deckLoader
+        active: GlobalStates.oskOpen && root.useDeck
+        onActiveChanged: {
+            if (!deckLoader.active) {
+                Ydotool.releaseAllKeys();
+            }
+        }
+
+        sourceComponent: DeckWindow {
+            pinned: root.pinned
+            onPinToggled: root.pinned = !root.pinned
+            onHideRequested: GlobalStates.oskOpen = false
+        }
+    }
+
+    Loader {
         id: oskLoader
-        active: GlobalStates.oskOpen
+        active: GlobalStates.oskOpen && !root.useDeck
         onActiveChanged: {
             if (!oskLoader.active) {
                 Ydotool.releaseAllKeys();
