@@ -20,7 +20,7 @@ ColumnLayout {
     id: root
 
     required property string messageId
-    required property var messageData
+    property var messageData: Ai.messageByID[root.messageId]
 
     readonly property bool isUser: root.messageData?.role === "user"
     // Keep the dependency on `content` explicit. QML cannot always infer a

@@ -21,9 +21,10 @@ import qs.modules.common.widgets
 ColumnLayout {
     id: root
 
-    signal requestSend
+    signal requestSend(string text)
     signal requestEscape
     signal requestOpenHistory
+    signal requestOpenModels
     signal requestFocusNext
     signal requestFocusPrev
 
@@ -56,6 +57,7 @@ ColumnLayout {
     // used by the Wi-Fi and Bluetooth dialogs.
     property string activeRail: "composer"
     property bool syncingDraft: false
+    property bool modelsOpen: false
 
     readonly property var orderedModels: {
         const models = Ai.catalog.modelIds.map(modelId => Ai.catalog.models[modelId]).filter(model => !!model);
@@ -76,6 +78,19 @@ ColumnLayout {
         root.syncingDraft = true;
         draftInput.text = String(value ?? "");
         root.syncingDraft = false;
+    }
+
+    function send() {
+        if (Ai.isGenerating) {
+            Ai.stopGeneration();
+            return;
+        }
+        const text = draftInput.text.trim();
+        if (text.length === 0)
+            return;
+        draftInput.clear();
+        Ai.draft = "";
+        root.requestSend(text);
     }
 
     function focusInput() {
@@ -370,7 +385,7 @@ ColumnLayout {
                                 root.requestEscape();
                             event.accepted = true;
                         } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !(event.modifiers & Qt.ShiftModifier)) {
-                            root.requestSend();
+                            root.send();
                             event.accepted = true;
                         } else if (event.key === Qt.Key_Tab) {
                             if (event.modifiers & Qt.ShiftModifier) {
@@ -439,12 +454,13 @@ ColumnLayout {
                         label: root.modelTitle
                         maximumWidth: root.maximumCompactModelWidth
                         active: true
+                        highlightTertiary: root.modelsOpen
                         tooltip: Translation.tr("Choose model: %1").arg(root.modelTitle)
-                        onClicked: root.showRail("models")
+                        onClicked: root.requestOpenModels()
 
                         Keys.onPressed: event => {
                             if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
-                                root.showRail("models");
+                                root.requestOpenModels();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Escape) {
                                 root.focusInput();
@@ -468,10 +484,7 @@ ColumnLayout {
 
                         Keys.onPressed: event => {
                             if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
-                                if (Ai.isGenerating)
-                                    Ai.stopGeneration();
-                                else
-                                    root.requestSend();
+                                root.send();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Escape) {
                                 root.focusInput();
@@ -498,14 +511,6 @@ ColumnLayout {
                 railName: "actions"
             }
 
-            // ── Model carousel ─────────────────────────────────
-
-            RailPage {
-                id: modelsRail
-                railName: "models"
-                scrollable: true
-            }
-
             // ── Response effort carousel ───────────────────────
 
             RailPage {
@@ -526,7 +531,7 @@ ColumnLayout {
                 right: parent.right
             }
             width: root.controlExtent * 2 + root.horizontalInset
-            visible: root.activeRail === "models" || root.activeRail === "response"
+            visible: root.activeRail === "response"
             color: "transparent"
             gradient: Gradient {
                 orientation: Gradient.Horizontal
@@ -757,6 +762,7 @@ ColumnLayout {
         property string tooltip: ""
         property string customIcon: ""
         property bool active: false
+        property bool highlightTertiary: false
         property real maximumWidth: Number.POSITIVE_INFINITY
 
         implicitWidth: Math.min(contentRow.implicitWidth + root.chipPadding * 2, maximumWidth)
@@ -764,17 +770,23 @@ ColumnLayout {
         buttonRadius: Appearance.rounding.full
         focusPolicy: Qt.StrongFocus
         toggled: textButton.active
-        colBackground: textButton.activeFocus
-            ? (textButton.active ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer2Active)
-            : (textButton.active ? Appearance.colors.colPrimary : Appearance.colors.colLayer2)
-        colBackgroundHover: Appearance.colors.colLayer2Hover
-        colBackgroundActive: Appearance.colors.colLayer2Active
-        colRipple: Appearance.colors.colLayer2Active
-        colBackgroundToggled: Appearance.colors.colPrimary
-        colBackgroundToggledHover: Appearance.colors.colPrimaryHover
-        colBackgroundToggledActive: Appearance.colors.colPrimaryActive
-        colRippleToggled: Appearance.colors.colPrimaryActive
+        colBackground: textButton.highlightTertiary
+            ? (textButton.activeFocus ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colTertiaryContainer)
+            : (textButton.activeFocus
+                ? (textButton.active ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer2Active)
+                : (textButton.active ? Appearance.colors.colPrimary : Appearance.colors.colLayer2))
+        colBackgroundHover: textButton.highlightTertiary ? Appearance.colors.colTertiaryContainerHover : Appearance.colors.colLayer2Hover
+        colBackgroundActive: textButton.highlightTertiary ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colLayer2Active
+        colRipple: textButton.highlightTertiary ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colLayer2Active
+        colBackgroundToggled: textButton.highlightTertiary ? Appearance.colors.colTertiaryContainer : Appearance.colors.colPrimary
+        colBackgroundToggledHover: textButton.highlightTertiary ? Appearance.colors.colTertiaryContainerHover : Appearance.colors.colPrimaryHover
+        colBackgroundToggledActive: textButton.highlightTertiary ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colPrimaryActive
+        colRippleToggled: textButton.highlightTertiary ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colPrimaryActive
         Accessible.name: textButton.tooltip
+
+        readonly property color contentColor: textButton.highlightTertiary
+            ? Appearance.m3colors.m3onTertiaryContainer
+            : ((textButton.active || textButton.activeFocus) ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2)
 
         contentItem: RowLayout {
             id: contentRow
@@ -789,7 +801,7 @@ ColumnLayout {
                     width: Appearance.font.pixelSize.larger
                     height: Appearance.font.pixelSize.larger
                     colorize: true
-                    color: (textButton.active || textButton.activeFocus) ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
+                    color: textButton.contentColor
                 }
             }
 
@@ -799,7 +811,7 @@ ColumnLayout {
                 text: textButton.symbol
                 iconSize: Appearance.font.pixelSize.larger
                 fill: 1
-                color: (textButton.active || textButton.activeFocus) ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
+                color: textButton.contentColor
             }
 
             StyledText {
@@ -810,7 +822,7 @@ ColumnLayout {
                 maximumLineCount: 1
                 font.pixelSize: Appearance.font.pixelSize.normal
                 font.weight: Font.Bold
-                color: (textButton.active || textButton.activeFocus) ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
+                color: textButton.contentColor
             }
         }
 
@@ -827,11 +839,6 @@ ColumnLayout {
         active: enabled && !Ai.isGenerating
         enabled: Ai.isGenerating || root.hasDraft
         opacity: 1
-        onClicked: {
-            if (Ai.isGenerating)
-                Ai.stopGeneration();
-            else
-                root.requestSend();
-        }
+        onClicked: root.send()
     }
 }

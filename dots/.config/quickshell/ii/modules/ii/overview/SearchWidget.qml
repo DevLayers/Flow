@@ -403,19 +403,20 @@ Item {
     // Send the current search bar text as a chat message. The search bar is
     // the composer in AI mode, so both Enter in the field and the send button
     // in the panel funnel through here.
-    function sendAiMessage() {
-        const raw = Ai.draft;
+    function sendAiMessage(messageText) {
+        const raw = (typeof messageText === "string" && messageText.length > 0) ? messageText : Ai.draft;
         const cleaned = StringUtils.cleanOnePrefix(raw, [Config.options.search.prefix.ai]).trim();
         if (!cleaned)
             return;
+        Ai.draft = "";
         const parsed = AiActionRegistry.parseInput(cleaned, "/");
         if (parsed.kind === "command" || parsed.kind === "unknown-command") {
             root.executeAiCommand(parsed);
-            Ai.draft = "";
         } else {
             Ai.sendUserMessage(parsed.text);
         }
-        root.focusSearchInput();
+        if (aiPanelLoader.item && typeof aiPanelLoader.item.focusComposer === "function")
+            aiPanelLoader.item.focusComposer();
     }
 
     // Search and sidebar share the parser; commands that need a sidebar host
@@ -648,7 +649,7 @@ Item {
                 return (materialSymbolsPanelLoader.item ? materialSymbolsPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isAiMode) {
                 const panelH = aiPanelLoader.item ? aiPanelLoader.item.implicitHeight : 520;
-                return panelH + 20;
+                return panelH + 16;
             }
             return gridLayout.implicitHeight;
         }
@@ -1571,10 +1572,10 @@ Item {
                 active: root.isAiMode || opacity > 0.01
                 visible: opacity > 0.01
                 Layout.fillWidth: true
-                Layout.leftMargin: 10
-                Layout.rightMargin: 10
-                Layout.topMargin: 10
-                Layout.bottomMargin: 10
+                Layout.leftMargin: 8
+                Layout.rightMargin: 8
+                Layout.topMargin: 8
+                Layout.bottomMargin: 8
                 Layout.preferredHeight: (root.isAiMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
                 height: Layout.preferredHeight
                 source: "AiChatPanel.qml"
@@ -1599,15 +1600,6 @@ Item {
                     }
                 }
 
-                onLoaded: {
-                    if (item) {
-                        item.requestBackToSearch.connect(root.exitAiMode);
-                        item.requestFocusComposer.connect(root.focusSearchInput);
-                        item.requestSendMessage.connect(root.sendAiMessage);
-                        item.requestContinueInSidebar.connect(root.continueInSidebar);
-                    }
-                }
-
                 Connections {
                     target: aiPanelLoader.item
                     ignoreUnknownSignals: true
@@ -1615,10 +1607,11 @@ Item {
                         root.exitAiMode();
                     }
                     function onRequestFocusComposer() {
-                        root.focusSearchInput();
+                        if (aiPanelLoader.item && typeof aiPanelLoader.item.focusComposer === "function")
+                            aiPanelLoader.item.focusComposer();
                     }
-                    function onRequestSendMessage() {
-                        root.sendAiMessage();
+                    function onRequestSendMessage(text) {
+                        root.sendAiMessage(text);
                     }
                     function onRequestContinueInSidebar() {
                         root.continueInSidebar();

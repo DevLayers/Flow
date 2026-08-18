@@ -33,13 +33,33 @@ Item {
 
     signal requestBackToSearch()
     signal requestFocusComposer()
-    signal requestSendMessage()
+    signal requestSendMessage(string text)
     signal requestContinueInSidebar()
 
     property bool historyOpen: false
+    property bool modelsOpen: false
+
+    onModelsOpenChanged: {
+        if (root.modelsOpen)
+            root.historyOpen = false;
+    }
     onHistoryOpenChanged: {
-        if (root.historyOpen)
+        if (root.historyOpen) {
+            root.modelsOpen = false;
             Ai.sessions.ensureLoaded();
+        }
+    }
+
+    readonly property var orderedModels: {
+        const models = Ai.catalog.modelIds.map(modelId => Ai.catalog.models[modelId]).filter(model => !!model);
+        models.sort((first, second) => {
+            const firstLocal = Ai.catalog.isModelLocal(first) ? 0 : 1;
+            const secondLocal = Ai.catalog.isModelLocal(second) ? 0 : 1;
+            if (firstLocal !== secondLocal)
+                return firstLocal - secondLocal;
+            return String(first.title ?? first.value ?? "").localeCompare(String(second.title ?? second.value ?? ""));
+        });
+        return models;
     }
 
     Component.onCompleted: Ai.sessions.ensureLoaded()
@@ -66,6 +86,10 @@ Item {
             sessionList.contentY = Math.max(0, sessionList.contentY - 64);
             return;
         }
+        if (root.modelsOpen) {
+            modelList.contentY = Math.max(0, modelList.contentY - 64);
+            return;
+        }
         if (messageList.contentHeight > messageList.height)
             messageList.contentY = Math.max(0, messageList.contentY - 64);
     }
@@ -75,6 +99,12 @@ Item {
             sessionList.contentY = Math.min(
                 Math.max(0, sessionList.contentHeight - sessionList.height),
                 sessionList.contentY + 64);
+            return;
+        }
+        if (root.modelsOpen) {
+            modelList.contentY = Math.min(
+                Math.max(0, modelList.contentHeight - modelList.height),
+                modelList.contentY + 64);
             return;
         }
         if (messageList.contentHeight > messageList.height)
@@ -159,6 +189,10 @@ Item {
     function handleEscape() {
         if (root.historyOpen) {
             root.historyOpen = false;
+            return true;
+        }
+        if (root.modelsOpen) {
+            root.modelsOpen = false;
             return true;
         }
         return false;
@@ -441,10 +475,10 @@ Item {
             Item {
                 id: messagesView
                 anchors.fill: parent
-                opacity: root.historyOpen ? 0.0 : 1.0
+                opacity: (!root.historyOpen && !root.modelsOpen) ? 1.0 : 0.0
                 visible: opacity > 0.001
                 transform: Translate {
-                    x: root.historyOpen ? -36 : 0
+                    x: (root.historyOpen || root.modelsOpen) ? -36 : 0
                 }
 
                 Behavior on opacity {
@@ -483,7 +517,9 @@ Item {
                     clip: true
                     spacing: 12
                     visible: root.visibleMessageIds.length > 0
-                    model: root.visibleMessageIds
+                    model: ScriptModel {
+                        values: root.visibleMessageIds
+                    }
 
                     property bool following: true
 
@@ -505,6 +541,7 @@ Item {
                         required property int index
                         width: messageList.width
                         messageId: modelData
+                        messageData: Ai.messageByID[modelData]
                     }
                 }
             }
@@ -697,6 +734,216 @@ Item {
                     }
                 }
             }
+
+            // Inlined Models view (Identical design to historyView)
+            Item {
+                id: modelsView
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.topMargin: 0
+                anchors.bottomMargin: 0
+                opacity: root.modelsOpen ? 1.0 : 0.0
+                visible: opacity > 0.001
+                transform: Translate {
+                    x: root.modelsOpen ? 0 : 36
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+                Behavior on transform {
+                    NumberAnimation {
+                        property: "x"
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+
+                // Empty models placeholder
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    visible: root.orderedModels.length === 0
+
+                    MaterialSymbol {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "smart_toy"
+                        fill: 1
+                        iconSize: Appearance.font.pixelSize.huge
+                        color: Appearance.colors.colSubtext
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: Translation.tr("No models available")
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colSubtext
+                    }
+                }
+
+                ListView {
+                    id: modelList
+                    anchors.fill: parent
+                    clip: false
+                    spacing: 8
+                    topMargin: 16
+                    bottomMargin: 16
+                    visible: root.orderedModels.length > 0
+                    model: root.orderedModels
+
+                    header: Item {
+                        width: modelList.width
+                        implicitHeight: modelHeaderRow.implicitHeight + 12
+                        height: implicitHeight
+
+                        RowLayout {
+                            id: modelHeaderRow
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.topMargin: 0
+                            anchors.leftMargin: 4
+                            anchors.rightMargin: 4
+
+                            StyledText {
+                                text: Translation.tr("Models")
+                                font.pixelSize: Appearance.font.pixelSize.large
+                                font.weight: Font.DemiBold
+                                color: Appearance.colors.colOnLayer1
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            StyledText {
+                                text: Translation.tr("%1 models").arg(root.orderedModels.length)
+                                font.pixelSize: Appearance.font.pixelSize.smallie
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
+                    }
+
+                    delegate: Item {
+                        id: modelRow
+                        required property var modelData
+                        width: modelList.width
+                        implicitHeight: 48
+                        height: implicitHeight
+
+                        readonly property bool isActive: modelRow.modelData?.id === Ai.currentModelId
+
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 8
+
+                            // Main Model Info Card
+                            RippleButton {
+                                id: modelCard
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                buttonRadius: Appearance.rounding.full
+                                toggled: modelRow.isActive
+                                colBackground: modelRow.isActive ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                                colBackgroundHover: modelRow.isActive ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
+                                colRipple: Appearance.colors.colLayer2Active
+                                colBackgroundToggled: Appearance.colors.colPrimary
+                                colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+                                colBackgroundToggledActive: Appearance.colors.colPrimaryActive
+
+                                onClicked: {
+                                    Ai.setModel(modelRow.modelData.id, false);
+                                    root.modelsOpen = false;
+                                    root.requestFocusComposer();
+                                }
+
+                                contentItem: RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 16
+                                    anchors.rightMargin: 16
+                                    spacing: 12
+
+                                    Loader {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        active: (modelRow.modelData.icon ?? "").length > 0
+                                        visible: active
+                                        sourceComponent: CustomIcon {
+                                            source: modelRow.modelData.icon ?? ""
+                                            width: Appearance.font.pixelSize.larger
+                                            height: Appearance.font.pixelSize.larger
+                                            colorize: true
+                                            color: modelRow.isActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
+                                        }
+                                    }
+
+                                    MaterialSymbol {
+                                        visible: !(modelRow.modelData.icon ?? "").length
+                                        text: modelRow.modelData.materialIcon ?? "auto_awesome"
+                                        fill: 1
+                                        iconSize: Appearance.font.pixelSize.larger
+                                        color: modelRow.isActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: modelRow.modelData.title || modelRow.modelData.name || modelRow.modelData.value || Translation.tr("Unknown model")
+                                        font.pixelSize: Appearance.font.pixelSize.normal
+                                        font.weight: Font.DemiBold
+                                        color: modelRow.isActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
+                                        elide: Text.ElideRight
+                                    }
+
+                                    StyledText {
+                                        visible: Ai.catalog.isModelLocal(modelRow.modelData)
+                                        text: Translation.tr("Local")
+                                        font.pixelSize: Appearance.font.pixelSize.smallie
+                                        color: modelRow.isActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colSubtext
+                                    }
+                                }
+                            }
+
+                            // Right Circle Check/Select Button
+                            RippleButton {
+                                id: selectModelBtn
+                                implicitWidth: 48
+                                implicitHeight: 48
+                                Layout.preferredWidth: 48
+                                Layout.preferredHeight: 48
+                                buttonRadius: Appearance.rounding.full
+                                toggled: modelRow.isActive
+                                colBackground: modelRow.isActive ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                                colBackgroundHover: modelRow.isActive ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
+                                colRipple: Appearance.colors.colLayer2Active
+                                colBackgroundToggled: Appearance.colors.colPrimary
+                                colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+                                colBackgroundToggledActive: Appearance.colors.colPrimaryActive
+
+                                onClicked: {
+                                    Ai.setModel(modelRow.modelData.id, false);
+                                    root.modelsOpen = false;
+                                    root.requestFocusComposer();
+                                }
+
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: modelRow.isActive ? "check" : "arrow_forward"
+                                    fill: 1
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: modelRow.isActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
+                                }
+
+                                StyledToolTip {
+                                    text: modelRow.isActive ? Translation.tr("Active model") : Translation.tr("Select model")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // ════════════════════════════════════════════════════════
@@ -706,9 +953,11 @@ Item {
         AiSearchComposer {
             id: composer
             Layout.fillWidth: true
-            onRequestSend: root.requestSendMessage()
+            modelsOpen: root.modelsOpen
+            onRequestSend: text => root.requestSendMessage(text)
             onRequestEscape: root.handleComposerEscape()
             onRequestOpenHistory: root.historyOpen = !root.historyOpen
+            onRequestOpenModels: root.modelsOpen = !root.modelsOpen
             onRequestFocusNext: historyToggleBtn.forceActiveFocus()
             onRequestFocusPrev: brainBackButton.forceActiveFocus()
         }

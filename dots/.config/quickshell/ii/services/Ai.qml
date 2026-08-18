@@ -1114,8 +1114,13 @@ Singleton {
         }
         root.sessionModelId = model.id;
         root.thinkingLevel = root.responseProfileForModel(model.id).thinkingLevel;
-        if (setPersistentState)
+        if (setPersistentState) {
             root.rememberModel(model.id);
+            if (Persistent.states?.ai) {
+                Persistent.states.ai.defaultModelId = model.id;
+                Persistent.states.ai.modelId = model.id;
+            }
+        }
         if (feedback)
             root.addMessage(Translation.tr("Model set to %1").arg(model.name), root.interfaceRole);
         if (model.requires_key && root.apiKeysLoaded && !(root.apiKeys[model.key_id]?.length > 0))
