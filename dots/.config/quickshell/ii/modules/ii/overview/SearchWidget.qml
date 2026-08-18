@@ -386,8 +386,12 @@ Item {
         root.searchingText = "";
         LauncherSearch.query = "";
         searchBar.searchInput.text = "";
-        if (focusNormalSearch)
-            Qt.callLater(root.focusSearchInput);
+        if (focusNormalSearch) {
+            Qt.callLater(() => {
+                root.focusSearchInput();
+                searchBar.searchInput.forceActiveFocus();
+            });
+        }
     }
 
     // Leave AI chat and return to the plain search without discarding an
@@ -429,17 +433,24 @@ Item {
         case "provider":
             Ai.setProvider(args.join(" ").trim());
             break;
-        case "thinking":
-            Ai.setThinkingLevel(args[0] ?? "medium");
-            break;
+        case "temp":
         case "temperature":
-            Ai.setTemperature(Number(args[0]));
+            Ai.setTemperature(Number(args[0] ?? 0.7));
             break;
-        case "new-chat":
+        case "effort":
+        case "thinking":
+        case "reasoning":
+            Ai.setResponseMode(args[0] ?? "balanced");
+            break;
+        case "web":
+            Ai.setWebMode(args[0] ?? "auto");
+            break;
+        case "tools":
+            Ai.setFunctionExposure(args[0] ?? "all");
+            break;
+        case "clear":
+        case "new":
             Ai.newChat();
-            break;
-        case "history":
-            root.continueInSidebar();
             break;
         default:
             Ai.submissionNotice = Translation.tr("/%1 is available in the sidebar.").arg(parsed.name);
@@ -500,6 +511,20 @@ Item {
             return;
         }
 
+        // TAB / Backtab: route navigation inside AI panel when in AI mode
+        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+            if (root.isAiMode) {
+                if (aiPanelLoader.item) {
+                    if (event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier))
+                        aiPanelLoader.item.focusPrev();
+                    else
+                        aiPanelLoader.item.focusNext();
+                }
+                event.accepted = true;
+                return;
+            }
+        }
+
         // Handle Backspace: focus and delete character if not focused
         if (event.key === Qt.Key_Backspace) {
             if (root.isAiMode) {
@@ -536,8 +561,13 @@ Item {
         }
 
         // Only handle visible printable characters (ignore control chars, arrows, etc.)
-        if (event.text && event.text.length === 1 && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Return && event.key !== Qt.Key_Delete && event.text.charCodeAt(0) >= 0x20) // ignore control chars like Backspace, Tab, etc.
+        if (event.text && event.text.length === 1 && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Return && event.key !== Qt.Key_Delete && event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backtab && event.text.charCodeAt(0) >= 0x20)
         {
+            if (root.isAiMode) {
+                root.focusSearchInput();
+                event.accepted = true;
+                return;
+            }
             if (!searchBar.searchInput.activeFocus) {
                 root.focusSearchInput();
                 // Insert the character at the cursor position
@@ -572,6 +602,12 @@ Item {
                 height: searchWidgetContent.height
                 radius: searchWidgetContent.radius
             }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            // Absorb clicks inside search widget so they do not hit the full-screen dismiss MouseArea
+            onClicked: {}
         }
         implicitWidth: {
             let baseW = 0;
@@ -616,7 +652,7 @@ Item {
             }
             return gridLayout.implicitHeight;
         }
-        radius: root.isAiMode ? Appearance.rounding.large : Appearance.rounding.windowRounding
+        radius: root.isAiMode ? Appearance.rounding.verylarge : Appearance.rounding.windowRounding
         color: GlobalStates.searchConnectActive ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
 
         Behavior on implicitWidth {
@@ -1560,6 +1596,15 @@ Item {
                         duration: 220
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+
+                onLoaded: {
+                    if (item) {
+                        item.requestBackToSearch.connect(root.exitAiMode);
+                        item.requestFocusComposer.connect(root.focusSearchInput);
+                        item.requestSendMessage.connect(root.sendAiMessage);
+                        item.requestContinueInSidebar.connect(root.continueInSidebar);
                     }
                 }
 

@@ -37,6 +37,12 @@ Item {
     signal requestContinueInSidebar()
 
     property bool historyOpen: false
+    onHistoryOpenChanged: {
+        if (root.historyOpen)
+            Ai.sessions.ensureLoaded();
+    }
+
+    Component.onCompleted: Ai.sessions.ensureLoaded()
     property string pendingTrashId: ""
 
     readonly property real headerControlExtent: Math.round(Appearance.font.pixelSize.huge * 2)
@@ -163,6 +169,28 @@ Item {
             root.requestBackToSearch();
     }
 
+    function focusNext() {
+        if (brainBackButton.activeFocus)
+            historyToggleBtn.forceActiveFocus();
+        else if (historyToggleBtn.activeFocus)
+            newChatBtn.forceActiveFocus();
+        else if (newChatBtn.activeFocus)
+            composer.focusInput();
+        else
+            composer.focusFirstButton();
+    }
+
+    function focusPrev() {
+        if (brainBackButton.activeFocus)
+            composer.focusLastButton();
+        else if (newChatBtn.activeFocus)
+            historyToggleBtn.forceActiveFocus();
+        else if (historyToggleBtn.activeFocus)
+            brainBackButton.forceActiveFocus();
+        else
+            brainBackButton.forceActiveFocus();
+    }
+
     readonly property var visibleMessageIds: Ai.messageIDs.filter(id => {
         const m = Ai.messageByID[id];
         return m && m.role !== Ai.interfaceRole && (m.visibleToUser ?? true);
@@ -172,6 +200,15 @@ Item {
         if (event.key === Qt.Key_Escape) {
             if (!root.handleEscape())
                 root.requestBackToSearch();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Tab) {
+            if (event.modifiers & Qt.ShiftModifier)
+                root.focusPrev();
+            else
+                root.focusNext();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Backtab) {
+            root.focusPrev();
             event.accepted = true;
         } else if (event.key === Qt.Key_O && (event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)) {
             Ai.newChat();
@@ -198,6 +235,11 @@ Item {
             radius: Appearance.rounding.full
             clip: true
 
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {}
+            }
+
             RowLayout {
                 anchors.fill: parent
                 anchors.margins: root.headerControlPadding
@@ -209,18 +251,40 @@ Item {
                     implicitWidth: root.headerControlExtent
                     implicitHeight: root.headerControlExtent
                     buttonRadius: Appearance.rounding.full
-                    colBackground: brainBackButton.hovered ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
+                    focusPolicy: Qt.StrongFocus
+                    colBackground: brainBackButton.activeFocus
+                        ? Appearance.colors.colLayer2Active
+                        : (brainBackButton.hovered ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2)
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     colRipple: Appearance.colors.colLayer2Active
                     onClicked: root.requestBackToSearch()
 
                     Accessible.name: Translation.tr("Back to search")
 
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
+                            root.requestBackToSearch();
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Escape) {
+                            root.focusComposer();
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Tab) {
+                            if (event.modifiers & Qt.ShiftModifier)
+                                newChatBtn.forceActiveFocus();
+                            else
+                                root.focusComposer();
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Backtab) {
+                            newChatBtn.forceActiveFocus();
+                            event.accepted = true;
+                        }
+                    }
+
                     contentItem: MaterialSymbol {
-                        text: brainBackButton.hovered ? "arrow_back" : "network_intelligence"
+                        text: (brainBackButton.hovered || brainBackButton.activeFocus) ? "arrow_back" : "network_intelligence"
                         fill: 1
                         iconSize: Appearance.font.pixelSize.larger
-                        color: brainBackButton.hovered ? Appearance.m3colors.m3primary : Appearance.colors.colOnLayer1
+                        color: (brainBackButton.hovered || brainBackButton.activeFocus) ? Appearance.m3colors.m3primary : Appearance.colors.colOnLayer1
                     }
 
                     StyledToolTip {
@@ -257,13 +321,35 @@ Item {
                         implicitWidth: root.headerControlExtent
                         implicitHeight: root.headerControlExtent
                         buttonRadius: Appearance.rounding.full
+                        focusPolicy: Qt.StrongFocus
                         toggled: root.historyOpen
-                        colBackground: root.historyOpen ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                        colBackground: historyToggleBtn.activeFocus
+                            ? (root.historyOpen ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer2Active)
+                            : (root.historyOpen ? Appearance.colors.colPrimary : Appearance.colors.colLayer2)
                         colBackgroundHover: root.historyOpen ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
                         colRipple: Appearance.colors.colLayer2Active
                         onClicked: root.historyOpen = !root.historyOpen
 
                         Accessible.name: Translation.tr("History")
+
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
+                                root.historyOpen = !root.historyOpen;
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Escape) {
+                                root.focusComposer();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Tab) {
+                                if (event.modifiers & Qt.ShiftModifier)
+                                    composer.focusLastButton();
+                                else
+                                    newChatBtn.forceActiveFocus();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Backtab) {
+                                composer.focusLastButton();
+                                event.accepted = true;
+                            }
+                        }
 
                         contentItem: MaterialSymbol {
                             text: "history"
@@ -282,7 +368,10 @@ Item {
                         implicitWidth: root.headerControlExtent
                         implicitHeight: root.headerControlExtent
                         buttonRadius: Appearance.rounding.full
-                        colBackground: Appearance.colors.colLayer2
+                        focusPolicy: Qt.StrongFocus
+                        colBackground: newChatBtn.activeFocus
+                            ? Appearance.colors.colLayer2Active
+                            : (newChatBtn.hovered ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2)
                         colBackgroundHover: Appearance.colors.colLayer2Hover
                         colRipple: Appearance.colors.colLayer2Active
                         onClicked: {
@@ -293,11 +382,32 @@ Item {
 
                         Accessible.name: Translation.tr("New chat")
 
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
+                                Ai.newChat();
+                                root.historyOpen = false;
+                                root.focusComposer();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Escape) {
+                                root.focusComposer();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Tab) {
+                                if (event.modifiers & Qt.ShiftModifier)
+                                    historyToggleBtn.forceActiveFocus();
+                                else
+                                    brainBackButton.forceActiveFocus();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Backtab) {
+                                historyToggleBtn.forceActiveFocus();
+                                event.accepted = true;
+                            }
+                        }
+
                         contentItem: MaterialSymbol {
                             text: "add_comment"
                             fill: 1
                             iconSize: Appearance.font.pixelSize.larger
-                            color: Appearance.colors.colOnLayer2
+                            color: newChatBtn.activeFocus ? Appearance.m3colors.m3primary : Appearance.colors.colOnLayer2
                         }
 
                         StyledToolTip {
@@ -321,6 +431,11 @@ Item {
             color: Appearance.colors.colLayer1
             radius: Appearance.rounding.large
             clip: true
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.focusComposer()
+            }
 
             // Messages view (Transcript & Starters)
             Item {
@@ -348,65 +463,16 @@ Item {
                     }
                 }
 
-                // Empty state starter chips
-                ColumnLayout {
-                    anchors.centerIn: parent
-                    width: parent.width - 48
-                    spacing: 16
-                    visible: root.visibleMessageIds.length === 0
-
-                    MaterialSymbol {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: "auto_awesome"
-                        fill: 1
-                        iconSize: Appearance.font.pixelSize.huge
-                        color: Appearance.m3colors.m3primary
-                    }
-
-                    StyledText {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: Translation.tr("How can I help you?")
-                        font.pixelSize: Appearance.font.pixelSize.large
-                        font.weight: Font.DemiBold
-                        color: Appearance.colors.colOnLayer1
-                    }
-
-                    Flow {
-                        Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignHCenter
-                        spacing: 8
-
-                        Repeater {
-                            model: [
-                                Translation.tr("Explain what this command does"),
-                                Translation.tr("Summarise this in three points"),
-                                Translation.tr("What is wrong with this code?"),
-                                Translation.tr("Help me word this")
-                            ]
-                            delegate: RippleButton {
-                                id: starterBtn
-                                required property string modelData
-                                implicitHeight: 32
-                                implicitWidth: starterLabel.implicitWidth + 24
-                                buttonRadius: Appearance.rounding.full
-                                colBackground: Appearance.colors.colLayer2
-                                colBackgroundHover: Appearance.colors.colLayer2Hover
-                                colRipple: Appearance.colors.colLayer2Active
-                                onClicked: {
-                                    Ai.draft = starterBtn.modelData;
-                                    root.requestFocusComposer();
-                                }
-
-                                contentItem: StyledText {
-                                    id: starterLabel
-                                    anchors.centerIn: parent
-                                    text: starterBtn.modelData
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    color: Appearance.colors.colOnLayer2
-                                }
-                            }
-                        }
-                    }
+                // Empty state matching sidebarPolicies/AiChat
+                PagePlaceholder {
+                    id: emptyStatePlaceholder
+                    z: 2
+                    shown: root.visibleMessageIds.length === 0
+                    icon: Ai.currentPersona?.icon ?? "neurology"
+                    title: Ai.currentPersona?.name ?? Translation.tr("Large language models")
+                    description: Ai.currentPersona?.description ?? Translation.tr("Ask anything, or start with one of these")
+                    shape: MaterialShape.Shape.PixelCircle
+                    animateIconOnShow: true
                 }
 
                 // Messages list
@@ -447,7 +513,10 @@ Item {
             Item {
                 id: historyView
                 anchors.fill: parent
-                anchors.margins: 16
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.topMargin: 0
+                anchors.bottomMargin: 0
                 opacity: root.historyOpen ? 1.0 : 0.0
                 visible: opacity > 0.001
                 transform: Translate {
@@ -470,51 +539,96 @@ Item {
                     }
                 }
 
+                // Empty history placeholder
                 ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    visible: (Ai.sessions.index ?? []).length === 0
+
+                    MaterialSymbol {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "history"
+                        fill: 1
+                        iconSize: Appearance.font.pixelSize.huge
+                        color: Appearance.colors.colSubtext
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: Translation.tr("No conversation history")
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colSubtext
+                    }
+                }
+
+                ListView {
+                    id: sessionList
                     anchors.fill: parent
-                    spacing: 12
+                    clip: false
+                    spacing: 8
+                    topMargin: 16
+                    bottomMargin: 16
+                    visible: (Ai.sessions.index ?? []).length > 0
+                    model: Ai.sessions.index ?? []
 
-                    RowLayout {
-                        Layout.fillWidth: true
+                    header: Item {
+                        width: sessionList.width
+                        implicitHeight: headerRow.implicitHeight + 12
+                        height: implicitHeight
 
-                        StyledText {
-                            text: Translation.tr("Conversations")
-                            font.pixelSize: Appearance.font.pixelSize.large
-                            font.weight: Font.DemiBold
-                            color: Appearance.colors.colOnLayer1
-                        }
+                        RowLayout {
+                            id: headerRow
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.topMargin: 0
+                            anchors.leftMargin: 4
+                            anchors.rightMargin: 4
 
-                        Item { Layout.fillWidth: true }
+                            StyledText {
+                                text: Translation.tr("Conversations")
+                                font.pixelSize: Appearance.font.pixelSize.large
+                                font.weight: Font.DemiBold
+                                color: Appearance.colors.colOnLayer1
+                            }
 
-                        StyledText {
-                            text: Translation.tr("%1 sessions").arg(Ai.sessions.entries.length)
-                            font.pixelSize: Appearance.font.pixelSize.smallie
-                            color: Appearance.colors.colSubtext
+                            Item { Layout.fillWidth: true }
+
+                            StyledText {
+                                text: Translation.tr("%1 sessions").arg((Ai.sessions.index ?? []).length)
+                                font.pixelSize: Appearance.font.pixelSize.smallie
+                                color: Appearance.colors.colSubtext
+                            }
                         }
                     }
 
-                    ListView {
-                        id: sessionList
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        spacing: 6
-                        model: Ai.sessions.entries
+                    delegate: Item {
+                        id: sessionRow
+                        required property var modelData
+                        width: sessionList.width
+                        implicitHeight: 48
+                        height: implicitHeight
 
-                        delegate: RowLayout {
-                            id: sessionRow
-                            required property var modelData
-                            width: sessionList.width
+                        readonly property bool isActive: sessionRow.modelData?.id === Ai.sessions.currentId
+
+                        RowLayout {
+                            anchors.fill: parent
                             spacing: 8
 
+                            // Main Conversation Info Card
                             RippleButton {
+                                id: sessionCard
                                 Layout.fillWidth: true
-                                implicitHeight: 48
-                                buttonRadius: Appearance.rounding.normal
-                                toggled: Ai.sessions.currentId === sessionRow.modelData.id
-                                colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-                                colBackgroundHover: toggled ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                                Layout.fillHeight: true
+                                buttonRadius: Appearance.rounding.full
+                                toggled: sessionRow.isActive
+                                colBackground: sessionRow.isActive ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                                colBackgroundHover: sessionRow.isActive ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
                                 colRipple: Appearance.colors.colLayer2Active
+                                colBackgroundToggled: Appearance.colors.colPrimary
+                                colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+                                colBackgroundToggledActive: Appearance.colors.colPrimaryActive
+
                                 onClicked: {
                                     Ai.openSession(sessionRow.modelData.id);
                                     root.historyOpen = false;
@@ -523,132 +637,61 @@ Item {
 
                                 contentItem: RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    anchors.rightMargin: 12
-                                    spacing: 8
+                                    anchors.leftMargin: 16
+                                    anchors.rightMargin: 16
+                                    spacing: 12
 
                                     MaterialSymbol {
-                                        text: sessionRow.modelData.pinned ? "push_pin" : "chat_bubble"
+                                        text: "chat_bubble"
                                         fill: 1
-                                        iconSize: Appearance.font.pixelSize.normal
-                                        color: Appearance.colors.colOnLayer2
+                                        iconSize: Appearance.font.pixelSize.larger
+                                        color: sessionRow.isActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
                                     }
 
-                                    ColumnLayout {
+                                    StyledText {
                                         Layout.fillWidth: true
-                                        spacing: 1
-
-                                        StyledText {
-                                            Layout.fillWidth: true
-                                            text: sessionRow.modelData.title || Translation.tr("Untitled chat")
-                                            elide: Text.ElideRight
-                                            color: Appearance.colors.colOnLayer2
-                                        }
-
-                                        StyledText {
-                                            Layout.fillWidth: true
-                                            text: sessionRow.modelData.preview || Translation.tr("No messages yet")
-                                            elide: Text.ElideRight
-                                            font.pixelSize: Appearance.font.pixelSize.smallie
-                                            color: Appearance.colors.colSubtext
-                                        }
+                                        text: sessionRow.modelData.title || Translation.tr("Untitled chat")
+                                        font.pixelSize: Appearance.font.pixelSize.normal
+                                        font.weight: Font.DemiBold
+                                        color: sessionRow.isActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
+                                        elide: Text.ElideRight
                                     }
                                 }
                             }
 
+                            // Right Circle Arrow Button
                             RippleButton {
-                                implicitWidth: 32
-                                implicitHeight: 32
+                                id: openSessionBtn
+                                implicitWidth: 48
+                                implicitHeight: 48
+                                Layout.preferredWidth: 48
+                                Layout.preferredHeight: 48
                                 buttonRadius: Appearance.rounding.full
-                                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                                colBackgroundHover: Appearance.colors.colLayer2Hover
+                                toggled: sessionRow.isActive
+                                colBackground: sessionRow.isActive ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                                colBackgroundHover: sessionRow.isActive ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
                                 colRipple: Appearance.colors.colLayer2Active
-                                onClicked: Ai.sessions.setPinned(sessionRow.modelData.id, !sessionRow.modelData.pinned)
+                                colBackgroundToggled: Appearance.colors.colPrimary
+                                colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+                                colBackgroundToggledActive: Appearance.colors.colPrimaryActive
 
-                                contentItem: MaterialSymbol {
-                                    text: "push_pin"
-                                    fill: 1
-                                    iconSize: Appearance.font.pixelSize.smallie
-                                    color: sessionRow.modelData.pinned ? Appearance.m3colors.m3primary : Appearance.colors.colSubtext
-                                }
-
-                                StyledToolTip { text: Translation.tr("Pin or unpin") }
-                            }
-
-                            RippleButton {
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                buttonRadius: Appearance.rounding.full
-                                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                                colBackgroundHover: Appearance.colors.colLayer2Hover
-                                colRipple: Appearance.colors.colLayer2Active
-                                onClicked: root.pendingTrashId = root.pendingTrashId === sessionRow.modelData.id ? "" : sessionRow.modelData.id
-
-                                Accessible.name: Translation.tr("Move chat to trash")
-
-                                contentItem: MaterialSymbol {
-                                    text: "delete"
-                                    fill: 1
-                                    iconSize: Appearance.font.pixelSize.smallie
-                                    color: Appearance.m3colors.m3error
-                                }
-
-                                StyledToolTip { text: Translation.tr("Move to trash") }
-                            }
-
-                            RippleButton {
-                                visible: root.pendingTrashId === sessionRow.modelData.id
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                buttonRadius: Appearance.rounding.full
-                                colBackground: Appearance.m3colors.m3error
-                                colBackgroundHover: Appearance.m3colors.m3error
-                                colRipple: Appearance.colors.colLayer2Active
                                 onClicked: {
-                                    Ai.sessions.trash(sessionRow.modelData.id);
-                                    root.pendingTrashId = "";
+                                    Ai.openSession(sessionRow.modelData.id);
+                                    root.historyOpen = false;
+                                    root.requestFocusComposer();
                                 }
-
-                                Accessible.name: Translation.tr("Confirm moving chat to trash")
 
                                 contentItem: MaterialSymbol {
-                                    text: "check"
+                                    anchors.centerIn: parent
+                                    text: "arrow_forward"
                                     fill: 1
-                                    iconSize: Appearance.font.pixelSize.smallie
-                                    color: Appearance.m3colors.m3onError
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: sessionRow.isActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
                                 }
 
-                                StyledToolTip { text: Translation.tr("Confirm trash") }
-                            }
-                        }
-                    }
-
-                    RowLayout {
-                        visible: !!Ai.sessions.deletedEntry
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("%1 moved to trash").arg(Ai.sessions.deletedEntry?.title ?? Translation.tr("Chat"))
-                            elide: Text.ElideRight
-                            font.pixelSize: Appearance.font.pixelSize.smallie
-                            color: Appearance.colors.colSubtext
-                        }
-
-                        RippleButton {
-                            implicitWidth: 76
-                            implicitHeight: 30
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: Appearance.colors.colSecondaryContainer
-                            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                            colRipple: Appearance.colors.colSecondaryContainerActive
-                            onClicked: Ai.sessions.undoDelete()
-
-                            contentItem: StyledText {
-                                text: Translation.tr("Undo")
-                                horizontalAlignment: Text.AlignHCenter
-                                color: Appearance.m3colors.m3onSecondaryContainer
+                                StyledToolTip {
+                                    text: Translation.tr("Open chat")
+                                }
                             }
                         }
                     }
@@ -666,6 +709,8 @@ Item {
             onRequestSend: root.requestSendMessage()
             onRequestEscape: root.handleComposerEscape()
             onRequestOpenHistory: root.historyOpen = !root.historyOpen
+            onRequestFocusNext: historyToggleBtn.forceActiveFocus()
+            onRequestFocusPrev: brainBackButton.forceActiveFocus()
         }
     }
 }

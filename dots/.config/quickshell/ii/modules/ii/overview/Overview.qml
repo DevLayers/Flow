@@ -202,6 +202,11 @@ Scope {
 
                         Keys.onPressed: event => {
                             if (event.key === Qt.Key_Escape) {
+                                if (searchWidget.isAiMode) {
+                                    searchWidget.exitAiMode();
+                                    event.accepted = true;
+                                    return;
+                                }
                                 GlobalStates.overviewOpen = false;
                             }
                         }
@@ -381,6 +386,11 @@ Scope {
 
                                 Keys.onPressed: event => {
                                     if (event.key === Qt.Key_Escape) {
+                                        if (searchWidget.isAiMode) {
+                                            searchWidget.exitAiMode();
+                                            event.accepted = true;
+                                            return;
+                                        }
                                         GlobalStates.overviewOpen = false;
                                     }
                                 }

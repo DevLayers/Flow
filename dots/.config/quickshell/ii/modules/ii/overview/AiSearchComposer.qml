@@ -24,6 +24,8 @@ ColumnLayout {
     signal requestSend
     signal requestEscape
     signal requestOpenHistory
+    signal requestFocusNext
+    signal requestFocusPrev
 
     readonly property int maximumLines: 6
     readonly property int maximumCharacters: 12000
@@ -93,6 +95,25 @@ ColumnLayout {
             return false;
         root.focusInput();
         return true;
+    }
+
+    function focusFirstButton() {
+        if (root.activeRail !== "composer") {
+            railSendButton.forceActiveFocus();
+            return;
+        }
+        if (compactChevron.visible)
+            compactChevron.forceActiveFocus();
+        else
+            modelButton.forceActiveFocus();
+    }
+
+    function focusLastButton() {
+        if (root.activeRail !== "composer") {
+            railSendButton.forceActiveFocus();
+            return;
+        }
+        sendButton.forceActiveFocus();
     }
 
     function cycleWebMode() {
@@ -237,6 +258,11 @@ ColumnLayout {
             animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerSurface)
         }
 
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.focusInput()
+        }
+
         Item {
             id: composerStage
             anchors {
@@ -346,6 +372,16 @@ ColumnLayout {
                         } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !(event.modifiers & Qt.ShiftModifier)) {
                             root.requestSend();
                             event.accepted = true;
+                        } else if (event.key === Qt.Key_Tab) {
+                            if (event.modifiers & Qt.ShiftModifier) {
+                                root.requestFocusPrev();
+                            } else {
+                                root.focusFirstButton();
+                            }
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Backtab) {
+                            root.requestFocusPrev();
+                            event.accepted = true;
                         }
                     }
                 }
@@ -370,6 +406,25 @@ ColumnLayout {
                         tooltip: Translation.tr("Show chat controls")
                         active: false
                         onClicked: root.showRail("actions")
+
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
+                                root.showRail("actions");
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Escape) {
+                                root.focusInput();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Tab) {
+                                if (event.modifiers & Qt.ShiftModifier)
+                                    root.focusInput();
+                                else
+                                    modelButton.forceActiveFocus();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Backtab) {
+                                root.focusInput();
+                                event.accepted = true;
+                            }
+                        }
                     }
 
                     Item {
@@ -386,11 +441,52 @@ ColumnLayout {
                         active: true
                         tooltip: Translation.tr("Choose model: %1").arg(root.modelTitle)
                         onClicked: root.showRail("models")
+
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
+                                root.showRail("models");
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Escape) {
+                                root.focusInput();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Tab) {
+                                if (event.modifiers & Qt.ShiftModifier)
+                                    compactChevron.forceActiveFocus();
+                                else
+                                    sendButton.forceActiveFocus();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Backtab) {
+                                compactChevron.forceActiveFocus();
+                                event.accepted = true;
+                            }
+                        }
                     }
 
                     SendButton {
                         id: sendButton
                         Layout.alignment: Qt.AlignVCenter
+
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
+                                if (Ai.isGenerating)
+                                    Ai.stopGeneration();
+                                else
+                                    root.requestSend();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Escape) {
+                                root.focusInput();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Tab) {
+                                if (event.modifiers & Qt.ShiftModifier)
+                                    modelButton.forceActiveFocus();
+                                else
+                                    root.requestFocusNext();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Backtab) {
+                                modelButton.forceActiveFocus();
+                                event.accepted = true;
+                            }
+                        }
                     }
                 }
             }
@@ -627,8 +723,11 @@ ColumnLayout {
         implicitWidth: root.controlExtent
         implicitHeight: root.controlExtent
         buttonRadius: Appearance.rounding.full
+        focusPolicy: Qt.StrongFocus
         toggled: iconButton.active
-        colBackground: Appearance.colors.colLayer2
+        colBackground: iconButton.activeFocus
+            ? (iconButton.active ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer2Active)
+            : (iconButton.active ? Appearance.colors.colPrimary : Appearance.colors.colLayer2)
         colBackgroundHover: Appearance.colors.colLayer2Hover
         colBackgroundActive: Appearance.colors.colLayer2Active
         colRipple: Appearance.colors.colLayer2Active
@@ -642,7 +741,7 @@ ColumnLayout {
             text: iconButton.symbol
             iconSize: Appearance.font.pixelSize.larger
             fill: 1
-            color: iconButton.active ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
+            color: (iconButton.active || iconButton.activeFocus) ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
         }
 
         StyledToolTip {
@@ -663,8 +762,11 @@ ColumnLayout {
         implicitWidth: Math.min(contentRow.implicitWidth + root.chipPadding * 2, maximumWidth)
         implicitHeight: root.controlExtent
         buttonRadius: Appearance.rounding.full
+        focusPolicy: Qt.StrongFocus
         toggled: textButton.active
-        colBackground: Appearance.colors.colLayer2
+        colBackground: textButton.activeFocus
+            ? (textButton.active ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer2Active)
+            : (textButton.active ? Appearance.colors.colPrimary : Appearance.colors.colLayer2)
         colBackgroundHover: Appearance.colors.colLayer2Hover
         colBackgroundActive: Appearance.colors.colLayer2Active
         colRipple: Appearance.colors.colLayer2Active
@@ -687,7 +789,7 @@ ColumnLayout {
                     width: Appearance.font.pixelSize.larger
                     height: Appearance.font.pixelSize.larger
                     colorize: true
-                    color: textButton.active ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
+                    color: (textButton.active || textButton.activeFocus) ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
                 }
             }
 
@@ -697,7 +799,7 @@ ColumnLayout {
                 text: textButton.symbol
                 iconSize: Appearance.font.pixelSize.larger
                 fill: 1
-                color: textButton.active ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
+                color: (textButton.active || textButton.activeFocus) ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
             }
 
             StyledText {
@@ -708,7 +810,7 @@ ColumnLayout {
                 maximumLineCount: 1
                 font.pixelSize: Appearance.font.pixelSize.normal
                 font.weight: Font.Bold
-                color: textButton.active ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
+                color: (textButton.active || textButton.activeFocus) ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
             }
         }
 
