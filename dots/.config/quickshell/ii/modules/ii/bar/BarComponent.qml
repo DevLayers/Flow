@@ -141,6 +141,22 @@ Item {
         }
     }
 
+    // itemLoader.item.visible reads *effective* visibility, so a transient hide of any
+    // bar ancestor (e.g. Connect Mode hides the whole bar layer while a window is
+    // fullscreen) latches hasLayoutContent — and this widget — off permanently: once
+    // rootItem hides itself in response, the loaded item can never read visible again.
+    // When the ancestor chain becomes visible again, re-run the startup grace period so
+    // the widget gets a frame to report its real visibility.
+    Connections {
+        target: rootItem.parent
+        function onVisibleChanged() {
+            if (!rootItem.parent || !rootItem.parent.visible)
+                return;
+            rootItem.layoutReady = false;
+            readyTimer.restart();
+        }
+    }
+
     // ── Notch Mode Integration ───────────────────────────────────────────────
     property var modeState: null
 
