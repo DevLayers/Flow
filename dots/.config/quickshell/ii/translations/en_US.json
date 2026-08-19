@@ -2298,7 +2298,6 @@
   "Sync notifications": "Sync notifications",
   "System Control": "System Control",
   "Screenshot Path (leave empty to just copy)": "Screenshot Path (leave empty to just copy)",
-  "localsend-cli is not available. You can install it with <tt>pip install localsend-cli</tt>. Check the docs for further details.": "localsend-cli is not available. You can install it with <tt>pip install localsend-cli</tt>. Check the docs for further details.",
   "Heavy Rain with Thunder": "Heavy Rain with Thunder",
   "A beautiful analog clock with Material You shapes and customization.": "A beautiful analog clock with Material You shapes and customization.",
   "scrcpy": "scrcpy",

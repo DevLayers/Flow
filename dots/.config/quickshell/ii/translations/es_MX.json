@@ -2384,7 +2384,6 @@
   "Vibrant": "Vibrante",
   "Sync notifications": "Sincronizar notificaciones",
   "System Control": "Control del sistema",
-  "localsend-cli is not available. You can install it with <tt>pip install localsend-cli</tt>. Check the docs for further details.": "localsend-cli no está disponible. Puedes instalarlo con <tt>pip install localsend-cli</tt>. Consulta la documentación para más detalles.",
   "Heavy Rain with Thunder": "Lluvia fuerte con truenos",
   "A beautiful analog clock with Material You shapes and customization.": "Un hermoso reloj analógico con formas y personalización de Material You.",
   "scrcpy": "scrcpy",

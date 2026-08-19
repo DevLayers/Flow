@@ -2298,7 +2298,6 @@
   "Sync notifications": "Sincronizar notificações",
   "System Control": "Controle do Sistema",
   "Screenshot Path (leave empty to just copy)": "Caminho da Captura de Tela (deixe vazio para apenas copiar)",
-  "localsend-cli is not available. You can install it with <tt>pip install localsend-cli</tt>. Check the docs for further details.": "localsend-cli não está disponível. Você pode instalá-lo com <tt>pip install localsend-cli</tt>. Verifique a documentação para mais detalhes.",
   "Heavy Rain with Thunder": "Chuva Forte com Trovões",
   "A beautiful analog clock with Material You shapes and customization.": "Um belo relógio analógico com formas e personalização Material You.",
   "scrcpy": "scrcpy",
