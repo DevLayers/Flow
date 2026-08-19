@@ -45,6 +45,7 @@ ShellRoot {
         AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
         TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
         TouchGestureService.enabled; // Touch singleton: starts passive touch input helper daemon
+        WorkspaceCompactor.enabled; // Touch singleton: auto-compacts workspace gaps, does nothing while disabled
         IconThemes.availableThemes; // Touch singleton: arms the DynamicTheme watcher for live icon refresh
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;

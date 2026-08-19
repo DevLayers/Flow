@@ -2319,6 +2319,10 @@ Singleton {
                     property bool dockShowWindowDots: true
                     property bool dockHoverEffect: true
                     property bool dockShowAppIcons: true
+
+                    property bool autoCompact: false // Run the workspace compactor automatically when a gap appears
+                    property string autoCompactCurrentGap: "onswitch" // Gap on the current workspace: "onswitch" | "immediate" | "never"
+                    property int autoCompactDelay: 600 // ms of quiet before an automatic compaction fires
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false
