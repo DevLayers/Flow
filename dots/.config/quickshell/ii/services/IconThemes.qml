@@ -37,7 +37,8 @@ Singleton {
 
     Process {
         id: applyProcess
-        command: ["python3", Directories.scriptPath + "/colors/recolor_icons.py"]
+        // Explicit apply always regenerates, even when colors/theme look unchanged
+        command: ["python3", Directories.scriptPath + "/colors/recolor_icons.py", "--force"]
 
         onRunningChanged: {
             if (!running && exitCode === 0 && root.reloadOnFinish) {

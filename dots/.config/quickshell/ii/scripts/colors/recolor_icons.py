@@ -12,6 +12,7 @@ This extends icon pack coverage to 100% — apps without themed icons
 (e.g. Zen Browser, AppImages) get gowall-recolored versions automatically.
 """
 import os
+import sys
 import json
 import re
 import shutil
@@ -23,6 +24,9 @@ import hashlib
 import fcntl
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+
+# --force skips the "nothing changed" early-exit and always regenerates
+FORCE = "--force" in sys.argv
 
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -600,6 +604,24 @@ def create_lowercase_symlinks(theme_path):
     print(f"  Created {symlink_count} lowercase symlinks.")
 
 
+def get_theme_fingerprint(theme_path):
+    """Cheap content fingerprint of a theme dir: file count + newest mtime.
+    Directory mtimes are included because archive extraction preserves file
+    mtimes but always touches the directories entries were written into."""
+    count = 0
+    newest = 0
+    for root, dirs, files in os.walk(theme_path):
+        count += len(files)
+        for path in [root] + [os.path.join(root, f) for f in files]:
+            try:
+                mtime = int(os.lstat(path).st_mtime)
+                if mtime > newest:
+                    newest = mtime
+            except OSError:
+                pass
+    return f"{count}:{newest}"
+
+
 # ── Main Generation ─────────────────────────────────────────────────────────
 def generate():
     # Rapid wallpaper switching spawns overlapping recolor processes that race
@@ -666,18 +688,23 @@ def _generate_locked():
 
     print(f"Generating DynamicTheme using {icon_theme_name} as base from {base_theme_path}...")
 
-    # ── Skip if colors haven't changed ───────────────────────────────────
+    # ── Skip if colors, base theme name AND base theme content unchanged ──
+    # The content fingerprint catches the base theme being updated/reinstalled
+    # in place (same name, different files), which the name tag alone misses.
     colors_hash = hashlib.md5(json.dumps(colors, sort_keys=True).encode()).hexdigest()
     hash_file = TARGET_THEME_PATH + ".colhash"
-    try:
-        if os.path.isfile(hash_file) and open(hash_file).read().strip() == colors_hash and os.path.isdir(TARGET_THEME_PATH):
-            # Check same base theme too
-            base_tag = TARGET_THEME_PATH + ".basetheme"
-            if os.path.isfile(base_tag) and open(base_tag).read().strip() == icon_theme_name:
-                print(f"Colors unchanged (hash={colors_hash[:8]}), skipping regeneration.")
-                return
-    except Exception:
-        pass
+    base_fingerprint = get_theme_fingerprint(base_theme_path)
+    fp_file = TARGET_THEME_PATH + ".basefp"
+    if not FORCE:
+        try:
+            if os.path.isfile(hash_file) and open(hash_file).read().strip() == colors_hash and os.path.isdir(TARGET_THEME_PATH):
+                base_tag = TARGET_THEME_PATH + ".basetheme"
+                if os.path.isfile(base_tag) and open(base_tag).read().strip() == icon_theme_name:
+                    if os.path.isfile(fp_file) and open(fp_file).read().strip() == base_fingerprint:
+                        print(f"Colors and base theme unchanged (hash={colors_hash[:8]}), skipping regeneration.")
+                        return
+        except Exception:
+            pass
 
     # ── Phase 0: Generate into temp dir, then atomic swap ─────────────────
     # We generate into TARGET_THEME_PATH + ".new" and rename at the end
@@ -792,13 +819,15 @@ def _generate_locked():
     if os.path.exists(OLD_PATH):
         shutil.rmtree(OLD_PATH)
 
-    # Save hash so next run can skip if colors unchanged
+    # Save hash + base theme fingerprint so next run can skip if nothing changed
     try:
         with open(hash_file, 'w') as f:
             f.write(colors_hash)
         base_tag = TARGET_THEME_PATH + ".basetheme"
         with open(base_tag, 'w') as f:
             f.write(icon_theme_name)
+        with open(fp_file, 'w') as f:
+            f.write(base_fingerprint)
     except Exception:
         pass
 
