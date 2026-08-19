@@ -30,8 +30,8 @@ Item {
             NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
         }
 
-        readonly property bool isVertical: Config.options.bar.vertical
-        readonly property bool isBottom: Config.options.bar.bottom
+        readonly property bool isVertical: BarPlacement.vertical
+        readonly property bool isBottom: BarPlacement.bottom
         readonly property int barSize: isVertical
             ? Appearance.sizes.verticalBarWidth
             : Appearance.sizes.barHeight
@@ -136,8 +136,8 @@ Item {
             NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
         }
 
-        readonly property bool isVertical: Config.options.bar.vertical
-        readonly property bool isBottom: Config.options.bar.bottom
+        readonly property bool isVertical: BarPlacement.vertical
+        readonly property bool isBottom: BarPlacement.bottom
         readonly property int barSize: isVertical
             ? Appearance.sizes.verticalBarWidth
             : Appearance.sizes.barHeight

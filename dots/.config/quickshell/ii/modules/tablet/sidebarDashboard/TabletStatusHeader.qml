@@ -14,67 +14,12 @@ Item {
     id: root
 
     property real barHeight: 56
-    property int entranceTrigger: -1
 
     implicitHeight: root.barHeight
 
     readonly property real iconSize: Math.round(root.barHeight * 0.42)
     readonly property real iconSpacing: Math.round(root.barHeight * 0.28)
     readonly property color colStatus: Appearance.colors.colOnLayer0
-
-    // ── Entrance ────────────────────────────────────────────────────────────
-    readonly property bool animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
-    property real entranceOpacity: 0
-    property real entranceOffset: -12
-    property bool entranceDone: false
-
-    function playEntrance() {
-        if (root.animationsDisabled) {
-            root.entranceDone = true;
-            root.entranceOpacity = 1;
-            root.entranceOffset = 0;
-            return;
-        }
-        root.entranceDone = false;
-        root.entranceOpacity = 0;
-        root.entranceOffset = -12;
-        Qt.callLater(() => entranceAnim.start());
-    }
-
-    onEntranceTriggerChanged: root.playEntrance()
-    Component.onCompleted: root.playEntrance()
-
-    SequentialAnimation {
-        id: entranceAnim
-        ParallelAnimation {
-            NumberAnimation {
-                target: root
-                property: "entranceOpacity"
-                from: 0
-                to: 1
-                duration: 260
-                easing.type: Easing.OutCubic
-            }
-            NumberAnimation {
-                target: root
-                property: "entranceOffset"
-                from: -12
-                to: 0
-                duration: 320
-                easing.type: Easing.OutCubic
-            }
-        }
-        PropertyAction {
-            target: root
-            property: "entranceDone"
-            value: true
-        }
-    }
-
-    opacity: root.entranceDone ? 1.0 : root.entranceOpacity
-    transform: Translate {
-        y: root.entranceDone ? 0 : root.entranceOffset
-    }
 
     // ── Clock ───────────────────────────────────────────────────────────────
     RowLayout {

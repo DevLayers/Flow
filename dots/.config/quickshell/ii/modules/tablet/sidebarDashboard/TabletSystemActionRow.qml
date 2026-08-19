@@ -16,7 +16,6 @@ Item {
     id: root
 
     property real rowHeight: 64
-    property int entranceTrigger: -1
     property bool editMode: false
 
     signal editModeToggled(bool newEditMode)
@@ -29,60 +28,6 @@ Item {
     // The circles read heavier than the pill at the same height, so they sit a notch under it.
     readonly property real circleSize: Math.round(root.rowHeight * 0.84)
     readonly property int trayItemCount: TrayService.allItems.length
-
-    // ── Entrance ────────────────────────────────────────────────────────────
-    readonly property bool animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
-    property real entranceOpacity: 0
-    property real entranceOffset: 18
-    property bool entranceDone: false
-
-    function playEntrance() {
-        if (root.animationsDisabled) {
-            root.entranceDone = true;
-            root.entranceOpacity = 1;
-            root.entranceOffset = 0;
-            return;
-        }
-        root.entranceDone = false;
-        root.entranceOpacity = 0;
-        root.entranceOffset = 18;
-        Qt.callLater(() => entranceAnim.start());
-    }
-
-    onEntranceTriggerChanged: root.playEntrance()
-    Component.onCompleted: root.playEntrance()
-
-    SequentialAnimation {
-        id: entranceAnim
-        ParallelAnimation {
-            NumberAnimation {
-                target: root
-                property: "entranceOpacity"
-                from: 0
-                to: 1
-                duration: 280
-                easing.type: Easing.OutCubic
-            }
-            NumberAnimation {
-                target: root
-                property: "entranceOffset"
-                from: 18
-                to: 0
-                duration: 340
-                easing.type: Easing.OutCubic
-            }
-        }
-        PropertyAction {
-            target: root
-            property: "entranceDone"
-            value: true
-        }
-    }
-
-    opacity: root.entranceDone ? 1.0 : root.entranceOpacity
-    transform: Translate {
-        y: root.entranceDone ? 0 : root.entranceOffset
-    }
 
     RowLayout {
         anchors.fill: parent

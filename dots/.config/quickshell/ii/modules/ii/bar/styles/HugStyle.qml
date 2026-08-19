@@ -33,7 +33,7 @@ Item {
     }
 
     readonly property bool isIslandMode: Config.options.bar.barBackgroundStyle === 3
-    readonly property string barEdge: Config.options.bar.bottom ? "bottom" : "top"
+    readonly property string barEdge: BarPlacement.bottom ? "bottom" : "top"
 
     Rectangle {
         id: barBackground
@@ -45,7 +45,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
     }
@@ -79,7 +79,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
 
@@ -103,7 +103,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
 
@@ -127,7 +127,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
 

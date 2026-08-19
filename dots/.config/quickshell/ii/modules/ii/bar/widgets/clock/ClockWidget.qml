@@ -9,7 +9,7 @@ Item {
     id: root
     property bool showDate: Config.options.bar.verbose
     property bool isMaterial: Config.options.bar.styles.clock === "material"
-    property bool vertical: Config.options.bar.vertical
+    property bool vertical: BarPlacement.vertical
     implicitWidth: root.isMaterial ? (rowLoader.item?.implicitWidth) : (rowLoader.item?.implicitWidth + rowLoader.item?.spacing * 10)
     implicitHeight: Appearance.sizes.baseBarHeight
     property color colText: dropArea.containsDrag ? Appearance.colors.colPrimary : rootItem.highlighted ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1

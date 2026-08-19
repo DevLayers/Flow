@@ -1,7 +1,9 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
@@ -9,19 +11,18 @@ import qs.modules.common.functions
 /**
  * The full-screen surface the tablet notification shade is pulled down onto.
  *
- * A layer-shell namespace is fixed the moment the surface is created and it is what decides
- * whether Hyprland blurs behind the shade, so it can never be a live binding: the owner
- * instantiates one of two Components, each carrying a constant namespace, and throws the
- * window away when the transparency setting flips.
+ * The blur behind the shade is done here rather than by Hyprland: a layer rule can only turn
+ * blur on or off for the whole surface — its strength is the layer's own fade alpha, which no
+ * client can drive per frame. So the shade freezes the screen the instant the pull starts and
+ * blurs that snapshot, which is the only way to ramp it smoothly from 0 to full while the
+ * finger moves, the way a phone does.
  */
 PanelWindow {
     id: root
 
-    required property string shellNamespace
-    required property bool blurBacked
-
     readonly property real progress: TabletDashboardGestureController.progress
     readonly property string screenName: root.screen?.name ?? ""
+    readonly property bool useBlur: Config.options?.appearance?.transparency?.enable ?? false
 
     anchors {
         top: true
@@ -32,7 +33,7 @@ PanelWindow {
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
 
-    WlrLayershell.namespace: root.shellNamespace
+    WlrLayershell.namespace: "quickshell:tabletShade"
     WlrLayershell.layer: WlrLayer.Overlay
 
     // Keyboard focus: only after the shade has completely settled open
@@ -45,7 +46,26 @@ PanelWindow {
     }
 
     // Always mapped so the top edge is ready to be pulled down at any time
-    visible: true
+    visible: !GlobalStates.screenLocked
+
+    // The snapshot has to be taken while this surface is still painting nothing, otherwise the
+    // capture contains the shade itself. Grabbing it on press buys the whole press-to-move
+    // latency; the progress hook covers hotkey/IPC opens, which have no press.
+    function refreshBackdrop() {
+        if (root.useBlur)
+            backdropCapture.captureFrame();
+    }
+
+    onProgressChanged: {
+        if (root.progress > 0.001 && !root._backdropArmed) {
+            root._backdropArmed = true;
+            root.refreshBackdrop();
+        } else if (root.progress <= 0.001) {
+            root._backdropArmed = false;
+        }
+    }
+
+    property bool _backdropArmed: false
 
     Connections {
         target: TabletDashboardGestureController
@@ -78,55 +98,100 @@ PanelWindow {
             }
         }
 
-        // ── SCRIM / FROSTED SHEET ────────────────────────────────────────────
-        // Hyprland's layer blur is a *region*, masked by this surface's own alpha (the
-        // `ignore_alpha` layer rule) — not an intensity it can ramp. A scrim covering the
-        // whole screen would therefore snap the entire desktop to blurred the instant the
-        // shade is touched. Instead the sheet is only painted down to where the shade
-        // currently ends, so the frosted area is revealed together with the panel, with
-        // rounded corners on its leading edge that square off as it locks fully open.
-        // Without transparency there is no blur to reveal, so the overlay colour just fades
-        // in across the screen as before.
+        // ── FROZEN BACKDROP ──────────────────────────────────────────────────
+        // Covers the whole screen from the first millimetre of the pull, sharp at progress 0
+        // and indistinguishable from the live desktop, then blurs with the drag.
+        Item {
+            id: backdrop
+            anchors.fill: parent
+            visible: root.useBlur && root.progress > 0.001 && backdropCapture.hasContent
+            layer.enabled: backdrop.visible
+            layer.effect: MultiEffect {
+                // Auto padding grows the effect item past the source and shifts the whole
+                // capture down, leaving a sharp strip along the top edge.
+                autoPaddingEnabled: false
+                blurEnabled: true
+                blurMax: 96
+                blurMultiplier: 1.4
+                blur: Math.min(1.0, root.progress * 1.15)
+            }
+
+            ScreencopyView {
+                id: backdropCapture
+                anchors.fill: parent
+                captureSource: root.useBlur ? root.screen : null
+                // Live re-capture also sees the shade's own blurred output, so it smears —
+                // opt-in only, from Settings › Sidebars.
+                live: Config.options?.sidebar?.tabletShade?.liveBackdrop ?? false
+            }
+        }
+
+        // ── SCRIM ────────────────────────────────────────────────────────────
+        // Dim over the blurred backdrop; without transparency there is no backdrop and this is
+        // the opaque surface the shade sits on.
         Rectangle {
             id: scrim
+            anchors.fill: parent
+            visible: root.progress > 0.001
+
+            // Layer 0: the shade drops the card that used to sit behind the quick toggles, so
+            // the tiles (layer 2) and the notification card (layer 1) stack straight onto this.
+            // A surfaceContainer background would be the exact colour of an untoggled tile.
+            color: root.useBlur ? ColorUtils.transparentize(Appearance.colors.colScrim, 1.0 - root.progress) : Appearance.colors.colLayer0
+            opacity: root.useBlur ? 1.0 : root.progress
+
+            // Faint themed wash over the dim, so the blurred desktop still reads as part of the
+            // shade's palette the way the opaque mode does.
+            Rectangle {
+                anchors.fill: parent
+                visible: root.useBlur
+                color: Appearance.colors.colLayer0
+                opacity: 0.22 * root.progress
+            }
+
+            ShadeDragArea {
+                id: shadeDragArea
+                tapCloses: true
+            }
+        }
+
+        // ── SHADE SHEET ──────────────────────────────────────────────────────
+        // Android *reveals* the shade rather than sliding it: the content sits at its final
+        // position and the descending edge uncovers it, so every card looks like it is growing
+        // downward. Translating the whole sheet instead showed the bottom of the dashboard
+        // first and left the content static relative to the finger, which read as no animation
+        // at all. A little parallax keeps it feeling attached to the drag.
+        Item {
+            id: shadeSheet
             anchors {
                 top: parent.top
                 left: parent.left
                 right: parent.right
             }
-            height: root.blurBacked ? Math.round(parent.height * root.progress) : parent.height
+            height: Math.round(root.height * root.progress)
             visible: root.progress > 0.001
+            clip: true
 
-            // Layer 0: the shade drops the card that used to sit behind the quick toggles, so the
-            // tiles (layer 2) and the notification card (layer 1) now stack straight onto this.
-            // A surfaceContainer background would be the exact colour of an untoggled tile.
-            color: root.blurBacked ? ColorUtils.transparentize(Appearance.colors.colScrim, 1.0 - root.progress) : Appearance.colors.colLayer0
-            opacity: root.blurBacked ? 1.0 : root.progress
-
-            readonly property real leadingEdgeRadius: root.blurBacked ? Appearance.rounding.verylarge * Math.max(0, Math.min(1, (1.0 - root.progress) * 4)) : 0
-            bottomLeftRadius: leadingEdgeRadius
-            bottomRightRadius: leadingEdgeRadius
-
-            MouseArea {
-                anchors.fill: parent
-                enabled: TabletDashboardGestureController.isSettledOpen
-                onClicked: TabletDashboardGestureController.close()
+            TabletDashboardContent {
+                width: shadeSheet.width
+                height: root.height
+                y: -(1.0 - root.progress) * root.height * 0.08
+                onDismissRequested: TabletDashboardGestureController.close()
             }
         }
 
-        // Sliding surface (follows finger/progress directly 1:1)
         Item {
-            id: slidingSurface
-            anchors.fill: parent
+            id: shadeTopHandle
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+            }
+            height: Math.max(48, Math.round(root.height * 0.075))
             visible: root.progress > 0.001
-            transform: Translate {
-                y: -root.height * (1.0 - root.progress)
-            }
+            z: 500
 
-            TabletDashboardContent {
-                anchors.fill: parent
-                onDismissRequested: TabletDashboardGestureController.close()
-            }
+            ShadeDragArea {}
         }
 
         // ── TOP EDGE CAPTURE STRIP (independent from the bar) ────────────────
@@ -138,15 +203,18 @@ PanelWindow {
                 left: parent.left
                 right: parent.right
             }
-            height: 32
+            height: Math.max(2, Config.options?.sidebar?.tabletShade?.edgeDragHeight ?? 8)
             z: 9999
 
             MouseArea {
                 id: topMouseDragArea
                 anchors.fill: parent
                 hoverEnabled: true
-                cursorShape: TabletDashboardGestureController.isSettledOpen ? Qt.ArrowCursor : Qt.PointingHandCursor
+                cursorShape: Qt.PointingHandCursor
                 preventStealing: true
+                // Only owns the edge while the shade is mostly closed; latched on isTracking so
+                // an open drag that crosses the halfway point doesn't lose its own grab.
+                enabled: TabletDashboardGestureController.progress < 0.5 || topMouseDragArea.isTracking
 
                 property real startY: 0
                 property real lastY: 0
@@ -156,6 +224,7 @@ PanelWindow {
 
                 onPressed: mouse => {
                     if (TabletDashboardGestureController.isSettledOpen) return;
+                    root.refreshBackdrop();
                     startY = mouse.y;
                     lastY = mouse.y;
                     lastTime = Date.now();
@@ -173,8 +242,7 @@ PanelWindow {
                     lastTime = now;
 
                     const deltaY = mouse.y - startY;
-                    const targetDist = root.height * 0.55;
-                    const p = Math.max(0.0, Math.min(1.0, deltaY / Math.max(1, targetDist)));
+                    const p = Math.max(0.0, Math.min(1.0, deltaY / TabletDashboardGestureController.dragDistance(root.height)));
                     TabletDashboardGestureController.updateProgress(p, calculatedVelocity);
                 }
 
@@ -190,6 +258,74 @@ PanelWindow {
                         TabletDashboardGestureController.cancelTracking();
                     }
                 }
+            }
+        }
+    }
+
+    // Drag surfaces for the shade. Both are outside the sliding surface on purpose: an area
+    // that moves with the sheet would see its own coordinate shift as pointer movement and
+    // feed the gesture back into itself.
+    component ShadeDragArea: MouseArea {
+        id: dragArea
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        preventStealing: true
+
+        // A press that never turns into a drag counts as a tap outside the content.
+        property bool tapCloses: false
+
+        property real startY: 0
+        property real startProgress: 1.0
+        property real lastY: 0
+        property real lastTime: 0
+        property real calculatedVelocity: 0
+        property bool dragging: false
+        property bool moved: false
+
+        onPressed: mouse => {
+            dragArea.startY = mouse.y;
+            dragArea.lastY = mouse.y;
+            dragArea.lastTime = Date.now();
+            dragArea.calculatedVelocity = 0;
+            dragArea.dragging = false;
+            dragArea.moved = false;
+            dragArea.startProgress = TabletDashboardGestureController.progress;
+        }
+
+        onPositionChanged: mouse => {
+            const deltaY = mouse.y - dragArea.startY;
+            if (!dragArea.dragging) {
+                if (Math.abs(deltaY) < 10)
+                    return;
+                dragArea.dragging = true;
+                TabletDashboardGestureController.startTracking(root.screenName);
+            }
+            const now = Date.now();
+            const dt = Math.max(1, now - dragArea.lastTime);
+            dragArea.calculatedVelocity = ((mouse.y - dragArea.lastY) / dt) * 1000.0;
+            dragArea.lastY = mouse.y;
+            dragArea.lastTime = now;
+            dragArea.moved = true;
+
+            const p = dragArea.startProgress + deltaY / TabletDashboardGestureController.dragDistance(root.height);
+            TabletDashboardGestureController.updateProgress(Math.max(0.0, Math.min(1.0, p)), dragArea.calculatedVelocity);
+        }
+
+        onReleased: {
+            if (dragArea.dragging) {
+                dragArea.dragging = false;
+                TabletDashboardGestureController.endTracking(dragArea.calculatedVelocity, dragArea.startProgress);
+            } else if (dragArea.tapCloses && !dragArea.moved && TabletDashboardGestureController.progress > 0.5) {
+                TabletDashboardGestureController.close();
+            }
+        }
+
+        // Treated as a release: if something steals the grab mid-drag, settling by position
+        // is far less jarring than snapping straight back to where the gesture started.
+        onCanceled: {
+            if (dragArea.dragging) {
+                dragArea.dragging = false;
+                TabletDashboardGestureController.endTracking(dragArea.calculatedVelocity, dragArea.startProgress);
             }
         }
     }

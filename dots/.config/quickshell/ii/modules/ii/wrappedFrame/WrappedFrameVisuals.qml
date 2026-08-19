@@ -19,8 +19,8 @@ Item {
 
     property var screen: null
     property int frameThickness: Config.options.appearance.wrappedFrameThickness
-    property bool barVertical: Config.options.bar.vertical
-    property bool barBottom: Config.options.bar.bottom
+    property bool barVertical: BarPlacement.vertical
+    property bool barBottom: BarPlacement.bottom
     property bool showBarBackground: false
     property real hBarHiddenAmount: 0
     property real vBarHiddenAmount: 0

@@ -67,11 +67,18 @@ Item {
 
     property bool editMode: false
 
-    property int entranceTrigger: -1
+    // Content reveal rides the drag instead of the ii sidebar's entrance animations, which
+    // only started once the finger was released. Sections slide down from the top edge and
+    // grow a touch as the sheet comes out; it finishes before the sheet does so the shade is
+    // fully readable while it is still moving.
+    readonly property real revealProgress: {
+        const t = Math.max(0, Math.min(1, (TabletDashboardGestureController.progress - 0.02) / 0.45));
+        return 1 - Math.pow(1 - t, 3);
+    }
 
-    function triggerContentEntrance() {
-        root.entranceTrigger++;
-        androidQuickPanelLoader.item?.triggerContentEntrance?.();
+    function sectionReveal(delay) {
+        const span = Math.max(0.001, 1 - delay);
+        return Math.max(0, Math.min(1, (root.revealProgress - delay) / span));
     }
 
     function closeAllDialogs() {
@@ -93,12 +100,8 @@ Item {
     Connections {
         target: TabletDashboardGestureController
         function onProgressChanged() {
-            if (TabletDashboardGestureController.progress >= 0.95 && root.entranceTrigger < 0) {
-                root.triggerContentEntrance();
-            } else if (TabletDashboardGestureController.progress <= 0.05) {
+            if (TabletDashboardGestureController.progress <= 0.05)
                 root.closeAllDialogs();
-                root.entranceTrigger = -1;
-            }
         }
     }
 
@@ -142,10 +145,16 @@ Item {
 
             // ── STATUS LINE ─────────────────────────────────────────────────
             TabletStatusHeader {
+                id: statusHeader
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.headerHeight
                 barHeight: root.headerHeight
-                entranceTrigger: root.entranceTrigger
+
+                readonly property real reveal: root.sectionReveal(0)
+                opacity: reveal
+                transform: Translate {
+                    y: -(1 - statusHeader.reveal) * root.headerHeight * 0.4
+                }
             }
 
             // ── TWO COLUMNS ─────────────────────────────────────────────────
@@ -175,6 +184,12 @@ Item {
                         flickableDirection: Flickable.VerticalFlick
                         boundsBehavior: Flickable.StopAtBounds
 
+                        readonly property real reveal: root.sectionReveal(0.08)
+                        opacity: reveal
+                        transform: Translate {
+                            y: -(1 - quickTogglesScroll.reveal) * root.touchCellHeight * 0.4
+                        }
+
                         ColumnLayout {
                             id: quickTogglesColumn
                             width: quickTogglesScroll.width
@@ -195,6 +210,8 @@ Item {
                                 id: androidQuickPanelLoader
                                 styleName: "android"
                                 sourceComponent: AndroidQuickPanel {
+                                    entranceOnOpen: false
+                                    revealProgress: root.sectionReveal(0.08)
                                     color: "transparent"
                                     padding: 0
                                     spacing: root.gridSpacing
@@ -210,11 +227,18 @@ Item {
                     }
 
                     TabletSystemActionRow {
+                        id: systemActionRow
                         Layout.fillWidth: true
                         Layout.preferredHeight: root.actionRowHeight
                         rowHeight: root.actionRowHeight
-                        entranceTrigger: root.entranceTrigger
                         editMode: root.editMode
+
+                        readonly property real reveal: root.sectionReveal(0.22)
+                        opacity: reveal
+                        transform: Translate {
+                            y: -(1 - systemActionRow.reveal) * root.actionRowHeight * 0.6
+                        }
+
                         onEditModeToggled: newEditMode => root.editMode = newEditMode
                         onTrayRequested: root.showTrayDialog = true
                         onDismissRequested: root.dismissRequested()
@@ -237,10 +261,15 @@ Item {
                         color: Appearance.colors.colLayer1
                         clip: true
 
+                        readonly property real reveal: root.sectionReveal(0.14)
+                        opacity: reveal
+                        transform: Translate {
+                            y: -(1 - notificationsCard.reveal) * root.touchCellHeight * 0.4
+                        }
+
                         NotificationList {
                             anchors.fill: parent
                             anchors.margins: Math.round(root.gridSpacing * 0.8)
-                            entranceTrigger: root.entranceTrigger
                             zoom: 1.12
                             placeholderScale: 1.4
                         }
@@ -256,21 +285,6 @@ Item {
                         }
                     }
                 }
-            }
-        }
-    }
-
-    // ── SWIPE UP TO DISMISS ─────────────────────────────────────────────────
-    DragHandler {
-        target: null
-        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
-        xAxis.enabled: false
-        yAxis.enabled: true
-        yAxis.minimum: -500
-        yAxis.maximum: 0
-        onActiveChanged: {
-            if (!active && translation.y < -60) {
-                root.dismissRequested();
             }
         }
     }

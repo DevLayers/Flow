@@ -56,9 +56,9 @@ PopupWindow {
             anchors {
                 left: parent.left
                 right: parent.right
-                verticalCenter: Config.options.bar.vertical ? parent.verticalCenter : undefined
-                top: Config.options.bar.vertical ? undefined : Config.options.bar.bottom ? undefined : parent.top
-                bottom: Config.options.bar.vertical ? undefined : Config.options.bar.bottom ? parent.bottom : undefined
+                verticalCenter: BarPlacement.vertical ? parent.verticalCenter : undefined
+                top: BarPlacement.vertical ? undefined : BarPlacement.bottom ? undefined : parent.top
+                bottom: BarPlacement.vertical ? undefined : BarPlacement.bottom ? parent.bottom : undefined
                 margins: root.padding
             }
 

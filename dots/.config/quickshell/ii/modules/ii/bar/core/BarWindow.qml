@@ -12,7 +12,6 @@ import qs.modules.common.functions
 import qs.modules.ii.wrappedFrame
 import qs.modules.ii.bar.shared
 import qs.modules.ii.bar
-import qs.modules.tablet.sidebarDashboard
 
 // Encapsulates the two PanelWindows (space-reserver + main bar)
 // and all autohide / fullscreen detection logic.
@@ -25,7 +24,7 @@ Scope {
     property real sizeScale: 1.0
     property bool forceTop: false
 
-    readonly property bool isBottom: !root.forceTop && Config.options.bar.bottom
+    readonly property bool isBottom: !root.forceTop && BarPlacement.bottom
     readonly property real effectiveBaseBarHeight: Appearance.sizes.baseBarHeight * root.sizeScale
     readonly property real effectiveBarHeight: Appearance.sizes.barHeight * root.sizeScale
     readonly property bool lockUsesFade: Config.options.appearance.fakeScreenRounding === 3
@@ -44,9 +43,10 @@ Scope {
             left: true
             right: true
         }
-        exclusionMode: (root.forceTop && TabletDashboardGestureController.progress > 0.05)
-            ? ExclusionMode.Ignore
-            : ((Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) ? ExclusionMode.Ignore : ExclusionMode.Normal)
+        // The tablet shade covers the bar from the Overlay layer, so the bar only fades — it
+        // keeps its surface and its exclusive zone. Releasing the zone while the shade is open
+        // let tiled windows expand into the bar's strip and jump back on close.
+        exclusionMode: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) ? ExclusionMode.Ignore : ExclusionMode.Normal
 
         property real targetZone: root.effectiveBaseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
         property real minZone: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : 0
@@ -174,15 +174,9 @@ Scope {
         MouseArea {
             id: hoverRegion
             hoverEnabled: true
-            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (
-                root.forceTop
-                    ? Math.max(0.0, 1.0 - TabletDashboardGestureController.progress * 1.5)
-                    : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
-            )
+            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
             transform: Translate {
-                y: root.forceTop
-                    ? -root.effectiveBarHeight * TabletDashboardGestureController.progress
-                    : (root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress)
+                y: root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress
             }
             anchors {
                 left: parent.left

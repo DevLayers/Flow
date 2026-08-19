@@ -15,10 +15,18 @@ Singleton {
     property real velocity: 0.0          // Vertical velocity in px/s
     property string activeScreenName: "" // Screen where the drag started
 
+    // Travel that maps to a full open/close, shared by every drag surface so the pull-down
+    // and the pull-up move the shade at the same rate.
+    function dragDistance(screenHeight) {
+        return Math.max(1, screenHeight * 0.55);
+    }
+
     // Velocity threshold for fling detection (px/s)
     readonly property real flingVelocityThreshold: 450.0
     // Position threshold when velocity is below fling threshold
     readonly property real positionThreshold: 0.40
+    // Same, but for a drag that started from an open shade — closing is the cheaper intent.
+    readonly property real closeThreshold: 0.82
 
     readonly property bool isSettledOpen: progress >= 0.999 && !tracking
     readonly property bool isSettledClosed: progress <= 0.001 && !tracking
@@ -61,7 +69,7 @@ Singleton {
         }
     }
 
-    function endTracking(releaseVelocity) {
+    function endTracking(releaseVelocity, startProgress) {
         if (!controller.tracking) return;
         controller.tracking = false;
 
@@ -71,6 +79,10 @@ Singleton {
         if (Math.abs(v) > flingVelocityThreshold) {
             // High velocity: fling direction decides
             shouldOpen = (v > 0);
+        } else if (startProgress !== undefined && startProgress >= 0.5) {
+            // Gesture started from an open shade: dismissing should not require dragging it
+            // most of the way back up, the way opening requires committing to the pull.
+            shouldOpen = (controller.progress > closeThreshold);
         } else {
             // Low velocity: position threshold decides
             shouldOpen = (controller.progress > positionThreshold);

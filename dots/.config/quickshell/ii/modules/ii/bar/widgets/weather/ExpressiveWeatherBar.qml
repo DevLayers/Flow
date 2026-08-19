@@ -10,7 +10,7 @@ import QtQuick.Layouts
 MouseArea {
     id: root
     property bool hovered: false
-    property bool vertical: Config.options.bar.vertical
+    property bool vertical: BarPlacement.vertical
     property bool isMaterial: true
 
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : (isMaterial ? materialPill.implicitWidth : defaultRow.implicitWidth + 6)

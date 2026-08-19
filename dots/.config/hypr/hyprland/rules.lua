@@ -179,18 +179,11 @@ hl.layer_rule({ match = { namespace = "quickshell:session" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, ignore_alpha = 0})
 hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, animation = "slide right", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, animation = "slide left", order = 5})
--- Tablet shade. The two namespaces are distinct surfaces, not a toggle: quickshell maps the
--- blurred one only while transparency is enabled, because a layer namespace cannot change
--- after the surface exists. They must not share a prefix either — layer rules are matched with
--- a substring regex, so "tabletShade" would also catch an opaque "tabletShadeSolid".
--- ignore_alpha = 0 masks the frosted region to whatever the shade actually paints, which is how
--- the blur grows with the pull-down instead of hitting the whole screen on first touch.
-hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, blur = true})
-hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, ignore_alpha = 0.0})
-hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, xray = false})
+-- Tablet shade. Compositor blur is deliberately off: a layer rule can only switch blur on or
+-- off, and its strength is the layer's own fade alpha, which the client cannot drive per frame.
+-- The shade blurs a frozen screencopy of the desktop itself so the strength can follow the drag.
+hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, no_anim = true})
-hl.layer_rule({ match = { namespace = "quickshell:tabletOpaqueShade" }, blur = false})
-hl.layer_rule({ match = { namespace = "quickshell:tabletOpaqueShade" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:verticalBar" }, animation = "slide", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, order = -1})
 -- Quickshell: waffles

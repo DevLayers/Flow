@@ -71,8 +71,8 @@ Scope {
 
     property bool barExtraCondition: true
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3
-    readonly property bool barBot: Config.options.bar.bottom
-    readonly property bool barVert: Config.options.bar.vertical
+    readonly property bool barBot: BarPlacement.bottom
+    readonly property bool barVert: BarPlacement.vertical
 
     Component.onCompleted: Qt.callLater(() => updateBarExtraCondition())
     onUsingWrappedFrameChanged: updateBarExtraCondition()
@@ -87,7 +87,8 @@ Scope {
     }
 
     PanelLoader {
-        extraCondition: (Config.options.panelFamily === "tablet" || !Config.options.bar.vertical) && root.barExtraCondition && !GlobalStates.connectModeActive
+        // BarLayout already resolves the family override, so this is just "is the bar horizontal".
+        extraCondition: !BarPlacement.vertical && root.barExtraCondition && !GlobalStates.connectModeActive
         component: root.horizontalBarComponent
     }
     PanelLoader {
@@ -157,7 +158,7 @@ Scope {
         component: root.sidebarDashboardComponent
     }
     PanelLoader {
-        extraCondition: Config.options.bar.vertical && root.barExtraCondition && !GlobalStates.connectModeActive && Config.options.panelFamily !== "tablet"
+        extraCondition: BarPlacement.vertical && root.barExtraCondition && !GlobalStates.connectModeActive
         component: VerticalBar {}
     }
     PanelLoader { component: WallpaperSelector {} }

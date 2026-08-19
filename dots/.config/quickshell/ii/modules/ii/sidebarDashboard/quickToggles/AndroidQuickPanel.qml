@@ -14,6 +14,16 @@ import "androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 AbstractQuickPanel {
     id: root
     property bool editMode: false
+    // Hosts that reveal the panel with a gesture drive their own reveal and switch this off,
+    // otherwise the entrance replays in full the moment the drag is released.
+    property bool entranceOnOpen: true
+    // Gesture-driven hosts feed their 0→1 pull progress here so the sliders and the tile grid
+    // come in one after the other instead of appearing at once. 1.0 = fully revealed (ii).
+    property real revealProgress: 1.0
+    function stageReveal(delay) {
+        const span = Math.max(0.001, 1 - delay);
+        return Math.max(0, Math.min(1, (root.revealProgress - delay) / span));
+    }
     Layout.fillWidth: true
 
     // Current page index
@@ -30,7 +40,8 @@ AbstractQuickPanel {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
             if (GlobalStates.sidebarRightOpen) {
-                root.triggerContentEntrance();
+                if (root.entranceOnOpen)
+                    root.triggerContentEntrance();
             } else if (editController.active) {
                 editController.cancel();
             }
@@ -251,6 +262,12 @@ AbstractQuickPanel {
             width: parent.width
             spacing: root.spacing
 
+            readonly property real reveal: root.stageReveal(0)
+            opacity: reveal
+            transform: Translate {
+                y: -(1 - fixedSlidersColumn.reveal) * root.baseCellHeight * 0.5
+            }
+
             StableQuickToggleModel {
                 id: fixedSlidersModel
                 sourceValues: {
@@ -306,6 +323,12 @@ AbstractQuickPanel {
             id: flickableContainer
             width: parent.width
             height: root.currentContentHeight
+
+            readonly property real reveal: root.stageReveal(0.25)
+            opacity: reveal
+            transform: Translate {
+                y: -(1 - flickableContainer.reveal) * root.baseCellHeight * 0.7
+            }
 
             Behavior on height {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)

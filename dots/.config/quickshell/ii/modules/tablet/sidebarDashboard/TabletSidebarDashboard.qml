@@ -14,35 +14,17 @@ Scope {
             id: screenScope
             required property ShellScreen modelData
 
-            // Hyprland only blurs behind a layer surface whose namespace carries the `blur`
-            // layer rule, and a namespace can never change after the surface exists. Config
-            // also loads asynchronously, so binding the namespace to the transparency setting
-            // silently produced a no-blur surface at every startup. Instead the window is only
-            // built once Config is readable, from whichever of the two Components matches the
-            // setting — flipping it destroys the surface and maps a fresh one.
-            readonly property bool wantsBlur: Config.options?.appearance?.transparency?.enable ?? false
-
+            // Held back until Config is readable: the shade decides between a blurred backdrop
+            // and a plain opaque surface from the transparency setting, and Config loads async.
             Loader {
-                id: shadeWindowLoader
                 active: Config.ready
-                sourceComponent: screenScope.wantsBlur ? blurredShadeComponent : opaqueShadeComponent
+                sourceComponent: shadeWindowComponent
             }
 
             Component {
-                id: blurredShadeComponent
+                id: shadeWindowComponent
                 TabletShadeWindow {
                     screen: screenScope.modelData
-                    shellNamespace: "quickshell:tabletShade"
-                    blurBacked: true
-                }
-            }
-
-            Component {
-                id: opaqueShadeComponent
-                TabletShadeWindow {
-                    screen: screenScope.modelData
-                    shellNamespace: "quickshell:tabletShadeOpaque"
-                    blurBacked: false
                 }
             }
         }

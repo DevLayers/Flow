@@ -22,7 +22,7 @@ LazyLoader {
         if (screenHeight <= 0 || !root.contentItem)
             return 1.0;
         var baseScale = Math.max(0.75, Math.min(1.5, screenHeight / 1080.0));
-        var barSpace = Config.options.bar.vertical ? 0 : Appearance.sizes.barHeight;
+        var barSpace = BarPlacement.vertical ? 0 : Appearance.sizes.barHeight;
         var maxAllowedHeight = screenHeight - barSpace - Appearance.sizes.elevationMargin * 2 - 40;
         var maxAllowedWidth = (screenWidth > 0 ? screenWidth : 1920) * 0.9;
         
@@ -188,10 +188,10 @@ LazyLoader {
         readonly property real screenWidth: popupWindow.screen?.width ?? 0
         readonly property real screenHeight: popupWindow.screen?.height ?? 0
 
-        anchors.left: root.customPosition ? root.anchorLeft : (!Config.options.bar.vertical || (Config.options.bar.vertical && !Config.options.bar.bottom))
-        anchors.right: root.customPosition ? root.anchorRight : (Config.options.bar.vertical && Config.options.bar.bottom)
-        anchors.top: root.customPosition ? root.anchorTop : (Config.options.bar.vertical || (!Config.options.bar.vertical && !Config.options.bar.bottom))
-        anchors.bottom: root.customPosition ? root.anchorBottom : (!Config.options.bar.vertical && Config.options.bar.bottom)
+        anchors.left: root.customPosition ? root.anchorLeft : (!BarPlacement.vertical || (BarPlacement.vertical && !BarPlacement.bottom))
+        anchors.right: root.customPosition ? root.anchorRight : (BarPlacement.vertical && BarPlacement.bottom)
+        anchors.top: root.customPosition ? root.anchorTop : (BarPlacement.vertical || (!BarPlacement.vertical && !BarPlacement.bottom))
+        anchors.bottom: root.customPosition ? root.anchorBottom : (!BarPlacement.vertical && BarPlacement.bottom)
 
         implicitWidth: popupBackground.targetWidth + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
         implicitHeight: popupBackground._windowHeight + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
@@ -220,7 +220,7 @@ LazyLoader {
                 if (root.customPosition) {
                     return root.customMarginLeft;
                 }
-                if (!Config.options.bar.vertical) {
+                if (!BarPlacement.vertical) {
                     if (!root.hoverTarget || !root.QsWindow)
                         return 0;
                     var targetPos = root.QsWindow.mapFromItem(root.hoverTarget, 0, 0);
@@ -236,7 +236,7 @@ LazyLoader {
                 if (root.customPosition) {
                     return root.customMarginTop;
                 }
-                if (!Config.options.bar.vertical) {
+                if (!BarPlacement.vertical) {
                     return Appearance.sizes.barHeight;
                 }
                 if (!root.hoverTarget || !root.QsWindow)
@@ -277,8 +277,8 @@ LazyLoader {
             // directly using the root.active property, matching HourlyForecast's pattern.
         }
 
-        readonly property bool isBarVertical: Config.options.bar.vertical
-        readonly property bool isBarBottom: Config.options.bar.bottom
+        readonly property bool isBarVertical: BarPlacement.vertical
+        readonly property bool isBarBottom: BarPlacement.bottom
         readonly property real slideOffset: 35
 
         readonly property real slideX: {
@@ -436,8 +436,8 @@ LazyLoader {
                 readonly property real targetWidth: ((root.contentItem?.implicitWidth ?? 0) + margin * 2) * root.layoutScale
                 readonly property real targetHeight: ((root.contentItem?.implicitHeight ?? 0) + margin * 2) * root.layoutScale
 
-                property bool isVertical: Config.options.bar.vertical
-                property bool isBottom: Config.options.bar.bottom
+                property bool isVertical: BarPlacement.vertical
+                property bool isBottom: BarPlacement.bottom
                 property int elevation: Appearance.sizes.elevationMargin
 
                 property real _commitHeight: 0

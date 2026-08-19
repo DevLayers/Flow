@@ -11,8 +11,6 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.bar.core
 
-import qs.modules.tablet.sidebarDashboard
-
 // Bar entry point — one BarWindow per monitor.
 // Window/autohide/exclusiveZone logic lives in bar/core/BarWindow.qml.
 Scope {

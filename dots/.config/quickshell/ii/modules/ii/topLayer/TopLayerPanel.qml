@@ -57,8 +57,8 @@ PanelWindow {
 
     readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
     readonly property bool hasBarOnThisMonitor: GlobalStates.isScreenAllowedForBar(topPanel.screen)
-    readonly property bool barVertical: Config.options.bar.vertical && hasBarOnThisMonitor
-    readonly property bool barBottom: Config.options.bar.bottom && hasBarOnThisMonitor
+    readonly property bool barVertical: BarPlacement.vertical && hasBarOnThisMonitor
+    readonly property bool barBottom: BarPlacement.bottom && hasBarOnThisMonitor
     readonly property bool barOnLeft: barVertical && !barBottom
     readonly property bool barOnRight: barVertical && barBottom
     readonly property bool policiesOnLeft: Config.options.sidebar.position === "default" || Config.options.sidebar.position === "left"

@@ -53,7 +53,7 @@ Scope {
                         screen: realOverviewLoader.modelData
                         readonly property bool monitorIsFocused: realOverviewLoader.monitorIsFocused
                         readonly property int monitorIndex: realOverviewLoader.monitorIndex
-                        readonly property bool isBottomBar: !Config.options.bar.vertical && Config.options.bar.bottom
+                        readonly property bool isBottomBar: !BarPlacement.vertical && BarPlacement.bottom
 
                         readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
                         readonly property string animStyle: (GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? "zoom" : (Config.options.overview.animationStyle ?? "bounce")
@@ -167,7 +167,7 @@ Scope {
                             left: true
                             right: true
                         }
-                        property int barSize: Config.options.bar.vertical ? Appearance.sizes.verticalBarWindowWidth : Appearance.sizes.barHeight
+                        property int barSize: BarPlacement.vertical ? Appearance.sizes.verticalBarWindowWidth : Appearance.sizes.barHeight
                         property int margin: barSize * 2
                         margins {
                             top: -margin * 2

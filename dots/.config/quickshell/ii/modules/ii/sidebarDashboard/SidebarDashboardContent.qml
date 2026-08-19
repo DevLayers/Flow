@@ -53,8 +53,8 @@ Item {
         entranceTrigger++;
     }
 
-    readonly property bool isDynamicIslandTop: !Config.options.bar.vertical && !Config.options.bar.bottom && Config.options.bar.cornerStyle === 3
-    readonly property bool isDynamicIslandBottom: !Config.options.bar.vertical && Config.options.bar.bottom && Config.options.bar.cornerStyle === 3
+    readonly property bool isDynamicIslandTop: !BarPlacement.vertical && !BarPlacement.bottom && Config.options.bar.cornerStyle === 3
+    readonly property bool isDynamicIslandBottom: !BarPlacement.vertical && BarPlacement.bottom && Config.options.bar.cornerStyle === 3
 
     property bool isLoadedOnLeft: false
 

@@ -3039,6 +3039,16 @@ Singleton {
                 }
                 property string position: "default"
                 property string sidebarStyle: "default" // "default" | "connect"
+                property JsonObject tabletShade: JsonObject {
+                    // Height of the strip at the very top that starts the pull-down. It sits
+                    // above the bar on the Overlay layer, so whatever it covers stops being
+                    // clickable — raise it for an easier grab, lower it to keep the bar usable.
+                    property int edgeDragHeight: 8
+                    // The tablet shade blurs a screencopy of the desktop so the blur can ramp
+                    // with the drag. Off = one frozen frame per open (cheap, no feedback);
+                    // on = continuous capture, which also re-captures the shade's own output.
+                    property bool liveBackdrop: false
+                }
                 property bool keepRightSidebarLoaded: true
                 property bool volumeDialogMediaWidget: true
                 property JsonObject translator: JsonObject {
