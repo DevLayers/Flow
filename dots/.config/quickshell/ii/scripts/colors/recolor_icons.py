@@ -781,6 +781,11 @@ def _generate_locked():
                     f.write(f"Inherits={icon_theme_name},hicolor\n")
                 elif line.startswith("Comment="):
                     f.write(f"Comment=Dynamic Material You icons from {icon_theme_name}\n")
+                elif line.startswith("KDE-Extensions="):
+                    # KIconLoader only probes the listed extensions. SVG-only themes
+                    # ship this as ".svg", which would hide every PNG we generate
+                    # (recolored base rasters, scavenged icons) from KDE/Qt apps.
+                    pass
                 else:
                     f.write(line)
     else:
@@ -882,6 +887,11 @@ def _generate_locked():
 
     # Notify system
     subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", "DynamicTheme"], capture_output=True)
+    # KIconLoader (KDE platform theme, used by Quickshell) caches the parsed
+    # theme per-process; this signal makes running apps drop it and re-read.
+    for group in range(7):
+        subprocess.run(["dbus-send", "--session", "--type=signal", "/KIconLoader",
+                        "org.kde.KIconLoader.iconChanged", f"int32:{group}"], capture_output=True)
 
     total = base_count + svg_count + raster_count
     print(f"Generation complete. {total} total icons in DynamicTheme.")
