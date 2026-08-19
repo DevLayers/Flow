@@ -20,7 +20,7 @@ Item {
         
         // 1. Try desktopEntry.icon directly if valid
         if (root.desktopEntry && root.desktopEntry.icon) {
-            let path = Quickshell.iconPath(root.desktopEntry.icon, "").toString();
+            let path = Quickshell.iconPath(root.desktopEntry.icon, true).toString();
             if (path !== "" && !path.includes("image-missing"))
                 return path;
         }
@@ -29,7 +29,7 @@ Item {
         if (root.appId) {
             let guessed = TaskbarApps.getCachedIcon(root.appId);
             if (guessed && guessed !== "image-missing") {
-                let path = Quickshell.iconPath(guessed, "").toString();
+                let path = Quickshell.iconPath(guessed, true).toString();
                 if (path !== "" && !path.includes("image-missing"))
                     return path;
             }
@@ -39,7 +39,7 @@ Item {
         if (root.desktopEntry && root.desktopEntry.icon) {
             let guessed = AppSearch.guessIcon(root.desktopEntry.icon);
             if (guessed && guessed !== "image-missing") {
-                let path = Quickshell.iconPath(guessed, "").toString();
+                let path = Quickshell.iconPath(guessed, true).toString();
                 if (path !== "" && !path.includes("image-missing"))
                     return path;
             }
