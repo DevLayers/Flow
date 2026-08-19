@@ -243,8 +243,8 @@ Singleton {
             "name": "Accounts & Backup",
             "icon": "checklist",
             "component": "modules/settings/configs/TasksAccountsConfig.qml",
-            "subPages": ["widgets/GoogleDriveBackupConfig.qml", "widgets/AdvancedDriveConfig.qml"],
-            "aliases": ["Core Services", "Tasks & Accounts", "TickTick", "Tasks", "Accounts", "Google Drive", "Backup", "Cloud backup", "rclone"]
+            "subPages": ["widgets/GoogleDriveBackupConfig.qml", "widgets/AdvancedDriveConfig.qml", "widgets/CoreGoogleTasksConfig.qml", "widgets/CoreTickTickConfig.qml"],
+            "aliases": ["Core Services", "Tasks & Accounts", "TickTick", "Google Tasks", "Google Tasks API", "Tasks", "Accounts", "Google Drive", "Backup", "Cloud backup", "rclone"]
         },
         {
             "id": "soundAlerts",

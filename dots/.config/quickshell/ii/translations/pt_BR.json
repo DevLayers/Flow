@@ -3892,5 +3892,7 @@
   "Set up": "Configurar",
   "Set up Wi-Fi": "Configurar Wi-Fi",
   "Wireless connection is active.": "A conexão sem fio está ativa.",
-  "%1 · %2%": "%1 · %2%"
+  "%1 · %2%": "%1 · %2%",
+  "Google Tasks uses the Google Cloud OAuth 2.0 Client credentials (Client ID and Client Secret) configured for Gmail in ii/.env. If you already have Gmail configured, you can connect directly; otherwise, set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (or GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET) in your .env file.": "O Google Tasks utiliza as credenciais de Cliente OAuth 2.0 do Google Cloud (Client ID e Client Secret) configuradas para o Gmail em ii/.env. Se você já configurou o Gmail, pode conectar diretamente; caso contrário, defina GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET (ou GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET) em seu arquivo .env.",
+  "Gmail and Google Tasks credentials are set in ii/.env (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET or GMAIL_*). Sports (ESPN) options live in the Sports bar widget page.": "As credenciais do Gmail e Google Tasks são definidas em ii/.env (GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET ou GMAIL_*). As opções de Esportes (ESPN) ficam na página do widget de Esportes."
 }

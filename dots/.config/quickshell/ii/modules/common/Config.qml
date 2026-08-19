@@ -976,6 +976,16 @@ Singleton {
                 property real driveBackupUsageMb: 0.0
             }
 
+            property JsonObject todo: JsonObject {
+                // Choices: "local", "ticktick", or "googleTasks".
+                property string provider: "local"
+                property int refreshIntervalMinutes: 5
+                property JsonObject googleTasks: JsonObject {
+                    property string taskListId: ""
+                    property string taskListTitle: ""
+                }
+            }
+
             property JsonObject vpn: JsonObject {
                 property bool enabled: false
                 property bool autoConnect: false

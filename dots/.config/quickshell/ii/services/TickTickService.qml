@@ -62,6 +62,18 @@ Singleton {
         createTaskProcess.running = true;
     }
 
+    function setTaskDone(task, done) {
+        if (!task || !task.id)
+            return;
+
+        if (done) {
+            root.completeTask(task.id, task.containerId || task.projectId);
+            return;
+        }
+
+        root.refresh();
+    }
+
     function completeTask(taskId, projectId) {
         if (!root.available)
             return;
@@ -71,10 +83,13 @@ Singleton {
         completeTaskProcess.running = true;
     }
 
-    function deleteTask(taskId, projectId) {
-        if (!root.available)
+    function deleteTask(taskOrId, projectId) {
+        if (!root.available || !taskOrId)
             return;
-        let pid = projectId || root.inboxProjectId;
+        let taskId = typeof taskOrId === "object" ? taskOrId.id : taskOrId;
+        let pid = (typeof taskOrId === "object" ? (taskOrId.containerId || taskOrId.projectId) : projectId) || root.inboxProjectId;
+        if (!taskId)
+            return;
         let cmd = `curl -s -X DELETE "${root.apiBase}/project/${pid}/task/${taskId}" -H "Authorization: Bearer ${root.accessToken}"`;
         deleteTaskProcess.command[2] = cmd;
         deleteTaskProcess.running = true;
@@ -196,7 +211,9 @@ Singleton {
                     for (let i = 0; i < rawTasks.length; i++) {
                         let t = rawTasks[i];
                         parsed.push({
+                            "provider": "ticktick",
                             "id": t.id || "",
+                            "containerId": t.projectId || root.inboxProjectId,
                             "projectId": t.projectId || root.inboxProjectId,
                             "content": t.title || "",
                             "done": (t.status !== undefined) ? (t.status === 2) : false,
@@ -248,13 +265,5 @@ Singleton {
                 root.refresh();
             }
         }
-    }
-
-    // ── Auto-refresh timer ────────────────────────────────────────
-    Timer {
-        running: root.available
-        repeat: true
-        interval: root.refreshInterval
-        onTriggered: root.refresh()
     }
 }
