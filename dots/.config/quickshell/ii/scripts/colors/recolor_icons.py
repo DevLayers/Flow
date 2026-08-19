@@ -197,14 +197,24 @@ def recolor_svg(content, colors):
 
 
 def process_file(args):
-    src_file, dst_file, colors = args
+    src_file, dst_file, colors, luts = args
     try:
         if src_file.endswith(".svg"):
             with open(src_file, 'r', errors='ignore') as f:
                 content = f.read()
             new_content = recolor_svg(content, colors)
+            # Icons that are just an SVG shell around a base64 PNG (common in
+            # macOS-style packs) pass through the hex recolor untouched
+            if luts and "base64," in new_content:
+                new_content = recolor_embedded_images(new_content, luts)
             with open(dst_file, 'w') as f:
                 f.write(new_content)
+        elif luts and src_file.endswith(".png"):
+            try:
+                from PIL import Image
+                recolor_raster_image(Image.open(src_file), luts).save(dst_file, "PNG")
+            except Exception:
+                shutil.copy2(src_file, dst_file)
         else:
             shutil.copy2(src_file, dst_file)
         return True
@@ -410,16 +420,13 @@ def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
-def recolor_raster_icons(raster_icons, colors, target_apps_dir):
-    import base64
+def build_raster_luts(colors):
+    """Build the 256-entry gradient-map LUTs used for raster recoloring.
+    Returns (r_lut, g_lut, b_lut), or None when Pillow is unavailable."""
     try:
-        from PIL import Image
+        from PIL import Image  # probe only; callers import what they need
     except ImportError:
-        print("  Pillow not installed, skipping accurate raster recoloring")
-        return []
-
-    if not raster_icons:
-        return []
+        return None
 
     def get_luminance(rgb):
         return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
@@ -457,23 +464,62 @@ def recolor_raster_icons(raster_icons, colors, target_apps_dir):
         g_lut.append(c[1])
         b_lut.append(c[2])
 
+    return r_lut, g_lut, b_lut
+
+
+def recolor_raster_image(img, luts):
+    """Gradient-map a PIL image onto the Material palette, preserving alpha."""
+    from PIL import Image
+    r_lut, g_lut, b_lut = luts
+    img = img.convert("RGBA")
+    alpha = img.split()[3]
+    gray = img.convert("L")
+    mapped = Image.merge("RGB", (gray.point(r_lut), gray.point(g_lut), gray.point(b_lut)))
+    mapped.putalpha(alpha)
+    return mapped
+
+
+# Matches base64-embedded rasters in SVGs (quotes end the match: not in charset)
+DATA_IMAGE_RE = re.compile(r'data:image/(?:png|jpe?g);base64,([A-Za-z0-9+/=\s]+)')
+
+
+def recolor_embedded_images(svg_content, luts):
+    """Recolor base64-embedded rasters inside an SVG. macOS-style icon packs
+    ship PNGs wrapped in SVG, which the hex-color text pass can't touch."""
+    import base64
+    import io
+
+    def repl(match):
+        try:
+            raw = base64.b64decode(match.group(1), validate=False)
+            from PIL import Image
+            img = Image.open(io.BytesIO(raw))
+            out = io.BytesIO()
+            recolor_raster_image(img, luts).save(out, "PNG")
+            return "data:image/png;base64," + base64.b64encode(out.getvalue()).decode('ascii')
+        except Exception:
+            return match.group(0)
+
+    return DATA_IMAGE_RE.sub(repl, svg_content)
+
+
+def recolor_raster_icons(raster_icons, colors, target_apps_dir):
+    import base64
+    luts = build_raster_luts(colors)
+    if luts is None:
+        print("  Pillow not installed, skipping accurate raster recoloring")
+        return []
+
+    if not raster_icons:
+        return []
+    from PIL import Image
+
     successful_names = []
     with tempfile.TemporaryDirectory() as tmpdir:
         for icon_name, source_path in raster_icons:
             try:
-                img = Image.open(source_path).convert("RGBA")
-                alpha = img.split()[3]
-                gray = img.convert("L")
-                
-                # Apply gradient map
-                r = gray.point(r_lut)
-                g = gray.point(g_lut)
-                b = gray.point(b_lut)
-                
-                mapped = Image.merge("RGB", (r, g, b))
-                mapped.putalpha(alpha)
-                img = mapped
-                
+                img = recolor_raster_image(Image.open(source_path), luts)
+
                 # Save full res for SVG wrapping
                 out_path = os.path.join(tmpdir, icon_name + ".png")
                 img.save(out_path, "PNG")
@@ -747,9 +793,12 @@ def _generate_locked():
                     f"[128x128/apps]\nSize=128\nType=Fixed\nContext=Applications\n\n"
                     f"[48x48/apps]\nSize=48\nType=Fixed\nContext=Applications\n")
 
-    # ── Phase 1: Recolor base theme SVGs ─────────────────────────────────
+    # ── Phase 1: Recolor base theme icons (vector, raster, base64-in-SVG) ─
     tasks = []
     processed_folders = set()
+    luts = build_raster_luts(colors)
+    if luts is None:
+        print("  Pillow not installed — base theme rasters will be copied untinted")
 
     for root_dir, dirs, files in os.walk(base_theme_path):
         if any(x in root_dir.lower() for x in ["apps", "places", "categories", "devices", "status", "actions"]):
@@ -760,7 +809,7 @@ def _generate_locked():
 
             for filename in files:
                 if filename.endswith(".svg") or filename.endswith(".png"):
-                    tasks.append((os.path.join(root_dir, filename), os.path.join(dst_folder, filename), colors))
+                    tasks.append((os.path.join(root_dir, filename), os.path.join(dst_folder, filename), colors, luts))
 
     print(f"[Phase 1] Processing {len(tasks)} base theme icons from {len(processed_folders)} folders...")
 
