@@ -656,7 +656,7 @@ done"
         mkdir -p "$(dirname "$STATE_DIR/user/generated/colors.json")"
         cp "$theme_file" "$STATE_DIR/user/generated/colors.json"
         echo "[switchwall_vynx.sh] Applied theme: $type_flag"
-        python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
+        if [[ "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         "$SCRIPT_DIR"/applycolor_vynx.sh
     else
         matugen "${matugen_args[@]}"
@@ -665,7 +665,7 @@ done"
             python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
         fi
         (
-            python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py" &
+            if [[ "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi &
             (
                 source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
                 if python3 "$SCRIPT_DIR/generate_colors_material_vynx.py" "${generate_colors_material_args[@]}" \

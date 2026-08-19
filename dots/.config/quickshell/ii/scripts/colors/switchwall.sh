@@ -642,7 +642,7 @@ done"
         mkdir -p "$(dirname "$STATE_DIR/user/generated/colors.json")"
         cp "$theme_file" "$STATE_DIR/user/generated/colors.json"
         echo "[switchwall.sh] Applied theme: $type_flag"
-        python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
+        if [[ "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         "$SCRIPT_DIR"/applycolor.sh
     else
         matugen "${matugen_args[@]}"
@@ -650,7 +650,7 @@ done"
             echo "[switchwall.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
             python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
         fi
-        python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
+        if [[ "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
         if python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
             --all-previews "$STATE_DIR/user/generated/wallpaper_preview_colors.json" \
