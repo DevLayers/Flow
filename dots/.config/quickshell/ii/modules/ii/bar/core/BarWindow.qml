@@ -107,9 +107,14 @@ Scope {
 
         // ── Fullscreen detection ──────────────────────────────────────────────
         readonly property bool hasFullscreenWindowOnMonitor: {
-            const monitorData = HyprlandData.monitors.find(m => m.name === barRoot.screen.name);
+            // A throw here would leave the property latched at its last value with
+            // incomplete dependencies, so the bar could never un-hide again.
+            const screenName = barRoot.screen ? barRoot.screen.name : "";
+            if (screenName === "")
+                return false;
+            const monitorData = HyprlandData.monitors.find(m => m.name === screenName);
             const specialWsName = monitorData?.specialWorkspace?.name;
-            const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name === barRoot.screen.name);
+            const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name === screenName);
             return workspaces.some(workspace => {
                 const isWorkspaceActive = workspace.active || (specialWsName && specialWsName !== "" && (workspace.name === specialWsName || workspace.name === "special:" + specialWsName || (specialWsName === "special:special" && workspace.name === "special") || (specialWsName === "special" && workspace.name === "special:special")));
                 return isWorkspaceActive && workspace.toplevels.values.some(toplevel => toplevel.wayland && toplevel.wayland.fullscreen);
