@@ -14,6 +14,8 @@ Item {
     property alias shape: shapeWidget.shape
     property alias descriptionHorizontalAlignment: widgetDescriptionText.horizontalAlignment
     property bool animateIconOnShow: false
+    // Touch hosts render the same placeholder larger without forking it.
+    property real sizeScale: 1.0
 
     opacity: shown ? 1 : 0
     visible: opacity > 0
@@ -224,7 +226,7 @@ Item {
                 id: shapeWidget
                 anchors.centerIn: parent
                 padding: 12
-                iconSize: 56
+                iconSize: Math.round(56 * root.sizeScale)
                 rotation: -30 * (1 - root.opacity)
                 
                 FastBlur {
@@ -261,7 +263,7 @@ Item {
                 anchors.fill: parent
                 font {
                     family: Appearance.font.family.title
-                    pixelSize: Appearance.font.pixelSize.larger
+                    pixelSize: Math.round(Appearance.font.pixelSize.larger * root.sizeScale)
                     variableAxes: Appearance.font.variableAxes.title
                 }
                 color: Appearance.m3colors.m3outline
@@ -279,7 +281,7 @@ Item {
             visible: description !== ""
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
-            font.pixelSize: Appearance.font.pixelSize.small
+            font.pixelSize: Math.round(Appearance.font.pixelSize.small * root.sizeScale)
             color: Appearance.m3colors.m3outline
             horizontalAlignment: root.descriptionHorizontalAlignment ?? Text.AlignHCenter
             wrapMode: Text.Wrap

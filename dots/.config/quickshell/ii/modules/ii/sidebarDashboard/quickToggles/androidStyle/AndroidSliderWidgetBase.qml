@@ -15,6 +15,13 @@ Item {
     required property var buttonData
     required property real baseCellWidth
     required property real baseCellHeight
+
+    // Mirrors AndroidQuickToggleButton: chrome scales with the cell height so touch-sized
+    // grids get proportionally larger icons. Identity at the ii default cell height.
+    readonly property real touchScale: Math.max(1.0, Math.pow(root.baseCellHeight / 56, 0.65))
+    function scaled(value) {
+        return Math.round(value * root.touchScale);
+    }
     required property real cellSpacing
     required property int cellSize
 
@@ -220,7 +227,9 @@ Item {
             StyledSlider {
                 id: quickSlider
                 anchors.fill: parent
-                configuration: StyledSlider.Configuration.M
+                // Touch-sized cells get a track proportional to the cell; the ii grid
+                // (touchScale === 1) keeps the fixed M track.
+                configuration: root.touchScale > 1 ? Math.round(root.baseCellHeight * 0.62) : StyledSlider.Configuration.M
                 stopIndicatorValues: []
                 dividerValues: root.secondaryMaterialSymbol.length > 0 ? [secondaryIcon.iconLocation] : []
                 value: root.currentSliderValue
@@ -243,7 +252,7 @@ Item {
                     right: nearFull ? quickSlider.handle.right : quickSlider.right
                     rightMargin: nearFull ? 10 : 4
                 }
-                iconSize: 16
+                iconSize: root.scaled(16)
                 padding: 4
                 shape: MaterialShape.Shape.Cookie7Sided
                 text: root.materialSymbol
@@ -293,7 +302,7 @@ Item {
                     right: nearIcon ? quickSlider.handle.right : quickSlider.right
                     rightMargin: nearIcon ? 14 : (1 - iconLocation) * quickSlider.effectiveDraggingWidth + quickSlider.rightPadding + 8
                 }
-                iconSize: 20
+                iconSize: root.scaled(20)
                 color: quickSlider.value >= iconLocation - 0.1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
                 text: root.secondaryMaterialSymbol
 

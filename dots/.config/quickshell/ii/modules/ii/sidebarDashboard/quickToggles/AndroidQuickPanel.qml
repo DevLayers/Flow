@@ -55,7 +55,9 @@ AbstractQuickPanel {
         const availableWidth = root.width - (root.padding * 2) - (root.spacing * (root.columns));
         return availableWidth / root.columns;
     }
-    readonly property real baseCellHeight: 56
+    // Hosts with touch-sized grids (tablet family) raise this; the ii sidebar keeps 56,
+    // and every derived metric (icon circles, typography) scales off it.
+    property real baseCellHeight: 56
 
     // Toggles config
     readonly property list<string> availableToggleTypes: QuickToggleCatalog.allTypes()

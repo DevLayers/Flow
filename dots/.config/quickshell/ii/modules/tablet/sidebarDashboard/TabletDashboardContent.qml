@@ -1,21 +1,14 @@
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Effects
+
 import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.ii.bar as Bar
-import qs.modules.ii.bar.shared
-import QtQuick
-import QtQuick.Controls
-import QtQuick.Layouts
-import QtQuick.Effects
-import Quickshell
-import Quickshell.Bluetooth
-import Quickshell.Hyprland
-import Qt5Compat.GraphicalEffects
 
 import qs.modules.ii.sidebarDashboard
 import qs.modules.ii.sidebarDashboard.quickToggles
-import qs.modules.ii.sidebarDashboard.quickToggles.classicStyle
 import qs.modules.ii.sidebarDashboard.notifications
 import qs.modules.ii.sidebarDashboard.bluetoothDevices
 import qs.modules.ii.sidebarDashboard.nightLight
@@ -29,11 +22,34 @@ import qs.modules.ii.sidebarDashboard.dnsOverTls
 import qs.modules.ii.sidebarDashboard.idleInhibitor
 import qs.modules.ii.sidebarDashboard.screenShader
 
+/**
+ * Landscape shade contents, laid out like Android's: one status line across the top, quick
+ * toggles and the system actions on the left, notifications on the right.
+ *
+ * Everything is sized off the screen height rather than fixed pixels, so the same layout is
+ * usable with a finger on a small tablet and on a large scaled display.
+ */
 Item {
     id: root
 
-    signal dismissRequested()
+    signal dismissRequested
 
+    // ── Touch metrics ───────────────────────────────────────────────────────
+    // One grid cell is the unit the whole shade is built from. The clamps keep tiles
+    // thumb-sized on a short screen without letting them balloon on a tall one.
+    readonly property real touchCellHeight: Math.max(64, Math.min(116, Math.round(root.height * 0.088)))
+    readonly property real gridSpacing: Math.max(6, Math.round(root.touchCellHeight * 0.12))
+    readonly property real actionRowHeight: Math.max(50, Math.min(68, Math.round(root.height * 0.055)))
+    readonly property real headerHeight: Math.max(44, Math.min(68, Math.round(root.height * 0.05)))
+    readonly property real outerMargin: Math.max(16, Math.min(32, Math.round(root.height * 0.022)))
+    // The ii dialogs are sized for a 460px sidebar; here they float over the whole screen.
+    readonly property real dialogWidth: Math.max(560, Math.min(980, Math.round(root.width * 0.38)))
+
+    // Parked, not deleted: the calendar/to-do/timer group moves into the quick toggles grid
+    // later, so the code stays wired up behind this switch and notifications take the space.
+    readonly property bool showBottomWidgetGroup: false
+
+    // ── Dialog state ────────────────────────────────────────────────────────
     property bool showAudioOutputDialog: false
     property bool showAudioInputDialog: false
     property bool showBluetoothDialog: false
@@ -46,13 +62,32 @@ Item {
     property bool showDnsOverTlsDialog: false
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog
+    property bool showTrayDialog: false
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showTrayDialog
+
     property bool editMode: false
 
     property int entranceTrigger: -1
 
     function triggerContentEntrance() {
-        entranceTrigger++;
+        root.entranceTrigger++;
+        androidQuickPanelLoader.item?.triggerContentEntrance?.();
+    }
+
+    function closeAllDialogs() {
+        root.showWifiDialog = false;
+        root.showBluetoothDialog = false;
+        root.showAudioOutputDialog = false;
+        root.showAudioInputDialog = false;
+        root.showNightLightDialog = false;
+        root.showDarkModeDialog = false;
+        root.showLocalSendDialog = false;
+        root.showVpnDialog = false;
+        root.showTailscaleDialog = false;
+        root.showDnsOverTlsDialog = false;
+        root.showIdleInhibitorDialog = false;
+        root.showScreenShaderDialog = false;
+        root.showTrayDialog = false;
     }
 
     Connections {
@@ -61,17 +96,7 @@ Item {
             if (TabletDashboardGestureController.progress >= 0.95 && root.entranceTrigger < 0) {
                 root.triggerContentEntrance();
             } else if (TabletDashboardGestureController.progress <= 0.05) {
-                root.showWifiDialog = false;
-                root.showBluetoothDialog = false;
-                root.showAudioOutputDialog = false;
-                root.showAudioInputDialog = false;
-                root.showDarkModeDialog = false;
-                root.showLocalSendDialog = false;
-                root.showVpnDialog = false;
-                root.showTailscaleDialog = false;
-                root.showDnsOverTlsDialog = false;
-                root.showIdleInhibitorDialog = false;
-                root.showScreenShaderDialog = false;
+                root.closeAllDialogs();
                 root.entranceTrigger = -1;
             }
         }
@@ -87,32 +112,26 @@ Item {
         }
     }
 
-    BarThemes {
-        id: barThemes
-    }
-    readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
-
-    // ── MAIN CONTENT CONTAINER ──────────────────────────────────────────────
+    // ── MAIN CONTENT ────────────────────────────────────────────────────────
     Item {
         id: contentContainer
         anchors {
             fill: parent
-            leftMargin: Appearance.sizes.hyprlandGapsOut * 3
-            rightMargin: Appearance.sizes.hyprlandGapsOut * 3
-            topMargin: Appearance.sizes.hyprlandGapsOut * 3
-            bottomMargin: Appearance.sizes.hyprlandGapsOut * 3
+            margins: root.outerMargin
         }
 
         property real dialogBlurProgress: root.anyDialogVisible ? 1.0 : 0.0
         Behavior on dialogBlurProgress {
-            NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
+            NumberAnimation {
+                duration: 320
+                easing.type: Easing.OutCubic
+            }
         }
 
-        // Two-column landscape layout (Android 16 style)
-        RowLayout {
-            id: mainRowLayout
+        ColumnLayout {
+            id: shadeLayout
             anchors.fill: parent
-            spacing: Appearance.sizes.hyprlandGapsOut * 2
+            spacing: root.outerMargin
 
             layer.enabled: contentContainer.dialogBlurProgress > 0.01
             layer.effect: MultiEffect {
@@ -121,108 +140,127 @@ Item {
                 blur: contentContainer.dialogBlurProgress
             }
 
-            // ══════════════════════════════════════════════════════════════════
-            // LEFT COLUMN: Quick Toggles (with sliders) + System Button Row
-            // ══════════════════════════════════════════════════════════════════
-            ColumnLayout {
-                id: leftColumn
-                Layout.fillHeight: true
+            // ── STATUS LINE ─────────────────────────────────────────────────
+            TabletStatusHeader {
                 Layout.fillWidth: true
-                Layout.preferredWidth: parent.width * 0.5
-                spacing: Appearance.sizes.hyprlandGapsOut * 2
-
-                // Quick Toggles Card
-                Rectangle {
-                    id: quickTogglesCard
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    radius: Appearance.rounding.normal
-                    color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
-                    border.width: 1
-                    border.color: Appearance.colors.colLayer0Border
-                    clip: true
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 14
-                        spacing: 12
-
-                        LoaderedQuickPanelImplementation {
-                            id: classicQuickPanelLoader
-                            styleName: "classic"
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            sourceComponent: ClassicQuickPanel {
-                                onOpenVpnDialog: root.showVpnDialog = true
-                                onOpenTailscaleDialog: root.showTailscaleDialog = true
-                            }
-                        }
-
-                        LoaderedQuickPanelImplementation {
-                            id: androidQuickPanelLoader
-                            styleName: "android"
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            sourceComponent: AndroidQuickPanel {
-                                editMode: root.editMode
-                                onOpenVpnDialog: root.showVpnDialog = true
-                                onOpenTailscaleDialog: root.showTailscaleDialog = true
-                                onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
-                                onOpenScreenShaderDialog: root.showScreenShaderDialog = true
-                            }
-                        }
-                    }
-                }
-
-                // System Button Row (Uptime / Profile Banner + Action Buttons)
-                SystemButtonRow {
-                    id: systemButtonRow
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: implicitHeight
-                    entranceTrigger: root.entranceTrigger
-                    editMode: root.editMode
-                    onEditModeToggled: (newEditMode) => root.editMode = newEditMode
-                }
+                Layout.preferredHeight: root.headerHeight
+                barHeight: root.headerHeight
+                entranceTrigger: root.entranceTrigger
             }
 
-            // ══════════════════════════════════════════════════════════════════
-            // RIGHT COLUMN: Notifications + Bottom Widget Group
-            // ══════════════════════════════════════════════════════════════════
-            ColumnLayout {
-                id: rightColumn
-                Layout.fillHeight: true
+            // ── TWO COLUMNS ─────────────────────────────────────────────────
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredWidth: parent.width * 0.5
-                spacing: Appearance.sizes.hyprlandGapsOut * 2
+                Layout.fillHeight: true
+                spacing: root.outerMargin
 
-                // Notifications Card
-                Rectangle {
-                    id: notificationsCard
+                // ── LEFT: quick toggles + system actions ────────────────────
+                ColumnLayout {
+                    id: leftColumn
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    radius: Appearance.rounding.normal
-                    color: Appearance.colors.colLayer1
-                    clip: true
+                    Layout.preferredWidth: 1
+                    spacing: root.outerMargin
 
-                    NotificationList {
-                        anchors.fill: parent
-                        anchors.margins: 8
+                    // Touch-sized tiles plus the edit-mode drawer can outgrow the column, so
+                    // the grid scrolls instead of spilling over the action row. The panel's own
+                    // paging flickable is horizontal only, so the two axes don't fight.
+                    StyledFlickable {
+                        id: quickTogglesScroll
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        contentWidth: width
+                        contentHeight: quickTogglesColumn.implicitHeight
+                        flickableDirection: Flickable.VerticalFlick
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        ColumnLayout {
+                            id: quickTogglesColumn
+                            width: quickTogglesScroll.width
+                            spacing: root.outerMargin
+
+                            // No card behind the toggles: on Android the grid sits directly on
+                            // the shade background, and a nested surface only eats touch space.
+                            LoaderedQuickPanelImplementation {
+                                id: classicQuickPanelLoader
+                                styleName: "classic"
+                                sourceComponent: ClassicQuickPanel {
+                                    onOpenVpnDialog: root.showVpnDialog = true
+                                    onOpenTailscaleDialog: root.showTailscaleDialog = true
+                                }
+                            }
+
+                            LoaderedQuickPanelImplementation {
+                                id: androidQuickPanelLoader
+                                styleName: "android"
+                                sourceComponent: AndroidQuickPanel {
+                                    color: "transparent"
+                                    padding: 0
+                                    spacing: root.gridSpacing
+                                    baseCellHeight: root.touchCellHeight
+                                    editMode: root.editMode
+                                    onOpenVpnDialog: root.showVpnDialog = true
+                                    onOpenTailscaleDialog: root.showTailscaleDialog = true
+                                    onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
+                                    onOpenScreenShaderDialog: root.showScreenShaderDialog = true
+                                }
+                            }
+                        }
+                    }
+
+                    TabletSystemActionRow {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: root.actionRowHeight
+                        rowHeight: root.actionRowHeight
                         entranceTrigger: root.entranceTrigger
+                        editMode: root.editMode
+                        onEditModeToggled: newEditMode => root.editMode = newEditMode
+                        onTrayRequested: root.showTrayDialog = true
+                        onDismissRequested: root.dismissRequested()
                     }
                 }
 
-                // Bottom Widget Group (Calendar / To-Do / Timer)
-                BottomWidgetGroup {
-                    id: bottomWidgetGroup
+                // ── RIGHT: notifications ────────────────────────────────────
+                ColumnLayout {
+                    id: rightColumn
                     Layout.fillWidth: true
-                    Layout.preferredHeight: implicitHeight
-                    forceCollapsed: root.editMode
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 1
+                    spacing: root.outerMargin
+
+                    Rectangle {
+                        id: notificationsCard
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: Appearance.rounding.normal
+                        color: Appearance.colors.colLayer1
+                        clip: true
+
+                        NotificationList {
+                            anchors.fill: parent
+                            anchors.margins: Math.round(root.gridSpacing * 0.8)
+                            entranceTrigger: root.entranceTrigger
+                            zoom: 1.12
+                            placeholderScale: 1.4
+                        }
+                    }
+
+                    Loader {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: active ? implicitHeight : 0
+                        active: root.showBottomWidgetGroup
+                        visible: active
+                        sourceComponent: BottomWidgetGroup {
+                            forceCollapsed: root.editMode
+                        }
+                    }
                 }
             }
         }
     }
 
-    // ── SWIPE UP GESTURE TO DISMISS ─────────────────────────────────────────
+    // ── SWIPE UP TO DISMISS ─────────────────────────────────────────────────
     DragHandler {
         target: null
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
@@ -237,11 +275,26 @@ Item {
         }
     }
 
-    // ── DIALOG LOADERS ──────────────────────────────────────────────────────
+    // ── DIALOGS ─────────────────────────────────────────────────────────────
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showTrayDialog"
+        dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
+        dialog: TabletTrayDialog {
+            rowHeight: root.actionRowHeight
+            onItemActivated: {
+                root.showTrayDialog = false;
+                root.dismissRequested();
+            }
+        }
+    }
+
     DialogHostLoader {
         owner: root
         shownPropertyString: "showAudioOutputDialog"
         dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
         dialog: VolumeDialog {
             isSink: true
         }
@@ -251,6 +304,7 @@ Item {
         owner: root
         shownPropertyString: "showAudioInputDialog"
         dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
         dialog: VolumeDialog {
             isSink: false
         }
@@ -260,6 +314,7 @@ Item {
         owner: root
         shownPropertyString: "showBluetoothDialog"
         dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
         dialog: BluetoothDialog {}
     }
 
@@ -267,6 +322,7 @@ Item {
         owner: root
         shownPropertyString: "showNightLightDialog"
         dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
         dialog: NightLightDialog {}
     }
 
@@ -274,6 +330,7 @@ Item {
         owner: root
         shownPropertyString: "showWifiDialog"
         dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
         dialog: WifiDialog {}
     }
 
@@ -281,6 +338,7 @@ Item {
         owner: root
         shownPropertyString: "showDarkModeDialog"
         dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
         dialog: DarkModeDialog {}
     }
 
@@ -288,6 +346,7 @@ Item {
         owner: root
         shownPropertyString: "showLocalSendDialog"
         dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
         dialog: LocalSendDialog {}
     }
 
@@ -295,6 +354,7 @@ Item {
         owner: root
         shownPropertyString: "showVpnDialog"
         dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
         dialog: VpnDialog {}
     }
 
@@ -302,6 +362,7 @@ Item {
         owner: root
         shownPropertyString: "showTailscaleDialog"
         dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
         dialog: TailscaleDialog {}
     }
 
@@ -309,6 +370,7 @@ Item {
         owner: root
         shownPropertyString: "showDnsOverTlsDialog"
         dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
         dialog: DnsOverTlsDialog {}
     }
 
@@ -339,9 +401,12 @@ Item {
             }
         }
         onLoaded: {
-            if (item && item.hasOwnProperty("radius")) {
+            if (!item)
+                return;
+            if (item.hasOwnProperty("radius"))
                 item.radius = Appearance.rounding.normal;
-            }
+            if (item.hasOwnProperty("preferredDialogWidth"))
+                item.preferredDialogWidth = root.dialogWidth;
         }
         Connections {
             target: toggleDialogLoader.item
@@ -359,9 +424,9 @@ Item {
     component LoaderedQuickPanelImplementation: Loader {
         id: quickPanelImplLoader
         required property string styleName
-        Layout.alignment: item?.Layout.alignment ?? Qt.AlignHCenter
-        Layout.fillWidth: item?.Layout.fillWidth ?? true
-        Layout.fillHeight: item?.Layout.fillHeight ?? true
+        Layout.fillWidth: true
+        Layout.fillHeight: false
+        Layout.alignment: Qt.AlignTop
         visible: active
         active: Config.options.sidebar.quickToggles.style === styleName
         Connections {

@@ -26,6 +26,14 @@ Item {
     readonly property int effectiveSizeW: root.catalogSize[0]
     readonly property int effectiveSizeH: root.catalogSize[1]
 
+    // Every metric inside a tile is proportional to the cell height, so a touch-sized grid
+    // grows its icon circles and labels along with it. Damped so a twice-as-tall cell doesn't
+    // double the type; at the ii default (56) this is exactly 1.0 and nothing changes there.
+    readonly property real touchScale: Math.max(1.0, Math.pow(root.baseCellHeight / 56, 0.65))
+    function scaled(value) {
+        return Math.round(value * root.touchScale);
+    }
+
     readonly property bool isWide: effectiveSizeW > 1
     readonly property bool isTall: effectiveSizeH > 1
     readonly property bool expandedSize: isWide
@@ -243,7 +251,7 @@ Item {
         enableImplicitHeightAnimation: !root.editMode && visualButton.mouseArea.containsMouse
 
         enabled: root.available || root.editMode
-        padding: 6
+        padding: root.scaled(6)
         horizontalPadding: padding
         verticalPadding: padding
 
@@ -253,8 +261,8 @@ Item {
         colBackgroundToggledHover: is3WaySlider ? "transparent" : (useLayer2Bg ? Appearance.colors.colLayer2Hover : Appearance.colors.colPrimaryHover)
         colBackgroundToggledActive: is3WaySlider ? "transparent" : (useLayer2Bg ? Appearance.colors.colLayer2Active : Appearance.colors.colPrimaryActive)
         readonly property int fullRadius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
-        buttonRadius: is3WaySlider ? (height / 2) : ((root.toggled || root.isTall) ? Appearance.rounding.large : fullRadius)
-        buttonRadiusPressed: is3WaySlider ? (height / 2) : Appearance.rounding.normal
+        buttonRadius: is3WaySlider ? (height / 2) : ((root.toggled || root.isTall) ? root.scaled(Appearance.rounding.large) : fullRadius)
+        buttonRadiusPressed: is3WaySlider ? (height / 2) : root.scaled(Appearance.rounding.normal)
         property color colText: (root.toggled && !useLayer2Bg && enabled) ? Appearance.colors.colOnPrimary : ColorUtils.transparentize(Appearance.colors.colOnLayer2, enabled ? 0 : 0.7)
         property color colIcon: root.expandedSize ? ((root.toggled) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3) : colText
 
@@ -288,8 +296,8 @@ Item {
 
             MouseArea {
                 id: tallIconMouseArea
-                width: 54
-                height: 54
+                width: root.scaled(54)
+                height: root.scaled(54)
                 anchors.top: parent.top
                 anchors.topMargin: 4
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -311,13 +319,13 @@ Item {
 
                     Item {
                         width: parent.width
-                        height: parent.width // 54x54, matching the top circle of the pill
+                        height: parent.width // matches the top circle of the pill
                         anchors.top: parent.top
 
                         MaterialSymbol {
                             visible: root.backgroundIcon !== ""
                             anchors.centerIn: parent
-                            iconSize: 26
+                            iconSize: root.scaled(26)
                             opacity: 0.3
                             color: root.toggled ? Appearance.colors.colOnPrimary : visualButton.colIcon
                             text: root.backgroundIcon
@@ -326,7 +334,7 @@ Item {
                         MaterialSymbol {
                             anchors.centerIn: parent
                             fill: root.toggled ? 1 : 0
-                            iconSize: 26
+                            iconSize: root.scaled(26)
                             color: root.toggled ? Appearance.colors.colOnPrimary : visualButton.colIcon
                             text: root.buttonIcon
                             Behavior on color {
@@ -362,7 +370,7 @@ Item {
                 StyledText {
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    font.pixelSize: Appearance.font.pixelSize.smallie
+                    font.pixelSize: root.scaled(Appearance.font.pixelSize.smallie)
                     font.weight: 600
                     color: visualButton.colText
                     elide: Text.ElideRight
@@ -374,7 +382,7 @@ Item {
                     visible: root.statusText !== ""
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    font.pixelSize: root.scaled(Appearance.font.pixelSize.smaller)
                     font.weight: 100
                     color: ColorUtils.transparentize(visualButton.colText, 0.3)
                     elide: Text.ElideRight
@@ -403,8 +411,8 @@ Item {
                 hoverEnabled: true
                 acceptedButtons: root.altAction ? Qt.LeftButton : Qt.NoButton
                 Layout.alignment: Qt.AlignLeft | Qt.AlignTop
-                Layout.preferredWidth: 38
-                Layout.preferredHeight: 38
+                Layout.preferredWidth: root.scaled(38)
+                Layout.preferredHeight: root.scaled(38)
                 cursorShape: Qt.PointingHandCursor
 
                 onClicked: root.mainAction()
@@ -428,7 +436,7 @@ Item {
                     MaterialSymbol {
                         visible: root.backgroundIcon !== ""
                         anchors.centerIn: parent
-                        iconSize: 22
+                        iconSize: root.scaled(22)
                         opacity: 0.3
                         color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
                         text: root.backgroundIcon
@@ -437,7 +445,7 @@ Item {
                     MaterialSymbol {
                         anchors.centerIn: parent
                         fill: root.toggled ? 1 : 0
-                        iconSize: 22
+                        iconSize: root.scaled(22)
                         color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
                         text: root.buttonIcon
                     }
@@ -473,7 +481,7 @@ Item {
                         left: parent.left
                         right: parent.right
                     }
-                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.pixelSize: root.scaled(Appearance.font.pixelSize.small)
                     font.weight: 600
                     color: visualButton.colText
                     elide: Text.ElideRight
@@ -487,7 +495,7 @@ Item {
                         right: parent.right
                     }
                     font {
-                        pixelSize: Appearance.font.pixelSize.smaller
+                        pixelSize: root.scaled(Appearance.font.pixelSize.smaller)
                         weight: 400
                     }
                     color: ColorUtils.transparentize(visualButton.colText, 0.3)
@@ -553,7 +561,7 @@ Item {
                     MaterialSymbol {
                         visible: root.backgroundIcon !== ""
                         anchors.centerIn: parent
-                        iconSize: root.isWide ? 22 : 24
+                        iconSize: root.scaled(root.isWide ? 22 : 24)
                         opacity: 0.3
                         color: visualButton.colIcon
                         text: root.backgroundIcon
@@ -562,7 +570,7 @@ Item {
                     MaterialSymbol {
                         anchors.centerIn: parent
                         fill: root.toggled ? 1 : 0
-                        iconSize: root.isWide ? 22 : 24
+                        iconSize: root.scaled(root.isWide ? 22 : 24)
                         color: visualButton.colIcon
                         text: root.buttonIcon
                     }
@@ -598,7 +606,7 @@ Item {
                             left: parent.left
                             right: parent.right
                         }
-                        font.pixelSize: Appearance.font.pixelSize.smallie
+                        font.pixelSize: root.scaled(Appearance.font.pixelSize.smallie)
                         font.weight: 600
                         color: visualButton.colText
                         elide: Text.ElideRight
@@ -612,7 +620,7 @@ Item {
                             right: parent.right
                         }
                         font {
-                            pixelSize: Appearance.font.pixelSize.smaller
+                            pixelSize: root.scaled(Appearance.font.pixelSize.smaller)
                             weight: 100
                         }
                         color: visualButton.colText

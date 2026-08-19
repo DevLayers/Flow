@@ -10,6 +10,9 @@ Item {
     id: root
 
     property int entranceTrigger: -1
+    // Touch hosts (tablet shade) nudge the whole list up a notch; 1.0 keeps the sidebar.
+    property real zoom: 1.0
+    property real placeholderScale: 1.0
     property real _entranceScale: 0.94
     property bool _entranceDone: false
     readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
@@ -77,6 +80,7 @@ Item {
         // }
 
         popup: false
+        zoom: root.zoom
         entranceTrigger: root.entranceTrigger
     }
 
@@ -87,6 +91,7 @@ Item {
         anchors.top: parent.top
         anchors.bottom: statusRow.top
         shown: Notifications.list.length === 0
+        sizeScale: root.placeholderScale
         icon: "notifications_active"
         description: Translation.tr("Nothing")
         shape: MaterialShape.Shape.Ghostish
