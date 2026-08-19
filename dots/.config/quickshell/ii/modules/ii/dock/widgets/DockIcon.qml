@@ -101,16 +101,12 @@ Item {
             visible: !Config.options.dock.monochromeIcons
             opacity: root.iconOpacity
 
-            // Force reload when icon theme regenerates: iconThemeRevision is folded
-            // into sourceSize, and the pixmap cache key already includes the
-            // requested size, so a regeneration cannot resurrect a stale pixmap.
-            // That makes the revision, not cache: false, the invalidation mechanism
-            // -- and leaving the cache on means a dropped icon can be repainted
-            // instead of staying blank until the next theme regeneration.
-            // Async so the decode doesn't stall the UI thread.
+            // Force reload when icon theme regenerates; cache: false so the reload
+            // re-decodes from disk instead of resurrecting a stale cached pixmap,
+            // async so the re-decode doesn't stall the UI thread
             asynchronous: true
-            backer.cache: true
-            backer.sourceSize: Qt.size(Math.max(1, parent.width) + TaskbarApps.iconThemeRevision, Math.max(1, parent.height) + TaskbarApps.iconThemeRevision)
+            backer.cache: false
+            backer.sourceSize: Qt.size(parent.width + TaskbarApps.iconThemeRevision, parent.height + TaskbarApps.iconThemeRevision)
 
             layer.enabled: Config.options.dock.enableShapeMask && root.isThemedIcon
             layer.effect: OpacityMask {
