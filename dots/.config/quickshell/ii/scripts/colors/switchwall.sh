@@ -12,6 +12,37 @@ SHELL_CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
 MATUGEN_DIR="$XDG_CONFIG_HOME/matugen"
 terminalscheme="$SCRIPT_DIR/terminal/scheme-base.json"
 
+# Matugen aborts the whole run - colors.json included - as soon as any template
+# in its config points at an input file that does not exist, and it walks the
+# templates in random order, so the breakage looks intermittent: some runs write
+# the palette, most do not. Name the offending entries instead of leaving the
+# shell silently stuck on the previous colors.
+report_matugen_failure() {
+    local script_name="$1"
+    local cfg="$MATUGEN_DIR/config.toml"
+    local missing=()
+    local p
+    if [[ -f "$cfg" ]]; then
+        while read -r p; do
+            [[ -z "$p" ]] && continue
+            p="${p/#\~/$HOME}"
+            [[ -f "$p" ]] || missing+=("$p")
+        done < <(grep -oP "input_path\s*=\s*'\K[^']+" "$cfg" 2>/dev/null)
+    fi
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo "[$script_name] matugen aborted; missing template inputs: ${missing[*]}" >&2
+        notify-send -a "Wallpaper switcher" -c "im.error" \
+            "Color generation failed" \
+            "matugen aborted because these templates are missing: ${missing[*]} - fix or remove them in $cfg" 2>/dev/null || true
+    else
+        echo "[$script_name] matugen failed; keeping the previous palette." >&2
+        notify-send -a "Wallpaper switcher" -c "im.error" \
+            "Color generation failed" \
+            "matugen exited with an error, so the shell kept its previous palette." 2>/dev/null || true
+    fi
+}
+
 handle_kde_material_you_colors() {
     # Check if Qt app theming is enabled in config
     if [ -f "$SHELL_CONFIG_FILE" ]; then
@@ -645,7 +676,9 @@ done"
         if [[ "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         "$SCRIPT_DIR"/applycolor.sh
     else
-        matugen "${matugen_args[@]}"
+        if ! matugen "${matugen_args[@]}"; then
+            report_matugen_failure "switchwall.sh"
+        fi
         if [[ "$type_flag" == "scheme-intense" ]]; then
             echo "[switchwall.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
             python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
