@@ -165,14 +165,9 @@ PanelWindow {
     readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && Config.options.bar.cornerStyle === 3) && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
 
     readonly property bool hasFullscreenWindowOnMonitor: {
-        // A throw here would leave the property latched at its last value with
-        // incomplete dependencies, so the bar could never un-hide again.
-        const screenName = topPanel.screen ? topPanel.screen.name : "";
-        if (screenName === "")
-            return false;
-        const monitorData = HyprlandData.monitors.find(m => m.name === screenName);
+        const monitorData = HyprlandData.monitors.find(m => m.name === topPanel.screen.name);
         const specialWsName = monitorData?.specialWorkspace?.name;
-        const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name === screenName);
+        const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name === topPanel.screen.name);
         return workspaces.some(workspace => {
             const isWorkspaceActive = workspace.active || (specialWsName && specialWsName !== "" && (workspace.name === specialWsName || workspace.name === "special:" + specialWsName || (specialWsName === "special:special" && workspace.name === "special") || (specialWsName === "special" && workspace.name === "special:special")));
 

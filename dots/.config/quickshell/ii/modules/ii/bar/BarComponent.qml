@@ -65,19 +65,9 @@ Item {
         }
     ]
 
-    // alwaysRunToEnd + the explicit snap in onStopped are a safety net: these
-    // properties have no declarative binding, so an entry fade that is cut short
-    // (stalled animation driver while the bar sits behind a fullscreen window)
-    // would otherwise leave the widget parked at opacity 0 forever.
     ParallelAnimation {
         id: entryAnimation
         running: true
-        alwaysRunToEnd: true
-        onStopped: {
-            entryTranslation.x = 0;
-            entryTranslation.y = 0;
-            wrapper.opacity = 1.0;
-        }
         NumberAnimation {
             target: entryTranslation
             property: rootItem.vertical ? "x" : "y"
@@ -96,12 +86,6 @@ Item {
         }
     }
 
-    // moveTranslation has no binding, so whatever an interrupted move animation
-    // leaves behind is permanent -- a widget parked off its layout slot stays
-    // there until the shell is reloaded. Cap how far the accumulated offset may
-    // grow, and always land back on 0 when the animation ends.
-    readonly property real maxMoveOffset: 400
-
     NumberAnimation {
         id: moveXAnimation
         target: moveTranslation
@@ -109,7 +93,6 @@ Item {
         to: 0
         duration: 350
         easing.type: Easing.OutExpo
-        onStopped: moveTranslation.x = 0
     }
 
     NumberAnimation {
@@ -119,23 +102,14 @@ Item {
         to: 0
         duration: 350
         easing.type: Easing.OutExpo
-        onStopped: moveTranslation.y = 0
     }
 
     onXChanged: {
         if (rootItem.isReady) {
-            const delta = rootItem.oldX - x;
+            let delta = rootItem.oldX - x;
             if (Math.abs(delta) > 1) {
-                const offset = moveTranslation.x + delta;
-                // A jump this large is a relayout, not a neighbour reordering.
-                // Snap instead of animating so the offset cannot accumulate.
-                if (Math.abs(offset) > rootItem.maxMoveOffset) {
-                    moveXAnimation.stop();
-                    moveTranslation.x = 0;
-                } else {
-                    moveXAnimation.from = offset;
-                    moveXAnimation.restart();
-                }
+                moveXAnimation.from = moveTranslation.x + delta;
+                moveXAnimation.restart();
             }
         }
         rootItem.oldX = x;
@@ -143,18 +117,10 @@ Item {
 
     onYChanged: {
         if (rootItem.isReady) {
-            const delta = rootItem.oldY - y;
+            let delta = rootItem.oldY - y;
             if (Math.abs(delta) > 1) {
-                const offset = moveTranslation.y + delta;
-                // A jump this large is a relayout, not a neighbour reordering.
-                // Snap instead of animating so the offset cannot accumulate.
-                if (Math.abs(offset) > rootItem.maxMoveOffset) {
-                    moveYAnimation.stop();
-                    moveTranslation.y = 0;
-                } else {
-                    moveYAnimation.from = offset;
-                    moveYAnimation.restart();
-                }
+                moveYAnimation.from = moveTranslation.y + delta;
+                moveYAnimation.restart();
             }
         }
         rootItem.oldY = y;
