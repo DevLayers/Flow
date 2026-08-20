@@ -16,7 +16,7 @@ ColumnLayout {
     NoticeBox {
         Layout.fillWidth: true
         materialIcon: "info"
-        text: Translation.tr("Google Tasks uses the Google Cloud OAuth 2.0 Client credentials (Client ID and Client Secret) configured for Gmail in ii/.env. If you already have Gmail configured, you can connect directly; otherwise, set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (or GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET) in your .env file.")
+        text: Translation.tr("Google Tasks, Gmail, and Google Drive backup share the same Google Cloud OAuth credentials configured in ii/.env (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET). Set them once to authorize all Google services.")
     }
 
     // ── Warning / Error Banners ─────────────────────────────────
@@ -24,7 +24,7 @@ ColumnLayout {
     WarningBox {
         Layout.fillWidth: true
         visible: !GoogleTasksService.credentialsConfigured
-        text: Translation.tr("Google OAuth credentials are not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (or GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET) in .env.")
+        text: Translation.tr("Google OAuth credentials are not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.")
     }
 
     WarningBox {
@@ -56,7 +56,7 @@ ColumnLayout {
         HelperLinkBox {
             Layout.fillWidth: true
             title: Translation.tr("Google Tasks Setup")
-            text: Translation.tr("Google Tasks uses the same OAuth 2.0 Client credentials configured for Gmail and Google Drive. Authorize your Google account to sync tasks.")
+            text: Translation.tr("Google Tasks uses the same OAuth 2.0 Client credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) configured for Gmail and Google Drive. Authorize your Google account to sync tasks.")
             isFirst: true
 
             RippleButtonWithIcon {

@@ -64,9 +64,9 @@ It aims to provide a state-of-the-art Linux desktop experience by strictly adher
     5. Copy Client ID and Secret to `.env`.
 
     ### 🚀 Setup Instructions
-    1. **Env**: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REDIRECT_URI=http://localhost:8080`.
+    1. **Env**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` in `.env` (shared across Gmail, Google Tasks, and Google Drive).
     2. **Deps**: `pip install google-auth google-auth-oauthlib google-api-python-client python-dotenv`.
-    3. **Auth**: Run shell -> Email Tab -> "Connect Account".
+    3. **Auth**: Run shell -> Email Tab / Settings -> "Connect Google Tasks" / "Connect Account".
   </details>
 
 - **🔍 Revamped Search Launcher (Power-User)**: This repository includes a completely revamped search launcher widget (`Super + D` or `Super + Space`) designed for power-users.

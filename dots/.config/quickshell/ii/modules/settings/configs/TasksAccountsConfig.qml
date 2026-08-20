@@ -970,7 +970,7 @@ Item {
         bottomLeftRadius: Appearance.rounding.large
         bottomRightRadius: Appearance.rounding.large
         visible: !root.driveSubPageMode
-        text: Translation.tr("Gmail and Google Tasks credentials are set in ii/.env (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET or GMAIL_*). Sports (ESPN) options live in the Sports bar widget page.")
+        text: Translation.tr("Google credentials (for Gmail, Google Tasks, and Google Drive) are set in ii/.env (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET). Sports (ESPN) options live in the Sports bar widget page.")
     }
 
     ContentSection {

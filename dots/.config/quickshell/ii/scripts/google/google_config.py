@@ -35,7 +35,7 @@ def has_credentials():
 def refresh_token_exchange(refresh_token):
     cid, sec = get_credentials()
     if not cid or not sec:
-        raise Exception("Missing GOOGLE_CLIENT_ID/GMAIL_CLIENT_ID or GOOGLE_CLIENT_SECRET/GMAIL_CLIENT_SECRET in .env")
+        raise Exception("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET in .env")
 
     data = urllib.parse.urlencode({
         "refresh_token": refresh_token,
