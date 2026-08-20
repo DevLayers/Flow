@@ -118,12 +118,48 @@ RippleButton {
     readonly property bool useWpe: (Config.options && Config.options.background)
         ? Config.options.background.useWallpaperEngine : false
 
+    readonly property string presetPath: customTheme
+        ? FileUtils.trimFileProtocol(customThemeFilePath)
+        : builtInTheme ? FileUtils.trimFileProtocol(builtInThemeFilePath) : ""
+
+    function applySwatch(swatch) {
+        if (!swatch)
+            return false;
+        root.primaryColor = swatch.primary;
+        root.secondaryColor = swatch.secondary;
+        root.tertiaryColor = swatch.tertiary;
+        root.loaded = true;
+        myCanvas.requestPaint();
+        return true;
+    }
+
+    // A settings page holds dozens of swatches. Reading them from the shared
+    // caches keeps the page free of one subprocess per swatch; the process
+    // below stays as a fallback for entries the caches cannot serve.
+    function loadFromCache() {
+        if (usePreviewColors || !shouldLoad)
+            return true;
+
+        if (customTheme || builtInTheme) {
+            if (root.presetPath === "")
+                return false;
+            if (root.applySwatch(ThemePreviewCache.get(root.presetPath)))
+                return true;
+            ThemePreviewCache.request(root.presetPath);
+            return true;
+        }
+
+        return root.applySwatch(ThemePreviewCache.wallpaperPreview(root.colorScheme));
+    }
+
     // Deferred so `effectiveCommand` (and therefore the process command) has
     // already been re-evaluated: starting the fetch straight from the source
     // change handler could relaunch the process with the previous wallpaper and
     // leave the swatch showing stale colors until the page is rebuilt.
     function startColorFetch() {
         if (usePreviewColors || !shouldLoad || effectiveCommand === "")
+            return;
+        if (root.loadFromCache())
             return;
         colorFetchProcess.running = false;
         colorFetchProcess.running = true;
@@ -142,6 +178,22 @@ RippleButton {
     onWallpaperPathChanged: root.refetchColors()
     onWpeIdChanged: root.refetchColors()
     onUseWpeChanged: root.refetchColors()
+
+    Connections {
+        target: ThemePreviewCache
+        enabled: root.shouldLoad && !root.usePreviewColors
+
+        function onCacheChanged(path) {
+            if (path === root.presetPath)
+                root.applySwatch(ThemePreviewCache.get(path));
+        }
+
+        function onWallpaperPreviewsChanged() {
+            if (root.customTheme || root.builtInTheme)
+                return;
+            root.applySwatch(ThemePreviewCache.wallpaperPreview(root.colorScheme));
+        }
+    }
 
     Process {
         id: colorFetchProcess

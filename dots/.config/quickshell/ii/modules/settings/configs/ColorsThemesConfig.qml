@@ -154,6 +154,14 @@ Item {
                 checked: Config.options.light.darkMode.automatic || Config.options.light.night.automatic
                 configPage: Qt.resolvedUrl("widgets/SchedulingConfig.qml")
                 onCheckedChanged: {
+                    // `checked` is derived from both options, so writing them
+                    // back whenever it changes re-enters this handler - QML
+                    // reported that as a binding loop. Only a real change of
+                    // the derived value is a user toggle worth persisting.
+                    const current = Config.options.light.darkMode.automatic
+                        || Config.options.light.night.automatic;
+                    if (current === checked)
+                        return;
                     Config.options.light.darkMode.automatic = checked;
                     Config.options.light.night.automatic = checked;
                     if (!checked) {

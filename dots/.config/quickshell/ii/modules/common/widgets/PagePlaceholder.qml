@@ -227,9 +227,14 @@ Item {
                 iconSize: 56
                 rotation: -30 * (1 - root.opacity)
                 
-                FastBlur {
+                // Value holder for the entrance animation. This used to be a
+                // real FastBlur just to carry `radius`, which cost every
+                // placeholder a shader pass and an offscreen surface it never
+                // drew into. The blur that is actually applied is layer.effect.
+                QtObject {
                     id: iconBlur
-                    radius: 0
+                    property real radius: 0
+                    property bool enabled: false
                 }
 
                 layer.enabled: iconBlur.radius > 0
@@ -284,9 +289,10 @@ Item {
             horizontalAlignment: root.descriptionHorizontalAlignment ?? Text.AlignHCenter
             wrapMode: Text.Wrap
 
-            FastBlur {
+            QtObject {
                 id: descBlur
-                radius: 0
+                property real radius: 0
+                property bool enabled: false
             }
 
             layer.enabled: descBlur.radius > 0
