@@ -114,10 +114,10 @@ Rectangle {
 
             layer.enabled: visible
             layer.effect: OpacityMask {
-                maskSource: Rectangle {
+                maskSource: AndroidIconMask {
                     width: launcherIcon.width
                     height: launcherIcon.height
-                    radius: width / 2
+                    shapeName: Config.options?.phone?.scrcpy?.appMode?.iconShape ?? "oneui"
                 }
             }
         }

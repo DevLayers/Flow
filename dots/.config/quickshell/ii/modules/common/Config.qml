@@ -904,6 +904,7 @@ Singleton {
                     property JsonObject appMode: JsonObject {
                         property bool enabled: true
                         property bool showAppIcons: true // Pull each app's launcher icon off the phone over adb
+                        property string iconShape: "oneui" // Launcher-style mask for those icons, keys in AndroidIconMask.shapes
                         property bool flexDisplay: true
                         property int displayWidth: 1280
                         property int displayHeight: 960
