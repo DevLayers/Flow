@@ -313,6 +313,25 @@ Singleton {
                 property string sessionId: ""
             }
 
+            // Runtime state of services/Modes.qml: what is running and what
+            // to put back when it ends. Definitions are in Config.
+            property JsonObject modes: JsonObject {
+                property string activeId: ""
+                property string activeSource: "" // manual | schedule | app | game | …
+                property real activeSince: 0 // Epoch ms; must be real
+                property real activeEndsAt: 0 // Epoch ms, 0 = open-ended
+                property list<var> snapshot: [] // [{type, was, set, extra, action}] in apply order
+                property list<string> failed: []
+                property string lastUsedModeId: ""
+                property list<string> suppressed: [] // stopped by hand while triggers still held
+                property list<string> suppressedRoutines: [] // same, for `while` routines
+                property list<var> history: [] // newest first, capped
+                // Running `while` routines: [{id, source, since, snapshot, failed}]
+                property list<var> routineRuns: []
+                // Last fire time of `once` routines for cooldowns: [{id, t}]
+                property list<var> routineFired: []
+            }
+
             property JsonObject overlay: JsonObject {
                 property list<string> open: ["crosshair", "recorder", "media", "volumeMixer", "resources"]
                 property JsonObject crosshair: JsonObject {

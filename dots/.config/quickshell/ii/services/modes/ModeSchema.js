@@ -1,0 +1,563 @@
+.pragma library
+
+// Shared shape of mode / routine definitions stored in
+// Config.options.modes.modes and Config.options.modes.routines.
+//
+// Everything that reads a definition goes through normalizeMode() so the rest
+// of the engine can assume every field exists and has the right type.
+// JsonAdapter hands back QML sequences rather than JS arrays, so arrays are
+// always rebuilt with Array.from before being touched.
+
+var SCHEMA_VERSION = 1;
+var HISTORY_MAX = 200;
+
+// Trigger types whose watcher exists. Anything else evaluates as unsatisfied
+// (and is reported once).
+var CONDITION_SOURCES = {
+    schedule: "conditions/ScheduleCondition.qml",
+    app: "conditions/AppCondition.qml",
+    game: "conditions/GameCondition.qml",
+    battery: "conditions/BatteryCondition.qml",
+    wifi: "conditions/WifiCondition.qml",
+    bluetooth: "conditions/BluetoothCondition.qml",
+    monitors: "conditions/MonitorsCondition.qml",
+    fullscreen: "conditions/FullscreenCondition.qml",
+    locked: "conditions/LockedCondition.qml",
+    modeActive: "conditions/ModeActiveCondition.qml",
+    audioDevice: "conditions/AudioDeviceCondition.qml"
+};
+
+// Editor metadata per trigger type: label, icon and which parameter control
+// the editor row shows. Every trigger also accepts `not: true`, which flips
+// its verdict ("Zoom is not running") — that is how "when X closes" is said.
+var TRIGGER_TYPES = {
+    schedule: { label: "Schedule", icon: "schedule", editor: "schedule" },
+    app: { label: "App", icon: "apps", editor: "app" },
+    game: { label: "Game", icon: "sports_esports", editor: "game" },
+    battery: { label: "Battery", icon: "battery_5_bar", editor: "battery" },
+    wifi: { label: "Wi-Fi", icon: "wifi", editor: "wifi" },
+    bluetooth: { label: "Bluetooth", icon: "bluetooth", editor: "bluetooth" },
+    monitors: { label: "Monitors", icon: "monitor", editor: "monitors" },
+    fullscreen: { label: "Fullscreen window", icon: "fullscreen", editor: "none" },
+    locked: { label: "Screen locked", icon: "lock", editor: "locked" },
+    modeActive: { label: "Mode active", icon: "tune", editor: "modeActive", routineOnly: true },
+    audioDevice: { label: "Audio device", icon: "headphones", editor: "audioDevice" }
+};
+
+// Default launcher class patterns for game detection (GameDetector signal 1).
+var GAME_LAUNCHER_PATTERNS = [
+    "^steam_app_\\d+$",
+    "^gamescope",
+    "^(heroic|lutris|bottles|net\\.lutris\\.)",
+    "^(minecraft|prism)"
+];
+
+// The exact option set the Game Mode quick toggle writes
+// (modules/common/models/quickToggles/GameModeToggle.qml). Kept identical so
+// the Gaming preset and the toggle cannot drift apart.
+var GAME_MODE_OPTIONS = {
+    "animations:enabled": 0,
+    "decoration:shadow:enabled": 0,
+    "decoration:blur:enabled": 0,
+    "general:gaps_in": 0,
+    "general:gaps_out": 0,
+    "general:border_size": 1,
+    "decoration:rounding": 0,
+    "decoration:rounding_power": 0,
+    "general:allow_tearing": 1
+};
+var GAME_MODE_RULE_MARKER = "shell:game-mode-opaque";
+var GAME_MODE_RULE = 'hl.window_rule({name="' + GAME_MODE_RULE_MARKER + '",match={class=".*"},'
+    + 'opacity="1.0 override 1.0 override 1.0 override",opaque=true})';
+
+// Named option sets for the `hyprland` action's preset chips.
+var HYPRLAND_PRESETS = {
+    animations: { "animations:enabled": 0 },
+    blur: { "decoration:blur:enabled": 0 },
+    shadows: { "decoration:shadow:enabled": 0 },
+    gaps: { "general:gaps_in": 0, "general:gaps_out": 0 },
+    rounding: { "decoration:rounding": 0, "decoration:rounding_power": 0 },
+    tearing: { "general:allow_tearing": 1 }
+};
+
+function isArrayLike(value) {
+    return typeof value === "object" && value !== null && typeof value.length === "number";
+}
+
+function toArray(value) {
+    if (value === undefined || value === null)
+        return [];
+    if (Array.isArray(value))
+        return value.slice();
+    if (isArrayLike(value))
+        return Array.from(value);
+    return [];
+}
+
+// Deep copy through JSON so nothing keeps a reference into the adapter.
+function clone(value) {
+    if (value === undefined)
+        return undefined;
+    return JSON.parse(JSON.stringify(value));
+}
+
+function slugify(text) {
+    return String(text || "")
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "mode";
+}
+
+function uniqueId(base, taken) {
+    var id = base;
+    var n = 2;
+    while (taken.indexOf(id) !== -1) {
+        id = base + "-" + n;
+        n += 1;
+    }
+    return id;
+}
+
+function stringList(value) {
+    return toArray(value)
+        .map(function (x) { return String(x); })
+        .filter(function (x) { return x.length > 0; });
+}
+
+function optionalBool(value) {
+    return typeof value === "boolean" ? value : null;
+}
+
+function optionalInt(value, min, max) {
+    if (value === null || value === undefined || value === "")
+        return null;
+    var n = Number(value);
+    if (!isFinite(n))
+        return null;
+    return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function normalizeTrigger(raw) {
+    var t = (raw && typeof raw === "object") ? clone(raw) : {};
+    t.type = typeof t.type === "string" ? t.type : "";
+    t.not = t.not === true;
+    switch (t.type) {
+    case "schedule":
+        t.from = validTime(t.from) ? t.from : "22:00";
+        t.to = validTime(t.to) ? t.to : "07:00";
+        var days = toArray(t.days).map(Number).filter(function (d) { return d >= 1 && d <= 7; });
+        t.days = days.length ? days : [1, 2, 3, 4, 5, 6, 7];
+        break;
+    case "app":
+        t.classes = stringList(t.classes);
+        t.when = t.when === "focused" ? "focused" : "running";
+        break;
+    case "game":
+        t.when = t.when === "focused" ? "focused" : "running";
+        break;
+    case "battery":
+        t.below = optionalInt(t.below, 0, 100);
+        t.above = optionalInt(t.above, 0, 100);
+        t.pluggedIn = optionalBool(t.pluggedIn);
+        break;
+    case "wifi":
+        t.ssids = stringList(t.ssids);
+        t.connected = t.connected !== false;
+        t.ethernet = optionalBool(t.ethernet);
+        break;
+    case "bluetooth":
+        t.devices = stringList(t.devices).map(function (a) { return a.toUpperCase(); });
+        t.connected = t.connected !== false;
+        break;
+    case "monitors":
+        t.count = optionalInt(t.count, 1, 16) || 2;
+        t.names = stringList(t.names);
+        break;
+    case "locked":
+        t.is = t.is !== false;
+        break;
+    case "modeActive":
+        t.id = typeof t.id === "string" ? t.id : "";
+        break;
+    case "audioDevice":
+        t.match = typeof t.match === "string" ? t.match : "";
+        t.kind = t.kind === "source" ? "source" : "sink";
+        break;
+    }
+    return t;
+}
+
+// Class patterns: a plain name matches exactly (case-insensitive); anything
+// containing regex metacharacters is taken as a regex.
+function classRegex(text) {
+    var s = String(text || "").trim();
+    if (!s.length)
+        return null;
+    try {
+        if (/[\\^$.*+?()\[\]{}|]/.test(s))
+            return new RegExp(s, "i");
+        return new RegExp("^" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i");
+    } catch (e) {
+        return null;
+    }
+}
+
+function classRegexes(list) {
+    return toArray(list).map(classRegex).filter(function (r) { return r !== null; });
+}
+
+// Hyprland client JSON carries both `class` and `initialClass`; match either.
+function windowMatches(win, regexes) {
+    if (!win)
+        return false;
+    var a = String(win.initialClass || "");
+    var b = String(win["class"] || "");
+    for (var i = 0; i < regexes.length; ++i) {
+        if ((a.length && regexes[i].test(a)) || (b.length && regexes[i].test(b)))
+            return true;
+    }
+    return false;
+}
+
+// `revert: false` keeps an action's effect when its owner ends (routines
+// offer it per action); absent means revert like everything else.
+function normalizeAction(raw) {
+    var a = (raw && typeof raw === "object") ? clone(raw) : {};
+    a.type = typeof a.type === "string" ? a.type : "";
+    if (a.value === undefined)
+        a.value = null;
+    if (typeof a.revert !== "boolean")
+        delete a.revert;
+    return a;
+}
+
+function normalizeMode(raw) {
+    var m = (raw && typeof raw === "object") ? clone(raw) : {};
+    m.id = typeof m.id === "string" && m.id.length ? m.id : slugify(m.name);
+    m.name = typeof m.name === "string" && m.name.length ? m.name : m.id;
+    m.icon = typeof m.icon === "string" && m.icon.length ? m.icon : "tune";
+    m.color = typeof m.color === "string" ? m.color : "";
+    m.preset = m.preset === true;
+    m.auto = m.auto === true;
+    m.match = m.match === "all" ? "all" : "any";
+    m.triggers = toArray(m.triggers).map(normalizeTrigger).filter(function (t) { return t.type.length > 0; });
+    m.actions = toArray(m.actions).map(normalizeAction).filter(function (a) { return a.type.length > 0; });
+    var end = (m.end && typeof m.end === "object") ? m.end : {};
+    m.end = {
+        revert: end.revert !== false,
+        strict: end.strict === true,
+        autoOffMin: Math.max(0, Number(end.autoOffMin) || 0),
+        notify: end.notify !== false
+    };
+    return m;
+}
+
+function normalizeModes(rawList) {
+    var taken = [];
+    return toArray(rawList).map(function (raw) {
+        var m = normalizeMode(raw);
+        m.id = uniqueId(m.id, taken);
+        taken.push(m.id);
+        return m;
+    });
+}
+
+// Routines share the trigger/action vocabulary but are not exclusive.
+//  - kind "while": applies on true, reverts on false (same grace as modes)
+//  - kind "once":  fires on the false→true edge, never reverts, honours cooldownSec
+function normalizeRoutine(raw) {
+    var r = (raw && typeof raw === "object") ? clone(raw) : {};
+    r.id = typeof r.id === "string" && r.id.length ? r.id : slugify(r.name);
+    r.name = typeof r.name === "string" && r.name.length ? r.name : r.id;
+    r.icon = typeof r.icon === "string" && r.icon.length ? r.icon : "bolt";
+    r.color = typeof r.color === "string" ? r.color : "";
+    r.preset = r.preset === true;
+    r.template = typeof r.template === "string" ? r.template : "";
+    r.enabled = r.enabled !== false;
+    r.kind = r.kind === "once" ? "once" : "while";
+    r.match = r.match === "all" ? "all" : "any";
+    r.cooldownSec = Math.max(0, Number(r.cooldownSec) || 0);
+    r.notify = r.notify !== false;
+    r.triggers = toArray(r.triggers).map(normalizeTrigger).filter(function (t) { return t.type.length > 0; });
+    r.actions = toArray(r.actions).map(normalizeAction).filter(function (a) { return a.type.length > 0; });
+    var end = (r.end && typeof r.end === "object") ? r.end : {};
+    r.end = {
+        revert: r.kind === "while" && end.revert !== false,
+        strict: end.strict === true
+    };
+    return r;
+}
+
+function normalizeRoutines(rawList) {
+    var taken = [];
+    return toArray(rawList).map(function (raw) {
+        var r = normalizeRoutine(raw);
+        r.id = uniqueId(r.id, taken);
+        taken.push(r.id);
+        return r;
+    });
+}
+
+function validTime(text) {
+    return typeof text === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(text);
+}
+
+function timeToMinutes(text) {
+    var parts = text.split(":");
+    return Number(parts[0]) * 60 + Number(parts[1]);
+}
+
+// ISO weekday, 1 = Monday … 7 = Sunday.
+function isoDay(date) {
+    return ((date.getDay() + 6) % 7) + 1;
+}
+
+// Whether `date` falls inside a schedule trigger. Overnight windows belong to
+// the day they start on: 23:00–07:00 on Friday runs into Saturday morning.
+function scheduleSatisfied(trigger, date) {
+    var from = timeToMinutes(trigger.from);
+    var to = timeToMinutes(trigger.to);
+    var now = date.getHours() * 60 + date.getMinutes();
+    var days = toArray(trigger.days);
+    if (from === to)
+        return false;
+    if (from < to)
+        return now >= from && now < to && days.indexOf(isoDay(date)) !== -1;
+    if (now >= from)
+        return days.indexOf(isoDay(date)) !== -1;
+    if (now < to) {
+        var yesterday = new Date(date.getTime() - 86400000);
+        return days.indexOf(isoDay(yesterday)) !== -1;
+    }
+    return false;
+}
+
+// Epoch ms of the moment the currently satisfied window ends, 0 if not inside one.
+function scheduleEndsAt(trigger, date) {
+    if (!scheduleSatisfied(trigger, date))
+        return 0;
+    var to = timeToMinutes(trigger.to);
+    var end = new Date(date.getTime());
+    end.setSeconds(0, 0);
+    end.setHours(Math.floor(to / 60), to % 60, 0, 0);
+    if (end.getTime() <= date.getTime())
+        end.setTime(end.getTime() + 86400000);
+    return end.getTime();
+}
+
+function valuesEqual(a, b) {
+    if (a === b)
+        return true;
+    if (a === null || b === null || a === undefined || b === undefined)
+        return false;
+    if (typeof a === "number" && typeof b === "number")
+        return Math.abs(a - b) < 1e-6;
+    if (typeof a === "object" || typeof b === "object") {
+        try {
+            return JSON.stringify(a) === JSON.stringify(b);
+        } catch (e) {
+            return false;
+        }
+    }
+    return false;
+}
+
+// Seeded once into Config.options.modes.modes. All ship with auto off: a
+// preset must never start on its own before the user has looked at it.
+function presets() {
+    var all = [1, 2, 3, 4, 5, 6, 7];
+    return [
+        {
+            id: "sleep", name: "Sleep", icon: "bedtime",
+            color: "", preset: true, auto: false, match: "any",
+            triggers: [{ type: "schedule", from: "23:00", to: "07:00", days: all }],
+            actions: [
+                { type: "dnd", value: true },
+                { type: "nightLight", value: true },
+                { type: "screenShader", value: "grayscale" },
+                { type: "brightness", value: 20 },
+                { type: "keepAwake", value: false }
+            ],
+            end: { revert: true, strict: false, autoOffMin: 0, notify: true }
+        },
+        {
+            id: "work", name: "Work", icon: "work",
+            color: "", preset: true, auto: false, match: "any",
+            triggers: [{ type: "schedule", from: "09:00", to: "18:00", days: [1, 2, 3, 4, 5] }],
+            actions: [
+                { type: "dnd", value: true },
+                { type: "keepAwake", value: true },
+                { type: "powerProfile", value: "balanced" }
+            ],
+            end: { revert: true, strict: false, autoOffMin: 0, notify: true }
+        },
+        {
+            id: "focus", name: "Focus", icon: "center_focus_strong",
+            color: "", preset: true, auto: false, match: "any",
+            triggers: [],
+            actions: [
+                { type: "dnd", value: true },
+                { type: "media", value: "pause" }
+            ],
+            end: { revert: true, strict: false, autoOffMin: 0, notify: true }
+        },
+        {
+            id: "gaming", name: "Gaming", icon: "sports_esports",
+            color: "", preset: true, auto: false, match: "any",
+            triggers: [{ type: "game", when: "running" }],
+            actions: [
+                { type: "gameMode", value: true },
+                { type: "dnd", value: true },
+                { type: "powerProfile", value: "performance" },
+                { type: "keepAwake", value: true },
+                { type: "nightLight", value: false }
+            ],
+            end: { revert: true, strict: false, autoOffMin: 0, notify: true }
+        },
+        {
+            id: "theater", name: "Theater", icon: "theaters",
+            color: "", preset: true, auto: false, match: "any",
+            triggers: [{ type: "fullscreen" }],
+            actions: [
+                { type: "dnd", value: true },
+                { type: "keepAwake", value: true },
+                { type: "nightLight", value: false }
+            ],
+            end: { revert: true, strict: false, autoOffMin: 0, notify: true }
+        },
+        {
+            id: "presentation", name: "Presentation", icon: "co_present",
+            color: "", preset: true, auto: false, match: "any",
+            triggers: [{ type: "monitors", count: 2 }],
+            actions: [
+                { type: "dnd", value: true },
+                { type: "keepAwake", value: true },
+                { type: "nightLight", value: false },
+                { type: "screenShader", value: "" }
+            ],
+            end: { revert: true, strict: false, autoOffMin: 0, notify: true }
+        },
+        {
+            id: "relax", name: "Relax", icon: "spa",
+            color: "", preset: true, auto: false, match: "any",
+            triggers: [{ type: "schedule", from: "20:00", to: "23:00", days: all }],
+            actions: [
+                { type: "nightLight", value: true },
+                { type: "brightness", value: 50 }
+            ],
+            end: { revert: true, strict: false, autoOffMin: 0, notify: true }
+        }
+    ];
+}
+
+// Ready-made routines offered in the editor's Templates group (Samsung's
+// "Discover"). Adding one copies it into the list; the copy is then an
+// ordinary routine, linked back here only by `template` so the list can say
+// it has been added already.
+function routineTemplates() {
+    return [
+        {
+            template: "battery-saver", id: "battery-saver", name: "Battery saver below 20 %",
+            icon: "battery_alert", color: "orange", enabled: true, kind: "while", match: "all",
+            triggers: [{ type: "battery", below: 20, pluggedIn: false }],
+            actions: [
+                { type: "powerProfile", value: "power-saver" },
+                { type: "brightness", value: { level: 40, scope: "all" } }
+            ],
+            cooldownSec: 0, notify: true, end: { revert: true, strict: false }
+        },
+        {
+            template: "focus-headphones", id: "focus-headphones", name: "Focus when headphones connect",
+            icon: "headphones", color: "purple", enabled: true, kind: "once", match: "any",
+            triggers: [{ type: "audioDevice", kind: "sink", match: "headphone" }],
+            actions: [{ type: "mode", value: { action: "start", id: "focus" } }],
+            cooldownSec: 60, notify: true, end: { revert: false, strict: false }
+        },
+        {
+            template: "pause-on-lock", id: "pause-on-lock", name: "Pause media on lock",
+            icon: "pause_circle", color: "blue", enabled: true, kind: "once", match: "any",
+            triggers: [{ type: "locked", is: true }],
+            actions: [{ type: "media", value: "pause" }],
+            cooldownSec: 5, notify: false, end: { revert: false, strict: false }
+        },
+        {
+            template: "mute-after-call", id: "mute-after-call", name: "Mute mic when Zoom closes",
+            icon: "mic_off", color: "red", enabled: true, kind: "once", match: "any",
+            triggers: [{ type: "app", when: "running", classes: ["zoom", "Zoom", "us.zoom.Zoom"], not: true }],
+            actions: [{ type: "micMute", value: true }],
+            cooldownSec: 30, notify: true, end: { revert: false, strict: false }
+        },
+        {
+            template: "performance-gaming", id: "performance-gaming", name: "Performance profile while a game runs",
+            icon: "speed", color: "green", enabled: true, kind: "while", match: "any",
+            triggers: [{ type: "game", when: "running" }],
+            actions: [{ type: "powerProfile", value: "performance" }],
+            cooldownSec: 0, notify: false, end: { revert: true, strict: false }
+        }
+    ];
+}
+
+function routineTemplate(key) {
+    var all = routineTemplates();
+    for (var i = 0; i < all.length; ++i) {
+        if (all[i].template === key)
+            return all[i];
+    }
+    return null;
+}
+
+// Routines that `actions` would set in motion, directly (run another
+// routine) or through a mode (start a mode that another routine waits for).
+function routinesTriggeredBy(actions, routines) {
+    var out = [];
+    toArray(actions).forEach(function (a) {
+        var v = (a && a.value && typeof a.value === "object") ? a.value : {};
+        if (a.type === "routine" && v.action !== "stop" && typeof v.id === "string" && v.id.length) {
+            if (out.indexOf(v.id) === -1)
+                out.push(v.id);
+        } else if (a.type === "mode" && v.action !== "stop" && typeof v.id === "string" && v.id.length) {
+            toArray(routines).forEach(function (r) {
+                var waits = toArray(r.triggers).some(function (t) {
+                    return t.type === "modeActive" && !t.not && (t.id === "" || t.id === v.id);
+                });
+                if (waits && out.indexOf(r.id) === -1)
+                    out.push(r.id);
+            });
+        }
+    });
+    return out;
+}
+
+// If running `actions` as routine `ownerId` would eventually run `ownerId`
+// again, returns the chain of routine ids that closes the loop (without the
+// owner at either end); otherwise null.
+function routineLoop(ownerId, actions, routines) {
+    var byId = {};
+    toArray(routines).forEach(function (r) { byId[r.id] = r; });
+    var seen = {};
+    function walk(id, path) {
+        if (id === ownerId)
+            return path;
+        if (seen[id])
+            return null;
+        seen[id] = true;
+        var r = byId[id];
+        if (!r)
+            return null;
+        var next = routinesTriggeredBy(r.actions, routines);
+        for (var i = 0; i < next.length; ++i) {
+            var found = walk(next[i], path.concat([id]));
+            if (found)
+                return found;
+        }
+        return null;
+    }
+    var starts = routinesTriggeredBy(actions, routines);
+    for (var i = 0; i < starts.length; ++i) {
+        var found = walk(starts[i], []);
+        if (found)
+            return found;
+    }
+    return null;
+}

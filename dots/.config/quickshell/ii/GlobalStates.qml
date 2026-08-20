@@ -134,6 +134,7 @@ Singleton {
     property bool sessionOpen: false
     property bool superDown: false
     property bool usageOpen: false
+    property bool modesOpen: false
     property bool superReleaseMightTrigger: true
     property bool wallpaperSelectorOpen: false
     property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"

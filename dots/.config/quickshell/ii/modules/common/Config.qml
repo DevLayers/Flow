@@ -1219,6 +1219,32 @@ Singleton {
                 property int minDurationSec: 0
             }
 
+            // Modes & Routines (services/Modes.qml). Definitions are user data
+            // but live here on purpose so one file carries the whole setup.
+            property JsonObject modes: JsonObject {
+                property bool enable: true
+                property bool overlayEnabled: true
+                // Presets are added once; deleting one afterwards sticks.
+                property bool presetsSeeded: false
+                // Seconds an auto-started mode's triggers must stay false
+                // before it ends, so a workspace switch does not flap it.
+                property int graceSec: 20
+                // Mode definitions, in priority order (first wins among
+                // automatic starts). Shape: see services/modes/ModeSchema.js.
+                property list<var> modes: []
+                property list<var> routines: []
+                // Game detection (services/GameDetector.qml). Signals 1–3 are
+                // instant; the GPU heuristic needs `gpuThreshold` % for `holdSec`.
+                property JsonObject game: JsonObject {
+                    property bool useLauncherClasses: true
+                    property bool useDesktopCategory: true
+                    property bool useGpuHeuristic: true
+                    property int gpuThreshold: 45
+                    property int holdSec: 20
+                    property list<string> extraClasses: []
+                }
+            }
+
             property list<var> bluetoothDeviceImages: []
 
             property JsonObject background: JsonObject {
