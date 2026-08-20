@@ -560,8 +560,12 @@ FloatingWindow {
                         pageLoadArmed = false;
                         _skeletonGateActive = true;
                         _waitingForLoad = true;
-                        pageSkeleton.revealed = true;
-                        skeletonDelayTimer.stop();
+                        // The skeleton is a fallback for pages slow enough that
+                        // an empty pane would look broken. Revealing it on every
+                        // switch made the fast pages - which is most of them -
+                        // flash three grey cards for a couple of frames.
+                        pageSkeleton.revealed = false;
+                        skeletonDelayTimer.restart();
                         source = nextSource;
                         pageActivationTimer.restart();
                     }
@@ -624,7 +628,10 @@ FloatingWindow {
 
                     Timer {
                         id: pageActivationTimer
-                        interval: 48
+                        // Only needs to give the outgoing page its own frame to
+                        // be torn down in; it used to sit for a third of the
+                        // whole page-switch budget doing nothing.
+                        interval: 16
                         repeat: false
                         onTriggered: {
                             if (root.visible && Config.ready)
@@ -646,7 +653,10 @@ FloatingWindow {
 
                     Timer {
                         id: skeletonDelayTimer
-                        interval: 90
+                        // Covers pageActivationTimer plus the build time of a
+                        // typical page, so only the genuinely heavy ones ever
+                        // reach the skeleton.
+                        interval: 200
                         repeat: false
                         onTriggered: {
                             if (pageLoader.status === Loader.Loading || pageLoader._waitingForLoad)

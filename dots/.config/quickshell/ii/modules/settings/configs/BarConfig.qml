@@ -18,6 +18,15 @@ Item {
 
     property string autoSwitchNoticeMessage: ""
 
+    // A lazy section reserves estimatedHeight until it exists, so a wrong
+    // estimate shoves everything below it the moment it loads. The layout
+    // section grows with the number of configured widgets, so its reservation
+    // has to grow with them too: each row is entryHeight (48) + listSpacing (4),
+    // on top of the three headers, combo rows and margins.
+    readonly property int barWidgetCount: (Config.options.bar.layouts.left?.length ?? 0)
+        + (Config.options.bar.layouts.center?.length ?? 0)
+        + (Config.options.bar.layouts.right?.length ?? 0)
+
     Timer {
         id: autoSwitchNoticeTimer
         interval: 6000
@@ -746,7 +755,7 @@ Item {
             id: layoutSectionLoader
             source: Qt.resolvedUrl("sections/BarLayoutSection.qml")
             active: false
-            estimatedHeight: 620
+            estimatedHeight: 437 + 52 * barConfigRoot.barWidgetCount
             sectionTitle: Translation.tr("Layout")
             prioritizeOnViewport: true
             prioritizeOnSearch: true
@@ -756,7 +765,7 @@ Item {
             id: behaviorSectionLoader
             source: Qt.resolvedUrl("sections/BarBehaviorSection.qml")
             active: false
-            estimatedHeight: 270
+            estimatedHeight: 284
             sectionTitle: Translation.tr("Behavior")
             prioritizeOnViewport: true
             prioritizeOnSearch: true
@@ -766,7 +775,7 @@ Item {
             id: monitorsSectionLoader
             source: Qt.resolvedUrl("sections/BarMonitorsSection.qml")
             active: false
-            estimatedHeight: 210
+            estimatedHeight: 122
             sectionTitle: Translation.tr("Monitors")
             prioritizeOnViewport: true
             prioritizeOnSearch: true
