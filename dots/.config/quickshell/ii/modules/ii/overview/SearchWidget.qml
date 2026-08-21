@@ -1257,14 +1257,23 @@ Item {
                         Component {
                             id: settingResultCard
 
-                            AiSettingResultCard {
-                                // Match SearchItem's horizontal inset so the
-                                // Settings card reads as one launcher row.
-                                width: Math.max(0, resultDelegate.width - Appearance.sizes.elevationMargin * 2)
-                                x: Appearance.sizes.elevationMargin
-                                setting: resultDelegate.modelData.modelRef.settingRef
-                                compact: true
-                                launcherStyle: true
+                            // Loader owns this item's explicit width and
+                            // resizes it to the delegate. The card must be a
+                            // child instead: a direct child gets stretched
+                            // back to full width after its x inset is applied.
+                            Item {
+                                implicitHeight: settingCardItem.implicitHeight
+
+                                AiSettingResultCard {
+                                    id: settingCardItem
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.margins: Appearance.sizes.elevationMargin
+                                    height: implicitHeight
+                                    setting: resultDelegate.modelData.modelRef.settingRef
+                                    compact: true
+                                    launcherStyle: true
+                                }
                             }
                         }
 

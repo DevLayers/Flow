@@ -17,9 +17,16 @@ class LauncherSettingsResultsTests(unittest.TestCase):
         settings = LAUNCHER.index("result = result.concat(settingsResultObjects);")
         self.assertLess(apps, settings)
 
-    def test_settings_cards_use_the_same_inset_as_application_rows(self):
+    def test_settings_cards_are_inset_inside_a_full_width_loader_wrapper(self):
+        # Loader resizes its directly loaded item to its own explicit width.
+        # The Settings card therefore needs a full-width wrapper; merely
+        # moving the card with x leaves its right edge outside the delegate.
         card_loader = SEARCH_WIDGET.split("id: settingResultCard", 1)[1].split("id: normalSearchItem", 1)[0]
-        self.assertIn("Appearance.sizes.elevationMargin", card_loader)
+        self.assertIn("Item {", card_loader)
+        self.assertIn("anchors.left: parent.left", card_loader)
+        self.assertIn("anchors.right: parent.right", card_loader)
+        self.assertIn("anchors.margins: Appearance.sizes.elevationMargin", card_loader)
+        self.assertNotIn("width: Math.max", card_loader)
         self.assertIn("launcherStyle: true", card_loader)
 
     def test_launcher_card_has_its_own_surface_background(self):
