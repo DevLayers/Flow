@@ -205,9 +205,11 @@ Rectangle {
 
                     StyledText {
                         // Shrinks (elides) when the row is tight, never grows
-                        // past its text, so the pills stay next to it.
+                        // past its text, so the pills stay next to it. Rounded
+                        // up: a cap a fraction of a pixel short elides the
+                        // whole last word.
                         Layout.fillWidth: true
-                        Layout.maximumWidth: implicitWidth
+                        Layout.maximumWidth: Math.ceil(implicitWidth)
                         text: root.entry?.label ?? root.type
                         elide: Text.ElideRight
                         color: root.available ? Appearance.colors.colOnLayer2 : Appearance.colors.colSubtext
