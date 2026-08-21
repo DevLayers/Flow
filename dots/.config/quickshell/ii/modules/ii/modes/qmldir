@@ -23,3 +23,10 @@ EditorSection 1.0 EditorSection.qml
 EditorRow 1.0 EditorRow.qml
 AddRowButton 1.0 AddRowButton.qml
 FooterButton 1.0 FooterButton.qml
+FormLabel 1.0 FormLabel.qml
+FormHint 1.0 FormHint.qml
+FormChoice 1.0 FormChoice.qml
+FormIconButton 1.0 FormIconButton.qml
+SmallButton 1.0 SmallButton.qml
+TimeField 1.0 TimeField.qml
+PercentField 1.0 PercentField.qml

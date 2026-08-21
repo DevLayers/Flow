@@ -419,6 +419,57 @@ Singleton {
         return t.length ? t[0].toUpperCase() + t.slice(1) : t;
     }
 
+    // ---------------------------------------------------------------- forms
+
+    // Where a condition's parameter form lives ("" when it has none). Forms
+    // are plain files under forms/, picked by the editor key in TRIGGER_TYPES.
+    function triggerFormUrl(type) {
+        const editor = ModeSchema.TRIGGER_TYPES[type]?.editor ?? "none";
+        return editor === "none" ? "" : Qt.resolvedUrl(`forms/Trigger${root.capitalize(editor)}.qml`);
+    }
+
+    // Same for an action's editor key; inline editors have no form.
+    function actionFormUrl(editor) {
+        if (!editor || editor === "none" || root.inlineActionEditors.indexOf(editor) !== -1)
+            return "";
+        return Qt.resolvedUrl(`forms/Action${root.capitalize(editor)}.qml`);
+    }
+
+    // Editors drawn right on the action row instead of in a form.
+    readonly property var inlineActionEditors: ["switch", "segmented", "dropdown", "stepper", "text"]
+
+    // Open windows as chip suggestions: class as the value, title as the label.
+    function windowSuggestions() {
+        const seen = {};
+        const out = [];
+        for (const w of ModeSchema.toArray(HyprlandData.windowList)) {
+            const cls = String(w.initialClass || w["class"] || "");
+            if (!cls.length || seen[cls])
+                continue;
+            seen[cls] = true;
+            out.push({ label: String(w.title || cls).slice(0, 40), value: cls });
+        }
+        return out;
+    }
+
+    function hyprlandPresetLabel(key) {
+        switch (key) {
+        case "animations":
+            return Translation.tr("Animations");
+        case "blur":
+            return Translation.tr("Blur");
+        case "shadows":
+            return Translation.tr("Shadows");
+        case "gaps":
+            return Translation.tr("Gaps");
+        case "rounding":
+            return Translation.tr("Rounding");
+        case "tearing":
+            return Translation.tr("Tearing");
+        }
+        return key;
+    }
+
     // The value column of an action row.
     function actionValueText(a) {
         if (!a)
