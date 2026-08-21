@@ -1353,6 +1353,8 @@ Singleton {
     readonly property AiShellContextIntegration shellContext: AiShellContextIntegration {}
     /** Local alarms, khal calendar and Weather DTOs; it owns no UI. */
     readonly property AiTimeIntegration timeIntegration: AiTimeIntegration {}
+    /** Read-only live system and keybind DTOs; never a shell fallback. */
+    readonly property AiSystemIntegration systemIntegration: AiSystemIntegration {}
     /** Preview id → immutable proposed changes until the user decides. */
     property var settingsPreviews: ({})
 
@@ -1417,6 +1419,9 @@ Singleton {
             "alarms_list": call => root.toolAlarmsList(call),
             "calendar_list_events": call => root.toolCalendarListEvents(call),
             "weather_get": call => root.toolWeatherGet(call),
+            "system_get_status": call => root.toolSystemGetStatus(call),
+            "system_health": call => root.toolSystemHealth(call),
+            "keybinds_search": call => root.toolKeybindsSearch(call),
             "set_shell_config": call => root.toolSetShellConfig(call),
             "remember_fact": call => root.toolRememberFact(call),
             "web_search": call => root.toolWeb(call, true),
@@ -4074,6 +4079,32 @@ Singleton {
             status: "success",
             summary: Translation.tr("Weather read"),
             data: root.timeIntegration.weather()
+        };
+    }
+
+    function toolSystemGetStatus(call: var): var {
+        return {
+            status: "success",
+            summary: Translation.tr("System status read"),
+            data: root.systemIntegration.status()
+        };
+    }
+
+    function toolSystemHealth(call: var): var {
+        return {
+            status: "success",
+            summary: Translation.tr("System health read"),
+            data: root.systemIntegration.health()
+        };
+    }
+
+    function toolKeybindsSearch(call: var): var {
+        const query = String(call.args.query ?? "").trim();
+        const matches = root.systemIntegration.keybinds(query, Number(call.args.limit ?? 12));
+        return {
+            status: "success",
+            summary: matches.length === 1 ? Translation.tr("1 shortcut found") : Translation.tr("%1 shortcuts found").arg(matches.length),
+            data: { query: query, matches: matches }
         };
     }
 

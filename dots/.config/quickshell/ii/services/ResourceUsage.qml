@@ -40,6 +40,9 @@ Singleton {
     property real gpuUsage: 0
     property real gpuPowerW: 0
     property real gpuTemp: 0
+    // A bounded, presentation-safe sample for the assistant and resource
+    // views. This is deliberately not a general process table or argv dump.
+    property list<var> topProcesses: []
 
     property string cpuModel: "--"
     property string gpuModel: "--"
@@ -55,6 +58,25 @@ Singleton {
 
     function kbToGbString(kb) {
         return (kb / (1024 * 1024)).toFixed(1) + " GB";
+    }
+
+    function parseTopProcesses(output) {
+        const processes = [];
+        for (const line of String(output ?? "").split("\n")) {
+            const match = line.trim().match(/^(.*?)\s+([0-9]+(?:\.[0-9]+)?)$/);
+            if (!match)
+                continue;
+            const name = String(match[1]).trim()
+                .replace(/[^\p{L}\p{N} ._+:-]/gu, "")
+                .slice(0, 80);
+            const cpuPercent = Number(match[2]);
+            if (name.length === 0 || !Number.isFinite(cpuPercent))
+                continue;
+            processes.push({ name: name, cpuPercent: Math.max(0, Math.round(cpuPercent * 10) / 10) });
+            if (processes.length >= 5)
+                break;
+        }
+        root.topProcesses = processes;
     }
 
     function updateMemoryUsageHistory() {
@@ -224,6 +246,30 @@ Singleton {
 
 	FileView { id: fileMeminfo; path: "/proc/meminfo" }
 	FileView { id: fileStat; path: "/proc/stat" }
+
+    // The process list is sampled independently of the fast CPU tick. `comm`
+    // contains only an executable name (not argv), and the result is bounded
+    // before it is published, so a health answer cannot turn into `top`.
+    Process {
+        id: topProcessesProc
+        command: ["ps", "-eo", "comm=,pcpu=", "--sort=-pcpu"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: root.parseTopProcesses(text)
+        }
+    }
+
+    Timer {
+        id: topProcessesTimer
+        interval: 15000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: {
+            if (!topProcessesProc.running)
+                topProcessesProc.running = true;
+        }
+    }
 
     Process {
         id: findCpuMaxFreqProc

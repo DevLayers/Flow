@@ -354,6 +354,73 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "system_get_status",
+            version: 1,
+            domain: "system",
+            title: Translation.tr("Read system status"),
+            summary: Translation.tr("Reads selected battery, network, audio, Do Not Disturb and media state. Nothing is changed."),
+            icon: "monitor_heart",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 220,
+            idempotent: true,
+            description: "Read selected shell status: battery percentage and charging state, connection type and state without SSID or IP address, output volume and mute, Do Not Disturb, and whether media is playing. Nothing is changed. Never use this for process lists, environment variables, hardware identifiers, or network identifiers.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "system_health",
+            version: 1,
+            domain: "system",
+            title: Translation.tr("Read system health"),
+            summary: Translation.tr("Reads bounded CPU, memory, swap, disk, temperature and five busiest process names. Nothing is changed."),
+            icon: "speed",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 300,
+            idempotent: true,
+            description: "Read a concise system-health snapshot for diagnosing slowness: CPU, memory, swap, disk, CPU temperature, and at most five busiest process names with CPU percentages. It is not a process-table, command-line, environment, or hardware inventory, and changes nothing.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "keybinds_search",
+            version: 1,
+            domain: "system",
+            title: Translation.tr("Search keyboard shortcuts"),
+            summary: Translation.tr("Searches the parsed Hyprland shortcut tree. Nothing is changed."),
+            icon: "keyboard",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 300,
+            idempotent: true,
+            description: "Search the real parsed Hyprland keybind tree by action, section, modifier or key. Return the matching keys, action, section and source. Use this to answer how to do something in II instead of inventing a shortcut. Nothing is changed.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "Words from the action, section, modifier or key" },
+                    limit: { type: "integer", description: "Maximum matches, from 1 to 20" }
+                },
+                required: ["query"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             // Registered but offered to nobody: `formats: []` keeps it out of
             // every wire schema while leaving a definition for the call a model
             // still makes from memory, which is answered with the two tools
@@ -671,6 +738,8 @@ Singleton {
             return String(args.label ?? "") + " · " + (args.whenAbsolute ?? `${args.whenRelative ?? ""} min`);
         case "calendar_list_events":
             return [args.from ?? "", args.to ?? ""].filter(value => String(value).length > 0).join(" → ");
+        case "keybinds_search":
+            return String(args.query ?? "");
         case "set_shell_config":
             return Array.from(args.changes ?? []).map(change => `${change.key} = ${change.value}`).join(", ");
         }
