@@ -19,19 +19,14 @@ Rectangle {
     id: root
 
     property var messageData: null
-    readonly property var changes: Array.from(root.messageData?.pendingChanges ?? [])
+    /** The card this is drawing, out of the turn's `toolCards`. */
+    property var card: null
+    readonly property var changes: Array.from(root.card?.data?.changes ?? [])
 
     /** Indexes the user unticked. Everything else is applied. */
     property var dropped: ({})
 
-    readonly property int keptCount: {
-        let count = 0;
-        for (let i = 0; i < root.changes.length; i++) {
-            if (!root.dropped[i])
-                count += 1;
-        }
-        return count;
-    }
+    readonly property int keptCount: root.keptChanges().length
 
     function toggle(index: int) {
         const next = {};
@@ -45,7 +40,10 @@ Rectangle {
     function keptChanges(): var {
         const result = [];
         for (let i = 0; i < root.changes.length; i++) {
-            if (!root.dropped[i])
+            // A change the config would refuse is never kept, whatever the
+            // ticks say: it cannot be applied, so offering it as applicable
+            // would only produce a failure line after the fact.
+            if (!root.dropped[i] && root.changes[i].valid !== false)
                 result.push(root.changes[i]);
         }
         return result;
@@ -95,7 +93,10 @@ Rectangle {
                 required property var modelData
                 required property int index
 
-                readonly property bool kept: !root.dropped[changeRow.index]
+                readonly property bool refused: changeRow.modelData.valid === false
+                readonly property bool kept: !changeRow.refused && !root.dropped[changeRow.index]
+
+                enabled: !changeRow.refused
 
                 Layout.fillWidth: true
                 leftPadding: 8
@@ -113,9 +114,9 @@ Rectangle {
 
                     MaterialSymbol {
                         Layout.alignment: Qt.AlignTop
-                        text: changeRow.kept ? "check_box" : "check_box_outline_blank"
+                        text: changeRow.refused ? "block" : (changeRow.kept ? "check_box" : "check_box_outline_blank")
                         iconSize: Appearance.font.pixelSize.larger
-                        color: changeRow.kept ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
+                        color: changeRow.refused ? Appearance.colors.colError : (changeRow.kept ? Appearance.colors.colPrimary : Appearance.colors.colSubtext)
                     }
 
                     ColumnLayout {
@@ -132,8 +133,18 @@ Rectangle {
                             color: Appearance.colors.colOnLayer1
                         }
 
+                        StyledText {
+                            Layout.fillWidth: true
+                            visible: changeRow.refused
+                            text: changeRow.modelData.reason ?? ""
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colError
+                        }
+
                         RowLayout {
                             Layout.fillWidth: true
+                            visible: !changeRow.refused
                             spacing: 6
 
                             StyledText {
@@ -210,7 +221,9 @@ Rectangle {
                 colBackground: Appearance.colors.colPrimary
                 colBackgroundHover: Appearance.colors.colPrimaryHover
                 colRipple: Appearance.colors.colPrimaryActive
-                onClicked: Ai.applyConfigChanges(root.messageData, root.keptChanges())
+                onClicked: root.card?.tool === "settings_propose_changes"
+                    ? Ai.applySettingsChanges(root.messageData, root.keptChanges())
+                    : Ai.applyConfigChanges(root.messageData, root.keptChanges())
 
                 contentItem: StyledText {
                     text: root.keptCount === root.changes.length ? Translation.tr("Apply") : Translation.tr("Apply %1").arg(root.keptCount)

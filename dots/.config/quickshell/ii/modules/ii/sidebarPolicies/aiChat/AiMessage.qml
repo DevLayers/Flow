@@ -585,22 +585,69 @@ Item {
                     readonly property string toolId: String(toolRow.modelData?.name ?? "")
                     readonly property var definition: Ai.toolbox.definitionFor(toolRow.toolId)
                     readonly property string detail: Ai.toolbox.describeArgs(toolRow.toolId, toolRow.modelData?.args)
+                    // Written by the broker onto the call itself as it goes.
+                    // A call with no state at all is one from a session saved
+                    // before the broker existed.
+                    readonly property string state: String(toolRow.modelData?.state ?? "")
+                    readonly property string outcome: String(toolRow.modelData?.summary ?? "")
+                    readonly property bool waiting: toolRow.state === "running"
+                        || (toolRow.state.length === 0 && (root.streaming || (root.messageData?.functionPending ?? false)))
+                    readonly property bool wentWrong: ["error", "unavailable", "needsInspection"].indexOf(toolRow.state) >= 0
+                    readonly property bool refused: ["denied", "cancelled"].indexOf(toolRow.state) >= 0
 
                     Layout.fillWidth: true
-                    symbol: (toolRow.definition?.icon ?? "").length > 0 ? toolRow.definition.icon : "build"
-                    label: Ai.toolbox.titleFor(toolRow.toolId)
-                    running: root.streaming || (root.messageData?.functionPending ?? false)
+                    symbol: {
+                        if (toolRow.state === "needsInspection")
+                            return "help";
+                        if (toolRow.wentWrong)
+                            return "error";
+                        if (toolRow.refused)
+                            return "block";
+                        return (toolRow.definition?.icon ?? "").length > 0 ? toolRow.definition.icon : "build";
+                    }
+                    // The outcome next to the name, because "Search the web"
+                    // and "Search the web · nothing came back" are different
+                    // things to have read in a transcript.
+                    label: toolRow.outcome.length > 0 && !toolRow.waiting
+                        ? `${Ai.toolbox.titleFor(toolRow.toolId)} · ${toolRow.outcome}`
+                        : Ai.toolbox.titleFor(toolRow.toolId)
+                    running: toolRow.waiting
                     expandable: toolRow.detail.length > 0
                     expanded: toolRow.expandable && toolRow.toolExpanded
                     onToggled: toolRow.toolExpanded = !toolRow.toolExpanded
 
                     expandedContent: Component {
-                        StyledText {
-                            text: toolRow.detail
-                            wrapMode: Text.Wrap
-                            font.family: Appearance.font.family.monospace
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colSubtext
+                        ColumnLayout {
+                            spacing: Appearance.rounding.unsharpenmore
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: toolRow.detail
+                                wrapMode: Text.Wrap
+                                font.family: Appearance.font.family.monospace
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colSubtext
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: toolRow.modelData?.networkUsed === true || toolRow.modelData?.truncated === true
+                                spacing: Appearance.rounding.unsharpenmore
+
+                                StyledText {
+                                    visible: toolRow.modelData?.networkUsed === true
+                                    text: Translation.tr("used the network")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colSubtext
+                                }
+
+                                StyledText {
+                                    visible: toolRow.modelData?.truncated === true
+                                    text: Translation.tr("result was cut to fit")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colSubtext
+                                }
+                            }
                         }
                     }
                 }
@@ -759,122 +806,183 @@ Item {
 
         // ── When it went wrong, or wants something ────────────────────────
 
-        Loader {
-            // The one thing a chat can do that outlives it: keep a fact for
-            // every conversation after this one. So it asks, here, with the
-            // words it wants to keep.
-            Layout.fillWidth: true
-            Layout.maximumWidth: root.answerMaximumWidth
-            active: (root.messageData?.pendingMemory?.length ?? 0) > 0 && (root.messageData?.functionPending ?? false)
-            visible: active
+        // ── Cards this turn carries ───────────────────────────────────────
+        // A tool that needs to show something adds a card; the component is
+        // picked by its `kind`. There used to be one Loader per tool here,
+        // each testing a property of its own on the message, which is three
+        // edits in three files every time a tool learns to ask something.
 
-            sourceComponent: Rectangle {
-                implicitHeight: memoryColumn.implicitHeight + root.bubblePadding * 2
-                radius: Appearance.rounding.large
-                color: Appearance.colors.colSecondaryContainer
+        Repeater {
+            model: ScriptModel {
+                values: Ai.pendingToolCards(root.messageData)
+            }
 
-                ColumnLayout {
-                    id: memoryColumn
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: root.bubblePadding
-                    anchors.rightMargin: root.bubblePadding
-                    spacing: Appearance.rounding.unsharpenmore
+            delegate: Loader {
+                id: cardHost
+                required property var modelData
+                readonly property var card: cardHost.modelData
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Appearance.rounding.unsharpenmore
-
-                        MaterialSymbol {
-                            Layout.alignment: Qt.AlignTop
-                            text: "bookmark_add"
-                            fill: 1
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: Appearance.m3colors.m3onSecondaryContainer
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: Translation.tr("Remember this for later chats?")
-                                wrapMode: Text.Wrap
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.weight: Font.DemiBold
-                                color: Appearance.m3colors.m3onSecondaryContainer
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: root.messageData?.pendingMemory ?? ""
-                                wrapMode: Text.Wrap
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.m3colors.m3onSecondaryContainer
-                            }
-                        }
+                Layout.fillWidth: true
+                Layout.maximumWidth: root.answerMaximumWidth
+                sourceComponent: {
+                    switch (String(cardHost.card?.kind ?? "")) {
+                    case "settingsDiff":
+                        return settingsDiffCard;
+                    case "memoryFact":
+                        return memoryFactCard;
                     }
+                    // A kind this build does not know: a session written by a
+                    // newer one still opens, showing what the card says about
+                    // itself rather than nothing at all.
+                    return unknownCard;
+                }
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Appearance.rounding.unsharpenmore
+                Component {
+                    id: settingsDiffCard
 
-                        Item {
-                            Layout.fillWidth: true
-                        }
+                    AiConfigDiffCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
 
-                        RippleButton {
-                            leftPadding: Appearance.rounding.small
-                            rightPadding: Appearance.rounding.small
-                            topPadding: Appearance.rounding.unsharpenmore / 2
-                            bottomPadding: Appearance.rounding.unsharpenmore / 2
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                            colBackgroundHover: Appearance.colors.colLayer2Hover
-                            colRipple: Appearance.colors.colLayer2Active
-                            onClicked: Ai.rejectMemory(root.messageData)
+                Component {
+                    id: unknownCard
 
-                            contentItem: StyledText {
-                                text: Translation.tr("No")
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.m3colors.m3onSecondaryContainer
+                    Rectangle {
+                        implicitHeight: unknownRow.implicitHeight + root.bubblePadding * 2
+                        radius: Appearance.rounding.large
+                        color: Appearance.colors.colLayer2
+
+                        RowLayout {
+                            id: unknownRow
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: root.bubblePadding
+                            anchors.rightMargin: root.bubblePadding
+                            spacing: Appearance.rounding.unsharpenmore
+
+                            MaterialSymbol {
+                                Layout.alignment: Qt.AlignTop
+                                text: "extension"
+                                fill: 1
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: Appearance.colors.colSubtext
                             }
-                        }
 
-                        RippleButton {
-                            leftPadding: Appearance.rounding.small
-                            rightPadding: Appearance.rounding.small
-                            topPadding: Appearance.rounding.unsharpenmore / 2
-                            bottomPadding: Appearance.rounding.unsharpenmore / 2
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: Appearance.colors.colPrimary
-                            colBackgroundHover: Appearance.colors.colPrimaryHover
-                            colRipple: Appearance.colors.colPrimaryActive
-                            onClicked: Ai.commitMemory(root.messageData)
-
-                            contentItem: StyledText {
-                                text: Translation.tr("Remember it")
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colOnPrimary
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: String(cardHost.card?.summary ?? "").length > 0
+                                    ? cardHost.card.summary
+                                    : Translation.tr("This needs a newer version of the shell to show.")
+                                wrapMode: Text.Wrap
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colSubtext
                             }
                         }
                     }
                 }
+
+                Component {
+                    id: memoryFactCard
+
+                    Rectangle {
+                        implicitHeight: memoryColumn.implicitHeight + root.bubblePadding * 2
+                        radius: Appearance.rounding.large
+                        color: Appearance.colors.colSecondaryContainer
+
+                        ColumnLayout {
+                            id: memoryColumn
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: root.bubblePadding
+                            anchors.rightMargin: root.bubblePadding
+                            spacing: Appearance.rounding.unsharpenmore
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Appearance.rounding.unsharpenmore
+
+                                MaterialSymbol {
+                                    Layout.alignment: Qt.AlignTop
+                                    text: "bookmark_add"
+                                    fill: 1
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: Appearance.m3colors.m3onSecondaryContainer
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: Translation.tr("Remember this for later chats?")
+                                        wrapMode: Text.Wrap
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        font.weight: Font.DemiBold
+                                        color: Appearance.m3colors.m3onSecondaryContainer
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: cardHost.card?.data?.fact ?? ""
+                                        wrapMode: Text.Wrap
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.m3colors.m3onSecondaryContainer
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Appearance.rounding.unsharpenmore
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+
+                                RippleButton {
+                                    leftPadding: Appearance.rounding.small
+                                    rightPadding: Appearance.rounding.small
+                                    topPadding: Appearance.rounding.unsharpenmore / 2
+                                    bottomPadding: Appearance.rounding.unsharpenmore / 2
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                                    colRipple: Appearance.colors.colLayer2Active
+                                    onClicked: Ai.rejectMemory(root.messageData)
+
+                                    contentItem: StyledText {
+                                        text: Translation.tr("No")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.m3colors.m3onSecondaryContainer
+                                    }
+                                }
+
+                                RippleButton {
+                                    leftPadding: Appearance.rounding.small
+                                    rightPadding: Appearance.rounding.small
+                                    topPadding: Appearance.rounding.unsharpenmore / 2
+                                    bottomPadding: Appearance.rounding.unsharpenmore / 2
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: Appearance.colors.colPrimary
+                                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                                    colRipple: Appearance.colors.colPrimaryActive
+                                    onClicked: Ai.commitMemory(root.messageData)
+
+                                    contentItem: StyledText {
+                                        text: Translation.tr("Remember it")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.colors.colOnPrimary
+                                    }
+                                }
+                            }
+                        }
             }
-        }
-
-        Loader {
-            // Settings the model wants to write, shown against what they
-            // would replace. Only ever loaded while an answer is waiting.
-            Layout.fillWidth: true
-            Layout.maximumWidth: root.answerMaximumWidth
-            active: (root.messageData?.pendingChanges?.length ?? 0) > 0 && (root.messageData?.functionPending ?? false)
-            visible: active
-
-            sourceComponent: AiConfigDiffCard {
-                messageData: root.messageData
+                }
             }
         }
 

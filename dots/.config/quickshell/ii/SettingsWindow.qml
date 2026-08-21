@@ -239,10 +239,34 @@ FloatingWindow {
         return SettingsPageRegistry.pageIndexById(id);
     }
 
+    /**
+     * Shows the section a deep link asked for, once its page is up.
+     *
+     * The highlight used to be started only from the page loader's `onLoaded`,
+     * which is fine for a link followed from inside the window — that always
+     * changes page. A link from outside often does not: the window may already
+     * be showing that page, and then nothing loads and nothing ever fires. So
+     * a page that is already up is handled here, and one that is still loading
+     * is left to `onLoaded`.
+     */
+    function applyPendingSectionHighlight() {
+        if (root.pendingSectionHighlight === "")
+            return;
+        if (pageLoader.status === Loader.Ready)
+            pendingHighlightTimer.restart();
+    }
+
     function consumePendingSettingsPage() {
         const pending = GlobalStates.consumePendingSettingsPage();
         root.pendingSubPage = GlobalStates.settingsPendingSubPage || "";
         GlobalStates.settingsPendingSubPage = "";
+        if ((GlobalStates.settingsPendingSection || "") !== "") {
+            root.pendingSectionHighlight = GlobalStates.settingsPendingSection;
+            GlobalStates.settingsPendingSection = "";
+            // After the page switch below has been processed: if it changed
+            // page, the loader takes it; if it did not, this does.
+            Qt.callLater(() => root.applyPendingSectionHighlight());
+        }
         if (!pending || pending === "")
             return;
 
@@ -351,6 +375,13 @@ FloatingWindow {
     Component.onCompleted: {
         root.visible = GlobalStates.settingsOpen;
         if (root.visible) {
+            // The deep link that opened this window fired before the window
+            // existed: the loader below shell.qml only starts building it when
+            // `settingsOpen` turns true, so both Connections above missed the
+            // signal that carried the destination. A warm window has them and
+            // navigates; a cold one used to land on whatever page was last
+            // shown and drop the request on the floor.
+            root.consumePendingSettingsPage();
             Qt.callLater(() => {
                 SearchRegistry.setSettingsActive(true);
                 root.beginNavigationSession();

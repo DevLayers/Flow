@@ -32,8 +32,283 @@ Singleton {
     // shell hot-reload while Phone services are initializing.
     property int writeGuardDelay: 5000
 
-    function setNestedValue(nestedKey, value) {
+    /**
+     * What kind of thing a config value is, in the vocabulary the checks below
+     * and the assistant both use.
+     */
+    function valueKind(value): string {
+        if (value === undefined)
+            return "unset";
+        if (value === null)
+            return "null";
+        if (Array.isArray(value))
+            return "list";
+        if (typeof value === "boolean")
+            return "bool";
+        if (typeof value === "number")
+            return Number.isInteger(value) ? "int" : "real";
+        if (typeof value === "string")
+            return "string";
+        if (typeof value === "object") {
+            // A JsonObject is a group of options; an array-like one is a list.
+            if (typeof value.length === "number" && Object.keys(value).every(key => !isNaN(key) || key === "length"))
+                return "list";
+            return "group";
+        }
+        return "unknown";
+    }
+
+    /**
+     * Whether a value may be written to a key, and as what.
+     *
+     * The loose path below converts anything that merely looks numeric, which
+     * is how a string option set to "007" became the number 7 and how an enum
+     * could be handed a value it never accepts. This decides against the type
+     * the key already holds instead of against the shape of the incoming
+     * string, and returns the converted value so the caller writes exactly
+     * what was checked.
+     *
+     * Returns {ok, reason, value, kind}.
+     */
+    function validateNestedValue(nestedKey, value): var {
+        const keys = String(nestedKey ?? "").split(".").filter(part => part.length > 0);
+        if (keys.length === 0)
+            return { ok: false, reason: "No key given.", value: undefined, kind: "unset" };
+
+        let node = root.options;
+        for (let i = 0; i < keys.length - 1; ++i) {
+            if (node === undefined || node === null || typeof node !== "object")
+                return { ok: false, reason: `\`${keys.slice(0, i + 1).join(".")}\` is not a group of settings.`, value: undefined, kind: "unset" };
+            node = node[keys[i]];
+        }
+        if (node === undefined || node === null || typeof node !== "object")
+            return { ok: false, reason: `\`${nestedKey}\` does not exist.`, value: undefined, kind: "unset" };
+
+        const leaf = keys[keys.length - 1];
+        const current = node[leaf];
+        const kind = root.valueKind(current);
+        if (kind === "unset")
+            return { ok: false, reason: `\`${nestedKey}\` does not exist.`, value: undefined, kind: kind };
+        if (kind === "group")
+            return { ok: false, reason: `\`${nestedKey}\` is a group of settings, not a single value. Set the options inside it.`, value: undefined, kind: kind };
+
+        const raw = typeof value === "string" ? value.trim() : value;
+        let converted = raw;
+
+        if (kind === "bool") {
+            if (typeof raw === "boolean")
+                converted = raw;
+            else if (raw === "true" || raw === "false")
+                converted = raw === "true";
+            else
+                return { ok: false, reason: `\`${nestedKey}\` is a switch. It takes true or false.`, value: undefined, kind: kind };
+        } else if (kind === "int" || kind === "real") {
+            if (typeof raw === "number")
+                converted = raw;
+            else if (typeof raw === "string" && /^-?(?:\d+|\d*\.\d+)$/.test(raw))
+                converted = Number(raw);
+            else
+                return { ok: false, reason: `\`${nestedKey}\` is a number.`, value: undefined, kind: kind };
+            if (!isFinite(converted))
+                return { ok: false, reason: `\`${nestedKey}\` is a number.`, value: undefined, kind: kind };
+            // Whole against fractional is deliberately not enforced. The kind
+            // comes from the value the option happens to hold, and a `real`
+            // sitting at 1 is indistinguishable from an `int` — rejecting 1.5
+            // there would refuse a change that is perfectly legal. QML rounds
+            // a fraction assigned to an int property, which is the mild half
+            // of the two failures.
+        } else if (kind === "list") {
+            if (Array.isArray(raw))
+                converted = raw;
+            else if (typeof raw === "string") {
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (!Array.isArray(parsed))
+                        throw new Error("not a list");
+                    converted = parsed;
+                } catch (e) {
+                    return { ok: false, reason: `\`${nestedKey}\` is a list. Give it a JSON array.`, value: undefined, kind: kind };
+                }
+            } else
+                return { ok: false, reason: `\`${nestedKey}\` is a list.`, value: undefined, kind: kind };
+        } else if (kind === "string") {
+            // Deliberately no conversion: a string option keeps what it was
+            // given, leading zeroes and all.
+            if (typeof raw === "object")
+                return { ok: false, reason: `\`${nestedKey}\` is text.`, value: undefined, kind: kind };
+            converted = String(raw);
+        }
+
+        const allowed = root.enumConstraints[keys.join(".")];
+        if (allowed !== undefined && allowed.indexOf(converted) === -1)
+            return {
+                ok: false,
+                reason: `\`${nestedKey}\` only takes ${allowed.map(entry => JSON.stringify(entry)).join(", ")}.`,
+                value: undefined,
+                kind: kind
+            };
+
+        return { ok: true, reason: "", value: converted, kind: kind };
+    }
+
+    /**
+     * Every option path in the config, as dotted keys.
+     *
+     * Built once: the shape comes from the QML declarations, so it changes
+     * with the shell version and not with what the user sets. It exists so a
+     * key can be looked for by name instead of the whole file being read out
+     * to find one — the assistant used to be handed all of config.json, some
+     * forty-six kilobytes of it, to change a single switch.
+     */
+    property var cachedKeyPaths: null
+
+    function keyPaths(): var {
+        if (root.cachedKeyPaths !== null)
+            return root.cachedKeyPaths;
+        const paths = [];
+        const walk = (node, prefix) => {
+            if (paths.length > 4000)
+                return;
+            for (const name in node) {
+                if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children")
+                    || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
+                    continue;
+                const value = node[name];
+                if (typeof value === "function")
+                    continue;
+                const path = prefix.length > 0 ? `${prefix}.${name}` : name;
+                if (root.valueKind(value) === "group")
+                    walk(value, path);
+                else
+                    paths.push(path);
+            }
+        };
+        walk(root.options, "");
+        root.cachedKeyPaths = paths;
+        return paths;
+    }
+
+    /** A value short enough to hand to a reader, with a note when it was cut. */
+    function summariseValue(value, maxLength = 120): var {
+        const kind = root.valueKind(value);
+        if (kind === "group")
+            return { kind: kind, value: "…" };
+        if (kind === "list") {
+            const list = Array.from(value ?? []);
+            const text = JSON.stringify(list);
+            return text.length <= maxLength
+                ? { kind: kind, value: list }
+                : { kind: kind, value: `${list.length} entries`, truncated: true };
+        }
+        if (kind === "string") {
+            const text = String(value);
+            return text.length <= maxLength
+                ? { kind: kind, value: text }
+                : { kind: kind, value: `${text.slice(0, maxLength)}…`, truncated: true };
+        }
+        return { kind: kind, value: value };
+    }
+
+    /**
+     * Options whose key path matches every word given.
+     *
+     * Matching is on the key path alone, which is what the shell knows without
+     * the settings window open. Labels, pages and translations belong to the
+     * settings index, which is a separate thing.
+     */
+    function findKeys(query, limit = 25): var {
+        const words = String(query ?? "").toLowerCase().split(/[\s._-]+/).filter(word => word.length > 1);
+        if (words.length === 0)
+            return [];
+        const paths = root.keyPaths();
+        const scored = [];
+        for (let i = 0; i < paths.length; i++) {
+            const path = paths[i];
+            const lower = path.toLowerCase();
+            // A key path is camelCase, so the words in it need separating
+            // before "automatic suspend" can match "battery.automaticSuspend".
+            const spaced = lower.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
+                + " " + path.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().replace(/\./g, " ");
+            let score = 0;
+            let matchedAll = true;
+            for (let w = 0; w < words.length; w++) {
+                const word = words[w];
+                if (lower.endsWith(word))
+                    score += 300;
+                else if (spaced.indexOf(` ${word} `) >= 0 || spaced.indexOf(` ${word}`) >= 0)
+                    score += 200;
+                else if (lower.indexOf(word) >= 0)
+                    score += 100;
+                else {
+                    matchedAll = false;
+                    break;
+                }
+            }
+            if (!matchedAll)
+                continue;
+            // A short path that matched is more likely the option itself than
+            // a long one that merely contains the word.
+            score -= path.length;
+            scored.push({ path: path, score: score });
+        }
+        scored.sort((a, b) => b.score - a.score);
+        return scored.slice(0, Math.max(1, limit)).map(entry => {
+            const summary = root.summariseValue(root.getNestedValue(root.options, entry.path.split(".")));
+            return { key: entry.path, type: summary.kind, value: summary.value };
+        });
+    }
+
+    /** What sits directly under one group, one level deep. */
+    function listGroup(prefix, limit = 60): var {
+        const keys = String(prefix ?? "").split(".").filter(part => part.length > 0);
+        const node = keys.length === 0 ? root.options : root.getNestedValue(root.options, keys);
+        if (node === undefined || root.valueKind(node) !== "group")
+            return null;
+        const entries = [];
+        for (const name in node) {
+            if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children")
+                || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
+                continue;
+            const value = node[name];
+            if (typeof value === "function")
+                continue;
+            const path = keys.length > 0 ? `${keys.join(".")}.${name}` : name;
+            const summary = root.summariseValue(value, 60);
+            const entry = { key: path, type: summary.kind };
+            if (summary.kind !== "group")
+                entry.value = summary.value;
+            entries.push(entry);
+            if (entries.length >= Math.max(1, limit))
+                break;
+        }
+        return entries;
+    }
+
+    /**
+     * Writes one option.
+     *
+     * `strict` is for callers that did not write the key themselves — the
+     * assistant, above all. Loose writing creates whatever path it is handed
+     * and converts by guessing, which is fine for a switch in the settings
+     * window bound to a key that provably exists, and is not fine for a key a
+     * model produced from memory. Strict refuses an unknown key, refuses a
+     * value of the wrong kind, and refuses a value outside a declared enum.
+     */
+    function setNestedValue(nestedKey, value, strict = false) {
         let keys = nestedKey.split(".");
+
+        if (strict) {
+            const verdict = root.validateNestedValue(nestedKey, value);
+            if (!verdict.ok)
+                throw new Error(verdict.reason);
+            let target = root.options;
+            for (let i = 0; i < keys.length - 1; ++i) {
+                target = target[keys[i]];
+            }
+            target[keys[keys.length - 1]] = verdict.value;
+            return verdict.value;
+        }
+
         let obj = root.options;
         let parents = [obj];
 
@@ -60,6 +335,7 @@ Singleton {
         }
 
         obj[keys[keys.length - 1]] = convertedValue;
+        return convertedValue;
     }
 
     // Persist options immediately (e.g. kill dialog "Always" in a short-lived process).
@@ -1087,13 +1363,17 @@ Singleton {
                     // anything that writes.
                     // Reading is allowed outright; anything that writes or runs
                     // still asks. Searching and fetching a page only read.
-                    property list<string> alwaysAllow: ["get_shell_config", "switch_to_search_mode", "web_search", "fetch_url"]
+                    property list<string> alwaysAllow: ["settings_search", "settings_get", "switch_to_search_mode", "web_search", "fetch_url"]
                     property list<string> alwaysDeny: []
                     // Show every proposed settings change next to its current
                     // value before writing any of them.
                     property bool reviewConfigChanges: true
                     // How many tool calls the log remembers. 0 keeps none.
                     property int logSize: 50
+                    // A local-only policy is about reducing what the assistant
+                    // can reach, not only about the network, so shell commands
+                    // stay off under it. Set true to disagree.
+                    property bool allowShellInLocalPolicy: false
                 }
                 // Longest answer to ask for, in tokens. 0 uses whatever the
                 // model itself supports, which is what most people want;

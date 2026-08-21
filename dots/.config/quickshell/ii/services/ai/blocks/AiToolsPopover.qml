@@ -169,9 +169,10 @@ Item {
 
         property string value: ""
         property bool danger: false
+        /** Which answers this tool accepts. A shell never accepts "Always". */
+        property var values: Ai.toolbox.permissionValues
         signal picked(string value)
 
-        readonly property var values: Ai.toolbox.permissionValues
         readonly property int selectedIndex: Math.max(0, segments.values.indexOf(segments.value))
         readonly property real segmentWidth: segments.width / Math.max(1, segments.values.length)
 
@@ -307,6 +308,10 @@ Item {
                         readonly property string permission: Ai.toolbox.permission(toolRow.modelData.id)
                         readonly property bool denied: toolRow.permission === "deny"
                         readonly property bool risky: toolRow.modelData.risk === "danger"
+                        // Not the same as denied: this is the model, the policy
+                        // or a missing service, none of which a switch here can
+                        // change. Saying which one saves a round of guessing.
+                        readonly property string blockedReason: toolRow.denied ? "" : Ai.toolbox.unavailableReason(toolRow.modelData.id)
 
                         Layout.fillWidth: true
                         Layout.preferredHeight: toolCardColumn.implicitHeight + root.inset * 2
@@ -314,7 +319,7 @@ Item {
                         color: Appearance.colors.colSurfaceContainerHighest
                         // A denied tool stays legible instead of disappearing:
                         // what the model cannot reach is worth reading too.
-                        opacity: toolRow.denied ? 0.6 : 1
+                        opacity: (toolRow.denied || toolRow.blockedReason.length > 0) ? 0.6 : 1
 
                         Behavior on opacity {
                             NumberAnimation { duration: 150 }
@@ -376,6 +381,28 @@ Item {
                                         color: Appearance.colors.colOnSurface
                                         opacity: 0.75
                                     }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Layout.topMargin: 2
+                                        visible: toolRow.blockedReason.length > 0
+                                        spacing: 4
+
+                                        MaterialSymbol {
+                                            text: "info"
+                                            fill: 1
+                                            iconSize: Appearance.font.pixelSize.normal
+                                            color: Appearance.colors.colSubtext
+                                        }
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: toolRow.blockedReason
+                                            wrapMode: Text.Wrap
+                                            font.pixelSize: Appearance.font.pixelSize.smaller
+                                            color: Appearance.colors.colSubtext
+                                        }
+                                    }
                                 }
                             }
 
@@ -383,6 +410,7 @@ Item {
                                 Layout.fillWidth: true
                                 value: toolRow.permission
                                 danger: toolRow.risky
+                                values: Ai.toolbox.permissionValuesFor(toolRow.modelData.id)
                                 onPicked: value => Ai.toolbox.setPermission(toolRow.modelData.id, value)
                             }
                         }

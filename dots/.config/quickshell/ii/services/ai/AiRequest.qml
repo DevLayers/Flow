@@ -117,7 +117,7 @@ Scope {
             functionCallId: message.functionCallId,
             functionResponse: message.functionResponse,
             functionPending: message.functionPending,
-            pendingChanges: JSON.parse(JSON.stringify(message.pendingChanges ?? [])),
+            toolCards: JSON.parse(JSON.stringify(message.toolCards ?? [])),
             toolCallSerial: message.toolCallSerial,
             errorKind: message.errorKind,
             errorText: message.errorText,

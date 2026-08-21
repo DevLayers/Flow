@@ -136,6 +136,9 @@ ContentPage {
                         onSelected: newValue => {
                             Ai.toolbox.setPermission(toolEntry.modelData.id, newValue);
                         }
+                        // "Always" is missing for a tool that cannot be given
+                        // standing permission — a shell is not one capability
+                        // to trust once, and the command differs every time.
                         options: [
                             {
                                 displayName: Translation.tr("Always"),
@@ -152,7 +155,7 @@ ContentPage {
                                 icon: "block",
                                 value: "deny"
                             }
-                        ]
+                        ].filter(option => Ai.toolbox.permissionValuesFor(toolEntry.modelData.id).indexOf(option.value) >= 0)
                     }
                 }
             }

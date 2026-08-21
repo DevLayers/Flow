@@ -1,237 +1,104 @@
 import QtQuick
 import Quickshell
 import qs.services
+import qs.services.ai
 import qs.modules.common
 
 /**
- * What the assistant is allowed to reach for, and what it did with it.
+ * This chat's view of the tools, and the record of what they did.
  *
- * Every tool is described once, here. The three API dialects disagree only on
- * where the name, the description and the parameter schema go, so the wire
- * shape is generated rather than written out per format — which is what used
- * to make adding a tool a three-place edit, with the copies drifting apart
- * (the config tool took a list of changes on Gemini and a single key/value
- * everywhere else).
+ * What a tool *is* lives in `AiToolRegistry`, once. What lives here is what
+ * changes per chat and per user: which model is answering, what the policy
+ * allows right now, the standing permission the user gave each tool, and the
+ * log of calls. Splitting the two is what stopped the schema sent to the
+ * model, the Tools page and the dispatcher from each carrying their own
+ * slightly different copy of the rules.
  *
- * Permission is per tool and lives in the config: a tool is either allowed
- * outright, refused outright, or asks first — and asking is the default for
- * anything that writes. Nothing here executes: the Ai service owns that, and
- * calls back in to log what happened.
+ * Nothing here executes a tool. The broker does that, and calls back in to
+ * record what happened.
  */
 Scope {
     id: root
 
+    // ── This chat's situation ─────────────────────────────────────────────
     /** API dialect of the model in use, and whether it has search of its own. */
     property string apiFormat: "openai"
     property bool searchAvailable: false
     /** Profile-level exposure; permissions below remain per-tool approvals. */
     property string functionExposure: "all"
     property bool localOnly: false
+    /** Whether the current policy lets anything reach the network at all. */
+    property bool online: true
+    /** What the model itself can do, when it has been resolved. Null means unknown. */
+    property var modelCapabilities: null
 
-    // ── Registry ──────────────────────────────────────────────────────────
-    // `description` is what the model reads, `title`/`summary` what the user
-    // reads. `risk` is only for presentation: the lists in the config decide
-    // what actually runs.
-    readonly property var definitions: [
-        {
-            id: "switch_to_search_mode",
-            title: Translation.tr("Switch to web search"),
-            summary: Translation.tr("Lets it hand the turn over to the provider's own search when a question needs today's answer."),
-            icon: "travel_explore",
-            risk: "safe",
-            description: "Switch to search mode to perform web searches. Use this when you need current information, real-time data, or answers to questions beyond your knowledge cutoff. After switching, continue with the user's original request.",
-            parameters: null,
-            formats: ["gemini"],
-            needsSearch: true
-        },
-        {
-            id: "get_shell_config",
-            title: Translation.tr("Read the shell settings"),
-            summary: Translation.tr("Reads config.json so it can name real settings instead of guessing them. Nothing is changed."),
-            icon: "settings",
-            risk: "safe",
-            description: "Retrieve the complete desktop shell configuration file in JSON format. Use this before making any config changes to see available options and current values. Returns the full config structure. Don't ask for permission, run directly.",
-            parameters: null,
-            formats: ["gemini", "openai", "anthropic"],
-            needsSearch: false
-        },
-        {
-            id: "set_shell_config",
-            title: Translation.tr("Change the shell settings"),
-            summary: Translation.tr("Writes settings. Every change is shown with its current value before anything is applied."),
-            icon: "tune",
-            risk: "writes",
-            description: "Modify one or multiple fields in the desktop shell config at once. CRITICAL: You MUST call get_shell_config first to see available keys — never guess key names. Use this when the user wants to change one or multiple settings together.",
-            parameters: {
-                type: "object",
-                properties: {
-                    changes: {
-                        type: "array",
-                        description: "Config changes to apply",
-                        items: {
-                            type: "object",
-                            properties: {
-                                key: {
-                                    type: "string",
-                                    description: "The key to set, e.g. `bar.borderless`"
-                                },
-                                value: {
-                                    type: "string",
-                                    description: "The value to set, e.g. `true`"
-                                }
-                            },
-                            required: ["key", "value"]
-                        }
-                    }
-                },
-                required: ["changes"]
-            },
-            formats: ["gemini", "openai", "anthropic"],
-            needsSearch: false
-        },
-        {
-            id: "remember_fact",
-            title: Translation.tr("Remember something"),
-            summary: Translation.tr("Keeps one fact about you between conversations. Every fact is a line you can read, edit or delete."),
-            icon: "bookmark_add",
-            risk: "writes",
-            description: "Store one durable fact about the user so later conversations start knowing it — their distro, editor, preferences, recurring projects. Keep it to one short sentence. Do not store secrets, credentials, or anything the user asked you to forget.",
-            parameters: {
-                type: "object",
-                properties: {
-                    fact: {
-                        type: "string",
-                        description: "The single fact to remember, as one short sentence"
-                    }
-                },
-                required: ["fact"]
-            },
-            formats: ["gemini", "openai", "anthropic"],
-            needsSearch: false
-        },
-        {
-            id: "web_search",
-            title: Translation.tr("Search the web"),
-            summary: Translation.tr("Looks something up and reads back titles, links and snippets. Works with any model that can call a function, including local ones."),
-            icon: "travel_explore",
-            risk: "safe",
-            description: "Search the web for current information and return titles, URLs and snippets. Use it whenever the answer depends on something recent, specific or outside your knowledge. Follow up with fetch_url on the most promising result when the snippets are not enough.",
-            parameters: {
-                type: "object",
-                properties: {
-                    query: {
-                        type: "string",
-                        description: "What to search for"
-                    },
-                    count: {
-                        type: "integer",
-                        description: "How many results to return, 1 to 10. Defaults to 5."
-                    }
-                },
-                required: ["query"]
-            },
-            formats: ["gemini", "openai", "anthropic"],
-            needsSearch: false
-        },
-        {
-            id: "fetch_url",
-            title: Translation.tr("Read a page"),
-            summary: Translation.tr("Fetches one page and reads its text. Nothing is run, and nothing is saved."),
-            icon: "link",
-            risk: "safe",
-            description: "Fetch a single http(s) URL and return its readable text. Use it to read a search result, a documentation page, or a link the user pasted.",
-            parameters: {
-                type: "object",
-                properties: {
-                    url: {
-                        type: "string",
-                        description: "The absolute http or https URL to read"
-                    }
-                },
-                required: ["url"]
-            },
-            formats: ["gemini", "openai", "anthropic"],
-            needsSearch: false
-        },
-        {
-            id: "run_shell_command",
-            title: Translation.tr("Run a command"),
-            summary: Translation.tr("Runs a command in bash and reads its output back. The command is shown before it runs."),
-            icon: "terminal",
-            risk: "danger",
-            description: "Execute a bash command and return its output. Only use for quick, non-interactive commands (queries, checks, simple operations). For interactive commands, long-running processes, or dangerous operations, ask the user to run them manually instead.",
-            parameters: {
-                type: "object",
-                properties: {
-                    command: {
-                        type: "string",
-                        description: "The bash command to run"
-                    }
-                },
-                required: ["command"]
-            },
-            formats: ["gemini", "openai", "anthropic"],
-            needsSearch: false
-        }
-    ]
-
-    /** The provider's own web search, which is a tool the shell never runs. */
-    readonly property var searchPayloads: ({
-            "gemini": [
-                {
-                    "google_search": {}
-                }
-            ],
-            "anthropic": [
-                {
-                    "type": "web_search_20250305",
-                    "name": "web_search"
-                }
-            ]
+    /** Everything `AiToolRegistry.availability()` needs to decide. */
+    readonly property var availabilityContext: ({
+            format: root.apiFormat,
+            searchAvailable: root.searchAvailable,
+            exposure: root.functionExposure,
+            localOnly: root.localOnly,
+            online: root.online,
+            capabilities: root.modelCapabilities,
+            services: root.serviceAvailability
         })
 
+    /** Services a tool may depend on, by the name it declares in `requiredServices`. */
+    readonly property var serviceAvailability: ({
+            memory: AiMemory.enabled
+        })
+
+    // ── Registry, passed through ──────────────────────────────────────────
+    // Kept as this object's own API so every existing caller keeps working;
+    // the definitions themselves are the registry's.
+    readonly property var definitions: AiToolRegistry.definitions
+
     function definitionFor(id: string): var {
-        const list = root.definitions;
-        for (let i = 0; i < list.length; i++) {
-            if (list[i].id === id)
-                return list[i];
-        }
-        return null;
+        return AiToolRegistry.definitionFor(id);
     }
 
     function titleFor(id: string): string {
-        return root.definitionFor(id)?.title ?? id;
+        return AiToolRegistry.titleFor(id);
+    }
+
+    function describeArgs(id: string, args: var): string {
+        return AiToolRegistry.describeArgs(id, args);
+    }
+
+    /** Why a tool is not on offer right now, empty when it is. */
+    function unavailableReason(id: string): string {
+        const def = AiToolRegistry.definitionFor(id);
+        if (!def)
+            return Translation.tr("Unknown tool");
+        const verdict = AiToolRegistry.availability(def, root.contextFor(id));
+        return verdict.available ? "" : verdict.reason;
+    }
+
+    function isAvailable(id: string): bool {
+        const def = AiToolRegistry.definitionFor(id);
+        if (!def)
+            return false;
+        return AiToolRegistry.availability(def, root.contextFor(id)).available;
+    }
+
+    /** The shared context plus this tool's standing permission. */
+    function contextFor(id: string): var {
+        return Object.assign({}, root.availabilityContext, {
+            permission: root.permission(id)
+        });
     }
 
     // ── Modes ─────────────────────────────────────────────────────────────
     readonly property string mode: Config.options?.ai?.tools?.mode ?? "functions"
 
-    /**
-     * Modes the model in use can actually deliver. A format with no search of
-     * its own must not offer a search mode: picking it used to hand over an
-     * empty tool list, so the model quietly answered from memory.
-     */
     function modesFor(format: string): var {
-        const modes = ["functions"];
-        if (root.searchPayloads[format] !== undefined)
-            modes.push("search");
-        modes.push("none");
-        return modes;
+        return AiToolRegistry.modesFor(format);
     }
 
-    readonly property var availableModes: root.modesFor(root.apiFormat)
-
-    readonly property var modeDescriptions: ({
-            "functions": Translation.tr("Commands, settings, and a hop to search.\nEach tool asks or runs by its own rule"),
-            "search": Translation.tr("Gives the model search capabilities (immediately)"),
-            "none": Translation.tr("Disable tools")
-        })
-
-    readonly property var modeLabels: ({
-            "functions": Translation.tr("Tools"),
-            "search": Translation.tr("Search"),
-            "none": Translation.tr("None")
-        })
+    readonly property var availableModes: AiToolRegistry.modesFor(root.apiFormat)
+    readonly property var modeDescriptions: AiToolRegistry.modeDescriptions
+    readonly property var modeLabels: AiToolRegistry.modeLabels
+    readonly property var searchPayloads: AiToolRegistry.searchPayloads
 
     // ── Permissions ───────────────────────────────────────────────────────
     // Two lists rather than a map: JsonAdapter stores list<string> honestly,
@@ -239,20 +106,38 @@ Scope {
     // A tool in neither list asks.
     readonly property var permissionValues: ["allow", "ask", "deny"]
 
+    /**
+     * The answers a given tool may be given.
+     *
+     * A tool marked `neverAutoApprove` — the generic shell, today — cannot be
+     * granted standing permission at all. It is not one capability that can be
+     * trusted once; it is every capability, and the command differs each time.
+     */
+    function permissionValuesFor(id: string): var {
+        const def = AiToolRegistry.definitionFor(id);
+        if (def?.neverAutoApprove === true)
+            return ["ask", "deny"];
+        return root.permissionValues;
+    }
+
     function permission(id: string): string {
+        const def = AiToolRegistry.definitionFor(id);
         const tools = Config.options?.ai?.tools;
         if (!tools)
-            return "ask";
+            return def?.neverAutoApprove === true ? "ask" : "ask";
         if (Array.from(tools.alwaysDeny ?? []).indexOf(id) !== -1)
             return "deny";
-        if (Array.from(tools.alwaysAllow ?? []).indexOf(id) !== -1)
-            return "allow";
+        if (Array.from(tools.alwaysAllow ?? []).indexOf(id) !== -1) {
+            // A standing "allow" left over in the config from before this rule
+            // existed is read as "ask" rather than honoured.
+            return def?.neverAutoApprove === true ? "ask" : "allow";
+        }
         return "ask";
     }
 
     function setPermission(id: string, value: string) {
         const tools = Config.options?.ai?.tools;
-        if (!tools || root.permissionValues.indexOf(value) === -1)
+        if (!tools || root.permissionValuesFor(id).indexOf(value) === -1)
             return;
         const allow = Array.from(tools.alwaysAllow ?? []).filter(entry => entry !== id);
         const deny = Array.from(tools.alwaysDeny ?? []).filter(entry => entry !== id);
@@ -276,77 +161,31 @@ Scope {
     // ── Wire format ───────────────────────────────────────────────────────
     /** Tools offered to a model of this dialect, minus the refused ones. */
     function enabledFor(format: string): var {
-        const list = root.definitions;
-        const result = [];
-        for (let i = 0; i < list.length; i++) {
-            const def = list[i];
-            if (def.formats.indexOf(format) === -1)
-                continue;
-            if (def.needsSearch && !root.searchAvailable)
-                continue;
-            if (root.functionExposure === "none")
-                continue;
-            if (root.functionExposure === "safe" && def.risk !== "safe")
-                continue;
-            if (root.localOnly && def.id === "run_shell_command")
-                continue;
-            // A local-only policy is about the network, so the two tools that
-            // reach it are the ones it has to take away.
-            if (root.localOnly && (def.id === "web_search" || def.id === "fetch_url"))
-                continue;
-            if (root.permission(def.id) === "deny")
-                continue;
-            result.push(def);
-        }
-        return result;
+        return AiToolRegistry.definitions.filter(def => AiToolRegistry.availability(def, Object.assign({}, root.availabilityContext, {
+            format: format,
+            permission: root.permission(def.id)
+        })).available);
     }
 
     function functionSchema(def: var, format: string): var {
-        const parameters = def.parameters;
-        if (format === "gemini") {
-            const schema = {
-                name: def.id,
-                description: def.description
-            };
-            if (parameters)
-                schema.parameters = parameters;
-            return schema;
-        }
-        if (format === "anthropic")
-            return {
-                name: def.id,
-                description: def.description,
-                input_schema: parameters ?? {
-                    type: "object",
-                    properties: {}
-                }
-            };
-        return {
-            type: "function",
-            function: {
-                name: def.id,
-                description: def.description,
-                parameters: parameters ?? {}
-            }
-        };
+        return AiToolRegistry.functionSchema(def, format);
     }
 
-    /** What goes in the request body. Empty means "no tools this turn". */
     function wireTools(format: string, mode: string): var {
         if (mode === "none")
             return [];
         if (mode === "search")
-            return root.searchPayloads[format] ?? [];
+            return AiToolRegistry.searchPayloads[format] ?? [];
         const enabled = root.enabledFor(format);
         if (enabled.length === 0)
             return [];
         if (format === "gemini")
             return [
                 {
-                    functionDeclarations: enabled.map(def => root.functionSchema(def, format))
+                    functionDeclarations: enabled.map(def => AiToolRegistry.functionSchema(def, format))
                 }
             ];
-        return enabled.map(def => root.functionSchema(def, format));
+        return enabled.map(def => AiToolRegistry.functionSchema(def, format));
     }
 
     // ── Call log ──────────────────────────────────────────────────────────
@@ -357,38 +196,23 @@ Scope {
     property int callSerial: 0
     signal callCheckpointChanged(var entry)
 
-    function describeArgs(id: string, args: var): string {
-        if (!args)
-            return "";
-        if (id === "run_shell_command")
-            return String(args.command ?? "");
-        if (id === "web_search")
-            return String(args.query ?? "");
-        if (id === "fetch_url")
-            return String(args.url ?? "");
-        if (id === "remember_fact")
-            return String(args.fact ?? "");
-        if (id === "set_shell_config") {
-            const changes = Array.from(args.changes ?? []);
-            return changes.map(change => `${change.key} = ${change.value}`).join(", ");
-        }
-        return "";
-    }
-
     /** Records a call as it starts and returns the handle to finish it with. */
     function noteCall(id: string, args: var): int {
         if (root.logSize === 0)
             return -1;
         root.callSerial += 1;
+        const def = AiToolRegistry.definitionFor(id);
         const entry = {
             serial: root.callSerial,
             id: id,
-            title: root.titleFor(id),
-            icon: root.definitionFor(id)?.icon ?? "build",
-            detail: root.describeArgs(id, args),
+            title: AiToolRegistry.titleFor(id),
+            icon: def?.icon ?? "build",
+            detail: AiToolRegistry.describeArgs(id, args),
             status: "running",
             outcome: "",
-            at: Date.now()
+            at: Date.now(),
+            network: def?.network === "required",
+            writes: def?.writes === true
         };
         root.callLog = [entry].concat(Array.from(root.callLog)).slice(0, root.logSize);
         root.callCheckpointChanged(entry);

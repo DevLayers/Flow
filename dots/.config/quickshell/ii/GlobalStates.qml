@@ -113,6 +113,10 @@ Singleton {
     property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""
     property string settingsPendingPageName: ""
+    // Section to land on inside the page. Held here rather than passed along,
+    // because the settings window may not exist yet when the deep link is
+    // made — the same reason the page and sub-page wait here.
+    property string settingsPendingSection: ""
     // Welcome is an in-process window. Keep its lifecycle in the shared state
     // graph so first-run, keybinds and Settings deep links all use one owner.
     property bool welcomeOpen: false
@@ -315,11 +319,22 @@ Singleton {
         root.settingsOpen = true;
     }
 
+    /**
+     * Opens the settings window at a page, and optionally at a sub-page and a
+     * section within it.
+     *
+     * `sectionId` is the section's title, which is what the window already
+     * highlights by when a link inside settings points at one. It used to be
+     * accepted here and dropped on the floor, so every caller outside the
+     * settings window could only reach the top of a page.
+     */
     function openSettingsPage(pageId, subPageId, sectionId) {
         const targetSubPage = subPageId || "";
+        const targetSection = sectionId || "";
         if (!pageId || pageId === "") {
             root.settingsPendingPageName = "";
             root.settingsPendingSubPage = targetSubPage;
+            root.settingsPendingSection = targetSection;
             root.settingsOpen = true;
             return;
         }
@@ -329,6 +344,7 @@ Singleton {
 
         root.settingsPendingPageName = pageId;
         root.settingsPendingSubPage = targetSubPage;
+        root.settingsPendingSection = targetSection;
         root.settingsNavigationRequest += 1;
         root.settingsOpen = true;
     }
@@ -379,6 +395,10 @@ Singleton {
 
         function openPage(pageId: string): void {
             root.openSettingsPage(pageId);
+        }
+
+        function openSection(pageId: string, sectionTitle: string): void {
+            root.openSettingsPage(pageId, "", sectionTitle);
         }
 
     }

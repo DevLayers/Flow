@@ -1299,8 +1299,176 @@ Singleton {
         searchAvailable: root.currentModelEntry?.builtinSearch ?? false
         functionExposure: root.responseProfile.functionExposure
         localOnly: root.localOnly
+        // Whether the network may be reached at all, asked separately from
+        // whether the model is local. A local model with policy Yes may still
+        // search; a remote model under a local-only policy may not exist.
+        online: root.onlineAllowed
+        // What the model itself can do. Null while nothing has been resolved,
+        // which the registry reads as "do not gate on it".
+        modelCapabilities: root.currentModelEntry ? ({
+            tools: root.currentModelEntry.tools === true,
+            vision: root.currentModelEntry.vision === true,
+            builtinSearch: root.currentModelEntry.builtinSearch === true
+        }) : null
         onCallCheckpointChanged: entry => root.recordToolCheckpoint(entry)
     }
+
+    /**
+     * The only thing that runs a tool the model asked for.
+     *
+     * It owns the road every call takes — schema check, a second look at the
+     * policy, a deadline, a size limit, the record — and knows nothing about
+     * what any individual tool does. The handlers below are where that lives,
+     * next to the state each one has to touch.
+     */
+    readonly property AiToolBroker broker: AiToolBroker {
+        host: root
+        toolbox: root.toolbox
+        handlers: root.toolHandlers
+        onCallStarted: record => {
+            if (root.currentRunId.length > 0)
+                root.runCoordinator.activity(root.currentRunId, "tool", {
+                    "tool": record.tool,
+                    "serial": record.serial
+                });
+            root.noteToolCallState(record.message, record.callId, {
+                state: "running",
+                summary: ""
+            });
+        }
+        onCallFinished: (record, envelope) => {
+            root.noteToolCallState(record.message, record.callId, {
+                state: envelope.status,
+                summary: envelope.summary,
+                durationMs: envelope.durationMs,
+                networkUsed: envelope.networkUsed,
+                truncated: envelope.truncated
+            });
+        }
+    }
+    /** Local Settings metadata and strict typed writes; never a config dump. */
+    readonly property AiSettingsIntegration settingsIntegration: AiSettingsIntegration {}
+    /** Preview id → immutable proposed changes until the user decides. */
+    property var settingsPreviews: ({})
+
+    /**
+     * Writes how a call went onto the call itself.
+     *
+     * The transcript already lists what the model reached for; what it could
+     * not say was whether any of it worked. The outcome belongs on the same
+     * record as the request rather than in a second array that has to be kept
+     * in step with the first.
+     */
+    function noteToolCallState(message, callId: string, changes: var): bool {
+        if (!message)
+            return false;
+        const calls = Array.from(message.toolCalls ?? []);
+        if (calls.length === 0)
+            return false;
+        let touched = false;
+        const next = calls.map(call => {
+            // An id is the reliable match; without one there is only ever a
+            // single call in flight, so the running one is the right one.
+            const matches = String(callId).length > 0
+                ? String(call.id ?? "") === String(callId)
+                : String(call.state ?? "") === "running" || call.state === undefined;
+            if (!matches || touched)
+                return call;
+            touched = true;
+            return Object.assign({}, call, changes ?? ({}));
+        });
+        if (touched)
+            message.toolCalls = next;
+        return touched;
+    }
+
+    /**
+     * What each tool actually does.
+     *
+     * A handler gets the broker's record — `{tool, args, callId, key, serial,
+     * message}` — and answers with the outcome, or says it will finish later.
+     * Arguments have already been checked against the schema the model was
+     * given, so nothing here re-reads `args.foo ?? ""` defensively.
+     */
+    readonly property var toolHandlers: ({
+            "switch_to_search_mode": call => {
+                root.toolOverride = "search";
+                root.postResponseHook = () => {
+                    root.toolOverride = "";
+                };
+                return {
+                    status: "success",
+                    summary: Translation.tr("Search on for one turn"),
+                    data: "Switched to search mode. Continue with the user's request."
+                };
+            },
+            "settings_find": call => root.toolSettingsFind(call),
+            "settings_get": call => root.toolSettingsGetSemantic(call),
+            "settings_search": call => root.toolSettingsSearch(call),
+            "settings_open": call => root.toolSettingsOpen(call),
+            "settings_propose_changes": call => root.toolSettingsProposeChanges(call),
+            "settings_apply_changes": call => root.toolSettingsApplyChanges(call),
+            "set_shell_config": call => root.toolSetShellConfig(call),
+            "remember_fact": call => root.toolRememberFact(call),
+            "web_search": call => root.toolWeb(call, true),
+            "fetch_url": call => root.toolWeb(call, false),
+            "run_shell_command": call => root.toolShellCommand(call)
+        })
+
+    // ── Tool cards ────────────────────────────────────────────────────────
+    // A card is how a tool shows something in the transcript: an approval, a
+    // diff, a result with a shape. They live in one array on the message so a
+    // new tool costs one entry rather than a property here, a branch in the
+    // serializer and a branch in the transcript.
+
+    function addToolCard(message, card): var {
+        if (!message)
+            return null;
+        const entry = Object.assign({
+            callId: "",
+            tool: "",
+            kind: "note",
+            state: "pending",
+            summary: "",
+            data: null,
+            createdAt: Date.now()
+        }, card ?? ({}));
+        message.toolCards = [...Array.from(message.toolCards ?? []), entry];
+        return entry;
+    }
+
+    /** Changes one card in place, found by the call it belongs to. */
+    function updateToolCard(message, callId: string, changes: var): bool {
+        if (!message)
+            return false;
+        const cards = Array.from(message.toolCards ?? []);
+        let touched = false;
+        const next = cards.map(card => {
+            if (String(card.callId) !== String(callId))
+                return card;
+            touched = true;
+            return Object.assign({}, card, changes ?? ({}));
+        });
+        if (touched)
+            message.toolCards = next;
+        return touched;
+    }
+
+    function toolCardFor(message, callId: string): var {
+        return Array.from(message?.toolCards ?? []).find(card => String(card.callId) === String(callId)) ?? null;
+    }
+
+    /** Cards still waiting on the user, which is what the transcript draws. */
+    function pendingToolCards(message): var {
+        return Array.from(message?.toolCards ?? []).filter(card => card.state === "pending");
+    }
+
+    /** The broker's key for the call a message is waiting on. */
+    function toolKeyFor(message): string {
+        const callId = String(message?.functionCallId ?? "");
+        return callId.length > 0 ? callId : `#${Number(message?.toolCallSerial ?? -1)}`;
+    }
+
     readonly property var availableTools: root.toolbox.availableModes.filter(mode => root.onlineAllowed || mode !== "search")
     readonly property var toolDescriptions: root.toolbox.modeDescriptions
 
@@ -1423,6 +1591,19 @@ Singleton {
             // provider/model pair before Ai consumes the unified model id.
             if (Persistent.ready)
                 Qt.callLater(() => root.restorePersistentDefaults());
+        }
+    }
+
+    Connections {
+        target: Config
+
+        function onReadyChanged() {
+            // Tool permissions live in config.json, which can settle after
+            // states.json does. Without this the split of `get_shell_config`
+            // would be migrated only on the boot where Config happened to be
+            // ready first.
+            if (Config.ready)
+                Qt.callLater(() => root.migrateToolPermissions());
         }
     }
 
@@ -2393,6 +2574,10 @@ Singleton {
         root.followUpQueued = false;
         root.pendingToolCalls = [];
         root.activeToolCallId = "";
+        // Nothing new starts, and whatever was waiting stops waiting. A
+        // mutation already sent stays sent — the broker says so rather than
+        // pretending it was undone.
+        root.broker.cancelAll(Translation.tr("Stopped"));
         if (root.pendingSubmissionId.length > 0 && !requester.running)
             return root.cancelPendingSubmission("user");
         return requester.abort();
@@ -2945,36 +3130,56 @@ Singleton {
 
     /** Writes the fact the model asked for, and tells it what happened. */
     function commitMemory(message: AiMessageData, factText = "") {
-        const fact = String(factText.length > 0 ? factText : (message?.pendingMemory ?? "")).trim();
-        message.pendingMemory = "";
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const fact = String(factText.length > 0 ? factText : (card?.data?.fact ?? "")).trim();
         message.functionPending = false;
         if (fact.length === 0)
             return;
         const stored = AiMemory.remember(fact, "assistant");
-        root.toolbox.finishCall(message.toolCallSerial, stored ? "done" : "refused", stored ? fact : Translation.tr("Already known"));
-        root.addFunctionOutputMessage("remember_fact", stored
-            ? Translation.tr("Remembered: %1").arg(fact)
-            : Translation.tr("That is already remembered."), message.functionCallId ?? "");
-        root.requestFollowUp();
+        root.updateToolCard(message, key, {
+            state: stored ? "done" : "failed",
+            summary: stored ? Translation.tr("Remembered") : Translation.tr("Already known")
+        });
+        root.broker.settle(key, {
+            status: stored ? "success" : "error",
+            summary: stored ? fact : Translation.tr("Already known"),
+            data: stored
+                ? Translation.tr("Remembered: %1").arg(fact)
+                : Translation.tr("That is already remembered.")
+        });
     }
 
     function rejectMemory(message: AiMessageData) {
         if (!message.functionPending)
             return;
         message.functionPending = false;
-        message.pendingMemory = "";
-        root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Not kept"));
-        root.addFunctionOutputMessage("remember_fact", Translation.tr("The user chose not to remember that. Do not ask again in this conversation."), message.functionCallId ?? "");
-        root.requestFollowUp();
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, {
+            state: "denied",
+            summary: Translation.tr("Not kept")
+        });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Not kept"),
+            data: Translation.tr("The user chose not to remember that. Do not ask again in this conversation.")
+        });
     }
 
     function rejectCommand(message: AiMessageData) {
         if (!message.functionPending)
             return;
         message.functionPending = false; // User decided, no more "thinking"
-        root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Rejected"));
-        addFunctionOutputMessage(message.functionName, Translation.tr("Command rejected by user"));
-        root.requestFollowUp();
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, {
+            state: "denied",
+            summary: Translation.tr("Rejected")
+        });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Rejected"),
+            data: Translation.tr("Command rejected by user")
+        });
     }
 
     function approveCommand(message: AiMessageData) {
@@ -2991,7 +3196,6 @@ Singleton {
         if (root.pendingToolExecution?.message === message)
             root.pendingToolExecution = null;
         message.functionPending = false;
-        root.toolbox.finishCall(serial, "failed", reason);
         if (checkpointSerial >= 0 && checkpointSerial !== serial)
             root.recordToolCheckpoint({
                 serial: checkpointSerial,
@@ -3003,8 +3207,12 @@ Singleton {
                 outcome: reason,
                 at: Date.now()
             });
-        root.addFunctionOutputMessage(message.functionName, reason, message.functionCallId, sessionId);
-        root.requestFollowUp();
+        root.broker.settle(root.toolKeyFor(message), {
+            status: "error",
+            summary: reason,
+            data: reason,
+            retryable: false
+        });
     }
 
     /**
@@ -3012,7 +3220,52 @@ Singleton {
      * operation itself is started only after a second checkpoint marks the
      * irreversible execution boundary.
      */
-    function beginToolExecution(message: AiMessageData, kind: string, payload: var): bool {
+    /**
+     * A stable fingerprint of what a call was asked to do.
+     *
+     * Two attempts at the same mutation hash the same, which is what makes it
+     * possible to notice a repeat instead of performing it twice. Keys are
+     * sorted so the order the model happened to write them in does not change
+     * the answer.
+     */
+    function argsHash(args: var): string {
+        const canonical = value => {
+            if (value === null || value === undefined)
+                return null;
+            if (Array.isArray(value))
+                return value.map(canonical);
+            if (typeof value === "object") {
+                const sorted = ({});
+                for (const key of Object.keys(value).sort()) {
+                    sorted[key] = canonical(value[key]);
+                }
+                return sorted;
+            }
+            return value;
+        };
+        const text = JSON.stringify(canonical(args ?? ({})));
+        // Not cryptography: this only has to be stable and cheap, and it is
+        // compared against another hash made the same way a moment earlier.
+        let hash = 5381;
+        for (let i = 0; i < text.length; i++) {
+            hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
+        }
+        return `h${hash.toString(36)}${text.length.toString(36)}`;
+    }
+
+    /**
+     * Writes an approved side effect down and waits for the disk to say so.
+     *
+     * Any tool that changes something goes through here: the intent is
+     * journalled and acknowledged before the irreversible part starts, and a
+     * second checkpoint marks the moment it did. If the shell dies between
+     * the two, reopening the session finds a record that says the effect may
+     * have happened — which is the honest answer, and the reason nothing here
+     * retries on its own.
+     *
+     * `toolId` is the tool's registry id; `payload` is `{args, preview}`.
+     */
+    function beginToolExecution(message: AiMessageData, toolId: string, payload: var): bool {
         if (!message)
             return false;
         if (root.pendingToolExecution) {
@@ -3026,18 +3279,24 @@ Singleton {
             root.failToolExecution(message, message.toolCallSerial, Translation.tr("This tool call is no longer attached to an active run."));
             return false;
         }
+        const id = String(toolId.length > 0 ? toolId : (message.functionName ?? "tool"));
+        const args = payload?.args ?? ({});
         const serial = Number(message.toolCallSerial ?? -1);
         const checkpointSerial = serial >= 0 ? serial : -(++root.toolExecutionSequence);
+        const hash = root.argsHash(args);
         const entry = {
             serial: checkpointSerial,
-            id: String(message.functionName ?? kind),
-            title: root.toolbox.titleFor(String(message.functionName ?? kind)),
-            icon: root.toolbox.definitionFor(String(message.functionName ?? kind))?.icon ?? "build",
-            detail: kind === "shell" ? String(payload?.command ?? "") : JSON.stringify(payload?.changes ?? []),
+            id: id,
+            title: root.toolbox.titleFor(id),
+            icon: root.toolbox.definitionFor(id)?.icon ?? "build",
+            // Described by the registry rather than by a branch on the tool's
+            // name, so a new tool gets a readable journal line for free.
+            detail: root.toolbox.describeArgs(id, args),
             status: "approved",
             outcome: "",
             at: Date.now(),
-            kind: kind
+            kind: id,
+            argsHash: hash
         };
         root.recordToolCheckpoint(entry);
         const operationId = root.commitRunSession(sessionId, true);
@@ -3050,14 +3309,56 @@ Singleton {
             sessionId: sessionId,
             runId: runId,
             message: message,
-            kind: kind,
+            toolId: id,
+            kind: id,
+            args: args,
+            argsHash: hash,
             serial: serial,
             checkpointSerial: checkpointSerial,
-            command: String(payload?.command ?? ""),
-            changes: Array.from(payload?.changes ?? []),
             phase: "approved"
         };
         return true;
+    }
+
+    /**
+     * The effect was started and its outcome is unknown.
+     *
+     * Reached when the shell loses the thread after the irreversible boundary
+     * — a request sent with no reply, a process that vanished. Retrying is the
+     * one thing that must not happen, because "it might have worked" and "it
+     * failed" look identical from here. The card offers to go and look
+     * instead.
+     */
+    function markToolNeedsInspection(message: AiMessageData, reason: string) {
+        const pending = root.pendingToolExecution;
+        const toolId = String(pending?.toolId ?? message?.functionName ?? "tool");
+        if (pending?.message === message)
+            root.pendingToolExecution = null;
+        if (message)
+            message.functionPending = false;
+        root.recordToolCheckpoint({
+            serial: Number(pending?.checkpointSerial ?? message?.toolCallSerial ?? -1),
+            id: toolId,
+            title: root.toolbox.titleFor(toolId),
+            icon: root.toolbox.definitionFor(toolId)?.icon ?? "build",
+            detail: root.toolbox.describeArgs(toolId, pending?.args ?? ({})),
+            status: "needsInspection",
+            outcome: reason,
+            at: Date.now(),
+            kind: toolId,
+            argsHash: String(pending?.argsHash ?? "")
+        });
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, {
+            state: "needsInspection",
+            summary: reason
+        });
+        root.broker.settle(key, {
+            status: "needsInspection",
+            summary: reason,
+            data: Translation.tr("This may or may not have taken effect. Do not try it again — check the result first."),
+            retryable: false
+        });
     }
 
     function handleToolJournalSaveSucceeded(operationId: string, sessionId: string): bool {
@@ -3066,7 +3367,7 @@ Singleton {
             return false;
         if (pending.phase === "approved") {
             if (!root.runCoordinator.markExecutionStarted(pending.runId, {
-                "tool": pending.kind,
+                "tool": pending.toolId,
                 "toolCallSerial": pending.serial
             })) {
                 root.failToolExecution(pending.message, pending.serial, Translation.tr("The run ended before the tool could start."), pending.checkpointSerial, pending.sessionId);
@@ -3074,14 +3375,15 @@ Singleton {
             }
             root.recordToolCheckpoint({
                 serial: pending.checkpointSerial,
-                id: String(pending.message.functionName ?? pending.kind),
-                title: root.toolbox.titleFor(String(pending.message.functionName ?? pending.kind)),
-                icon: root.toolbox.definitionFor(String(pending.message.functionName ?? pending.kind))?.icon ?? "build",
-                detail: pending.kind === "shell" ? pending.command : JSON.stringify(pending.changes),
+                id: pending.toolId,
+                title: root.toolbox.titleFor(pending.toolId),
+                icon: root.toolbox.definitionFor(pending.toolId)?.icon ?? "build",
+                detail: root.toolbox.describeArgs(pending.toolId, pending.args),
                 status: "executionStarted",
                 outcome: "",
                 at: Date.now(),
-                kind: pending.kind
+                kind: pending.toolId,
+                argsHash: pending.argsHash
             });
             pending.phase = "executionStarted";
             pending.operationId = root.commitRunSession(pending.sessionId, true);
@@ -3092,12 +3394,29 @@ Singleton {
         }
         root.pendingToolExecution = null;
         pending.message.functionPending = false;
-        if (pending.kind === "shell")
-            root.startShellCommand(pending.message, pending.command, pending.sessionId);
-        else
-            root.applyConfigChangesNow(pending.message, pending.changes, pending.sessionId);
+        // Past the boundary: what runs here is the side effect itself, chosen
+        // by the tool's id rather than by a category the journal invented.
+        const starter = root.sideEffectStarters[pending.toolId];
+        if (!starter) {
+            root.markToolNeedsInspection(pending.message, Translation.tr("%1 was approved but has no way to run.").arg(pending.toolId));
+            return true;
+        }
+        starter(pending);
         return true;
     }
+
+    /**
+     * What actually happens after a tool's approval has been journalled.
+     *
+     * Separate from the handlers above because these run on the far side of
+     * the irreversible boundary, possibly a moment after the user clicked and
+     * possibly into a session that is no longer the visible one.
+     */
+    readonly property var sideEffectStarters: ({
+            "run_shell_command": pending => root.startShellCommand(pending.message, String(pending.args?.command ?? ""), pending.sessionId),
+            "set_shell_config": pending => root.applyConfigChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
+            "settings_apply_changes": pending => root.applySettingsChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId)
+        })
 
     function handleToolJournalSaveFailed(operationId: string, sessionId: string, reason: string): bool {
         const pending = root.pendingToolExecution;
@@ -3109,14 +3428,20 @@ Singleton {
     }
 
     function runShellCommand(message: AiMessageData, command: string) {
-        if (!root.onlineAllowed) {
+        // Checked again at the moment of the side effect, not only when the
+        // tool was offered: the policy can change while an approval card sits
+        // on screen waiting for someone to come back to it.
+        if (!root.toolbox.isAvailable("run_shell_command")) {
             message.functionPending = false;
-            root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Shell commands are disabled by the local-only AI policy."));
-            addFunctionOutputMessage(message.functionName, Translation.tr("Shell commands are disabled while AI is restricted to local providers."), message.functionCallId);
-            root.requestFollowUp();
+            root.broker.settle(root.toolKeyFor(message), {
+                status: "unavailable",
+                summary: root.toolbox.unavailableReason("run_shell_command"),
+                data: Translation.tr("Shell commands are not available under the current policy."),
+                retryable: false
+            });
             return;
         }
-        root.beginToolExecution(message, "shell", { "command": command });
+        root.beginToolExecution(message, "run_shell_command", { args: { command: command } });
     }
 
     function startShellCommand(message: AiMessageData, command: string, sessionId = "") {
@@ -3154,6 +3479,7 @@ Singleton {
         commandExecutionProc.message = responseMessage;
         commandExecutionProc.baseMessageContent = responseMessage.content;
         commandExecutionProc.serial = message.toolCallSerial;
+        commandExecutionProc.toolKey = root.toolKeyFor(message);
         commandExecutionProc.shellCommand = command;
         commandExecutionProc.running = true; // Start the command execution
     }
@@ -3164,6 +3490,7 @@ Singleton {
         property AiMessageData message
         property string baseMessageContent: ""
         property int serial: -1
+        property string toolKey: ""
         command: ["bash", "-c", shellCommand]
         stdout: SplitParser {
             onRead: output => {
@@ -3175,8 +3502,23 @@ Singleton {
         }
         onExited: (exitCode, exitStatus) => {
             commandExecutionProc.message.functionResponse += `[[ Command exited with code ${exitCode} (${exitStatus}) ]]\n`;
-            root.toolbox.finishCall(commandExecutionProc.serial, exitCode === 0 ? "done" : "failed", Translation.tr("Exit code %1").arg(exitCode));
-            root.requestFollowUp(); // Continue
+            // A command that was killed rather than finishing tells us nothing
+            // about what it had already done. An exit code does; a crash does
+            // not, and the difference decides whether trying again is safe.
+            if (exitStatus !== 0) {
+                root.markToolNeedsInspection(commandExecutionProc.message,
+                    Translation.tr("The command was interrupted. Whatever it had already done is done."));
+                return;
+            }
+            // Silent: the command has been streaming into its own message all
+            // along, so the model already has the output.
+            root.broker.settle(commandExecutionProc.toolKey, {
+                status: exitCode === 0 ? "success" : "error",
+                summary: Translation.tr("Exit code %1").arg(exitCode),
+                data: null,
+                silent: true,
+                retryable: false
+            });
         }
     }
 
@@ -3218,10 +3560,17 @@ Singleton {
             if (!change || change.key === undefined || change.value === undefined)
                 continue;
             const key = String(change.key);
+            // Checked here rather than at write time, because the point of the
+            // card is to be a review: a key that does not exist, or a value the
+            // option cannot take, has to be visible as such before anyone
+            // presses Apply.
+            const verdict = Config.validateNestedValue(key, change.value);
             result.push({
                 key: key,
                 current: root.describeConfigValue(Config.getNestedValue(Config.options, key.split("."))),
-                proposed: String(change.value)
+                proposed: String(change.value),
+                valid: verdict.ok,
+                reason: verdict.reason
             });
         }
         return result;
@@ -3229,41 +3578,81 @@ Singleton {
 
     /** Writes the changes the user kept, and tells the model which those were. */
     function applyConfigChanges(message: AiMessageData, changes: var) {
-        root.beginToolExecution(message, "config", { "changes": Array.from(changes ?? []) });
+        root.beginToolExecution(message, "set_shell_config", { args: { changes: Array.from(changes ?? []) } });
+    }
+
+    function applySettingsChanges(message: AiMessageData, changes: var) {
+        const card = root.toolCardFor(message, root.toolKeyFor(message));
+        const previewId = String(card?.data?.previewId ?? root.toolKeyFor(message));
+        root.beginToolExecution(message, "settings_apply_changes", {
+            args: { previewId: previewId, changes: Array.from(changes ?? []) }
+        });
     }
 
     function applyConfigChangesNow(message: AiMessageData, changes: var, sessionId = "") {
-        const proposed = Array.from(message.pendingChanges ?? []).length;
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const proposed = Array.from(card?.data?.changes ?? changes ?? []).length;
         message.functionPending = false;
-        message.pendingChanges = [];
         const kept = Array.from(changes ?? []);
         const results = [];
         let applied = 0;
         for (let i = 0; i < kept.length; i++) {
             const change = kept[i];
             try {
-                Config.setNestedValue(change.key, change.proposed);
-                results.push(`✓ ${change.key} = ${change.proposed}`);
+                // Strict: the key came from a model, not from a switch that is
+                // bound to it, so an unknown path must fail instead of adding
+                // itself to the config.
+                const written = Config.setNestedValue(change.key, change.proposed, true);
+                results.push(`✓ ${change.key} = ${JSON.stringify(written)}`);
                 applied += 1;
             } catch (e) {
-                results.push(`❌ Failed to set ${change.key}: ${e}`);
+                results.push(`❌ ${change.key}: ${e.message ?? e}`);
             }
         }
         if (results.length === 0)
             results.push(Translation.tr("The user kept every setting as it was."));
-        root.toolbox.finishCall(message.toolCallSerial, applied > 0 ? "done" : "refused", Translation.tr("%1 of %2 applied").arg(applied).arg(Math.max(proposed, applied)));
-        addFunctionOutputMessage("set_shell_config", results.join("\n"), "", sessionId);
-        root.requestFollowUp();
+        root.updateToolCard(message, key, {
+            state: applied > 0 ? "done" : "denied",
+            summary: Translation.tr("%1 of %2 applied").arg(applied).arg(Math.max(proposed, applied))
+        });
+        root.broker.settle(key, {
+            status: applied > 0 ? "success" : "denied",
+            summary: Translation.tr("%1 of %2 applied").arg(applied).arg(Math.max(proposed, applied)),
+            data: results.join("\n")
+        });
+    }
+
+    function applySettingsChangesNow(message: AiMessageData, changes: var, sessionId = "") {
+        const key = root.toolKeyFor(message);
+        const result = root.settingsIntegration.apply(changes);
+        message.functionPending = false;
+        root.updateToolCard(message, key, {
+            state: result.applied.length > 0 ? "done" : "denied",
+            summary: Translation.tr("%1 applied, %2 skipped").arg(result.applied.length).arg(result.skipped.length)
+        });
+        root.broker.settle(key, {
+            status: result.applied.length > 0 ? "success" : "denied",
+            summary: Translation.tr("%1 applied, %2 skipped").arg(result.applied.length).arg(result.skipped.length),
+            data: result,
+            retryable: false
+        });
     }
 
     function rejectConfigChanges(message: AiMessageData) {
         if (!message.functionPending)
             return;
         message.functionPending = false;
-        message.pendingChanges = [];
-        root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Rejected"));
-        addFunctionOutputMessage("set_shell_config", Translation.tr("Settings change rejected by user"));
-        root.requestFollowUp();
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, {
+            state: "denied",
+            summary: Translation.tr("Rejected")
+        });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Rejected"),
+            data: Translation.tr("Settings change rejected by user")
+        });
     }
 
     function handleFunctionCalls(calls: var, message: AiMessageData) {
@@ -3325,159 +3714,311 @@ Singleton {
             args: args,
             id: callId
         };
-        if (!root.toolbox.definitionFor(name)) {
-            addFunctionOutputMessage(name, Translation.tr("Unknown function call: %1").arg(name));
-            root.requestFollowUp();
-            return;
-        }
-        const serial = root.toolbox.noteCall(name, args);
-        message.toolCallSerial = serial;
-        if (root.currentRunId.length > 0)
-            root.runCoordinator.activity(root.currentRunId, "tool", { "tool": name, "serial": serial });
+        root.broker.dispatch({
+            name: name,
+            args: args,
+            id: callId
+        }, message);
+    }
 
-        if (root.toolbox.permission(name) === "deny") {
-            root.toolbox.finishCall(serial, "refused", Translation.tr("Turned off"));
-            addFunctionOutputMessage(name, Translation.tr("%1 is turned off. The user has to allow it in the AI settings before it can be used.").arg(name));
-            root.requestFollowUp();
-            return;
-        }
+    // ── Tool handlers ─────────────────────────────────────────────────────
+    // One function per tool, each next to the state it touches. The broker
+    // has already found the definition, checked the arguments against the
+    // schema and asked the policy again, so what is left here is the work.
 
-        if (!root.onlineAllowed && (name === "switch_to_search_mode" || name === "run_shell_command")) {
-            root.toolbox.finishCall(serial, "refused", Translation.tr("Blocked by local-only policy"));
-            addFunctionOutputMessage(name, Translation.tr("This tool requires network or shell access and is disabled by the current AI policy."), callId);
-            root.requestFollowUp();
-            return;
-        }
-
-        if (name === "switch_to_search_mode") {
-            root.toolOverride = "search";
-            root.postResponseHook = () => {
-                root.toolOverride = "";
+    function toolSettingsFind(call: var): var {
+        const query = String(call.args.query ?? "").trim();
+        const prefix = call.args.prefix;
+        if (query.length === 0 && prefix === undefined)
+            return {
+                status: "error",
+                summary: Translation.tr("Nothing to look for"),
+                data: null,
+                retryable: true
             };
-            root.toolbox.finishCall(serial, "done", Translation.tr("Search on for one turn"));
-            addFunctionOutputMessage(name, Translation.tr("Switched to search mode. Continue with the user's request."));
-            root.requestFollowUp();
-            return;
+
+        if (query.length > 0) {
+            const found = Config.findKeys(query, 25);
+            return {
+                status: "success",
+                summary: found.length === 1
+                    ? Translation.tr("1 setting found")
+                    : Translation.tr("%1 settings found").arg(found.length),
+                data: found.length === 0 ? {
+                    query: query,
+                    matches: [],
+                    hint: "No key path contains those words. Try one word, or a broader one, or list a group with `prefix`."
+                } : {
+                    query: query,
+                    matches: found
+                }
+            };
         }
 
-        if (name === "get_shell_config") {
-            const configJson = CF.ObjectUtils.toPlainObject(Config.options);
-            root.toolbox.finishCall(serial, "done", Translation.tr("Settings read"));
-            addFunctionOutputMessage(name, JSON.stringify(configJson));
-            root.requestFollowUp();
-            return;
-        }
+        const group = String(prefix ?? "").trim();
+        const entries = Config.listGroup(group, 60);
+        if (entries === null)
+            return {
+                status: "error",
+                summary: Translation.tr("No such group"),
+                data: {
+                    prefix: group,
+                    error: `\`${group}\` is not a group of settings.`,
+                    hint: "Pass an empty prefix to see the top level."
+                },
+                retryable: true
+            };
+        return {
+            status: "success",
+            summary: Translation.tr("%1 entries under %2").arg(entries.length).arg(group.length > 0 ? group : "/"),
+            data: {
+                prefix: group,
+                entries: entries,
+                hint: "Entries of type `group` hold more options; pass one as `prefix` to open it."
+            }
+        };
+    }
 
-        if (name === "set_shell_config") {
-            const changes = root.configChangeList(args);
-            if (changes.length === 0) {
-                root.toolbox.finishCall(serial, "failed", Translation.tr("Nothing to change"));
-                addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `changes`, each with a `key` and a `value`."));
-                root.requestFollowUp();
-                return;
-            }
-            // Permission says whether the tool may be used at all; the review
-            // switch says whether its work is shown first. Only a tool that
-            // is allowed outright, with review off, writes unannounced.
-            if (root.toolbox.permission(name) === "allow" && !root.toolbox.reviewsConfigChanges) {
-                message.pendingChanges = changes;
-                root.applyConfigChanges(message, changes);
-                return;
-            }
-            message.pendingChanges = changes;
-            message.functionPending = true;
-            return;
-        }
+    function toolSettingsGet(call: var): var {
+        const wanted = Array.from(call.args.keys ?? []).filter(key => String(key).length > 0);
+        if (wanted.length === 0)
+            return {
+                status: "error",
+                summary: Translation.tr("No keys given"),
+                data: null,
+                retryable: true
+            };
+        // A cap rather than an error: a model that asks for thirty keys wants
+        // an answer, and the answer says which ones it got.
+        const capped = wanted.slice(0, 10);
+        const values = capped.map(key => {
+            const raw = Config.getNestedValue(Config.options, String(key).split("."));
+            if (raw === undefined)
+                return { key: key, error: "no such setting" };
+            const summary = Config.summariseValue(raw, 400);
+            return { key: key, type: summary.kind, value: summary.value };
+        });
+        const missing = values.filter(entry => entry.error !== undefined).length;
+        const payload = { settings: values };
+        if (wanted.length > capped.length)
+            payload.note = `Only the first ${capped.length} keys were read; ask again for the rest.`;
+        return {
+            status: missing === values.length ? "error" : "success",
+            summary: missing > 0
+                ? Translation.tr("%1 of %2 read").arg(values.length - missing).arg(values.length)
+                : Translation.tr("%1 read").arg(values.length),
+            data: payload,
+            retryable: missing > 0
+        };
+    }
 
-        if (name === "remember_fact") {
-            const fact = String(args?.fact ?? "").trim();
-            if (fact.length === 0) {
-                root.toolbox.finishCall(serial, "failed", Translation.tr("Nothing to remember"));
-                addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `fact`."), callId);
-                root.requestFollowUp();
-                return;
-            }
-            if (!AiMemory.enabled) {
-                root.toolbox.finishCall(serial, "refused", Translation.tr("Memory is off"));
-                addFunctionOutputMessage(name, Translation.tr("The user has memory turned off. Do not try again in this conversation."), callId);
-                root.requestFollowUp();
-                return;
-            }
-            // Permission decides whether it may write at all; the default is
-            // to ask, and asking happens on the turn itself rather than in a
-            // dialog over the chat.
-            if (root.toolbox.permission(name) === "allow") {
-                root.commitMemory(message, fact);
-                return;
-            }
-            message.pendingMemory = fact;
-            message.functionPending = true;
-            return;
+    function toolSettingsSearch(call: var): var {
+        if (!root.settingsIntegration.ready) {
+            root.settingsIntegration.ensureIndex();
+            return {
+                status: "error",
+                summary: Translation.tr("Settings index is preparing"),
+                data: { error: "indexPreparing", retryable: true },
+                retryable: true
+            };
         }
+        const query = String(call.args.query ?? "").trim();
+        const matches = root.settingsIntegration.search(query, Number(call.args.limit ?? 8));
+        return {
+            status: "success",
+            summary: matches.length === 1 ? Translation.tr("1 setting found") : Translation.tr("%1 settings found").arg(matches.length),
+            data: { query: query, matches: matches }
+        };
+    }
 
-        if (name === "web_search" || name === "fetch_url") {
-            if (!root.onlineAllowed) {
-                root.toolbox.finishCall(serial, "refused", Translation.tr("Blocked by local-only policy"));
-                addFunctionOutputMessage(name, Translation.tr("Reaching the web is disabled by the current AI policy."), callId);
-                root.requestFollowUp();
-                return;
-            }
-            const isSearch = name === "web_search";
-            const term = isSearch ? String(args?.query ?? "") : String(args?.url ?? "");
-            if (term.length === 0) {
-                root.toolbox.finishCall(serial, "failed", Translation.tr("Nothing to look up"));
-                addFunctionOutputMessage(name, isSearch
-                    ? Translation.tr("Invalid arguments. Must provide `query`.")
-                    : Translation.tr("Invalid arguments. Must provide `url`."), callId);
-                root.requestFollowUp();
-                return;
-            }
-            const count = Math.max(1, Math.min(10, Number(args?.count ?? 5)));
-            webToolProc.toolName = name;
-            webToolProc.callId = callId;
-            webToolProc.serial = serial;
-            webToolProc.term = term;
-            webToolProc.command = isSearch
-                ? ["python3", Directories.aiWebScriptPath, "search", term, String(count)]
-                : ["python3", Directories.aiWebScriptPath, "fetch", term];
-            webToolProc.running = true;
-            // What it looked up belongs with the answer, the same way the
-            // providers' own search results do.
-            if (isSearch)
-                message.searchQueries = [...Array.from(message.searchQueries ?? []), term];
-            return;
+    function toolSettingsGetSemantic(call: var): var {
+        if (!root.settingsIntegration.ready) {
+            root.settingsIntegration.ensureIndex();
+            return { status: "error", summary: Translation.tr("Settings index is preparing"), data: { error: "indexPreparing" }, retryable: true };
         }
+        const settings = root.settingsIntegration.get(call.args.keys);
+        const missing = settings.filter(setting => setting.error !== undefined).length;
+        return {
+            status: missing === settings.length ? "error" : "success",
+            summary: Translation.tr("%1 settings read").arg(settings.length - missing),
+            data: { settings: settings },
+            retryable: missing > 0
+        };
+    }
 
-        if (name === "run_shell_command") {
-            const command = String(args?.command ?? "");
-            if (command.length === 0) {
-                root.toolbox.finishCall(serial, "failed", Translation.tr("No command given"));
-                addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `command`."));
-                root.requestFollowUp();
-                return;
-            }
-            const contentToAppend = `\n\n**Command execution request**\n\n\`\`\`command\n${command}\n\`\`\``;
-            message.rawContent += contentToAppend;
-            message.content += contentToAppend;
-            if (root.toolbox.permission(name) === "allow") {
-                root.runShellCommand(message, command);
-                return;
-            }
-            message.functionPending = true; // Use thinking to indicate the command is waiting for approval
+    function toolSettingsOpen(call: var): var {
+        const pageId = String(call.args.pageId ?? "");
+        if (SettingsPageRegistry.pageIndexById(pageId) < 0)
+            return { status: "error", summary: Translation.tr("Unknown Settings page"), data: { error: "unknownPage" }, retryable: true };
+        GlobalStates.openSettingsPage(pageId, String(call.args.subPage ?? ""), String(call.args.sectionTitle ?? ""));
+        return { status: "success", summary: Translation.tr("Opened Settings"), data: { opened: true, pageId: pageId } };
+    }
+
+    function rememberSettingsPreview(id: string, preview: var) {
+        root.settingsPreviews = Object.assign({}, root.settingsPreviews, { [id]: preview });
+    }
+
+    function toolSettingsProposeChanges(call: var): var {
+        const message = call.message;
+        message.toolCallSerial = call.serial;
+        const previewId = String(call.key);
+        const preview = root.settingsIntegration.propose(call.args.changes);
+        if (preview.changes.length === 0)
+            return { status: "error", summary: Translation.tr("Nothing to change"), data: null, retryable: true };
+        root.rememberSettingsPreview(previewId, preview);
+        root.addToolCard(message, {
+            callId: call.key,
+            tool: "settings_propose_changes",
+            kind: "settingsDiff",
+            state: "pending",
+            summary: Translation.tr("Settings changes need approval"),
+            data: Object.assign({ previewId: previewId }, preview)
+        });
+        message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function toolSettingsApplyChanges(call: var): var {
+        const previewId = String(call.args.previewId ?? "");
+        const preview = root.settingsPreviews[previewId];
+        if (!preview)
+            return { status: "error", summary: Translation.tr("That Settings preview is no longer available"), data: { error: "unknownPreview" }, retryable: false };
+        const keep = Array.from(call.args.keep ?? []);
+        const changes = keep.length === 0 ? preview.changes : preview.changes.filter(change => keep.indexOf(change.key) >= 0);
+        return root.toolSettingsProposeChanges({
+            message: call.message,
+            serial: call.serial,
+            key: call.key,
+            args: { changes: changes.map(change => ({ key: change.key, value: change.proposed })) }
+        });
+    }
+
+    function toolSetShellConfig(call: var): var {
+        const message = call.message;
+        message.toolCallSerial = call.serial;
+        const changes = root.configChangeList(call.args);
+        if (changes.length === 0)
+            return {
+                status: "error",
+                summary: Translation.tr("Nothing to change"),
+                data: null,
+                retryable: true
+            };
+        // Permission says whether the tool may be used at all; the review
+        // switch says whether its work is shown first. Only a tool that is
+        // allowed outright, with review off, writes unannounced.
+        if (root.toolbox.permission("set_shell_config") === "allow" && !root.toolbox.reviewsConfigChanges) {
+            root.applyConfigChanges(message, changes);
+            return { status: "pending" };
         }
+        root.addToolCard(message, {
+            callId: call.key,
+            tool: "set_shell_config",
+            kind: "settingsDiff",
+            state: "pending",
+            summary: changes.length === 1
+                ? Translation.tr("It wants to change one setting")
+                : Translation.tr("It wants to change %1 settings").arg(changes.length),
+            data: { changes: changes }
+        });
+        message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function toolRememberFact(call: var): var {
+        const message = call.message;
+        message.toolCallSerial = call.serial;
+        const fact = String(call.args.fact ?? "").trim();
+        if (fact.length === 0)
+            return {
+                status: "error",
+                summary: Translation.tr("Nothing to remember"),
+                data: null,
+                retryable: true
+            };
+        // Permission decides whether it may write at all; the default is to
+        // ask, and asking happens on the turn itself rather than in a dialog
+        // over the chat.
+        if (root.toolbox.permission("remember_fact") === "allow") {
+            root.commitMemory(message, fact);
+            return { status: "pending" };
+        }
+        root.addToolCard(message, {
+            callId: call.key,
+            tool: "remember_fact",
+            kind: "memoryFact",
+            state: "pending",
+            summary: Translation.tr("It wants to remember something"),
+            data: { fact: fact }
+        });
+        message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function toolWeb(call: var, isSearch: bool): var {
+        if (webToolProc.running)
+            return {
+                status: "error",
+                summary: Translation.tr("Another lookup is already running."),
+                data: null,
+                retryable: true
+            };
+        const term = isSearch ? String(call.args.query ?? "") : String(call.args.url ?? "");
+        if (term.length === 0)
+            return {
+                status: "error",
+                summary: isSearch ? Translation.tr("Nothing to look up") : Translation.tr("No address given"),
+                data: null,
+                retryable: true
+            };
+        const count = Math.max(1, Math.min(10, Number(call.args.count ?? 5)));
+        webToolProc.toolKey = call.key;
+        webToolProc.isSearch = isSearch;
+        webToolProc.term = term;
+        webToolProc.command = isSearch
+            ? ["python3", Directories.aiWebScriptPath, "search", term, String(count)]
+            : ["python3", Directories.aiWebScriptPath, "fetch", term];
+        webToolProc.running = true;
+        // What it looked up belongs with the answer, the same way the
+        // providers' own search results do.
+        if (isSearch)
+            call.message.searchQueries = [...Array.from(call.message.searchQueries ?? []), term];
+        return { status: "pending" };
+    }
+
+    function toolShellCommand(call: var): var {
+        const message = call.message;
+        message.toolCallSerial = call.serial;
+        const command = String(call.args.command ?? "");
+        if (command.length === 0)
+            return {
+                status: "error",
+                summary: Translation.tr("No command given"),
+                data: null,
+                retryable: true
+            };
+        const contentToAppend = `\n\n**Command execution request**\n\n\`\`\`command\n${command}\n\`\`\``;
+        message.rawContent += contentToAppend;
+        message.content += contentToAppend;
+        if (root.toolbox.permission("run_shell_command") === "allow") {
+            root.runShellCommand(message, command);
+            return { status: "pending" };
+        }
+        // Thinking indicates the command is waiting for approval.
+        message.functionPending = true;
+        return { status: "approval" };
     }
 
     /**
      * The web tools. They only read: a search returns titles and snippets, a
      * fetch returns one page as text. Both run out of process so a slow site
-     * never blocks the shell, and both hand their result straight back to the
-     * model as the tool's output.
+     * never blocks the shell, and both hand their result back to the broker,
+     * which is what decides how much of it the model gets to see.
      */
     Process {
         id: webToolProc
-        property string toolName: ""
-        property string callId: ""
-        property int serial: -1
+        property string toolKey: ""
+        property bool isSearch: false
         property string term: ""
 
         stdout: StdioCollector {
@@ -3492,26 +4033,49 @@ Singleton {
                 }
                 if (!parsed || parsed.error) {
                     const reason = parsed?.error ?? Translation.tr("nothing came back");
-                    root.toolbox.finishCall(webToolProc.serial, "failed", reason);
-                    root.addFunctionOutputMessage(webToolProc.toolName, Translation.tr("Could not reach the web: %1").arg(reason), webToolProc.callId);
-                    root.requestFollowUp();
+                    root.broker.settle(webToolProc.toolKey, {
+                        status: parsed?.blocked === true ? "denied" : "error",
+                        summary: reason,
+                        data: null,
+                        // A refused address is not worth trying again; a site
+                        // that did not answer might be.
+                        retryable: parsed?.blocked !== true
+                    });
                     return;
                 }
-                if (webToolProc.toolName === "web_search") {
+                if (webToolProc.isSearch) {
                     const results = Array.from(parsed.results ?? []);
-                    root.toolbox.finishCall(webToolProc.serial, "done", Translation.tr("%1 results from %2").arg(results.length).arg(parsed.engine ?? "web"));
                     // Sources are recorded so the answer can cite them the way
                     // a provider-side search does.
                     root.sessionSources = [...root.sessionSources, ...results.map(result => ({
                                     "url": String(result.url ?? ""),
                                     "text": String(result.title ?? result.url ?? "")
                                 }))].slice(-100);
-                } else {
-                    root.toolbox.finishCall(webToolProc.serial, "done", String(parsed.title ?? webToolProc.term));
+                    root.broker.settle(webToolProc.toolKey, {
+                        status: "success",
+                        summary: Translation.tr("%1 results from %2").arg(results.length).arg(parsed.engine ?? "web"),
+                        data: raw
+                    });
+                    return;
                 }
-                root.addFunctionOutputMessage(webToolProc.toolName, raw, webToolProc.callId);
-                root.requestFollowUp();
+                root.broker.settle(webToolProc.toolKey, {
+                    status: "success",
+                    summary: String(parsed.title ?? webToolProc.term),
+                    data: raw
+                });
             }
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            // A helper that died without writing anything would otherwise
+            // leave the call waiting until its deadline.
+            if (exitCode !== 0 && root.broker.isPending(webToolProc.toolKey))
+                root.broker.settle(webToolProc.toolKey, {
+                    status: "error",
+                    summary: Translation.tr("The web helper stopped with code %1.").arg(exitCode),
+                    data: null,
+                    retryable: true
+                });
         }
     }
 
@@ -3744,7 +4308,7 @@ Singleton {
                 "errorText": message.errorText,
                 "errorStatus": message.errorStatus,
                 "notice": message.notice,
-                "pendingMemory": message.pendingMemory
+                "toolCards": JSON.parse(JSON.stringify(Array.from(message.toolCards ?? [])))
             });
     }
 
@@ -3758,6 +4322,45 @@ Singleton {
 
     function runningChatToJson() {
         return root.runningMessageIDs.map(id => root.serializeMessageFrom(id, root.runningMessageByID)).filter(message => message !== null);
+    }
+
+    /**
+     * The cards a saved message carries.
+     *
+     * A session written before cards existed kept the settings diff and the
+     * remembered fact in fields of their own. They are turned into cards on
+     * the way in, so an old conversation reopens showing what it showed then
+     * rather than losing the card entirely.
+     */
+    function toolCardsFromJson(data: var): var {
+        const stored = Array.from(data?.toolCards ?? []);
+        if (stored.length > 0)
+            return stored;
+        const migrated = [];
+        const callId = String(data?.functionCallId ?? "");
+        const changes = Array.from(data?.pendingChanges ?? []);
+        if (changes.length > 0)
+            migrated.push({
+                callId: callId,
+                tool: "set_shell_config",
+                kind: "settingsDiff",
+                state: data?.functionPending ? "pending" : "done",
+                summary: "",
+                data: { changes: changes },
+                createdAt: Number(data?.createdAt ?? 0)
+            });
+        const fact = String(data?.pendingMemory ?? "");
+        if (fact.length > 0)
+            migrated.push({
+                callId: callId,
+                tool: "remember_fact",
+                kind: "memoryFact",
+                state: data?.functionPending ? "pending" : "done",
+                summary: "",
+                data: { fact: fact },
+                createdAt: Number(data?.createdAt ?? 0)
+            });
+        return migrated;
     }
 
     function messageFromJson(data: var): AiMessageData {
@@ -3777,7 +4380,7 @@ Singleton {
             "localFilePath": data?.localFilePath ?? "",
             "attachments": data?.attachments ?? [],
             "finishReason": data.finishReason ?? "",
-            "pendingMemory": data.pendingMemory ?? "",
+            "toolCards": root.toolCardsFromJson(data),
             "createdAt": data.createdAt ?? 0,
             "completedAt": data.completedAt ?? 0,
             "model": data.model,
@@ -3818,6 +4421,25 @@ Singleton {
     // chat is opened, so restoring `done: false` would create an immortal
     // loading row. Convert only unfinished assistant turns to a terminal,
     // retryable message; completed history remains byte-for-byte intact.
+    /**
+     * Checkpoints left mid-flight by a shell that stopped.
+     *
+     * `executionStarted` with nothing after it means the side effect had begun
+     * and its outcome was never written down. Reopening the session says so
+     * rather than quietly showing an approved-looking card, because the one
+     * unsafe thing to do here is to offer to try again.
+     */
+    function recoverInterruptedCheckpoints(checkpoints: var): var {
+        return Array.from(checkpoints ?? []).map(entry => {
+            if (String(entry?.status ?? "") !== "executionStarted")
+                return entry;
+            return Object.assign({}, entry, {
+                status: "needsInspection",
+                outcome: Translation.tr("The shell stopped while this was running. Check the result before trying it again.")
+            });
+        });
+    }
+
     function recoverInterruptedMessages(messages: var, run: var): var {
         const source = Array.isArray(messages) ? messages : [];
         const hasUnfinishedRun = !!run && !root.runCoordinator.terminalStates.includes(String(run.state ?? ""));
@@ -4038,7 +4660,7 @@ Singleton {
         root.isProvisionalTitle = session.isProvisionalTitle === true || (session.isProvisionalTitle === undefined && root.sessionTitle.length === 0);
         root.sessionSearchQueries = Array.from(session.searchQueries ?? []).map(value => String(value)).slice(-50);
         root.sessionSources = Array.from(session.sources ?? []).slice(-100);
-        root.sessionToolCheckpoints = Array.from(session.toolCheckpoints ?? []).slice(-100);
+        root.sessionToolCheckpoints = root.recoverInterruptedCheckpoints(Array.from(session.toolCheckpoints ?? []).slice(-100));
         root.contextSummary = String(session.contextSummary ?? "");
         root.contextSummaryKey = String(session.contextSummaryKey ?? "");
         root.contextCutMessageId = "";
@@ -4065,6 +4687,7 @@ Singleton {
     }
 
     function migrateAiDefaults() {
+        root.migrateToolPermissions();
         const state = Persistent.states?.ai;
         if (!state)
             return;
@@ -4076,6 +4699,31 @@ Singleton {
             state.defaultThinkingLevel = state.thinkingLevel;
         if (state.defaultPersonaId.length === 0)
             state.defaultPersonaId = state.personaId;
+    }
+
+    /**
+     * Carries a standing permission across the split of one tool into two.
+     *
+     * `get_shell_config` read the whole configuration and was allowed outright
+     * because reading is harmless; `settings_find` and `settings_get` read the
+     * part that was asked for and are no less harmless. Someone who had said
+     * yes to the first should not be asked again for the two that replaced it.
+     */
+    function migrateToolPermissions() {
+        if (!Config.ready)
+            return;
+        const tools = Config.options?.ai?.tools;
+        if (!tools)
+            return;
+        const allow = Array.from(tools.alwaysAllow ?? []);
+        if (allow.indexOf("get_shell_config") === -1)
+            return;
+        const migrated = allow.filter(entry => entry !== "get_shell_config");
+        for (const replacement of ["settings_search", "settings_get"]) {
+            if (migrated.indexOf(replacement) === -1 && Array.from(tools.alwaysDeny ?? []).indexOf(replacement) === -1)
+                migrated.push(replacement);
+        }
+        tools.alwaysAllow = migrated;
     }
 
     /**

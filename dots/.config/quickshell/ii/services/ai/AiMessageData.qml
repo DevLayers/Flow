@@ -62,12 +62,28 @@ QtObject {
     property string functionCallId: ""
     property string functionResponse
     property bool functionPending: false
-    // A fact the model wants to keep between conversations, held until the
-    // user has seen it. Memory is the one tool whose effect outlives the
-    // chat, so it asks in the chat.
+    /**
+     * Cards this turn carries: an approval waiting on the user, a result with
+     * a shape of its own, a diff, a list of sources.
+     *
+     * One array rather than a property per tool. Every tool that needed to
+     * show something used to add its own field here, its own branch in the
+     * serializer and its own branch in the transcript — three edits per tool,
+     * in three files, forever. The transcript picks a component by `kind`, so
+     * a tool that needs a card adds one entry and nothing else changes.
+     *
+     *   {callId, tool, kind, state, summary, data, createdAt}
+     *
+     * `state`: pending | approved | denied | done | failed | needsInspection.
+     * A `kind` the running version does not know falls back to a plain card
+     * showing `summary`, so a session written by a newer build still opens.
+     */
+    property var toolCards: []
+
+    // Legacy, kept so a session saved before `toolCards` existed still opens;
+    // `Ai.messageFromJson` migrates them into cards on the way in. Nothing
+    // writes to these any more.
     property string pendingMemory: ""
-    // Settings the model wants to write, as {key, current, proposed}, held
-    // until the user has seen them next to what they would replace.
     property var pendingChanges: []
     // Handle of this call's entry in the tool log, so the user's answer
     // closes the same entry the call opened. -1 when nothing was logged.
