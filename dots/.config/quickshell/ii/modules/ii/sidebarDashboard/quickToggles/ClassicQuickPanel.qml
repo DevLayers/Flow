@@ -47,6 +47,11 @@ AbstractQuickPanel {
                 root.openIdleInhibitorDialog();
             }
         }
+        ModesQuickToggle {
+            altAction: () => {
+                root.openModesDialog();
+            }
+        }
         EasyEffectsToggle {}
         CloudflareWarp {}
         KeyboardBacklight {}
