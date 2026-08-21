@@ -60,8 +60,13 @@ Rectangle {
         StyledListView {
             id: list
 
+            // Shares the column with the footer: asks for its content, gives
+            // way down to a few rows, and takes whatever is left over.
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.preferredHeight: contentHeight
+            Layout.minimumHeight: Math.min(contentHeight, 3 * list.rowStride)
+            visible: root.items.length > 0
             clip: true
             spacing: 4
             popin: false
@@ -203,10 +208,22 @@ Rectangle {
             }
         }
 
+        // The footer never grows past its content and never shrinks below
+        // what it says it needs; between the two it splits the height with
+        // the list.
         Loader {
             id: footerSlot
             Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.maximumHeight: item ? item.implicitHeight : 0
+            Layout.minimumHeight: item ? Math.min(item.implicitHeight, item.minimumHeight ?? 0) : 0
             visible: sourceComponent !== null && sourceComponent !== undefined
+        }
+
+        // Keeps the New button at the bottom while there is nothing to list.
+        Item {
+            Layout.fillHeight: true
+            visible: root.items.length === 0
         }
 
         RippleButton {
