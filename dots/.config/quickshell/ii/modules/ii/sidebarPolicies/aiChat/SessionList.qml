@@ -29,9 +29,16 @@ Item {
     readonly property var sessions: Ai.sessions
     property string expandedId: ""
     property string renamingId: ""
+    /** The chat whose labels are being written, "" when none is. */
+    property string taggingId: ""
+
+    /** The label the list is narrowed to, "" for all of them. */
+    property string activeTag: ""
 
     readonly property var visibleEntries: {
-        const entries = root.sessions.index ?? [];
+        let entries = root.sessions.index ?? [];
+        if (root.activeTag.length > 0)
+            entries = entries.filter(entry => Array.from(entry.tags ?? []).indexOf(root.activeTag) >= 0);
         const needle = searchField.text.trim().toLowerCase();
         if (needle.length === 0)
             return entries;
@@ -56,6 +63,44 @@ Item {
     }
 
     Component.onCompleted: root.sessions.ensureLoaded()
+
+    /** One label in the filter strip. */
+    component TagChip: Rectangle {
+        id: tagChip
+
+        property string label: ""
+        property bool selected: false
+
+        signal chosen
+
+        implicitWidth: tagChipLabel.implicitWidth + Appearance.rounding.small * 2
+        height: Math.round(Appearance.font.pixelSize.huge * 1.3)
+        anchors.verticalCenter: parent?.verticalCenter
+        radius: Appearance.rounding.full
+        color: tagChip.selected
+            ? Appearance.colors.colPrimary
+            : (tagChipMouse.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2)
+
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        }
+
+        MouseArea {
+            id: tagChipMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tagChip.chosen()
+        }
+
+        StyledText {
+            id: tagChipLabel
+            anchors.centerIn: parent
+            text: tagChip.label
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: tagChip.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+        }
+    }
 
     /**
      * Row metrics, shared by both pages so the circle, the card and the pills
@@ -294,6 +339,62 @@ Item {
             }
         }
 
+        Flickable {
+            // The labels in use, as a row that scrolls when there are more of
+            // them than fit. Nothing here until a chat has been labelled.
+            id: tagStrip
+            Layout.fillWidth: true
+            implicitHeight: root.sessions.allTags.length > 0 ? Math.round(Appearance.font.pixelSize.huge * 1.6) : 0
+            visible: implicitHeight > 0
+            contentWidth: tagRow.implicitWidth
+            contentHeight: height
+            flickableDirection: Flickable.HorizontalFlick
+            boundsBehavior: Flickable.StopAtBounds
+            interactive: contentWidth > width
+            clip: true
+
+            Behavior on implicitHeight {
+                animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.NoButton
+                enabled: tagStrip.interactive
+                onWheel: wheel => {
+                    const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
+                    const limit = tagStrip.contentWidth - tagStrip.width;
+                    tagStrip.contentX = Math.max(0, Math.min(limit, tagStrip.contentX - delta));
+                    wheel.accepted = true;
+                }
+            }
+
+            Row {
+                id: tagRow
+                height: tagStrip.height
+                spacing: Appearance.rounding.unsharpenmore
+
+                TagChip {
+                    label: Translation.tr("All")
+                    selected: root.activeTag.length === 0
+                    onChosen: root.activeTag = ""
+                }
+
+                Repeater {
+                    model: ScriptModel {
+                        values: root.sessions.allTags
+                    }
+
+                    delegate: TagChip {
+                        required property var modelData
+                        label: modelData
+                        selected: root.activeTag === modelData
+                        onChosen: root.activeTag = root.activeTag === modelData ? "" : modelData
+                    }
+                }
+            }
+        }
+
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -318,11 +419,94 @@ Item {
 
                     readonly property bool current: sessionRow.modelData.id === root.sessions.currentId
                     readonly property bool renaming: sessionRow.modelData.id === root.renamingId
+                    readonly property bool tagging: sessionRow.modelData.id === root.taggingId
 
                     anchors.left: parent?.left
                     anchors.right: parent?.right
-                    implicitHeight: root.rowHeight
+                    // The labels open under the row rather than over it, so
+                    // the list keeps its place while one chat is being filed.
+                    implicitHeight: root.rowHeight + tagEditor.height
                     height: implicitHeight
+
+                    Item {
+                        // A Loader cannot be given a height of its own, so the
+                        // strip that grows is this wrapper and the Loader only
+                        // fills it.
+                        id: tagEditor
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.topMargin: root.rowHeight
+                        height: sessionRow.tagging ? Math.round(Appearance.font.pixelSize.huge * 2.4) : 0
+                        visible: height > 0
+                        clip: true
+
+                        Behavior on height {
+                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                        }
+
+                        Loader {
+                            anchors.fill: parent
+                            active: sessionRow.tagging
+
+                            sourceComponent: Rectangle {
+                            radius: Appearance.rounding.large
+                            color: Appearance.colors.colLayer2
+
+                            Component.onCompleted: tagField.forceActiveFocus()
+
+                            RowLayout {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: root.rowInset
+                                anchors.rightMargin: Appearance.rounding.unsharpenmore
+                                spacing: Appearance.rounding.unsharpenmore
+
+                                MaterialSymbol {
+                                    text: "label"
+                                    fill: 1
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: Appearance.colors.colSubtext
+                                }
+
+                                StyledTextInput {
+                                    id: tagField
+                                    Layout.fillWidth: true
+                                    text: Array.from(sessionRow.modelData.tags ?? []).join(", ")
+                                    color: Appearance.colors.colOnLayer2
+                                    onAccepted: {
+                                        root.sessions.setTags(sessionRow.modelData.id, tagField.text.split(","));
+                                        root.taggingId = "";
+                                    }
+
+                                    StyledText {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        visible: tagField.text.length === 0
+                                        text: Translation.tr("Labels, separated by commas")
+                                        color: Appearance.colors.colSubtext
+                                        font: tagField.font
+                                    }
+                                }
+
+                                ActionButton {
+                                    symbol: "check"
+                                    tooltipText: Translation.tr("Save the labels")
+                                    onClicked: {
+                                        root.sessions.setTags(sessionRow.modelData.id, tagField.text.split(","));
+                                        root.taggingId = "";
+                                    }
+                                }
+
+                                ActionButton {
+                                    symbol: "close"
+                                    tooltipText: Translation.tr("Leave them as they were")
+                                    onClicked: root.taggingId = ""
+                                }
+                            }
+                            }
+                        }
+                    }
 
                     readonly property real rFull: height / 2
 
@@ -332,7 +516,10 @@ Item {
                     // growing a panel underneath it.
                     Flickable {
                         id: rowFlick
-                        anchors.fill: parent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        height: root.rowHeight
                         contentWidth: rowFlick.width * 2 + root.rowSpacing
                         contentHeight: rowFlick.height
                         interactive: false
@@ -570,6 +757,16 @@ Item {
                                             label: sessionRow.modelData.pinned ? Translation.tr("Unpin") : Translation.tr("Pin")
                                             onTriggered: {
                                                 root.sessions.setPinned(sessionRow.modelData.id, !sessionRow.modelData.pinned);
+                                                rowFlick.showActions = false;
+                                            }
+                                        }
+
+                                        RowActionPill {
+                                            showLabel: rowFlick.width >= root.actionsLabelledWidth
+                                            symbol: "label"
+                                            label: Translation.tr("Labels")
+                                            onTriggered: {
+                                                root.taggingId = root.taggingId === sessionRow.modelData.id ? "" : sessionRow.modelData.id;
                                                 rowFlick.showActions = false;
                                             }
                                         }

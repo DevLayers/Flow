@@ -64,7 +64,7 @@ ApiStrategy {
             }
             return {
                 "type": "text",
-                "text": `[[ ${file.name} ]]\n${attachmentMarker(file.path, "text")}`
+                "text": `[[ ${file.name} ]]\n${attachmentMarker(file.path, textModeFor(file))}`
             };
         });
     }
@@ -240,6 +240,9 @@ ApiStrategy {
         }
 
         if (event.type === "message_delta" || event.type === "message_start") {
+            const stopReason = event.delta?.stop_reason ?? event.message?.stop_reason;
+            if (stopReason)
+                message.finishReason = String(stopReason);
             // The prompt is counted once, at the start; the output count is
             // restated as it grows. Both halves are kept so the later event
             // does not wipe what the earlier one reported.

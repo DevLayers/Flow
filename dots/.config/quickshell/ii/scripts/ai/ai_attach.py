@@ -22,7 +22,11 @@ import base64
 import json
 import mimetypes
 import os
+import shutil
+import select
+import subprocess
 import sys
+import time
 
 # Enough of a signature to name the common extensionless cases — clipboard
 # images land in a file named after their cliphist id, with no extension at all.
@@ -53,6 +57,30 @@ CODE_EXTENSIONS = {
     ".toml", ".yaml", ".yml", ".ini", ".conf", ".cfg", ".env", ".lua",
     ".zig", ".nim", ".hs", ".sql", ".gradle", ".dockerfile", ".make",
 }
+
+# Never offer obvious credentials to a model merely because they happen to
+# look like text. A user can still paste a deliberately redacted value into
+# the composer, but attaching a secret file requires an explicit local edit.
+SENSITIVE_BASENAMES = {
+    ".env", ".env.local", ".env.production", ".env.development",
+    "credentials.json", "credentials.yaml", "credentials.yml",
+    "secrets.json", "secrets.yaml", "secrets.yml",
+    "id_rsa", "id_ed25519", "id_ecdsa", "private.key",
+}
+SENSITIVE_SEGMENTS = {
+    ".ssh", ".gnupg", ".aws", ".kube", ".docker",
+    "keyrings", "browser", "chromium", "mozilla",
+}
+
+
+def is_sensitive_path(path: str) -> bool:
+    """Whether a path belongs to a high-risk credential/config location."""
+    expanded = os.path.realpath(os.path.expanduser(path))
+    basename = os.path.basename(expanded).lower()
+    if basename in SENSITIVE_BASENAMES or basename.startswith(".env."):
+        return True
+    segments = {segment.lower() for segment in expanded.split(os.sep) if segment}
+    return bool(segments.intersection(SENSITIVE_SEGMENTS))
 
 
 def sniff(path: str) -> str:
@@ -103,6 +131,12 @@ def probe(path: str) -> dict:
     path = os.path.expanduser(path)
     if not os.path.isfile(path):
         return {"error": f"No file at {path}", "path": path}
+    if is_sensitive_path(path):
+        return {
+            "error": "This file looks like a credential or secret and was blocked for safety.",
+            "path": path,
+            "sensitive": True,
+        }
     try:
         size = os.path.getsize(path)
     except OSError as error:
@@ -114,10 +148,110 @@ def probe(path: str) -> dict:
         "mime": mime,
         "kind": kind_of(mime),
         "bytes": size,
+        # Whether this machine can turn it into text if the model cannot read
+        # the format itself.
+        "extractable": extractor_for(mime) is not None,
+    }
+
+
+# Documents that no chat API takes as a document, but that this machine can
+# turn into text before anything leaves it.
+EXTRACTORS = {
+    "application/pdf": [["pdftotext", "-layout", "{src}", "-"]],
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+        ["pandoc", "-t", "plain", "{src}"],
+    ],
+    "application/msword": [["pandoc", "-t", "plain", "{src}"]],
+    "application/vnd.oasis.opendocument.text": [["pandoc", "-t", "plain", "{src}"]],
+    "application/epub+zip": [["pandoc", "-t", "plain", "{src}"]],
+    "application/rtf": [["pandoc", "-t", "plain", "{src}"]],
+}
+
+
+def extractor_for(mime: str):
+    """The first extraction command whose tool is actually installed."""
+    for command in EXTRACTORS.get(mime, []):
+        if shutil.which(command[0]):
+            return command
+    return None
+
+
+def extract(path: str, limit: int = 400_000) -> dict:
+    """Turns a document into plain text, so a model that only reads text can
+    still be asked about it. Truncation is reported rather than hidden."""
+    path = os.path.expanduser(path)
+    if not os.path.isfile(path):
+        return {"error": f"No file at {path}", "path": path}
+    if is_sensitive_path(path):
+        return {
+            "error": "This file looks like a credential or secret and was blocked for safety.",
+            "path": path,
+            "sensitive": True,
+        }
+    mime = mime_of(path)
+    command = extractor_for(mime)
+    if command is None:
+        return {"error": f"No extractor for {mime}", "path": path, "mime": mime}
+    filled = [part.replace("{src}", path) for part in command]
+    try:
+        process = subprocess.Popen(filled, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        # Read only one byte past the cap. Large PDFs must not be copied in
+        # full into a Python/QML buffer just to discover that they are long.
+        chunks = []
+        total = 0
+        truncated = False
+        deadline = time.monotonic() + 60
+        while True:
+            remaining_time = deadline - time.monotonic()
+            if remaining_time <= 0:
+                process.kill()
+                process.wait()
+                return {"error": "Document extraction timed out", "path": path, "mime": mime}
+            ready, _, _ = select.select([process.stdout], [], [], remaining_time)
+            if not ready:
+                process.kill()
+                process.wait()
+                return {"error": "Document extraction timed out", "path": path, "mime": mime}
+            chunk = os.read(process.stdout.fileno(), min(65536, limit + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > limit:
+                truncated = True
+                process.kill()
+                process.wait()
+                break
+        output = b"".join(chunks)
+        process.wait(timeout=max(1, int(deadline - time.monotonic())))
+        returncode = process.returncode
+    except (OSError, subprocess.SubprocessError) as error:
+        return {"error": str(error), "path": path, "mime": mime}
+    if returncode != 0 and not truncated:
+        return {"error": f"{command[0]} failed", "path": path, "mime": mime}
+    text = output[:limit].decode("utf-8", errors="replace").strip()
+    return {
+        "path": path,
+        "name": os.path.basename(path),
+        "mime": mime,
+        "text": text,
+        "characters": len(text),
+        "truncated": truncated,
     }
 
 
 def encoded(mode: str, path: str) -> str:
+    if is_sensitive_path(path):
+        raise OSError("attachment blocked: credential or secret path")
+    if mode == "extract":
+        # A document the model cannot read as a document. It is turned into
+        # text here, at send time, so the whole extraction never sits in the
+        # shell's memory or in the saved session.
+        result = extract(path)
+        if result.get("error") or not result.get("text"):
+            raise OSError(result.get("error") or "extraction returned nothing")
+        note = "\n\n[[ truncated ]]" if result.get("truncated") else ""
+        return json.dumps(result["text"] + note)[1:-1]
     with open(path, "rb") as handle:
         raw = handle.read()
     if mode == "text":
@@ -149,9 +283,9 @@ def inject(body_path: str, spec_raw: str) -> dict:
             body = body.replace(marker, encoded(item.get("mode", "b64"), path))
         except OSError as error:
             # The caller aborts the request when any attachment has vanished
-            # between being picked and being sent.
+            # between being picked and being sent, or could not be read.
             body = body.replace(marker, "")
-            failures.append(f"{os.path.basename(path)}: {error.strerror}")
+            failures.append(f"{os.path.basename(path)}: {error.strerror or error}")
 
     try:
         with open(body_path, "w", encoding="utf-8") as handle:
@@ -166,6 +300,12 @@ def main() -> int:
         print(json.dumps({"error": "usage: ai_attach.py probe PATH | inject BODY SPEC"}))
         return 0
     command = sys.argv[1]
+    if command == "extract":
+        if len(sys.argv) < 3:
+            print(json.dumps({"error": "extract needs a path"}))
+            return 1
+        print(json.dumps(extract(sys.argv[2])))
+        return 0
     if command == "probe":
         print(json.dumps(probe(sys.argv[2])))
         return 0

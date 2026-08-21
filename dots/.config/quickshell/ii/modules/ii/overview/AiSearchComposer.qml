@@ -25,6 +25,7 @@ ColumnLayout {
     signal requestEscape
     signal requestOpenHistory
     signal requestOpenModels
+    signal requestOpenShortcuts
     signal requestFocusNext
     signal requestFocusPrev
 
@@ -88,8 +89,6 @@ ColumnLayout {
         const text = draftInput.text.trim();
         if (text.length === 0)
             return;
-        draftInput.clear();
-        Ai.draft = "";
         root.requestSend(text);
     }
 
@@ -182,30 +181,30 @@ ColumnLayout {
     function railItems(railName) {
         if (railName === "actions") {
             return [
-                { id: "back", kind: "icon", icon: "chevron_left", tooltip: Translation.tr("Return to message") },
-                { id: "web", kind: "text", icon: "travel_explore", label: root.webModeLabel(Ai.webMode), tooltip: Translation.tr("Web search: %1").arg(Ai.webMode) },
-                { id: "tools", kind: "text", icon: "service_toolbox", label: root.toolModeLabel(Ai.functionExposure), tooltip: Translation.tr("Tools: %1").arg(Ai.functionExposure) },
-                { id: "paste", kind: "icon", icon: "content_paste", tooltip: Translation.tr("Paste clipboard") },
-                { id: "history", kind: "icon", icon: "history", tooltip: Translation.tr("Chat history") },
-                { id: "response", kind: "icon", icon: "speed", tooltip: Translation.tr("Response effort: %1").arg(Ai.responseMode) }
+                { id: "back", kind: "icon", icon: "chevron_left", tooltip: Translation.tr("Return to message (Esc)") },
+                { id: "web", kind: "text", icon: "travel_explore", label: root.webModeLabel(Ai.webMode), tooltip: Translation.tr("Web search: %1\nAlso /web").arg(Ai.webMode) },
+                { id: "tools", kind: "text", icon: "service_toolbox", label: root.toolModeLabel(Ai.functionExposure), tooltip: Translation.tr("Tools: %1\nAlso /tools").arg(Ai.functionExposure) },
+                { id: "paste", kind: "icon", icon: "content_paste", tooltip: Translation.tr("Paste clipboard (Ctrl+V)") },
+                { id: "history", kind: "icon", icon: "history", tooltip: Translation.tr("Chat history (Ctrl+L)") },
+                { id: "response", kind: "icon", icon: "speed", tooltip: Translation.tr("Response effort: %1\nAlso /effort").arg(Ai.responseMode) }
             ];
         }
         if (railName === "models") {
-            const start = [{ id: "back", kind: "icon", icon: "chevron_left", tooltip: Translation.tr("Return to message") }];
+            const start = [{ id: "back", kind: "icon", icon: "chevron_left", tooltip: Translation.tr("Return to message (Esc)") }];
             return start.concat(root.orderedModels.map(model => ({
                 id: String(model.id ?? ""),
                 kind: "text",
                 icon: model.materialIcon ?? "auto_awesome",
                 customIcon: model.icon ?? "",
                 label: model.title ?? model.value ?? "",
-                tooltip: model.name ?? model.title ?? ""
+                tooltip: Translation.tr("Select %1 (Ctrl+M)").arg(model.name ?? model.title ?? "")
             })));
         }
         return [
-            { id: "back", kind: "icon", icon: "chevron_left", tooltip: Translation.tr("Return to message") },
-            { id: "fast", kind: "text", icon: "speed", label: Translation.tr("Slow"), tooltip: Translation.tr("Response effort: Slow") },
-            { id: "balanced", kind: "text", icon: "speed", label: Translation.tr("Medium"), tooltip: Translation.tr("Response effort: Medium") },
-            { id: "deep", kind: "text", icon: "speed", label: Translation.tr("High"), tooltip: Translation.tr("Response effort: High") }
+            { id: "back", kind: "icon", icon: "chevron_left", tooltip: Translation.tr("Return to message (Esc)") },
+            { id: "fast", kind: "text", icon: "speed", label: Translation.tr("Fast"), tooltip: Translation.tr("Response effort: Fast\nAlso /effort") },
+            { id: "balanced", kind: "text", icon: "speed", label: Translation.tr("Medium"), tooltip: Translation.tr("Response effort: Medium\nAlso /effort") },
+            { id: "deep", kind: "text", icon: "speed", label: Translation.tr("High"), tooltip: Translation.tr("Response effort: High\nAlso /effort") }
         ];
     }
 
@@ -350,7 +349,7 @@ ColumnLayout {
                     persistentSelection: true
                     background: Item {}
                     Accessible.name: Translation.tr("AI message")
-                    Accessible.description: Translation.tr("Multiline draft. Enter sends; Shift+Enter inserts a line break.")
+                    Accessible.description: Translation.tr("Multiline draft. Enter sends; Shift+Enter inserts a line break; ? opens keyboard shortcuts when empty.")
 
                     Behavior on height {
                         animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(draftInput)
@@ -380,7 +379,10 @@ ColumnLayout {
                     }
 
                     Keys.onPressed: event => {
-                        if (event.key === Qt.Key_Escape) {
+                        if (event.text === "?" && draftInput.text.trim().length === 0) {
+                            root.requestOpenShortcuts();
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Escape) {
                             if (!root.closeRail())
                                 root.requestEscape();
                             event.accepted = true;
@@ -418,7 +420,7 @@ ColumnLayout {
                     RailIconButton {
                         id: compactChevron
                         symbol: "chevron_right"
-                        tooltip: Translation.tr("Show chat controls")
+                        tooltip: Translation.tr("Show chat controls (Ctrl+T or Tab)")
                         active: false
                         onClicked: root.showRail("actions")
 
@@ -455,7 +457,7 @@ ColumnLayout {
                         maximumWidth: root.maximumCompactModelWidth
                         active: true
                         highlightTertiary: root.modelsOpen
-                        tooltip: Translation.tr("Choose model: %1").arg(root.modelTitle)
+                        tooltip: Translation.tr("Choose model: %1 (Ctrl+M)").arg(root.modelTitle)
                         onClicked: root.requestOpenModels()
 
                         Keys.onPressed: event => {
@@ -509,6 +511,15 @@ ColumnLayout {
             RailPage {
                 id: actionsRail
                 railName: "actions"
+            }
+
+            // The model selector is a horizontal rail as well. Keeping it as
+            // a real page gives the edge fade a source item and prevents the
+            // Ctrl+M shortcut from switching to a non-existent surface.
+            RailPage {
+                id: modelsRail
+                railName: "models"
+                scrollable: true
             }
 
             // ── Response effort carousel ───────────────────────

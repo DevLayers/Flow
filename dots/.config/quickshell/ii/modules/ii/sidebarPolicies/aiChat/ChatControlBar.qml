@@ -1,6 +1,8 @@
 pragma ComponentBehavior: Bound
 
+import qs
 import qs.services
+import qs.services.ai
 import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
@@ -83,6 +85,12 @@ Item {
         root.activePopover = "keys";
     }
 
+    function openShortcuts() {
+        root.viewDirection = 1;
+        root.viewReturnTo = "";
+        root.activePopover = "shortcuts";
+    }
+
     /** Opens the model list for one answer only, without changing the chat's. */
     function openRegenerate(messageId: string) {
         root.regenerateMessageId = messageId;
@@ -135,11 +143,27 @@ Item {
      */
     readonly property var chipModel: [
         {
+            "key": "projects",
+            "symbol": "folder_special",
+            "label": Ai.currentProject?.name ?? Translation.tr("None"),
+            "tooltip": Translation.tr("Projects — a prompt and a folder for related chats"),
+            "available": true,
+            "caret": true
+        },
+        {
+            "key": "memory",
+            "symbol": "psychology",
+            "label": Translation.tr("%1 facts").arg(AiMemory?.facts?.length ?? 0),
+            "tooltip": Translation.tr("What the assistant remembers about you between chats"),
+            "available": true,
+            "caret": true
+        },
+        {
             // Saved chats. Doubles as the name of the one on screen, which is
             // otherwise nowhere to be seen.
             "key": "sessions",
             "symbol": "forum",
-            "label": Ai.sessionTitle.length > 0 ? Ai.sessionTitle : Translation.tr("Chats"),
+            "label": (Ai.sessionTitle ?? "").length > 0 ? Ai.sessionTitle : Translation.tr("Chats"),
             "caret": false,
             "tooltip": Translation.tr("Saved chats\nAlso %1load NAME").arg(root.commandPrefix)
         },
@@ -163,14 +187,14 @@ Item {
         {
             "key": "thinking",
             "symbol": "neurology",
-            "label": root.thinkingShortLabels[Ai.thinkingLevel] ?? Ai.thinkingLevel,
-            "available": Ai.currentModelThinks,
-            "tooltip": Ai.currentModelThinks ? Translation.tr("How hard to think\nAlso %1think LEVEL").arg(root.commandPrefix) : Translation.tr("%1 does not think out loud").arg(root.currentModel?.title ?? Translation.tr("This model"))
+            "label": root.thinkingShortLabels[Ai.thinkingLevel] ?? Ai.thinkingLevel ?? "",
+            "available": Ai.currentModelThinks ?? false,
+            "tooltip": (Ai.currentModelThinks ?? false) ? Translation.tr("How hard to think\nAlso %1think LEVEL").arg(root.commandPrefix) : Translation.tr("%1 does not think out loud").arg(root.currentModel?.title ?? Translation.tr("This model"))
         },
         {
             "key": "tools",
             "symbol": "service_toolbox",
-            "label": Ai.toolbox.modeLabels[Ai.currentTool] ?? Ai.currentTool,
+            "label": Ai.toolbox?.modeLabels?.[Ai.currentTool] ?? Ai.currentTool ?? "",
             "available": root.toolsUsable,
             "tooltip": root.toolsUsable ? Translation.tr("Tools: %1\nAlso %2tool TOOL").arg(Ai.currentTool).arg(root.commandPrefix) : Translation.tr("%1 has no tool support").arg(root.currentModel?.title ?? Translation.tr("This model"))
         },
@@ -181,17 +205,17 @@ Item {
             "key": "prompt",
             "symbol": Ai.currentPersona?.icon ?? "assignment",
             "label": root.personaChipLabel,
-            "dot": Ai.personaModified && Ai.promptOverride.length === 0,
+            "dot": (Ai.personaModified ?? false) && (Ai.promptOverride ?? "").length === 0,
             "tooltip": root.personaChipTooltip
         },
         {
             // Nothing else says whether the model in use can be reached at all
             // until a message fails.
             "key": "keys",
-            "symbol": Ai.currentModelHasApiKey ? "key" : "key_off",
-            "label": Ai.currentModelHasApiKey ? Translation.tr("Key") : Translation.tr("No key"),
+            "symbol": (Ai.currentModelHasApiKey ?? false) ? "key" : "key_off",
+            "label": (Ai.currentModelHasApiKey ?? false) ? Translation.tr("Key") : Translation.tr("No key"),
             "caret": false,
-            "tooltip": Ai.currentModelHasApiKey ? Translation.tr("API keys\nAlso %1key").arg(root.commandPrefix) : Translation.tr("%1 needs an API key").arg(root.currentModel?.title ?? Translation.tr("This model"))
+            "tooltip": (Ai.currentModelHasApiKey ?? false) ? Translation.tr("API keys\nAlso %1key").arg(root.commandPrefix) : Translation.tr("%1 needs an API key").arg(root.currentModel?.title ?? Translation.tr("This model"))
         },
         {
             "key": "advanced",
@@ -212,7 +236,7 @@ Item {
     ]
 
     function chipEntry(key: string): var {
-        return root.chipModel.find(entry => entry.key === key) ?? null;
+        return (root.chipModel ?? []).find(entry => entry?.key === key) ?? null;
     }
 
     /** Whether a chip's view is the one currently filling the canvas. */
@@ -276,12 +300,15 @@ Item {
         "slash": Translation.tr("Commands"),
         "advanced": Translation.tr("Sampling & limits"),
         "sessions": Translation.tr("Saved chats"),
-        "keys": Translation.tr("API keys")
+        "keys": Translation.tr("API keys"),
+        "shortcuts": Translation.tr("Keys"),
+        "memory": Translation.tr("What it remembers"),
+        "projects": Translation.tr("Projects")
     })
 
-    readonly property var overflowKeys: root.chipModel
-        .filter(entry => root.barKeys.indexOf(entry.key) === -1)
-        .map(entry => entry.key)
+    readonly property var overflowKeys: (root.chipModel ?? [])
+        .filter(entry => root.barKeys.indexOf(entry?.key) === -1)
+        .map(entry => entry?.key)
 
     /**
      * Controls are square to the height the bar was given, so the surface that
@@ -744,9 +771,15 @@ Item {
         colBackgroundHover: Appearance.colors.colLayer2Hover
         colBackgroundActive: Appearance.colors.colLayer2Active
         colRipple: Appearance.colors.colLayer2Active
+        leftPadding: 0
+        rightPadding: 0
+        topPadding: 0
+        bottomPadding: 0
         onClicked: root.activateChip(toolButton.chipKey)
 
         contentItem: MaterialSymbol {
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
             text: toolButton.symbolOverride.length > 0
                 ? toolButton.symbolOverride
                 : (toolButton.entry?.symbol ?? "")
@@ -788,10 +821,20 @@ Item {
             readonly property var entry: root.chipEntry("advanced")
             readonly property bool opened: root.chipOpened("advanced")
             readonly property bool samplingHonoured: Ai.currentModelEntry?.samplingParams ?? true
+            readonly property bool isExpanded: (GlobalStates?.policiesExtended ?? false) || root.width >= 420
+            readonly property string tempText: temperatureButton.samplingHonoured
+                ? String(Number(Ai.temperature.toFixed(2)))
+                : Translation.tr("Auto")
 
             implicitHeight: root.controlExtent
-            implicitWidth: temperatureRow.implicitWidth + root.controlExtent * 0.7
+            implicitWidth: temperatureButton.isExpanded
+                ? (temperatureRow.implicitWidth + root.controlExtent * 0.7)
+                : root.controlExtent
             buttonRadius: Appearance.rounding.full
+            leftPadding: temperatureButton.isExpanded ? (root.controlExtent * 0.35) : 0
+            rightPadding: temperatureButton.isExpanded ? (root.controlExtent * 0.35) : 0
+            topPadding: 0
+            bottomPadding: 0
             toggled: temperatureButton.opened
             opacity: temperatureButton.samplingHonoured ? 1 : 0.5
             colBackground: Appearance.colors.colLayer2
@@ -800,11 +843,19 @@ Item {
             colRipple: Appearance.colors.colLayer2Active
             onClicked: root.activateChip("advanced")
 
+            Behavior on implicitWidth {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
             contentItem: RowLayout {
                 id: temperatureRow
+                anchors.centerIn: parent
                 spacing: Appearance.rounding.unsharpenmore
 
                 MaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                     text: "thermostat"
                     iconSize: Appearance.font.pixelSize.larger
                     fill: 1
@@ -814,21 +865,27 @@ Item {
                 }
 
                 StyledText {
-                    // Trimmed rather than fixed to two places: the popover is
-                    // where the exact value belongs, this is the glance.
-                    text: temperatureButton.samplingHonoured
-                        ? String(Number(Ai.temperature.toFixed(2)))
-                        : Translation.tr("Auto")
+                    id: temperatureLabel
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: temperatureButton.isExpanded
+                    text: temperatureButton.tempText
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
                     color: temperatureButton.opened
                         ? Appearance.colors.colOnPrimaryContainer
                         : Appearance.colors.colOnLayer2
+                    animateChange: true
                 }
             }
 
             StyledToolTip {
-                text: temperatureButton.entry?.tooltip ?? ""
+                text: {
+                    const desc = temperatureButton.entry?.tooltip ?? Translation.tr("Temperature, output length, context");
+                    if (!temperatureButton.isExpanded) {
+                        return Translation.tr("Temperature: %1\n%2").arg(temperatureButton.tempText).arg(desc);
+                    }
+                    return desc;
+                }
             }
         }
 
@@ -838,9 +895,15 @@ Item {
         Rectangle {
             id: tokenIndicator
 
-            readonly property int total: Ai.sessionTokenTotal
+            // What the chat has cost, or — before anyone has been charged for
+            // anything — what the next request would carry, counted here.
+            readonly property int spent: Ai.sessionTokenTotal
+            readonly property bool estimated: tokenIndicator.spent <= 0
+            readonly property int total: tokenIndicator.estimated ? Ai.estimatedContextTokens : tokenIndicator.spent
             readonly property int window: Ai.currentModelEntry?.contextWindow ?? 0
-            readonly property real fraction: tokenIndicator.window > 0 ? Math.min(1, Ai.tokenCount.total / tokenIndicator.window) : 0
+            readonly property real fraction: tokenIndicator.window > 0
+                ? Math.min(1, Math.max(Ai.estimatedContextTokens, Ai.tokenCount.total) / tokenIndicator.window)
+                : 0
             // A window filling up is the one thing here worth a colour: past
             // three quarters the oldest turns are about to be dropped.
             readonly property color tint: tokenIndicator.fraction >= 0.75 ? Appearance.m3colors.m3tertiary : Appearance.colors.colOnLayer2
@@ -876,7 +939,7 @@ Item {
 
                 StyledText {
                     Layout.alignment: Qt.AlignVCenter
-                    text: Ai.shortTokenCount(tokenIndicator.total)
+                    text: (tokenIndicator.estimated ? "~" : "") + Ai.shortTokenCount(tokenIndicator.total)
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
                     color: tokenIndicator.tint
@@ -888,7 +951,11 @@ Item {
                 extraVisibleCondition: false
                 alternativeVisibleCondition: tokenHover.containsMouse
                 text: {
-                    let lines = [Translation.tr("%1 tokens in this chat").arg(tokenIndicator.total)];
+                    let lines = [tokenIndicator.estimated
+                        ? Translation.tr("About %1 tokens would go out with the next message").arg(tokenIndicator.total)
+                        : Translation.tr("%1 tokens in this chat").arg(tokenIndicator.total)];
+                    if (Ai.prunedTurnCount > 0)
+                        lines.push(Translation.tr("%1 earlier turns are no longer sent").arg(Ai.prunedTurnCount));
                     if (Ai.tokenCount.input > 0 || Ai.tokenCount.output > 0)
                         lines.push(Translation.tr("Last turn — in: %1, out: %2").arg(Math.max(0, Ai.tokenCount.input)).arg(Math.max(0, Ai.tokenCount.output)));
                     if (tokenIndicator.window > 0)
@@ -1074,6 +1141,12 @@ Item {
                             return sessionsComponent;
                         if (root.activePopover === "keys")
                             return keysComponent;
+                        if (root.activePopover === "shortcuts")
+                            return shortcutsComponent;
+                        if (root.activePopover === "memory")
+                            return memoryComponent;
+                        if (root.activePopover === "projects")
+                            return projectsComponent;
                         if (root.activePopover === "more")
                             return moreComponent;
                         return advancedComponent;
@@ -1147,6 +1220,25 @@ Item {
         id: keysComponent
         AiApiKeyManager {
             onClosed: root.closePopover()
+        }
+    }
+
+    Component {
+        id: shortcutsComponent
+        ChatShortcutSheet {}
+    }
+
+    Component {
+        id: memoryComponent
+        AiMemoryView {
+            onClosed: root.goBack()
+        }
+    }
+
+    Component {
+        id: projectsComponent
+        AiProjectView {
+            onClosed: root.goBack()
         }
     }
 

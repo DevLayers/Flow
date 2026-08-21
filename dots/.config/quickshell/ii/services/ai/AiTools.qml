@@ -90,6 +90,70 @@ Scope {
             needsSearch: false
         },
         {
+            id: "remember_fact",
+            title: Translation.tr("Remember something"),
+            summary: Translation.tr("Keeps one fact about you between conversations. Every fact is a line you can read, edit or delete."),
+            icon: "bookmark_add",
+            risk: "writes",
+            description: "Store one durable fact about the user so later conversations start knowing it — their distro, editor, preferences, recurring projects. Keep it to one short sentence. Do not store secrets, credentials, or anything the user asked you to forget.",
+            parameters: {
+                type: "object",
+                properties: {
+                    fact: {
+                        type: "string",
+                        description: "The single fact to remember, as one short sentence"
+                    }
+                },
+                required: ["fact"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "web_search",
+            title: Translation.tr("Search the web"),
+            summary: Translation.tr("Looks something up and reads back titles, links and snippets. Works with any model that can call a function, including local ones."),
+            icon: "travel_explore",
+            risk: "safe",
+            description: "Search the web for current information and return titles, URLs and snippets. Use it whenever the answer depends on something recent, specific or outside your knowledge. Follow up with fetch_url on the most promising result when the snippets are not enough.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: {
+                        type: "string",
+                        description: "What to search for"
+                    },
+                    count: {
+                        type: "integer",
+                        description: "How many results to return, 1 to 10. Defaults to 5."
+                    }
+                },
+                required: ["query"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "fetch_url",
+            title: Translation.tr("Read a page"),
+            summary: Translation.tr("Fetches one page and reads its text. Nothing is run, and nothing is saved."),
+            icon: "link",
+            risk: "safe",
+            description: "Fetch a single http(s) URL and return its readable text. Use it to read a search result, a documentation page, or a link the user pasted.",
+            parameters: {
+                type: "object",
+                properties: {
+                    url: {
+                        type: "string",
+                        description: "The absolute http or https URL to read"
+                    }
+                },
+                required: ["url"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "run_shell_command",
             title: Translation.tr("Run a command"),
             summary: Translation.tr("Runs a command in bash and reads its output back. The command is shown before it runs."),
@@ -226,6 +290,10 @@ Scope {
                 continue;
             if (root.localOnly && def.id === "run_shell_command")
                 continue;
+            // A local-only policy is about the network, so the two tools that
+            // reach it are the ones it has to take away.
+            if (root.localOnly && (def.id === "web_search" || def.id === "fetch_url"))
+                continue;
             if (root.permission(def.id) === "deny")
                 continue;
             result.push(def);
@@ -294,6 +362,12 @@ Scope {
             return "";
         if (id === "run_shell_command")
             return String(args.command ?? "");
+        if (id === "web_search")
+            return String(args.query ?? "");
+        if (id === "fetch_url")
+            return String(args.url ?? "");
+        if (id === "remember_fact")
+            return String(args.fact ?? "");
         if (id === "set_shell_config") {
             const changes = Array.from(args.changes ?? []);
             return changes.map(change => `${change.key} = ${change.value}`).join(", ");

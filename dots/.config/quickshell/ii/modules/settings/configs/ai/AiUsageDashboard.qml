@@ -266,7 +266,13 @@ GridLayout {
                     gridLineOpacity: 0.14
                     textureColor: Appearance.colors.colOnPrimaryContainer
                     textureOpacity: 0.30
-                    barWidth: grid.periodMode === "today" ? 12 : 24
+                    // A tighter rhythm leaves enough room for visibly heavier
+                    // columns even in the 30-day view, without merging them.
+                    barWidth: Appearance.rounding.large
+                    minimumBarWidth: grid.periodMode === "today"
+                        ? Appearance.font.pixelSize.large
+                        : Appearance.font.pixelSize.larger
+                    barSpacing: Appearance.rounding.verysmall / 2
                     labelStride: grid.periodMode === "today"
                         ? 4
                         : Math.max(1, Math.ceil(grid.periodSeries.length / 7))

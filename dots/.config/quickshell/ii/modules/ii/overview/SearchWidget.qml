@@ -80,13 +80,20 @@ Item {
     readonly property bool isTranslatorMode: root.searchingText.startsWith(Config.options.search.prefix.translator)
     readonly property bool isMediaDownloaderMode: Config.options.mediaDownloader.enabled && root.searchingText.startsWith(Config.options.search.prefix.mediaDownloader)
     readonly property bool isMaterialSymbolsMode: root.searchingText.startsWith(Config.options.search.prefix.materialSymbols)
-    readonly property bool isAiMode: Ai.enabled && (root.searchingText.startsWith(Config.options.search.prefix.ai) || root.aiAutoEngaged || root.aiModeLocked)
+    /**
+     * Whether the AI surface owns the search.
+     *
+     * This is state, not a formula. It used to be derived from the query —
+     * and entering AI mode clears the query, which fed straight back into the
+     * formula. Qt saw a binding loop and froze the property, so Escape and
+     * the back button had nothing left to change and the panel could not be
+     * left. Every way in sets the latch; only `exitAiMode()` clears it.
+     */
+    readonly property bool isAiMode: Ai.enabled && root.aiModeLocked
     // Auto AI recognition: when enabled, a settled query that matches no app,
-    // command or prefix hands the search over to the AI chat.
+    // command or prefix hands the search over to the AI chat. Kept apart from
+    // the latch so the timer cannot fire twice for one query.
     property bool aiAutoEngaged: false
-    // Once AI mode is entered (prefix, suggest or auto), it stays locked
-    // until the user explicitly goes back (back button or Esc). Clearing
-    // the text does NOT exit AI mode.
     property bool aiModeLocked: false
     // Prevents a query that entered AI mode from being copied repeatedly when
     // the launcher query is cleared or the draft is restored asynchronously.
@@ -115,13 +122,27 @@ Item {
                     Ai.draft = initialDraft;
                 LauncherSearch.query = "";
             }
-            root.aiModeLocked = true;
-            // Focus the AI composer immediately so the user can type without clicking
+            // Focus the AI composer immediately so the user can type without
+            // clicking. The latch is *not* set here: `isAiMode` reads
+            // `aiModeLocked`, so writing it back from this handler made the
+            // binding depend on its own result — Qt broke the loop by
+            // freezing the property, and Escape then had nothing to change.
             Qt.callLater(root.focusSearchInput);
         } else {
             root.aiDraftHydrated = false;
         }
         root.tryConsumeSurfaceIntent();
+    }
+
+    /**
+     * Enters AI mode and keeps it: however it was entered, deleting the text
+     * must not yank the panel away mid-conversation. Every way in calls this;
+     * only the back button and Escape call `exitAiMode()`.
+     */
+    function engageAiMode() {
+        if (!Ai.enabled)
+            return;
+        root.aiModeLocked = true;
     }
 
     // Debounce so a query that is still matching things asynchronously does
@@ -132,12 +153,16 @@ Item {
         onTriggered: {
             if (root.aiAutoTriggerEnabled && !root.aiAutoEngaged && !root.queryHasAnyPrefix && root.searchingText.trim().length >= 3 && root.realResultCount === 0) {
                 root.aiAutoEngaged = true;
-                root.aiModeLocked = true;
+                root.engageAiMode();
             }
         }
     }
 
     onSearchingTextChanged: {
+        // Typing the prefix is one of the ways in, so it latches here rather
+        // than as a reaction to the mode changing.
+        if (Ai.enabled && root.searchingText.startsWith(Config.options.search.prefix.ai))
+            root.engageAiMode();
         if (root.searchingText === "" || root.queryHasAnyPrefix) {
             root.aiAutoEngaged = false;
             aiAutoEngageTimer.stop();
@@ -160,8 +185,12 @@ Item {
     Connections {
         target: GlobalStates
         function onOverviewOpenChanged() {
-            if (!GlobalStates.overviewOpen && (root.isAiMode || root.aiAutoEngaged || root.aiModeLocked))
-                root.resetAiSearchState(false);
+            if (!GlobalStates.overviewOpen) {
+                if (root.isAiMode || root.aiAutoEngaged || root.aiModeLocked)
+                    root.resetAiSearchState(false);
+                else
+                    root.cancelSearch();
+            }
         }
     }
     readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !root.isAnySpecialMode && root.searchingText === ""
@@ -305,6 +334,10 @@ Item {
         const intent = Ai.surfaceRouter.pendingIntent;
         if (!intent || intent.surface !== "search" || intent.monitorName !== root.surfaceMonitorName)
             return;
+        // A chat handed over from the sidebar opens the panel rather than
+        // waiting for someone to type the prefix first.
+        if (GlobalStates.overviewOpen && !root.isAiMode)
+            root.engageAiMode();
         if (!GlobalStates.overviewOpen || !root.isAiMode || !aiPanelLoader.item)
             return;
         if (intent.sessionId.length > 0 && Ai.sessions.currentId !== intent.sessionId) {
@@ -369,8 +402,12 @@ Item {
     }
 
     function cancelSearch() {
-        searchBar.searchInput.selectAll();
+        // Normal Search is intentionally ephemeral. The AI composer owns its
+        // draft per session; the launcher query must not become a second draft
+        // store that brings the last ordinary search back on the next open.
+        root.searchingText = "";
         LauncherSearch.query = "";
+        searchBar.searchInput.text = "";
         searchBar.animateWidth = true;
     }
 
@@ -400,6 +437,18 @@ Item {
         root.resetAiSearchState(true);
     }
 
+    // One Escape path for the whole overview surface. A PanelWindow cannot
+    // host a Keys attached property, so Overview's window shortcut delegates
+    // here; the focused composer and child controls use the same function.
+    function handleEscape(): bool {
+        if (!root.isAiMode)
+            return false;
+        if (aiPanelLoader.item && typeof aiPanelLoader.item.handleEscape === "function" && aiPanelLoader.item.handleEscape())
+            return true;
+        root.exitAiMode();
+        return true;
+    }
+
     // Send the current search bar text as a chat message. The search bar is
     // the composer in AI mode, so both Enter in the field and the send button
     // in the panel funnel through here.
@@ -408,10 +457,10 @@ Item {
         const cleaned = StringUtils.cleanOnePrefix(raw, [Config.options.search.prefix.ai]).trim();
         if (!cleaned)
             return;
-        Ai.draft = "";
         const parsed = AiActionRegistry.parseInput(cleaned, "/");
         if (parsed.kind === "command" || parsed.kind === "unknown-command") {
-            root.executeAiCommand(parsed);
+            if (root.executeAiCommand(parsed))
+                Ai.clearDraftIfCurrent();
         } else {
             Ai.sendUserMessage(parsed.text);
         }
@@ -424,7 +473,7 @@ Item {
     function executeAiCommand(parsed: var) {
         if (parsed.kind === "unknown-command") {
             Ai.submissionNotice = Translation.tr("Unknown AI command: %1").arg(parsed.name);
-            return;
+            return false;
         }
         const args = parsed.args ?? [];
         switch (parsed.id) {
@@ -438,9 +487,10 @@ Item {
         case "temperature":
             Ai.setTemperature(Number(args[0] ?? 0.7));
             break;
+        case "think":
+            Ai.setThinkingLevel(args[0] ?? "medium");
+            break;
         case "effort":
-        case "thinking":
-        case "reasoning":
             Ai.setResponseMode(args[0] ?? "balanced");
             break;
         case "web":
@@ -449,14 +499,22 @@ Item {
         case "tools":
             Ai.setFunctionExposure(args[0] ?? "all");
             break;
+        case "tool":
+            Ai.setTool(args[0] ?? "");
+            break;
+        case "chats":
+            if (aiPanelLoader.item)
+                aiPanelLoader.item.historyOpen = true;
+            break;
         case "clear":
         case "new":
             Ai.newChat();
             break;
         default:
             Ai.submissionNotice = Translation.tr("/%1 is available in the sidebar.").arg(parsed.name);
-            break;
+            return false;
         }
+        return true;
     }
 
     function setSearchingText(text) {
@@ -501,11 +559,7 @@ Item {
         // ESC: in AI mode, delegate to panel (closes history first, then exits AI mode)
         if (event.key === Qt.Key_Escape) {
             if (root.isAiMode) {
-                if (aiPanelLoader.item && aiPanelLoader.item.handleEscape()) {
-                    // panel handled it (e.g. closed history)
-                } else {
-                    root.exitAiMode();
-                }
+                root.handleEscape();
                 event.accepted = true;
             }
             // In non-AI mode, let the event propagate to OverviewWindow for closing
@@ -566,6 +620,10 @@ Item {
         {
             if (root.isAiMode) {
                 root.focusSearchInput();
+                const input = searchBar.searchInput;
+                const position = input.cursorPosition;
+                input.text = input.text.slice(0, position) + event.text + input.text.slice(position);
+                input.cursorPosition = position + event.text.length;
                 event.accepted = true;
                 return;
             }
@@ -754,11 +812,8 @@ Item {
                 }
 
                 onEscapeToSearch: {
-                    if (root.isAiMode) {
-                        if (aiPanelLoader.item && aiPanelLoader.item.handleEscape())
-                            return;
-                        root.exitAiMode();
-                    }
+                    if (root.isAiMode)
+                        root.handleEscape();
                 }
 
                 onSendMessage: {
@@ -1616,6 +1671,24 @@ Item {
                     function onRequestContinueInSidebar() {
                         root.continueInSidebar();
                     }
+                }
+
+                Binding {
+                    target: aiPanelLoader.item
+                    property: "activeSurface"
+                    value: root.isAiMode
+                    when: aiPanelLoader.status === Loader.Ready
+                }
+
+                // The panel remains reusable on its own, but when hosted by
+                // Search it can leave through this direct, synchronous route.
+                // This avoids a Loader signal being the only path back to the
+                // normal search surface.
+                Binding {
+                    target: aiPanelLoader.item
+                    property: "searchHost"
+                    value: root
+                    when: aiPanelLoader.status === Loader.Ready
                 }
             }
 

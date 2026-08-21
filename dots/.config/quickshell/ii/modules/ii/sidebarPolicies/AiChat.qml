@@ -68,8 +68,105 @@ Item {
 
     property int entranceTrigger: -1
 
+    // ── Editing a question ────────────────────────────────────────────────
+    /** The question being rewritten, "" when the composer is writing a new one. */
+    property string editingMessageId: ""
+    // ── Finding something in this chat ────────────────────────────────────
+    /** Whether the find-in-chat field is open over the transcript. */
+    property bool transcriptSearchOpen: false
+    property string transcriptQuery: ""
+    property int transcriptMatchIndex: 0
+
+    /** Indices in the visible list whose text holds the query. */
+    readonly property var transcriptMatches: {
+        const needle = root.transcriptQuery.trim().toLowerCase();
+        if (needle.length === 0)
+            return [];
+        const ids = Ai.messageIDs.filter(id => Ai.messageByID[id]?.visibleToUser ?? true);
+        const found = [];
+        for (let i = 0; i < ids.length; i++) {
+            const message = Ai.messageByID[ids[i]];
+            const haystack = `${message?.content ?? ""}\n${message?.thought ?? ""}`.toLowerCase();
+            if (haystack.indexOf(needle) >= 0)
+                found.push(i);
+        }
+        return found;
+    }
+
+    function goToMatch(step: int) {
+        const matches = root.transcriptMatches;
+        if (matches.length === 0)
+            return;
+        root.transcriptMatchIndex = ((root.transcriptMatchIndex + step) % matches.length + matches.length) % matches.length;
+        const index = matches[root.transcriptMatchIndex];
+        messageListView.following = false;
+        messageListView.focusedIndex = index;
+        messageListView.positionViewAtIndex(index, ListView.Center);
+        // The list keeps the mark; the focus stays in the field so the next
+        // Enter is another step rather than a new search.
+        Qt.callLater(function () {
+            messageListView.positionViewAtIndex(index, ListView.Center);
+        });
+    }
+
+    onTranscriptSearchOpenChanged: {
+        if (!root.transcriptSearchOpen) {
+            root.transcriptQuery = "";
+            root.transcriptMatchIndex = 0;
+            messageInputField.forceActiveFocus();
+        }
+    }
+
+    function beginEdit(messageId: string, content: string) {
+        root.editingMessageId = messageId;
+        messageInputField.text = String(content ?? "");
+        messageInputField.cursorPosition = messageInputField.text.length;
+        messageInputField.forceActiveFocus();
+    }
+
+    function cancelEdit() {
+        if (root.editingMessageId.length === 0)
+            return;
+        root.editingMessageId = "";
+        messageInputField.clear();
+    }
+
+    /**
+     * Sends the rewritten question. Everything that followed it answered the
+     * old wording, so the service forks first and leaves that branch behind
+     * rather than deleting it.
+     */
+    function commitEdit(text: string) {
+        const id = root.editingMessageId;
+        root.editingMessageId = "";
+        messageInputField.clear();
+        Ai.editAndResend(id, String(text ?? ""));
+        messageListView.pinToEnd();
+    }
+
     function triggerContentEntrance() {
         root.entranceTrigger++;
+    }
+
+    // ── Empty-state hello ────────────────────────────────────────────────
+    // The line itself is rolled by `AiTranscriptRegistry`, which both
+    // transcripts share; what belongs here is only when to roll a new one.
+    property string emptyStateGreeting: ""
+
+    function refreshEmptyStateGreeting() {
+        root.emptyStateGreeting = AiTranscriptRegistry.greetingLine();
+    }
+
+    Connections {
+        target: emptyStatePlaceholder
+        function onShownChanged() {
+            if (emptyStatePlaceholder.shown)
+                root.refreshEmptyStateGreeting();
+        }
+        function onEntranceTriggerChanged() {
+            if (emptyStatePlaceholder.shown)
+                root.refreshEmptyStateGreeting();
+        }
     }
 
     // Handoff state is logical, not a reference to a sidebar delegate. The
@@ -169,7 +266,134 @@ Item {
         }
     }
 
+    // ── Keyboard ──────────────────────────────────────────────────────────
+    // Everything the chat can do has a key, and `?` on an empty composer says
+    // what they are. The handlers live here rather than on each control so a
+    // key works wherever the focus happens to be inside the panel.
+
+    /** The newest question, which is what Ctrl+E takes back. */
+    function lastMessageIdOfRole(role: string): string {
+        for (let at = Ai.messageIDs.length - 1; at >= 0; at--) {
+            const id = Ai.messageIDs[at];
+            if (Ai.messageByID[id]?.role === role)
+                return id;
+        }
+        return "";
+    }
+
+    function editLastQuestion(): bool {
+        const id = root.lastMessageIdOfRole("user");
+        if (id.length === 0)
+            return false;
+        root.beginEdit(id, String(Ai.messageByID[id]?.content ?? ""));
+        return true;
+    }
+
+    function regenerateLastAnswer(): bool {
+        const id = root.lastMessageIdOfRole("assistant");
+        if (id.length === 0)
+            return false;
+        Ai.regenerate(id);
+        return true;
+    }
+
+    /**
+     * Moves the focus from turn to turn. A transcript nobody can walk with a
+     * keyboard is a transcript a screen reader cannot walk either.
+     */
+    function stepThroughTurns(delta: int) {
+        const count = messageListView.count;
+        if (count <= 0)
+            return;
+        const current = messageListView.focusedIndex;
+        const next = current < 0
+            ? (delta > 0 ? 0 : count - 1)
+            : Math.max(0, Math.min(count - 1, current + delta));
+        messageListView.focusedIndex = next;
+        messageListView.following = false;
+        messageListView.positionViewAtIndex(next, ListView.Contain);
+        const delegate = messageListView.itemAtIndex(next);
+        if (delegate)
+            delegate.forceActiveFocus();
+    }
+
+    /** Runs a panel shortcut. Returns whether the key belonged to one. */
+    function handleShortcut(event): bool {
+        const control = (event.modifiers & Qt.ControlModifier) !== 0;
+        const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
+        const alt = (event.modifiers & Qt.AltModifier) !== 0;
+
+        if (event.key === Qt.Key_Escape) {
+            if (root.canvasViewOpen) {
+                controlBar.closePopover();
+                return true;
+            }
+            if (root.editingMessageId.length > 0) {
+                root.cancelEdit();
+                return true;
+            }
+            return false;
+        }
+
+        if (alt && !control) {
+            if (event.key === Qt.Key_Up) {
+                root.stepThroughTurns(-1);
+                return true;
+            }
+            if (event.key === Qt.Key_Down) {
+                root.stepThroughTurns(1);
+                return true;
+            }
+        }
+
+        if (!control)
+            return false;
+
+        if (shift && event.key === Qt.Key_O) {
+            Ai.newChat();
+            return true;
+        }
+        switch (event.key) {
+        case Qt.Key_J:
+            Ai.surfaceRouter.open({
+                surface: "search",
+                monitorName: GlobalStates.activeLeftSidebarMonitor,
+                sessionId: Ai.sessions.currentId,
+                focusIntent: "composer",
+                scrollAnchor: root.captureHandoffState()
+            });
+            return true;
+        case Qt.Key_L:
+            controlBar.togglePopover("sessions");
+            return true;
+        case Qt.Key_M:
+            controlBar.togglePopover("model");
+            return true;
+        case Qt.Key_T:
+            controlBar.togglePopover("tools");
+            return true;
+        case Qt.Key_K:
+            controlBar.togglePopover("keys");
+            return true;
+        case Qt.Key_F:
+            root.transcriptSearchOpen = !root.transcriptSearchOpen;
+            return true;
+        case Qt.Key_E:
+            return root.editLastQuestion();
+        case Qt.Key_R:
+            return root.regenerateLastAnswer();
+        case Qt.Key_End:
+            messageListView.pinToEnd();
+            return true;
+        }
+        return false;
+    }
+
     Keys.onPressed: event => {
+        if (root.handleShortcut(event)) {
+            event.accepted = true;
+            return;
+        }
         messageInputField.forceActiveFocus();
         if (event.modifiers === Qt.NoModifier) {
             if (event.key === Qt.Key_PageUp) {
@@ -180,25 +404,71 @@ Item {
                 event.accepted = true;
             }
         }
-        if (event.key === Qt.Key_Escape && root.canvasViewOpen) {
-            controlBar.closePopover();
-            event.accepted = true;
-        }
-        if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_J) {
-            Ai.surfaceRouter.open({
-                surface: "search",
-                monitorName: GlobalStates.activeLeftSidebarMonitor,
-                sessionId: Ai.sessions.currentId,
-                focusIntent: "composer",
-                scrollAnchor: root.captureHandoffState()
+    }
+
+    // ── References ────────────────────────────────────────────────────────
+    // `@` pulls context in without leaving the composer: the window in front,
+    // what is in the clipboard, a file that was just attached, an earlier
+    // chat. Each one resolves to text that goes out with the message.
+
+    readonly property var referenceSources: {
+        const list = [];
+        const activeWindow = HyprlandData.activeWindow;
+        if (activeWindow?.class)
+            list.push({
+                token: "window",
+                icon: "web_asset",
+                label: Translation.tr("Window in front"),
+                detail: `${activeWindow.title ?? activeWindow.class}`,
+                resolve: () => `[[ ${Translation.tr("Window in front")} ]]\nclass: ${activeWindow.class}\ntitle: ${activeWindow.title ?? ""}`
             });
-            event.accepted = true;
-            return;
+        if (Quickshell.clipboardText && Quickshell.clipboardText.length > 0)
+            list.push({
+                token: "clipboard",
+                icon: "content_paste",
+                label: Translation.tr("Clipboard"),
+                detail: Quickshell.clipboardText.slice(0, 60).replace(/\n/g, " "),
+                resolve: () => `[[ ${Translation.tr("Clipboard")} ]]\n${Quickshell.clipboardText}`
+            });
+        const attachments = Array.from(Ai.attachments ?? []);
+        for (let i = 0; i < attachments.length; i++) {
+            const file = attachments[i];
+            list.push({
+                token: `file:${file.name}`,
+                icon: "description",
+                label: file.name,
+                detail: Translation.tr("Attached file"),
+                resolve: () => `[[ ${file.name} ]]`
+            });
         }
-        if ((event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier) && event.key === Qt.Key_O) {
-            Ai.newChat();
-            event.accepted = true;
+        const sessions = Array.from(Ai.sessions.index ?? []).slice(0, 8);
+        for (let i = 0; i < sessions.length; i++) {
+            const entry = sessions[i];
+            if (!entry?.title || entry.id === Ai.sessions.currentId)
+                continue;
+            list.push({
+                token: `chat:${entry.title}`,
+                icon: "forum",
+                label: entry.title,
+                detail: Translation.tr("Earlier chat"),
+                resolve: () => `[[ ${Translation.tr("From the chat “%1”").arg(entry.title)} ]]\n${entry.preview ?? ""}`
+            });
         }
+        return list;
+    }
+
+    /** Turns every `@token` in the message into the text it stands for. */
+    function expandReferences(text: string): string {
+        let out = String(text ?? "");
+        const sources = root.referenceSources;
+        for (let i = 0; i < sources.length; i++) {
+            const source = sources[i];
+            const marker = `@${source.token}`;
+            if (out.indexOf(marker) < 0)
+                continue;
+            out = out.split(marker).join(`\n\n${source.resolve()}\n\n`);
+        }
+        return out.trim();
     }
 
     property var allCommands: [
@@ -361,6 +631,27 @@ Item {
             }
         },
         {
+            name: "effort",
+            description: Translation.tr("Set response effort: fast, balanced or deep."),
+            execute: args => {
+                Ai.setResponseMode(args.length > 0 ? args[0] : "balanced");
+            }
+        },
+        {
+            name: "web",
+            description: Translation.tr("Set web search mode: off, auto or on."),
+            execute: args => {
+                Ai.setWebMode(args.length > 0 ? args[0] : "auto");
+            }
+        },
+        {
+            name: "tools",
+            description: Translation.tr("Set tool exposure: none, safe or all."),
+            execute: args => {
+                Ai.setFunctionExposure(args.length > 0 ? args[0] : "all");
+            }
+        },
+        {
             name: "test",
             description: Translation.tr("Markdown test"),
             execute: () => {
@@ -419,22 +710,32 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
     ]
 
     function handleInput(inputText) {
+        if (root.editingMessageId.length > 0 && String(inputText ?? "").trim().length > 0) {
+            root.commitEdit(inputText);
+            messageListView.pinToEnd();
+            return { accepted: true, state: "edit" };
+        }
         const parsed = AiActionRegistry.parseInput(inputText, root.commandPrefix);
         if (parsed.kind === "command" || parsed.kind === "unknown-command") {
             // Handle special commands
             const commandObj = root.allCommands.find(cmd => cmd.name === `${parsed.id ?? parsed.name}` || cmd.name === `${parsed.name}`);
             if (commandObj) {
                 commandObj.execute(parsed.args);
+                Ai.clearDraftIfCurrent();
+                messageListView.pinToEnd();
+                return { accepted: true, state: "command", commandId: parsed.id };
             } else {
                 Ai.addMessage(Translation.tr("Unknown command: ") + parsed.name, Ai.interfaceRole);
+                messageListView.pinToEnd();
+                return { accepted: false, state: "rejected", errorCode: "unknown-command" };
             }
         } else {
-            Ai.sendUserMessage(parsed.text);
+            const result = Ai.sendUserMessage(root.expandReferences(parsed.text));
+            // The AI service owns clearing accepted prompts. Rejected prompts
+            // stay in the field so the user can correct or retry them.
+            messageListView.pinToEnd();
+            return result;
         }
-
-        // Sending is the one thing that always brings the view back down,
-        // however far up the chat the reader had gone.
-        messageListView.pinToEnd();
     }
 
     Connections {
@@ -615,6 +916,115 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         }
     }
 
+    /** One of the round controls on the find row. */
+    component FindStep: RippleButton {
+        id: findStep
+
+        property string symbol: ""
+        property string tooltipText: ""
+
+        signal triggered
+
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: Math.round(Appearance.font.pixelSize.huge * 1.5)
+        implicitHeight: implicitWidth
+        buttonRadius: Appearance.rounding.full
+        topPadding: 0
+        bottomPadding: 0
+        leftPadding: 0
+        rightPadding: 0
+        colBackground: ColorUtils.transparentize(Appearance.colors.colLayer3, 1)
+        colBackgroundHover: Appearance.colors.colLayer3Hover
+        colRipple: Appearance.colors.colLayer3Active
+        onClicked: findStep.triggered()
+
+        Accessible.name: findStep.tooltipText
+
+        contentItem: MaterialSymbol {
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            text: findStep.symbol
+            fill: 1
+            iconSize: Appearance.font.pixelSize.larger
+            color: Appearance.colors.colOnLayer2
+        }
+
+        StyledToolTip {
+            text: findStep.tooltipText
+        }
+    }
+
+    /** One line of the empty state: what the key is, and what it does. */
+    component EmptyStateKey: Rectangle {
+        id: emptyKey
+
+        property var keys: []
+        property string label: ""
+        /** Set when pressing the row does the same thing the key does. */
+        property bool actionable: false
+
+        signal triggered
+
+        implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.6)
+        radius: Appearance.rounding.full
+        color: emptyKeyMouse.containsMouse && emptyKey.actionable ? Appearance.colors.colLayer2Hover : "transparent"
+
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        }
+
+        MouseArea {
+            id: emptyKeyMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            enabled: emptyKey.actionable
+            cursorShape: emptyKey.actionable ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: emptyKey.triggered()
+        }
+
+        RowLayout {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: Appearance.rounding.unsharpenmore
+            anchors.rightMargin: Appearance.rounding.small
+            spacing: Appearance.rounding.unsharpenmore
+
+            Repeater {
+                model: ScriptModel {
+                    values: emptyKey.keys
+                }
+
+                delegate: Rectangle {
+                    id: emptyKeyCap
+                    required property var modelData
+
+                    implicitWidth: Math.max(emptyKeyLabel.implicitWidth + Appearance.rounding.small, emptyKey.implicitHeight * 0.66)
+                    implicitHeight: Math.round(emptyKey.implicitHeight * 0.66)
+                    radius: Appearance.rounding.verysmall
+                    color: Appearance.colors.colLayer2
+
+                    StyledText {
+                        id: emptyKeyLabel
+                        anchors.centerIn: parent
+                        text: emptyKeyCap.modelData
+                        font.family: Appearance.font.family.monospace
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colOnLayer2
+                    }
+                }
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: emptyKey.label
+                elide: Text.ElideRight
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+        }
+    }
+
     component ComposerButton: RippleButton {
         id: composerButton
 
@@ -731,6 +1141,78 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     }
                 }
 
+                Loader {
+                    // This chat came off another one — a fork, or a question
+                    // that was rewritten. The answer it replaced is still in
+                    // the chat it was left in, and this is the way back to it.
+                    id: branchBar
+                    Layout.fillWidth: true
+                    Layout.leftMargin: root.messageListInset
+                    Layout.rightMargin: root.messageListInset
+                    active: Ai.sessionParentId.length > 0
+                    visible: active
+
+                    sourceComponent: Rectangle {
+                        implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.7)
+                        radius: Appearance.rounding.full
+                        color: Appearance.colors.colLayer2
+
+                        RowLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: Appearance.rounding.small
+                            anchors.rightMargin: Appearance.rounding.unsharpen
+                            spacing: Appearance.rounding.unsharpenmore
+
+                            MaterialSymbol {
+                                text: "alt_route"
+                                fill: 1
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: Appearance.colors.colSubtext
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: {
+                                    const title = Ai.sessions.titleFor(Ai.sessionParentId);
+                                    return title.length > 0
+                                        ? Translation.tr("Branched from “%1”").arg(title)
+                                        : Translation.tr("Branched from another chat");
+                                }
+                                elide: Text.ElideRight
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colSubtext
+                            }
+
+                            RippleButton {
+                                implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.4)
+                                leftPadding: Appearance.rounding.small
+                                rightPadding: Appearance.rounding.small
+                                topPadding: 0
+                                bottomPadding: 0
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer3, 1)
+                                colBackgroundHover: Appearance.colors.colLayer3Hover
+                                colRipple: Appearance.colors.colLayer3Active
+                                onClicked: Ai.sessions.openSession(Ai.sessionParentId)
+
+                                Accessible.name: Translation.tr("Open the chat this one came from")
+
+                                contentItem: StyledText {
+                                    text: Translation.tr("Open the original")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colOnLayer2
+                                }
+
+                                StyledToolTip {
+                                    text: Translation.tr("The answer this one replaced is still there")
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Item {
                     id: messagesArea
                     // Messages
@@ -819,6 +1301,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                          * where the reader was standing before it did.
                          */
                         property bool following: true
+                        /** Which turn the keyboard is standing on, -1 for none. */
+                        property int focusedIndex: -1
                         /**
                          * Set while the view is moving because it was told to. Its own
                          * scrolling would otherwise read as the reader walking away —
@@ -929,6 +1413,9 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         }
                         delegate: AiMessage {
                             required property var modelData
+                            required property int index
+
+                            highlighted: messageListView.focusedIndex === index
                             // The id, not the row: this list hides messages the model
                             // sends itself, so a row number points at the wrong one.
                             messageId: modelData
@@ -937,6 +1424,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             }
                             onRegenerateRequested: id => controlBar.openRegenerate(id)
                             onModelPickerRequested: controlBar.togglePopover("model")
+                            onEditRequested: (id, content) => root.beginEdit(id, content)
                         }
                     }
 
@@ -945,11 +1433,168 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         z: 2
                         shown: Ai.messageIDs.length === 0
                         icon: Ai.currentPersona?.icon ?? "neurology"
-                        title: Ai.currentPersona?.name ?? Translation.tr("Large language models")
+                        // A persona speaks with its own name; without one,
+                        // the greeting rolls a fresh hello for this opening.
+                        title: {
+                            const personaName = Ai.currentPersona?.name;
+                            if (personaName)
+                                return personaName;
+                            return root.emptyStateGreeting.length > 0 ? root.emptyStateGreeting : Translation.tr("Hello");
+                        }
                         description: Ai.currentPersona?.description ?? Translation.tr("Ask anything")
                         shape: MaterialShape.Shape.PixelCircle
                         animateIconOnShow: true
                         entranceTrigger: root.entranceTrigger
+                        Component.onCompleted: root.refreshEmptyStateGreeting()
+                    }
+
+                    Loader {
+                        // The keys worth knowing before the first message: one
+                        // that opens the rest, and the three that decide where
+                        // this sidebar lives.
+                        id: emptyStateKeys
+                        z: 3
+                        anchors {
+                            horizontalCenter: parent.horizontalCenter
+                            bottom: parent.bottom
+                            bottomMargin: root.messageListInset * 2
+                        }
+                        width: Math.min(parent.width - root.messageListInset * 2, Appearance.font.pixelSize.huge * 20)
+                        active: Ai.messageIDs.length === 0 && !root.canvasViewOpen
+                        opacity: active ? 1 : 0
+                        visible: opacity > 0.01
+
+                        Behavior on opacity {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+
+                        sourceComponent: ColumnLayout {
+                            spacing: Appearance.rounding.unsharpenmore
+
+                            EmptyStateKey {
+                                Layout.fillWidth: true
+                                keys: ["?"]
+                                label: Translation.tr("All the keys this chat answers to")
+                                actionable: true
+                                onTriggered: controlBar.openShortcuts()
+                            }
+
+                            EmptyStateKey {
+                                Layout.fillWidth: true
+                                keys: ["Ctrl", "O"]
+                                label: Translation.tr("Expand the sidebar")
+                            }
+
+                            EmptyStateKey {
+                                Layout.fillWidth: true
+                                keys: ["Ctrl", "D"]
+                                label: Translation.tr("Detach it into its own window")
+                            }
+
+                            EmptyStateKey {
+                                Layout.fillWidth: true
+                                keys: ["Ctrl", "P"]
+                                label: Translation.tr("Pin it open")
+                            }
+                        }
+                    }
+
+                    Loader {
+                        // Find-in-chat, over the transcript rather than beside
+                        // it: the list stays where it is and the field is one
+                        // key away from being gone again.
+                        id: transcriptSearchLoader
+                        z: 4
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            top: parent.top
+                            margins: root.messageListInset
+                        }
+                        active: root.transcriptSearchOpen
+                        visible: active
+
+                        sourceComponent: Rectangle {
+                            implicitHeight: Math.round(Appearance.font.pixelSize.huge * 2)
+                            radius: Appearance.rounding.full
+                            color: Appearance.colors.colLayer2
+
+                            Component.onCompleted: findField.forceActiveFocus()
+
+                            RowLayout {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: Appearance.rounding.small
+                                anchors.rightMargin: Appearance.rounding.unsharpenmore
+                                spacing: Appearance.rounding.unsharpenmore
+
+                                MaterialSymbol {
+                                    text: "search"
+                                    fill: 1
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: Appearance.colors.colSubtext
+                                }
+
+                                StyledTextInput {
+                                    id: findField
+                                    Layout.fillWidth: true
+                                    text: root.transcriptQuery
+                                    color: Appearance.colors.colOnLayer2
+                                    onTextChanged: {
+                                        root.transcriptQuery = findField.text;
+                                        root.transcriptMatchIndex = 0;
+                                        if (root.transcriptMatches.length > 0)
+                                            root.goToMatch(0);
+                                    }
+                                    Keys.onPressed: event => {
+                                        if (event.key === Qt.Key_Escape) {
+                                            root.transcriptSearchOpen = false;
+                                            event.accepted = true;
+                                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                            root.goToMatch((event.modifiers & Qt.ShiftModifier) ? -1 : 1);
+                                            event.accepted = true;
+                                        }
+                                    }
+
+                                    StyledText {
+                                        anchors.fill: parent
+                                        verticalAlignment: Text.AlignVCenter
+                                        visible: findField.text.length === 0
+                                        text: Translation.tr("Find in this chat")
+                                        color: Appearance.colors.colSubtext
+                                    }
+                                }
+
+                                StyledText {
+                                    visible: root.transcriptQuery.trim().length > 0
+                                    text: root.transcriptMatches.length > 0
+                                        ? `${root.transcriptMatchIndex + 1}/${root.transcriptMatches.length}`
+                                        : Translation.tr("none")
+                                    font.family: Appearance.font.family.monospace
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colSubtext
+                                }
+
+                                FindStep {
+                                    symbol: "keyboard_arrow_up"
+                                    tooltipText: Translation.tr("Previous match")
+                                    onTriggered: root.goToMatch(-1)
+                                }
+
+                                FindStep {
+                                    symbol: "keyboard_arrow_down"
+                                    tooltipText: Translation.tr("Next match")
+                                    onTriggered: root.goToMatch(1)
+                                }
+
+                                FindStep {
+                                    symbol: "close"
+                                    tooltipText: Translation.tr("Close")
+                                    onTriggered: root.transcriptSearchOpen = false
+                                }
+                            }
+                        }
                     }
 
                     ScrollToBottomButton {
@@ -1261,7 +1906,9 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                 wrapMode: TextArea.Wrap
                                 padding: 10
                                 color: activeFocus ? Appearance.m3colors.m3onSurface : Appearance.m3colors.m3onSurfaceVariant
-                                placeholderText: Translation.tr('Message the model... "%1" for commands').arg(root.commandPrefix)
+                                placeholderText: root.editingMessageId.length > 0
+                                    ? Translation.tr("Rewrite the question — Esc to leave it as it was")
+                                    : Translation.tr('Message the model... "%1" for commands').arg(root.commandPrefix)
 
                                 background: null
 
@@ -1378,6 +2025,21 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                                 description: Ai.toolDescriptions[toolName]
                                             };
                                         });
+                                    } else if (/(^|\s)@[^\s]*$/.test(messageInputField.text)) {
+                                        // Only the token being typed is matched, so
+                                        // `@` in the middle of a sentence still works.
+                                        const typed = messageInputField.text.match(/(^|\s)@([^\s]*)$/)[2] ?? "";
+                                        root.suggestionQuery = typed;
+                                        const needle = typed.toLowerCase();
+                                        root.suggestionList = root.referenceSources
+                                            .filter(source => needle.length === 0
+                                                || source.token.toLowerCase().indexOf(needle) >= 0
+                                                || source.label.toLowerCase().indexOf(needle) >= 0)
+                                            .map(source => ({
+                                                name: `@${source.token}`,
+                                                displayName: source.label,
+                                                description: source.detail
+                                            }));
                                     } else if (messageInputField.text.startsWith(root.commandPrefix)) {
                                         root.suggestionQuery = messageInputField.text;
                                         root.suggestionList = root.allCommands.filter(cmd => cmd.name.startsWith(messageInputField.text.substring(1))).map(cmd => {
@@ -1395,9 +2057,25 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                 }
 
                                 Keys.onPressed: event => {
-                                    if (event.key === Qt.Key_Tab) {
+                                    // `?` on an empty composer is the way into the
+                                    // list of keys; with anything typed it is just a
+                                    // question mark.
+                                    if (event.text === "?" && messageInputField.text.length === 0) {
+                                        controlBar.openShortcuts();
+                                        event.accepted = true;
+                                        return;
+                                    }
+                                    if (root.handleShortcut(event)) {
+                                        event.accepted = true;
+                                        return;
+                                    }
+                                    if (event.key === Qt.Key_Tab && suggestions.visible) {
                                         suggestions.acceptSelectedWord();
                                         event.accepted = true;
+                                    } else if (event.key === Qt.Key_Tab) {
+                                        // With nothing to complete, Tab is what it is
+                                        // everywhere else: the way to the next control.
+                                        event.accepted = false;
                                     } else if (event.key === Qt.Key_Up && suggestions.visible) {
                                         suggestions.selectedIndex = Math.max(0, suggestions.selectedIndex - 1);
                                         event.accepted = true;
@@ -1412,7 +2090,6 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                         } else {
                                             // Accept text
                                             const inputText = messageInputField.text;
-                                            messageInputField.clear();
                                             root.handleInput(inputText);
                                             event.accepted = true;
                                         }
@@ -1441,9 +2118,12 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                         }
                                         event.accepted = false; // No image, let text pasting proceed
                                     } else if (event.key === Qt.Key_Escape) {
-                                        // Esc takes the attachments back off, one row
-                                        // at a time, before it closes anything.
-                                        if (Ai.attachments.length > 0) {
+                                        // Esc backs out of whatever the composer is
+                                        // in the middle of, one step at a time.
+                                        if (root.editingMessageId.length > 0) {
+                                            root.cancelEdit();
+                                            event.accepted = true;
+                                        } else if (Ai.attachments.length > 0) {
                                             Ai.clearAttachments();
                                             event.accepted = true;
                                         } else {
@@ -1607,7 +2287,6 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                                 }
                                                 const inputText = messageInputField.text;
                                                 root.handleInput(inputText);
-                                                messageInputField.clear();
                                             }
                                         }
 

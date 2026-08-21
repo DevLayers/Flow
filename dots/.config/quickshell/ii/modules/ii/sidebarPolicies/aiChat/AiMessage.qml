@@ -29,13 +29,65 @@ Item {
     property string messageId
     property var messageData
 
+    /**
+     * How much room the turn is allowed to take.
+     *
+     * "comfortable" is the sidebar: bubbles, activity rows and the action bar
+     * under the answer. "compact" is the Search panel, which is a narrow
+     * strip over the desktop — there the answer drops its bubble and the bar
+     * becomes the two controls worth having, so one component serves both
+     * instead of two that drift apart.
+     */
+    property string density: "comfortable"
+    readonly property bool compact: root.density === "compact"
+
     /** Asks the control bar for another model to redo this answer with. */
     signal regenerateRequested(string messageId)
     /** Asks the control bar to open the model picker. */
     signal modelPickerRequested
+    /** Asks the composer to take this question back for another go. */
+    signal editRequested(string messageId, string content)
 
     readonly property string transcriptContent: String(root.messageData?.content ?? root.messageData?.rawContent ?? "")
-    property list<var> messageBlocks: AiTranscriptRegistry.blocksForContent(root.transcriptContent)
+
+    /**
+     * The parsed content, rebuilt rather than re-bound.
+     *
+     * As a binding this ran the whole splitter on every token and handed back
+     * fresh objects each time, so every block's delegate was destroyed and
+     * built again sixty times a second. Now the rebuild is coalesced while an
+     * answer is streaming, and the blocks that did not change keep their
+     * identity so their delegates are left alone.
+     */
+    property list<var> messageBlocks: []
+
+    function rebuildBlocks() {
+        root.messageBlocks = AiTranscriptRegistry.reuseBlocks(root.messageBlocks, root.transcriptContent);
+    }
+
+    onTranscriptContentChanged: {
+        if (!root.streaming) {
+            blockRebuildTimer.stop();
+            root.rebuildBlocks();
+            return;
+        }
+        if (!blockRebuildTimer.running)
+            blockRebuildTimer.start();
+    }
+
+    onDoneChanged: {
+        blockRebuildTimer.stop();
+        root.rebuildBlocks();
+    }
+
+    Timer {
+        // Fast enough to read as text arriving, slow enough that a token does
+        // not cost a full re-parse and re-layout of the whole answer.
+        id: blockRebuildTimer
+        interval: 60
+        repeat: false
+        onTriggered: root.rebuildBlocks()
+    }
 
     readonly property string role: String(root.messageData?.role ?? "assistant")
     readonly property bool isUser: root.role === "user"
@@ -48,7 +100,7 @@ Item {
 
     // ── Measures ──────────────────────────────────────────────────────────
     /** Inside a bubble, from its edge to its text. */
-    readonly property real bubblePadding: Appearance.rounding.small
+    readonly property real bubblePadding: root.compact ? Appearance.rounding.unsharpenmore : Appearance.rounding.small
     /** Between the parts of one turn. */
     readonly property real blockGap: Appearance.rounding.unsharpenmore
     /** How much of the width a turn may take, so the other side stays open. */
@@ -67,13 +119,19 @@ Item {
     // are told apart by tone and side before a word of either is read.
     // `on`-prefixed names are read as signal handlers in QML, so the ink
     // colours are named for what they are rather than for what they sit on.
-    readonly property color questionSurface: Appearance.colors.colLayer3
+    // The turn the keyboard is standing on lifts its own surface. A ring
+    // would be a border, and this design does not use them.
+    /** Set by the transcript when this is the turn a search landed on. */
+    property bool highlighted: false
+    readonly property bool turnFocused: root.activeFocus || root.highlighted
+    readonly property color questionSurface: root.turnFocused ? Appearance.colors.colLayer3Hover : Appearance.colors.colLayer3
     readonly property color questionInk: Appearance.colors.colOnLayer3
-    readonly property color answerSurface: Appearance.m3colors.m3surfaceContainerLowest
+    readonly property color answerSurface: root.turnFocused ? Appearance.colors.colLayer2 : Appearance.m3colors.m3surfaceContainerLowest
     readonly property color answerInk: Appearance.colors.colOnLayer1
 
     focus: false
     activeFocusOnTab: true
+    Accessible.role: Accessible.Paragraph
     Accessible.name: root.isUser
         ? Translation.tr("Your message: %1").arg(String(root.messageData?.content ?? ""))
         : Translation.tr("Assistant response")
@@ -92,6 +150,7 @@ Item {
     }
 
     Component.onCompleted: {
+        root.rebuildBlocks();
         if (root.arriving)
             arrivalAnimation.start();
     }
@@ -137,6 +196,53 @@ Item {
         anchors.right: parent.right
         anchors.top: parent.top
         spacing: root.blockGap
+
+        Loader {
+            // Everything above this line is out of the model's reach now. The
+            // alternative was a conversation that quietly started forgetting,
+            // or one that the provider refused outright.
+            Layout.fillWidth: true
+            Layout.bottomMargin: active ? root.blockGap : 0
+            active: Ai.contextCutMessageId.length > 0 && Ai.contextCutMessageId === root.messageId && Ai.prunedTurnCount > 0
+            visible: active
+
+            sourceComponent: RowLayout {
+                spacing: Appearance.rounding.unsharpenmore
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 1
+                    color: Appearance.colors.colOutlineVariant
+                }
+
+                MaterialSymbol {
+                    text: "content_cut"
+                    fill: 1
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colSubtext
+                }
+
+                StyledText {
+                    text: Ai.contextSummary.length > 0
+                        ? Translation.tr("%1 earlier turns, summarised for the model").arg(Ai.prunedTurnCount)
+                        : Translation.tr("%1 earlier turns are past the model's window").arg(Ai.prunedTurnCount)
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+
+                    StyledToolTip {
+                        text: Ai.contextSummary.length > 0
+                            ? Translation.tr("They are still in this chat and still saved — the model gets them as a summary:\n\n%1").arg(Ai.contextSummary)
+                            : Translation.tr("They are still in this chat and still saved; they are just not sent any more.")
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 1
+                    color: Appearance.colors.colOutlineVariant
+                }
+            }
+        }
 
         // ── The question ──────────────────────────────────────────────────
 
@@ -204,36 +310,97 @@ Item {
             }
         }
 
-        Rectangle {
-            id: questionBubble
+        RowLayout {
+            // The pencil lives beside the bubble rather than inside it, so a
+            // long question is never rewrapped by a control that is only
+            // there while the pointer is.
             Layout.alignment: Qt.AlignRight
-            Layout.maximumWidth: root.userMaximumWidth
+            Layout.maximumWidth: root.width
             visible: root.isUser
-            implicitWidth: visible ? Math.min(root.userMaximumWidth, questionText.implicitWidth + root.bubblePadding * 3) : 0
-            implicitHeight: visible ? questionText.implicitHeight + root.bubblePadding * 2 : 0
-            // A stadium while the question is one line, and a soft box once
-            // it is many: a full radius on a tall block is a circle, and the
-            // text ends up inside its arc rather than inside the bubble.
-            radius: Math.min(questionBubble.height / 2, Appearance.rounding.verylarge)
-            color: root.questionSurface
+            spacing: Appearance.rounding.unsharpenmore
 
-            Behavior on implicitHeight {
-                animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+            HoverHandler {
+                id: questionHover
+                blocking: false
             }
 
-            StyledText {
-                id: questionText
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: root.bubblePadding * 1.5
-                anchors.rightMargin: root.bubblePadding * 1.5
-                text: String(root.messageData?.content ?? "")
-                wrapMode: Text.Wrap
-                horizontalAlignment: Text.AlignRight
-                font.pixelSize: Appearance.font.pixelSize.small
-                font.weight: Font.DemiBold
-                color: root.questionInk
+            RippleButton {
+                id: editButton
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: Math.round(Appearance.font.pixelSize.huge * 1.35)
+                implicitHeight: implicitWidth
+                buttonRadius: Appearance.rounding.full
+                topPadding: 0
+                bottomPadding: 0
+                leftPadding: 0
+                rightPadding: 0
+                focusPolicy: Qt.TabFocus
+                opacity: questionHover.hovered || editButton.hovered || editButton.activeFocus ? 1 : 0
+                visible: opacity > 0.01
+                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colRipple: Appearance.colors.colLayer2Active
+                onClicked: root.editRequested(root.messageId, String(root.messageData?.content ?? ""))
+
+                Accessible.name: Translation.tr("Edit this question")
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+
+                contentItem: MaterialSymbol {
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    text: "edit"
+                    fill: 1
+                    iconSize: Appearance.font.pixelSize.larger
+                    color: Appearance.colors.colSubtext
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Edit and ask again")
+                }
+            }
+
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+            }
+
+            Rectangle {
+                id: questionBubble
+                Layout.alignment: Qt.AlignRight
+                Layout.maximumWidth: root.userMaximumWidth
+                implicitWidth: visible ? Math.min(root.userMaximumWidth, questionText.implicitWidth + root.bubblePadding * 3) : 0
+                implicitHeight: visible ? questionText.implicitHeight + root.bubblePadding * 2 : 0
+                // A stadium while the question is one line, and a soft box once
+                // it is many: a full radius on a tall block is a circle, and the
+                // text ends up inside its arc rather than inside the bubble.
+                radius: Math.min(questionBubble.height / 2, Appearance.rounding.verylarge)
+                color: root.questionSurface
+
+                Behavior on color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                }
+
+                Behavior on implicitHeight {
+                    animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+                }
+
+                StyledText {
+                    id: questionText
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: root.bubblePadding * 1.5
+                    anchors.rightMargin: root.bubblePadding * 1.5
+                    text: String(root.messageData?.content ?? "")
+                    wrapMode: Text.Wrap
+                    horizontalAlignment: Text.AlignRight
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.DemiBold
+                    color: root.questionInk
+                }
             }
         }
 
@@ -450,7 +617,15 @@ Item {
             visible: root.isAssistant && (root.messageBlocks.length > 0 || root.streaming)
             implicitHeight: visible ? answerContent.implicitHeight + root.bubblePadding * 2 : 0
             radius: Math.min(answerBubble.height / 2, Appearance.rounding.large)
-            color: root.answerSurface
+            // An empty bubble is a box with nothing in it. The ground arrives
+            // with the first block, so the wait reads as the model about to
+            // speak rather than as a card that failed to load.
+            readonly property bool holdsOnlyTheWait: root.messageBlocks.length < 1
+            color: answerBubble.holdsOnlyTheWait ? "transparent" : root.answerSurface
+
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
 
             // Line by line rather than in jumps: the box follows the text
             // that is arriving in it instead of snapping to each new height.
@@ -490,27 +665,20 @@ Item {
                         }
 
                         FadeLoader {
+                            // Left, where the first line of the answer will
+                            // appear: the wait belongs in the place the words
+                            // are about to take, not in the middle of a box.
                             id: loadingIndicatorLoader
-                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
                             shown: root.messageBlocks.length < 1 && root.streaming
 
-                            sourceComponent: RowLayout {
-                                spacing: Appearance.rounding.unsharpenmore
-
-                                MaterialLoadingIndicator {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    loading: true
-                                }
-
-                                StyledText {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: (root.messageData?.thought?.length ?? 0) > 0
-                                        ? Translation.tr("Writing the answer")
-                                        : Translation.tr("Waiting for the model")
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    color: Appearance.colors.colSubtext
-                                }
+                            sourceComponent: AiTypingIndicator {
+                                active: loadingIndicatorLoader.shown
+                                // Before the first token, a model with a thought
+                                // in flight is reasoning; one without has not
+                                // started saying anything yet.
+                                reasoning: (root.messageData?.thought?.length ?? 0) > 0
                             }
                         }
                     }
@@ -550,6 +718,15 @@ Item {
                             }
 
                             Component {
+                                id: tableBlockComponent
+                                AiMessageTableBlock {
+                                    width: messageBlockItem.width
+                                    block: messageBlockItem.modelData
+                                    messageData: root.messageData
+                                }
+                            }
+
+                            Component {
                                 id: textBlockComponent
                                 AiMessageTextBlock {
                                     width: messageBlockItem.width
@@ -569,6 +746,8 @@ Item {
                                         return codeBlockComponent;
                                     if (blockType === "think")
                                         return thinkBlockComponent;
+                                    if (blockType === "table")
+                                        return tableBlockComponent;
                                     return textBlockComponent;
                                 }
                             }
@@ -579,6 +758,112 @@ Item {
         }
 
         // ── When it went wrong, or wants something ────────────────────────
+
+        Loader {
+            // The one thing a chat can do that outlives it: keep a fact for
+            // every conversation after this one. So it asks, here, with the
+            // words it wants to keep.
+            Layout.fillWidth: true
+            Layout.maximumWidth: root.answerMaximumWidth
+            active: (root.messageData?.pendingMemory?.length ?? 0) > 0 && (root.messageData?.functionPending ?? false)
+            visible: active
+
+            sourceComponent: Rectangle {
+                implicitHeight: memoryColumn.implicitHeight + root.bubblePadding * 2
+                radius: Appearance.rounding.large
+                color: Appearance.colors.colSecondaryContainer
+
+                ColumnLayout {
+                    id: memoryColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: root.bubblePadding
+                    anchors.rightMargin: root.bubblePadding
+                    spacing: Appearance.rounding.unsharpenmore
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Appearance.rounding.unsharpenmore
+
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignTop
+                            text: "bookmark_add"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.m3colors.m3onSecondaryContainer
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Remember this for later chats?")
+                                wrapMode: Text.Wrap
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.DemiBold
+                                color: Appearance.m3colors.m3onSecondaryContainer
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.messageData?.pendingMemory ?? ""
+                                wrapMode: Text.Wrap
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.m3colors.m3onSecondaryContainer
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Appearance.rounding.unsharpenmore
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        RippleButton {
+                            leftPadding: Appearance.rounding.small
+                            rightPadding: Appearance.rounding.small
+                            topPadding: Appearance.rounding.unsharpenmore / 2
+                            bottomPadding: Appearance.rounding.unsharpenmore / 2
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                            colBackgroundHover: Appearance.colors.colLayer2Hover
+                            colRipple: Appearance.colors.colLayer2Active
+                            onClicked: Ai.rejectMemory(root.messageData)
+
+                            contentItem: StyledText {
+                                text: Translation.tr("No")
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.m3colors.m3onSecondaryContainer
+                            }
+                        }
+
+                        RippleButton {
+                            leftPadding: Appearance.rounding.small
+                            rightPadding: Appearance.rounding.small
+                            topPadding: Appearance.rounding.unsharpenmore / 2
+                            bottomPadding: Appearance.rounding.unsharpenmore / 2
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colPrimary
+                            colBackgroundHover: Appearance.colors.colPrimaryHover
+                            colRipple: Appearance.colors.colPrimaryActive
+                            onClicked: Ai.commitMemory(root.messageData)
+
+                            contentItem: StyledText {
+                                text: Translation.tr("Remember it")
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colOnPrimary
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Loader {
             // Settings the model wants to write, shown against what they
@@ -806,6 +1091,46 @@ Item {
             }
         }
 
+        Loader {
+            // The provider stopped at its output limit. Regenerating was the
+            // only way out before, and it paid for the whole context again to
+            // get a different answer instead of the rest of this one.
+            Layout.fillWidth: true
+            Layout.maximumWidth: root.answerMaximumWidth
+            active: root.isAssistant && root.done && Ai.wasTruncated(root.messageData)
+            visible: active
+
+            sourceComponent: RippleButton {
+                implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.7)
+                leftPadding: Appearance.rounding.small
+                rightPadding: Appearance.rounding.small
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colRipple: Appearance.colors.colSecondaryContainerActive
+                onClicked: Ai.continueMessage(root.messageId)
+
+                Accessible.name: Translation.tr("Continue this answer")
+
+                contentItem: RowLayout {
+                    spacing: Appearance.rounding.unsharpenmore
+
+                    MaterialSymbol {
+                        text: "more_horiz"
+                        fill: 1
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: Appearance.m3colors.m3onSecondaryContainer
+                    }
+
+                    StyledText {
+                        text: Translation.tr("Continue — it stopped at the length limit")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.m3colors.m3onSecondaryContainer
+                    }
+                }
+            }
+        }
+
         // ── What can be done with it ──────────────────────────────────────
 
         AiMessageActions {
@@ -814,6 +1139,9 @@ Item {
             Layout.maximumWidth: root.answerMaximumWidth
             Layout.topMargin: visible ? root.blockGap / 2 : 0
             visible: root.isAssistant && root.done && root.messageBlocks.length > 0
+            // The Search panel is a strip that is mostly composer: it gets
+            // the same bar with the two actions a quick question needs.
+            minimal: root.compact
             messageId: root.messageId
             messageData: root.messageData
             surfaceColor: root.answerSurface

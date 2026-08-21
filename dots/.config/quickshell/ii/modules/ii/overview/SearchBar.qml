@@ -27,6 +27,10 @@ RowLayout {
     // True while the overview search widget is in AI chat mode — the field
     // becomes the chat composer.
     property bool aiModeActive: false
+    // Do not echo a programmatic handoff back into the launcher query. The
+    // query is cleared when AI takes over; echoing that assignment through the
+    // hidden field creates a query/isAiMode feedback loop and drops focus.
+    property bool syncingSearchText: false
 
     BarThemes {
         id: barThemes
@@ -35,7 +39,9 @@ RowLayout {
 
     onSearchingTextChanged: {
         if (searchInput.text !== searchingText) {
+            root.syncingSearchText = true;
             searchInput.text = searchingText;
+            root.syncingSearchText = false;
         }
     }
 
@@ -315,7 +321,10 @@ RowLayout {
             }
         }
 
-        onTextChanged: LauncherSearch.query = text
+        onTextChanged: {
+            if (!root.syncingSearchText)
+                LauncherSearch.query = text;
+        }
 
         onAccepted: {
             if (root.aiModeActive) {

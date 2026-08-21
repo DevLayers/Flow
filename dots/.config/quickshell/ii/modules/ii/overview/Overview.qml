@@ -200,15 +200,14 @@ Scope {
                             active: false
                         }
 
-                        Keys.onPressed: event => {
-                            if (event.key === Qt.Key_Escape) {
-                                if (searchWidget.isAiMode) {
-                                    searchWidget.exitAiMode();
-                                    event.accepted = true;
-                                    return;
-                                }
-                                GlobalStates.overviewOpen = false;
-                            }
+                        // PanelWindow is a Wayland interface, not a QtQuick
+                        // Item, so a Keys attached property here is ignored.
+                        // Resolve Escape with a real window shortcut instead;
+                        // it remains active even when the composer lost focus.
+                        Shortcut {
+                            enabled: root.monitorIsFocused && GlobalStates.overviewOpen && searchWidget.isAiMode
+                            sequence: "Escape"
+                            onActivated: searchWidget.handleEscape()
                         }
 
                         Timer {

@@ -6,6 +6,7 @@ import qs.services.ai
 import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.sidebarPolicies.aiChat
 import qs.modules.common.functions
 import qs.modules.ii.sidebarPolicies
 import QtQuick
@@ -23,7 +24,8 @@ import Quickshell.Io
  *    - Right: History toggle & New Chat buttons (with fill: 1)
  *
  * 2. Middle Canvas Rectangle:
- *    - Hosts the message transcript and the inlined history view with fade + slide animation
+ *    - Hosts the transcript, history, model picker and keyboard shortcut page
+ *      with the same fade + directional slide used by the sidebar AiChat
  *
  * 3. Bottom Composer Rectangle:
  *    - Multi-line keyboard-first prompt input, model selector pill, and send button
@@ -36,17 +38,36 @@ Item {
     signal requestSendMessage(string text)
     signal requestContinueInSidebar()
 
+    // The Loader keeps this item alive for the fade-out.  Keep its shortcuts
+    // scoped to the actual AI surface so a just-closed panel cannot swallow
+    // the Escape that should close ordinary Search.
+    property bool activeSurface: false
+    // Assigned by SearchWidget while this panel is hosted in Overview. Keep
+    // the signal fallback below so the panel remains embeddable elsewhere.
+    property var searchHost: null
+    focus: root.activeSurface
     property bool historyOpen: false
     property bool modelsOpen: false
+    property bool shortcutsOpen: false
+    property string loadingSessionId: ""
 
     onModelsOpenChanged: {
-        if (root.modelsOpen)
+        if (root.modelsOpen) {
             root.historyOpen = false;
+            root.shortcutsOpen = false;
+        }
     }
     onHistoryOpenChanged: {
         if (root.historyOpen) {
             root.modelsOpen = false;
+            root.shortcutsOpen = false;
             Ai.sessions.ensureLoaded();
+        }
+    }
+    onShortcutsOpenChanged: {
+        if (root.shortcutsOpen) {
+            root.historyOpen = false;
+            root.modelsOpen = false;
         }
     }
 
@@ -62,7 +83,59 @@ Item {
         return models;
     }
 
-    Component.onCompleted: Ai.sessions.ensureLoaded()
+    Component.onCompleted: {
+        Ai.sessions.ensureLoaded();
+        root.refreshVisibleMessageIds();
+    }
+
+    function refreshVisibleMessageIds() {
+        const ids = Array.from(Ai.messageIDs ?? []);
+        const byId = Ai.messageByID ?? ({});
+        root.visibleMessageIds = ids.filter(id => {
+            const message = byId[id];
+            return message && message.role !== Ai.interfaceRole && (message.visibleToUser ?? true);
+        });
+    }
+
+    Connections {
+        target: Ai
+        function onMessageIDsChanged() { root.refreshVisibleMessageIds(); }
+        function onMessageByIDChanged() { root.refreshVisibleMessageIds(); }
+    }
+
+    Connections {
+        target: Ai.sessions
+        function onSessionOpened(session) {
+            const openedId = String(session?.id ?? "");
+            if (openedId.length === 0 || openedId !== root.loadingSessionId)
+                return;
+            root.loadingSessionId = "";
+            root.historyOpen = false;
+            Qt.callLater(root.focusComposer);
+        }
+        function onLoadFailed(operationId, sessionId, reason) {
+            if (String(sessionId ?? "") !== root.loadingSessionId)
+                return;
+            root.loadingSessionId = "";
+            Ai.submissionNotice = String(reason ?? Translation.tr("Unable to open that chat."));
+        }
+        function onOpenFailed(sessionId, reason) {
+            if (String(sessionId ?? "") !== root.loadingSessionId)
+                return;
+            root.loadingSessionId = "";
+            Ai.submissionNotice = String(reason ?? Translation.tr("Unable to open that chat."));
+        }
+    }
+
+    onActiveSurfaceChanged: {
+        if (root.activeSurface)
+            Qt.callLater(root.focusComposer);
+    }
+
+    onFocusChanged: {
+        if (root.focus && root.activeSurface)
+            Qt.callLater(root.focusComposer);
+    }
     property string pendingTrashId: ""
 
     readonly property real headerControlExtent: Math.round(Appearance.font.pixelSize.huge * 2)
@@ -71,6 +144,21 @@ Item {
     readonly property real canvasHeight: 380
     readonly property real composerHeight: headerControlExtent + headerControlPadding * 2
     readonly property real columnSpacing: Appearance.rounding.verysmall
+    readonly property real pageSlideDistance: Appearance.font.pixelSize.huge * 1.5
+    /**
+     * What the transcript keeps clear of the surface's rounded corners. The
+     * same measure the sidebar uses, so a bubble never looks like it is
+     * overflowing the panel it sits in.
+     */
+    readonly property real transcriptInset: Appearance.rounding.small
+
+    /** The hello on an empty chat, rolled fresh every time one appears. */
+    property string emptyStateGreeting: ""
+
+    function refreshEmptyStateGreeting() {
+        root.emptyStateGreeting = AiTranscriptRegistry.greetingLine();
+    }
+    readonly property bool canvasViewOpen: root.historyOpen || root.modelsOpen || root.shortcutsOpen
 
     implicitWidth: 720
     implicitHeight: headerHeight + canvasHeight + composerHeight + columnSpacing * 2
@@ -83,32 +171,40 @@ Item {
 
     function navigateUp() {
         if (root.historyOpen) {
-            sessionList.contentY = Math.max(0, sessionList.contentY - 64);
+            sessionList.contentY = Math.max(0, sessionList.contentY - root.canvasHeight / 2);
             return;
         }
         if (root.modelsOpen) {
-            modelList.contentY = Math.max(0, modelList.contentY - 64);
+            modelList.contentY = Math.max(0, modelList.contentY - root.canvasHeight / 2);
+            return;
+        }
+        if (root.shortcutsOpen) {
+            shortcutSheetLoader.item?.navigateUp?.();
             return;
         }
         if (messageList.contentHeight > messageList.height)
-            messageList.contentY = Math.max(0, messageList.contentY - 64);
+            messageList.contentY = Math.max(0, messageList.contentY - messageList.height / 2);
     }
 
     function navigateDown() {
         if (root.historyOpen) {
             sessionList.contentY = Math.min(
                 Math.max(0, sessionList.contentHeight - sessionList.height),
-                sessionList.contentY + 64);
+                sessionList.contentY + sessionList.height / 2);
             return;
         }
         if (root.modelsOpen) {
             modelList.contentY = Math.min(
                 Math.max(0, modelList.contentHeight - modelList.height),
-                modelList.contentY + 64);
+                modelList.contentY + modelList.height / 2);
+            return;
+        }
+        if (root.shortcutsOpen) {
+            shortcutSheetLoader.item?.navigateDown?.();
             return;
         }
         if (messageList.contentHeight > messageList.height)
-            messageList.contentY = Math.min(messageList.contentHeight - messageList.height, messageList.contentY + 64);
+            messageList.contentY = Math.min(messageList.contentHeight - messageList.height, messageList.contentY + messageList.height / 2);
     }
 
     function captureHandoffState() {
@@ -187,6 +283,11 @@ Item {
     }
 
     function handleEscape() {
+        if (root.shortcutsOpen) {
+            root.shortcutsOpen = false;
+            root.focusComposer();
+            return true;
+        }
         if (root.historyOpen) {
             root.historyOpen = false;
             return true;
@@ -198,12 +299,41 @@ Item {
         return false;
     }
 
+    function openShortcuts() {
+        root.shortcutsOpen = true;
+        Qt.callLater(function() {
+            if (root.shortcutsOpen)
+                shortcutsBackButton.forceActiveFocus();
+        });
+    }
+
     function handleComposerEscape() {
         if (!root.handleEscape())
-            root.requestBackToSearch();
+            root.returnToSearch();
+    }
+
+    function returnToSearch() {
+        const host = root.searchHost;
+        if (host && typeof host.exitAiMode === "function") {
+            host.exitAiMode();
+            return;
+        }
+        root.requestBackToSearch();
+    }
+
+    function openSession(sessionId: string) {
+        const id = String(sessionId ?? "").trim();
+        if (id.length === 0)
+            return;
+        root.loadingSessionId = id;
+        Ai.openSession(id);
     }
 
     function focusNext() {
+        if (root.shortcutsOpen) {
+            shortcutsBackButton.forceActiveFocus();
+            return;
+        }
         if (brainBackButton.activeFocus)
             historyToggleBtn.forceActiveFocus();
         else if (historyToggleBtn.activeFocus)
@@ -215,6 +345,10 @@ Item {
     }
 
     function focusPrev() {
+        if (root.shortcutsOpen) {
+            shortcutsBackButton.forceActiveFocus();
+            return;
+        }
         if (brainBackButton.activeFocus)
             composer.focusLastButton();
         else if (newChatBtn.activeFocus)
@@ -225,15 +359,39 @@ Item {
             brainBackButton.forceActiveFocus();
     }
 
-    readonly property var visibleMessageIds: Ai.messageIDs.filter(id => {
-        const m = Ai.messageByID[id];
-        return m && m.role !== Ai.interfaceRole && (m.visibleToUser ?? true);
-    })
+    property var visibleMessageIds: []
 
+    // This panel is a parent of the focused composer and header controls.
+    // Capture Esc first so a child cannot send focus to the background before
+    // the AI surface has a chance to return to normal Search.
+    Keys.priority: Keys.BeforeItem
     Keys.onPressed: event => {
-        if (event.key === Qt.Key_Escape) {
+        if (!root.activeSurface)
+            return;
+        if (event.text === "?" && String(Ai.draft ?? "").trim().length === 0) {
+            root.openShortcuts();
+            event.accepted = true;
+        } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_L) {
+            root.historyOpen = !root.historyOpen;
+            event.accepted = true;
+        } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_M) {
+            root.modelsOpen = !root.modelsOpen;
+            event.accepted = true;
+        } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_T) {
+            composer.showRail("actions");
+            event.accepted = true;
+        } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_J) {
+            root.requestContinueInSidebar();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Escape) {
             if (!root.handleEscape())
-                root.requestBackToSearch();
+                root.returnToSearch();
+            event.accepted = true;
+        } else if (root.canvasViewOpen && (event.key === Qt.Key_Up || event.key === Qt.Key_PageUp)) {
+            root.navigateUp();
+            event.accepted = true;
+        } else if (root.canvasViewOpen && (event.key === Qt.Key_Down || event.key === Qt.Key_PageDown)) {
+            root.navigateDown();
             event.accepted = true;
         } else if (event.key === Qt.Key_Tab) {
             if (event.modifiers & Qt.ShiftModifier)
@@ -247,6 +405,7 @@ Item {
         } else if (event.key === Qt.Key_O && (event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)) {
             Ai.newChat();
             root.historyOpen = false;
+            root.shortcutsOpen = false;
             event.accepted = true;
         }
     }
@@ -291,16 +450,16 @@ Item {
                         : (brainBackButton.hovered ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2)
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     colRipple: Appearance.colors.colLayer2Active
-                    onClicked: root.requestBackToSearch()
+                    onClicked: root.returnToSearch()
 
                     Accessible.name: Translation.tr("Back to search")
 
                     Keys.onPressed: event => {
                         if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
-                            root.requestBackToSearch();
+                            root.returnToSearch();
                             event.accepted = true;
                         } else if (event.key === Qt.Key_Escape) {
-                            root.focusComposer();
+                            root.returnToSearch();
                             event.accepted = true;
                         } else if (event.key === Qt.Key_Tab) {
                             if (event.modifiers & Qt.ShiftModifier)
@@ -393,7 +552,7 @@ Item {
                         }
 
                         StyledToolTip {
-                            text: Translation.tr("History (/sessions)")
+                            text: Translation.tr("History (Ctrl+L)")
                         }
                     }
 
@@ -411,6 +570,7 @@ Item {
                         onClicked: {
                             Ai.newChat();
                             root.historyOpen = false;
+                            root.shortcutsOpen = false;
                             root.requestFocusComposer();
                         }
 
@@ -420,6 +580,7 @@ Item {
                             if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
                                 Ai.newChat();
                                 root.historyOpen = false;
+                                root.shortcutsOpen = false;
                                 root.focusComposer();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Escape) {
@@ -445,7 +606,7 @@ Item {
                         }
 
                         StyledToolTip {
-                            text: Translation.tr("New chat (/new)")
+                            text: Translation.tr("New chat (Ctrl+Shift+O)")
                         }
                     }
                 }
@@ -475,10 +636,22 @@ Item {
             Item {
                 id: messagesView
                 anchors.fill: parent
-                opacity: (!root.historyOpen && !root.modelsOpen) ? 1.0 : 0.0
+                opacity: root.canvasViewOpen ? 0.0 : 1.0
                 visible: opacity > 0.001
                 transform: Translate {
-                    x: (root.historyOpen || root.modelsOpen) ? -36 : 0
+                    id: messagesViewSlide
+                    x: root.canvasViewOpen ? -root.pageSlideDistance : 0
+
+                    // Animate Translate.x, not the transform list itself.
+                    // The latter is an object and cannot be interpolated
+                    // reliably, which made the old page transitions snap.
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
+                    }
                 }
 
                 Behavior on opacity {
@@ -488,60 +661,215 @@ Item {
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
                 }
-                Behavior on transform {
-                    NumberAnimation {
-                        property: "x"
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-
-                // Empty state matching sidebarPolicies/AiChat
+                // The same empty state the sidebar shows, down to the line
+                // that greets the reader: it is rolled by the shared registry
+                // so the two surfaces cannot drift apart again.
                 PagePlaceholder {
                     id: emptyStatePlaceholder
                     z: 2
                     shown: root.visibleMessageIds.length === 0
                     icon: Ai.currentPersona?.icon ?? "neurology"
-                    title: Ai.currentPersona?.name ?? Translation.tr("Large language models")
-                    description: Ai.currentPersona?.description ?? Translation.tr("Ask anything, or start with one of these")
+                    title: {
+                        const personaName = Ai.currentPersona?.name;
+                        if (personaName)
+                            return personaName;
+                        return root.emptyStateGreeting.length > 0 ? root.emptyStateGreeting : Translation.tr("Hello");
+                    }
+                    description: Ai.currentPersona?.description ?? Translation.tr("Ask anything")
                     shape: MaterialShape.Shape.PixelCircle
                     animateIconOnShow: true
+                    Component.onCompleted: root.refreshEmptyStateGreeting()
+
+                    onShownChanged: {
+                        if (emptyStatePlaceholder.shown)
+                            root.refreshEmptyStateGreeting();
+                    }
+                }
+
+                RippleButton {
+                    id: shortcutsHint
+                    z: 3
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: Appearance.rounding.normal
+                    implicitHeight: root.headerControlExtent
+                    implicitWidth: hintContent.implicitWidth + Appearance.rounding.normal * 2
+                    visible: root.visibleMessageIds.length === 0 && !root.canvasViewOpen
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundActive: Appearance.colors.colLayer2Active
+                    colRipple: Appearance.colors.colLayer2Active
+                    onClicked: root.openShortcuts()
+
+                    Accessible.name: Translation.tr("Keyboard shortcuts")
+
+                    contentItem: RowLayout {
+                        id: hintContent
+                        spacing: Appearance.rounding.verysmall
+
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: "keyboard"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: Translation.tr("Keyboard shortcuts")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnLayer2
+                        }
+
+                        Rectangle {
+                            Layout.alignment: Qt.AlignVCenter
+                            implicitWidth: Math.max(
+                                Appearance.font.pixelSize.small + Appearance.rounding.small,
+                                Appearance.font.pixelSize.huge * 0.65)
+                            implicitHeight: Appearance.font.pixelSize.huge
+                            radius: Appearance.rounding.verysmall
+                            color: Appearance.colors.colLayer3
+
+                            StyledText {
+                                anchors.centerIn: parent
+                                text: "?"
+                                font.family: Appearance.font.family.monospace
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colOnLayer3
+                            }
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Keyboard shortcuts (?)")
+                    }
+                }
+
+                ScrollEdgeFade {
+                    // The same soft ends the sidebar transcript has: they
+                    // appear only when there is something past them, and the
+                    // band blurs before it fades.
+                    z: 1
+                    target: messageList
+                    vertical: true
+                    blurEdges: true
+                    fadeSize: Math.round(Appearance.font.pixelSize.huge * 1.6)
+                    color: Appearance.colors.colLayer1
                 }
 
                 // Messages list
-                ListView {
+                StyledListView {
                     id: messageList
+                    z: 0
                     anchors.fill: parent
-                    anchors.margins: 12
+                    anchors.leftMargin: root.transcriptInset
+                    anchors.rightMargin: root.transcriptInset
                     clip: true
-                    spacing: 12
+                    spacing: Appearance.rounding.small
+                    topMargin: root.transcriptInset
+                    bottomMargin: root.transcriptInset
+                    popin: false
+                    animateAppearance: false
+                    boundsBehavior: Flickable.StopAtBounds
                     visible: root.visibleMessageIds.length > 0
                     model: ScriptModel {
                         values: root.visibleMessageIds
                     }
 
+                    /**
+                     * Following the end is a decision about direction, not
+                     * distance: any move upward hands the view to the reader
+                     * and nothing pulls it back until they return to the end
+                     * themselves. Copied deliberately from the sidebar, which
+                     * is where this behaviour was got right.
+                     */
                     property bool following: true
+                    property bool pinning: false
+                    property real previousContentY: 0
+                    readonly property real followThreshold: Appearance.rounding.large
+                    readonly property real bottomGap: Math.max(0, messageList.originY + messageList.contentHeight - messageList.height - messageList.contentY)
+                    readonly property real maximumContentY: Math.max(messageList.originY - messageList.topMargin,
+                        messageList.originY + messageList.contentHeight - messageList.height + messageList.bottomMargin)
+
+                    function pinToEnd() {
+                        messageList.following = true;
+                        messageList.pinning = true;
+                        messageList.contentY = messageList.maximumContentY;
+                        messageList.previousContentY = messageList.contentY;
+                        pinReleaseTimer.restart();
+                    }
+
+                    Timer {
+                        id: pinReleaseTimer
+                        interval: Appearance.animation.scroll.duration + 80
+                        onTriggered: messageList.pinning = false
+                    }
+
+                    onUserScrolled: (targetY, maxY) => {
+                        messageList.pinning = false;
+                        if (targetY < messageList.previousContentY - 0.5) {
+                            messageList.following = false;
+                            return;
+                        }
+                        messageList.following = (maxY - targetY) <= messageList.followThreshold;
+                    }
+
+                    onDraggingChanged: {
+                        if (messageList.dragging)
+                            messageList.pinning = false;
+                    }
+
+                    onMovementEnded: messageList.following = messageList.bottomGap <= messageList.followThreshold
 
                     onContentYChanged: {
-                        if (moving) {
-                            following = atYEnd;
+                        const previous = messageList.previousContentY;
+                        messageList.previousContentY = messageList.contentY;
+                        if (messageList.pinning)
+                            return;
+                        if (messageList.contentY < previous - 0.5) {
+                            messageList.following = false;
+                            return;
                         }
+                        messageList.following = messageList.bottomGap <= messageList.followThreshold;
+                    }
+
+                    onContentHeightChanged: {
+                        if (!messageList.following)
+                            return;
+                        Qt.callLater(function () {
+                            messageList.pinToEnd();
+                        });
                     }
 
                     onCountChanged: {
-                        if (following) {
-                            Qt.callLater(positionViewAtEnd);
-                        }
+                        if (!messageList.following)
+                            return;
+                        Qt.callLater(function () {
+                            messageList.pinToEnd();
+                        });
                     }
 
-                    delegate: AiChatPanelMessage {
+                    onHeightChanged: {
+                        if (messageList.following)
+                            Qt.callLater(function () {
+                                messageList.pinToEnd();
+                            });
+                    }
+
+                    delegate: AiMessage {
+                        // The same turn the sidebar draws, in its compact
+                        // density. There used to be a second implementation
+                        // here, and the two had already drifted apart.
                         id: messageDelegate
                         required property string modelData
                         required property int index
                         width: messageList.width
+                        density: "compact"
                         messageId: modelData
                         messageData: Ai.messageByID[modelData]
+                        onRegenerateRequested: id => Ai.regenerate(id)
                     }
                 }
             }
@@ -557,29 +885,26 @@ Item {
                 opacity: root.historyOpen ? 1.0 : 0.0
                 visible: opacity > 0.001
                 transform: Translate {
-                    x: root.historyOpen ? 0 : 36
+                    id: historyViewSlide
+                    x: root.historyOpen ? 0 : root.pageSlideDistance
+
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
+                    }
                 }
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-                Behavior on transform {
-                    NumberAnimation {
-                        property: "x"
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(historyView)
                 }
 
                 // Empty history placeholder
                 ColumnLayout {
                     anchors.centerIn: parent
-                    spacing: 8
+                    spacing: Appearance.rounding.verysmall
                     visible: (Ai.sessions.index ?? []).length === 0
 
                     MaterialSymbol {
@@ -602,9 +927,9 @@ Item {
                     id: sessionList
                     anchors.fill: parent
                     clip: false
-                    spacing: 8
-                    topMargin: 16
-                    bottomMargin: 16
+                    spacing: Appearance.rounding.verysmall
+                    topMargin: Appearance.rounding.normal
+                    bottomMargin: Appearance.rounding.normal
                     visible: (Ai.sessions.index ?? []).length > 0
                     model: Ai.sessions.index ?? []
 
@@ -643,14 +968,14 @@ Item {
                         id: sessionRow
                         required property var modelData
                         width: sessionList.width
-                        implicitHeight: 48
+                        implicitHeight: root.headerControlExtent
                         height: implicitHeight
 
                         readonly property bool isActive: sessionRow.modelData?.id === Ai.sessions.currentId
 
                         RowLayout {
                             anchors.fill: parent
-                            spacing: 8
+                            spacing: Appearance.rounding.verysmall
 
                             // Main Conversation Info Card
                             RippleButton {
@@ -667,16 +992,14 @@ Item {
                                 colBackgroundToggledActive: Appearance.colors.colPrimaryActive
 
                                 onClicked: {
-                                    Ai.openSession(sessionRow.modelData.id);
-                                    root.historyOpen = false;
-                                    root.requestFocusComposer();
+                                    root.openSession(sessionRow.modelData.id);
                                 }
 
                                 contentItem: RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 16
-                                    anchors.rightMargin: 16
-                                    spacing: 12
+                                    anchors.leftMargin: Appearance.rounding.normal
+                                    anchors.rightMargin: Appearance.rounding.normal
+                                    spacing: Appearance.rounding.small
 
                                     MaterialSymbol {
                                         text: "chat_bubble"
@@ -699,10 +1022,10 @@ Item {
                             // Right Circle Arrow Button
                             RippleButton {
                                 id: openSessionBtn
-                                implicitWidth: 48
-                                implicitHeight: 48
-                                Layout.preferredWidth: 48
-                                Layout.preferredHeight: 48
+                                implicitWidth: root.headerControlExtent
+                                implicitHeight: root.headerControlExtent
+                                Layout.preferredWidth: root.headerControlExtent
+                                Layout.preferredHeight: root.headerControlExtent
                                 buttonRadius: Appearance.rounding.full
                                 toggled: sessionRow.isActive
                                 colBackground: sessionRow.isActive ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
@@ -713,9 +1036,7 @@ Item {
                                 colBackgroundToggledActive: Appearance.colors.colPrimaryActive
 
                                 onClicked: {
-                                    Ai.openSession(sessionRow.modelData.id);
-                                    root.historyOpen = false;
-                                    root.requestFocusComposer();
+                                    root.openSession(sessionRow.modelData.id);
                                 }
 
                                 contentItem: MaterialSymbol {
@@ -746,29 +1067,26 @@ Item {
                 opacity: root.modelsOpen ? 1.0 : 0.0
                 visible: opacity > 0.001
                 transform: Translate {
-                    x: root.modelsOpen ? 0 : 36
+                    id: modelsViewSlide
+                    x: root.modelsOpen ? 0 : root.pageSlideDistance
+
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
+                    }
                 }
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-                Behavior on transform {
-                    NumberAnimation {
-                        property: "x"
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(modelsView)
                 }
 
                 // Empty models placeholder
                 ColumnLayout {
                     anchors.centerIn: parent
-                    spacing: 8
+                    spacing: Appearance.rounding.verysmall
                     visible: root.orderedModels.length === 0
 
                     MaterialSymbol {
@@ -791,9 +1109,9 @@ Item {
                     id: modelList
                     anchors.fill: parent
                     clip: false
-                    spacing: 8
-                    topMargin: 16
-                    bottomMargin: 16
+                    spacing: Appearance.rounding.verysmall
+                    topMargin: Appearance.rounding.normal
+                    bottomMargin: Appearance.rounding.normal
                     visible: root.orderedModels.length > 0
                     model: root.orderedModels
 
@@ -832,14 +1150,14 @@ Item {
                         id: modelRow
                         required property var modelData
                         width: modelList.width
-                        implicitHeight: 48
+                        implicitHeight: root.headerControlExtent
                         height: implicitHeight
 
                         readonly property bool isActive: modelRow.modelData?.id === Ai.currentModelId
 
                         RowLayout {
                             anchors.fill: parent
-                            spacing: 8
+                            spacing: Appearance.rounding.verysmall
 
                             // Main Model Info Card
                             RippleButton {
@@ -863,9 +1181,9 @@ Item {
 
                                 contentItem: RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 16
-                                    anchors.rightMargin: 16
-                                    spacing: 12
+                                    anchors.leftMargin: Appearance.rounding.normal
+                                    anchors.rightMargin: Appearance.rounding.normal
+                                    spacing: Appearance.rounding.small
 
                                     Loader {
                                         Layout.alignment: Qt.AlignVCenter
@@ -909,10 +1227,10 @@ Item {
                             // Right Circle Check/Select Button
                             RippleButton {
                                 id: selectModelBtn
-                                implicitWidth: 48
-                                implicitHeight: 48
-                                Layout.preferredWidth: 48
-                                Layout.preferredHeight: 48
+                                implicitWidth: root.headerControlExtent
+                                implicitHeight: root.headerControlExtent
+                                Layout.preferredWidth: root.headerControlExtent
+                                Layout.preferredHeight: root.headerControlExtent
                                 buttonRadius: Appearance.rounding.full
                                 toggled: modelRow.isActive
                                 colBackground: modelRow.isActive ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
@@ -937,11 +1255,112 @@ Item {
                                 }
 
                                 StyledToolTip {
-                                    text: modelRow.isActive ? Translation.tr("Active model") : Translation.tr("Select model")
+                                    text: modelRow.isActive
+                                        ? Translation.tr("Active model (Ctrl+M)")
+                                        : Translation.tr("Select model (Ctrl+M)")
                                 }
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Keyboard shortcuts page. This is the same canvas page used by the
+        // sidebar chat, so `?` teaches one vocabulary instead of creating a
+        // second, Search-only cheatsheet.
+        Item {
+            id: shortcutsView
+            parent: canvasSurface
+            anchors.fill: parent
+            z: 2
+            opacity: root.shortcutsOpen ? 1.0 : 0.0
+            visible: opacity > 0.001
+            transform: Translate {
+                id: shortcutsViewSlide
+                x: root.shortcutsOpen ? 0 : root.pageSlideDistance
+
+                Behavior on x {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+            }
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(shortcutsView)
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: Appearance.rounding.large
+                spacing: Appearance.rounding.small
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Appearance.rounding.normal
+
+                    RippleButton {
+                        id: shortcutsBackButton
+                        implicitWidth: root.headerControlExtent
+                        implicitHeight: root.headerControlExtent
+                        buttonRadius: Appearance.rounding.full
+                        focusPolicy: Qt.StrongFocus
+                        colBackground: shortcutsBackButton.activeFocus
+                            ? Appearance.colors.colLayer2Active
+                            : (shortcutsBackButton.hovered ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2)
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colRipple: Appearance.colors.colLayer2Active
+                        onClicked: root.handleEscape()
+
+                        Accessible.name: Translation.tr("Back to chat")
+
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
+                                root.handleEscape();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Escape) {
+                                root.handleEscape();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+                                root.focusComposer();
+                                event.accepted = true;
+                            }
+                        }
+
+                        contentItem: MaterialSymbol {
+                            text: "arrow_back"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: shortcutsBackButton.activeFocus
+                                ? Appearance.m3colors.m3primary
+                                : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Back to chat (Esc)")
+                        }
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Keys")
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnLayer1
+                    }
+                }
+
+                Loader {
+                    id: shortcutSheetLoader
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    // Keep the page mounted while it fades out so closing
+                    // does not replace the content with a blank frame.
+                    active: true
+                    source: Qt.resolvedUrl("../sidebarPolicies/aiChat/ChatShortcutSheet.qml")
                 }
             }
         }
@@ -958,6 +1377,7 @@ Item {
             onRequestEscape: root.handleComposerEscape()
             onRequestOpenHistory: root.historyOpen = !root.historyOpen
             onRequestOpenModels: root.modelsOpen = !root.modelsOpen
+            onRequestOpenShortcuts: root.openShortcuts()
             onRequestFocusNext: historyToggleBtn.forceActiveFocus()
             onRequestFocusPrev: brainBackButton.forceActiveFocus()
         }

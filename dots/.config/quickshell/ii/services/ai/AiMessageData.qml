@@ -41,6 +41,14 @@ QtObject {
     property int totalTokens: -1
     property bool thinking: true
     property bool done: false
+    // Why the provider stopped. Normalised by `Ai.stopKind()`: what matters
+    // to the UI is only whether the answer was cut off at the output limit,
+    // which is the one case worth offering to continue.
+    property string finishReason: ""
+    // When the turn was made and when it settled. A transcript can then say
+    // how long an answer took without asking the provider for it.
+    property real createdAt: 0
+    property real completedAt: 0
     property var annotations: []
     property var annotationSources: []
     property list<string> searchQueries: []
@@ -54,6 +62,10 @@ QtObject {
     property string functionCallId: ""
     property string functionResponse
     property bool functionPending: false
+    // A fact the model wants to keep between conversations, held until the
+    // user has seen it. Memory is the one tool whose effect outlives the
+    // chat, so it asks in the chat.
+    property string pendingMemory: ""
     // Settings the model wants to write, as {key, current, proposed}, held
     // until the user has seen them next to what they would replace.
     property var pendingChanges: []

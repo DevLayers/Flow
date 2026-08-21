@@ -1085,7 +1085,9 @@ Singleton {
                     // Permission per tool, by tool id. A tool named in neither
                     // list asks before it runs, which is the default for
                     // anything that writes.
-                    property list<string> alwaysAllow: ["get_shell_config", "switch_to_search_mode"]
+                    // Reading is allowed outright; anything that writes or runs
+                    // still asks. Searching and fetching a page only read.
+                    property list<string> alwaysAllow: ["get_shell_config", "switch_to_search_mode", "web_search", "fetch_url"]
                     property list<string> alwaysDeny: []
                     // Show every proposed settings change next to its current
                     // value before writing any of them.
@@ -1110,6 +1112,39 @@ Singleton {
                 // is sent again with every following turn.
                 property int maxAttachmentMib: 8
                 property int maxAttachments: 6
+                // What happens when a conversation outgrows the model's
+                // context window. Sending it whole is how a long chat starts
+                // failing outright, so the oldest turns are left behind and,
+                // if asked, folded into a summary that goes in their place.
+                property JsonObject context: JsonObject {
+                    property bool manage: true
+                    property bool summarise: true
+                    // Room kept for the answer itself.
+                    property int reserveTokens: 4096
+                }
+                // Documents a model cannot read natively are turned into text
+                // on this machine instead of being dropped on the way out.
+                property bool extractDocuments: true
+                // A desktop notification when an answer lands. Only while the
+                // chat is not on screen: telling someone what they are already
+                // reading is noise.
+                property JsonObject notify: JsonObject {
+                    property bool whenDone: true
+                    property bool onlyWhenAway: true
+                    // An answer that came back before this many seconds is one
+                    // the user almost certainly waited for.
+                    property int minimumSeconds: 4
+                }
+                // Facts the assistant carries between conversations. Each one
+                // is a line the user can read and delete; the model can only
+                // propose one through a tool that asks first.
+                property JsonObject memory: JsonObject {
+                    property bool enabled: true
+                    property int limit: 40
+                }
+                // Projects: a name, a prompt of its own and files that go with
+                // every chat filed under it. {id, name, icon, prompt, files[]}
+                property list<var> projects: []
                 // Personas the user wrote: {id, name, icon, description,
                 // systemPrompt, modelId, thinking, temperature, starters[]}.
                 // The ones that ship with the shell are not in here.

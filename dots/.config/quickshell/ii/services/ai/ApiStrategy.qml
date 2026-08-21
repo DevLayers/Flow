@@ -37,6 +37,14 @@ QtObject {
         return marker;
     }
 
+    /**
+     * How a text part should be produced: read straight off disk, or run
+     * through the extractor first because the file is a document.
+     */
+    function textModeFor(file: var): string {
+        return file?.extracted === true ? "extract" : "text";
+    }
+
     /** Attachments of a message, skipping any the model in use cannot read. */
     function attachmentsOf(message: AiMessageData, model: AiModel): var {
         const files = Array.from(message?.attachments ?? []);

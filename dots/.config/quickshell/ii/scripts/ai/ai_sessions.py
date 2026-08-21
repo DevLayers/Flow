@@ -155,6 +155,13 @@ def normalize(session: Any, fallback_id: str = "") -> dict | None:
         "sources": [value for value in session.get("sources", []) if isinstance(value, dict)],
         "toolCheckpoints": [value for value in session.get("toolCheckpoints", []) if isinstance(value, dict)],
         "activityEvents": [value for value in session.get("activityEvents", []) if isinstance(value, dict)],
+        # Where the chat came from, and how it is filed.
+        "parentId": str(session.get("parentId") or ""),
+        "branchMessageId": str(session.get("branchMessageId") or ""),
+        "tags": [str(tag) for tag in session.get("tags", []) if str(tag).strip()],
+        "projectId": str(session.get("projectId") or ""),
+        "contextSummary": str(session.get("contextSummary") or ""),
+        "contextSummaryKey": str(session.get("contextSummaryKey") or ""),
     })
     return normalized
 
@@ -175,6 +182,10 @@ def entry_of(session: dict) -> dict:
         "runState": str(run.get("state") or ""),
         "needsInspection": run.get("state") == "needsInspection",
         "isSeen": bool(run.get("isSeen", True)),
+        "parentId": session.get("parentId", ""),
+        "branchMessageId": session.get("branchMessageId", ""),
+        "tags": session.get("tags", []),
+        "projectId": session.get("projectId", ""),
     }
 
 
@@ -492,6 +503,13 @@ def cmd_patch(argv: list) -> int:
             session["title"] = rest.pop(0)
         elif flag == "--pinned" and rest:
             session["pinned"] = rest.pop(0) not in ("0", "false", "False")
+        elif flag == "--tags" and rest:
+            # One comma-separated argument, so a chat with no tags is still a
+            # single well-formed call.
+            raw = rest.pop(0)
+            session["tags"] = [tag.strip() for tag in raw.split(",") if tag.strip()]
+        elif flag == "--project" and rest:
+            session["projectId"] = rest.pop(0)
     if not write_json(session_path(directory, session_id), session):
         return emit({"error": "Could not write the session file"})
     entries = upsert(load_index(directory), entry_of(session))

@@ -41,7 +41,7 @@ ApiStrategy {
         const parts = attachmentsOf(message, model).map(file => {
             if (file.kind === "text") {
                 return {
-                    "text": `\n\n[[ ${file.name} ]]\n${attachmentMarker(file.path, "text")}`
+                    "text": `\n\n[[ ${file.name} ]]\n${attachmentMarker(file.path, textModeFor(file))}`
                 };
             }
             return {
@@ -227,6 +227,7 @@ ApiStrategy {
 
             // Finished?
             if (dataJson.candidates[0]?.finishReason) {
+                message.finishReason = String(dataJson.candidates[0].finishReason);
                 finished = true;
             }
 

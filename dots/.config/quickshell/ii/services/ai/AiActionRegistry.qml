@@ -40,10 +40,13 @@ Singleton {
         { id: "persona", aliases: ["persona"] },
         { id: "save", aliases: ["save"] },
         { id: "load", aliases: ["load"] },
-        { id: "history", aliases: ["chats", "sessions", "history"] },
-        { id: "new-chat", aliases: ["clear", "new", "newchat"] },
-        { id: "temperature", aliases: ["temp", "temperature"] },
-        { id: "thinking", aliases: ["think", "thinking"] },
+        { id: "chats", aliases: ["chats", "sessions", "history"] },
+        { id: "clear", aliases: ["clear", "new", "newchat"] },
+        { id: "temp", aliases: ["temp", "temperature"] },
+        { id: "think", aliases: ["think", "thinking"] },
+        { id: "web", aliases: ["web"] },
+        { id: "tools", aliases: ["tools", "functions"] },
+        { id: "effort", aliases: ["effort", "response", "reasoning"] },
         { id: "key", aliases: ["key"] }
     ]
 

@@ -61,7 +61,7 @@ ApiStrategy {
                 continue;
             parts.push({
                 "type": "text",
-                "text": `[[ ${file.name} ]]\n${attachmentMarker(file.path, "text")}`
+                "text": `[[ ${file.name} ]]\n${attachmentMarker(file.path, textModeFor(file))}`
             });
         }
         if (parts.length === 0)
@@ -239,6 +239,10 @@ ApiStrategy {
 
             const tokenUsage = tokenUsageFrom(dataJson);
             const finished = dataJson.done === true || (choice?.finish_reason !== undefined && choice?.finish_reason !== null);
+            if (choice?.finish_reason)
+                message.finishReason = String(choice.finish_reason);
+            else if (dataJson.done_reason)
+                message.finishReason = String(dataJson.done_reason);
             if (finished)
                 closeThought(message);
             if (tokenUsage || finished)

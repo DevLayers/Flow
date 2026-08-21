@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
+import qs
 import qs.modules.common.functions as CF
 import qs.modules.common
 import Quickshell
@@ -27,7 +28,8 @@ Singleton {
     readonly property string interfaceRole: "interface"
     readonly property string apiKeyEnvVarName: "API_KEY"
 
-    signal responseFinished
+    /** Structured terminal event consumed by sidebar, Search and background attention. */
+    signal responseFinished(var result)
     signal submissionStateChanged(var submission)
     signal submissionStarted(string submissionId, string runId, string sessionId)
     signal submissionFailed(string submissionId, string operationId, string errorCode, var recoveryActionIds)
@@ -164,6 +166,19 @@ Singleton {
     }
 
     /**
+     * Clears a command draft only after the command itself was accepted.
+     * Network submissions use the correlated submissionStarted signal instead;
+     * this helper is intentionally for local slash actions with no run.
+     */
+    function clearDraftIfCurrent(expectedText = ""): bool {
+        const expected = String(expectedText ?? "");
+        if (expected.length > 0 && String(root.draft ?? "") !== expected)
+            return false;
+        root.draft = "";
+        return true;
+    }
+
+    /**
      * Synchronous submit contract. It only validates immutable input and
      * reserves the one global pending slot; keyring and disk work continue
      * through correlated signals below.
@@ -179,6 +194,9 @@ Singleton {
         const modelId = root.currentModelId;
         const model = root.catalog.models[modelId] ?? null;
         const profile = root.responseProfileForModel(modelId);
+        const attachmentProblem = root.attachmentRejectionForModel(files, model);
+        if (attachmentProblem.length > 0)
+            return root.rejectSubmission("attachment-incompatible", attachmentProblem, ["open-models", "remove-attachment"]);
         const permission = root.canSubmit(modelId);
         const waitingForKeyring = !!model && model.requires_key && !KeyringStorage.loaded;
         if (!permission.allowed && !waitingForKeyring)
@@ -275,6 +293,8 @@ Singleton {
         pending.sessionId = root.sessions.currentId;
         const user = root.aiMessageComponent.createObject(root, {
             "role": "user",
+            "createdAt": Date.now(),
+            "completedAt": Date.now(),
             "content": pending.text.length > 0 ? pending.text : Translation.tr("(see attached)"),
             "rawContent": pending.text.length > 0 ? pending.text : Translation.tr("(see attached)"),
             "attachments": pending.attachments,
@@ -285,8 +305,13 @@ Singleton {
         pending.userMessageId = userId;
         pending.insertedIds = [userId];
         pending.insertedObjects[userId] = user;
-        root.messageIDs = [...root.messageIDs, userId];
+        // The map is filled before the list is published: anything
+        // watching `messageIDs` synchronously — the Search transcript
+        // does — would otherwise look the new id up in a map that does
+        // not hold it yet and drop the turn until something else
+        // refreshed it.
         root.messageByID[userId] = user;
+        root.messageIDs = [...root.messageIDs, userId];
         root.makeRequest(pending);
     }
 
@@ -314,6 +339,7 @@ Singleton {
         if (!pending || root.pendingSubmissionId !== pending.submissionId)
             return;
         compensationRetryTimer.stop();
+        root.cancelContextCompaction();
         const run = pending.runId ? root.runCoordinator.runFor(pending.runId) : null;
         if (run && !root.runCoordinator.terminalStates.includes(run.state))
             root.runCoordinator.finish(pending.runId, "cancelled", cancelled ? "cancelled" : "submissionFailed");
@@ -742,7 +768,20 @@ Singleton {
      * chat that was opened with a prompt keeps answering the way it did, even
      * if the persona has moved on since.
      */
-    readonly property string systemPrompt: root.substituted(root.basePrompt)
+    readonly property string systemPrompt: {
+        // Three things stack, in the order they were chosen: how it should
+        // answer, what the project it belongs to is about, and what is
+        // already known about the person asking.
+        const parts = [root.substituted(root.basePrompt)];
+        if (root.projectPrompt.length > 0)
+            parts.push(root.projectPrompt);
+        // Read defensively: the prompt is evaluated while the singletons are
+        // still coming up, and one that is not ready yet is not an error.
+        const remembered = String(AiMemory?.promptBlock ?? "");
+        if (remembered.length > 0)
+            parts.push(remembered);
+        return parts.filter(part => String(part).trim().length > 0).join("\n\n");
+    }
 
     readonly property string basePrompt: {
         if (root.promptOverride.length > 0)
@@ -751,6 +790,35 @@ Singleton {
         if (persona?.systemPrompt?.length > 0)
             return persona.systemPrompt;
         return Config.options?.ai?.systemPrompt ?? "";
+    }
+
+    // ── Projects ──────────────────────────────────────────────────────────
+    // A project is a folder with an opinion: chats filed under it share a
+    // prompt and, when set, the files that go with every one of them.
+    readonly property var projects: Array.from(Config.options?.ai?.projects ?? [])
+
+    function projectById(projectId: string): var {
+        const id = String(projectId ?? "");
+        if (id.length === 0)
+            return null;
+        return root.projects.find(project => String(project?.id ?? "") === id) ?? null;
+    }
+
+    readonly property var currentProject: root.projectById(root.sessionProjectId)
+
+    readonly property string projectPrompt: {
+        const project = root.currentProject;
+        const prompt = String(project?.prompt ?? "").trim();
+        if (prompt.length === 0)
+            return "";
+        return `## ${String(project.name ?? Translation.tr("This project"))}\n${root.substituted(prompt)}`;
+    }
+
+    function setProject(projectId: string) {
+        root.sessionProjectId = String(projectId ?? "");
+        if (root.sessions.currentId.length > 0)
+            root.sessions.setProject(root.sessions.currentId, root.sessionProjectId);
+        root.commitSession();
     }
 
     /** This chat's own prompt. Saved with it, and empty for most chats. */
@@ -786,6 +854,7 @@ Singleton {
         root.lastAppendedId = String(ids[ids.length - 1] ?? "");
         root.lastAppendedAt = Date.now();
     }
+    on_KnownMessageCountChanged: root.recomputeContextEstimate()
 
     /** Whether this turn arrived within the last moment, animation aside. */
     function isFreshMessage(messageId: string): bool {
@@ -833,6 +902,296 @@ Singleton {
         return Math.max(0, root.tokenCount.total);
     }
 
+    // ── Context window ────────────────────────────────────────────────────
+    // Nothing here asks a provider anything. A conversation that outgrows the
+    // model's window used to be sent whole and refused whole; now the oldest
+    // turns are left behind, the transcript says where the cut is, and what
+    // was left behind can be replaced by a summary of itself.
+
+    /** Roughly what a piece of text costs. Four characters to a token is the
+     * ratio every major tokeniser lands near for prose, and the estimate is
+     * only ever used to decide what to leave out. */
+    function estimateTokens(text: string): int {
+        const value = String(text ?? "");
+        if (value.length === 0)
+            return 0;
+        return Math.ceil(value.length / 4);
+    }
+
+    function estimateMessageTokens(message): int {
+        if (!message)
+            return 0;
+        // Reasoning is not resent, but attachments are, and a base64 image is
+        // the one thing that dwarfs everything else in a request.
+        let total = root.estimateTokens(message.content ?? message.rawContent ?? "");
+        const files = Array.from(message.attachments ?? []);
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (file?.kind === "text")
+                total += Math.ceil((file.bytes ?? 0) / 4);
+            else {
+                // Base64 expands bytes by 4/3 and the text heuristic is
+                // roughly four characters per token. Keep the estimate
+                // conservative; underestimating vision input is more harmful
+                // than leaving a little unused context room.
+                total += Math.ceil((file.bytes ?? 0) / 3);
+            }
+        }
+        return total;
+    }
+
+    /** What the next request would carry, before anyone is charged for it. */
+    property int estimatedContextTokens: 0
+    property string contextSummary: ""
+    /** Stable cut fingerprint for the summary currently in context. */
+    property string contextSummaryKey: ""
+    /** Id of the first turn that will actually be sent, "" when all of them are. */
+    property string contextCutMessageId: ""
+    property int prunedTurnCount: 0
+    /** At most one compaction may be in flight; it is correlated to a session and cut. */
+    property var pendingContextCompaction: null
+    property int contextCompactionSequence: 0
+
+    readonly property bool contextManaged: Config.options?.ai?.context?.manage ?? true
+    readonly property bool contextSummarises: Config.options?.ai?.context?.summarise ?? true
+    /** Room kept for the answer, so the cut is not made at the very edge. */
+    readonly property int contextReserve: Math.max(512, Config.options?.ai?.context?.reserveTokens ?? 4096)
+
+    function recomputeContextEstimate() {
+        let total = root.estimateTokens(root.systemPrompt) + root.estimateTokens(root.contextSummary);
+        const ids = root.messageIDs;
+        for (let i = 0; i < ids.length; i++) {
+            const message = root.messageByID[ids[i]];
+            if (!message || message.role === root.interfaceRole)
+                continue;
+            total += root.estimateMessageTokens(message);
+        }
+        root.estimatedContextTokens = total;
+    }
+
+    function scheduleContextEstimate() {
+        contextEstimateTimer.restart();
+    }
+
+    Timer {
+        id: contextEstimateTimer
+        interval: 120
+        repeat: false
+        onTriggered: root.recomputeContextEstimate()
+    }
+
+    onSystemPromptChanged: root.recomputeContextEstimate()
+
+    onMessageByIDChanged: root.scheduleContextEstimate()
+
+    Connections {
+        // Use the singleton as a safe initial target. QML's Connections rejects
+        // an undefined QObject target during startup; once a run response id
+        // exists the binding switches to that message object.
+        target: root.currentRunResponseId.length > 0 ? root.messageByID[root.currentRunResponseId] : root
+        ignoreUnknownSignals: true
+        function onContentChanged() { root.scheduleContextEstimate(); }
+        function onRawContentChanged() { root.scheduleContextEstimate(); }
+        function onAttachmentsChanged() { root.scheduleContextEstimate(); }
+    }
+
+    function messageIdForObject(message): string {
+        if (!message)
+            return "";
+        const ids = root.messageIDs;
+        for (let i = 0; i < ids.length; i++) {
+            if (root.messageByID[ids[i]] === message)
+                return String(ids[i]);
+        }
+        return "";
+    }
+
+    function contextCompactionKey(pruned: var, model, sessionId = ""): string {
+        const ids = Array.from(pruned ?? []).map(message => root.messageIdForObject(message)).filter(id => id.length > 0);
+        const fallback = Array.from(pruned ?? []).map(message => `${message?.role ?? ""}:${String(message?.content ?? "").slice(0, 160)}`).join("|");
+        return [String(sessionId || root.sessions.currentId), String(model?.id ?? ""), ids.join(",") || fallback].join("|");
+    }
+
+    function createApiStrategy(format: string): var {
+        const normalized = String(format ?? "openai").toLowerCase();
+        if (normalized === "gemini")
+            return root.geminiApiStrategy.createObject(root);
+        if (normalized === "anthropic")
+            return root.anthropicApiStrategy.createObject(root);
+        return root.openAiCompatStrategy.createObject(root);
+    }
+
+    /**
+     * Which turns fit, newest first. The cut always lands on a user turn so
+     * the model never opens on an answer to a question it cannot see.
+     */
+    function historyWithinWindow(messages: var, model): var {
+        const all = Array.from(messages ?? []);
+        const window = Number(model?.contextWindow ?? 0);
+        if (!root.contextManaged || window <= 0)
+            return { messages: all, pruned: [], cutId: "", oversized: null };
+
+        const budget = Math.max(1024, window - root.contextReserve - root.estimateTokens(root.systemPrompt) - root.estimateTokens(root.contextSummary));
+        let used = 0;
+        let firstKept = all.length;
+        let oversized = null;
+        for (let i = all.length - 1; i >= 0; i--) {
+            const cost = root.estimateMessageTokens(all[i]);
+            if (used === 0 && cost > budget) {
+                oversized = all[i];
+                firstKept = i + 1;
+                break;
+            }
+            if (used + cost > budget && firstKept < all.length)
+                break;
+            used += cost;
+            firstKept = i;
+        }
+        // Never open on an assistant turn: walk forward to the next question.
+        while (firstKept > 0 && firstKept < all.length && all[firstKept].role !== "user")
+            firstKept += 1;
+        if (firstKept <= 0)
+            return { messages: all, pruned: [], cutId: "", oversized: oversized };
+
+        const kept = all.slice(firstKept);
+        const pruned = all.slice(0, firstKept);
+        const cutMessage = kept.length > 0 ? kept[0] : null;
+        let cutId = "";
+        for (let i = 0; i < root.messageIDs.length; i++) {
+            if (root.messageByID[root.messageIDs[i]] === cutMessage) {
+                cutId = root.messageIDs[i];
+                break;
+            }
+        }
+        return { messages: kept, pruned: pruned, cutId: cutId, oversized: oversized };
+    }
+
+    /**
+     * Asks the model to fold what was dropped into a paragraph, once, and
+     * keeps it with the session. Costs one small request the first time a
+     * conversation outgrows its window, and nothing after that.
+     */
+    function fallbackContextSummary(pruned: var): string {
+        return Array.from(pruned ?? [])
+            .map(message => `${message?.role ?? "turn"}: ${String(message?.content ?? message?.rawContent ?? "").slice(0, 900)}`)
+            .join("\n\n")
+            .slice(0, 6000);
+    }
+
+    function summarisePruned(pruned: var, model, sessionId = ""): bool {
+        if (!root.contextSummarises || summaryRequester.running || !model)
+            return false;
+        const turns = Array.from(pruned ?? []);
+        if (turns.length === 0)
+            return false;
+        const previousSummary = root.contextSummary.length > 0
+            ? `Earlier compacted context:\n${root.contextSummary}\n\n`
+            : "";
+        const transcript = previousSummary + turns.map(message => `${message.role}: ${String(message.content ?? "").slice(0, 2000)}`).join("\n\n");
+        const key = root.contextCompactionKey(turns, model, sessionId);
+        const strategy = root.createApiStrategy(model.api_format || "openai");
+        if (!strategy)
+            return false;
+        root.contextCompactionSequence += 1;
+        root.pendingContextCompaction = {
+            key: key,
+            sequence: root.contextCompactionSequence,
+            sessionId: String(sessionId || root.sessions.currentId),
+            submissionId: root.pendingSubmissionId,
+            modelId: String(model.id ?? ""),
+            fallback: root.fallbackContextSummary(turns)
+        };
+        root.summaryMessage.content = "";
+        root.summaryMessage.rawContent = "";
+        root.summaryMessage.thought = "";
+        root.summaryMessage.done = false;
+        const request = root.aiMessageComponent.createObject(root, {
+            "role": "user",
+            "content": `${root.summaryInstruction}\n\n---\n\n${transcript}`,
+            "rawContent": ""
+        });
+        strategy.thinkingOverride = "off";
+        strategy.activeThinkingLevel = "off";
+        const data = strategy.buildRequestData(model, [request], root.summaryInstruction, 0.2, null);
+        request.destroy();
+        summaryRequester.model = model;
+        summaryRequester.strategy = strategy;
+        summaryRequester.message = root.summaryMessage;
+        summaryRequester.endpoint = strategy.buildEndpoint(model);
+        summaryRequester.requestData = data;
+        summaryRequester.apiKey = model.requires_key ? (root.apiKeys?.[model.key_id] ?? "") : "";
+        if (!summaryRequester.start()) {
+            strategy.destroy();
+            summaryRequester.strategy = null;
+            root.pendingContextCompaction = null;
+            return false;
+        }
+        return true;
+    }
+
+    function finishContextCompaction(success: bool): void {
+        const job = root.pendingContextCompaction;
+        if (!job)
+            return;
+        const strategy = summaryRequester.strategy;
+        const sameSession = String(job.sessionId) === String(root.sessions.currentId);
+        if (sameSession) {
+            const summary = String(root.summaryMessage.content ?? "").trim();
+            root.contextSummary = success && summary.length > 0 ? summary : String(job.fallback ?? "");
+            root.contextSummaryKey = String(job.key ?? "");
+            root.recomputeContextEstimate();
+            root.commitSession();
+        }
+        root.pendingContextCompaction = null;
+        summaryRequester.strategy = null;
+        if (strategy && typeof strategy.destroy === "function")
+            strategy.destroy();
+        if (!sameSession)
+            return;
+        const pending = job.submissionId.length > 0 && job.submissionId === root.pendingSubmissionId
+            ? root.pendingSubmission
+            : null;
+        if (pending)
+            pending.state = "preparing";
+        // The retry deliberately skips another compaction pass. The windowing
+        // pass still trims the request, but one user turn cannot recursively
+        // start a second summarizer because the summary itself consumed room.
+        Qt.callLater(() => root.makeRequest(pending, { skipCompaction: true }));
+    }
+
+    function cancelContextCompaction() {
+        const strategy = summaryRequester.strategy;
+        root.pendingContextCompaction = null;
+        // `running` on an AiRequest is read-only — assigning to it threw, and
+        // since this is the first thing `applySession()` does, a restored chat
+        // came back with no messages at all.
+        summaryRequester.abort();
+        summaryRequester.strategy = null;
+        if (strategy && typeof strategy.destroy === "function")
+            strategy.destroy();
+    }
+
+    readonly property string summaryInstruction: "Summarise the earlier part of this conversation in at most 150 words. Keep names, decisions, file paths and anything the assistant must remember. Answer with the summary only."
+    property AiMessageData summaryMessage: AiMessageData {}
+
+    AiRequest {
+        id: summaryRequester
+        apiKeyEnvVarName: root.apiKeyEnvVarName
+        scriptPath: `/tmp/quickshell-${SystemInfo.username}/ai/summary.sh`
+
+        onLine: data => {
+            try {
+                summaryRequester.strategy.parseResponseLine(data, root.summaryMessage);
+            } catch (e) {
+            // A summary is not worth a message in the chat.
+            }
+        }
+
+        onFinished: reason => {
+            root.finishContextCompaction(reason === "done");
+        }
+    }
+
     /** A count short enough for a chip: 940, 1.2k, 48k. */
     function shortTokenCount(count: int): string {
         const value = Math.max(0, Number(count ?? 0));
@@ -867,6 +1226,11 @@ Singleton {
     readonly property bool canForceWeb: root.responseProfile.canForceWeb
     property string sessionModelId: ""
     property string sessionPersonaId: ""
+    // Persistent is loaded asynchronously. Until its adapter is ready, the
+    // values exposed below are only the QML defaults, not the user's saved
+    // choices. Keep the startup restore separate from normal per-chat state.
+    property bool persistentDefaultsRestored: false
+    property string pendingPersistentModelId: ""
     readonly property string defaultModelId: {
         const explicit = Persistent.states?.ai?.defaultModelId ?? "";
         return explicit.length > 0 ? explicit : (Persistent.states?.ai?.modelId ?? "");
@@ -1046,11 +1410,20 @@ Singleton {
     property string requestScriptFilePath: `/tmp/quickshell-${SystemInfo.username}/ai/request.sh`
 
     Component.onCompleted: {
-        root.migrateAiDefaults();
-        root.resetSessionSettings();
         root.sessions.ensureLoaded();
         root.draftStore.ensureLoaded();
-        setModel(currentModelId, false, false); // Do necessary setup for model
+        root.restorePersistentDefaults();
+    }
+
+    Connections {
+        target: Persistent
+
+        function onReadyChanged() {
+            // Let Persistent's own ready handler migrate the retired
+            // provider/model pair before Ai consumes the unified model id.
+            if (Persistent.ready)
+                Qt.callLater(() => root.restorePersistentDefaults());
+        }
     }
 
     // Boot-time index: Ollama models + default prompts + user prompts —
@@ -1139,11 +1512,18 @@ Singleton {
             "content": message,
             "rawContent": message,
             "thinking": false,
-            "done": true
+            "done": true,
+            "createdAt": Date.now(),
+            "completedAt": Date.now()
         }, extra ?? ({})));
         const id = idForMessage(aiMessage);
-        root.messageIDs = [...root.messageIDs, id];
+        // The map is filled before the list is published: anything
+        // watching `messageIDs` synchronously — the Search transcript
+        // does — would otherwise look the new id up in a map that does
+        // not hold it yet and drop the turn until something else
+        // refreshed it.
         root.messageByID[id] = aiMessage;
+        root.messageIDs = [...root.messageIDs, id];
     }
 
     function removeMessage(messageId: string) {
@@ -1178,13 +1558,8 @@ Singleton {
         }
         root.sessionModelId = model.id;
         root.thinkingLevel = root.responseProfileForModel(model.id).thinkingLevel;
-        if (setPersistentState) {
-            root.rememberModel(model.id);
-            if (Persistent.states?.ai) {
-                Persistent.states.ai.defaultModelId = model.id;
-                Persistent.states.ai.modelId = model.id;
-            }
-        }
+        if (setPersistentState)
+            root.persistDefaultModel(model.id);
         if (feedback)
             root.addMessage(Translation.tr("Model set to %1").arg(model.name), root.interfaceRole);
         if (model.requires_key && root.apiKeysLoaded && !(root.apiKeys[model.key_id]?.length > 0))
@@ -1214,6 +1589,27 @@ Singleton {
         const remembered = Array.from(Persistent.states.ai.recentModels ?? []).filter(id => id !== modelId);
         remembered.unshift(modelId);
         Persistent.states.ai.recentModels = remembered.slice(0, 6);
+    }
+
+    /**
+     * Makes an explicit model pick the default for future chats and future
+     * shell sessions. A pick made during the short startup hydration window
+     * is staged so the later disk load cannot overwrite it.
+     */
+    function persistDefaultModel(modelId: string) {
+        const id = String(modelId ?? "");
+        if (id.length === 0)
+            return;
+        if (!Persistent.ready) {
+            root.pendingPersistentModelId = id;
+            return;
+        }
+        const state = Persistent.states?.ai;
+        if (!state)
+            return;
+        root.rememberModel(id);
+        state.defaultModelId = id;
+        state.modelId = id;
     }
 
     /** Switches provider, landing on that provider's first model. */
@@ -1466,6 +1862,7 @@ Singleton {
         if (!message || message.done)
             return;
         message.done = true;
+        message.completedAt = Date.now();
         // The usage ledger counts every finished response; tokens only when
         // the provider actually reported them (total stayed -1 otherwise),
         // success only when nothing flagged the message with an error kind.
@@ -1473,6 +1870,7 @@ Singleton {
             message.inputTokens, message.outputTokens,
             message.thoughtTokens, message.totalTokens,
             (message.errorKind ?? "").length === 0);
+        root.notifyResponseFinished(message);
         if (root.postResponseHook) {
             root.postResponseHook();
             root.postResponseHook = null; // Reset hook after use
@@ -1481,13 +1879,103 @@ Singleton {
         if (!runSessionId || runSessionId === root.sessions.currentId)
             root.autoTitle(); // Names it first, so the write below carries the name
         root.commitRunSession(runSessionId || root.sessions.currentId, true);
-        root.responseFinished();
+        root.responseFinished({
+            runId: root.currentRunId,
+            sessionId: runSessionId || root.sessions.currentId,
+            requestMessageId: root.currentRunRequestId,
+            responseMessageId: root.currentRunResponseId,
+            modelId: message.model ?? root.currentModelId,
+            state: (message.errorKind ?? "").length > 0 ? "failed" : "completed",
+            finishReason: message.finishReason ?? "",
+            errorKind: message.errorKind ?? "",
+            requiresAttention: (message.errorKind ?? "").length > 0
+        });
     }
 
     /**
      * What went wrong, as something the transcript can act on rather than as
      * prose in the bubble: a 429 and an answer used to look the same.
      */
+    // ── Telling someone it finished ───────────────────────────────────────
+    /** Whether a chat surface is on screen, wherever it is. */
+    readonly property bool chatOnScreen: GlobalStates.sidebarLeftOpen || GlobalStates.overviewOpen
+
+    /**
+     * A desktop notification when an answer lands.
+     *
+     * It goes through `notify-send`, so the shell's own notification service
+     * shows it like any other — no separate path, and it obeys the user's
+     * do-not-disturb. Nothing is sent while the chat is on screen: a model
+     * that finishes in front of the reader has already told them.
+     */
+    /**
+     * A name the icon theme actually has for the model that answered.
+     *
+     * The bundled provider logos are files in `assets/icons`, and a
+     * notification icon is a *theme name* — handing the daemon a path (or the
+     * name of a file that is not in the theme) is what drew the missing-texture
+     * checkerboard. Candidates are derived from the model itself and each one
+     * is checked before it is used; when none exists the field is left empty
+     * on purpose, and the shell draws a Material symbol instead of a hole.
+     */
+    function notificationIconFor(model): string {
+        const candidates = [];
+        const icon = String(model?.icon ?? "");
+        if (icon.length > 0) {
+            const bare = icon.replace(/\.(svg|png)$/i, "");
+            candidates.push(bare);
+            candidates.push(bare.replace(/-symbolic$/, ""));
+            candidates.push(bare.replace(/^bootstrap_/, "").replace(/-symbolic$/, ""));
+            candidates.push(bare.replace(/^ai-/, "").replace(/-symbolic$/, ""));
+        }
+        const modelProvider = String(model?.modelProvider ?? "");
+        if (modelProvider.length > 0)
+            candidates.push(modelProvider);
+        const providerId = String(model?.providerId ?? "");
+        if (providerId.length > 0)
+            candidates.push(providerId);
+        for (let i = 0; i < candidates.length; i++) {
+            const candidate = candidates[i];
+            if (candidate.length > 0 && String(Quickshell.iconPath(candidate, true)).length > 0)
+                return candidate;
+        }
+        return "";
+    }
+
+    function notifyResponseFinished(message: AiMessageData) {
+        const options = Config.options?.ai?.notify;
+        if (!(options?.whenDone ?? true))
+            return;
+        if ((options?.onlyWhenAway ?? true) && root.chatOnScreen)
+            return;
+        const started = Number(message?.createdAt ?? 0);
+        const elapsed = started > 0 ? (Date.now() - started) / 1000 : 0;
+        if (started > 0 && elapsed < Math.max(0, options?.minimumSeconds ?? 4))
+            return;
+
+        const failed = String(message?.errorKind ?? "").length > 0;
+        const model = root.catalog.models[message?.model] ?? null;
+        const modelName = model?.title ?? Translation.tr("The model");
+        const chatName = root.sessionTitle.length > 0 ? root.sessionTitle : Translation.tr("this chat");
+        const answer = String(message?.content ?? "").replace(/```[\s\S]*?```/g, " ").replace(/\s+/g, " ").trim();
+        const summary = failed
+            ? Translation.tr("%1 could not answer").arg(modelName)
+            : Translation.tr("%1 answered").arg(modelName);
+        const body = failed
+            ? String(message?.errorText ?? Translation.tr("The request failed."))
+            : (answer.length > 0 ? (answer.length > 160 ? `${answer.slice(0, 160)}…` : answer) : Translation.tr("Answer ready in %1").arg(chatName));
+
+        // The model's own logo when the theme has it, nothing when it does
+        // not: an icon name the daemon cannot resolve renders as a broken
+        // image, while no icon at all renders as a Material symbol.
+        const iconName = failed ? "dialog-error" : root.notificationIconFor(model);
+        const command = ["notify-send", summary, body, "--app-name=AI",
+            failed ? "--urgency=normal" : "--urgency=low"];
+        if (iconName.length > 0)
+            command.push(`--icon=${iconName}`);
+        Quickshell.execDetached(command);
+    }
+
     function transportErrorKind(status: int, code: int): string {
         if (status === 401 || status === 403)
             return "auth";
@@ -1706,7 +2194,7 @@ Singleton {
     /**
      * Builds and sends a request for the conversation as it currently stands.
      */
-    function makeRequest(submission = null) {
+    function makeRequest(submission = null, options = ({})) {
         const pending = submission;
         if (pending && root.pendingSubmissionId !== pending.submissionId)
             return;
@@ -1765,6 +2253,45 @@ Singleton {
         strategy.activeThinkingLevel = profile.thinkingLevel;
         const messageArray = root.messageIDs.map(id => root.messageByID[id]);
         const filteredMessageArray = messageArray.filter(message => message.role !== root.interfaceRole);
+        // Only what fits goes out. What does not is remembered as a summary
+        // rather than dropped in silence, and the transcript is told where
+        // the cut landed so it can say so.
+        const windowed = root.historyWithinWindow(filteredMessageArray, model);
+        root.contextCutMessageId = windowed.cutId;
+        root.prunedTurnCount = windowed.pruned.length;
+        if (windowed.oversized) {
+            const oversizedName = String(windowed.oversized.content ?? Translation.tr("The latest message")).slice(0, 80);
+            const message = Translation.tr("This message is too large for the selected model's context window. Shorten it or remove an attachment: %1").arg(oversizedName);
+            if (pending)
+                root.failPendingSubmission("context-too-large", message, ["shorten-prompt", "remove-attachment", "open-models"]);
+            else
+                root.addMessage(message, root.interfaceRole, { notice: "submission", errorKind: "context-too-large" });
+            return;
+        }
+        const sessionIdForCompaction = pending?.sessionId || root.sessions.currentId;
+        const compactionKey = windowed.pruned.length > 0
+            ? root.contextCompactionKey(windowed.pruned, model, sessionIdForCompaction)
+            : "";
+        if (!options.skipCompaction && windowed.pruned.length > 0 && root.contextSummaryKey !== compactionKey) {
+            if (root.pendingContextCompaction?.key === compactionKey)
+                return;
+            if (root.pendingContextCompaction)
+                root.cancelContextCompaction();
+            if (pending) {
+                pending.state = "compacting";
+                root.submissionStateChanged(pending);
+            }
+            if (root.summarisePruned(windowed.pruned, model, sessionIdForCompaction))
+                return;
+            // If a provider cannot summarize, preserve the old conversation in
+            // a deterministic local fallback and continue with the request.
+            root.contextSummary = root.fallbackContextSummary(windowed.pruned);
+            root.contextSummaryKey = compactionKey;
+        }
+        const basePrompt = pending ? pending.systemPrompt : root.systemPrompt;
+        const promptWithSummary = root.contextSummary.length > 0
+            ? `${basePrompt}\n\n## Earlier in this conversation\n${root.contextSummary}`
+            : basePrompt;
         // Tool support is a property of the model, not of its address. A
         // local model that can call functions keeps them; a remote one
         // that cannot does not get them handed over anyway.
@@ -1773,7 +2300,7 @@ Singleton {
                 ? root.toolbox.wireTools(model.api_format, toolOverride)
                 : null;
 
-        const data = strategy.buildRequestData(model, filteredMessageArray, pending ? pending.systemPrompt : root.systemPrompt, pending ? pending.temperature : root.temperature, tools);
+        const data = strategy.buildRequestData(model, windowed.messages, promptWithSummary, pending ? pending.temperature : root.temperature, tools);
         // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
 
         // Fresh response, fresh counters: a dialect that never reports usage
@@ -1788,6 +2315,7 @@ Singleton {
         const message = root.aiMessageComponent.createObject(root, {
             "role": "assistant",
             "model": model.id,
+            "createdAt": Date.now(),
             "responseMode": profile.responseMode,
             "webMode": profile.webMode,
             "functionExposure": profile.functionExposure,
@@ -1798,8 +2326,13 @@ Singleton {
             "done": false
         });
         const id = idForMessage(message);
-        root.messageIDs = [...root.messageIDs, id];
+        // The map is filled before the list is published: anything
+        // watching `messageIDs` synchronously — the Search transcript
+        // does — would otherwise look the new id up in a map that does
+        // not hold it yet and drop the turn until something else
+        // refreshed it.
         root.messageByID[id] = message;
+        root.messageIDs = [...root.messageIDs, id];
 
         const runResult = root.runCoordinator.start(root.sessions.currentId, requestMessageId, id, model.id, "ai");
         if (!runResult.accepted) {
@@ -2005,6 +2538,83 @@ Singleton {
         return Translation.tr("%1 B").arg(bytes);
     }
 
+    /**
+     * Whether the model in use can be handed this kind of file as a file.
+     *
+     * Only Gemini and Anthropic take documents in the request; the
+     * OpenAI-compatible dialect has no block for one, and used to drop it on
+     * the way out without saying so. Everything else that is not an image is
+     * turned into text here first.
+     */
+    function modelTakesDocumentsFor(model): bool {
+        const format = String(model?.api_format ?? "");
+        return !!model?.attachments && (format === "gemini" || format === "anthropic");
+    }
+
+    function modelTakesDocuments(): bool {
+        return root.modelTakesDocumentsFor(root.currentModelEntry);
+    }
+
+    /** Revalidates the immutable attachment snapshot at submit time. */
+    function attachmentRejectionForModel(files: var, model): string {
+        const list = Array.from(files ?? []);
+        for (let i = 0; i < list.length; i++) {
+            const file = list[i] ?? ({});
+            const name = String(file.name ?? Translation.tr("That file"));
+            const kind = String(file.kind ?? "");
+            if (kind === "text") {
+                if (Number(file.bytes ?? 0) > root.maxTextAttachmentBytes)
+                    return Translation.tr("%1 is too large for this message.").arg(name);
+                continue;
+            }
+            if (kind === "image") {
+                if (!model?.attachments || !model?.vision)
+                    return Translation.tr("%1 cannot look at images with the selected model.").arg(name);
+                if (Number(file.bytes ?? 0) > root.maxAttachmentBytes)
+                    return Translation.tr("%1 is too large for the selected model.").arg(name);
+                continue;
+            }
+            if (!file.extracted && !root.modelTakesDocumentsFor(model))
+                return Translation.tr("%1 was attached for another model. Reattach it after choosing a document-capable model.").arg(name);
+            if (Number(file.bytes ?? 0) > root.maxAttachmentBytes && !file.extracted)
+                return Translation.tr("%1 is too large for the selected model.").arg(name);
+        }
+        return "";
+    }
+
+    /**
+     * What should happen to a probed file: send it as it is, read it here
+     * first, or turn it away with a reason. Nothing is ever accepted and then
+     * quietly left out of the request.
+     */
+    function attachmentPlan(file: var): var {
+        const modelName = root.currentModelEntry?.title ?? Translation.tr("This model");
+        const kind = String(file?.kind ?? "");
+        if (kind === "text") {
+            if (file.bytes > root.maxTextAttachmentBytes)
+                return { action: "reject", reason: Translation.tr("%1 is %2 of text — too much to put in one message.").arg(file.name).arg(root.humanSize(file.bytes)) };
+            return { action: "send" };
+        }
+        if (kind === "image") {
+            if (!root.currentModelTakesFiles || !(root.currentModelEntry?.vision ?? false))
+                return { action: "reject", reason: Translation.tr("%1 cannot look at images.").arg(modelName) };
+            if (file.bytes > root.maxAttachmentBytes)
+                return { action: "reject", reason: Translation.tr("%1 is %2. The limit is %3.").arg(file.name).arg(root.humanSize(file.bytes)).arg(root.humanSize(root.maxAttachmentBytes)) };
+            return { action: "send" };
+        }
+        // Documents, audio, video.
+        const canExtract = (file?.extractable === true) && (Config.options?.ai?.extractDocuments ?? true);
+        if (root.modelTakesDocuments() && file.bytes <= root.maxAttachmentBytes)
+            return { action: "send" };
+        if (canExtract)
+            return { action: "extract" };
+        if (!root.currentModelTakesFiles)
+            return { action: "reject", reason: Translation.tr("%1 cannot read files, and this one cannot be turned into text here.").arg(modelName) };
+        if (file.bytes > root.maxAttachmentBytes)
+            return { action: "reject", reason: Translation.tr("%1 is %2. The limit is %3.").arg(file.name).arg(root.humanSize(file.bytes)).arg(root.humanSize(root.maxAttachmentBytes)) };
+        return { action: "reject", reason: Translation.tr("%1 cannot read %2 files.").arg(modelName).arg(file.kind === "pdf" ? "PDF" : file.kind) };
+    }
+
     /** Empty when the file may be sent, otherwise the reason it may not. */
     function attachmentRejection(file: var): string {
         const modelName = root.currentModelEntry?.title ?? Translation.tr("This model");
@@ -2063,6 +2673,8 @@ Singleton {
     function clearAttachments() {
         root.attachmentGeneration += 1;
         root.probeQueue = [];
+        root.extractQueue = [];
+        root.activeExtract = null;
         root.pendingAttachmentPaths = [];
         root.activeProbePath = "";
         root.activeProbeGeneration = -1;
@@ -2098,17 +2710,94 @@ Singleton {
             root.attachmentNotice = file.error;
             return;
         }
-        const rejection = root.attachmentRejection(file);
-        if (rejection.length > 0) {
-            root.attachmentNotice = rejection;
+        const plan = root.attachmentPlan(file);
+        if (plan.action === "reject") {
+            root.attachmentNotice = plan.reason;
             return;
         }
-        root.attachmentNotice = "";
         if (root.attachments.length >= root.maxAttachments)
             return;
         if (root.attachments.some(item => item.path === file.path))
             return;
+        if (plan.action === "extract") {
+            // Read here rather than sent: the chip stays in the tray with a
+            // note saying so, instead of the file being silently left out.
+            root.attachmentNotice = "";
+            root.extractQueue = [...root.extractQueue, {
+                    file: file,
+                    generation: generation
+                }];
+            root.runExtract();
+            return;
+        }
+        root.attachmentNotice = "";
         root.attachments = [...root.attachments, file];
+    }
+
+    // ── Reading a document here ───────────────────────────────────────────
+    property var extractQueue: []
+    property var activeExtract: null
+
+    function runExtract() {
+        if (extractProc.running || root.extractQueue.length === 0)
+            return;
+        const job = root.extractQueue[0];
+        root.extractQueue = root.extractQueue.slice(1);
+        root.activeExtract = job;
+        extractProc.command = ["python3", Directories.aiAttachScriptPath, "extract", job.file.path];
+        extractProc.running = true;
+    }
+
+    function acceptExtracted(raw: string, job: var) {
+        if (!job || job.generation !== root.attachmentGeneration)
+            return;
+        let result;
+        try {
+            result = JSON.parse(raw.trim());
+        } catch (e) {
+            root.attachmentNotice = Translation.tr("Could not read %1 on this machine.").arg(job.file.name);
+            return;
+        }
+        if (result.error || String(result.text ?? "").length === 0) {
+            root.attachmentNotice = Translation.tr("Could not read %1 here: %2").arg(job.file.name).arg(result.error ?? Translation.tr("it came back empty"));
+            return;
+        }
+        if (root.attachments.some(item => item.path === job.file.path))
+            return;
+        // The preview response necessarily exists briefly in the collector;
+        // only metadata is retained in the session. The full text is read
+        // again at send time, straight into the request body, and is never
+        // persisted as chat content.
+        root.attachments = [...root.attachments, {
+                path: job.file.path,
+                name: job.file.name,
+                mime: "text/plain",
+                kind: "text",
+                bytes: Number(result.characters ?? 0),
+                extracted: true,
+                extractedFrom: job.file.mime,
+                truncated: result.truncated === true
+            }];
+        root.attachmentNotice = result.truncated === true
+            ? Translation.tr("%1 was read here as text, and is long enough that the end was left out.").arg(job.file.name)
+            : "";
+    }
+
+    Process {
+        id: extractProc
+        stdout: StdioCollector {
+            id: extractCollector
+            onStreamFinished: root.acceptExtracted(extractCollector.text, extractProc.job)
+        }
+        property var job: null
+        onRunningChanged: {
+            if (extractProc.running)
+                extractProc.job = root.activeExtract;
+        }
+        onExited: {
+            root.activeExtract = null;
+            Qt.callLater(root.runExtract);
+        }
     }
 
     Process {
@@ -2130,6 +2819,32 @@ Singleton {
             root.activeProbeGeneration = -1;
             Qt.callLater(root.runProbe);
         }
+    }
+
+    /** Whether the provider stopped because the answer hit the output limit. */
+    function wasTruncated(message): bool {
+        const reason = String(message?.finishReason ?? "").toLowerCase();
+        return reason === "length" || reason === "max_tokens" || reason === "maxtokens";
+    }
+
+    readonly property string continueInstruction: "Continue the previous answer from exactly where it stopped. Do not repeat anything you already wrote, and do not start over."
+
+    /**
+     * Picks a cut-off answer back up.
+     *
+     * The ask goes in as a turn the model can see and the reader cannot, so
+     * the transcript stays a conversation rather than gaining an instruction
+     * nobody wrote. Regenerating was the only way out before, and it paid for
+     * the whole context again to get a different answer.
+     */
+    function continueMessage(messageId: string) {
+        const message = root.messageByID[messageId];
+        if (!message || message.role !== "assistant" || requester.running)
+            return;
+        root.addMessage(root.continueInstruction, "user", {
+            "visibleToUser": false
+        });
+        root.makeRequest();
     }
 
     /**
@@ -2199,16 +2914,26 @@ Singleton {
             root.runningMessageIDs = [...root.runningMessageIDs, id];
             root.runningMessageByID[id] = aiMessage;
             if (targetSessionId === root.sessions.currentId) {
-                root.messageIDs = [...root.messageIDs, id];
+                // The map is filled before the list is published: anything
+                // watching `messageIDs` synchronously — the Search transcript
+                // does — would otherwise look the new id up in a map that does
+                // not hold it yet and drop the turn until something else
+                // refreshed it.
                 root.messageByID[id] = aiMessage;
+                root.messageIDs = [...root.messageIDs, id];
             } else {
                 root.conversations.capture(targetSessionId, root.runningSessionToJson());
                 root.commitRunSession(targetSessionId, false);
             }
             return;
         }
-        root.messageIDs = [...root.messageIDs, id];
+        // The map is filled before the list is published: anything
+        // watching `messageIDs` synchronously — the Search transcript
+        // does — would otherwise look the new id up in a map that does
+        // not hold it yet and drop the turn until something else
+        // refreshed it.
         root.messageByID[id] = aiMessage;
+        root.messageIDs = [...root.messageIDs, id];
     }
 
     // ── Tool calls ────────────────────────────────────────────────────────
@@ -2217,6 +2942,31 @@ Singleton {
     // the call. Everything the model asks for is written to the log either
     // way: a refusal that leaves no trace is indistinguishable from a tool
     // that was never offered.
+
+    /** Writes the fact the model asked for, and tells it what happened. */
+    function commitMemory(message: AiMessageData, factText = "") {
+        const fact = String(factText.length > 0 ? factText : (message?.pendingMemory ?? "")).trim();
+        message.pendingMemory = "";
+        message.functionPending = false;
+        if (fact.length === 0)
+            return;
+        const stored = AiMemory.remember(fact, "assistant");
+        root.toolbox.finishCall(message.toolCallSerial, stored ? "done" : "refused", stored ? fact : Translation.tr("Already known"));
+        root.addFunctionOutputMessage("remember_fact", stored
+            ? Translation.tr("Remembered: %1").arg(fact)
+            : Translation.tr("That is already remembered."), message.functionCallId ?? "");
+        root.requestFollowUp();
+    }
+
+    function rejectMemory(message: AiMessageData) {
+        if (!message.functionPending)
+            return;
+        message.functionPending = false;
+        message.pendingMemory = "";
+        root.toolbox.finishCall(message.toolCallSerial, "refused", Translation.tr("Not kept"));
+        root.addFunctionOutputMessage("remember_fact", Translation.tr("The user chose not to remember that. Do not ask again in this conversation."), message.functionCallId ?? "");
+        root.requestFollowUp();
+    }
 
     function rejectCommand(message: AiMessageData) {
         if (!message.functionPending)
@@ -2380,15 +3130,25 @@ Singleton {
             root.runningMessageIDs = [...root.runningMessageIDs, id];
             root.runningMessageByID[id] = responseMessage;
             if (targetSessionId === root.sessions.currentId) {
-                root.messageIDs = [...root.messageIDs, id];
+                // The map is filled before the list is published: anything
+                // watching `messageIDs` synchronously — the Search transcript
+                // does — would otherwise look the new id up in a map that does
+                // not hold it yet and drop the turn until something else
+                // refreshed it.
                 root.messageByID[id] = responseMessage;
+                root.messageIDs = [...root.messageIDs, id];
             } else {
                 root.conversations.capture(targetSessionId, root.runningSessionToJson());
                 root.commitRunSession(targetSessionId, false);
             }
         } else {
-            root.messageIDs = [...root.messageIDs, id];
+            // The map is filled before the list is published: anything
+            // watching `messageIDs` synchronously — the Search transcript
+            // does — would otherwise look the new id up in a map that does
+            // not hold it yet and drop the turn until something else
+            // refreshed it.
             root.messageByID[id] = responseMessage;
+            root.messageIDs = [...root.messageIDs, id];
         }
 
         commandExecutionProc.message = responseMessage;
@@ -2629,6 +3389,65 @@ Singleton {
             return;
         }
 
+        if (name === "remember_fact") {
+            const fact = String(args?.fact ?? "").trim();
+            if (fact.length === 0) {
+                root.toolbox.finishCall(serial, "failed", Translation.tr("Nothing to remember"));
+                addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `fact`."), callId);
+                root.requestFollowUp();
+                return;
+            }
+            if (!AiMemory.enabled) {
+                root.toolbox.finishCall(serial, "refused", Translation.tr("Memory is off"));
+                addFunctionOutputMessage(name, Translation.tr("The user has memory turned off. Do not try again in this conversation."), callId);
+                root.requestFollowUp();
+                return;
+            }
+            // Permission decides whether it may write at all; the default is
+            // to ask, and asking happens on the turn itself rather than in a
+            // dialog over the chat.
+            if (root.toolbox.permission(name) === "allow") {
+                root.commitMemory(message, fact);
+                return;
+            }
+            message.pendingMemory = fact;
+            message.functionPending = true;
+            return;
+        }
+
+        if (name === "web_search" || name === "fetch_url") {
+            if (!root.onlineAllowed) {
+                root.toolbox.finishCall(serial, "refused", Translation.tr("Blocked by local-only policy"));
+                addFunctionOutputMessage(name, Translation.tr("Reaching the web is disabled by the current AI policy."), callId);
+                root.requestFollowUp();
+                return;
+            }
+            const isSearch = name === "web_search";
+            const term = isSearch ? String(args?.query ?? "") : String(args?.url ?? "");
+            if (term.length === 0) {
+                root.toolbox.finishCall(serial, "failed", Translation.tr("Nothing to look up"));
+                addFunctionOutputMessage(name, isSearch
+                    ? Translation.tr("Invalid arguments. Must provide `query`.")
+                    : Translation.tr("Invalid arguments. Must provide `url`."), callId);
+                root.requestFollowUp();
+                return;
+            }
+            const count = Math.max(1, Math.min(10, Number(args?.count ?? 5)));
+            webToolProc.toolName = name;
+            webToolProc.callId = callId;
+            webToolProc.serial = serial;
+            webToolProc.term = term;
+            webToolProc.command = isSearch
+                ? ["python3", Directories.aiWebScriptPath, "search", term, String(count)]
+                : ["python3", Directories.aiWebScriptPath, "fetch", term];
+            webToolProc.running = true;
+            // What it looked up belongs with the answer, the same way the
+            // providers' own search results do.
+            if (isSearch)
+                message.searchQueries = [...Array.from(message.searchQueries ?? []), term];
+            return;
+        }
+
         if (name === "run_shell_command") {
             const command = String(args?.command ?? "");
             if (command.length === 0) {
@@ -2645,6 +3464,54 @@ Singleton {
                 return;
             }
             message.functionPending = true; // Use thinking to indicate the command is waiting for approval
+        }
+    }
+
+    /**
+     * The web tools. They only read: a search returns titles and snippets, a
+     * fetch returns one page as text. Both run out of process so a slow site
+     * never blocks the shell, and both hand their result straight back to the
+     * model as the tool's output.
+     */
+    Process {
+        id: webToolProc
+        property string toolName: ""
+        property string callId: ""
+        property int serial: -1
+        property string term: ""
+
+        stdout: StdioCollector {
+            id: webToolCollector
+            onStreamFinished: {
+                const raw = String(webToolCollector.text ?? "").trim();
+                let parsed = null;
+                try {
+                    parsed = JSON.parse(raw);
+                } catch (e) {
+                    parsed = null;
+                }
+                if (!parsed || parsed.error) {
+                    const reason = parsed?.error ?? Translation.tr("nothing came back");
+                    root.toolbox.finishCall(webToolProc.serial, "failed", reason);
+                    root.addFunctionOutputMessage(webToolProc.toolName, Translation.tr("Could not reach the web: %1").arg(reason), webToolProc.callId);
+                    root.requestFollowUp();
+                    return;
+                }
+                if (webToolProc.toolName === "web_search") {
+                    const results = Array.from(parsed.results ?? []);
+                    root.toolbox.finishCall(webToolProc.serial, "done", Translation.tr("%1 results from %2").arg(results.length).arg(parsed.engine ?? "web"));
+                    // Sources are recorded so the answer can cite them the way
+                    // a provider-side search does.
+                    root.sessionSources = [...root.sessionSources, ...results.map(result => ({
+                                    "url": String(result.url ?? ""),
+                                    "text": String(result.title ?? result.url ?? "")
+                                }))].slice(-100);
+                } else {
+                    root.toolbox.finishCall(webToolProc.serial, "done", String(parsed.title ?? webToolProc.term));
+                }
+                root.addFunctionOutputMessage(webToolProc.toolName, raw, webToolProc.callId);
+                root.requestFollowUp();
+            }
         }
     }
 
@@ -2815,6 +3682,16 @@ Singleton {
     /** Name of the conversation on screen. Empty until it earns one. */
     property string sessionTitle: ""
     property real sessionCreatedAt: 0
+    /**
+     * Where this chat came from. A fork and a rewritten question both leave a
+     * branch behind; without these two the old answer became a chat with no
+     * relation to the one on screen, and there was no way back to it.
+     */
+    property string sessionParentId: ""
+    property string sessionBranchMessageId: ""
+    /** Free-form labels, and the project this chat belongs to. */
+    property var sessionTags: []
+    property string sessionProjectId: ""
     /** Whether the model has already been asked to name this one. */
     property bool sessionTitleAsked: false
     property int titleRevision: 0
@@ -2849,6 +3726,9 @@ Singleton {
                 "totalTokens": message.totalTokens,
                 "thinking": false,
                 "done": true,
+                "finishReason": message.finishReason,
+                "createdAt": message.createdAt,
+                "completedAt": message.completedAt,
                 "annotations": message.annotations,
                 "annotationSources": message.annotationSources,
                 "searchQueries": message.searchQueries,
@@ -2863,7 +3743,8 @@ Singleton {
                 "errorDetails": message.errorDetails,
                 "errorText": message.errorText,
                 "errorStatus": message.errorStatus,
-                "notice": message.notice
+                "notice": message.notice,
+                "pendingMemory": message.pendingMemory
             });
     }
 
@@ -2880,14 +3761,25 @@ Singleton {
     }
 
     function messageFromJson(data: var): AiMessageData {
+        // Sessions written by the first chat implementation used `content`,
+        // while current snapshots use `rawContent`. Hydration must understand
+        // both formats or a valid old chat turns into blank delegates.
+        const persistedRaw = String(data?.rawContent ?? "");
+        const rawContent = persistedRaw.length > 0
+            ? persistedRaw
+            : String(data?.content ?? "");
         return root.aiMessageComponent.createObject(root, {
-            "role": data.role,
-            "rawContent": data.rawContent,
-            "content": data.rawContent,
-            "fileMimeType": data.fileMimeType,
-            "fileUri": data.fileUri,
-            "localFilePath": data.localFilePath,
-            "attachments": data.attachments ?? [],
+            "role": String(data?.role ?? "assistant"),
+            "rawContent": rawContent,
+            "content": rawContent,
+            "fileMimeType": data?.fileMimeType ?? "",
+            "fileUri": data?.fileUri ?? "",
+            "localFilePath": data?.localFilePath ?? "",
+            "attachments": data?.attachments ?? [],
+            "finishReason": data.finishReason ?? "",
+            "pendingMemory": data.pendingMemory ?? "",
+            "createdAt": data.createdAt ?? 0,
+            "completedAt": data.completedAt ?? 0,
             "model": data.model,
             "responseMode": data.responseMode ?? "balanced",
             "webMode": data.webMode ?? "off",
@@ -2962,11 +3854,17 @@ Singleton {
                 "promptFile": root.currentPromptFile,
                 "personaId": root.sessionPersonaId,
                 "promptOverride": root.promptOverride,
+                "parentId": root.sessionParentId,
+                "branchMessageId": root.sessionBranchMessageId,
+                "tags": root.sessionTags,
+                "projectId": root.sessionProjectId,
                 "messages": root.chatToJson(),
                 "run": root.conversations.records[root.sessions.currentId]?.run ?? null,
                 "searchQueries": root.sessionSearchQueries,
                 "sources": root.sessionSources,
                 "toolCheckpoints": root.sessionToolCheckpoints,
+                "contextSummary": root.contextSummary,
+                "contextSummaryKey": root.contextSummaryKey,
                 "activityEvents": root.conversations.records[root.sessions.currentId]?.run?.activityEvents ?? []
             });
     }
@@ -3003,6 +3901,8 @@ Singleton {
             searchQueries: sessionId === root.sessions.currentId ? root.sessionSearchQueries : (base.searchQueries ?? []),
             sources: sessionId === root.sessions.currentId ? root.sessionSources : (base.sources ?? []),
             toolCheckpoints: sessionId === root.sessions.currentId ? root.sessionToolCheckpoints : (base.toolCheckpoints ?? []),
+            contextSummary: sessionId === root.sessions.currentId ? root.contextSummary : (base.contextSummary ?? ""),
+            contextSummaryKey: sessionId === root.sessions.currentId ? root.contextSummaryKey : (base.contextSummaryKey ?? ""),
             activityEvents: root.conversations.records[sessionId]?.run?.activityEvents ?? [],
             updatedAt: Date.now()
         });
@@ -3046,6 +3946,13 @@ Singleton {
         root.sessions.currentId = "";
         root.sessionTitle = "";
         root.sessionCreatedAt = 0;
+        root.sessionParentId = "";
+        root.sessionBranchMessageId = "";
+        root.sessionTags = [];
+        root.contextSummary = "";
+        root.contextSummaryKey = "";
+        root.contextCutMessageId = "";
+        root.prunedTurnCount = 0;
         root.sessionTitleAsked = false;
         root.titleRevision = 0;
         root.isProvisionalTitle = true;
@@ -3062,8 +3969,12 @@ Singleton {
     }
 
     function openSession(sessionId: string) {
-        if (sessionId.length === 0 || sessionId === root.sessions.currentId)
+        if (sessionId.length === 0)
             return;
+        // Always reload the selected file. `currentId` is updated by the
+        // repository before `sessionOpened` is emitted, so using it as a
+        // dedupe key can leave a stale/empty in-memory transcript looking like
+        // an already restored chat (especially after switching hosts).
         if (root.pendingToolExecution || commandExecutionProc.running) {
             root.addMessage(Translation.tr("Wait for the active tool to finish before switching chats."), root.interfaceRole, {
                 "notice": "submission"
@@ -3078,7 +3989,11 @@ Singleton {
             });
             return;
         }
-        root.commitSession(); // Whatever is on screen keeps its own file
+        // Never overwrite a file while explicitly reloading that same id:
+        // the in-memory transcript may be stale/empty after a host handoff.
+        // Other chats still get their pending snapshot before we switch.
+        if (sessionId !== root.sessions.currentId)
+            root.commitSession();
         root.keepDraft();
         root.sessions.openSession(sessionId);
     }
@@ -3089,6 +4004,7 @@ Singleton {
      * set right now.
      */
     function applySession(session: var) {
+        root.cancelContextCompaction();
         const sessionId = root.sessions.currentId;
         if (sessionId.length > 0) {
             let restoredRun = session.run ?? root.conversations.records[sessionId]?.run ?? null;
@@ -3123,6 +4039,10 @@ Singleton {
         root.sessionSearchQueries = Array.from(session.searchQueries ?? []).map(value => String(value)).slice(-50);
         root.sessionSources = Array.from(session.sources ?? []).slice(-100);
         root.sessionToolCheckpoints = Array.from(session.toolCheckpoints ?? []).slice(-100);
+        root.contextSummary = String(session.contextSummary ?? "");
+        root.contextSummaryKey = String(session.contextSummaryKey ?? "");
+        root.contextCutMessageId = "";
+        root.prunedTurnCount = 0;
         root.sessionModelId = session.modelId ?? root.defaultModelId;
         root.temperature = typeof session.temperature === "number" ? session.temperature : root.defaultTemperature;
         root.thinkingLevel = root.thinkingLevels.indexOf(session.thinking) >= 0 ? session.thinking : root.defaultThinkingLevel;
@@ -3134,6 +4054,10 @@ Singleton {
         root.currentPromptFile = session.promptFile ?? "";
         root.promptOverride = session.promptOverride ?? "";
         root.sessionPersonaId = session.personaId ?? root.defaultPersonaId;
+        root.sessionParentId = String(session.parentId ?? "");
+        root.sessionBranchMessageId = String(session.branchMessageId ?? "");
+        root.sessionTags = Array.from(session.tags ?? []).map(tag => String(tag));
+        root.sessionProjectId = String(session.projectId ?? "");
         root.clearAttachments();
         root.restoreDraft();
         if (recoveredMessages)
@@ -3152,6 +4076,26 @@ Singleton {
             state.defaultThinkingLevel = state.thinkingLevel;
         if (state.defaultPersonaId.length === 0)
             state.defaultPersonaId = state.personaId;
+    }
+
+    /**
+     * Hydrates new-chat defaults only after states.json has actually loaded.
+     * Previously Component.onCompleted copied the compiled fallback into
+     * sessionModelId first; because session state has priority, the saved
+     * model arriving a moment later could never become current after boot.
+     */
+    function restorePersistentDefaults() {
+        if (!Persistent.ready || root.persistentDefaultsRestored)
+            return;
+        root.migrateAiDefaults();
+        const pendingModelId = root.pendingPersistentModelId;
+        root.pendingPersistentModelId = "";
+        if (pendingModelId.length > 0) {
+            root.persistDefaultModel(pendingModelId);
+        } else if (root.sessions.currentId.length === 0 && root.messageIDs.length === 0) {
+            root.resetSessionSettings();
+        }
+        root.persistentDefaultsRestored = true;
     }
 
     function resetSessionSettings() {
@@ -3179,8 +4123,18 @@ Singleton {
             delete root.messageByID[root.messageIDs[i]];
         }
         root.messageIDs = kept;
+        const previousSessionId = root.sessions.currentId;
+        root.cancelContextCompaction();
         root.sessions.currentId = root.sessions.newId();
         root.sessionCreatedAt = Date.now();
+        // The branch remembers its trunk, so the transcript can offer the
+        // answer this one replaced instead of losing it in the chat list.
+        root.sessionParentId = previousSessionId;
+        root.sessionBranchMessageId = messageId;
+        root.contextSummary = "";
+        root.contextSummaryKey = "";
+        root.contextCutMessageId = "";
+        root.prunedTurnCount = 0;
         if (root.sessionTitle.length > 0)
             root.sessionTitle = Translation.tr("%1 (fork)").arg(root.sessionTitle);
         root.sessionTitleAsked = root.sessionTitle.length > 0;

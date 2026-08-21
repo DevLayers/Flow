@@ -54,6 +54,19 @@ Item {
     implicitHeight: activityColumn.implicitHeight
     implicitWidth: activityColumn.implicitWidth
 
+    // A row that can be opened can be opened with the keyboard too.
+    activeFocusOnTab: root.expandable
+    Accessible.role: Accessible.Button
+    Accessible.name: root.label
+    Keys.onPressed: event => {
+        if (!root.expandable)
+            return;
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            root.toggled();
+            event.accepted = true;
+        }
+    }
+
     // A step that begins partway through an answer slides in rather than
     // blinking into the column above the bubble.
     visible: root.shown || root.opacity > 0.01
@@ -104,7 +117,7 @@ Item {
                     fill: 1
                     iconSize: root.iconSize
                     color: Appearance.colors.colSubtext
-                    opacity: headerMouse.containsMouse ? 1 : 0.9
+                    opacity: headerMouse.containsMouse || root.activeFocus ? 1 : 0.9
 
                     Behavior on opacity {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -118,7 +131,7 @@ Item {
                     Layout.alignment: Qt.AlignVCenter
                     text: root.label
                     running: root.running
-                    color: headerMouse.containsMouse ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
+                    color: headerMouse.containsMouse || root.activeFocus ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
                 }
 
                 MaterialSymbol {
@@ -127,7 +140,7 @@ Item {
                     text: "chevron_right"
                     fill: 1
                     iconSize: root.iconSize
-                    color: headerMouse.containsMouse ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
+                    color: headerMouse.containsMouse || root.activeFocus ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
                     rotation: root.expanded ? 90 : 0
 
                     Behavior on rotation {

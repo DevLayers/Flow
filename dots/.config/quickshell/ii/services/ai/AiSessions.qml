@@ -56,6 +56,7 @@ Scope {
     /** A background load completed without changing the visible session. */
     signal loadSucceeded(string operationId, string sessionId, var session)
     signal loadFailed(string operationId, string sessionId, string reason)
+    signal openFailed(string sessionId, string reason)
     /** Atomic submission primitives used by the run coordinator. */
     signal stageSucceeded(string operationId, string sessionId)
     signal stageFailed(string operationId, string sessionId, string reason)
@@ -223,6 +224,42 @@ Scope {
         });
     }
 
+    /** Labels for a chat, as one comma-separated argument. */
+    function setTags(id: string, tags: var) {
+        if (!id)
+            return;
+        const list = Array.from(tags ?? []).map(tag => String(tag).trim()).filter(tag => tag.length > 0);
+        root.enqueue({
+            kind: "index",
+            args: ["patch", root.dir, id, "--tags", list.join(",")]
+        });
+    }
+
+    /** Which project a chat is filed under, "" for none. */
+    function setProject(id: string, projectId: string) {
+        if (!id)
+            return;
+        root.enqueue({
+            kind: "index",
+            args: ["patch", root.dir, id, "--project", String(projectId ?? "")]
+        });
+    }
+
+    /** Every label in use, for the filter row. */
+    readonly property var allTags: {
+        const seen = [];
+        const entries = root.index ?? [];
+        for (let i = 0; i < entries.length; i++) {
+            const tags = entries[i]?.tags ?? [];
+            for (let at = 0; at < tags.length; at++) {
+                const tag = String(tags[at]);
+                if (tag.length > 0 && seen.indexOf(tag) < 0)
+                    seen.push(tag);
+            }
+        }
+        return seen.sort();
+    }
+
     function setPinned(id: string, pinned: bool) {
         if (!id)
             return;
@@ -357,6 +394,8 @@ Scope {
         const sessionId = String(op.sessionId ?? op.id ?? "");
         if (op.kind === "save")
             root.saveFailed(operationId, sessionId, reason);
+        else if (op.kind === "open")
+            root.openFailed(sessionId, reason);
         else if (op.kind === "load")
             root.loadFailed(operationId, sessionId, reason);
         else if (op.kind === "stage")

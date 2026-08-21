@@ -10,7 +10,12 @@ OPENAI_STRATEGY = (ROOT / "services" / "ai" / "OpenAiCompatStrategy.qml").read_t
 AI_SERVICE = (ROOT / "services" / "Ai.qml").read_text(encoding="utf-8")
 AI_MESSAGE = (ROOT / "services" / "ai" / "AiMessageData.qml").read_text(encoding="utf-8")
 AI_USAGE = (ROOT / "services" / "AiUsage.qml").read_text(encoding="utf-8")
-SEARCH_MESSAGE = (ROOT / "modules" / "ii" / "overview" / "AiChatPanelMessage.qml").read_text(encoding="utf-8")
+# Both surfaces draw the same turn now; the Search panel is that component in
+# its compact density.
+TRANSCRIPT_MESSAGE = (
+    ROOT / "modules" / "ii" / "sidebarPolicies" / "aiChat" / "AiMessage.qml"
+).read_text(encoding="utf-8")
+SEARCH_PANEL = (ROOT / "modules" / "ii" / "overview" / "AiChatPanel.qml").read_text(encoding="utf-8")
 
 
 class AiStreamUsageContractTests(unittest.TestCase):
@@ -38,8 +43,23 @@ class AiStreamUsageContractTests(unittest.TestCase):
         self.assertIn("root.applyResponse(record)", AI_USAGE)
 
     def test_restored_final_answer_has_a_direct_transcript_dependency(self):
-        self.assertIn("readonly property string transcriptContent", SEARCH_MESSAGE)
-        self.assertIn("blocksForContent(root.transcriptContent)", SEARCH_MESSAGE)
+        # The dependency is explicit rather than hidden behind a helper: QML
+        # cannot always infer a property read made inside a singleton call, and
+        # a restored answer used to render from a stale, empty model.
+        self.assertIn("readonly property string transcriptContent", TRANSCRIPT_MESSAGE)
+        self.assertIn("onTranscriptContentChanged:", TRANSCRIPT_MESSAGE)
+        self.assertIn("reuseBlocks(root.messageBlocks, root.transcriptContent)", TRANSCRIPT_MESSAGE)
+        # A finished answer always rebuilds, whatever the streaming coalescer
+        # was in the middle of.
+        self.assertIn("onDoneChanged:", TRANSCRIPT_MESSAGE)
+
+    def test_both_surfaces_share_one_transcript(self):
+        self.assertIn("AiMessage {", SEARCH_PANEL)
+        self.assertIn('density: "compact"', SEARCH_PANEL)
+        self.assertFalse(
+            (ROOT / "modules" / "ii" / "overview" / "AiChatPanelMessage.qml").exists(),
+            "the second transcript implementation is gone for good",
+        )
 
 
 if __name__ == "__main__":
