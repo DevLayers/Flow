@@ -10,6 +10,7 @@ import Quickshell.Io
 import qs
 import qs.services
 import qs.services.ai
+import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -1232,17 +1233,13 @@ Item {
                         applyResultDiff(root.processResults(LauncherSearch.results));
                     }
 
-                    delegate: SearchItem {
-                        id: searchItem
+                    delegate: Loader {
+                        id: resultDelegate
                         required property int index
-                        listIndex: index
-                        listCurrentIndex: appResults.currentIndex
                         required property var modelData
-                        anchors.left: parent?.left
-                        anchors.right: parent?.right
-                        // modelData is {key, modelRef} from ListModel — pass the actual result object
-                        entry: modelData.modelRef
-                        query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.emojis, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
+                        width: appResults.width
+                        height: item ? item.implicitHeight : 0
+                        sourceComponent: resultDelegate.modelData.modelRef?.settingRef ? settingResultCard : normalSearchItem
 
                         // Animate y when ListView repositions this delegate (via move/displaced)
                         Behavior on y {
@@ -1253,41 +1250,65 @@ Item {
                             }
                         }
 
-                        Connections {
-                            target: root
-                            function onRequestToggleActions() {
-                                if (searchItem.listIndex === appResults.currentIndex) {
-                                    searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
-                                    searchItem.actionSelectedIndex = 0;
-                                    if (searchItem.actionPanelOpen) {
-                                        searchItem.forceActiveFocus();
-                                    } else {
-                                        root.focusSearchInput();
-                                    }
-                                }
+                        Component {
+                            id: settingResultCard
+
+                            AiSettingResultCard {
+                                width: resultDelegate.width
+                                setting: resultDelegate.modelData.modelRef.settingRef
+                                compact: true
                             }
                         }
 
-                        Keys.onPressed: event => {
-                            if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
-                                searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
-                                searchItem.actionSelectedIndex = 0;
-                                if (searchItem.actionPanelOpen) {
-                                    searchItem.forceActiveFocus();
-                                } else {
-                                    root.focusSearchInput();
+                        Component {
+                            id: normalSearchItem
+
+                            SearchItem {
+                                id: searchItem
+                                width: resultDelegate.width
+                                listIndex: resultDelegate.index
+                                listCurrentIndex: appResults.currentIndex
+                                // modelData is {key, modelRef} from ListModel — pass the actual result object
+                                entry: resultDelegate.modelData.modelRef
+                                query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.emojis, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
+
+                                Connections {
+                                    target: root
+                                    function onRequestToggleActions() {
+                                        if (searchItem.listIndex === appResults.currentIndex) {
+                                            searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
+                                            searchItem.actionSelectedIndex = 0;
+                                            if (searchItem.actionPanelOpen) {
+                                                searchItem.forceActiveFocus();
+                                            } else {
+                                                root.focusSearchInput();
+                                            }
+                                        }
+                                    }
                                 }
-                                event.accepted = true;
-                            } else if (event.key === Qt.Key_Tab) {
-                                if (searchItem.actionPanelOpen)
-                                    return;
-                                if (LauncherSearch.results.length === 0)
-                                    return;
-                                const tabbedText = searchItem.modelData.name;
-                                LauncherSearch.query = tabbedText;
-                                searchBar.searchInput.text = tabbedText;
-                                event.accepted = true;
-                                root.focusSearchInput();
+
+                                Keys.onPressed: event => {
+                                    if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
+                                        searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
+                                        searchItem.actionSelectedIndex = 0;
+                                        if (searchItem.actionPanelOpen) {
+                                            searchItem.forceActiveFocus();
+                                        } else {
+                                            root.focusSearchInput();
+                                        }
+                                        event.accepted = true;
+                                    } else if (event.key === Qt.Key_Tab) {
+                                        if (searchItem.actionPanelOpen)
+                                            return;
+                                        if (LauncherSearch.results.length === 0)
+                                            return;
+                                        const tabbedText = resultDelegate.modelData.name;
+                                        LauncherSearch.query = tabbedText;
+                                        searchBar.searchInput.text = tabbedText;
+                                        event.accepted = true;
+                                        root.focusSearchInput();
+                                    }
+                                }
                             }
                         }
                     }

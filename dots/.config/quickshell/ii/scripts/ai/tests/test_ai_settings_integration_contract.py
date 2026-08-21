@@ -10,6 +10,8 @@ AI = (ROOT / "services/Ai.qml").read_text(encoding="utf-8")
 REGISTRY = (ROOT / "services/ai/AiToolRegistry.qml").read_text(encoding="utf-8")
 INTEGRATION_PATH = ROOT / "services/ai/integrations/AiSettingsIntegration.qml"
 RESULT_CARD = ROOT / "services/ai/blocks/AiSettingResultCard.qml"
+LAUNCHER = (ROOT / "services/LauncherSearch.qml").read_text(encoding="utf-8")
+SEARCH_WIDGET = (ROOT / "modules/ii/overview/SearchWidget.qml").read_text(encoding="utf-8")
 
 
 class SemanticSettingsToolsTests(unittest.TestCase):
@@ -75,6 +77,19 @@ class SemanticSettingsToolsTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertIn(token, source)
         self.assertIn('kind: "settingsResults"', AI)
+
+    def test_overview_launcher_reuses_the_generated_settings_index_and_card(self):
+        for token in (
+            "Ai.settingsIntegration.ready",
+            "function settingsIntegrationSearch(",
+            "Ai.settingsIntegration.search(query, 8)",
+            "function createSettingsResultObject(",
+            "settingRef: setting",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, LAUNCHER)
+        self.assertIn("import qs.services.ai.blocks", SEARCH_WIDGET)
+        self.assertIn("AiSettingResultCard", SEARCH_WIDGET)
 
 
 if __name__ == "__main__":

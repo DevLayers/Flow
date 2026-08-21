@@ -16,6 +16,12 @@ Singleton {
 
     property string query: ""
     property int mprisTrigger: 0
+    // The generated Settings index is shared with AI but does not depend on a
+    // model or network. Watching readiness makes a query recompute once a
+    // missing/stale index finishes rebuilding in the background.
+    readonly property bool settingsIndexReady: Ai.settingsIntegration.ready
+
+    onSettingsIndexReadyChanged: root._scheduleResultsUpdate()
 
     Connections {
         target: GlobalStates
@@ -49,6 +55,46 @@ Singleton {
         const hasDigitsAndOp = /^\d/.test(expr) && /[+\-\*\/^()%]/.test(expr);
         const hasFunc = /^(sqrt|sin|cos|tan|log|ln)\b/i.test(expr);
         return hasPrefix || hasDigitsAndOp || hasFunc;
+    }
+
+    function isSettingsSearchQuery(queryText: string): bool {
+        const query = String(queryText ?? "").trim();
+        if (query.length < 2)
+            return false;
+        const prefixes = Config.options.search.prefix;
+        const reserved = [
+            prefixes.action, prefixes.app, prefixes.bluetooth, prefixes.clipboard,
+            prefixes.emojis, prefixes.fileBrowser, prefixes.fileSearch, prefixes.math,
+            prefixes.mediaDownloader, prefixes.materialSymbols, prefixes.shellCommand,
+            prefixes.translator, prefixes.webSearch, prefixes.windowSearch, prefixes.ai
+        ].filter(prefix => String(prefix ?? "").length > 0);
+        return !reserved.some(prefix => query.startsWith(prefix));
+    }
+
+    function createSettingsResultObject(setting: var): var {
+        const label = String(setting?.labelLocalized ?? setting?.label ?? setting?.key ?? "");
+        const path = [
+            setting?.pageNameLocalized ?? setting?.pageName ?? "",
+            setting?.sectionTitleLocalized ?? setting?.sectionTitle ?? ""
+        ].filter(part => String(part).length > 0).join(" › ");
+        return resultComp.createObject(null, {
+            key: "setting:" + String(setting?.key ?? label),
+            name: label,
+            type: Translation.tr("Setting"),
+            verb: Translation.tr("Open"),
+            iconName: String(setting?.icon ?? "tune"),
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: path,
+            category: "setting",
+            settingRef: setting,
+            keepOverviewOpen: true,
+            execute: () => {
+                GlobalStates.openSettingsPage(
+                            String(setting?.pageId ?? ""),
+                            String(setting?.subPage ?? ""),
+                            String(setting?.sectionTitleLocalized ?? setting?.sectionTitle ?? ""));
+            }
+        });
     }
 
     // Instantly evaluate simple arithmetic using JS — no qalc needed
@@ -741,6 +787,11 @@ Singleton {
         // MPRIS handled above (empty query case)
 
         const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).slice(0, 60).map(entry => root.createAppResultObject(entry));
+        const settingsResultObjects = root.isSettingsSearchQuery(root.query)
+            ? (root.settingsIndexReady
+                ? root.settingsIntegrationSearch(root.query).map(setting => root.createSettingsResultObject(setting))
+                : (Ai.settingsIntegration.ensureIndex(), []))
+            : [];
         const commandResultObject = resultComp.createObject(null, {
             key: "cmd:shell",
             name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
@@ -1038,6 +1089,11 @@ Singleton {
         //////////////// Files /////////////////
         result = result.concat(fileResultsObject);
 
+        ////////////// Settings //////////////////
+        // This is intentionally before app matches: an exact local setting
+        // should not be buried under unrelated desktop entries.
+        result = result.concat(settingsResultObjects);
+
         //////////////// Apps //////////////////
         result = result.concat(appResultObjects);
 
@@ -1229,8 +1285,13 @@ Singleton {
             isMath: !!properties.isMath,
             isBuiltin: !!properties.isBuiltin,
             keepOverviewOpen: !!properties.keepOverviewOpen,
-            category: properties.category || properties.type || ""
+            category: properties.category || properties.type || "",
+            settingRef: properties.settingRef ?? null
         };
+    }
+
+    function settingsIntegrationSearch(query: string): var {
+        return Ai.settingsIntegration.search(query, 8);
     }
 
     readonly property var resultComp: {
