@@ -1226,6 +1226,14 @@ Singleton {
                 property bool overlayEnabled: true
                 // Presets are added once; deleting one afterwards sticks.
                 property bool presetsSeeded: false
+                // "auto" shows the start/end banner in the island or, without
+                // a notch, as a top-centre popup; "off" shows nothing.
+                property string flash: "auto"
+                property bool lockPill: true
+                // What the overlay reopens on.
+                property string lastTab: "modes"
+                property string lastModeId: ""
+                property string lastRoutineId: ""
                 // Seconds an auto-started mode's triggers must stay false
                 // before it ends, so a workspace switch does not flap it.
                 property int graceSec: 20

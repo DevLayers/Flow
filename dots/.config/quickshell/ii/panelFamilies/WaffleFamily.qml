@@ -23,6 +23,8 @@ import qs.modules.ii.onScreenKeyboard
 import qs.modules.ii.overlay
 import qs.modules.ii.screenTranslator
 import qs.modules.ii.usage
+import qs.modules.ii.modes
+import qs.modules.ii.modeFlashPopup
 import qs.modules.ii.wallpaperSelector
 
 Scope {
@@ -48,6 +50,14 @@ Scope {
     PanelLoader {
         extraCondition: Config.options.appStats.overlayEnabled
         component: Usage {}
+    }
+    PanelLoader {
+        extraCondition: Config.options.modes.overlayEnabled
+        component: ModesOverlay {}
+    }
+    PanelLoader {
+        extraCondition: Config.ready
+        component: ModeFlashPopup {}
     }
     PanelLoader { component: WallpaperSelector {} }
 }

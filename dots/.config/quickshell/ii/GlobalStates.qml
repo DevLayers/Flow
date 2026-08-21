@@ -135,6 +135,10 @@ Singleton {
     property bool superDown: false
     property bool usageOpen: false
     property bool modesOpen: false
+    // Transient "Work mode on" banner: set by the Modes engine for ~3 s.
+    // Payload: { kind: "mode"|"routine", id, icon, color, title, subtitle }
+    property bool modeFlashActive: false
+    property var modeFlashPayload: null
     property bool superReleaseMightTrigger: true
     property bool wallpaperSelectorOpen: false
     property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
