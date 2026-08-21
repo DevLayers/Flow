@@ -24,25 +24,84 @@ var CONDITION_SOURCES = {
     fullscreen: "conditions/FullscreenCondition.qml",
     locked: "conditions/LockedCondition.qml",
     modeActive: "conditions/ModeActiveCondition.qml",
-    audioDevice: "conditions/AudioDeviceCondition.qml"
+    audioDevice: "conditions/AudioDeviceCondition.qml",
+    idle: "conditions/IdleCondition.qml",
+    workspace: "conditions/WorkspaceCondition.qml",
+    media: "conditions/MediaCondition.qml",
+    deviceInUse: "conditions/DeviceInUseCondition.qml",
+    discordVoice: "conditions/DiscordVoiceCondition.qml",
+    phone: "conditions/PhoneCondition.qml",
+    pomodoro: "conditions/PomodoroCondition.qml",
+    calendar: "conditions/CalendarCondition.qml",
+    resource: "conditions/ResourceCondition.qml",
+    vpn: "conditions/VpnCondition.qml",
+    lid: "conditions/LidCondition.qml",
+    weather: "conditions/WeatherCondition.qml",
+    keyboardLayout: "conditions/KeyboardLayoutCondition.qml",
+    updates: "conditions/UpdatesCondition.qml"
 };
 
-// Editor metadata per trigger type: label, icon and which parameter control
-// the editor row shows. Every trigger also accepts `not: true`, which flips
-// its verdict ("Zoom is not running") — that is how "when X closes" is said.
-var TRIGGER_TYPES = {
-    schedule: { label: "Schedule", icon: "schedule", editor: "schedule" },
-    app: { label: "App", icon: "apps", editor: "app" },
-    game: { label: "Game", icon: "sports_esports", editor: "game" },
-    battery: { label: "Battery", icon: "battery_5_bar", editor: "battery" },
-    wifi: { label: "Wi-Fi", icon: "wifi", editor: "wifi" },
-    bluetooth: { label: "Bluetooth", icon: "bluetooth", editor: "bluetooth" },
-    monitors: { label: "Monitors", icon: "monitor", editor: "monitors" },
-    fullscreen: { label: "Fullscreen window", icon: "fullscreen", editor: "none" },
-    locked: { label: "Screen locked", icon: "lock", editor: "locked" },
-    modeActive: { label: "Mode active", icon: "tune", editor: "modeActive", routineOnly: true },
-    audioDevice: { label: "Audio device", icon: "headphones", editor: "audioDevice" }
+// Editor metadata per trigger type: label, icon, group in the "add
+// condition" menu and which parameter form the editor row shows. Every
+// trigger also accepts `not: true`, which flips its verdict ("Zoom is not
+// running" is how "when X closes" is said), and `forSec`.
+var TRIGGER_GROUPS = {
+    time: "Time",
+    windows: "Apps & windows",
+    you: "What you're doing",
+    system: "Power & system",
+    connectivity: "Connectivity & devices",
+    outside: "Outside",
+    automation: "Automation"
 };
+
+var TRIGGER_TYPES = {
+    schedule: { label: "Schedule", icon: "schedule", editor: "schedule", group: "time" },
+    calendar: { label: "Calendar event", icon: "event", editor: "calendar", group: "time" },
+    app: { label: "App", icon: "apps", editor: "app", group: "windows" },
+    game: { label: "Game", icon: "sports_esports", editor: "game", group: "windows" },
+    fullscreen: { label: "Fullscreen window", icon: "fullscreen", editor: "none", group: "windows" },
+    workspace: { label: "Workspace", icon: "grid_view", editor: "workspace", group: "windows" },
+    idle: { label: "Away from the keyboard", icon: "hourglass_empty", editor: "idle", group: "you" },
+    locked: { label: "Screen locked", icon: "lock", editor: "locked", group: "you" },
+    lid: { label: "Laptop lid", icon: "laptop", editor: "lid", group: "you" },
+    media: { label: "Media playing", icon: "music_note", editor: "media", group: "you" },
+    deviceInUse: { label: "Mic, camera or screen in use", icon: "videocam", editor: "deviceInUse", group: "you" },
+    discordVoice: { label: "Discord voice call", icon: "headset_mic", editor: "none", group: "you" },
+    pomodoro: { label: "Pomodoro timer", icon: "timer", editor: "pomodoro", group: "you" },
+    battery: { label: "Battery", icon: "battery_5_bar", editor: "battery", group: "system" },
+    resource: { label: "CPU, GPU, memory or disk", icon: "memory", editor: "resource", group: "system" },
+    keyboardLayout: { label: "Keyboard layout", icon: "keyboard", editor: "keyboardLayout", group: "system" },
+    updates: { label: "Updates pending", icon: "system_update", editor: "updates", group: "system" },
+    wifi: { label: "Wi-Fi", icon: "wifi", editor: "wifi", group: "connectivity" },
+    vpn: { label: "VPN or Tailscale", icon: "vpn_lock", editor: "vpn", group: "connectivity" },
+    bluetooth: { label: "Bluetooth", icon: "bluetooth", editor: "bluetooth", group: "connectivity" },
+    phone: { label: "Phone", icon: "smartphone", editor: "phone", group: "connectivity" },
+    monitors: { label: "Monitors", icon: "monitor", editor: "monitors", group: "connectivity" },
+    audioDevice: { label: "Audio device", icon: "headphones", editor: "audioDevice", group: "connectivity" },
+    weather: { label: "Weather", icon: "partly_cloudy_day", editor: "weather", group: "outside" },
+    modeActive: { label: "Mode active", icon: "tune", editor: "modeActive", group: "automation", routineOnly: true }
+};
+
+// WWO weather codes (what the weather service stores in wCode) folded into
+// the few kinds a condition can ask for.
+function weatherKind(code) {
+    var c = Number(code);
+    if (c === 113)
+        return "clear";
+    if (c === 116 || c === 119 || c === 122)
+        return "cloudy";
+    if (c === 143 || c === 248 || c === 260)
+        return "fog";
+    if (c === 200 || c === 386 || c === 389 || c === 392 || c === 395)
+        return "storm";
+    var snow = [179, 182, 185, 227, 230, 317, 320, 323, 326, 329, 332, 335, 338, 350, 362, 365, 368, 371, 374, 377];
+    if (snow.indexOf(c) !== -1)
+        return "snow";
+    if (c >= 176)
+        return "rain";
+    return "";
+}
 
 // Default launcher class patterns for game detection (GameDetector signal 1).
 var GAME_LAUNCHER_PATTERNS = [
@@ -163,6 +222,7 @@ function normalizeTrigger(raw) {
         break;
     case "app":
         t.classes = stringList(t.classes);
+        t.title = typeof t.title === "string" ? t.title.trim() : "";
         t.when = t.when === "focused" ? "focused" : "running";
         break;
     case "game":
@@ -196,9 +256,62 @@ function normalizeTrigger(raw) {
         t.match = typeof t.match === "string" ? t.match : "";
         t.kind = t.kind === "source" ? "source" : "sink";
         break;
+    case "idle":
+        t.sec = Math.max(5, durationSec(t.sec) || 300);
+        t.ignoreInhibitors = t.ignoreInhibitors === true;
+        break;
+    case "workspace":
+        t.names = stringList(t.names);
+        t.special = t.special === true;
+        break;
+    case "media":
+        t.playing = t.playing !== false;
+        t.player = typeof t.player === "string" ? t.player.trim() : "";
+        break;
+    case "deviceInUse":
+        t.what = ["mic", "camera", "screen"].indexOf(t.what) !== -1 ? t.what : "mic";
+        break;
+    case "phone":
+        t.reachable = t.reachable !== false;
+        t.batteryBelow = optionalInt(t.batteryBelow, 1, 100);
+        break;
+    case "pomodoro":
+        t.phase = ["focus", "break", "any"].indexOf(t.phase) !== -1 ? t.phase : "any";
+        break;
+    case "calendar":
+        t.match = typeof t.match === "string" ? t.match.trim() : "";
+        break;
+    case "resource":
+        t.metric = RESOURCE_METRICS.indexOf(t.metric) !== -1 ? t.metric : "cpuUsage";
+        t.above = optionalInt(t.above, 0, 1000);
+        t.below = optionalInt(t.below, 0, 1000);
+        if (t.above === null && t.below === null)
+            t.above = 80;
+        break;
+    case "vpn":
+        t.kind = t.kind === "tailscale" ? "tailscale" : "vpn";
+        t.connected = t.connected !== false;
+        break;
+    case "lid":
+        t.closed = t.closed !== false;
+        break;
+    case "weather":
+        t.kind = WEATHER_KINDS.indexOf(t.kind) !== -1 ? t.kind : "any";
+        t.tempBelow = optionalInt(t.tempBelow, -100, 150);
+        t.tempAbove = optionalInt(t.tempAbove, -100, 150);
+        break;
+    case "keyboardLayout":
+        t.code = typeof t.code === "string" ? t.code.trim().toLowerCase() : "";
+        break;
+    case "updates":
+        t.atLeast = Math.max(1, optionalInt(t.atLeast, 1, 10000) || 1);
+        break;
     }
     return t;
 }
+
+var RESOURCE_METRICS = ["cpuUsage", "cpuTemp", "gpuUsage", "gpuTemp", "memory", "swap", "disk"];
+var WEATHER_KINDS = ["any", "clear", "cloudy", "fog", "rain", "snow", "storm"];
 
 // Class patterns: a plain name matches exactly (case-insensitive); anything
 // containing regex metacharacters is taken as a regex.
@@ -219,10 +332,16 @@ function classRegexes(list) {
     return toArray(list).map(classRegex).filter(function (r) { return r !== null; });
 }
 
-// Hyprland client JSON carries both `class` and `initialClass`; match either.
-function windowMatches(win, regexes) {
+// Hyprland client JSON carries both `class` and `initialClass`; match
+// either. With `titleRegex` the title has to match as well (or alone, when
+// there are no class patterns).
+function windowMatches(win, regexes, titleRegex) {
     if (!win)
         return false;
+    if (titleRegex && !titleRegex.test(String(win.title || "")))
+        return false;
+    if (regexes.length === 0)
+        return !!titleRegex;
     var a = String(win.initialClass || "");
     var b = String(win["class"] || "");
     for (var i = 0; i < regexes.length; ++i) {
@@ -230,6 +349,21 @@ function windowMatches(win, regexes) {
             return true;
     }
     return false;
+}
+
+// Title patterns: plain text matches anywhere (case-insensitive); anything
+// with regex metacharacters is a regex.
+function titleRegex(text) {
+    var s = String(text || "").trim();
+    if (!s.length)
+        return null;
+    try {
+        if (/[\\^$.*+?()\[\]{}|]/.test(s))
+            return new RegExp(s, "i");
+        return new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    } catch (e) {
+        return null;
+    }
 }
 
 // `revert: false` keeps an action's effect when its owner ends (routines
@@ -337,13 +471,39 @@ function normalizeRoutines(rawList) {
     });
 }
 
+var SUN_TOKENS = ["sunrise", "sunset"];
+
 function validTime(text) {
-    return typeof text === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(text);
+    return typeof text === "string"
+        && (/^([01]\d|2[0-3]):[0-5]\d$/.test(text) || SUN_TOKENS.indexOf(text) !== -1);
 }
 
-function timeToMinutes(text) {
-    var parts = text.split(":");
-    return Number(parts[0]) * 60 + Number(parts[1]);
+// "HH:MM" (or "h:MM AM/PM", which the weather service may hand back) to
+// minutes since midnight; -1 when unreadable.
+function clockMinutes(text) {
+    var m = /^\s*(\d{1,2}):(\d{2})\s*(AM|PM)?\s*$/i.exec(String(text || ""));
+    if (!m)
+        return -1;
+    var h = Number(m[1]);
+    if (m[3]) {
+        h = h % 12;
+        if (m[3].toUpperCase() === "PM")
+            h += 12;
+    }
+    return h * 60 + Number(m[2]);
+}
+
+// `sun` is { sunrise, sunset } as clock text, for the tokens; without it a
+// token does not resolve and the window is closed.
+function timeToMinutes(text, sun) {
+    if (SUN_TOKENS.indexOf(text) !== -1) {
+        var t = sun ? clockMinutes(sun[text]) : -1;
+        // The service's placeholder before any fetch.
+        if (t === 0 && sun && clockMinutes(sun.sunrise) === 0 && clockMinutes(sun.sunset) === 0)
+            return -1;
+        return t;
+    }
+    return clockMinutes(text);
 }
 
 // ISO weekday, 1 = Monday … 7 = Sunday.
@@ -353,12 +513,12 @@ function isoDay(date) {
 
 // Whether `date` falls inside a schedule trigger. Overnight windows belong to
 // the day they start on: 23:00–07:00 on Friday runs into Saturday morning.
-function scheduleSatisfied(trigger, date) {
-    var from = timeToMinutes(trigger.from);
-    var to = timeToMinutes(trigger.to);
+function scheduleSatisfied(trigger, date, sun) {
+    var from = timeToMinutes(trigger.from, sun);
+    var to = timeToMinutes(trigger.to, sun);
     var now = date.getHours() * 60 + date.getMinutes();
     var days = toArray(trigger.days);
-    if (from === to)
+    if (from < 0 || to < 0 || from === to)
         return false;
     if (from < to)
         return now >= from && now < to && days.indexOf(isoDay(date)) !== -1;
@@ -372,10 +532,10 @@ function scheduleSatisfied(trigger, date) {
 }
 
 // Epoch ms of the moment the currently satisfied window ends, 0 if not inside one.
-function scheduleEndsAt(trigger, date) {
-    if (!scheduleSatisfied(trigger, date))
+function scheduleEndsAt(trigger, date, sun) {
+    if (!scheduleSatisfied(trigger, date, sun))
         return 0;
-    var to = timeToMinutes(trigger.to);
+    var to = timeToMinutes(trigger.to, sun);
     var end = new Date(date.getTime());
     end.setSeconds(0, 0);
     end.setHours(Math.floor(to / 60), to % 60, 0, 0);

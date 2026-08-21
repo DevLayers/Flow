@@ -141,7 +141,10 @@ Item {
         const out = [];
         for (const type in ModeSchema.TRIGGER_TYPES) {
             const meta = ModeSchema.TRIGGER_TYPES[type];
-            out.push({ key: type, label: meta.label, icon: meta.icon, group: "", enabled: true, hint: "" });
+            out.push({
+                key: type, label: Translation.tr(meta.label), icon: meta.icon,
+                group: ModeUi.triggerGroupLabel(type), enabled: true, hint: ""
+            });
         }
         return out;
     }

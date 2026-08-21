@@ -33,8 +33,25 @@ ColumnLayout {
         onChanged: list => row.set({ classes: list })
     }
 
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 10
+
+        FormLabel {
+            text: Translation.tr("Title contains")
+        }
+
+        PlainField {
+            Layout.fillWidth: true
+            value: row.trigger.title ?? ""
+            placeholder: Translation.tr("Optional — \"YouTube\" catches it in any browser")
+            onCommitted: v => row.set({ title: v })
+        }
+    }
+
     FormHint {
         text: Translation.tr("A plain name matches the class exactly (case-insensitive); "
-            + "anything with regex characters is a regular expression.")
+            + "anything with regex characters is a regular expression. "
+            + "With no class, the title alone decides.")
     }
 }

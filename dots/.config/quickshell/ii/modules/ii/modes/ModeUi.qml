@@ -117,7 +117,8 @@ Singleton {
     }
 
     function triggerTypeLabel(type) {
-        return ModeSchema.TRIGGER_TYPES[type]?.label ?? type;
+        const label = ModeSchema.TRIGGER_TYPES[type]?.label;
+        return label ? Translation.tr(label) : type;
     }
 
     function triggerTypeIcon(type) {
@@ -178,11 +179,15 @@ Singleton {
         }
         case "app": {
             const apps = root.listText(t.classes);
-            if (!apps.length)
+            const title = String(t.title ?? "").trim();
+            const what = apps.length
+                ? (title.length ? `${apps} "${title}"` : apps)
+                : (title.length ? Translation.tr("Window titled \"%1\"").arg(title) : "");
+            if (!what.length)
                 return t.when === "focused" ? Translation.tr("Any app focused") : Translation.tr("Any app running");
             return t.when === "focused"
-                ? Translation.tr("%1 focused").arg(apps)
-                : Translation.tr("%1 running").arg(apps);
+                ? Translation.tr("%1 focused").arg(what)
+                : Translation.tr("%1 running").arg(what);
         }
         case "game":
             return t.when === "focused" ? Translation.tr("A game is focused") : Translation.tr("A game is running");
@@ -230,8 +235,115 @@ Singleton {
         case "audioDevice":
             return (t.kind === "source" ? Translation.tr("Input %1") : Translation.tr("Output %1"))
                 .arg(t.match || Translation.tr("(any)"));
+        case "idle":
+            return Translation.tr("No input for %1").arg(root.durationText(t.sec));
+        case "workspace": {
+            if (t.special === true)
+                return Translation.tr("A special workspace is open");
+            const names = root.listText(t.names);
+            return names.length ? Translation.tr("On workspace %1").arg(names) : Translation.tr("Workspace (none chosen)");
+        }
+        case "media": {
+            const who = String(t.player ?? "").trim();
+            if (t.playing === false)
+                return who.length ? Translation.tr("%1 is not playing").arg(who) : Translation.tr("Nothing is playing");
+            return who.length ? Translation.tr("%1 is playing").arg(who) : Translation.tr("Media is playing");
+        }
+        case "deviceInUse":
+            return t.what === "camera" ? Translation.tr("Camera in use")
+                : (t.what === "screen" ? Translation.tr("Screen being captured") : Translation.tr("Microphone in use"));
+        case "discordVoice":
+            return Translation.tr("In a Discord voice call");
+        case "phone": {
+            if (t.reachable === false)
+                return Translation.tr("Phone out of reach");
+            return t.batteryBelow !== null && t.batteryBelow !== undefined
+                ? Translation.tr("Phone nearby, battery below %1 %").arg(t.batteryBelow)
+                : Translation.tr("Phone nearby");
+        }
+        case "pomodoro":
+            return t.phase === "focus" ? Translation.tr("Pomodoro focus lap")
+                : (t.phase === "break" ? Translation.tr("Pomodoro break") : Translation.tr("Pomodoro running"));
+        case "calendar": {
+            const m = String(t.match ?? "").trim();
+            return m.length ? Translation.tr("During an event \"%1\"").arg(m) : Translation.tr("During a calendar event");
+        }
+        case "resource": {
+            const metric = root.resourceMetricLabel(t.metric);
+            const unit = String(t.metric).endsWith("Temp") ? "°C" : "%";
+            if (t.above !== null && t.above !== undefined)
+                return Translation.tr("%1 above %2 %3").arg(metric).arg(t.above).arg(unit);
+            if (t.below !== null && t.below !== undefined)
+                return Translation.tr("%1 below %2 %3").arg(metric).arg(t.below).arg(unit);
+            return metric;
+        }
+        case "vpn": {
+            const what = t.kind === "tailscale" ? Translation.tr("Tailscale") : Translation.tr("VPN");
+            return t.connected === false ? Translation.tr("%1 down").arg(what) : Translation.tr("%1 up").arg(what);
+        }
+        case "lid":
+            return t.closed === false ? Translation.tr("Lid open") : Translation.tr("Lid closed");
+        case "weather": {
+            const parts = [];
+            if (t.kind && t.kind !== "any")
+                parts.push(root.weatherKindLabel(t.kind));
+            if (t.tempBelow !== null && t.tempBelow !== undefined)
+                parts.push(Translation.tr("colder than %1°").arg(t.tempBelow));
+            if (t.tempAbove !== null && t.tempAbove !== undefined)
+                parts.push(Translation.tr("warmer than %1°").arg(t.tempAbove));
+            return parts.length ? parts.join(" · ") : Translation.tr("Any weather");
+        }
+        case "keyboardLayout":
+            return t.code ? Translation.tr("Keyboard layout %1").arg(String(t.code).toUpperCase())
+                : Translation.tr("Keyboard layout (none chosen)");
+        case "updates":
+            return Translation.tr("%1+ updates pending").arg(t.atLeast);
         }
         return root.triggerTypeLabel(t.type);
+    }
+
+    function resourceMetricLabel(metric) {
+        switch (metric) {
+        case "cpuUsage":
+            return Translation.tr("CPU load");
+        case "cpuTemp":
+            return Translation.tr("CPU temperature");
+        case "gpuUsage":
+            return Translation.tr("GPU load");
+        case "gpuTemp":
+            return Translation.tr("GPU temperature");
+        case "memory":
+            return Translation.tr("Memory used");
+        case "swap":
+            return Translation.tr("Swap used");
+        case "disk":
+            return Translation.tr("Disk used");
+        }
+        return String(metric ?? "");
+    }
+
+    function weatherKindLabel(kind) {
+        switch (kind) {
+        case "clear":
+            return Translation.tr("Clear");
+        case "cloudy":
+            return Translation.tr("Cloudy");
+        case "fog":
+            return Translation.tr("Fog");
+        case "rain":
+            return Translation.tr("Rain");
+        case "snow":
+            return Translation.tr("Snow");
+        case "storm":
+            return Translation.tr("Storm");
+        }
+        return Translation.tr("Any weather");
+    }
+
+    function triggerGroupLabel(type) {
+        const key = ModeSchema.TRIGGER_TYPES[type]?.group ?? "";
+        const label = ModeSchema.TRIGGER_GROUPS[key] ?? "";
+        return label.length ? Translation.tr(label) : "";
     }
 
     function bluetoothName(address) {
