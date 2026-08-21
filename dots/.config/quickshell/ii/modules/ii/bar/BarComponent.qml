@@ -372,6 +372,8 @@ Item {
             return true;
         if (modelData.id === "phone_scrcpy_indicator")
             return true;
+        if (modelData.id === "mode_indicator")
+            return true;
         return false;
     }
 
@@ -540,6 +542,8 @@ Item {
             return recordIndicatorComp;
         case "phone_scrcpy_indicator":
             return phoneScrcpyIndicatorComp;
+        case "mode_indicator":
+            return modeIndicatorComp;
         case "screen_share_indicator":
             return screenshareIndicatorComp;
         case "dock_to_panel":
@@ -617,6 +621,12 @@ Item {
     Component {
         id: phoneScrcpyIndicatorComp
         PhoneScrcpyIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: modeIndicatorComp
+        ModeIndicator {
             vertical: rootItem.vertical
         }
     }

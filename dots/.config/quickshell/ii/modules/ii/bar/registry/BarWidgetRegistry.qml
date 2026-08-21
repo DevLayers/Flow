@@ -30,6 +30,7 @@ QtObject {
             // Always expressive — no user config toggle
             case "record_indicator":
             case "phone_scrcpy_indicator":
+            case "mode_indicator":
                 return "expressive";
             default:
                 return "default";

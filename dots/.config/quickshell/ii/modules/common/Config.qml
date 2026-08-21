@@ -304,7 +304,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 6
+    readonly property int currentConfigVersion: 7
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -427,6 +427,25 @@ Singleton {
             });
             android.layoutVersion = 2;
             console.log("[Config] Migrated sidebar.quickToggles.android to canonical layout records");
+        }
+
+        // v6 -> v7: the bar gained the Modes & Routines indicator. It hides
+        // itself while no mode is active, so appending it to an existing
+        // layout changes nothing visible until a mode starts.
+        if (from < 7 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
+                && typeof raw.bar.layouts === "object") {
+            const layouts = raw.bar.layouts;
+            const sections = ["left", "center", "right"];
+            const present = sections.some(k => Array.isArray(layouts[k])
+                && layouts[k].some(e => e && e.id === "mode_indicator"));
+            if (!present) {
+                if (!Array.isArray(layouts.left))
+                    layouts.left = [];
+                const after = layouts.left.findIndex(e => e && e.id === "record_indicator");
+                const entry = { "centered": false, "id": "mode_indicator", "visible": false };
+                layouts.left.splice(after === -1 ? layouts.left.length : after + 1, 0, entry);
+                console.log("[Config] Migrated bar layout: added mode_indicator");
+            }
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -2410,6 +2429,11 @@ Singleton {
                             {
                                 "centered": false,
                                 "id": "record_indicator",
+                                "visible": false
+                            },
+                            {
+                                "centered": false,
+                                "id": "mode_indicator",
                                 "visible": false
                             }
                     ]
