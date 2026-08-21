@@ -135,10 +135,13 @@ Rectangle {
     }
 
     function openInSettings() {
-        GlobalStates.openSettingsPage(
-                    String(root.setting?.pageId ?? ""),
-                    String(root.setting?.subPage ?? ""),
-                    String(root.setting?.sectionTitleLocalized ?? root.setting?.sectionTitle ?? ""));
+        Ai.toolSettingsOpen({
+            args: {
+                pageId: String(root.setting?.pageId ?? ""),
+                subPage: String(root.setting?.subPage ?? ""),
+                sectionTitle: String(root.setting?.sectionTitleLocalized ?? root.setting?.sectionTitle ?? "")
+            }
+        });
     }
 
     /**
@@ -187,7 +190,7 @@ Rectangle {
         : Appearance.rounding.normal
     bottomRightRadius: root.bottomLeftRadius
     color: root.launcherStyle
-        ? (root.isSelected ? Appearance.colors.colPrimary : (root.isHovered ? Appearance.colors.colSurfaceContainerHighHover : Appearance.colors.colSurfaceContainerHigh))
+        ? (root.isSelected ? Appearance.colors.colPrimaryHover : (root.isHovered ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colSurfaceContainerHigh))
         : Appearance.colors.colLayer2
 
     // The full card gets a neutral surface hover. Its state must stay

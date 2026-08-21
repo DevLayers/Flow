@@ -80,10 +80,18 @@ class LauncherSettingsResultsTests(unittest.TestCase):
         self.assertIn("root.navigateSelectedResult(\"left\")", SEARCH_WIDGET)
         self.assertIn("root.navigateSelectedResult(\"right\")", SEARCH_WIDGET)
 
-    def test_setting_card_hover_uses_a_neutral_surface(self):
+    def test_selected_setting_card_uses_primary_hover_not_switch_primary(self):
         self.assertIn("HoverHandler {", SETTING_CARD)
-        self.assertIn("root.isHovered ? Appearance.colors.colSurfaceContainerHighHover", SETTING_CARD)
-        self.assertNotIn("root.isHovered ? Appearance.colors.colPrimary", SETTING_CARD)
+        card_surface = SETTING_CARD.split("color: root.launcherStyle", 1)[1].split("HoverHandler", 1)[0]
+        self.assertIn("root.isHovered ? Appearance.colors.colSurfaceContainerHighestHover", card_surface)
+        self.assertIn("root.isSelected ? Appearance.colors.colPrimaryHover", card_surface)
+
+    def test_open_button_reuses_the_chat_settings_open_redirect(self):
+        opener = SETTING_CARD.split("function openInSettings()", 1)[1].split("\n    }", 1)[0]
+        self.assertIn("Ai.toolSettingsOpen({", opener)
+        self.assertIn("pageId: String(root.setting?.pageId ?? \"\")", opener)
+        self.assertIn("subPage: String(root.setting?.subPage ?? \"\")", opener)
+        self.assertIn("sectionTitle:", opener)
 
 
 if __name__ == "__main__":
