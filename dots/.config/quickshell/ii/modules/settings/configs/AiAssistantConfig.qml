@@ -170,6 +170,50 @@ Item {
                 }
             }
         }
+
+        ContentSection {
+            icon: "privacy_tip"
+            title: Translation.tr("Privacy & context")
+
+            TipBox {
+                Layout.fillWidth: true
+                text: Translation.tr("Clipboard text, a launcher result, and active-app metadata are sent only when you attach them in the composer. Each attachment shows its source, size, destination, and a remove action before sending.")
+            }
+
+            TipBox {
+                Layout.fillWidth: true
+                text: String(Config.options.ai.systemPrompt ?? "").includes("{WINDOWCLASS}")
+                    ? Translation.tr("Your system prompt currently includes {WINDOWCLASS}; it is replaced with the active application's class on every request.")
+                    : Translation.tr("Your system prompt does not include active-window metadata.")
+            }
+
+            RippleButton {
+                Layout.fillWidth: true
+                visible: String(Config.options.ai.systemPrompt ?? "").includes("{WINDOWCLASS}")
+                implicitHeight: 40
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colRipple: Appearance.colors.colSecondaryContainerActive
+                onClicked: Config.options.ai.systemPrompt = String(Config.options.ai.systemPrompt ?? "").replace("{WINDOWCLASS}", "")
+
+                contentItem: RowLayout {
+                    spacing: 8
+
+                    MaterialSymbol {
+                        text: "visibility_off"
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colOnSecondaryContainer
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Remove active-window metadata from the prompt")
+                        color: Appearance.colors.colOnSecondaryContainer
+                    }
+                }
+            }
+        }
     }
 
     ConfigSubPageHost {

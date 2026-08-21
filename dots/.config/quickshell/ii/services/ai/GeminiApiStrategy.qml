@@ -39,6 +39,11 @@ ApiStrategy {
      */
     function attachmentParts(message, model: AiModel): var {
         const parts = attachmentsOf(message, model).map(file => {
+            if (file.kind === "context") {
+                return {
+                    "text": `\n\n${String(file.content ?? "")}`
+                };
+            }
             if (file.kind === "text") {
                 return {
                     "text": `\n\n[[ ${file.name} ]]\n${attachmentMarker(file.path, textModeFor(file))}`

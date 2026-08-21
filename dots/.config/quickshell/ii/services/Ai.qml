@@ -1349,6 +1349,8 @@ Singleton {
     }
     /** Local Settings metadata and strict typed writes; never a config dump. */
     readonly property AiSettingsIntegration settingsIntegration: AiSettingsIntegration {}
+    /** Explicit clipboard, launcher and active-window metadata for one turn. */
+    readonly property AiShellContextIntegration shellContext: AiShellContextIntegration {}
     /** Preview id → immutable proposed changes until the user decides. */
     property var settingsPreviews: ({})
 
@@ -2712,6 +2714,7 @@ Singleton {
     // Text goes in as text, so the limit is about the context window rather
     // than about what the request can carry.
     readonly property int maxTextAttachmentBytes: 256 * 1024
+    readonly property int maxContextAttachmentBytes: 16 * 1024
 
     /** Whether the model in use can take files at all, kinds aside. */
     readonly property bool currentModelTakesFiles: root.currentModelEntry?.attachments ?? false
@@ -2748,6 +2751,13 @@ Singleton {
             const file = list[i] ?? ({});
             const name = String(file.name ?? Translation.tr("That file"));
             const kind = String(file.kind ?? "");
+            if (kind === "context") {
+                if (String(file.content ?? "").length === 0)
+                    return Translation.tr("%1 is no longer available. Attach it again if you still want to send it.").arg(name);
+                if (Number(file.bytes ?? 0) > root.maxContextAttachmentBytes)
+                    return Translation.tr("%1 is too large for one context attachment.").arg(name);
+                continue;
+            }
             if (kind === "text") {
                 if (Number(file.bytes ?? 0) > root.maxTextAttachmentBytes)
                     return Translation.tr("%1 is too large for this message.").arg(name);
@@ -2854,6 +2864,41 @@ Singleton {
         if (index < 0 || index >= root.attachments.length)
             return;
         root.attachments = root.attachments.filter((file, at) => at !== index);
+    }
+
+    function attachContext(context: var): bool {
+        const candidate = context ?? ({});
+        if (candidate.error) {
+            root.attachmentNotice = String(candidate.error);
+            return false;
+        }
+        if (String(candidate.kind ?? "") !== "context" || String(candidate.content ?? "").length === 0) {
+            root.attachmentNotice = Translation.tr("This context could not be attached.");
+            return false;
+        }
+        if (Number(candidate.bytes ?? 0) > root.maxContextAttachmentBytes) {
+            root.attachmentNotice = Translation.tr("This context is too large to attach.");
+            return false;
+        }
+        if (root.attachments.length + root.pendingAttachmentPaths.length >= root.maxAttachments) {
+            root.attachmentNotice = Translation.tr("%1 files is as many as one message takes.").arg(root.maxAttachments);
+            return false;
+        }
+        root.attachments = [...root.attachments, candidate];
+        root.attachmentNotice = "";
+        return true;
+    }
+
+    function attachClipboardContext(): bool {
+        return root.attachContext(root.shellContext.clipboardContext());
+    }
+
+    function attachLauncherContext(): bool {
+        return root.attachContext(root.shellContext.launcherContext());
+    }
+
+    function attachActiveWindowContext(): bool {
+        return root.attachContext(root.shellContext.activeWindowContext());
     }
 
     function clearAttachments() {
@@ -4285,7 +4330,26 @@ Singleton {
                 "fileMimeType": message.fileMimeType,
                 "fileUri": message.fileUri,
                 "localFilePath": message.localFilePath,
-                "attachments": message.attachments,
+                // Context content is deliberately ephemeral. The chip's safe
+                // metadata remains in the transcript, while copied clipboard
+                // text can never be recovered from a saved session.
+                "attachments": Array.from(message.attachments ?? []).map(attachment => {
+                    if (attachment?.kind !== "context")
+                        return attachment;
+                    return {
+                        id: attachment.id,
+                        kind: attachment.kind,
+                        contextKind: attachment.contextKind,
+                        source: attachment.source,
+                        name: attachment.name,
+                        bytes: attachment.bytes,
+                        sensitive: attachment.sensitive === true,
+                        retention: attachment.retention,
+                        destination: attachment.destination,
+                        truncated: attachment.truncated === true,
+                        redacted: true
+                    };
+                }),
                 "model": message.model,
                 "responseMode": message.responseMode,
                 "webMode": message.webMode,

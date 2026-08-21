@@ -16,6 +16,9 @@ Singleton {
 
     property string query: ""
     property int mprisTrigger: 0
+    // Published by the visible Overview delegate. It is metadata only and is
+    // never sent unless the user explicitly attaches it from an AI composer.
+    property var selectedResult: null
     // The generated Settings index is shared with AI but does not depend on a
     // model or network. Watching readiness makes a query recompute once a
     // missing/stale index finishes rebuilding in the background.
@@ -28,6 +31,7 @@ Singleton {
         function onOverviewOpenChanged() {
             if (!GlobalStates.overviewOpen) {
                 root.query = "";
+                root.selectedResult = null;
             }
         }
     }
@@ -298,6 +302,7 @@ Singleton {
     }
 
     onQueryChanged: {
+        root.selectedResult = null;
         fileProc.running = false;
         fileBrowserProc.running = false;
         mathProc.running = false; // Stop active math calculation instantly to resolve race conditions and QML coalescing

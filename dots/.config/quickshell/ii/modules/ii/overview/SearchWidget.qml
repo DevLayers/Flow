@@ -1113,6 +1113,10 @@ Item {
                     }
 
                     onCurrentIndexChanged: {
+                        const selected = currentIndex >= 0 && currentIndex < resultModel.count
+                            ? resultModel.get(currentIndex)?.modelRef ?? null
+                            : null;
+                        LauncherSearch.selectedResult = selected;
                         if (currentIndex >= count - 5 && count < root.getFilteredResultsCount()) {
                             root.loadMoreResults();
                         }

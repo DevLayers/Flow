@@ -48,6 +48,13 @@ ApiStrategy {
                 "text": turn.content
             });
         for (const file of files) {
+            if (file.kind === "context") {
+                parts.push({
+                    "type": "text",
+                    "text": String(file.content ?? "")
+                });
+                continue;
+            }
             if (file.kind === "image" && (model?.vision ?? false)) {
                 parts.push({
                     "type": "image_url",

@@ -54,6 +54,8 @@ Item {
     }
 
     function symbolFor(kind: string): string {
+        if (kind === "context")
+            return "attachment";
         if (kind === "image")
             return "image";
         if (kind === "pdf")
@@ -65,6 +67,14 @@ Item {
         if (kind === "text")
             return "description";
         return "file_present";
+    }
+
+    function detailFor(file: var): string {
+        if (file?.kind !== "context")
+            return Ai.humanSize(Number(file?.bytes ?? 0));
+        const source = String(file?.source ?? file?.contextKind ?? Translation.tr("context"));
+        const destination = String(Ai.currentModelEntry?.title ?? Translation.tr("selected model"));
+        return source + " · " + Ai.humanSize(Number(file?.bytes ?? 0)) + " · " + destination;
     }
 
     ColumnLayout {
@@ -219,7 +229,7 @@ Item {
                                 }
 
                                 StyledText {
-                                    text: Ai.humanSize(fileChip.modelData.bytes)
+                                    text: root.detailFor(fileChip.modelData)
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                     color: Appearance.colors.colPrimary
                                     opacity: 0.8

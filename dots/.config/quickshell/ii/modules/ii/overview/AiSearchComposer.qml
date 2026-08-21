@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import Quickshell
 import qs
 import qs.services
+import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
@@ -185,6 +186,9 @@ ColumnLayout {
                 { id: "web", kind: "text", icon: "travel_explore", label: root.webModeLabel(Ai.webMode), tooltip: Translation.tr("Web search: %1\nAlso /web").arg(Ai.webMode) },
                 { id: "tools", kind: "text", icon: "service_toolbox", label: root.toolModeLabel(Ai.functionExposure), tooltip: Translation.tr("Tools: %1\nAlso /tools").arg(Ai.functionExposure) },
                 { id: "paste", kind: "icon", icon: "content_paste", tooltip: Translation.tr("Paste clipboard (Ctrl+V)") },
+                { id: "attach-clipboard", kind: "icon", icon: "content_paste", tooltip: Translation.tr("Attach clipboard text as context") },
+                { id: "attach-launcher", kind: "icon", icon: "select_window", tooltip: Translation.tr("Attach selected launcher result") },
+                { id: "attach-window", kind: "icon", icon: "desktop_windows", tooltip: Translation.tr("Attach active application metadata") },
                 { id: "history", kind: "icon", icon: "history", tooltip: Translation.tr("Chat history (Ctrl+L)") },
                 { id: "response", kind: "icon", icon: "speed", tooltip: Translation.tr("Response effort: %1\nAlso /effort").arg(Ai.responseMode) }
             ];
@@ -236,6 +240,9 @@ ColumnLayout {
         case "web": root.cycleWebMode(); break;
         case "tools": root.cycleFunctionExposure(); break;
         case "paste": root.pasteClipboard(); break;
+        case "attach-clipboard": Ai.attachClipboardContext(); break;
+        case "attach-launcher": Ai.attachLauncherContext(); break;
+        case "attach-window": Ai.attachActiveWindowContext(); break;
         case "history": root.requestOpenHistory(); break;
         case "response": root.showRail("response"); break;
         }
@@ -250,6 +257,10 @@ ColumnLayout {
     }
 
     Component.onCompleted: root.setDraft(Ai.draft)
+
+    AiAttachmentTray {
+        Layout.fillWidth: true
+    }
 
     Rectangle {
         id: composerSurface
@@ -509,9 +520,10 @@ ColumnLayout {
             // ── Collapsed controls rail ───────────────────────
 
             RailPage {
-                id: actionsRail
-                railName: "actions"
-            }
+            id: actionsRail
+            railName: "actions"
+            scrollable: true
+        }
 
             // The model selector is a horizontal rail as well. Keeping it as
             // a real page gives the edge fade a source item and prevents the

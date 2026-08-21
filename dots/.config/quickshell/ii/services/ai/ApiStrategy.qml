@@ -50,7 +50,8 @@ QtObject {
         const files = Array.from(message?.attachments ?? []);
         if (files.length === 0)
             return [];
-        return files.filter(file => file.kind === "text" || (model?.attachments ?? false));
+        return files.filter(file => (file.kind === "context" && String(file.content ?? "").length > 0)
+                            || file.kind === "text" || (model?.attachments ?? false));
     }
 
     /** Cleared before every request. Subclasses override this, not `reset()`. */

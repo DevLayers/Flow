@@ -2384,6 +2384,33 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                                     root.attachmentsExpanded = false;
                                                 }
                                             }
+
+                                            ComposerActionPill {
+                                                symbol: "content_paste"
+                                                label: Translation.tr("Attach clipboard text")
+                                                onTriggered: {
+                                                    Ai.attachClipboardContext();
+                                                    root.attachmentsExpanded = false;
+                                                }
+                                            }
+
+                                            ComposerActionPill {
+                                                symbol: "select_window"
+                                                label: Translation.tr("Attach launcher result")
+                                                onTriggered: {
+                                                    Ai.attachLauncherContext();
+                                                    root.attachmentsExpanded = false;
+                                                }
+                                            }
+
+                                            ComposerActionPill {
+                                                symbol: "desktop_windows"
+                                                label: Translation.tr("Attach active application")
+                                                onTriggered: {
+                                                    Ai.attachActiveWindowContext();
+                                                    root.attachmentsExpanded = false;
+                                                }
+                                            }
                                         }
                                     }
 

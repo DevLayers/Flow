@@ -42,6 +42,12 @@ ApiStrategy {
      */
     function attachmentBlocks(message, model: AiModel): var {
         return attachmentsOf(message, model).map(file => {
+            if (file.kind === "context") {
+                return {
+                    "type": "text",
+                    "text": String(file.content ?? "")
+                };
+            }
             if (file.kind === "image") {
                 return {
                     "type": "image",
