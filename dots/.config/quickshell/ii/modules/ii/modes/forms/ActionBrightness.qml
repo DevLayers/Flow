@@ -29,6 +29,8 @@ ColumnLayout {
             to: 100
             stepSize: 1
             value: brightnessCol.level
+            // The default tooltip normalises against `from`, which is 1 here.
+            tooltipContent: `${Math.round(value)} %`
             onPressedChanged: {
                 if (!pressed)
                     row.patchValue({ level: Math.round(value), scope: row.obj.scope ?? "all" });

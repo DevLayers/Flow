@@ -9,6 +9,7 @@ ModeListRow 1.0 ModeListRow.qml
 ModeEditor 1.0 ModeEditor.qml
 TriggerRow 1.0 TriggerRow.qml
 ActionRow 1.0 ActionRow.qml
+ActionList 1.0 ActionList.qml
 TypeMenu 1.0 TypeMenu.qml
 IconPicker 1.0 IconPicker.qml
 ColorDots 1.0 ColorDots.qml

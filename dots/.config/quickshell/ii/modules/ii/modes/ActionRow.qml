@@ -34,9 +34,14 @@ Rectangle {
     readonly property bool hasForm: !root.inlineEditor && root.editor !== "none"
     readonly property bool isWait: root.type === "wait"
     readonly property int delaySec: ModeSchema.durationSec(root.action?.delaySec)
-    /// Whether the row may move up / down in its list (set by the editor).
-    property bool canMoveUp: false
-    property bool canMoveDown: false
+    /// Shows the drag handle; the list decides (one row has nowhere to go).
+    property bool draggable: false
+    /// The delegate whose copy is being dragged: keeps its slot, shows nothing.
+    property bool hidden: false
+    /// The copy under the pointer: lifted, no interaction.
+    property bool ghost: false
+    // Forms line up with the label, which the handle pushes right.
+    readonly property int formIndent: root.draggable ? 62 : 34
     // Only actions the engine can put back offer the "undo at end" choice.
     readonly property bool revertible: root.routineKind === "while" && !!root.entry?.read && !!root.entry?.revert
     readonly property bool undoAtEnd: root.action?.revert !== false
@@ -52,7 +57,9 @@ Rectangle {
 
     signal changed(var action)
     signal removeRequested()
-    signal moveRequested(int delta)
+    signal dragStarted(real y)
+    signal dragMoved(real y)
+    signal dragEnded()
 
     function setValue(v) {
         root.changed(Object.assign({}, ModeSchema.clone(root.action), { value: v }));
@@ -99,9 +106,18 @@ Rectangle {
     radius: Appearance.rounding.normal
     color: Appearance.colors.colLayer2
     clip: true
+    opacity: root.hidden ? 0 : 1
 
     Behavior on implicitHeight {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
+
+    // Hover only: lights the handle up; clicks go through to the controls.
+    MouseArea {
+        id: rowArea
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
     }
 
     ColumnLayout {
@@ -111,7 +127,7 @@ Rectangle {
             right: parent.right
             top: parent.top
             topMargin: 8
-            leftMargin: 14
+            leftMargin: root.draggable ? 4 : 14
             rightMargin: 8
         }
         spacing: 8
@@ -119,6 +135,39 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
+
+            // Order is what the engine runs: drag to change it.
+            MouseArea {
+                id: handle
+                visible: root.draggable
+                Layout.alignment: Qt.AlignVCenter
+                Layout.rightMargin: -4
+                implicitWidth: 20
+                implicitHeight: 36
+                hoverEnabled: true
+                cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                preventStealing: true
+                opacity: rowArea.containsMouse || handle.containsMouse || root.ghost ? 1 : 0.35
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+
+                onPressed: mouse => root.dragStarted(handle.mapToItem(root, mouse.x, mouse.y).y)
+                onPositionChanged: mouse => {
+                    if (handle.pressed)
+                        root.dragMoved(handle.mapToItem(root, mouse.x, mouse.y).y);
+                }
+                onReleased: root.dragEnded()
+                onCanceled: root.dragEnded()
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "drag_indicator"
+                    iconSize: 20
+                    color: Appearance.colors.colSubtext
+                }
+            }
 
             MaterialSymbol {
                 text: root.entry?.icon ?? "bolt"
@@ -131,6 +180,7 @@ Rectangle {
                 spacing: 0
 
                 RowLayout {
+                    Layout.fillWidth: true
                     spacing: 8
 
                     StyledText {
@@ -304,21 +354,6 @@ Rectangle {
                 }
             }
 
-            // Order matters once waits and delays are in the list.
-            FormIconButton {
-                buttonIcon: "keyboard_arrow_up"
-                enabled: root.canMoveUp
-                opacity: enabled ? 1 : 0.3
-                onClicked: root.moveRequested(-1)
-            }
-
-            FormIconButton {
-                buttonIcon: "keyboard_arrow_down"
-                enabled: root.canMoveDown
-                opacity: enabled ? 1 : 0.3
-                onClicked: root.moveRequested(1)
-            }
-
             FormIconButton {
                 buttonIcon: root.expanded ? "expand_less" : "expand_more"
                 visible: !root.isWait
@@ -334,7 +369,7 @@ Rectangle {
         // A URL is short enough to live on the row itself.
         PlainField {
             Layout.fillWidth: true
-            Layout.leftMargin: 34
+            Layout.leftMargin: root.formIndent
             Layout.rightMargin: 6
             Layout.bottomMargin: 4
             visible: root.editor === "text"
@@ -348,7 +383,7 @@ Rectangle {
         Loader {
             id: formLoader
             Layout.fillWidth: true
-            Layout.leftMargin: 34
+            Layout.leftMargin: root.formIndent
             Layout.rightMargin: 6
             Layout.bottomMargin: 4
             visible: status === Loader.Ready && item !== null
@@ -368,7 +403,7 @@ Rectangle {
         // before this action, so anything below waits too.
         RowLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: 34
+            Layout.leftMargin: root.formIndent
             Layout.rightMargin: 6
             Layout.bottomMargin: 4
             visible: root.expanded && !root.isWait

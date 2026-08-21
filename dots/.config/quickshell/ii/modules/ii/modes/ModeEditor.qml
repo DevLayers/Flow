@@ -84,12 +84,11 @@ Item {
             root.actionsEdited = true;
     }
 
-    function moveAction(index, delta) {
+    function moveAction(from, to) {
         const list = ModeSchema.clone(root.mode.actions);
-        const to = index + delta;
-        if (to < 0 || to >= list.length)
+        if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length)
             return;
-        const [item] = list.splice(index, 1);
+        const [item] = list.splice(from, 1);
         list.splice(to, 0, item);
         root.patch({ actions: list });
         if (root.isActive)
@@ -431,14 +430,15 @@ Item {
                 }
 
                 Repeater {
-                    model: root.mode?.triggers ?? []
+                    // The count, not the list: rows outlive edits, so an
+                    // unfolded form stays open while it is being changed.
+                    model: root.mode?.triggers.length ?? 0
 
                     delegate: TriggerRow {
-                        required property var modelData
                         required property int index
 
                         Layout.fillWidth: true
-                        trigger: modelData
+                        trigger: root.mode?.triggers[index] ?? ({})
                         watcher: {
                             Modes.watchersRevision;
                             return Modes.watcherFor(root.modeId);
@@ -469,21 +469,13 @@ Item {
                     return span > 0 ? Translation.tr("%1, over %2").arg(base).arg(ModeUi.durationText(span)) : base;
                 }
 
-                Repeater {
-                    model: root.mode?.actions ?? []
-
-                    delegate: ActionRow {
-                        required property var modelData
-                        required property int index
-
-                        Layout.fillWidth: true
-                        action: modelData
-                        canMoveUp: index > 0
-                        canMoveDown: index < (root.mode?.actions.length ?? 0) - 1
-                        onMoveRequested: delta => root.moveAction(index, delta)
-                        onChanged: a => root.setAction(index, a)
-                        onRemoveRequested: root.removeAction(index)
-                    }
+                ActionList {
+                    Layout.fillWidth: true
+                    actions: root.mode?.actions ?? []
+                    flick: flick
+                    onChanged: (index, a) => root.setAction(index, a)
+                    onRemoveRequested: index => root.removeAction(index)
+                    onMoved: (from, to) => root.moveAction(from, to)
                 }
 
                 AddRowButton {
