@@ -582,6 +582,21 @@ function scheduleEndsAt(trigger, date, sun) {
     return end.getTime();
 }
 
+// Objects with their keys in a fixed order: a snapshot that went through
+// the state file comes back with its keys sorted, and must still compare
+// equal to the value read live.
+function canonical(value) {
+    if (value === null || value === undefined)
+        return value;
+    if (Array.isArray(value) || isArrayLike(value))
+        return toArray(value).map(canonical);
+    if (typeof value !== "object")
+        return value;
+    var out = {};
+    Object.keys(value).sort().forEach(function (key) { out[key] = canonical(value[key]); });
+    return out;
+}
+
 function valuesEqual(a, b) {
     if (a === b)
         return true;
@@ -591,7 +606,7 @@ function valuesEqual(a, b) {
         return Math.abs(a - b) < 1e-6;
     if (typeof a === "object" || typeof b === "object") {
         try {
-            return JSON.stringify(a) === JSON.stringify(b);
+            return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
         } catch (e) {
             return false;
         }
