@@ -46,6 +46,11 @@ class AiStreamUsageContractTests(unittest.TestCase):
         self.assertNotIn("root.markDone(requester.message)", on_line)
         self.assertIn("root.markDone(message)", on_finished)
 
+    def test_context_connections_keep_a_qobject_target_while_a_turn_is_removed(self):
+        # A run can finish and remove its response before the context
+        # estimator rebinds. Connections cannot accept undefined as target.
+        self.assertIn("root.messageByID[root.currentRunResponseId] ?? root", AI_SERVICE)
+
     def test_turn_owns_usage_and_session_persists_it(self):
         for token_property in ("inputTokens", "outputTokens", "totalTokens"):
             self.assertIn(f"property int {token_property}: -1", AI_MESSAGE)

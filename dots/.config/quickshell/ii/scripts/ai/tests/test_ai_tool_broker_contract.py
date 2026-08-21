@@ -128,6 +128,16 @@ class HostWiringTests(unittest.TestCase):
         stop = body_between(AI_QML, "function stopGeneration()", "function requestFollowUp")
         self.assertIn("root.broker.cancelAll(", stop)
 
+    def test_tool_follow_up_waits_for_the_finished_transport_to_unwind(self):
+        # Process.onExited emits AiRequest.finished before its `running` flag
+        # has necessarily settled. Starting the next request synchronously
+        # makes makeRequest reject its own tool continuation as still running.
+        requester = AI_QML.split("id: requester", 1)[1]
+        completed = requester.split("onFinished: (reason, status, code) => {", 1)[1].split("function makeRequest(", 1)[0]
+        self.assertIn("Qt.callLater", completed)
+        self.assertIn("root.requestFollowUp()", completed)
+        self.assertNotIn("root.makeRequest();", completed)
+
     def test_the_side_effect_rechecks_the_policy_at_the_last_moment(self):
         run = body_between(AI_QML, "function runShellCommand(message: AiMessageData", "function startShellCommand")
         self.assertIn('root.toolbox.isAvailable("run_shell_command")', run)

@@ -989,7 +989,7 @@ Singleton {
         // Use the singleton as a safe initial target. QML's Connections rejects
         // an undefined QObject target during startup; once a run response id
         // exists the binding switches to that message object.
-        target: root.currentRunResponseId.length > 0 ? root.messageByID[root.currentRunResponseId] : root
+        target: root.currentRunResponseId.length > 0 ? (root.messageByID[root.currentRunResponseId] ?? root) : root
         ignoreUnknownSignals: true
         function onContentChanged() { root.scheduleContextEstimate(); }
         function onRawContentChanged() { root.scheduleContextEstimate(); }
@@ -2389,7 +2389,14 @@ Singleton {
 
             if (root.followUpQueued && reason === "done") {
                 root.followUpQueued = false;
-                root.makeRequest();
+                // AiRequest emits this while Process.onExited is still
+                // unwinding. Starting synchronously makes makeRequest see
+                // the just-finished transport as running and reject the tool
+                // continuation. Queue it for the next event turn, where
+                // requestFollowUp also remains safe if another tool arrived.
+                Qt.callLater(function() {
+                    root.requestFollowUp();
+                });
             } else {
                 root.followUpQueued = false;
             }
