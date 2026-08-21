@@ -81,6 +81,7 @@ ApiStrategy {
     function buildRequestData(model: AiModel, messages, systemPrompt: string, temperature: real, tools: list<var>) {
         beginAttachments();
         const toolMessages = quirk(model, "toolMessages", true);
+        const nativeOllama = quirk(model, "nativeOllama", false);
         let lastCallId = "";
 
         const history = messages.map(message => {
@@ -94,6 +95,18 @@ ApiStrategy {
                 // follows only means something next to it, so the call has to
                 // be replayed as a call, not as the text describing it.
                 if (toolMessages && message.role === "assistant" && calls.length > 0) {
+                    if (nativeOllama) {
+                        return {
+                            "role": "assistant",
+                            "content": message.rawContent,
+                            "tool_calls": calls.map(call => ({
+                                "function": {
+                                    "name": call.name,
+                                    "arguments": call.args ?? ({})
+                                }
+                            }))
+                        };
+                    }
                     return {
                         "role": "assistant",
                         "content": message.rawContent,
@@ -112,11 +125,24 @@ ApiStrategy {
                     "content": message.rawContent
                 }, message, model);
             }
-            // The result of a call the model asked for. Pairing it with the id
-            // of that call is what lets the model match them up; without one,
-            // the exchange has to be flattened into ordinary text.
+            // The result of a call the model asked for. Native Ollama pairs
+            // it by name and expects `tool_name`; OpenAI pairs it by call id.
             const callId = message.functionCallId || message.functionCall?.id || lastCallId;
-            if (!toolMessages || callId.length === 0) {
+            if (!toolMessages) {
+                return {
+                    "role": "user",
+                    "content": `[[ Output of ${message.functionName} ]]\n${message.functionResponse}`
+                };
+            }
+            if (nativeOllama) {
+                lastCallId = "";
+                return {
+                    "role": "tool",
+                    "tool_name": message.functionName,
+                    "content": message.functionResponse
+                };
+            }
+            if (callId.length === 0) {
                 return {
                     "role": "user",
                     "content": `[[ Output of ${message.functionName} ]]\n${message.functionResponse}`
@@ -143,7 +169,6 @@ ApiStrategy {
             ],
             "stream": true
         };
-        const nativeOllama = quirk(model, "nativeOllama", false);
         if (nativeOllama) {
             const baseName = String(model.value ?? model.model ?? "").split(":")[0].toLowerCase();
             const level = thinkingLevel(model);
@@ -218,9 +243,14 @@ ApiStrategy {
 
             const choice = dataJson.choices?.[0];
             const delta = choice?.delta;
-
-            if (delta?.tool_calls)
-                collectToolCalls(delta.tool_calls);
+            const nativeMessage = dataJson.message ?? ({});
+            // The native Ollama `/api/chat` stream puts a complete call on
+            // `message.tool_calls`; OpenAI-compatible endpoints spread it
+            // across `choices[].delta.tool_calls`. Both shapes enter the same
+            // collector so dispatch only happens at the terminal frame.
+            const toolCallFragments = delta?.tool_calls ?? nativeMessage.tool_calls;
+            if (toolCallFragments)
+                collectToolCalls(toolCallFragments);
 
             // OpenAI-compatible streams normally put reasoning/content in the
             // delta. Ollama's native streaming shape keeps both fields under
@@ -228,7 +258,6 @@ ApiStrategy {
             // time before it emits answer content). Keep that reasoning in
             // the transcript instead of leaving the message looking like a
             // permanent loading indicator.
-            const nativeMessage = dataJson.message ?? ({});
             const nativeThought = textFromValue(nativeMessage.thinking ?? nativeMessage.reasoning);
             const nativeContent = textFromValue(nativeMessage.content);
             appendThought(message, textFromValue(delta?.reasoning_content ?? delta?.reasoning ?? delta?.thinking) || nativeThought);
@@ -306,7 +335,7 @@ ApiStrategy {
         return isFinite(number) && number >= 0 ? Math.round(number) : -1;
     }
 
-    /** Merges one delta's worth of tool-call fragments into what came before. */
+    /** Merges OpenAI fragments and complete native Ollama calls by position. */
     function collectToolCalls(fragments) {
         for (let i = 0; i < fragments.length; i++) {
             const fragment = fragments[i];
@@ -320,8 +349,15 @@ ApiStrategy {
                 call.id = fragment.id;
             if (fragment.function?.name)
                 call.name = fragment.function.name;
-            if (fragment.function?.arguments)
-                call.args += fragment.function.arguments;
+            const argumentsValue = fragment.function?.arguments;
+            // OpenAI streams a JSON string in fragments; Ollama hands over the
+            // already-decoded object in one terminal frame. Appending an
+            // object stringifies it as "[object Object]", so replace the
+            // accumulated fragments with valid JSON for that native shape.
+            if (typeof argumentsValue === "string")
+                call.args += argumentsValue;
+            else if (argumentsValue !== undefined && argumentsValue !== null)
+                call.args = JSON.stringify(argumentsValue);
             pendingCalls[index] = call;
         }
     }

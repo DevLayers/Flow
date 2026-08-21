@@ -814,7 +814,7 @@ Item {
 
         Repeater {
             model: ScriptModel {
-                values: Ai.pendingToolCards(root.messageData)
+                values: Ai.visibleToolCards(root.messageData)
             }
 
             delegate: Loader {

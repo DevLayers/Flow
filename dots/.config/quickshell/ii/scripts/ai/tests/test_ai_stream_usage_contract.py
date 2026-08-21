@@ -25,6 +25,21 @@ class AiStreamUsageContractTests(unittest.TestCase):
         self.assertIn("data?.eval_count", OPENAI_STRATEGY)
         self.assertIn("nativeMessage.content", OPENAI_STRATEGY)
 
+    def test_native_ollama_tool_calls_and_object_arguments_are_collected(self):
+        # `/api/chat` places calls under `message.tool_calls` and gives the
+        # arguments as an object, unlike the OpenAI delta string fragments.
+        self.assertIn("nativeMessage.tool_calls", OPENAI_STRATEGY)
+        collector = OPENAI_STRATEGY.split("function collectToolCalls(fragments)", 1)[1].split("function hasPendingCalls", 1)[0]
+        self.assertIn('typeof argumentsValue === "string"', collector)
+        self.assertIn("JSON.stringify(argumentsValue)", collector)
+
+    def test_native_ollama_replays_tool_exchanges_in_its_own_wire_shape(self):
+        request_builder = OPENAI_STRATEGY.split("function buildRequestData(", 1)[1].split("function buildAuthorizationHeader", 1)[0]
+        # Native Ollama expects decoded arguments plus tool_name, rather than
+        # OpenAI's JSON string arguments and tool_call_id pair.
+        self.assertIn('"arguments": call.args ?? ({})', request_builder)
+        self.assertIn('"tool_name": message.functionName', request_builder)
+
     def test_finished_stream_is_accounted_after_the_last_frame(self):
         on_line = AI_SERVICE.split("onLine: data =>", 1)[1].split("onRetrying:", 1)[0]
         on_finished = AI_SERVICE.split("onFinished: (reason, status, code) =>", 1)[1]

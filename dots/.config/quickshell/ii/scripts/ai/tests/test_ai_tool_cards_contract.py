@@ -56,9 +56,14 @@ class ShapeTests(unittest.TestCase):
 
 class RenderingTests(unittest.TestCase):
     def test_the_transcript_picks_a_component_by_kind(self):
-        self.assertIn("Ai.pendingToolCards(root.messageData)", MESSAGE)
+        self.assertIn("Ai.visibleToolCards(root.messageData)", MESSAGE)
         self.assertIn('case "settingsDiff":', MESSAGE)
         self.assertIn('case "memoryFact":', MESSAGE)
+
+    def test_completed_settings_results_remain_visible_with_pending_cards(self):
+        visible_cards = body_between(AI_QML, "function visibleToolCards(message): var", "/** The broker's key")
+        self.assertIn('card.state === "pending"', visible_cards)
+        self.assertIn('card.kind === "settingsResults"', visible_cards)
 
     def test_an_unknown_kind_still_draws_something(self):
         # A session written by a newer build must open, not blank out.

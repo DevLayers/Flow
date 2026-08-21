@@ -1477,6 +1477,16 @@ Singleton {
         return Array.from(message?.toolCards ?? []).filter(card => card.state === "pending");
     }
 
+    /**
+     * Cards the transcript keeps after the tool has returned. Most completed
+     * approvals disappear, but a Settings result contains a live control and
+     * must stay available for the user to inspect or change it.
+     */
+    function visibleToolCards(message): var {
+        return Array.from(message?.toolCards ?? []).filter(card => card.state === "pending"
+            || (card.kind === "settingsResults" && card.state === "done"));
+    }
+
     /** The broker's key for the call a message is waiting on. */
     function toolKeyFor(message): string {
         const callId = String(message?.functionCallId ?? "");
