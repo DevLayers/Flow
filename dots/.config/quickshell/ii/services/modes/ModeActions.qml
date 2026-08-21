@@ -1,9 +1,13 @@
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Services.Mpris
+import Quickshell.Services.Pipewire
 import Quickshell.Services.UPower
+import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.models.hyprland
 import "ModeSchema.js" as ModeSchema
 
@@ -22,7 +26,7 @@ import "ModeSchema.js" as ModeSchema
  *  - normalize() maps the stored value onto what read() returns, so the
  *    override check compares like with like.
  *  - extra() captures anything revert needs beyond the plain value.
- *  - editor / choices are metadata for the overlay's action rows.
+ *  - editor / choices / choiceLabel are metadata for the overlay's action rows.
  *  - repeatable entries may appear more than once in one mode (a mode
  *    otherwise holds each setting once); flow entries are sequence steps
  *    the engine handles itself, never applied or reverted.
@@ -158,7 +162,7 @@ QtObject {
             const pattern = cls.replace(/[^a-zA-Z0-9_.\-|()\[\]*+?^$\\]/g, "");
             if (!pattern.length)
                 continue;
-            Quickshell.execDetached(["hyprctl", "dispatch", "closewindow", `class:^(${pattern})$`]);
+            Hyprland.dispatch(`hl.dsp.window.close({ window = "class:^(${pattern})$" })`);
         }
     }
 
@@ -200,6 +204,159 @@ QtObject {
         const bar = ["autoHide", "fixed"].indexOf(obj.bar) !== -1 ? obj.bar : "keep";
         const dock = ["hide", "show"].indexOf(obj.dock) !== -1 ? obj.dock : "keep";
         return { bar: bar, dock: dock };
+    }
+
+    // ---- audio devices: stored by node name, matched again on apply so a
+    // device that was re-plugged (new id, same name) is still found.
+    function deviceRequest(v) {
+        const obj = (v && typeof v === "object") ? v : { name: v };
+        return {
+            name: root.nonEmpty(obj.name) ? obj.name.trim() : "",
+            label: root.nonEmpty(obj.label) ? obj.label.trim() : ""
+        };
+    }
+
+    function deviceText(node) {
+        return `${node.description ?? ""} ${node.nickname ?? ""} ${node.name ?? ""}`.toLowerCase();
+    }
+
+    function resolveDevice(isSink, v) {
+        const req = root.deviceRequest(v);
+        const list = Array.from(isSink ? Audio.outputDevices : Audio.inputDevices);
+        if (req.name.length) {
+            const exact = list.find(n => n.name === req.name);
+            if (exact)
+                return exact;
+        }
+        const label = req.label.toLowerCase();
+        if (label.length)
+            return list.find(n => root.deviceText(n).indexOf(label) !== -1) ?? null;
+        return null;
+    }
+
+    function deviceByName(isSink, name) {
+        if (!root.nonEmpty(name))
+            return null;
+        return Array.from(isSink ? Audio.outputDevices : Audio.inputDevices).find(n => n.name === name) ?? null;
+    }
+
+    function setDefaultDevice(isSink, node) {
+        if (isSink)
+            Audio.setDefaultSink(node);
+        else
+            Audio.setDefaultSource(node);
+    }
+
+    // ---- per-app volume: every output stream whose app matches.
+    function appVolumeRequest(v) {
+        const obj = root.asObject(v);
+        const vol = root.volumeRequest(obj);
+        return { app: root.nonEmpty(obj.app) ? obj.app.trim().toLowerCase() : "", level: vol.level, muted: vol.muted };
+    }
+
+    function appNodeText(node) {
+        const props = node.properties ?? {};
+        return `${Audio.appNodeDisplayName(node)} ${props["application.process.binary"] ?? ""} ${node.name ?? ""}`.toLowerCase();
+    }
+
+    function appNodesFor(app) {
+        if (!app.length)
+            return [];
+        return Array.from(Audio.outputAppNodes).filter(n => n && n.audio && root.appNodeText(n).indexOf(app) !== -1);
+    }
+
+    function appVolumeMap(nodes) {
+        const out = {};
+        for (const n of nodes)
+            out[String(n.id)] = { level: Math.round((n.audio?.volume ?? 0) * 100), muted: n.audio?.muted ?? false };
+        return out;
+    }
+
+    function appNodeById(id) {
+        return Array.from(Audio.outputAppNodes).find(n => n && String(n.id) === String(id)) ?? null;
+    }
+
+    // ---- earbuds: whichever supported headset is connected right now.
+    readonly property var ancModes: ({ normal: "Normal", transparency: "Transparency", anc: "NoiseCanceling" })
+
+    function earbudsService() {
+        if (SoundcoreService.isConnected)
+            return SoundcoreService;
+        if (BudsService.isConnected)
+            return BudsService;
+        return null;
+    }
+
+    function ancKey(modeName) {
+        for (const key in root.ancModes) {
+            if (root.ancModes[key] === modeName)
+                return key;
+        }
+        return "normal";
+    }
+
+    function setAnc(key) {
+        const service = root.earbudsService();
+        if (!service)
+            throw new Error("no supported earbuds connected");
+        service.setMode(service.activeDevice.address, root.ancModes[key] ?? "Normal");
+    }
+
+    // ---- workspaces: a plain number, a relative step, "empty", "name:x",
+    // or "special[:x]"; anything else is refused before it reaches Hyprland.
+    function workspaceRequest(v) {
+        const obj = root.asObject(v);
+        const target = String(obj.target ?? "").trim();
+        return {
+            action: obj.action === "move" ? "move" : "go",
+            target: /^[a-zA-Z0-9_:+\-]+$/.test(target) ? target : "",
+            back: obj.back === true
+        };
+    }
+
+    function goToWorkspace(target) {
+        if (!target.length)
+            throw new Error("no workspace");
+        if (target === "special" || target.startsWith("special:")) {
+            Hyprland.dispatch(`hl.dsp.workspace.toggle_special("${target === "special" ? "special" : target.slice(8)}")`);
+            return;
+        }
+        Hyprland.dispatch(`hl.dsp.focus({ workspace = "${target}" })`);
+    }
+
+    function currentWorkspaceId() {
+        const ws = Hyprland.focusedWorkspace;
+        return ws && ws.id > 0 ? ws.id : null;
+    }
+
+    // ---- desktop widgets: the placed list, positions included, so the
+    // revert puts every widget back where it was.
+    function activeWidgets() {
+        return ModeSchema.clone(ModeSchema.toArray(Config.options.background.activeWidgets));
+    }
+
+    function oledTargets(scope) {
+        if (scope === "focused") {
+            const name = Hyprland.focusedMonitor?.name;
+            return name ? [name] : [];
+        }
+        return Array.from(Quickshell.screens).map(s => s.name);
+    }
+
+    function oledUnion(scope) {
+        const names = new Set(Array.from(GlobalStates.oledSaverMonitors ?? []));
+        for (const n of root.oledTargets(scope))
+            names.add(n);
+        return Array.from(names).sort();
+    }
+
+    function clampKelvin(v) {
+        return Math.max(1000, Math.min(10000, Math.round((Number(v) || 5000) / 100) * 100));
+    }
+
+    function phoneRequest(v) {
+        const obj = root.asObject(v);
+        return { kind: obj.kind === "ring" ? "ring" : "ping", message: root.nonEmpty(obj.message) ? obj.message : "" };
     }
 
     // ---------------------------------------------------------------- registry
@@ -352,6 +509,51 @@ QtObject {
             }
         },
 
+        nightLightTemp: {
+            id: "nightLightTemp", category: "display", label: "Night Light warmth", icon: "thermostat",
+            editor: "temperature", volatile: false,
+            // value: kelvin, 1000–10000. Only visible while Night Light is on.
+            available: () => true,
+            read: () => Config.options.light.night.colorTemperature,
+            normalize: v => root.clampKelvin(v),
+            apply: v => { Config.options.light.night.colorTemperature = root.clampKelvin(v); },
+            revert: was => { Config.options.light.night.colorTemperature = root.clampKelvin(was); }
+        },
+        oledSaver: {
+            id: "oledSaver", category: "display", label: "OLED saver", icon: "brightness_empty",
+            editor: "segmented", choices: () => ["all", "focused"], volatile: true,
+            choiceLabel: v => v === "focused" ? "Focused monitor" : "All monitors",
+            // value: "all" | "focused" — which monitors to black out
+            available: () => true,
+            read: () => Array.from(GlobalStates.oledSaverMonitors ?? []).sort(),
+            normalize: v => root.oledUnion(v === "focused" ? "focused" : "all"),
+            apply: v => {
+                const next = root.oledUnion(v === "focused" ? "focused" : "all");
+                if (!next.length)
+                    throw new Error("no monitor");
+                GlobalStates.oledSaverMonitors = next;
+            },
+            revert: was => { GlobalStates.oledSaverMonitors = ModeSchema.stringList(was); }
+        },
+        desktopWidgets: {
+            id: "desktopWidgets", category: "display", label: "Hide desktop widgets", icon: "widgets",
+            editor: "none", volatile: false,
+            // No value: clears the placed widgets, and puts them back where
+            // they were.
+            available: () => true,
+            read: () => root.activeWidgets(),
+            normalize: () => [],
+            apply: () => {
+                if (root.activeWidgets().length)
+                    Config.options.background.activeWidgets = [];
+            },
+            revert: was => {
+                const list = ModeSchema.toArray(was);
+                if (list.length)
+                    Config.options.background.activeWidgets = ModeSchema.clone(list);
+            }
+        },
+
         // ------------------------------------------------- sound
         volume: {
             id: "volume", category: "sound", label: "Volume", icon: "volume_up",
@@ -455,6 +657,190 @@ QtObject {
             }
         },
 
+        audioOutput: {
+            id: "audioOutput", category: "sound", label: "Output device", icon: "speaker",
+            editor: "audioDevice", volatile: false,
+            // value: { name: "<node name>", label: "<description>" }
+            available: () => Array.from(Audio.outputDevices).length > 0,
+            read: () => Pipewire.defaultAudioSink?.name ?? null,
+            normalize: v => root.resolveDevice(true, v)?.name ?? null,
+            apply: v => {
+                const node = root.resolveDevice(true, v);
+                if (!node)
+                    throw new Error("output device not connected");
+                root.setDefaultDevice(true, node);
+            },
+            revert: was => {
+                const node = root.deviceByName(true, was);
+                if (node)
+                    root.setDefaultDevice(true, node);
+            }
+        },
+        audioInput: {
+            id: "audioInput", category: "sound", label: "Input device", icon: "mic",
+            editor: "audioDevice", volatile: false,
+            available: () => Array.from(Audio.inputDevices).length > 0,
+            read: () => Pipewire.defaultAudioSource?.name ?? null,
+            normalize: v => root.resolveDevice(false, v)?.name ?? null,
+            apply: v => {
+                const node = root.resolveDevice(false, v);
+                if (!node)
+                    throw new Error("input device not connected");
+                root.setDefaultDevice(false, node);
+            },
+            revert: was => {
+                const node = root.deviceByName(false, was);
+                if (node)
+                    root.setDefaultDevice(false, node);
+            }
+        },
+        appVolume: {
+            id: "appVolume", category: "sound", label: "App volume", icon: "tune",
+            editor: "appVolume", volatile: false,
+            // value: { app: "spotify", level: 0–100 | null, muted: bool | null };
+            // applies to every stream of a matching app, snapshot per stream
+            available: () => true,
+            read: action => root.appVolumeMap(root.appNodesFor(root.appVolumeRequest(action?.value).app)),
+            normalize: (v, action) => {
+                const req = root.appVolumeRequest(v);
+                const out = {};
+                for (const n of root.appNodesFor(req.app)) {
+                    out[String(n.id)] = {
+                        level: req.level === null ? Math.round((n.audio?.volume ?? 0) * 100) : root.clampPercent(req.level),
+                        muted: req.muted === null ? (n.audio?.muted ?? false) : !!req.muted
+                    };
+                }
+                return out;
+            },
+            apply: v => {
+                const req = root.appVolumeRequest(v);
+                if (!req.app.length)
+                    throw new Error("no app");
+                const nodes = root.appNodesFor(req.app);
+                if (!nodes.length)
+                    throw new Error(`"${req.app}" is not playing`);
+                for (const n of nodes) {
+                    if (req.level !== null)
+                        n.audio.volume = root.clampPercent(req.level) / 100;
+                    if (req.muted !== null)
+                        n.audio.muted = !!req.muted;
+                }
+            },
+            revert: was => {
+                const map = root.asObject(was);
+                for (const id in map) {
+                    const n = root.appNodeById(id);
+                    if (!n || !n.audio)
+                        continue;
+                    n.audio.volume = root.clampPercent(map[id].level) / 100;
+                    n.audio.muted = !!map[id].muted;
+                }
+            }
+        },
+        playerVolume: {
+            id: "playerVolume", category: "sound", label: "Player volume", icon: "music_cast",
+            editor: "level", volatile: false,
+            // value: 0–100, on the active media player
+            available: () => true,
+            read: () => {
+                const p = MprisController.activePlayer;
+                return p && p.volumeSupported ? Math.round(p.volume * 100) : null;
+            },
+            normalize: v => root.clampPercent(v),
+            apply: v => {
+                const p = MprisController.activePlayer;
+                if (!p)
+                    throw new Error("no media player");
+                if (!p.volumeSupported)
+                    throw new Error(`${p.identity ?? "player"} has no volume control`);
+                p.volume = root.clampPercent(v) / 100;
+            },
+            revert: was => {
+                const p = MprisController.activePlayer;
+                if (p && p.volumeSupported && was !== null && was !== undefined)
+                    p.volume = root.clampPercent(was) / 100;
+            }
+        },
+        mediaSkip: {
+            id: "mediaSkip", category: "sound", label: "Skip track", icon: "skip_next",
+            editor: "segmented", choices: () => ["next", "previous"], volatile: false,
+            choiceLabel: v => v === "previous" ? "Previous" : "Next",
+            available: () => true,
+            apply: v => {
+                const p = MprisController.activePlayer;
+                if (!p)
+                    throw new Error("no media player");
+                if (v === "previous") {
+                    if (!p.canGoPrevious)
+                        throw new Error("player cannot go back");
+                    p.previous();
+                    return;
+                }
+                if (!p.canGoNext)
+                    throw new Error("player cannot skip");
+                p.next();
+            }
+        },
+        monoAudio: {
+            id: "monoAudio", category: "sound", label: "Mono audio", icon: "spatial_audio_off",
+            editor: "switch", volatile: false,
+            available: () => true,
+            read: () => Config.options.sounds.monoAudio,
+            normalize: v => !!v,
+            apply: v => { Config.options.sounds.monoAudio = !!v; },
+            revert: was => { Config.options.sounds.monoAudio = !!was; }
+        },
+        easyEffects: {
+            id: "easyEffects", category: "sound", label: "EasyEffects", icon: "equalizer",
+            editor: "switch", volatile: false,
+            available: () => EasyEffects.available,
+            read: () => EasyEffects.active,
+            normalize: v => !!v,
+            apply: v => {
+                if (v)
+                    EasyEffects.enable();
+                else
+                    EasyEffects.disable();
+            },
+            revert: was => {
+                if (was)
+                    EasyEffects.enable();
+                else
+                    EasyEffects.disable();
+            }
+        },
+        earbudsAnc: {
+            id: "earbudsAnc", category: "sound", label: "Earbuds noise control", icon: "noise_control_off",
+            editor: "segmented", choices: () => ["normal", "transparency", "anc"], volatile: false,
+            choiceLabel: v => v === "anc" ? "Noise cancelling" : (v === "transparency" ? "Transparency" : "Normal"),
+            // value: "normal" | "transparency" | "anc", on whichever supported
+            // earbuds are connected when the action runs
+            available: () => true,
+            read: () => {
+                const service = root.earbudsService();
+                return service ? root.ancKey(service.currentMode) : null;
+            },
+            normalize: v => root.ancModes[v] ? v : "normal",
+            apply: v => { root.setAnc(root.ancModes[v] ? v : "normal"); },
+            revert: was => {
+                if (was && root.earbudsService())
+                    root.setAnc(was);
+            }
+        },
+        playSound: {
+            id: "playSound", category: "sound", label: "Play a sound", icon: "music_note",
+            editor: "sound", volatile: false,
+            // value: path to an audio file; plays once, regardless of the
+            // system-sounds switch (it was asked for explicitly)
+            available: () => true,
+            apply: v => {
+                const path = String(v ?? "").trim();
+                if (!path.length)
+                    throw new Error("no file");
+                SoundService.previewFile(path);
+            }
+        },
+
         // ------------------------------------------------- power
         keepAwake: {
             id: "keepAwake", category: "power", label: "Keep Awake", icon: "coffee",
@@ -495,6 +881,48 @@ QtObject {
                 PowerProfiles.profile = target;
             },
             revert: was => { PowerProfiles.profile = root.powerProfileFromName(was); }
+        },
+
+        // ------------------------------------------------- session
+        lock: {
+            id: "lock", category: "session", label: "Lock the screen", icon: "lock",
+            editor: "none", volatile: false,
+            available: () => true,
+            apply: () => { Session.lock(); }
+        },
+        screensOff: {
+            id: "screensOff", category: "session", label: "Screens off", icon: "desktop_access_disabled",
+            editor: "none", volatile: false,
+            // One-shot: any key or mouse move wakes them (Hyprland's default).
+            // The revert makes sure they are on when the mode ends.
+            available: () => true,
+            apply: () => { Hyprland.dispatch(`hl.dsp.dpms({ action = "disable" })`); },
+            revert: () => { Hyprland.dispatch(`hl.dsp.dpms({ action = "enable" })`); }
+        },
+        suspend: {
+            id: "suspend", category: "session", label: "Suspend", icon: "bedtime",
+            editor: "none", volatile: false,
+            available: () => true,
+            apply: () => { Session.suspend(); }
+        },
+
+        // ------------------------------------------------- tools
+        pomodoro: {
+            id: "pomodoro", category: "tools", label: "Pomodoro", icon: "timer",
+            editor: "segmented", choices: () => ["start", "stop"], volatile: false,
+            choiceLabel: v => v === "stop" ? "Stop" : "Start",
+            available: () => true,
+            read: () => TimerService.pomodoroRunning,
+            normalize: v => v !== "stop",
+            apply: v => {
+                const wanted = v !== "stop";
+                if (TimerService.pomodoroRunning !== wanted)
+                    TimerService.togglePomodoro();
+            },
+            revert: was => {
+                if (TimerService.pomodoroRunning !== !!was)
+                    TimerService.togglePomodoro();
+            }
         },
 
         // ------------------------------------------------- hyprland
@@ -559,6 +987,68 @@ QtObject {
                 if (typeof w.dockEnabled === "boolean")
                     Config.options.dock.enable = w.dockEnabled;
             }
+        },
+
+        workspace: {
+            id: "workspace", category: "hyprland", label: "Workspace", icon: "grid_view",
+            editor: "workspace", volatile: false,
+            // value: { action: "go" | "move", target: "3" | "+1" | "empty" |
+            //          "name:x" | "special[:x]", back: bool }
+            // Going somewhere is never "overridden": you will change
+            // workspace a hundred times while the mode is on. With `back`
+            // the end of the mode returns to where it started.
+            available: () => true,
+            read: () => null,
+            normalize: () => null,
+            extra: () => ({ from: root.currentWorkspaceId() }),
+            apply: v => {
+                const req = root.workspaceRequest(v);
+                if (!req.target.length)
+                    throw new Error("no workspace");
+                if (req.action === "move") {
+                    Hyprland.dispatch(`hl.dsp.window.move({ workspace = "${req.target}" })`);
+                    return;
+                }
+                root.goToWorkspace(req.target);
+            },
+            revert: (was, action, extra) => {
+                const req = root.workspaceRequest(action?.value);
+                const from = extra?.from;
+                if (req.action !== "go" || !req.back || typeof from !== "number")
+                    return;
+                root.goToWorkspace(String(from));
+            }
+        },
+
+        // ------------------------------------------------- input
+        keyboardLayout: {
+            id: "keyboardLayout", category: "input", label: "Keyboard layout", icon: "keyboard_alt",
+            editor: "dropdown", volatile: false,
+            choices: () => Array.from(HyprlandXkb.layoutCodes),
+            choiceLabel: v => String(v ?? "").toUpperCase(),
+            available: () => Array.from(HyprlandXkb.layoutCodes).length > 1,
+            read: () => HyprlandXkb.currentLayoutCode,
+            normalize: v => String(v ?? ""),
+            apply: v => {
+                const idx = Array.from(HyprlandXkb.layoutCodes).indexOf(String(v ?? ""));
+                if (idx === -1)
+                    throw new Error(`layout "${v}" is not configured`);
+                Quickshell.execDetached(["hyprctl", "switchxkblayout", "all", String(idx)]);
+            },
+            revert: was => {
+                const idx = Array.from(HyprlandXkb.layoutCodes).indexOf(String(was ?? ""));
+                if (idx !== -1)
+                    Quickshell.execDetached(["hyprctl", "switchxkblayout", "all", String(idx)]);
+            }
+        },
+        touchGestures: {
+            id: "touchGestures", category: "input", label: "Touch gestures", icon: "swipe",
+            editor: "switch", volatile: false,
+            available: () => true,
+            read: () => Config.options.interactions.touchGestures.enable,
+            normalize: v => !!v,
+            apply: v => { Config.options.interactions.touchGestures.enable = !!v; },
+            revert: was => { Config.options.interactions.touchGestures.enable = !!was; }
         },
 
         // ------------------------------------------------- apps
@@ -716,6 +1206,23 @@ QtObject {
             }
         },
 
+        pingPhone: {
+            id: "pingPhone", category: "radios", label: "Phone", icon: "smartphone",
+            editor: "phone", volatile: false,
+            // value: { kind: "ping" | "ring", message }, via KDE Connect
+            available: () => KdeConnectService.available,
+            apply: v => {
+                const req = root.phoneRequest(v);
+                const id = KdeConnectService.activeDeviceId;
+                if (!id.length || !KdeConnectService.activeReachable)
+                    throw new Error("phone not reachable");
+                if (req.kind === "ring")
+                    KdeConnectService.findMyPhone(id);
+                else
+                    KdeConnectService.sendPing(id, req.message);
+            }
+        },
+
         // ------------------------------------------------- flow
         // Not an action: a pause the engine honours while walking the list.
         // It is in the registry so the editor can offer and describe it.
@@ -804,8 +1311,11 @@ QtObject {
         display: { label: "Display", icon: "display_settings" },
         sound: { label: "Sound", icon: "volume_up" },
         power: { label: "Power", icon: "bolt" },
+        session: { label: "Session", icon: "lock" },
         hyprland: { label: "Hyprland", icon: "window" },
+        input: { label: "Input", icon: "keyboard" },
         apps: { label: "Apps", icon: "apps" },
+        tools: { label: "Tools", icon: "handyman" },
         radios: { label: "Connectivity", icon: "settings_input_antenna" },
         flow: { label: "Timing", icon: "hourglass_top" },
         advanced: { label: "Advanced", icon: "code" }

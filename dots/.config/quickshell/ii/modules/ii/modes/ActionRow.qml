@@ -99,7 +99,7 @@ Rectangle {
         } catch (e) {
             list = [];
         }
-        return list.map(c => ({ displayName: ModeUi.capitalize(c), value: c }));
+        return list.map(c => ({ displayName: ModeUi.choiceLabel(root.entry, c), value: c }));
     }
 
     implicitHeight: column.implicitHeight + 16

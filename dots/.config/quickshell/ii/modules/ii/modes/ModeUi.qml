@@ -559,8 +559,44 @@ Singleton {
             return { action: "run", id: "" };
         case "wait":
             return 60;
+        case "audioDevice":
+            return { name: "", label: "" };
+        case "appVolume":
+            return { app: "", level: 40, muted: null };
+        case "level":
+            return 50;
+        case "temperature":
+            return Config.options.light.night.colorTemperature || 4000;
+        case "workspace":
+            return { action: "go", target: "1", back: false };
+        case "phone":
+            return { kind: "ping", message: "" };
+        case "none":
+            return null;
         }
         return type === "closeApps" ? [] : "";
+    }
+
+    // The label of one of an action's choices (segmented / dropdown editors).
+    function choiceLabel(entry, value) {
+        if (entry?.choiceLabel)
+            return Translation.tr(entry.choiceLabel(value));
+        return root.capitalize(value);
+    }
+
+    // What a row without parameters does, in the place of its value.
+    function noValueText(type) {
+        switch (type) {
+        case "desktopWidgets":
+            return Translation.tr("Hidden while it's on, back afterwards");
+        case "lock":
+            return Translation.tr("Locks the session");
+        case "screensOff":
+            return Translation.tr("Turns every screen off; any key wakes them");
+        case "suspend":
+            return Translation.tr("Suspends at once — put a Wait step above it");
+        }
+        return "";
     }
 
     function actionLabel(type) {
@@ -578,6 +614,28 @@ Singleton {
     function capitalize(s) {
         const t = String(s ?? "");
         return t.length ? t[0].toUpperCase() + t.slice(1) : t;
+    }
+
+    // "workspace 3", "the next workspace", "the special workspace"…
+    function workspaceLabel(target) {
+        const t = String(target ?? "").trim();
+        if (!t.length)
+            return Translation.tr("no workspace");
+        if (/^\d+$/.test(t))
+            return Translation.tr("workspace %1").arg(t);
+        if (t === "+1" || t === "r+1" || t === "e+1" || t === "m+1")
+            return Translation.tr("the next workspace");
+        if (t === "-1" || t === "r-1" || t === "e-1" || t === "m-1")
+            return Translation.tr("the previous workspace");
+        if (t === "empty")
+            return Translation.tr("an empty workspace");
+        if (t === "special")
+            return Translation.tr("the special workspace");
+        if (t.startsWith("special:"))
+            return Translation.tr("special workspace %1").arg(t.slice(8));
+        if (t.startsWith("name:"))
+            return Translation.tr("workspace %1").arg(t.slice(5));
+        return t;
     }
 
     // ---------------------------------------------------------------- forms
@@ -639,12 +697,14 @@ Singleton {
         const entry = Modes.actions.get(a.type);
         const obj = (v && typeof v === "object" && !Array.isArray(v)) ? v : null;
         switch (entry?.editor) {
+        case "none":
+            return root.noValueText(a.type);
         case "switch":
             return root.onOff(!!v);
         case "segmented":
-            return root.capitalize(v ?? "");
+            return root.choiceLabel(entry, v ?? "");
         case "dropdown":
-            return v === "" || v === null || v === undefined ? Translation.tr("None") : String(v);
+            return v === "" || v === null || v === undefined ? Translation.tr("None") : root.choiceLabel(entry, v);
         case "brightness": {
             const level = obj ? obj.level : v;
             const scope = obj?.scope === "all" ? Translation.tr("all monitors") : Translation.tr("focused");
@@ -712,6 +772,34 @@ Singleton {
         }
         case "wait":
             return Translation.tr("Wait %1, then go on").arg(root.durationText(ModeSchema.durationSec(v)));
+        case "audioDevice":
+            return String(obj?.label ?? obj?.name ?? v ?? "");
+        case "appVolume": {
+            const parts = [String(obj?.app ?? "")];
+            if (obj?.level !== null && obj?.level !== undefined)
+                parts.push(`${obj.level} %`);
+            if (obj?.muted === true)
+                parts.push(Translation.tr("muted"));
+            else if (obj?.muted === false)
+                parts.push(Translation.tr("unmuted"));
+            return parts.filter(p => p.length).join(" · ");
+        }
+        case "level":
+            return v === null || v === undefined ? "" : `${v} %`;
+        case "temperature":
+            return v === null || v === undefined ? "" : `${v} K`;
+        case "workspace": {
+            const target = String(obj?.target ?? "");
+            const label = root.workspaceLabel(target);
+            if (obj?.action === "move")
+                return Translation.tr("Move the window to %1").arg(label);
+            return obj?.back ? Translation.tr("Go to %1, back at the end").arg(label) : Translation.tr("Go to %1").arg(label);
+        }
+        case "phone":
+            return obj?.kind === "ring" ? Translation.tr("Ring it")
+                : (obj?.message ? Translation.tr("Ping: %1").arg(obj.message) : Translation.tr("Ping"));
+        case "sound":
+            return String(v ?? "").split("/").pop();
         }
         return v === null || v === undefined ? "" : String(v);
     }
