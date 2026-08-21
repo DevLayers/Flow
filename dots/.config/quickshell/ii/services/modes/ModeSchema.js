@@ -38,7 +38,11 @@ var CONDITION_SOURCES = {
     lid: "conditions/LidCondition.qml",
     weather: "conditions/WeatherCondition.qml",
     keyboardLayout: "conditions/KeyboardLayoutCondition.qml",
-    updates: "conditions/UpdatesCondition.qml"
+    updates: "conditions/UpdatesCondition.qml",
+    notification: "conditions/NotificationCondition.qml",
+    alarm: "conditions/AlarmCondition.qml",
+    pomodoroLap: "conditions/PomodoroLapCondition.qml",
+    shortcut: "conditions/ShortcutCondition.qml"
 };
 
 // Editor metadata per trigger type: label, icon, group in the "add
@@ -52,7 +56,8 @@ var TRIGGER_GROUPS = {
     system: "Power & system",
     connectivity: "Connectivity & devices",
     outside: "Outside",
-    automation: "Automation"
+    automation: "Automation",
+    events: "Moments"
 };
 
 var TRIGGER_TYPES = {
@@ -80,8 +85,28 @@ var TRIGGER_TYPES = {
     monitors: { label: "Monitors", icon: "monitor", editor: "monitors", group: "connectivity" },
     audioDevice: { label: "Audio device", icon: "headphones", editor: "audioDevice", group: "connectivity" },
     weather: { label: "Weather", icon: "partly_cloudy_day", editor: "weather", group: "outside" },
-    modeActive: { label: "Mode active", icon: "tune", editor: "modeActive", group: "automation", routineOnly: true }
+    modeActive: { label: "Mode active", icon: "tune", editor: "modeActive", group: "automation", routineOnly: true },
+    // Events: a moment rather than a state. They pulse, so only a "when"
+    // routine (kind once) can use them.
+    notification: { label: "A notification arrives", icon: "notifications_active", editor: "notification",
+        group: "events", routineOnly: true, event: true },
+    alarm: { label: "An alarm rings", icon: "alarm", editor: "none", group: "events", routineOnly: true, event: true },
+    pomodoroLap: { label: "A Pomodoro lap ends", icon: "timer_off", editor: "pomodoroLap", group: "events",
+        routineOnly: true, event: true },
+    shortcut: { label: "A shortcut is pressed", icon: "keyboard_command_key", editor: "shortcut", group: "events",
+        routineOnly: true, event: true }
 };
+
+function isEventTrigger(type) {
+    return TRIGGER_TYPES[type]?.event === true;
+}
+
+// Global shortcut name for a shortcut trigger: the chosen name, else the
+// owning routine's id; only what Hyprland accepts in a dispatcher arg.
+function shortcutName(trigger, ownerId) {
+    var raw = String((trigger && trigger.name) || ownerId || "routine");
+    return slugify(raw);
+}
 
 // WWO weather codes (what the weather service stores in wCode) folded into
 // the few kinds a condition can ask for.
@@ -306,7 +331,20 @@ function normalizeTrigger(raw) {
     case "updates":
         t.atLeast = Math.max(1, optionalInt(t.atLeast, 1, 10000) || 1);
         break;
+    case "notification":
+        t.app = typeof t.app === "string" ? t.app.trim() : "";
+        t.text = typeof t.text === "string" ? t.text.trim() : "";
+        break;
+    case "pomodoroLap":
+        t.lap = ["focusEnd", "breakEnd", "any"].indexOf(t.lap) !== -1 ? t.lap : "any";
+        break;
+    case "shortcut":
+        t.name = typeof t.name === "string" && t.name.trim().length ? slugify(t.name) : "";
+        break;
     }
+    // A pulse is a moment; holding it for a while makes no sense.
+    if (isEventTrigger(t.type))
+        t.forSec = 0;
     return t;
 }
 

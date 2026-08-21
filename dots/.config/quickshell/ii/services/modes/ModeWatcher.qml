@@ -49,7 +49,12 @@ QtObject {
             id: loader
             required property var modelData
             readonly property string conditionType: loader.modelData?.type ?? ""
-            readonly property bool supported: ModeSchema.CONDITION_SOURCES[conditionType] !== undefined
+            readonly property bool hasSource: ModeSchema.CONDITION_SOURCES[conditionType] !== undefined
+            // An event trigger only makes sense where a false→true edge fires
+            // something: a "when" routine. Elsewhere it stays unsatisfied.
+            readonly property bool misplacedEvent: ModeSchema.isEventTrigger(conditionType)
+                && root.modeDef?.kind !== "once"
+            readonly property bool supported: loader.hasSource && !loader.misplacedEvent
             readonly property bool conditionSatisfied: loader.item?.satisfied ?? false
             readonly property bool negated: loader.modelData?.not === true
             // Seconds the verdict must hold before it counts (0: at once).
@@ -90,13 +95,15 @@ QtObject {
             onOkChanged: root.recompute()
             Component.onCompleted: {
                 if (!supported) {
-                    console.log(`[Modes] ${root.modeId}: trigger "${conditionType}" has no watcher yet, `
-                        + "treated as unsatisfied");
+                    console.log(`[Modes] ${root.modeId}: trigger "${conditionType}" `
+                        + (loader.misplacedEvent ? "is an event and needs a \"when\" routine"
+                            : "has no watcher yet") + ", treated as unsatisfied");
                     root.recompute();
                     return;
                 }
                 loader.setSource(ModeSchema.CONDITION_SOURCES[conditionType], {
                     params: loader.modelData,
+                    ownerId: root.modeId,
                     armed: Qt.binding(() => root.armed)
                 });
             }

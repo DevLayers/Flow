@@ -139,11 +139,14 @@ Item {
 
     readonly property var triggerChoices: {
         const out = [];
+        const once = (root.routine?.kind ?? "while") === "once";
         for (const type in ModeSchema.TRIGGER_TYPES) {
             const meta = ModeSchema.TRIGGER_TYPES[type];
+            const blocked = meta.event === true && !once;
             out.push({
                 key: type, label: Translation.tr(meta.label), icon: meta.icon,
-                group: ModeUi.triggerGroupLabel(type), enabled: true, hint: ""
+                group: ModeUi.triggerGroupLabel(type), enabled: !blocked,
+                hint: blocked ? Translation.tr("A moment, not a state: for \"when\" routines only") : ""
             });
         }
         return out;
@@ -429,6 +432,7 @@ Item {
 
                         Layout.fillWidth: true
                         trigger: modelData
+                        ownerId: root.routineId
                         watcher: {
                             Modes.watchersRevision;
                             return Modes.routineWatcherFor(root.routineId);

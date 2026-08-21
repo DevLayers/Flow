@@ -24,6 +24,9 @@ Rectangle {
     readonly property string type: root.trigger?.type ?? ""
     readonly property var condition: root.watcher?.conditionAt(root.triggerIndex) ?? null
     readonly property bool supported: root.condition?.supported ?? true
+    readonly property bool misplacedEvent: root.condition?.misplacedEvent ?? false
+    /// The owning mode or routine's id (shortcut triggers derive their name from it).
+    property string ownerId: ""
     readonly property bool negated: root.trigger?.not === true
     readonly property int forSec: ModeSchema.durationSec(root.trigger?.forSec)
     // The verdict the engine uses (after the dwell); `counting` is the gap
@@ -111,10 +114,13 @@ Rectangle {
                 }
 
                 StyledToolTip {
-                    extraVisibleCondition: verdictArea.containsMouse && (root.liveReason.length > 0 || root.counting)
-                    text: root.counting
-                        ? Translation.tr("True right now; counts once it has held for %1").arg(ModeUi.durationText(root.forSec))
-                        : root.liveReason
+                    extraVisibleCondition: verdictArea.containsMouse
+                        && (root.liveReason.length > 0 || root.counting || root.misplacedEvent)
+                    text: root.misplacedEvent
+                        ? Translation.tr("A moment, not a state: only a routine of type \"When conditions become true\" can fire on it")
+                        : (root.counting
+                            ? Translation.tr("True right now; counts once it has held for %1").arg(ModeUi.durationText(root.forSec))
+                            : root.liveReason)
                 }
 
                 RowLayout {
@@ -133,9 +139,12 @@ Rectangle {
                     }
 
                     StyledText {
-                        text: !root.supported ? Translation.tr("Unsupported")
-                            : (root.holds ? Translation.tr("Holds now")
-                            : (root.counting ? Translation.tr("Counting") : Translation.tr("Not now")))
+                        text: !root.supported
+                            ? (root.misplacedEvent ? Translation.tr("Needs a \"when\" routine") : Translation.tr("Unsupported"))
+                            : (ModeSchema.isEventTrigger(root.type)
+                                ? (root.holds ? Translation.tr("Just fired") : Translation.tr("Listening"))
+                                : (root.holds ? Translation.tr("Holds now")
+                                : (root.counting ? Translation.tr("Counting") : Translation.tr("Not now"))))
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: verdictRow.fg
                     }
@@ -204,13 +213,14 @@ Rectangle {
         }
 
         // "Idle for 10 minutes", "in a game for 5 minutes": the verdict has
-        // to last this long before it counts. Zero means at once.
+        // to last this long before it counts. Zero means at once. A moment
+        // (an event) cannot be held.
         RowLayout {
             Layout.fillWidth: true
             Layout.leftMargin: 34
             Layout.rightMargin: 6
             Layout.bottomMargin: 4
-            visible: root.expanded
+            visible: root.expanded && !ModeSchema.isEventTrigger(root.type)
             spacing: 10
 
             StyledSwitch {

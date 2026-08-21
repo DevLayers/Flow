@@ -298,6 +298,24 @@ Singleton {
                 : Translation.tr("Keyboard layout (none chosen)");
         case "updates":
             return Translation.tr("%1+ updates pending").arg(t.atLeast);
+        case "notification": {
+            const app = String(t.app ?? "").trim();
+            const text = String(t.text ?? "").trim();
+            let out = app.length ? Translation.tr("Notification from %1").arg(app) : Translation.tr("Any notification");
+            if (text.length)
+                out += " · " + Translation.tr("containing \"%1\"").arg(text);
+            return out;
+        }
+        case "alarm":
+            return Translation.tr("An alarm rings");
+        case "pomodoroLap":
+            return t.lap === "focusEnd" ? Translation.tr("A Pomodoro focus lap ends")
+                : (t.lap === "breakEnd" ? Translation.tr("A Pomodoro break ends") : Translation.tr("A Pomodoro lap ends"));
+        case "shortcut": {
+            const name = String(t.name ?? "").trim();
+            return name.length ? Translation.tr("Shortcut quickshell:modes-%1").arg(name)
+                : Translation.tr("The routine's shortcut is pressed");
+        }
         }
         return root.triggerTypeLabel(t.type);
     }
