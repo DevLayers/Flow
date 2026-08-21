@@ -23,6 +23,9 @@ class SemanticSettingsToolsTests(unittest.TestCase):
             "function validate(",
             "function propose(",
             "Config.setNestedValue(key, value, true)",
+            "readonly property FileView indexFile: FileView",
+            "readonly property Process indexCheck: Process",
+            "readonly property Process indexBuild: Process",
         ):
             with self.subTest(token=token):
                 self.assertIn(token, source)
@@ -43,6 +46,7 @@ class SemanticSettingsToolsTests(unittest.TestCase):
         self.assertIn('formats: []', REGISTRY.split('id: "set_shell_config"', 1)[1].split('id:', 1)[0])
 
     def test_ai_routes_semantic_tools_through_the_adapter_and_journal(self):
+        self.assertIn("import qs.services.ai.integrations", AI)
         for token in (
             "readonly property AiSettingsIntegration settingsIntegration",
             '"settings_search": call => root.toolSettingsSearch(call)',

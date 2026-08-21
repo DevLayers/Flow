@@ -9,6 +9,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
 import qs.services.ai
+import qs.services.ai.integrations
 
 /**
  * Handles LLM chats: the conversation, the tools, and which model answers.

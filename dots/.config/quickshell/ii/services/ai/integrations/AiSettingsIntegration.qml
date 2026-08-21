@@ -212,7 +212,7 @@ QtObject {
         return { applied: applied, skipped: skipped };
     }
 
-    FileView {
+    readonly property FileView indexFile: FileView {
         id: indexFile
         path: root.indexPath
         watchChanges: true
@@ -221,7 +221,7 @@ QtObject {
         onLoadFailed: root.rebuild()
     }
 
-    Process {
+    readonly property Process indexCheck: Process {
         id: indexCheck
         command: ["python3", root.generatorPath, "--out", root.indexPath, "check"]
         onExited: exitCode => {
@@ -232,7 +232,7 @@ QtObject {
         }
     }
 
-    Process {
+    readonly property Process indexBuild: Process {
         id: indexBuild
         command: ["python3", root.generatorPath, "--out", root.indexPath, "build"]
         onExited: exitCode => {
