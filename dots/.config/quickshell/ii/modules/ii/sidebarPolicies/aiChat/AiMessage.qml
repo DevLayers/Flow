@@ -830,6 +830,8 @@ Item {
                         return settingsDiffCard;
                     case "settingsResults":
                         return settingsResultsCard;
+                    case "reminderPreview":
+                        return reminderPreviewCard;
                     case "memoryFact":
                         return memoryFactCard;
                     }
@@ -864,6 +866,15 @@ Item {
                                 setting: modelData
                             }
                         }
+                    }
+                }
+
+                Component {
+                    id: reminderPreviewCard
+
+                    AiReminderCard {
+                        messageData: root.messageData
+                        card: cardHost.card
                     }
                 }
 

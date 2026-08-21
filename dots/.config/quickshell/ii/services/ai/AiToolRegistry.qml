@@ -258,6 +258,102 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "reminder_create",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("Create a reminder"),
+            summary: Translation.tr("Shows a local reminder before saving it as a one-time alarm."),
+            icon: "alarm_add",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "ask",
+            timeoutMs: 0,
+            maxResultTokens: 120,
+            idempotent: false,
+            description: "Create a local reminder after the user approves its preview. Pass exactly one time: `whenRelative` is a duration string such as `20 minutes`, `20 minutos`, `2 hours`, or `1 hora`; while `whenAbsolute` is a future ISO 8601 date-time with a time. Never pass bare seconds or a number with no unit. Pass a short label. A duration or time of day is a reminder; something to do with no time is a task. If the distinction is unclear, ask the user.",
+            parameters: {
+                type: "object",
+                properties: {
+                    whenRelative: { type: "string", description: "Duration with an explicit unit, e.g. `20 minutes`, `20 minutos`, or `2 hours`" },
+                    whenAbsolute: { type: "string", description: "Future ISO 8601 date-time, including T and time" },
+                    label: { type: "string", description: "Short reminder label" }
+                },
+                required: ["label"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "alarms_list",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("List active alarms"),
+            summary: Translation.tr("Reads active local alarms and reminders. Nothing is changed."),
+            icon: "alarm",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 220,
+            idempotent: true,
+            description: "List at most twenty active local alarms and reminders with their label, local time, optional date, and whether they repeat. Nothing is changed.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "calendar_list_events",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("Read calendar events"),
+            summary: Translation.tr("Reads a bounded range from the local khal calendar. Nothing is changed."),
+            icon: "calendar_month",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 400,
+            idempotent: true,
+            description: "Read events from the local khal calendar. For today or the next seven days, omit `from` and `to`; the shell supplies the current local date. Otherwise they are YYYY-MM-DD dates and may cover at most 31 days. `limit` is 1 to 20. This is read-only; do not offer to create calendar events with this tool.",
+            parameters: {
+                type: "object",
+                properties: {
+                    from: { type: "string", description: "Optional first local date, YYYY-MM-DD" },
+                    to: { type: "string", description: "Optional final local date, YYYY-MM-DD" },
+                    limit: { type: "integer", description: "Maximum events, from 1 to 20" }
+                },
+                required: []
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "weather_get",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("Read weather"),
+            summary: Translation.tr("Reads the current weather cache and may refresh it using the configured provider."),
+            icon: "partly_cloudy_day",
+            kind: "externalRead",
+            network: "required",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 10000,
+            maxResultTokens: 220,
+            idempotent: true,
+            description: "Read the configured weather service. It returns a short current condition and up to three forecast days. It may refresh through the network, so use it only when the current policy permits network access.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             // Registered but offered to nobody: `formats: []` keeps it out of
             // every wire schema while leaving a definition for the call a model
             // still makes from memory, which is answered with the two tools
@@ -571,6 +667,10 @@ Singleton {
             return Array.from(args.changes ?? []).map(change => `${change.key} = ${JSON.stringify(change.value)}`).join(", ");
         case "settings_apply_changes":
             return String(args.previewId ?? "");
+        case "reminder_create":
+            return String(args.label ?? "") + " · " + (args.whenAbsolute ?? `${args.whenRelative ?? ""} min`);
+        case "calendar_list_events":
+            return [args.from ?? "", args.to ?? ""].filter(value => String(value).length > 0).join(" → ");
         case "set_shell_config":
             return Array.from(args.changes ?? []).map(change => `${change.key} = ${change.value}`).join(", ");
         }

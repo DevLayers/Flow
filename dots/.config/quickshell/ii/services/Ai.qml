@@ -1351,6 +1351,8 @@ Singleton {
     readonly property AiSettingsIntegration settingsIntegration: AiSettingsIntegration {}
     /** Explicit clipboard, launcher and active-window metadata for one turn. */
     readonly property AiShellContextIntegration shellContext: AiShellContextIntegration {}
+    /** Local alarms, khal calendar and Weather DTOs; it owns no UI. */
+    readonly property AiTimeIntegration timeIntegration: AiTimeIntegration {}
     /** Preview id → immutable proposed changes until the user decides. */
     property var settingsPreviews: ({})
 
@@ -1411,6 +1413,10 @@ Singleton {
             "settings_open": call => root.toolSettingsOpen(call),
             "settings_propose_changes": call => root.toolSettingsProposeChanges(call),
             "settings_apply_changes": call => root.toolSettingsApplyChanges(call),
+            "reminder_create": call => root.toolReminderCreate(call),
+            "alarms_list": call => root.toolAlarmsList(call),
+            "calendar_list_events": call => root.toolCalendarListEvents(call),
+            "weather_get": call => root.toolWeatherGet(call),
             "set_shell_config": call => root.toolSetShellConfig(call),
             "remember_fact": call => root.toolRememberFact(call),
             "web_search": call => root.toolWeb(call, true),
@@ -3461,7 +3467,8 @@ Singleton {
     readonly property var sideEffectStarters: ({
             "run_shell_command": pending => root.startShellCommand(pending.message, String(pending.args?.command ?? ""), pending.sessionId),
             "set_shell_config": pending => root.applyConfigChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
-            "settings_apply_changes": pending => root.applySettingsChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId)
+            "settings_apply_changes": pending => root.applySettingsChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
+            "reminder_create": pending => root.createReminderNow(pending.message, pending.args, pending.sessionId)
         })
 
     function handleToolJournalSaveFailed(operationId: string, sessionId: string, reason: string): bool {
@@ -3698,6 +3705,65 @@ Singleton {
             status: "denied",
             summary: Translation.tr("Rejected"),
             data: Translation.tr("Settings change rejected by user")
+        });
+    }
+
+    function approveReminder(message: AiMessageData) {
+        if (!message?.functionPending)
+            return;
+        const card = root.toolCardFor(message, root.toolKeyFor(message));
+        const reminder = card?.data?.reminder;
+        if (!reminder) {
+            root.rejectReminder(message);
+            return;
+        }
+        // Persist the absolute instant from the preview rather than the
+        // original relative minutes: waiting for approval must not move it.
+        root.beginToolExecution(message, "reminder_create", {
+            args: { whenAbsolute: reminder.whenAbsolute, label: reminder.label }
+        });
+    }
+
+    function createReminderNow(message: AiMessageData, args: var, sessionId = "") {
+        const key = root.toolKeyFor(message);
+        const result = root.timeIntegration.createReminder(args);
+        message.functionPending = false;
+        if (!result.ok) {
+            const summary = Translation.tr("The reminder could not be created");
+            root.updateToolCard(message, key, { state: "failed", summary: summary });
+            root.broker.settle(key, {
+                status: "error",
+                summary: summary,
+                data: { error: result.reason ?? "alarmCreateFailed" },
+                retryable: false
+            });
+            return;
+        }
+        root.updateToolCard(message, key, {
+            state: "done",
+            summary: Translation.tr("Reminder created")
+        });
+        root.broker.settle(key, {
+            status: "success",
+            summary: Translation.tr("Reminder created"),
+            data: { reminder: result.reminder },
+            retryable: false
+        });
+    }
+
+    function rejectReminder(message: AiMessageData) {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, {
+            state: "denied",
+            summary: Translation.tr("Reminder discarded")
+        });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Reminder discarded"),
+            data: Translation.tr("The user chose not to create that reminder.")
         });
     }
 
@@ -3947,6 +4013,68 @@ Singleton {
             key: call.key,
             args: { changes: changes.map(change => ({ key: change.key, value: change.proposed })) }
         });
+    }
+
+    function toolReminderCreate(call: var): var {
+        const normalized = root.timeIntegration.normalizeReminder(call.args);
+        if (!normalized.ok)
+            return {
+                status: "error",
+                summary: Translation.tr("That reminder time is not valid"),
+                data: { error: normalized.reason ?? "invalidReminder" },
+                retryable: true
+            };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "reminder_create",
+            kind: "reminderPreview",
+            state: "pending",
+            summary: Translation.tr("Reminder needs approval"),
+            data: { reminder: normalized.reminder }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function toolAlarmsList(call: var): var {
+        const alarms = root.timeIntegration.alarms();
+        return {
+            status: "success",
+            summary: alarms.length === 1 ? Translation.tr("1 active alarm") : Translation.tr("%1 active alarms").arg(alarms.length),
+            data: { alarms: alarms }
+        };
+    }
+
+    function toolCalendarListEvents(call: var): var {
+        const result = root.timeIntegration.calendarEvents(call.args);
+        if (result.error)
+            return {
+                status: "error",
+                summary: Translation.tr("That calendar date range is not valid"),
+                data: { error: result.error },
+                retryable: true
+            };
+        if (!result.available)
+            return {
+                status: "unavailable",
+                summary: Translation.tr("The khal calendar is not available"),
+                data: { events: [] },
+                retryable: false
+            };
+        return {
+            status: "success",
+            summary: result.events.length === 1 ? Translation.tr("1 calendar event") : Translation.tr("%1 calendar events").arg(result.events.length),
+            data: { events: result.events }
+        };
+    }
+
+    function toolWeatherGet(call: var): var {
+        return {
+            status: "success",
+            summary: Translation.tr("Weather read"),
+            data: root.timeIntegration.weather()
+        };
     }
 
     function toolSetShellConfig(call: var): var {
