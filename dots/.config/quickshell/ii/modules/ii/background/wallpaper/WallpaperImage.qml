@@ -49,14 +49,14 @@ Item {
     // never expose black screen edges at extreme workspace positions.
     readonly property real effectiveParallaxX: {
         if (videoEffectsDisabled || !overviewController.useWallpaperParallax)
-            return 0;
+            return wallpaperPlanes.centeredX;
         if (overviewController && overviewController.progress > 0.001)
             return parallaxX + (wallpaperPlanes.centeredX - parallaxX) * overviewController.progress;
         return parallaxX;
     }
     readonly property real effectiveParallaxY: {
         if (videoEffectsDisabled || !overviewController.useWallpaperParallax)
-            return 0;
+            return wallpaperPlanes.centeredY;
         if (overviewController && overviewController.progress > 0.001)
             return parallaxY + (wallpaperPlanes.centeredY - parallaxY) * overviewController.progress;
         return parallaxY;
@@ -331,8 +331,11 @@ Item {
                     },
                     Translate {
                         id: parallaxTranslate
-                        x: wallpaperImageRoot.overviewController.useWallpaperParallax ? wallpaperImageRoot.effectiveParallaxX : 0
-                        y: wallpaperImageRoot.overviewController.useWallpaperParallax ? wallpaperImageRoot.effectiveParallaxY : 0
+                        // effectiveParallaxX/Y already fall back to the centred offset when
+                        // parallax is disabled; the centring must never be dropped or the
+                        // overscanned wallpaper sits top-left and the lock zoom-out exposes it.
+                        x: wallpaperImageRoot.effectiveParallaxX
+                        y: wallpaperImageRoot.effectiveParallaxY
                         Behavior on x {
                             enabled: !wallpaperImageRoot.overviewAnimationVisible
                             NumberAnimation {
