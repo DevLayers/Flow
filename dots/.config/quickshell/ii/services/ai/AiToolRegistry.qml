@@ -857,6 +857,8 @@ Singleton {
         const online = context?.online !== false;
         if (!online && def.network === "required")
             return { available: false, reason: Translation.tr("Needs the network, which the current policy does not allow") };
+        if (context?.webMode === "off" && ["web_search", "fetch_url"].indexOf(def.id) >= 0)
+            return { available: false, reason: Translation.tr("Web access is turned off for this chat") };
         if (context?.localOnly === true && def.kind === "dangerous"
                 && !(Config.options?.ai?.tools?.allowShellInLocalPolicy ?? false))
             return { available: false, reason: Translation.tr("Shell commands stay off in local mode") };

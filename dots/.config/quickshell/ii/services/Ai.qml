@@ -698,6 +698,13 @@ Singleton {
     property list<string> sessionSearchQueries: []
     property var sessionSources: []
     property var sessionToolCheckpoints: []
+    // Web reads are short-lived and keyed by request shape. Keeping this in
+    // the facade avoids a second network request when the model asks to cite
+    // the same result immediately after a search, without persisting web
+    // content to disk.
+    property var webCache: ({})
+    readonly property int webCacheTtlMs: 120000
+    readonly property int webCacheMaxEntries: 32
 
     function recordToolCheckpoint(entry: var) {
         if (!entry || entry.serial === undefined)
@@ -759,6 +766,88 @@ Singleton {
             }));
             root.commitRunSession(targetSessionId, false);
         }
+    }
+
+    function webCacheKey(isSearch: bool, term: string, count: int): string {
+        return (isSearch ? "search:" : "fetch:") + String(term).trim().toLowerCase() + (isSearch ? `:${count}` : "");
+    }
+
+    function cacheWebPayload(key: string, payload: var): var {
+        const cached = Object.assign({}, payload, {
+            freshness: "cached",
+            cacheHit: true
+        });
+        if (Array.isArray(cached.results)) {
+            cached.results = cached.results.map(result => Object.assign({}, result, {
+                freshness: "cached",
+                cacheHit: true,
+                fetchedAt: result.fetchedAt ?? cached.fetchedAt
+            }));
+        }
+        const next = Object.assign({}, root.webCache, {
+            [key]: { createdAt: Date.now(), payload: cached }
+        });
+        const keys = Object.keys(next).sort((a, b) => next[a].createdAt - next[b].createdAt).slice(-root.webCacheMaxEntries);
+        const bounded = ({});
+        keys.forEach(entryKey => bounded[entryKey] = next[entryKey]);
+        root.webCache = bounded;
+        return cached;
+    }
+
+    function decorateWebPayload(payload: var, isSearch: bool): var {
+        const observedAt = new Date().toISOString();
+        const decorated = Object.assign({}, payload, {
+            source: String(payload?.source ?? payload?.engine ?? "web"),
+            fetchedAt: String(payload?.fetchedAt ?? observedAt),
+            freshness: String(payload?.freshness ?? "live"),
+            cacheHit: payload?.cacheHit === true
+        });
+        if (isSearch && Array.isArray(payload?.results)) {
+            decorated.results = payload.results.map(result => Object.assign({}, result, {
+                source: String(result?.source ?? payload?.engine ?? "web"),
+                fetchedAt: String(result?.fetchedAt ?? decorated.fetchedAt),
+                freshness: String(result?.freshness ?? decorated.freshness),
+                cacheHit: result?.cacheHit === true || decorated.cacheHit === true
+            }));
+        } else if (!isSearch) {
+            const url = String(payload?.url ?? "");
+            const hostMatch = url.match(/^[a-z]+:\/\/([^/]+)/i);
+            decorated.source = String(payload?.source ?? (hostMatch ? hostMatch[1] : "web"));
+        }
+        return decorated;
+    }
+
+    function freshWebCache(key: string): var {
+        const entry = root.webCache[String(key)];
+        if (!entry || Date.now() - Number(entry.createdAt ?? 0) > root.webCacheTtlMs)
+            return null;
+        return entry.payload ?? null;
+    }
+
+    function recordWebSources(payload: var): void {
+        if (!payload)
+            return;
+        const entries = Array.isArray(payload.results) ? payload.results : [payload];
+        const byUrl = ({});
+        Array.from(root.sessionSources ?? []).forEach(source => {
+            const url = String(source?.url ?? "");
+            if (url.length > 0)
+                byUrl[url] = source;
+        });
+        entries.forEach(source => {
+            const url = String(source?.url ?? "");
+            if (url.length === 0)
+                return;
+            byUrl[url] = {
+                url: url,
+                text: String(source.title ?? source.url ?? ""),
+                source: String(source.source ?? payload.source ?? payload.engine ?? "web"),
+                fetchedAt: String(source.fetchedAt ?? payload.fetchedAt ?? ""),
+                freshness: String(source.freshness ?? payload.freshness ?? "live"),
+                cacheHit: source.cacheHit === true || payload.cacheHit === true
+            };
+        });
+        root.sessionSources = Object.values(byUrl).slice(-100);
     }
 
     /**
@@ -1306,6 +1395,7 @@ Singleton {
         online: root.onlineAllowed
         // What the model itself can do. Null while nothing has been resolved,
         // which the registry reads as "do not gate on it".
+        webMode: root.webMode
         modelCapabilities: root.currentModelEntry ? ({
             tools: root.currentModelEntry.tools === true,
             vision: root.currentModelEntry.vision === true,
@@ -4188,6 +4278,13 @@ Singleton {
     }
 
     function toolWeb(call: var, isSearch: bool): var {
+        if (root.webMode === "off")
+            return {
+                status: "unavailable",
+                summary: Translation.tr("Web access is turned off for this chat."),
+                data: null,
+                retryable: false
+            };
         if (webToolProc.running)
             return {
                 status: "error",
@@ -4204,9 +4301,22 @@ Singleton {
                 retryable: true
             };
         const count = Math.max(1, Math.min(10, Number(call.args.count ?? 5)));
+        const cacheKey = root.webCacheKey(isSearch, term, count);
+        const cached = root.freshWebCache(cacheKey);
+        if (cached) {
+            if (isSearch)
+                call.message.searchQueries = [...Array.from(call.message.searchQueries ?? []), term];
+            root.recordWebSources(cached);
+            return {
+                status: "success",
+                summary: Translation.tr("Fresh result from the short web cache"),
+                data: JSON.stringify(cached)
+            };
+        }
         webToolProc.toolKey = call.key;
         webToolProc.isSearch = isSearch;
         webToolProc.term = term;
+        webToolProc.cacheKey = cacheKey;
         webToolProc.command = isSearch
             ? ["python3", Directories.aiWebScriptPath, "search", term, String(count)]
             : ["python3", Directories.aiWebScriptPath, "fetch", term];
@@ -4252,6 +4362,7 @@ Singleton {
         property string toolKey: ""
         property bool isSearch: false
         property string term: ""
+        property string cacheKey: ""
 
         stdout: StdioCollector {
             id: webToolCollector
@@ -4275,25 +4386,22 @@ Singleton {
                     });
                     return;
                 }
+                parsed = root.decorateWebPayload(parsed, webToolProc.isSearch);
+                parsed = root.cacheWebPayload(webToolProc.cacheKey, parsed);
+                root.recordWebSources(parsed);
                 if (webToolProc.isSearch) {
                     const results = Array.from(parsed.results ?? []);
-                    // Sources are recorded so the answer can cite them the way
-                    // a provider-side search does.
-                    root.sessionSources = [...root.sessionSources, ...results.map(result => ({
-                                    "url": String(result.url ?? ""),
-                                    "text": String(result.title ?? result.url ?? "")
-                                }))].slice(-100);
                     root.broker.settle(webToolProc.toolKey, {
                         status: "success",
                         summary: Translation.tr("%1 results from %2").arg(results.length).arg(parsed.engine ?? "web"),
-                        data: raw
+                        data: JSON.stringify(parsed)
                     });
                     return;
                 }
                 root.broker.settle(webToolProc.toolKey, {
                     status: "success",
                     summary: String(parsed.title ?? webToolProc.term),
-                    data: raw
+                    data: JSON.stringify(parsed)
                 });
             }
         }
