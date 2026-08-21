@@ -84,7 +84,7 @@ Item {
         "calendar_next_event": component_calendar_next_event,
         "calendar_pill": component_calendar_pill,
         "calendar_upcoming_3days": component_calendar_upcoming_3days,
-        "photo_default": component_photo_default,
+        "photo": component_photo,
         "photo_1x1": component_photo_1x1,
         "photo_weather_2x1": component_photo_weather_2x1,
         "photo_pill_2x1": component_photo_pill_2x1,
@@ -796,7 +796,7 @@ Item {
     }
 
     Component {
-        id: component_photo_default
+        id: component_photo
 
         PhotoWidget {
             screenWidth: delegateRoot.screenWidth

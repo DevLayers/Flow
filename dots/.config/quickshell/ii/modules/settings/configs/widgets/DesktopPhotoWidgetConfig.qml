@@ -11,7 +11,7 @@ ContentPage {
     forceWidth: false
 
     property string configEntryName: "photo"
-    property string widgetIdName: "photo_default"
+    property string widgetIdName: "photo"
     property string titleText: Translation.tr("Photo Widget Options")
 
     signal goBack
@@ -142,8 +142,9 @@ ContentPage {
                     return entry && entry.showOverlay !== undefined ? entry.showOverlay : true;
                 }
                 onCheckedChanged: {
+                    if (root.configEntryName === "photo") return;
                     let entry = Config.options.background.widgets[root.configEntryName];
-                    if (entry) {
+                    if (entry && entry.showOverlay !== undefined) {
                         entry.showOverlay = checked;
                     }
                 }

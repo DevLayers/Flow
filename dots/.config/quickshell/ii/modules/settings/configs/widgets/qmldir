@@ -1,5 +1,7 @@
 module qs.modules.settings.configs.widgets
 
+DesktopPhotoWidgetConfig 1.0 DesktopPhotoWidgetConfig.qml
+
 BatteryOverview 1.0 BatteryOverview.qml
 BatteryUsageChart 1.0 BatteryUsageChart.qml
 LauncherPreview 1.0 LauncherPreview.qml
