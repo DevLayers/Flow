@@ -3825,6 +3825,16 @@ Singleton {
         }
         const query = String(call.args.query ?? "").trim();
         const matches = root.settingsIntegration.search(query, Number(call.args.limit ?? 8));
+        if (matches.length > 0) {
+            root.addToolCard(call.message, {
+                callId: call.key,
+                tool: "settings_search",
+                kind: "settingsResults",
+                state: "done",
+                summary: matches.length === 1 ? Translation.tr("1 setting found") : Translation.tr("%1 settings found").arg(matches.length),
+                data: { matches: matches }
+            });
+        }
         return {
             status: "success",
             summary: matches.length === 1 ? Translation.tr("1 setting found") : Translation.tr("%1 settings found").arg(matches.length),

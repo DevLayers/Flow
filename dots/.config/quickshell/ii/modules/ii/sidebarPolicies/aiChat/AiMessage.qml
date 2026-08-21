@@ -828,6 +828,8 @@ Item {
                     switch (String(cardHost.card?.kind ?? "")) {
                     case "settingsDiff":
                         return settingsDiffCard;
+                    case "settingsResults":
+                        return settingsResultsCard;
                     case "memoryFact":
                         return memoryFactCard;
                     }
@@ -843,6 +845,25 @@ Item {
                     AiConfigDiffCard {
                         messageData: root.messageData
                         card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: settingsResultsCard
+
+                    ColumnLayout {
+                        spacing: Appearance.rounding.unsharpenmore
+
+                        Repeater {
+                            model: ScriptModel {
+                                values: Array.from(cardHost.card?.data?.matches ?? [])
+                            }
+
+                            delegate: AiSettingResultCard {
+                                required property var modelData
+                                setting: modelData
+                            }
+                        }
                     }
                 }
 

@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 AI = (ROOT / "services/Ai.qml").read_text(encoding="utf-8")
 REGISTRY = (ROOT / "services/ai/AiToolRegistry.qml").read_text(encoding="utf-8")
 INTEGRATION_PATH = ROOT / "services/ai/integrations/AiSettingsIntegration.qml"
+RESULT_CARD = ROOT / "services/ai/blocks/AiSettingResultCard.qml"
 
 
 class SemanticSettingsToolsTests(unittest.TestCase):
@@ -57,6 +58,23 @@ class SemanticSettingsToolsTests(unittest.TestCase):
         ):
             with self.subTest(token=token):
                 self.assertIn(token, AI)
+
+    def test_settings_search_surfaces_a_strictly_validated_direct_control(self):
+        self.assertTrue(RESULT_CARD.exists())
+        source = RESULT_CARD.read_text(encoding="utf-8")
+        for token in (
+            "Ai.settingsIntegration.validate(root.key, value)",
+            "Config.setNestedValue(root.key, value, true)",
+            "GlobalStates.openSettingsPage(",
+            "StyledSwitch",
+            "StyledSpinBox",
+            "StyledSlider",
+            "ConfigSelectionArray",
+            "MaterialTextField",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, source)
+        self.assertIn('kind: "settingsResults"', AI)
 
 
 if __name__ == "__main__":
