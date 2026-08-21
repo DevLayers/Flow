@@ -730,6 +730,40 @@ function routineTemplates() {
             triggers: [{ type: "game", when: "running" }],
             actions: [{ type: "powerProfile", value: "performance" }],
             cooldownSec: 0, notify: false, end: { revert: true, strict: false }
+        },
+        {
+            template: "quiet-in-calls", id: "quiet-in-calls", name: "Quiet while the mic is in use",
+            icon: "voice_chat", color: "teal", enabled: true, kind: "while", match: "any",
+            triggers: [{ type: "deviceInUse", what: "mic" }],
+            actions: [
+                { type: "dnd", value: true },
+                { type: "media", value: "pause" }
+            ],
+            cooldownSec: 0, notify: false, end: { revert: true, strict: false }
+        },
+        {
+            template: "lock-phone-away", id: "lock-phone-away", name: "Lock when the phone is out of reach",
+            icon: "phonelink_lock", color: "blue", enabled: true, kind: "once", match: "any",
+            triggers: [{ type: "phone", reachable: false, forSec: 120 }],
+            actions: [{ type: "lock", value: null }],
+            cooldownSec: 300, notify: true, end: { revert: false, strict: false }
+        },
+        {
+            template: "break-reminder", id: "break-reminder", name: "Break reminder after 50 min of Work",
+            icon: "self_improvement", color: "green", enabled: true, kind: "once", match: "any",
+            triggers: [{ type: "modeActive", id: "work", forSec: 3000 }],
+            actions: [{ type: "notify", value: { title: "Time for a break", body: "Work has been on for 50 minutes.", icon: "" } }],
+            cooldownSec: 0, notify: false, end: { revert: false, strict: false }
+        },
+        {
+            template: "suspend-locked-battery", id: "suspend-locked-battery", name: "Suspend when locked for 30 min on battery",
+            icon: "bedtime", color: "purple", enabled: true, kind: "once", match: "all",
+            triggers: [
+                { type: "locked", is: true, forSec: 1800 },
+                { type: "battery", pluggedIn: false }
+            ],
+            actions: [{ type: "suspend", value: null }],
+            cooldownSec: 600, notify: false, end: { revert: false, strict: false }
         }
     ];
 }
