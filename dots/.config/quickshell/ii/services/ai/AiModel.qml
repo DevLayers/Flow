@@ -67,6 +67,9 @@ QtObject {
     property bool thinkingAlwaysOn: false
     property bool attachments: false
     property bool vision: false
+    property bool embeddings: false
+    /** detected | knownCatalog | userOverride | unavailable */
+    property string capabilitySource: "knownCatalog"
     property bool tools: true
     property bool builtinSearch: false
     property bool samplingParams: true

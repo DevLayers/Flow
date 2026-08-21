@@ -24,11 +24,11 @@ QtObject {
     property Component modelComponent: AiModel {}
     property Component providerComponent: AiProvider {}
 
-    /** Model names reported by the local Ollama daemon. Set by the Ai service. */
+    /** Capability records reported by the local Ollama daemon. Set by Ai. */
     property var ollamaModelNames: []
 
     /** Keys accepted from a standalone `ai.customModels` entry. */
-    readonly property var customModelKeys: ["name", "title", "icon", "description", "homepage", "endpoint", "model", "value", "requires_key", "key_id", "key_get_link", "key_get_description", "api_format", "extraParams", "modelProvider", "thinking", "thinkingKind", "thinkingAlwaysOn", "quirks", "attachments", "vision", "tools", "builtinSearch", "samplingParams", "maxTemperature", "contextWindow", "maxOutput"]
+    readonly property var customModelKeys: ["name", "title", "icon", "description", "homepage", "endpoint", "model", "value", "requires_key", "key_id", "key_get_link", "key_get_description", "api_format", "extraParams", "modelProvider", "thinking", "thinkingKind", "thinkingAlwaysOn", "quirks", "attachments", "vision", "embeddings", "tools", "builtinSearch", "samplingParams", "maxTemperature", "contextWindow", "maxOutput", "capabilitySource"]
 
     readonly property var providerDefs: [
         {
@@ -400,7 +400,9 @@ QtObject {
         const toolsAllowed = Config.options?.ai?.tools?.localModels ?? false;
         const result = [];
         for (let i = 0; i < names.length; i++) {
-            const modelName = String(names[i] ?? "");
+            const discovered = typeof names[i] === "object" ? names[i] : { name: names[i] };
+            const modelName = String(discovered.name ?? "");
+            const capabilities = Array.from(discovered.capabilities ?? []);
             const baseName = modelName.split(":")[0].toLowerCase();
             // Ollama's native chat API is the only API that exposes the
             // separate `message.thinking` and `message.content` fields. The
@@ -408,7 +410,8 @@ QtObject {
             // trace in `reasoning_content`, leaving the final answer empty.
             // Keep discovered models on the native endpoint so thinking and
             // the answer arrive as two reliable streams.
-            const thinkingModel = /^(qwen3(?:\.5)?|deepseek-r1|deepseek-v3\.1|gpt-oss)/.test(baseName);
+            const detected = capabilities.length > 0;
+            const thinkingModel = capabilities.indexOf("thinking") >= 0;
             result.push({
                 value: modelName,
                 title: catalog.guessModelName(modelName),
@@ -422,7 +425,12 @@ QtObject {
                 },
                 thinking: thinkingModel,
                 thinkingKind: thinkingModel ? "ollama" : "",
-                tools: toolsAllowed
+                tools: detected ? capabilities.indexOf("tools") >= 0 : toolsAllowed,
+                vision: capabilities.indexOf("vision") >= 0,
+                attachments: capabilities.indexOf("vision") >= 0,
+                embeddings: capabilities.indexOf("embedding") >= 0,
+                contextWindow: Number(discovered.context_length ?? 0),
+                capabilitySource: detected ? "detected" : "userOverride"
             });
         }
         return result;
@@ -526,6 +534,8 @@ QtObject {
             thinkingAlwaysOn: pick("thinkingAlwaysOn", false),
             attachments: pick("attachments", false),
             vision: pick("vision", false),
+            embeddings: pick("embeddings", false),
+            capabilitySource: pick("capabilitySource", "knownCatalog"),
             tools: pick("tools", true),
             builtinSearch: pick("builtinSearch", false),
             samplingParams: pick("samplingParams", true),

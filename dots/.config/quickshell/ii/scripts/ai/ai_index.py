@@ -25,6 +25,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 
@@ -41,11 +42,31 @@ def list_files(directory: str, suffixes: tuple[str, ...]) -> list[str]:
     return out
 
 
-def list_ollama_models() -> list[str]:
+def list_ollama_models() -> list[dict]:
     # Heuristic: only try to invoke ollama if the binary exists AND ollama
     # is reachable. The CLI blocks for several seconds when the daemon is
     # down (no — it errors immediately), but the spawn-test keeps the
     # logic cheap and avoids polluting stderr.
+    try:
+        # /api/tags is the capability source of truth. Unlike `ollama list`,
+        # it tells the UI which local models actually support tools, vision,
+        # thinking and their real context window.
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        models = []
+        for model in payload.get("models", []):
+            if not isinstance(model, dict) or not model.get("name"):
+                continue
+            details = model.get("details") if isinstance(model.get("details"), dict) else {}
+            models.append({
+                "name": str(model["name"]),
+                "capabilities": [str(capability) for capability in model.get("capabilities", [])],
+                "context_length": int(details.get("context_length") or 0),
+                "digest": str(model.get("digest") or ""),
+            })
+        return models
+    except (urllib.error.URLError, ValueError, OSError):
+        pass
     try:
         probe = subprocess.run(
             ["pgrep", "-x", "ollama"],
@@ -70,7 +91,7 @@ def list_ollama_models() -> list[str]:
         # Drop the header row.
         if lines and lines[0].lower().startswith("name"):
             lines = lines[1:]
-        models: list[str] = []
+        models: list[dict] = []
         for line in lines:
             line = line.strip()
             if not line:
@@ -79,7 +100,11 @@ def list_ollama_models() -> list[str]:
             # is the model name (tag included).
             name = line.split()[0]
             if name:
-                models.append(name)
+                # Old Ollama has no capabilities in /api/tags. Preserve the
+                # model but mark the absence, so the manual override is only
+                # offered for this case rather than pretending every model can
+                # use tools.
+                models.append({"name": name, "capabilities": [], "context_length": 0, "digest": ""})
         return models
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return []
