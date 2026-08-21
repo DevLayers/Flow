@@ -131,6 +131,14 @@ Singleton {
             "aliases": ["System Overlays", "Media overlay", "Game overlay"]
         },
         {
+            "id": "modes",
+            "name": "Modes & Routines",
+            "icon": "tune",
+            "component": "modules/settings/configs/ModesConfig.qml",
+            "subPages": [],
+            "aliases": ["Modes", "Routines", "Automation", "Game detection", "Focus mode", "Do not disturb", "Gaming mode", "Activity log"]
+        },
+        {
             "id": "screenCapture",
             "name": "Screenshots & Recording",
             "icon": "screenshot_region",
@@ -342,7 +350,7 @@ Singleton {
         {
             "id": "tools",
             "name": "Tools",
-            "pageIds": ["launcher", "clipboard", "screenCapture", "notifications", "overlays", "cheatSheet"]
+            "pageIds": ["launcher", "clipboard", "screenCapture", "notifications", "overlays", "modes", "cheatSheet"]
         },
         {
             "id": "servicesIntegrations",

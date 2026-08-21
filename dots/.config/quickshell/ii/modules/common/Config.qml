@@ -304,7 +304,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 6
+    readonly property int currentConfigVersion: 7
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -427,6 +427,25 @@ Singleton {
             });
             android.layoutVersion = 2;
             console.log("[Config] Migrated sidebar.quickToggles.android to canonical layout records");
+        }
+
+        // v6 -> v7: the bar gained the Modes & Routines indicator. It hides
+        // itself while no mode is active, so appending it to an existing
+        // layout changes nothing visible until a mode starts.
+        if (from < 7 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
+                && typeof raw.bar.layouts === "object") {
+            const layouts = raw.bar.layouts;
+            const sections = ["left", "center", "right"];
+            const present = sections.some(k => Array.isArray(layouts[k])
+                && layouts[k].some(e => e && e.id === "mode_indicator"));
+            if (!present) {
+                if (!Array.isArray(layouts.left))
+                    layouts.left = [];
+                const after = layouts.left.findIndex(e => e && e.id === "record_indicator");
+                const entry = { "centered": false, "id": "mode_indicator", "visible": false };
+                layouts.left.splice(after === -1 ? layouts.left.length : after + 1, 0, entry);
+                console.log("[Config] Migrated bar layout: added mode_indicator");
+            }
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -1217,6 +1236,40 @@ Singleton {
                 // Apps under this many seconds for the chosen metric are left out of
                 // the list. Duration metrics only; energy is never thresholded.
                 property int minDurationSec: 0
+            }
+
+            // Modes & Routines (services/Modes.qml). Definitions are user data
+            // but live here on purpose so one file carries the whole setup.
+            property JsonObject modes: JsonObject {
+                property bool enable: true
+                property bool overlayEnabled: true
+                // Presets are added once; deleting one afterwards sticks.
+                property bool presetsSeeded: false
+                // "auto" shows the start/end banner in the island or, without
+                // a notch, as a top-centre popup; "off" shows nothing.
+                property string flash: "auto"
+                property bool lockPill: true
+                // What the overlay reopens on.
+                property string lastTab: "modes"
+                property string lastModeId: ""
+                property string lastRoutineId: ""
+                // Seconds an auto-started mode's triggers must stay false
+                // before it ends, so a workspace switch does not flap it.
+                property int graceSec: 20
+                // Mode definitions, in priority order (first wins among
+                // automatic starts). Shape: see services/modes/ModeSchema.js.
+                property list<var> modes: []
+                property list<var> routines: []
+                // Game detection (services/GameDetector.qml). Signals 1–3 are
+                // instant; the GPU heuristic needs `gpuThreshold` % for `holdSec`.
+                property JsonObject game: JsonObject {
+                    property bool useLauncherClasses: true
+                    property bool useDesktopCategory: true
+                    property bool useGpuHeuristic: true
+                    property int gpuThreshold: 45
+                    property int holdSec: 20
+                    property list<string> extraClasses: []
+                }
             }
 
             property list<var> bluetoothDeviceImages: []
@@ -2376,6 +2429,11 @@ Singleton {
                             {
                                 "centered": false,
                                 "id": "record_indicator",
+                                "visible": false
+                            },
+                            {
+                                "centered": false,
+                                "id": "mode_indicator",
                                 "visible": false
                             }
                     ]

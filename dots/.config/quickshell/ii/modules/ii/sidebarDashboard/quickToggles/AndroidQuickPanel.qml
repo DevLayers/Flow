@@ -295,6 +295,7 @@ AbstractQuickPanel {
                     onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                     onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                     onOpenScreenShaderDialog: root.openScreenShaderDialog()
+                    onOpenModesDialog: root.openModesDialog()
                 }
             }
         }
@@ -432,6 +433,7 @@ AbstractQuickPanel {
                                             onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                                             onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                                             onOpenScreenShaderDialog: root.openScreenShaderDialog()
+                                            onOpenModesDialog: root.openModesDialog()
                                         }
                                     }
                                 }
@@ -662,6 +664,7 @@ AbstractQuickPanel {
                         onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                         onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                         onOpenScreenShaderDialog: root.openScreenShaderDialog()
+                        onOpenModesDialog: root.openModesDialog()
                     }
                 }
             }

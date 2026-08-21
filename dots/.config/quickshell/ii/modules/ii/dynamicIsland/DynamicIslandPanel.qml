@@ -450,6 +450,13 @@ Scope {
         onTriggered: root.keyboardNotifActive = false
     }
 
+    // Mode start/end banner: the engine holds the flag for its flash window.
+    readonly property bool modeNotifActive: GlobalStates.modeFlashActive && GlobalStates.modeFlashPayload !== null
+    onModeNotifActiveChanged: {
+        if (modeNotifActive)
+            root.revealForActivity(3000);
+    }
+
     // Workspaces transition notification status
     onActiveWsIdChanged: {
         if (prevWsId !== -1 && activeWsId !== -1 && prevWsId !== activeWsId && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableWorkspaces) {
@@ -536,6 +543,16 @@ Scope {
                 expandedH: 140,
                 contractedW: 44 + 16 + (70 * HyprlandXkb.layoutCodes.length) + (4 * (HyprlandXkb.layoutCodes.length - 1)) + 24,
                 expandedW: 44 + 16 + (70 * HyprlandXkb.layoutCodes.length) + (4 * (HyprlandXkb.layoutCodes.length - 1)) + 24
+            };
+        }
+        if (type === "mode") {
+            return {
+                type: "mode",
+                source: "widgets/FloatingNotchMode.qml",
+                contractedH: Config.options.bar.floatingNotch.heightKeyboard,
+                expandedH: 140,
+                contractedW: 300,
+                expandedW: 320
             };
         }
         if (type === "wifi") {
@@ -708,6 +725,8 @@ Scope {
             list.push(getWidgetDetails("workspaces"));
         if (keyboardNotifActive && !Config.options.bar.floatingNotch.disableKeyboard)
             list.push(getWidgetDetails("keyboard"));
+        if (modeNotifActive)
+            list.push(getWidgetDetails("mode"));
         if (wifiNotifActive && !Config.options.bar.floatingNotch.disableWifi)
             list.push(getWidgetDetails("wifi"));
         if (GlobalStates.floatingNotchBtNotifActive && !Config.options.bar.floatingNotch.disableBluetooth)
@@ -874,7 +893,7 @@ Scope {
 
     // Priority-sorted list of modes for accordion direction (Feature 13)
     readonly property bool isPrioritySwapUpward: {
-        const priorities = ["osd", "notification", "localsend", "progress", "clipboard", "workspaces", "keyboard", "wifi", "bluetooth", "stopwatch", "pomodoro", "recording", "media", "calendar", "checklist", "audio", "home"];
+        const priorities = ["osd", "notification", "localsend", "progress", "clipboard", "workspaces", "keyboard", "mode", "wifi", "bluetooth", "stopwatch", "pomodoro", "recording", "media", "calendar", "checklist", "audio", "home"];
         const oldIdx = priorities.indexOf(root.previousWidgetType);
         const newIdx = priorities.indexOf(root.currentWidgetType);
         return oldIdx !== -1 && newIdx !== -1 && newIdx < oldIdx;

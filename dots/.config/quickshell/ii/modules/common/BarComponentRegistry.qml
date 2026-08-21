@@ -156,6 +156,12 @@ Singleton {
             pageId: "devicesPhone"
         },
         {
+            id: "mode_indicator",
+            icon: "tune",
+            title: "Mode indicator",
+            configPage: "IndicatorsConfig.qml"
+        },
+        {
             id: "date",
             icon: "date_range",
             title: "Date",

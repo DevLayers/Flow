@@ -36,6 +36,8 @@ import qs.modules.ii.keyboardLayoutTransitionPopup
 import qs.modules.ii.topLayer
 import qs.modules.ii.tilingAssistant
 import qs.modules.ii.usage
+import qs.modules.ii.modes
+import qs.modules.ii.modeFlashPopup
 import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
@@ -73,6 +75,16 @@ Scope {
     PanelLoader {
         extraCondition: Config.options.appStats.overlayEnabled
         component: Usage {}
+    }
+    PanelLoader {
+        extraCondition: Config.options.modes.overlayEnabled
+        component: ModesOverlay {}
+    }
+    // The mode start/end banner; the dynamic island draws it when a notch is on.
+    PanelLoader {
+        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+            && !Config.options.bar.floatingNotch.centerInBar
+        component: ModeFlashPopup {}
     }
     PanelLoader {
         extraCondition: Config.options.dock.enable
