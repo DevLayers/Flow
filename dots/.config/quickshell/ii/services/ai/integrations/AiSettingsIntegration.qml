@@ -90,7 +90,8 @@ QtObject {
             const label = String(entry.label ?? "").toLocaleLowerCase();
             const localLabel = String(entry.labelLocalized ?? "").toLocaleLowerCase();
             const key = String(entry.key ?? "").toLocaleLowerCase();
-            const lastKey = key.split(".").at(-1) ?? "";
+            const keyParts = key.split(".");
+            const lastKey = keyParts.length > 0 ? keyParts[keyParts.length - 1] : "";
             const description = `${entry.description ?? ""} ${entry.descriptionLocalized ?? ""}`.toLocaleLowerCase();
             const navigation = `${Array.from(entry.aliases ?? []).join(" ")} ${entry.pageName ?? ""} ${entry.sectionTitle ?? ""} ${entry.sectionTitleLocalized ?? ""}`.toLocaleLowerCase();
             const keywords = Array.from(entry.keywords ?? []).map(word => String(word).toLocaleLowerCase());

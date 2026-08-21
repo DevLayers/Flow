@@ -32,6 +32,7 @@ class SemanticSettingsToolsTests(unittest.TestCase):
         ):
             with self.subTest(token=token):
                 self.assertIn(token, source)
+        self.assertNotIn(".at(", source)
 
     def test_registry_exposes_only_the_semantic_settings_schema(self):
         for tool in (
