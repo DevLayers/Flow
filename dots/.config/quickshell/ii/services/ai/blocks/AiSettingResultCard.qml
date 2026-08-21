@@ -24,6 +24,11 @@ Rectangle {
     // calmer layer card. Keep both surfaces in this shared control without
     // giving the launcher an unframed, visually floating result.
     property bool launcherStyle: false
+    // SearchItem's grouped radius is based on these ListView positions. The
+    // card is also used in chat, where they intentionally remain unset.
+    property int listIndex: -1
+    property int listCount: 0
+    property int listCurrentIndex: -1
     property var currentValue: root.readCurrentValue()
     property string writeError: ""
 
@@ -36,6 +41,21 @@ Rectangle {
             }))
     readonly property bool hasRange: root.range?.from !== undefined && root.range?.from !== null
         && root.range?.to !== undefined && root.range?.to !== null
+    readonly property bool isFirst: root.listIndex === 0 && root.listCount > 0
+    readonly property bool isLast: root.listIndex >= 0 && root.listIndex === root.listCount - 1
+    readonly property bool isSelected: root.listIndex >= 0 && root.listIndex === root.listCurrentIndex
+    readonly property bool isAboveSelected: root.listIndex >= 0 && root.listCurrentIndex === root.listIndex + 1
+    readonly property bool isBelowSelected: root.listIndex >= 0 && root.listCurrentIndex === root.listIndex - 1
+    readonly property real pillRadius: Math.min(root.height / 2, Appearance.rounding.large)
+    readonly property bool supportsHorizontalNavigation: root.settingType === "bool"
+        || root.settingType === "int"
+        || root.settingType === "real"
+        || (root.settingType === "enum" && root.enumOptions.length > 0)
+    readonly property color foregroundColor: root.launcherStyle && root.isSelected
+        ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+    readonly property color secondaryColor: root.launcherStyle && root.isSelected
+        ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+    readonly property bool isHovered: cardHover.hovered
     readonly property string displayLabel: String(root.setting?.labelLocalized ?? root.setting?.label ?? root.key)
     readonly property string sectionPath: [
         root.setting?.pageNameLocalized ?? root.setting?.pageName ?? "",
@@ -66,11 +86,87 @@ Rectangle {
         }
     }
 
+    function numericStep(): real {
+        const configured = Number(root.range?.step ?? 0);
+        if (isFinite(configured) && configured > 0)
+            return configured;
+        if (root.settingType === "real" && root.hasRange) {
+            const span = Math.abs(Number(root.range.to) - Number(root.range.from));
+            if (isFinite(span) && span > 0)
+                return span / 100;
+        }
+        return 1;
+    }
+
+    function boundedNumericValue(value: real): real {
+        let result = Number(value);
+        if (!isFinite(result))
+            result = Number(root.currentValue ?? 0);
+        if (root.hasRange)
+            result = Math.max(Number(root.range.from), Math.min(Number(root.range.to), result));
+        return root.settingType === "int" ? Math.round(result) : result;
+    }
+
+    /** Applies one horizontal keyboard move without giving the control focus. */
+    function adjustBy(direction: int): bool {
+        const stepDirection = direction < 0 ? -1 : (direction > 0 ? 1 : 0);
+        if (stepDirection === 0)
+            return false;
+
+        if (root.settingType === "bool") {
+            const wanted = stepDirection > 0;
+            return Boolean(root.currentValue) === wanted ? false : root.writeValue(wanted);
+        }
+
+        if (root.settingType === "int" || root.settingType === "real") {
+            const next = root.boundedNumericValue(Number(root.currentValue ?? 0) + root.numericStep() * stepDirection);
+            return Number(root.currentValue) === next ? false : root.writeValue(next);
+        }
+
+        if (root.settingType === "enum" && root.enumOptions.length > 0) {
+            let index = root.enumOptions.findIndex(option => option.value === root.currentValue);
+            if (index < 0)
+                index = stepDirection > 0 ? -1 : root.enumOptions.length;
+            const nextIndex = Math.max(0, Math.min(root.enumOptions.length - 1, index + stepDirection));
+            return nextIndex === index ? false : root.writeValue(root.enumOptions[nextIndex].value);
+        }
+
+        return false;
+    }
+
     function openInSettings() {
         GlobalStates.openSettingsPage(
                     String(root.setting?.pageId ?? ""),
                     String(root.setting?.subPage ?? ""),
                     String(root.setting?.sectionTitleLocalized ?? root.setting?.sectionTitle ?? ""));
+    }
+
+    /**
+     * The action for Enter on a selected launcher result. Toggles change in
+     * place; a text field takes keyboard focus; the remaining controls are
+     * adjusted with Left/Right and open their source on Enter.
+     */
+    function activate(): bool {
+        if (root.settingType === "bool")
+            return root.writeValue(!Boolean(root.currentValue));
+        if (root.settingType === "string" && controlLoader.item) {
+            controlLoader.item.forceActiveFocus();
+            return true;
+        }
+        root.openInSettings();
+        return true;
+    }
+
+    function clicked(): bool {
+        return root.activate();
+    }
+
+    function navigateLeft(): bool {
+        return root.adjustBy(-1);
+    }
+
+    function navigateRight(): bool {
+        return root.adjustBy(1);
     }
 
     function explain() {
@@ -82,7 +178,45 @@ Rectangle {
     Layout.fillWidth: true
     implicitHeight: cardColumn.implicitHeight + (root.compact ? 16 : 20)
     radius: Appearance.rounding.normal
-    color: root.launcherStyle ? Appearance.colors.colSurfaceContainerHigh : Appearance.colors.colLayer2
+    topLeftRadius: root.launcherStyle
+        ? (root.isFirst ? Appearance.rounding.large : (root.isSelected || root.isBelowSelected ? root.pillRadius : Appearance.rounding.small))
+        : Appearance.rounding.normal
+    topRightRadius: root.topLeftRadius
+    bottomLeftRadius: root.launcherStyle
+        ? (root.isLast ? Appearance.rounding.large : (root.isSelected || root.isAboveSelected ? root.pillRadius : Appearance.rounding.small))
+        : Appearance.rounding.normal
+    bottomRightRadius: root.bottomLeftRadius
+    color: root.launcherStyle
+        ? (root.isSelected ? Appearance.colors.colPrimary : (root.isHovered ? Appearance.colors.colSurfaceContainerHighHover : Appearance.colors.colSurfaceContainerHigh))
+        : Appearance.colors.colLayer2
+
+    // The full card gets a neutral surface hover. Its state must stay
+    // separate from a checked switch, which uses the primary color.
+    HoverHandler {
+        id: cardHover
+    }
+
+    Behavior on topLeftRadius {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+
+    Behavior on bottomLeftRadius {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+
+    Behavior on color {
+        ColorAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+        }
+    }
 
     ColumnLayout {
         id: cardColumn
@@ -98,7 +232,7 @@ Rectangle {
                 Layout.alignment: Qt.AlignTop
                 text: String(root.setting?.icon ?? "tune")
                 iconSize: Appearance.font.pixelSize.normal
-                color: Appearance.colors.colOnLayer2
+                color: root.foregroundColor
             }
 
             ColumnLayout {
@@ -110,7 +244,7 @@ Rectangle {
                     text: root.displayLabel
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnLayer2
+                    color: root.foregroundColor
                 }
 
                 StyledText {
@@ -119,7 +253,8 @@ Rectangle {
                     text: root.sectionPath
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colSubtext
+                    color: root.secondaryColor
+                    opacity: root.launcherStyle && root.isSelected ? 0.78 : 1
                 }
             }
 
@@ -127,9 +262,9 @@ Rectangle {
                 implicitWidth: 34
                 implicitHeight: 32
                 buttonRadius: Appearance.rounding.full
-                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colRipple: Appearance.colors.colLayer2Active
+                colBackground: ColorUtils.transparentize(root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colLayer2, 1)
+                colBackgroundHover: root.isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
+                colRipple: root.isSelected ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer2Active
                 onClicked: root.openInSettings()
 
                 Accessible.name: Translation.tr("Open in Settings")
@@ -137,7 +272,7 @@ Rectangle {
                 contentItem: MaterialSymbol {
                     text: "open_in_new"
                     iconSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnLayer2
+                    color: root.foregroundColor
                 }
 
                 StyledToolTip { text: Translation.tr("Open in Settings") }

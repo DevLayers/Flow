@@ -24,6 +24,13 @@ RowLayout {
     property bool isMediaDownloaderPanelFocused: false
     property bool isMaterialSymbolsPanelFocused: false
     property bool showSuggestionsPanel: false
+    readonly property bool selectedResultSupportsHorizontalNavigation: {
+        const results = LauncherSearch.results;
+        if (root.currentResultIndex < 0 || root.currentResultIndex >= results.length)
+            return false;
+        const type = String(results[root.currentResultIndex]?.settingRef?.type ?? "");
+        return type === "bool" || type === "int" || type === "real" || type === "enum";
+    }
     // True while the overview search widget is in AI chat mode — the field
     // becomes the chat composer.
     property bool aiModeActive: false
@@ -374,6 +381,16 @@ RowLayout {
                 return;
             } else if (event.key === Qt.Key_Down) {
                 root.navigateDown();
+                event.accepted = true;
+                return;
+            }
+            if (root.selectedResultSupportsHorizontalNavigation && event.key === Qt.Key_Left) {
+                root.navigateLeft();
+                event.accepted = true;
+                return;
+            }
+            if (root.selectedResultSupportsHorizontalNavigation && event.key === Qt.Key_Right) {
+                root.navigateRight();
                 event.accepted = true;
                 return;
             }

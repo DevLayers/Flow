@@ -40,6 +40,9 @@ Item {
     readonly property bool showSkeletons: false
 
     property int loadedResultsCount: 50
+    // Left/Right stays available to edit the query unless the selected row is
+    // one of the Settings controls that can consume a horizontal adjustment.
+    property bool selectedResultHandlesHorizontalNavigation: false
 
     function getFilteredResultsCount() {
         const results = LauncherSearch.results;
@@ -312,6 +315,29 @@ Item {
             return;
         }
         searchBar.forceFocus();
+    }
+
+    function selectedResultRow(): var {
+        if (appResults.currentIndex < 0 || appResults.currentIndex >= appResults.count)
+            return null;
+        const delegate = appResults.itemAtIndex(appResults.currentIndex);
+        return delegate?.item ?? delegate ?? null;
+    }
+
+    function refreshSelectedResultNavigation() {
+        const row = root.selectedResultRow();
+        root.selectedResultHandlesHorizontalNavigation = row?.supportsHorizontalNavigation === true;
+    }
+
+    function navigateSelectedResult(direction: string): bool {
+        const row = root.selectedResultRow();
+        if (!row)
+            return false;
+        if (direction === "left" && typeof row.navigateLeft === "function")
+            return row.navigateLeft();
+        if (direction === "right" && typeof row.navigateRight === "function")
+            return row.navigateRight();
+        return false;
     }
 
     function continueInSidebar() {
@@ -889,6 +915,8 @@ Item {
                         mediaDownloaderPanelLoader.item.navigateLeft();
                     else if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item)
                         materialSymbolsPanelLoader.item.navigateLeft();
+                    else if (root.selectedResultHandlesHorizontalNavigation)
+                        root.navigateSelectedResult("left");
                 }
 
                 onNavigateRight: {
@@ -902,6 +930,8 @@ Item {
                         mediaDownloaderPanelLoader.item.navigateRight();
                     else if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item)
                         materialSymbolsPanelLoader.item.navigateRight();
+                    else if (root.selectedResultHandlesHorizontalNavigation)
+                        root.navigateSelectedResult("right");
                 }
 
                 onActivate: {
@@ -1117,6 +1147,7 @@ Item {
                             ? resultModel.get(currentIndex)?.modelRef ?? null
                             : null;
                         LauncherSearch.selectedResult = selected;
+                        root.refreshSelectedResultNavigation();
                         if (currentIndex >= count - 5 && count < root.getFilteredResultsCount()) {
                             root.loadMoreResults();
                         }
@@ -1244,6 +1275,7 @@ Item {
                         width: appResults.width
                         height: item ? item.implicitHeight : 0
                         sourceComponent: resultDelegate.modelData.modelRef?.settingRef ? settingResultCard : normalSearchItem
+                        onLoaded: root.refreshSelectedResultNavigation()
 
                         // Animate y when ListView repositions this delegate (via move/displaced)
                         Behavior on y {
@@ -1263,6 +1295,23 @@ Item {
                             // back to full width after its x inset is applied.
                             Item {
                                 implicitHeight: settingCardItem.implicitHeight
+                                readonly property bool supportsHorizontalNavigation: settingCardItem.supportsHorizontalNavigation
+
+                                function activate(): bool {
+                                    return settingCardItem.activate();
+                                }
+
+                                function clicked(): bool {
+                                    return settingCardItem.clicked();
+                                }
+
+                                function navigateLeft(): bool {
+                                    return settingCardItem.navigateLeft();
+                                }
+
+                                function navigateRight(): bool {
+                                    return settingCardItem.navigateRight();
+                                }
 
                                 AiSettingResultCard {
                                     id: settingCardItem
@@ -1273,6 +1322,9 @@ Item {
                                     setting: resultDelegate.modelData.modelRef.settingRef
                                     compact: true
                                     launcherStyle: true
+                                    listIndex: resultDelegate.index
+                                    listCount: appResults.count
+                                    listCurrentIndex: appResults.currentIndex
                                 }
                             }
                         }
