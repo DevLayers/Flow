@@ -47,11 +47,29 @@ Rectangle {
 
     implicitHeight: column.implicitHeight + 16
     radius: Appearance.rounding.normal
-    color: Appearance.colors.colLayer2
+    color: headerArea.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
     clip: true
 
     Behavior on implicitHeight {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
+
+    Behavior on color {
+        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+    }
+
+    // The header is the unfold button too: a click on it, outside the
+    // controls, folds the form open or shut.
+    MouseArea {
+        id: headerArea
+        anchors {
+            left: parent.left
+            right: parent.right
+            top: parent.top
+        }
+        height: header.height + 16
+        hoverEnabled: true
+        onClicked: root.expanded = !root.expanded
     }
 
     ColumnLayout {
@@ -67,6 +85,7 @@ Rectangle {
         spacing: 8
 
         RowLayout {
+            id: header
             Layout.fillWidth: true
             spacing: 12
 
@@ -243,11 +262,17 @@ Rectangle {
                 }
             }
 
-            DurationField {
-                visible: root.forSec > 0
-                seconds: root.forSec
-                minimum: 1
-                onCommitted: sec => root.set({ forSec: sec })
+            // Created on demand: a field built while hidden measures its
+            // unit strip at zero width and keeps it.
+            Loader {
+                active: root.forSec > 0
+                visible: active
+
+                sourceComponent: DurationField {
+                    seconds: root.forSec
+                    minimum: 1
+                    onCommitted: sec => root.set({ forSec: sec })
+                }
             }
         }
     }

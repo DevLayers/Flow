@@ -29,10 +29,21 @@ RowLayout {
         return "s";
     }
 
+    // StyledSpinBox writes its own `value` back from the text field as
+    // soon as it exists, which drops any binding on it: the number (and
+    // the range it has to fit) is pushed in by hand instead.
+    function syncValue() {
+        spin.to = root.maximumHours * 3600 / root.factor;
+        spin.value = Math.round(root.seconds / root.factor);
+    }
+
     onSecondsChanged: {
         if (!spin.activeFocus)
             root.unit = root.unitFor(root.seconds);
+        root.syncValue();
     }
+    onFactorChanged: root.syncValue()
+    Component.onCompleted: root.syncValue()
 
     spacing: 8
 
@@ -42,8 +53,6 @@ RowLayout {
         // the row height); the buttons sit beside the value here.
         implicitHeight: baseHeight
         from: root.minimum
-        to: root.maximumHours * 3600 / root.factor
-        value: Math.round(root.seconds / root.factor)
         onValueModified: root.committed(value * root.factor)
     }
 

@@ -104,12 +104,16 @@ Rectangle {
 
     implicitHeight: column.implicitHeight + 16
     radius: Appearance.rounding.normal
-    color: Appearance.colors.colLayer2
+    color: headerArea.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
     clip: true
     opacity: root.hidden ? 0 : 1
 
     Behavior on implicitHeight {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
+
+    Behavior on color {
+        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }
 
     // Hover only: lights the handle up; clicks go through to the controls.
@@ -118,6 +122,21 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.NoButton
+    }
+
+    // The header is the unfold button too: a click on it, outside the
+    // controls, folds the form open or shut.
+    MouseArea {
+        id: headerArea
+        anchors {
+            left: parent.left
+            right: parent.right
+            top: parent.top
+        }
+        height: header.height + 16
+        enabled: !root.isWait
+        hoverEnabled: true
+        onClicked: root.expanded = !root.expanded
     }
 
     ColumnLayout {
@@ -133,6 +152,7 @@ Rectangle {
         spacing: 8
 
         RowLayout {
+            id: header
             Layout.fillWidth: true
             spacing: 12
 
@@ -184,6 +204,10 @@ Rectangle {
                     spacing: 8
 
                     StyledText {
+                        // Shrinks (elides) when the row is tight, never grows
+                        // past its text, so the pills stay next to it.
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: implicitWidth
                         text: root.entry?.label ?? root.type
                         elide: Text.ElideRight
                         color: root.available ? Appearance.colors.colOnLayer2 : Appearance.colors.colSubtext
@@ -274,6 +298,13 @@ Rectangle {
                                 color: Appearance.colors.colOnErrorContainer
                             }
                         }
+                    }
+
+                    // A nested row is only as wide as its children unless
+                    // one of them can grow: this one pushes the controls
+                    // to the right edge.
+                    Item {
+                        Layout.fillWidth: true
                     }
                 }
 
@@ -429,11 +460,17 @@ Rectangle {
                 }
             }
 
-            DurationField {
-                visible: root.delaySec > 0
-                seconds: root.delaySec
-                minimum: 1
-                onCommitted: sec => root.setDelay(sec)
+            // Created on demand: a field built while hidden measures its
+            // unit strip at zero width and keeps it.
+            Loader {
+                active: root.delaySec > 0
+                visible: active
+
+                sourceComponent: DurationField {
+                    seconds: root.delaySec
+                    minimum: 1
+                    onCommitted: sec => root.setDelay(sec)
+                }
             }
         }
     }
