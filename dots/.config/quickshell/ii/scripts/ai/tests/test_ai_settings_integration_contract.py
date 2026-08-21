@@ -79,6 +79,11 @@ class SemanticSettingsToolsTests(unittest.TestCase):
                 self.assertIn(token, source)
         self.assertIn('kind: "settingsResults"', AI)
 
+    def test_setting_result_card_can_open_its_settings_deep_link(self):
+        source = RESULT_CARD.read_text(encoding="utf-8")
+        self.assertIn("import qs\n", source)
+        self.assertIn("GlobalStates.openSettingsPage(", source)
+
     def test_overview_launcher_reuses_the_generated_settings_index_and_card(self):
         for token in (
             "Ai.settingsIntegration.ready",
