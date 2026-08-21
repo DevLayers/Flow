@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
+import qs
 import qs.services
 import qs.modules.common
 
@@ -24,6 +25,10 @@ Singleton {
     readonly property var opts: Config.options.bar.workspaces
     readonly property bool enabled: Config.ready && (root.opts.autoCompact ?? false)
     readonly property string binaryPath: `${Directories.scriptPath}/hyprland/workspace_compactor`
+
+    // Lock.qml parks every monitor on a temporary workspace with an id far above this while the
+    // screen is locked (and sweeps anything it finds up there back down on unlock).
+    readonly property int lockWorkspaceMin: 10000
 
     // A gap on the current workspace is waiting for the user to switch away.
     property bool pending: false
@@ -52,6 +57,11 @@ Singleton {
     // everything from Hyprland itself and exits early when the block is already gapless.
     function fire() {
         if (!root.enabled) return;
+        // The lock screen owns the workspace layout from lock until its unlock restore batch
+        // has landed: compacting then would be measured against the temporary lock workspace.
+        // A pending gap survives this and is re-evaluated on the next event.
+        if (GlobalStates.screenLocked || GlobalStates.workspaceRestoreInProgress) return;
+        if ((HyprlandData.activeWorkspace?.id ?? 0) >= root.lockWorkspaceMin) return;
         if (compactProc.running) {
             debounce.restart();
             return;

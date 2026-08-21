@@ -10,6 +10,9 @@ use std::env;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 
+/// Must match `lockWorkspaceMin` in `services/WorkspaceCompactor.qml`.
+const LOCK_WORKSPACE_MIN: i64 = 10000;
+
 /// Speaks the Hyprland IPC protocol directly — no `hyprctl` subprocess.
 fn hyprctl(command: &str) -> Option<String> {
     let xdg_runtime = env::var("XDG_RUNTIME_DIR").ok()?;
@@ -185,6 +188,12 @@ fn main() {
         } else if let Some(n) = arg.parse::<i64>().ok().filter(|&n| n > 0) {
             group_size = n;
         }
+    }
+    // The shell's lock screen parks monitors on temporary workspaces with ids >= 10000 (see
+    // Lock.qml). Compacting relative to one would push every window up next to it, and the lock
+    // screen then sweeps them all onto a single workspace on unlock.
+    if active_ws >= LOCK_WORKSPACE_MIN {
+        return;
     }
     let ws_map_cfg = read_workspace_map_config();
     let base = block_base(&ws_map_cfg, monitor_index(&monitors, mon_name), active_ws, group_size);
