@@ -11,6 +11,10 @@ Item {
     readonly property bool barEnabled: Config.options?.bar?.sports?.enable ?? false
     readonly property bool dockEnabled: Config.options?.dock?.enableSportsWidget ?? true
     property bool enabled: barEnabled || dockEnabled
+    // AI consumers are counted separately from the visual widgets. They may
+    // query a league that is not monitored by the bar, but must never cause a
+    // visual selection or a Config write as a side effect.
+    property int aiSubscribers: 0
     property string teamFilter: Config.options.bar.sports.teamFilter
     property int updateInterval: Config.options.bar.sports.updateInterval
 
@@ -33,6 +37,14 @@ Item {
 
     property bool loading: false
     property string error: ""
+
+    function acquireAiSubscriber() {
+        aiSubscribers += 1;
+    }
+
+    function releaseAiSubscriber() {
+        aiSubscribers = Math.max(0, aiSubscribers - 1);
+    }
 
     function nextGame() {
         if (allGames.length > 1) {

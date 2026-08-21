@@ -1445,8 +1445,21 @@ Singleton {
     readonly property AiTimeIntegration timeIntegration: AiTimeIntegration {}
     /** Read-only live system and keybind DTOs; never a shell fallback. */
     readonly property AiSystemIntegration systemIntegration: AiSystemIntegration {}
+    /** Parameterized ESPN reads; never touches the sports widget state. */
+    readonly property AiSportsIntegration sportsIntegration: AiSportsIntegration {}
     /** Preview id → immutable proposed changes until the user decides. */
     property var settingsPreviews: ({})
+
+    Connections {
+        target: root.sportsIntegration
+        function onResultReady(key, callId, sessionId, outcome) {
+            const activeSession = String(root.currentRunSessionId || root.sessions.currentId || "");
+            if (String(sessionId ?? "").length > 0 && activeSession.length > 0 && String(sessionId) !== activeSession)
+                return;
+            if (root.broker.isPending(String(key)))
+                root.broker.settle(String(key), outcome);
+        }
+    }
 
     /**
      * Writes how a call went onto the call itself.
@@ -1512,6 +1525,8 @@ Singleton {
             "system_get_status": call => root.toolSystemGetStatus(call),
             "system_health": call => root.toolSystemHealth(call),
             "keybinds_search": call => root.toolKeybindsSearch(call),
+            "sports_search_games": call => root.toolSports(call, false),
+            "sports_refresh_games": call => root.toolSports(call, true),
             "set_shell_config": call => root.toolSetShellConfig(call),
             "remember_fact": call => root.toolRememberFact(call),
             "web_search": call => root.toolWeb(call, true),
@@ -4326,6 +4341,11 @@ Singleton {
         if (isSearch)
             call.message.searchQueries = [...Array.from(call.message.searchQueries ?? []), term];
         return { status: "pending" };
+    }
+
+    function toolSports(call: var, force: bool): var {
+        const sessionId = String(root.currentRunSessionId || root.sessions.currentId || "");
+        return root.sportsIntegration.query(call.key, call.callId, sessionId, call.args, force);
     }
 
     function toolShellCommand(call: var): var {

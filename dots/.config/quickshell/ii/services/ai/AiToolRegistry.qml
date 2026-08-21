@@ -354,6 +354,68 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "sports_search_games",
+            version: 1,
+            domain: "sports",
+            title: Translation.tr("Search sports games"),
+            summary: Translation.tr("Reads ESPN game schedules and scores without changing the sports widgets."),
+            icon: "sports_score",
+            kind: "externalRead",
+            network: "required",
+            sensitivity: "none",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["sports"],
+            defaultApproval: "allow",
+            timeoutMs: 15000,
+            maxResultTokens: 500,
+            idempotent: true,
+            description: "Read games from ESPN for a supported league, including leagues that are not monitored by the shell sports widgets. Supported examples: nba, nfl, mlb, nhl, epl, bra.1 and soccer/bra.1. Optional team, date (YYYY-MM-DD), status (pre, in or post), and limit (1 to 20) narrow the result. This is read-only and never changes the widgets.",
+            parameters: {
+                type: "object",
+                properties: {
+                    league: { type: "string", description: "Supported league id or alias" },
+                    team: { type: "string", description: "Optional team name or abbreviation" },
+                    date: { type: "string", description: "Optional local date, YYYY-MM-DD" },
+                    status: { type: "string", description: "Optional game state: pre, in or post" },
+                    limit: { type: "integer", description: "Maximum games, from 1 to 20" }
+                },
+                required: ["league"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "sports_refresh_games",
+            version: 1,
+            domain: "sports",
+            title: Translation.tr("Refresh sports games"),
+            summary: Translation.tr("Forces a fresh ESPN scoreboard read without changing the sports widgets."),
+            icon: "refresh",
+            kind: "externalRead",
+            network: "required",
+            sensitivity: "none",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["sports"],
+            defaultApproval: "allow",
+            timeoutMs: 15000,
+            maxResultTokens: 500,
+            idempotent: true,
+            description: "Force a fresh ESPN read for a supported league. Use the same league, team, date, status and limit parameters as sports_search_games. This never changes the bar or dock sports widgets.",
+            parameters: {
+                type: "object",
+                properties: {
+                    league: { type: "string", description: "Supported league id or alias" },
+                    team: { type: "string", description: "Optional team name or abbreviation" },
+                    date: { type: "string", description: "Optional local date, YYYY-MM-DD" },
+                    status: { type: "string", description: "Optional game state: pre, in or post" },
+                    limit: { type: "integer", description: "Maximum games, from 1 to 20" }
+                },
+                required: ["league"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "system_get_status",
             version: 1,
             domain: "system",
