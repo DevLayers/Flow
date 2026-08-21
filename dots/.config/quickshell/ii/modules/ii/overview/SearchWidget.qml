@@ -1258,9 +1258,13 @@ Item {
                             id: settingResultCard
 
                             AiSettingResultCard {
-                                width: resultDelegate.width
+                                // Match SearchItem's horizontal inset so the
+                                // Settings card reads as one launcher row.
+                                width: Math.max(0, resultDelegate.width - Appearance.sizes.elevationMargin * 2)
+                                x: Appearance.sizes.elevationMargin
                                 setting: resultDelegate.modelData.modelRef.settingRef
                                 compact: true
+                                launcherStyle: true
                             }
                         }
 

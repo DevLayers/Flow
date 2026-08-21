@@ -1094,13 +1094,14 @@ Singleton {
         //////////////// Files /////////////////
         result = result.concat(fileResultsObject);
 
-        ////////////// Settings //////////////////
-        // This is intentionally before app matches: an exact local setting
-        // should not be buried under unrelated desktop entries.
-        result = result.concat(settingsResultObjects);
-
         //////////////// Apps //////////////////
         result = result.concat(appResultObjects);
+
+        ////////////// Settings //////////////////
+        // App rows remain the primary launcher results. Settings matches are
+        // useful controls in the same list, but belong after the programs
+        // rather than displacing them at the top of every broad query.
+        result = result.concat(settingsResultObjects);
 
         ////////// Launcher actions ////////////
         result = result.concat(launcherActionObjects);

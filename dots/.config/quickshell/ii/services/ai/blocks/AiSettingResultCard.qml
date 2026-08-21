@@ -20,6 +20,10 @@ Rectangle {
 
     required property var setting
     property bool compact: false
+    // The launcher presents settings beside program rows, while chat uses a
+    // calmer layer card. Keep both surfaces in this shared control without
+    // giving the launcher an unframed, visually floating result.
+    property bool launcherStyle: false
     property var currentValue: root.readCurrentValue()
     property string writeError: ""
 
@@ -78,7 +82,7 @@ Rectangle {
     Layout.fillWidth: true
     implicitHeight: cardColumn.implicitHeight + (root.compact ? 16 : 20)
     radius: Appearance.rounding.normal
-    color: Appearance.colors.colLayer2
+    color: root.launcherStyle ? Appearance.colors.colSurfaceContainerHigh : Appearance.colors.colLayer2
 
     ColumnLayout {
         id: cardColumn
