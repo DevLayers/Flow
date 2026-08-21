@@ -416,6 +416,123 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "gmail_search_messages",
+            version: 1,
+            domain: "gmail",
+            title: Translation.tr("Search Gmail"),
+            summary: Translation.tr("Reads bounded Gmail message metadata. Message bodies require an explicit follow-up."),
+            icon: "mail",
+            kind: "externalRead",
+            network: "required",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["gmail"],
+            defaultApproval: "allow",
+            timeoutMs: 15000,
+            maxResultTokens: 500,
+            idempotent: true,
+            description: "Search the authenticated Gmail account with a short Gmail query. Returns at most ten metadata-only message references: id, threadId, subject, sender, date, snippet and labels. It never returns a body; use gmail_get_message or gmail_get_thread with an explicit bodyMode when the user asks to read content.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "Gmail search query" },
+                    limit: { type: "integer", description: "Maximum messages, from 1 to 10" },
+                    pageToken: { type: "string", description: "Page token returned by a previous search" },
+                    accountId: { type: "string", description: "Optional authenticated account email" }
+                },
+                required: ["query"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "gmail_get_message",
+            version: 1,
+            domain: "gmail",
+            title: Translation.tr("Read a Gmail message"),
+            summary: Translation.tr("Reads one Gmail message, with its body only when explicitly requested."),
+            icon: "mark_email_read",
+            kind: "externalRead",
+            network: "required",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["gmail"],
+            defaultApproval: "ask",
+            timeoutMs: 15000,
+            maxResultTokens: 900,
+            idempotent: true,
+            description: "Read one message reference returned by Gmail search. The default bodyMode is metadata. To read content, pass bodyMode plainText or sanitizedHtml explicitly. This returns no attachment payloads and does not change message state.",
+            parameters: {
+                type: "object",
+                properties: {
+                    messageId: { type: "string", description: "Exact Gmail message id" },
+                    bodyMode: { type: "string", description: "metadata, plainText or sanitizedHtml; default metadata" },
+                    accountId: { type: "string", description: "Optional authenticated account email" }
+                },
+                required: ["messageId"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "gmail_get_thread",
+            version: 1,
+            domain: "gmail",
+            title: Translation.tr("Read a Gmail thread"),
+            summary: Translation.tr("Reads a bounded Gmail thread, with bodies only when explicitly requested."),
+            icon: "forum",
+            kind: "externalRead",
+            network: "required",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["gmail"],
+            defaultApproval: "ask",
+            timeoutMs: 20000,
+            maxResultTokens: 1200,
+            idempotent: true,
+            description: "Read up to ten messages in one Gmail thread by exact thread id. The default bodyMode is metadata. To read content, pass bodyMode plainText or sanitizedHtml explicitly. This returns no attachment payloads and does not change message state.",
+            parameters: {
+                type: "object",
+                properties: {
+                    threadId: { type: "string", description: "Exact Gmail thread id" },
+                    bodyMode: { type: "string", description: "metadata, plainText or sanitizedHtml; default metadata" },
+                    accountId: { type: "string", description: "Optional authenticated account email" }
+                },
+                required: ["threadId"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "gmail_open_in_client",
+            version: 1,
+            domain: "gmail",
+            title: Translation.tr("Open Gmail in II"),
+            summary: Translation.tr("Opens the existing Gmail tab in Cheatsheet without changing the message."),
+            icon: "open_in_new",
+            kind: "navigation",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["gmail"],
+            defaultApproval: "allow",
+            timeoutMs: 3000,
+            maxResultTokens: 120,
+            idempotent: true,
+            description: "Open II's existing Gmail tab in Cheatsheet so the user can inspect the account. Pass a messageId or threadId when available for context. This only navigates the UI; it does not fetch a body or change message state.",
+            parameters: {
+                type: "object",
+                properties: {
+                    messageId: { type: "string", description: "Optional Gmail message id for context" },
+                    threadId: { type: "string", description: "Optional Gmail thread id for context" },
+                    accountId: { type: "string", description: "Optional authenticated account email" }
+                },
+                required: []
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "system_get_status",
             version: 1,
             domain: "system",

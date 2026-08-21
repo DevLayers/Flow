@@ -46,7 +46,8 @@ Scope {
     /** Services a tool may depend on, by the name it declares in `requiredServices`. */
     readonly property var serviceAvailability: ({
             memory: AiMemory.enabled,
-            sports: true
+            sports: true,
+            gmail: EmailService.authenticated
         })
 
     // ── Registry, passed through ──────────────────────────────────────────

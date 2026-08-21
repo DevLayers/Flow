@@ -1447,6 +1447,8 @@ Singleton {
     readonly property AiSystemIntegration systemIntegration: AiSystemIntegration {}
     /** Parameterized ESPN reads; never touches the sports widget state. */
     readonly property AiSportsIntegration sportsIntegration: AiSportsIntegration {}
+    /** Read-only Gmail metadata/body bridge with correlated helper calls. */
+    readonly property AiGmailIntegration gmailIntegration: AiGmailIntegration {}
     /** Preview id → immutable proposed changes until the user decides. */
     property var settingsPreviews: ({})
 
@@ -1454,7 +1456,18 @@ Singleton {
         target: root.sportsIntegration
         function onResultReady(key, callId, sessionId, outcome) {
             const activeSession = String(root.currentRunSessionId || root.sessions.currentId || "");
-            if (String(sessionId ?? "").length > 0 && activeSession.length > 0 && String(sessionId) !== activeSession)
+            if (String(sessionId ?? "").length > 0 && String(sessionId) !== activeSession)
+                return;
+            if (root.broker.isPending(String(key)))
+                root.broker.settle(String(key), outcome);
+        }
+    }
+
+    Connections {
+        target: root.gmailIntegration
+        function onResultReady(key, callId, sessionId, outcome) {
+            const activeSession = String(root.currentRunSessionId || root.sessions.currentId || "");
+            if (String(sessionId ?? "").length > 0 && String(sessionId) !== activeSession)
                 return;
             if (root.broker.isPending(String(key)))
                 root.broker.settle(String(key), outcome);
@@ -1527,6 +1540,10 @@ Singleton {
             "keybinds_search": call => root.toolKeybindsSearch(call),
             "sports_search_games": call => root.toolSports(call, false),
             "sports_refresh_games": call => root.toolSports(call, true),
+            "gmail_search_messages": call => root.toolGmail(call, "search"),
+            "gmail_get_message": call => root.toolGmail(call, "get"),
+            "gmail_get_thread": call => root.toolGmail(call, "thread"),
+            "gmail_open_in_client": call => root.toolGmailOpen(call),
             "set_shell_config": call => root.toolSetShellConfig(call),
             "remember_fact": call => root.toolRememberFact(call),
             "web_search": call => root.toolWeb(call, true),
@@ -4346,6 +4363,19 @@ Singleton {
     function toolSports(call: var, force: bool): var {
         const sessionId = String(root.currentRunSessionId || root.sessions.currentId || "");
         return root.sportsIntegration.query(call.key, call.callId, sessionId, call.args, force);
+    }
+
+    function toolGmail(call: var, operation: string): var {
+        const sessionId = String(root.currentRunSessionId || root.sessions.currentId || "");
+        if (operation === "search")
+            return root.gmailIntegration.search(call.key, call.callId, sessionId, call.args);
+        if (operation === "get")
+            return root.gmailIntegration.getMessage(call.key, call.callId, sessionId, call.args);
+        return root.gmailIntegration.getThread(call.key, call.callId, sessionId, call.args);
+    }
+
+    function toolGmailOpen(call: var): var {
+        return root.gmailIntegration.openInClient(call.args);
     }
 
     function toolShellCommand(call: var): var {
