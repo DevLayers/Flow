@@ -29,10 +29,6 @@ Item {
     property var inputField: null
 
     signal newChatRequested
-    signal sessionsRequested
-
-    /** Whether the chat list is on screen, so its chip can say so. */
-    property bool sessionsOpen: false
 
     /** Below this the chips drop their labels and keep icons and values. */
     readonly property bool compact: root.width < 360
@@ -42,11 +38,44 @@ Item {
     /** Set while the regenerate picker is open, so it knows what to redo. */
     property string regenerateMessageId: ""
 
+    /**
+     * Which view to return to, so a control opened from the More list goes
+     * back to that list rather than all the way out to the transcript.
+     */
+    property string viewReturnTo: ""
+
+    /**
+     * Which way the next view arrives from: 1 going deeper, -1 coming back.
+     * Sliding both directions from the right made stepping back out of a
+     * control feel like stepping into another one.
+     */
+    property int viewDirection: 1
+
+    function openView(name: string, returnTo: string) {
+        root.viewDirection = 1;
+        root.viewReturnTo = returnTo;
+        root.activePopover = name;
+    }
+
+    function goBack() {
+        if (root.viewReturnTo.length > 0) {
+            const previous = root.viewReturnTo;
+            root.viewDirection = -1;
+            root.viewReturnTo = "";
+            root.activePopover = previous;
+            return;
+        }
+        root.closePopover();
+    }
+
     function togglePopover(name: string) {
+        root.viewDirection = 1;
+        root.viewReturnTo = "";
         root.activePopover = (root.activePopover === name) ? "" : name;
     }
 
     function closePopover() {
+        root.viewReturnTo = "";
         root.activePopover = "";
     }
 
@@ -186,10 +215,8 @@ Item {
         return root.chipModel.find(entry => entry.key === key) ?? null;
     }
 
-    /** Whether a chip is showing its own popover, or the drawer it opens. */
+    /** Whether a chip's view is the one currently filling the canvas. */
     function chipOpened(key: string): bool {
-        if (key === "sessions")
-            return root.sessionsOpen;
         return root.activePopover === key;
     }
 
@@ -200,11 +227,6 @@ Item {
         // Only the chips that do something other than open a popover put the
         // open one away first. Clearing it for all of them made every chip
         // reopen on the second press instead of closing.
-        if (key === "sessions") {
-            root.closePopover();
-            root.sessionsRequested();
-            return;
-        }
         if (key === "newChat") {
             root.closePopover();
             root.newChatRequested();
@@ -223,30 +245,62 @@ Item {
     }
 
     /**
-     * Which chips wrapped off the first row, asked of the chips themselves.
-     * Measuring them beats predicting them: a label's width depends on the
-     * font, the translation and the model's own name, none of which are known
-     * here.
+     * The chips with a slot of their own in the bar. The row is a fixed set of
+     * controls now rather than a flow that measured what fell off it, so what
+     * the overflow button holds is decided here instead of by the width.
      */
-    property var overflowKeys: []
+    readonly property var barKeys: ["keys", "advanced", "sessions", "newChat"]
 
-    function refreshOverflow() {
-        const keys = [];
-        for (let i = 0; i < chipRepeater.count; i++) {
-            const chip = chipRepeater.itemAt(i);
-            if (!chip)
-                continue;
-            const past = chip.y > 0.5;
-            chip.overflowing = past;
-            if (past)
-                keys.push(chip.chipKey);
-        }
-        // Rewriting an identical list would rebuild the menu under the cursor.
-        if (keys.join(",") !== root.overflowKeys.join(","))
-            root.overflowKeys = keys;
-    }
+    /**
+     * What each control is, as opposed to what it currently holds. A chip in
+     * the bar had room for only one of the two and showed the value; a row has
+     * room for both.
+     */
+    /**
+     * A row is wide enough for an icon; some chips never had one because a
+     * chip that small showed either a glyph or a value, not both.
+     */
+    readonly property var controlIcons: ({
+        "model": "network_intelligence",
+        "slash": "terminal",
+        "advanced": "tune",
+        "sessions": "history",
+        "keys": "key"
+    })
 
-    implicitHeight: chipStrip.implicitHeight
+    readonly property var controlTitles: ({
+        "model": Translation.tr("Model"),
+        "thinking": Translation.tr("Thinking"),
+        "tools": Translation.tr("Tools"),
+        "prompt": Translation.tr("Persona"),
+        "slash": Translation.tr("Commands"),
+        "advanced": Translation.tr("Sampling & limits"),
+        "sessions": Translation.tr("Saved chats"),
+        "keys": Translation.tr("API keys")
+    })
+
+    readonly property var overflowKeys: root.chipModel
+        .filter(entry => root.barKeys.indexOf(entry.key) === -1)
+        .map(entry => entry.key)
+
+    /**
+     * Controls are square to the height the bar was given, so the surface that
+     * hosts this bar owns the scale and the two never disagree about it.
+     */
+    readonly property real controlExtent: root.height > 0
+        ? root.height
+        : Math.round(Appearance.font.pixelSize.huge * 2)
+    readonly property real controlSpacing: Appearance.rounding.verysmall
+    /** How far a canvas view travels on its way in, and the transcript on its way out. */
+    readonly property real canvasSlideDistance: Appearance.font.pixelSize.huge * 1.5
+    /**
+     * Breathing room inside a canvas view. These used to be panels a few
+     * pixels wider than their text; filling the middle rectangle, they need
+     * the same inset the rest of the sidebar's cards give their content.
+     */
+    readonly property real canvasContentPadding: Appearance.rounding.large
+
+    implicitHeight: root.controlExtent
 
     /**
      * One chip. Everything it shows comes from an entry in `chipModel`, so the
@@ -275,13 +329,6 @@ Item {
          * the tooltip is the part that says why.
          */
         readonly property bool available: chip.entry?.available ?? true
-        /**
-         * Laid out, but past the first row and so out of sight — the overflow
-         * menu is where it can be reached. It keeps its place in the flow so
-         * the row above it does not reshuffle every time the width changes.
-         */
-        property bool overflowing: false
-
         implicitHeight: 30
         leftPadding: chip.sidePadding
         rightPadding: chip.sidePadding
@@ -297,8 +344,7 @@ Item {
         colBackgroundHover: Appearance.colors.colLayer2Hover
         colBackgroundActive: Appearance.colors.colLayer2Active
         colRipple: Appearance.colors.colLayer2Active
-        opacity: chip.overflowing ? 0 : (chip.available ? 1 : 0.5)
-        enabled: !chip.overflowing
+        opacity: chip.available ? 1 : 0.5
         onClicked: root.activateChip(chip.chipKey)
 
         contentItem: RowLayout {
@@ -324,6 +370,7 @@ Item {
                 visible: active
                 sourceComponent: MaterialSymbol {
                     text: chip.symbol
+                    fill: 1
                     iconSize: Appearance.font.pixelSize.larger
                     color: chip.toggled ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
                 }
@@ -344,6 +391,7 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 visible: chip.showCaret
                 text: "keyboard_arrow_down"
+                fill: 1
                 iconSize: Appearance.font.pixelSize.normal
                 color: chip.toggled ? Appearance.m3colors.m3onPrimary : Appearance.colors.colSubtext
                 rotation: chip.opened ? 180 : 0
@@ -373,36 +421,33 @@ Item {
     }
 
     /** One popover's worth of choices: a title, then a row per option. */
-    component OptionList: Item {
+    /**
+     * A list of choices, in the same shapes the rest of the canvas uses: one
+     * large pill per option, the one in use filled and check-marked.
+     */
+    component OptionList: ColumnLayout {
         id: optionList
 
         property string title: ""
         property string footnote: ""
         property var options: []
-        property real maxListHeight: 300
 
-        signal chosen(key: string)
+        signal chosen(string key)
 
-        implicitHeight: titleText.implicitHeight + 6 + Math.min(optionsColumn.implicitHeight, optionList.maxListHeight) + (footnoteLoader.active ? footnoteLoader.implicitHeight + 6 : 0)
+        spacing: root.canvasRowSpacing
 
         StyledText {
-            id: titleText
-            anchors.top: parent.top
-            anchors.left: parent.left
+            Layout.fillWidth: true
+            visible: optionList.title.length > 0
             text: optionList.title
-            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.pixelSize: Appearance.font.pixelSize.normal
             color: Appearance.colors.colSubtext
+            wrapMode: Text.Wrap
         }
 
         StyledFlickable {
-            anchors {
-                top: titleText.bottom
-                topMargin: 6
-                left: parent.left
-                right: parent.right
-                bottom: footnoteLoader.active ? footnoteLoader.top : parent.bottom
-                bottomMargin: footnoteLoader.active ? 6 : 0
-            }
+            Layout.fillWidth: true
+            Layout.fillHeight: true
             contentWidth: width
             contentHeight: optionsColumn.implicitHeight
             clip: true
@@ -410,88 +455,32 @@ Item {
             ColumnLayout {
                 id: optionsColumn
                 width: parent.width
-                spacing: 2
+                spacing: root.canvasRowSpacing
 
                 Repeater {
                     model: optionList.options
 
-                    RippleButton {
-                        id: optionButton
+                    delegate: CanvasOption {
                         required property var modelData
 
-                        Layout.fillWidth: true
-                        leftPadding: 10
-                        rightPadding: 10
-                        topPadding: 8
-                        bottomPadding: 8
-                        buttonRadius: Appearance.rounding.small
-                        enabled: modelData.enabled ?? true
-                        toggled: modelData.selected ?? false
-                        opacity: enabled ? 1 : 0.45
-                        colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                        colBackgroundHover: Appearance.colors.colLayer2Hover
-                        colRipple: Appearance.colors.colLayer2Active
-                        colBackgroundToggled: Appearance.colors.colSecondaryContainer
-                        colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-                        onClicked: optionList.chosen(optionButton.modelData.key)
-
-                        contentItem: RowLayout {
-                            id: optionRowLayout
-                            spacing: 10
-
-                            MaterialSymbol {
-                                visible: (optionButton.modelData.symbol ?? "").length > 0
-                                text: optionButton.modelData.symbol ?? ""
-                                iconSize: Appearance.font.pixelSize.larger
-                                color: optionButton.toggled ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer2
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: optionButton.modelData.label ?? ""
-                                    elide: Text.ElideRight
-                                    color: optionButton.toggled ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer2
-                                }
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    visible: (optionButton.modelData.description ?? "").length > 0
-                                    text: optionButton.modelData.description ?? ""
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    color: Appearance.colors.colSubtext
-                                    wrapMode: Text.Wrap
-                                }
-                            }
-
-                            MaterialSymbol {
-                                visible: optionButton.toggled
-                                text: "check"
-                                iconSize: Appearance.font.pixelSize.larger
-                                color: Appearance.m3colors.m3onSecondaryContainer
-                            }
-                        }
+                        symbol: modelData.symbol ?? ""
+                        label: modelData.label ?? ""
+                        description: modelData.description ?? ""
+                        selected: modelData.selected ?? false
+                        available: modelData.enabled ?? true
+                        onTriggered: optionList.chosen(modelData.key)
                     }
                 }
             }
         }
 
-        Loader {
-            id: footnoteLoader
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            active: optionList.footnote.length > 0
-            visible: active
-            sourceComponent: StyledText {
-                text: optionList.footnote
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
-                wrapMode: Text.Wrap
-            }
+        StyledText {
+            Layout.fillWidth: true
+            visible: optionList.footnote.length > 0
+            text: optionList.footnote
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colSubtext
+            wrapMode: Text.Wrap
         }
     }
 
@@ -500,132 +489,575 @@ Item {
      * there, and the last chip opens them as a menu — the old row scrolled
      * sideways, which hid them behind a gesture nothing announced.
      */
-    Item {
-        id: chipStrip
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        implicitHeight: 30
-        clip: true
+    /** Row metrics for the canvas views: big shapes, big type, real insets. */
+    readonly property real canvasRowHeight: Math.round(Appearance.font.pixelSize.huge * 2.5)
+    readonly property real canvasRowSpacing: Appearance.rounding.unsharpenmore
 
-        Flow {
-            id: chipFlow
-            anchors.left: parent.left
-            anchors.top: parent.top
-            // The overflow chip's room is reserved whether or not it is in
-            // use: a width that changed with it could hand a chip the space
-            // that hides the chip that freed it.
-            width: Math.max(0, parent.width - moreChip.implicitWidth - spacing)
-            spacing: 4
-            onWidthChanged: Qt.callLater(root.refreshOverflow)
+    /** The round control a canvas view uses for its way back. */
+    component CanvasCircleButton: Rectangle {
+        id: circleButton
 
-            Repeater {
-                id: chipRepeater
-                model: root.chipModel
+        property string symbol: ""
+        signal triggered
 
-                delegate: ControlChip {
-                    required property var modelData
+        Layout.preferredWidth: root.canvasRowHeight
+        Layout.preferredHeight: root.canvasRowHeight
+        radius: height / 2
+        color: circleButtonMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+            : circleButtonMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+            : Appearance.colors.colSurfaceContainerHighest
 
-                    entry: modelData
-                    onYChanged: Qt.callLater(root.refreshOverflow)
-                    Component.onCompleted: Qt.callLater(root.refreshOverflow)
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
+
+        MouseArea {
+            id: circleButtonMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: circleButton.triggered()
+        }
+
+        MaterialSymbol {
+            anchors.centerIn: parent
+            text: circleButton.symbol
+            fill: 1
+            iconSize: 24
+            color: Appearance.colors.colOnSurface
+        }
+    }
+
+    /**
+     * A choice in a canvas view. The pill carries the choice; the mark of
+     * which one is in use sits in its own circle beside it, the way the chat
+     * rows keep their menu button outside the row's shape.
+     */
+    component CanvasOption: RowLayout {
+        id: canvasOption
+
+        property string symbol: ""
+        property string label: ""
+        property string description: ""
+        property bool selected: false
+        property bool available: true
+        signal triggered
+
+        Layout.fillWidth: true
+        spacing: root.canvasRowSpacing
+
+        Rectangle {
+            id: optionPill
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.max(root.canvasRowHeight, optionColumn.implicitHeight + root.canvasRowSpacing * 2)
+            radius: Appearance.rounding.large
+            opacity: canvasOption.available ? 1 : 0.45
+
+            color: canvasOption.selected
+                ? (optionMouse.containsPress ? Appearance.colors.colPrimaryActive
+                    : optionMouse.containsMouse ? Appearance.colors.colPrimaryHover
+                    : Appearance.colors.colPrimary)
+                : (optionMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                    : optionMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                    : Appearance.colors.colSurfaceContainerHighest)
+
+            readonly property color colOn: canvasOption.selected
+                ? Appearance.colors.colOnPrimary
+                : Appearance.colors.colOnSurface
+
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
+
+            MouseArea {
+                id: optionMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                enabled: canvasOption.available
+                onClicked: canvasOption.triggered()
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: root.canvasContentPadding
+                anchors.rightMargin: root.canvasContentPadding
+                spacing: 12
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: canvasOption.symbol.length > 0
+                    text: canvasOption.symbol
+                    fill: 1
+                    iconSize: 24
+                    color: optionPill.colOn
+                }
+
+                ColumnLayout {
+                    id: optionColumn
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: canvasOption.label
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        font.bold: true
+                        color: optionPill.colOn
+                        elide: Text.ElideRight
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: canvasOption.description.length > 0
+                        text: canvasOption.description
+                        // Two lines at most. A long description used to stretch
+                        // its pill to nearly twice the height of the ones beside
+                        // it, which broke the row rhythm the whole view is built on.
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: optionPill.colOn
+                        opacity: 0.75
+                        wrapMode: Text.Wrap
+                    }
                 }
             }
         }
 
-        ControlChip {
-            id: moreChip
-            anchors.right: parent.right
-            anchors.top: parent.top
-            entry: ({
-                    "key": "more",
-                    "symbol": "more_horiz",
-                    "caret": false,
-                    "sidePadding": 8,
-                    "tooltip": Translation.tr("More controls")
-                })
-            opacity: root.overflowKeys.length > 0 ? 1 : 0
-            enabled: root.overflowKeys.length > 0
+        // Outside the pill, not inside it.
+        Rectangle {
+            Layout.preferredWidth: root.canvasRowHeight
+            Layout.preferredHeight: root.canvasRowHeight
+            Layout.alignment: Qt.AlignVCenter
+            radius: height / 2
+            visible: canvasOption.selected
+            color: Appearance.colors.colPrimaryContainer
 
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "check"
+                fill: 1
+                iconSize: 24
+                color: Appearance.colors.colOnPrimaryContainer
             }
         }
     }
 
+    /**
+     * One entry in a canvas view. Same silhouette as the device rows in the
+     * dashboard's Bluetooth and Wi-Fi dialogs: a full-height pill, a filled
+     * icon, a bold label, the value it currently holds, and a chevron.
+     */
+    component CanvasRow: Rectangle {
+        id: canvasRow
+
+        property string symbol: ""
+        property string label: ""
+        property string valueText: ""
+        property bool available: true
+        signal triggered
+
+        Layout.fillWidth: true
+        Layout.preferredHeight: root.canvasRowHeight
+        radius: height / 2
+        opacity: canvasRow.available ? 1 : 0.5
+        color: canvasRowMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+            : canvasRowMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+            : Appearance.colors.colSurfaceContainerHighest
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
+
+        MouseArea {
+            id: canvasRowMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: canvasRow.triggered()
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: root.canvasContentPadding
+            anchors.rightMargin: root.canvasContentPadding
+            spacing: 12
+
+            MaterialSymbol {
+                text: canvasRow.symbol
+                fill: 1
+                iconSize: 24
+                color: Appearance.colors.colOnSurface
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: canvasRow.label
+                font.pixelSize: Appearance.font.pixelSize.normal
+                font.bold: true
+                color: Appearance.colors.colOnSurface
+                elide: Text.ElideRight
+            }
+
+            StyledText {
+                visible: canvasRow.valueText.length > 0
+                text: canvasRow.valueText
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.bold: true
+                color: Appearance.colors.colOnSurface
+                opacity: 0.7
+                elide: Text.ElideRight
+            }
+
+            MaterialSymbol {
+                text: "chevron_right"
+                fill: 1
+                iconSize: 24
+                color: Appearance.colors.colSubtext
+            }
+        }
+    }
+
+    /**
+     * A round, icon-only control. Its label, tooltip, availability and open
+     * state all still come from `chipModel`, so the bar and the overflow menu
+     * remain two renderings of one source.
+     */
+    component ToolButton: RippleButton {
+        id: toolButton
+
+        property string chipKey: ""
+        readonly property var entry: root.chipEntry(toolButton.chipKey)
+        readonly property bool opened: root.chipOpened(toolButton.chipKey)
+        readonly property bool available: toolButton.entry?.available ?? true
+        property string symbolOverride: ""
+        property string tooltipOverride: ""
+
+        implicitWidth: root.controlExtent
+        implicitHeight: root.controlExtent
+        buttonRadius: Appearance.rounding.full
+        toggled: toolButton.opened
+        opacity: toolButton.available ? 1 : 0.5
+        colBackground: Appearance.colors.colLayer2
+        colBackgroundHover: Appearance.colors.colLayer2Hover
+        colBackgroundActive: Appearance.colors.colLayer2Active
+        colRipple: Appearance.colors.colLayer2Active
+        onClicked: root.activateChip(toolButton.chipKey)
+
+        contentItem: MaterialSymbol {
+            text: toolButton.symbolOverride.length > 0
+                ? toolButton.symbolOverride
+                : (toolButton.entry?.symbol ?? "")
+            iconSize: Appearance.font.pixelSize.larger
+            fill: 1
+            color: toolButton.opened
+                ? Appearance.colors.colOnPrimaryContainer
+                : Appearance.colors.colOnLayer2
+        }
+
+        StyledToolTip {
+            text: toolButton.tooltipOverride.length > 0
+                ? toolButton.tooltipOverride
+                : (toolButton.entry?.tooltip ?? "")
+        }
+    }
+
+    /**
+     * The bar: what a chat is set to on the left, what it does with the chat
+     * on the right. The gap between the two groups is the whole spare width,
+     * so the right-hand controls stay pinned to the edge at any size.
+     */
+    RowLayout {
+        id: controlRow
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: root.controlSpacing
+
+        ToolButton {
+            id: keysButton
+            chipKey: "keys"
+        }
+
+        // Temperature reads at a glance instead of behind the popover it opens.
+        RippleButton {
+            id: temperatureButton
+
+            readonly property var entry: root.chipEntry("advanced")
+            readonly property bool opened: root.chipOpened("advanced")
+            readonly property bool samplingHonoured: Ai.currentModelEntry?.samplingParams ?? true
+
+            implicitHeight: root.controlExtent
+            implicitWidth: temperatureRow.implicitWidth + root.controlExtent * 0.7
+            buttonRadius: Appearance.rounding.full
+            toggled: temperatureButton.opened
+            opacity: temperatureButton.samplingHonoured ? 1 : 0.5
+            colBackground: Appearance.colors.colLayer2
+            colBackgroundHover: Appearance.colors.colLayer2Hover
+            colBackgroundActive: Appearance.colors.colLayer2Active
+            colRipple: Appearance.colors.colLayer2Active
+            onClicked: root.activateChip("advanced")
+
+            contentItem: RowLayout {
+                id: temperatureRow
+                spacing: Appearance.rounding.unsharpenmore
+
+                MaterialSymbol {
+                    text: "thermostat"
+                    iconSize: Appearance.font.pixelSize.larger
+                    fill: 1
+                    color: temperatureButton.opened
+                        ? Appearance.colors.colOnPrimaryContainer
+                        : Appearance.colors.colOnLayer2
+                }
+
+                StyledText {
+                    // Trimmed rather than fixed to two places: the popover is
+                    // where the exact value belongs, this is the glance.
+                    text: temperatureButton.samplingHonoured
+                        ? String(Number(Ai.temperature.toFixed(2)))
+                        : Translation.tr("Auto")
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.DemiBold
+                    color: temperatureButton.opened
+                        ? Appearance.colors.colOnPrimaryContainer
+                        : Appearance.colors.colOnLayer2
+                }
+            }
+
+            StyledToolTip {
+                text: temperatureButton.entry?.tooltip ?? ""
+            }
+        }
+
+        // What this chat has cost so far. An indicator, not a control: it
+        // says something, nothing happens when it is pressed, and it takes no
+        // room at all until there is a number to show.
+        Rectangle {
+            id: tokenIndicator
+
+            readonly property int total: Ai.sessionTokenTotal
+            readonly property int window: Ai.currentModelEntry?.contextWindow ?? 0
+            readonly property real fraction: tokenIndicator.window > 0 ? Math.min(1, Ai.tokenCount.total / tokenIndicator.window) : 0
+            // A window filling up is the one thing here worth a colour: past
+            // three quarters the oldest turns are about to be dropped.
+            readonly property color tint: tokenIndicator.fraction >= 0.75 ? Appearance.m3colors.m3tertiary : Appearance.colors.colOnLayer2
+
+            visible: tokenIndicator.total > 0
+            implicitHeight: root.controlExtent
+            implicitWidth: tokenRow.implicitWidth + root.controlExtent * 0.7
+            radius: Appearance.rounding.full
+            color: Appearance.colors.colLayer2
+
+            MouseArea {
+                id: tokenHover
+                anchors.fill: parent
+                hoverEnabled: true
+            }
+
+            RowLayout {
+                id: tokenRow
+                anchors.centerIn: parent
+                spacing: Appearance.rounding.unsharpenmore
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: tokenIndicator.fraction >= 0.75 ? "data_alert" : "token"
+                    iconSize: Appearance.font.pixelSize.larger
+                    fill: 1
+                    color: tokenIndicator.tint
+
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: Ai.shortTokenCount(tokenIndicator.total)
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.DemiBold
+                    color: tokenIndicator.tint
+                    animateChange: true
+                }
+            }
+
+            StyledToolTip {
+                extraVisibleCondition: false
+                alternativeVisibleCondition: tokenHover.containsMouse
+                text: {
+                    let lines = [Translation.tr("%1 tokens in this chat").arg(tokenIndicator.total)];
+                    if (Ai.tokenCount.input > 0 || Ai.tokenCount.output > 0)
+                        lines.push(Translation.tr("Last turn — in: %1, out: %2").arg(Math.max(0, Ai.tokenCount.input)).arg(Math.max(0, Ai.tokenCount.output)));
+                    if (tokenIndicator.window > 0)
+                        lines.push(Translation.tr("%1% of the %2 token window").arg(Math.round(tokenIndicator.fraction * 100)).arg(tokenIndicator.window));
+                    return lines.join("\n");
+                }
+            }
+        }
+
+        // The spare width lives here, which is what splits the two groups.
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+        }
+
+        ToolButton {
+            id: sessionsButton
+            chipKey: "sessions"
+            // The bar has no room for the session's name, so the icon says
+            // what the control is for rather than what it currently holds.
+            symbolOverride: "history"
+        }
+
+        ToolButton {
+            id: newChatButton
+            chipKey: "newChat"
+        }
+
+        ToolButton {
+            id: moreButton
+            chipKey: "more"
+            symbolOverride: "more_vert"
+            tooltipOverride: Translation.tr("More controls")
+        }
+    }
+
+    /**
+     * Everything a control opens now takes over the canvas instead of floating
+     * a panel over it. There is no scrim and nothing is anchored to the bar:
+     * the view slides in from the right while the transcript leaves to the
+     * left, so the middle rectangle reads as one surface swapping its content.
+     */
+    readonly property bool viewOpen: root.activePopover.length > 0
+
     Loader {
-        id: popoverLoader
+        id: canvasViewLoader
         parent: root.overlayParent ?? root
         anchors.fill: parent
         z: 100
-        active: root.activePopover.length > 0
+        active: root.viewOpen
 
         sourceComponent: Item {
+            id: canvasView
+
+            opacity: 0
+            transform: Translate {
+                id: canvasViewTransform
+                x: root.canvasSlideDistance
+            }
+
+            Component.onCompleted: canvasViewEnter.start()
+
+            ParallelAnimation {
+                id: canvasViewEnter
+
+                NumberAnimation {
+                    target: canvasView
+                    property: "opacity"
+                    from: 0
+                    to: 1
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                }
+
+                NumberAnimation {
+                    target: canvasViewTransform
+                    property: "x"
+                    from: root.canvasSlideDistance
+                    to: 0
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                }
+            }
+
             MouseArea {
-                // Scrim. Clicking the transcript puts the popover away, and
-                // scrolling it does not leak through to the message list.
+                // The transcript is still behind this view during the cross
+                // fade; without this it would take the clicks meant for the
+                // list on top of it.
                 anchors.fill: parent
-                onClicked: root.closePopover()
                 onWheel: wheel => wheel.accepted = true
             }
 
-            Rectangle {
-                id: panel
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    bottom: parent.bottom
-                    leftMargin: 4
-                    rightMargin: 4
-                    bottomMargin: 4
-                }
-                height: Math.min(panelContentLoader.implicitHeight + 14 * 2, parent.height - 8)
-                radius: Appearance.rounding.normal
-                color: Appearance.colors.colSurfaceContainerHigh
-                clip: true
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: root.canvasContentPadding
+                spacing: root.canvasRowSpacing
 
-                opacity: 0
-                transform: Translate {
-                    id: panelTransform
-                    y: 12
-                }
+                // One header for every view, so none of them has to build its
+                // own way out and they cannot drift apart.
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: root.canvasRowSpacing
+                    // Wider than the row gap: the button is a control and the
+                    // title is a heading, and they were reading as one lump.
+                    spacing: root.canvasContentPadding
 
-                Component.onCompleted: panelAnim.start()
-
-                ParallelAnimation {
-                    id: panelAnim
-                    NumberAnimation {
-                        target: panel
-                        property: "opacity"
-                        from: 0
-                        to: 1
-                        duration: 160
-                        easing.type: Easing.OutCubic
+                    CanvasCircleButton {
+                        symbol: "arrow_back"
+                        onTriggered: root.goBack()
                     }
-                    NumberAnimation {
-                        target: panelTransform
-                        property: "y"
-                        from: 12
-                        to: 0
-                        duration: 220
-                        easing.type: Easing.OutCubic
-                    }
-                }
 
-                MouseArea {
-                    // Swallows clicks so they do not reach the scrim behind.
-                    anchors.fill: parent
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: root.controlTitles[root.activePopover]
+                            ?? (root.activePopover === "more" ? Translation.tr("More controls") : "")
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.bold: true
+                        color: Appearance.colors.colOnLayer1
+                        elide: Text.ElideRight
+                    }
                 }
 
                 Loader {
-                    id: panelContentLoader
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        top: parent.top
-                        margins: 14
+                    id: canvasContentLoader
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    // The view Item is built once and then only swaps what it
+                    // holds, so stepping between controls animated nothing.
+                    // This gives the content the same entrance the view itself
+                    // gets when it first arrives over the transcript.
+                    transform: Translate {
+                        id: canvasContentTransform
                     }
-                    height: panel.height - 14 * 2
+
+                    Connections {
+                        target: root
+
+                        function onActivePopoverChanged() {
+                            if (root.activePopover.length > 0)
+                                canvasContentEnter.restart();
+                        }
+                    }
+
+                    ParallelAnimation {
+                        id: canvasContentEnter
+
+                        NumberAnimation {
+                            target: canvasContentLoader
+                            property: "opacity"
+                            from: 0
+                            to: 1
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
+
+                        NumberAnimation {
+                            target: canvasContentTransform
+                            property: "x"
+                            from: root.canvasSlideDistance * root.viewDirection
+                            to: 0
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
+                    }
 
                     sourceComponent: {
                         if (root.activePopover === "model")
@@ -638,6 +1070,8 @@ Item {
                             return toolsComponent;
                         if (root.activePopover === "prompt")
                             return promptComponent;
+                        if (root.activePopover === "sessions")
+                            return sessionsComponent;
                         if (root.activePopover === "keys")
                             return keysComponent;
                         if (root.activePopover === "more")
@@ -703,6 +1137,13 @@ Item {
     }
 
     Component {
+        id: sessionsComponent
+        SessionList {
+            onCloseRequested: root.closePopover()
+        }
+    }
+
+    Component {
         id: keysComponent
         AiApiKeyManager {
             onClosed: root.closePopover()
@@ -715,41 +1156,32 @@ Item {
     }
 
     Component {
-        // What did not fit, as the same chips over as many rows as it takes.
-        // Picking one here opens the popover it would have opened in the bar.
+        // The controls without a slot in the bar. Each row says what it is and
+        // what it currently holds, and opens its own view in this same canvas.
         id: moreComponent
-        Item {
-            id: moreList
+        ColumnLayout {
+            spacing: root.canvasRowSpacing
 
-            implicitHeight: moreTitle.implicitHeight + 8 + moreFlow.implicitHeight
+            Repeater {
+                model: root.overflowKeys
 
-            StyledText {
-                id: moreTitle
-                anchors.top: parent.top
-                anchors.left: parent.left
-                text: Translation.tr("More controls")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
+                delegate: CanvasRow {
+                    required property string modelData
+
+                    readonly property var entry: root.chipEntry(modelData)
+
+                    symbol: (entry?.symbol ?? "").length > 0
+                        ? entry.symbol
+                        : (root.controlIcons[modelData] ?? "tune")
+                    label: root.controlTitles[modelData] ?? modelData
+                    valueText: entry?.label ?? ""
+                    available: entry?.available ?? true
+                    onTriggered: root.openView(modelData, "more")
+                }
             }
 
-            Flow {
-                id: moreFlow
-                anchors.top: moreTitle.bottom
-                anchors.topMargin: 8
-                anchors.left: parent.left
-                anchors.right: parent.right
-                spacing: 4
-
-                Repeater {
-                    model: root.overflowKeys
-
-                    delegate: ControlChip {
-                        required property string modelData
-
-                        entry: root.chipEntry(modelData)
-                        forceLabel: true
-                    }
-                }
+            Item {
+                Layout.fillHeight: true
             }
         }
     }

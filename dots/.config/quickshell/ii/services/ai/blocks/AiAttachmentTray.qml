@@ -25,6 +25,24 @@ Item {
     /** Set while a drag is over the composer, to say what dropping would do. */
     property string dragHint: ""
 
+    readonly property real chipHeight: Math.round(Appearance.font.pixelSize.huge * 2)
+    /**
+     * One inset for every side of the chip, so the round button at its end
+     * sits as far from the edge as it does from the top and the bottom. Half
+     * the height was the old value and it left the button stranded in the
+     * middle of its own chip, with the dashes a thumb's width away from it.
+     */
+    readonly property real chipPadding: Math.round(root.chipHeight * 0.14)
+    /**
+     * The leading edge is the curved one, so what starts there is pushed in
+     * far enough to clear the arc rather than sitting inside it.
+     */
+    readonly property real chipLeadingInset: Math.round(root.chipHeight * 0.32)
+    readonly property real chipGap: Appearance.rounding.unsharpenmore
+    readonly property real chipButtonSize: root.chipHeight - root.chipPadding * 2
+    /** Keeps one long name from pushing the row past the composer's width. */
+    readonly property real chipMaximumTextWidth: Math.max(80, root.width * 0.45)
+
     readonly property bool hasContent: root.files.length > 0 || root.notice.length > 0 || root.dragHint.length > 0
 
     implicitHeight: root.hasContent ? contentColumnLayout.implicitHeight : 0
@@ -79,15 +97,67 @@ Item {
                         required property var modelData
                         required property int index
 
-                        implicitWidth: chipRowLayout.implicitWidth + 8 * 2
-                        implicitHeight: 40
-                        radius: Appearance.rounding.small
-                        color: Appearance.colors.colLayer2
+                        implicitWidth: chipRowLayout.implicitWidth + root.chipLeadingInset + root.chipPadding
+                        implicitHeight: root.chipHeight
+                        radius: height / 2
+                        // Outlined, not filled: an attachment is a thing on its
+                        // way out, not a control, and the dashes say "pending"
+                        // without spending a surface colour on it.
+                        color: "transparent"
+
+                        DashedBorder {
+                            // Inset by its own stroke rather than by a flat
+                            // pixel, so the dashes land inside the chip at any
+                            // rounding scale instead of straddling its edge.
+                            anchors.fill: parent
+                            anchors.margins: borderWidth / 2
+                            radius: Math.max(0, fileChip.radius - anchors.margins)
+                            // Fine and close together: a long dash on a short
+                            // pill spends most of its length in the corners,
+                            // where it reads as a broken outline rather than
+                            // as a dashed one.
+                            borderWidth: Math.max(1, Math.round(Appearance.font.pixelSize.smaller / 8))
+                            dashLength: Math.max(2, Math.round(root.chipHeight * 0.09))
+                            gapLength: Math.max(2, Math.round(root.chipHeight * 0.07))
+                            color: Appearance.colors.colPrimary
+                        }
+
+                        // Arrives with the file rather than appearing finished.
+                        opacity: 0
+                        scale: 0.85
+                        Component.onCompleted: chipEnter.start()
+
+                        ParallelAnimation {
+                            id: chipEnter
+
+                            NumberAnimation {
+                                target: fileChip
+                                property: "opacity"
+                                from: 0
+                                to: 1
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                            }
+
+                            NumberAnimation {
+                                target: fileChip
+                                property: "scale"
+                                from: 0.85
+                                to: 1
+                                duration: Appearance.animation.elementMove.duration
+                                easing.type: Easing.OutBack
+                            }
+                        }
 
                         RowLayout {
                             id: chipRowLayout
-                            anchors.centerIn: parent
-                            spacing: 8
+                            anchors.left: parent.left
+                            anchors.leftMargin: root.chipLeadingInset
+                            anchors.right: parent.right
+                            anchors.rightMargin: root.chipPadding
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: root.chipGap
 
                             Loader {
                                 // A picture says what it is faster than its
@@ -96,8 +166,12 @@ Item {
                                 visible: active
                                 sourceComponent: Rectangle {
                                     id: thumbnail
-                                    implicitWidth: 28
-                                    implicitHeight: 28
+                                    // Smaller than the round button at the
+                                    // other end: this end of the chip is the
+                                    // curved one and a square that fills it
+                                    // touches the dashes.
+                                    implicitWidth: Math.round(root.chipHeight * 0.6)
+                                    implicitHeight: Math.round(root.chipHeight * 0.6)
                                     radius: Appearance.rounding.verysmall
                                     color: Appearance.colors.colLayer1
 
@@ -105,8 +179,8 @@ Item {
                                         anchors.fill: parent
                                         source: Qt.resolvedUrl(fileChip.modelData.path)
                                         fillMode: Image.PreserveAspectCrop
-                                        sourceSize.width: 56
-                                        sourceSize.height: 56
+                                        sourceSize.width: Math.round(root.chipHeight * 1.2)
+                                        sourceSize.height: Math.round(root.chipHeight * 1.2)
                                         asynchronous: true
 
                                         layer.enabled: true
@@ -124,43 +198,54 @@ Item {
                             MaterialSymbol {
                                 visible: fileChip.modelData.kind !== "image"
                                 text: root.symbolFor(fileChip.modelData.kind)
-                                iconSize: Appearance.font.pixelSize.hugeass
-                                color: Appearance.colors.colOnLayer2
+                                fill: 1
+                                iconSize: 24
+                                color: Appearance.colors.colPrimary
                             }
 
                             ColumnLayout {
                                 spacing: 0
 
                                 StyledText {
-                                    Layout.maximumWidth: 140
+                                    // A name long enough to push the chip past
+                                    // the composer is elided in the middle, so
+                                    // both the subject and the extension survive.
+                                    Layout.maximumWidth: root.chipMaximumTextWidth
                                     text: fileChip.modelData.name
                                     elide: Text.ElideMiddle
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    color: Appearance.colors.colOnLayer2
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.bold: true
+                                    color: Appearance.colors.colPrimary
                                 }
 
                                 StyledText {
                                     text: Ai.humanSize(fileChip.modelData.bytes)
-                                    font.pixelSize: Appearance.font.pixelSize.smallest
-                                    color: Appearance.colors.colSubtext
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colPrimary
+                                    opacity: 0.8
                                 }
                             }
 
                             RippleButton {
-                                implicitWidth: 24
-                                implicitHeight: 24
+                                implicitWidth: root.chipButtonSize
+                                implicitHeight: root.chipButtonSize
                                 buttonRadius: Appearance.rounding.full
-                                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                                colBackgroundHover: Appearance.colors.colLayer2Hover
-                                colRipple: Appearance.colors.colLayer2Active
+                                topPadding: 0
+                                bottomPadding: 0
+                                leftPadding: 0
+                                rightPadding: 0
+                                colBackground: Appearance.colors.colPrimary
+                                colBackgroundHover: Appearance.colors.colPrimaryHover
+                                colRipple: Appearance.colors.colPrimaryActive
                                 onClicked: Ai.removeAttachment(fileChip.index)
 
                                 contentItem: MaterialSymbol {
-                                    anchors.centerIn: parent
                                     horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
                                     text: "close"
-                                    iconSize: Appearance.font.pixelSize.normal
-                                    color: Appearance.colors.colOnLayer2
+                                    fill: 1
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: Appearance.colors.colOnPrimary
                                 }
 
                                 StyledToolTip {

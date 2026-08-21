@@ -32,6 +32,14 @@ Item {
         return String(tokens).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
     }
 
+    /**
+     * Section metrics. This used to be a popover a few pixels wider than its
+     * text; as a canvas view it carries the same weight as the dashboard's
+     * dialogs, so the labels are titles rather than captions.
+     */
+    readonly property real sectionSpacing: Appearance.rounding.large
+    readonly property real sectionInset: Appearance.rounding.large
+
     component SectionLabel: RowLayout {
         id: sectionLabel
 
@@ -39,21 +47,23 @@ Item {
         property string valueText: ""
 
         Layout.fillWidth: true
-        spacing: 8
+        spacing: 12
 
         StyledText {
             Layout.fillWidth: true
             text: sectionLabel.label
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colSubtext
+            font.pixelSize: Appearance.font.pixelSize.larger
+            font.bold: true
+            color: Appearance.colors.colOnLayer1
         }
 
         StyledText {
             visible: sectionLabel.valueText.length > 0
             text: sectionLabel.valueText
-            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.pixelSize: Appearance.font.pixelSize.larger
+            font.bold: true
             font.family: Appearance.font.family.numbers
-            color: Appearance.colors.colOnLayer2
+            color: Appearance.colors.colOnLayer1
         }
     }
 
@@ -62,7 +72,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        spacing: 4
+        spacing: root.sectionSpacing
 
         SectionLabel {
             label: Translation.tr("Temperature")
@@ -75,7 +85,7 @@ Item {
             visible: active
 
             sourceComponent: RowLayout {
-                spacing: 6
+                spacing: 12
 
                 StyledSlider {
                     id: temperatureSlider
@@ -89,8 +99,8 @@ Item {
                 }
 
                 RippleButton {
-                    implicitWidth: 30
-                    implicitHeight: 30
+                    implicitWidth: Math.round(Appearance.font.pixelSize.huge * 1.8)
+                    implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.8)
                     buttonRadius: height / 2
                     enabled: Math.abs(Ai.temperature - root.defaultTemperature) > 0.001
                     opacity: enabled ? 1 : 0.4
@@ -101,7 +111,8 @@ Item {
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
                         text: "restart_alt"
-                        iconSize: Appearance.font.pixelSize.larger
+                        fill: 1
+                        iconSize: 24
                         color: Appearance.colors.colOnLayer2
                     }
 
@@ -122,7 +133,8 @@ Item {
 
                 MaterialSymbol {
                     text: "auto_awesome"
-                    iconSize: Appearance.font.pixelSize.larger
+                    fill: 1
+                    iconSize: 24
                     color: Appearance.colors.colSubtext
                 }
 
@@ -130,14 +142,14 @@ Item {
                     Layout.fillWidth: true
                     text: Translation.tr("Managed by model — %1 picks its own sampling and rejects a temperature.").arg(root.model?.title ?? "")
                     wrapMode: Text.Wrap
-                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    font.pixelSize: Appearance.font.pixelSize.normal
                     color: Appearance.colors.colSubtext
                 }
             }
         }
 
         SectionLabel {
-            Layout.topMargin: 10
+            Layout.topMargin: root.sectionSpacing
             label: Translation.tr("Longest answer")
             valueText: Config.options.ai.maxOutputTokens > 0 ? root.formatTokens(Config.options.ai.maxOutputTokens) : Translation.tr("Model default")
         }

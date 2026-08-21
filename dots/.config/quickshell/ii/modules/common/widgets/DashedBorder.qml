@@ -15,6 +15,10 @@ Canvas {
     onRadiusChanged: requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
+    // A repaint on colour and stroke too: without these the dashes kept the
+    // palette they were first drawn in and survived a theme change unchanged.
+    onColorChanged: requestPaint()
+    onBorderWidthChanged: requestPaint()
     onPaint: {
         var ctx = getContext("2d");
         ctx.clearRect(0, 0, width, height);

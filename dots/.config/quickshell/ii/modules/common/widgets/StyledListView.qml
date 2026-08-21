@@ -14,6 +14,12 @@ ListView {
     property real dragDistance: 0
     property bool popin: true
     property bool animateAppearance: true
+    /**
+     * The first fill of the list, separate from `animateAppearance` so a view
+     * that already animates its own entrance can keep the per-row animation
+     * for later additions without playing it over its own arrival.
+     */
+    property bool animatePopulate: true
     property bool animateMovement: false
     property bool dismissToLeft: false
     property bool useSlideInAnimation: false
@@ -128,7 +134,7 @@ ListView {
     }
 
     populate: Transition {
-        enabled: root.animateAppearance
+        enabled: root.animateAppearance && root.animatePopulate
         ParallelAnimation {
             // Slide Animation
             NumberAnimation {

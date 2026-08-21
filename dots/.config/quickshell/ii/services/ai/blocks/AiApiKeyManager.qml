@@ -331,6 +331,9 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
+        // Reaches the bottom when the host gives this a height, so the list
+        // inside can take the room instead of stopping at a fixed cap.
+        anchors.bottom: root.height > contentColumnLayout.implicitHeight ? parent.bottom : undefined
         spacing: 6
 
         RowLayout {
@@ -354,7 +357,11 @@ Item {
 
         StyledFlickable {
             Layout.fillWidth: true
-            implicitHeight: Math.min(cardsColumnLayout.implicitHeight, 340)
+            // Takes the leftover height of the view rather than a fixed cap:
+            // as a panel this scroller had 340px to live in, as a canvas view
+            // it has the whole middle rectangle.
+            Layout.fillHeight: true
+            implicitHeight: cardsColumnLayout.implicitHeight
             contentWidth: width
             contentHeight: cardsColumnLayout.implicitHeight
             clip: true

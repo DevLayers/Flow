@@ -157,7 +157,14 @@ QtObject {
             key_get_link: "https://openrouter.ai/settings/keys",
             key_get_description: Translation.tr("**Pricing**: Pay-as-you-go (token based).\n\n" + "**Instructions**: Log into your OpenRouter account, " + "go to Keys in the top-right menu, and create an API key."),
             capabilities: {
-                tools: true
+                tools: true,
+                // OpenRouter passes image parts through to whatever model is
+                // behind the id, and every model worth routing to today takes
+                // them. A model entry that cannot may say so for itself with
+                // `vision: false`; without this the composer turned every
+                // attachment away before the request was ever built.
+                attachments: true,
+                vision: true
             },
             // Token counts are only sent if asked for.
             quirks: {

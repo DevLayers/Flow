@@ -767,6 +767,30 @@ Singleton {
     // property var messages: []
     property var messageIDs: []
     property var messageByID: ({})
+
+    /**
+     * The turn that has just arrived, so a transcript can animate its entrance
+     * without animating every delegate a ListView recycles while scrolling.
+     * Only a list that grew by exactly one counts: loading a saved chat
+     * replaces the whole list and is not an arrival.
+     */
+    property string lastAppendedId: ""
+    property real lastAppendedAt: 0
+    property int _knownMessageCount: 0
+    onMessageIDsChanged: {
+        const ids = root.messageIDs;
+        const grewByOne = ids.length === root._knownMessageCount + 1;
+        root._knownMessageCount = ids.length;
+        if (!grewByOne)
+            return;
+        root.lastAppendedId = String(ids[ids.length - 1] ?? "");
+        root.lastAppendedAt = Date.now();
+    }
+
+    /** Whether this turn arrived within the last moment, animation aside. */
+    function isFreshMessage(messageId: string): bool {
+        return String(messageId ?? "").length > 0 && messageId === root.lastAppendedId && (Date.now() - root.lastAppendedAt) < 1200;
+    }
     readonly property var apiKeys: KeyringStorage.keyringData?.apiKeys ?? {}
     readonly property var apiKeysLoaded: KeyringStorage.loaded
     readonly property bool currentModelHasApiKey: {
@@ -779,6 +803,46 @@ Singleton {
         return (key?.length > 0);
     }
     property var postResponseHook
+
+    /**
+     * What this chat has spent, whoever answered.
+     *
+     * Every turn records its own usage when it finishes, local models
+     * included — Ollama reports prompt/eval counts the same way a paid API
+     * reports input/output — so one sum covers both. `tokenCount` only ever
+     * holds the last turn, which is the size of the context rather than what
+     * the chat has cost, and is the fallback when nothing was recorded.
+     */
+    readonly property int sessionTokenTotal: {
+        let total = 0;
+        const ids = root.messageIDs;
+        for (let i = 0; i < ids.length; i++) {
+            const message = root.messageByID[ids[i]];
+            if (!message)
+                continue;
+            if (message.totalTokens > 0) {
+                total += message.totalTokens;
+                continue;
+            }
+            const input = message.inputTokens > 0 ? message.inputTokens : 0;
+            const output = message.outputTokens > 0 ? message.outputTokens : 0;
+            total += input + output;
+        }
+        if (total > 0)
+            return total;
+        return Math.max(0, root.tokenCount.total);
+    }
+
+    /** A count short enough for a chip: 940, 1.2k, 48k. */
+    function shortTokenCount(count: int): string {
+        const value = Math.max(0, Number(count ?? 0));
+        if (value < 1000)
+            return String(value);
+        if (value < 10000)
+            return `${(value / 1000).toFixed(1)}k`;
+        return `${Math.round(value / 1000)}k`;
+    }
+
     property real temperature: 0.5
     property QtObject tokenCount: QtObject {
         property int input: -1
@@ -1864,6 +1928,51 @@ Singleton {
                 return;
             }
             root.attachFile(snipWaitProc.attachPath);
+        }
+    }
+
+    /**
+     * Asks for files with whatever portal-backed dialog the system has.
+     *
+     * It lives here rather than in the sidebar because the sidebar is
+     * unloaded the moment it loses focus — which is exactly what opening a
+     * file dialog does. The picker used to be a Process owned by the chat
+     * panel, so the dialog was killed together with its owner and nothing
+     * ever arrived in the tray.
+     */
+    readonly property bool pickingFiles: filePickerProc.running
+    signal filePickerFinished(int count)
+
+    function pickFiles() {
+        if (filePickerProc.running)
+            return;
+        filePickerProc.running = true;
+    }
+
+    Process {
+        id: filePickerProc
+        running: false
+        // `--separate-output` is what makes kdialog put one path per line;
+        // without it several files come back on one line, quoted, and the
+        // whole selection was handed to the prober as a single bad path.
+        command: ["bash", "-c", "if command -v kdialog >/dev/null 2>&1; then " + "  kdialog --getopenfilename \"$HOME\" \"\" --multiple --separate-output 2>/dev/null; " + "elif command -v zenity >/dev/null 2>&1; then " + "  zenity --file-selection --multiple --separator='|' 2>/dev/null; " + "elif command -v yad >/dev/null 2>&1; then " + "  yad --file --multiple --separator='|' 2>/dev/null; " + "else " + "  echo '__no_picker__'; " + "fi"]
+
+        stdout: StdioCollector {
+            id: filePickerCollector
+
+            onStreamFinished: {
+                const raw = String(filePickerCollector.text ?? "").trim();
+                if (raw === "__no_picker__") {
+                    root.attachmentNotice = Translation.tr("No file dialog is installed. Install kdialog or zenity, or drag the file onto the composer.");
+                    root.filePickerFinished(0);
+                    return;
+                }
+                // Either separator survives: a picker that ignores the flag
+                // still gets read rather than handing over one long path.
+                const paths = raw.split(/[\n|]/).map(path => path.trim()).filter(path => path.length > 0);
+                paths.forEach(path => root.attachFile(path));
+                root.filePickerFinished(paths.length);
+            }
         }
     }
 

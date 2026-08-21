@@ -131,8 +131,14 @@ Item {
         return rows;
     }
 
-    property real maxListHeight: 340
-    implicitHeight: searchBox.implicitHeight + 8 + Math.max(48, Math.min(modelListView.contentHeight, root.maxListHeight))
+    // The list already anchors to the bottom of whatever it is given, so the
+    // implicit height is only the fallback for a host that has none. The old
+    // 340px cap was a panel's worth of room, not a view's.
+    implicitHeight: searchBox.implicitHeight + root.gap + Math.max(root.rowHeight, modelListView.contentHeight)
+
+    readonly property real rowHeight: Math.round(Appearance.font.pixelSize.huge * 2.5)
+    readonly property real gap: Appearance.rounding.unsharpenmore
+    readonly property real inset: Appearance.rounding.large
 
     component CapabilityBadge: Item {
         id: badge
@@ -140,14 +146,17 @@ Item {
         property string symbol: ""
         property string label: ""
 
-        implicitWidth: Appearance.font.pixelSize.normal
-        implicitHeight: Appearance.font.pixelSize.normal
+        property color tint: Appearance.colors.colSubtext
+
+        implicitWidth: Appearance.font.pixelSize.larger
+        implicitHeight: Appearance.font.pixelSize.larger
 
         MaterialSymbol {
             anchors.centerIn: parent
             text: badge.symbol
-            iconSize: Appearance.font.pixelSize.normal
-            color: Appearance.colors.colSubtext
+            fill: 1
+            iconSize: Appearance.font.pixelSize.larger
+            color: badge.tint
         }
 
         MouseArea {
@@ -168,26 +177,42 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        implicitHeight: 36
+        implicitHeight: Math.round(Appearance.font.pixelSize.huge * 2)
         radius: height / 2
         color: Appearance.colors.colLayer2
 
+        MouseArea {
+            // The whole field is a text target, not just the glyphs in it.
+            anchors.fill: parent
+            cursorShape: Qt.IBeamCursor
+            acceptedButtons: Qt.LeftButton
+            onClicked: searchInput.forceActiveFocus()
+        }
+
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 8
-            spacing: 8
+            anchors.leftMargin: root.inset
+            anchors.rightMargin: root.gap
+            spacing: root.gap
 
             MaterialSymbol {
                 text: "search"
-                iconSize: Appearance.font.pixelSize.larger
+                fill: 1
+                iconSize: 24
                 color: Appearance.colors.colSubtext
             }
 
             StyledTextInput {
                 id: searchInput
                 Layout.fillWidth: true
+                font.pixelSize: Appearance.font.pixelSize.normal
                 onTextChanged: root.query = text
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.IBeamCursor
+                    acceptedButtons: Qt.NoButton
+                }
                 Component.onCompleted: forceActiveFocus()
 
                 StyledText {
@@ -220,15 +245,19 @@ Item {
 
     StyledListView {
         id: modelListView
+        // The canvas already slides this whole view in; animating
+        // every row on top of that read as a second, different
+        // entrance. Rows added later by the search still animate.
+        animatePopulate: false
         anchors {
             top: searchBox.bottom
-            topMargin: 8
+            topMargin: root.gap
             left: parent.left
             right: parent.right
             bottom: parent.bottom
         }
         clip: true
-        spacing: 2
+        spacing: root.gap
         model: root.rows
 
         delegate: Item {
@@ -248,10 +277,10 @@ Item {
                 sourceComponent: RippleButton {
                     id: headerButton
 
-                    topPadding: 8
-                    bottomPadding: 2
-                    leftPadding: 4
-                    rightPadding: 4
+                    topPadding: root.inset
+                    bottomPadding: root.gap
+                    leftPadding: root.gap
+                    rightPadding: root.gap
                     buttonRadius: Appearance.rounding.small
                     colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
                     colBackgroundHover: Appearance.colors.colLayer2Hover
@@ -259,17 +288,17 @@ Item {
                     onClicked: Ai.toggleModelGroupCollapsed(rowItem.modelData.groupId)
 
                     contentItem: RowLayout {
-                        spacing: 6
+                        spacing: 12
 
                         Loader {
                             active: (rowItem.modelData.iconSource ?? "").length > 0
                             visible: active
                             sourceComponent: CustomIcon {
                                 source: rowItem.modelData.iconSource
-                                width: Appearance.font.pixelSize.normal
-                                height: Appearance.font.pixelSize.normal
+                                width: Appearance.font.pixelSize.larger
+                                height: Appearance.font.pixelSize.larger
                                 colorize: true
-                                color: Appearance.colors.colSubtext
+                                color: Appearance.colors.colOnLayer1
                             }
                         }
 
@@ -278,16 +307,18 @@ Item {
                             visible: active
                             sourceComponent: MaterialSymbol {
                                 text: rowItem.modelData.symbol
-                                iconSize: Appearance.font.pixelSize.normal
-                                color: Appearance.colors.colSubtext
+                                fill: 1
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: Appearance.colors.colOnLayer1
                             }
                         }
 
                         StyledText {
                             Layout.fillWidth: true
                             text: rowItem.modelData.label
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colSubtext
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.bold: true
+                            color: Appearance.colors.colOnLayer1
                             elide: Text.ElideRight
                         }
 
@@ -296,14 +327,16 @@ Item {
                             // are out of sight.
                             visible: rowItem.modelData.collapsed ?? false
                             text: rowItem.modelData.count ?? 0
-                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: true
                             color: Appearance.colors.colSubtext
                         }
 
                         MaterialSymbol {
                             text: "expand_more"
-                            iconSize: Appearance.font.pixelSize.normal
-                            color: Appearance.colors.colSubtext
+                            fill: 1
+                            iconSize: 24
+                            color: Appearance.colors.colOnLayer1
                             rotation: (rowItem.modelData.collapsed ?? false) ? -90 : 0
 
                             Behavior on rotation {
@@ -329,76 +362,122 @@ Item {
                 active: rowItem.modelData.kind === "model" && !!rowItem.modelData.model
                 visible: active
 
-                sourceComponent: RippleButton {
-                    id: modelButton
+                sourceComponent: RowLayout {
+                    id: modelRow
                     readonly property var entry: rowItem.modelData.model
-                    readonly property bool keyed: root.hasKey(entry)
+                    readonly property bool keyed: root.hasKey(modelRow.entry)
+                    readonly property bool selected: modelRow.entry.id === Ai.currentModelId
 
-                    leftPadding: 10
-                    rightPadding: 10
-                    topPadding: 8
-                    bottomPadding: 8
-                    buttonRadius: Appearance.rounding.small
-                    toggled: entry.id === Ai.currentModelId
-                    colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    colRipple: Appearance.colors.colLayer2Active
-                    colBackgroundToggled: Appearance.colors.colSecondaryContainer
-                    colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-                    onClicked: root.picked(modelButton.entry.id)
+                    spacing: root.gap
 
-                    contentItem: ColumnLayout {
-                        spacing: 2
+                    Rectangle {
+                        id: modelPill
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.max(root.rowHeight, modelColumn.implicitHeight + root.gap * 2)
+                        radius: Appearance.rounding.large
+                        color: modelRow.selected
+                            ? (modelMouse.containsPress ? Appearance.colors.colPrimaryActive
+                                : modelMouse.containsMouse ? Appearance.colors.colPrimaryHover
+                                : Appearance.colors.colPrimary)
+                            : (modelMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                                : modelMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                                : Appearance.colors.colSurfaceContainerHighest)
 
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: modelButton.entry.title
-                                elide: Text.ElideRight
-                                color: modelButton.toggled ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer2
-                            }
+                        readonly property color colOn: modelRow.selected
+                            ? Appearance.colors.colOnPrimary
+                            : Appearance.colors.colOnSurface
 
-                            MaterialSymbol {
-                                visible: !modelButton.keyed
-                                text: "key_off"
-                                iconSize: Appearance.font.pixelSize.normal
-                                color: Appearance.colors.colSubtext
-                            }
-
-                            MaterialSymbol {
-                                visible: modelButton.toggled
-                                text: "check"
-                                iconSize: Appearance.font.pixelSize.larger
-                                color: Appearance.m3colors.m3onSecondaryContainer
-                            }
+                        Behavior on color {
+                            ColorAnimation { duration: 150 }
                         }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
+                        MouseArea {
+                            id: modelMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.picked(modelRow.entry.id)
+                        }
 
-                            Repeater {
-                                model: root.badgeDefs.filter(badge => modelButton.entry[badge.key] === true)
-
-                                CapabilityBadge {
-                                    required property var modelData
-                                    symbol: modelData.symbol
-                                    label: modelData.label
-                                }
-                            }
+                        ColumnLayout {
+                            id: modelColumn
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: root.inset
+                            anchors.rightMargin: root.inset
+                            spacing: 2
 
                             StyledText {
                                 Layout.fillWidth: true
-                                visible: text.length > 0
-                                text: modelButton.keyed ? root.formatContext(modelButton.entry.contextWindow) : Translation.tr("No API key yet")
-                                horizontalAlignment: Text.AlignRight
+                                text: modelRow.entry.title
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.bold: true
                                 elide: Text.ElideRight
-                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                color: Appearance.colors.colSubtext
+                                color: modelPill.colOn
                             }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: root.gap
+
+                                Repeater {
+                                    model: root.badgeDefs.filter(badge => modelRow.entry[badge.key] === true)
+
+                                    delegate: CapabilityBadge {
+                                        required property var modelData
+
+                                        symbol: modelData.symbol
+                                        label: modelData.label
+                                        tint: modelPill.colOn
+                                        opacity: 0.75
+                                    }
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+
+                                // A model with no key can still be read about;
+                                // it just cannot be picked yet, and says so.
+                                MaterialSymbol {
+                                    visible: !modelRow.keyed
+                                    text: "key_off"
+                                    fill: 1
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: modelPill.colOn
+                                    opacity: 0.75
+                                }
+
+                                StyledText {
+                                    visible: text.length > 0
+                                    text: modelRow.keyed
+                                        ? root.formatContext(modelRow.entry.contextWindow)
+                                        : Translation.tr("No API key yet")
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: modelPill.colOn
+                                    opacity: 0.75
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.preferredWidth: root.rowHeight
+                        Layout.preferredHeight: root.rowHeight
+                        Layout.alignment: Qt.AlignVCenter
+                        radius: height / 2
+                        visible: modelRow.selected
+                        color: Appearance.colors.colPrimaryContainer
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "check"
+                            fill: 1
+                            iconSize: 24
+                            color: Appearance.colors.colOnPrimaryContainer
                         }
                     }
                 }

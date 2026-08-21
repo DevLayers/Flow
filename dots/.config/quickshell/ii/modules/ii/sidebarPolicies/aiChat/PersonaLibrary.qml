@@ -30,7 +30,13 @@ Item {
     property string view: "list"
 
     readonly property var personas: Ai.personas.all
-    readonly property string activeId: Ai.personas.currentId
+    /**
+     * The chat's persona, not the persisted default. `personas.currentId` is
+     * the fallback stored in Persistent; `setPersona` writes `sessionPersonaId`
+     * and `Ai.currentPersona` reads that one, so reading the other left this
+     * list marking whatever was saved rather than what the chat is using.
+     */
+    readonly property string activeId: Ai.sessionPersonaId
 
     /** Whether the prompt-file list is unfolded. Folded is the normal state. */
     property bool promptsExpanded: false
@@ -43,14 +49,24 @@ Item {
 
     implicitHeight: root.view === "prompt" ? promptLoader.implicitHeight : listColumnLayout.implicitHeight
 
+    readonly property real rowHeight: Math.round(Appearance.font.pixelSize.huge * 2.5)
+    readonly property real gap: Appearance.rounding.unsharpenmore
+    readonly property real inset: Appearance.rounding.large
+
     component SectionHeading: StyledText {
         Layout.fillWidth: true
-        Layout.topMargin: 4
-        font.pixelSize: Appearance.font.pixelSize.smaller
+        Layout.topMargin: root.gap
+        font.pixelSize: Appearance.font.pixelSize.normal
         color: Appearance.colors.colSubtext
+        wrapMode: Text.Wrap
     }
 
-    component EntryRow: RippleButton {
+    /**
+     * One persona or prompt file. The pill holds the entry; the mark of which
+     * one is in use, and the way to throw one away, sit in their own circles
+     * beside it rather than crowding the pill's inside.
+     */
+    component EntryRow: RowLayout {
         id: entryRow
 
         property string symbol: ""
@@ -59,80 +75,136 @@ Item {
         property bool selected: false
         property bool deletable: false
 
+        signal clicked
         signal deleteRequested
 
         Layout.fillWidth: true
-        leftPadding: 10
-        rightPadding: 6
-        topPadding: 8
-        bottomPadding: 8
-        buttonRadius: Appearance.rounding.small
-        toggled: entryRow.selected
-        colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-        colBackgroundHover: Appearance.colors.colLayer2Hover
-        colRipple: Appearance.colors.colLayer2Active
-        colBackgroundToggled: Appearance.colors.colSecondaryContainer
-        colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+        spacing: root.gap
 
-        contentItem: RowLayout {
-            spacing: 10
+        Rectangle {
+            id: entryPill
 
-            MaterialSymbol {
-                visible: entryRow.symbol.length > 0
-                text: entryRow.symbol
-                iconSize: Appearance.font.pixelSize.larger
-                color: entryRow.toggled ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer2
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.max(root.rowHeight, entryColumn.implicitHeight + root.gap * 2)
+            radius: Appearance.rounding.large
+
+            color: entryRow.selected
+                ? (entryMouse.containsPress ? Appearance.colors.colPrimaryActive
+                    : entryMouse.containsMouse ? Appearance.colors.colPrimaryHover
+                    : Appearance.colors.colPrimary)
+                : (entryMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                    : entryMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                    : Appearance.colors.colSurfaceContainerHighest)
+
+            readonly property color colOn: entryRow.selected
+                ? Appearance.colors.colOnPrimary
+                : Appearance.colors.colOnSurface
+
+            Behavior on color {
+                ColorAnimation { duration: 150 }
             }
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: entryRow.label
-                    elide: Text.ElideRight
-                    color: entryRow.toggled ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer2
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    visible: entryRow.sublabel.length > 0
-                    text: entryRow.sublabel
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colSubtext
-                }
+            MouseArea {
+                id: entryMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: entryRow.clicked()
             }
 
-            RippleButton {
-                visible: entryRow.deletable
-                implicitWidth: 26
-                implicitHeight: 26
-                buttonRadius: Appearance.rounding.full
-                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colRipple: Appearance.colors.colLayer2Active
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: root.inset
+                anchors.rightMargin: root.inset
+                spacing: 12
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: entryRow.symbol.length > 0
+                    text: entryRow.symbol
+                    fill: 1
+                    iconSize: 24
+                    color: entryPill.colOn
+                }
+
+                ColumnLayout {
+                    id: entryColumn
+                    Layout.fillWidth: true
+                    spacing: root.gap
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: entryRow.label
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        font.bold: true
+                        elide: Text.ElideRight
+                        color: entryPill.colOn
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: entryRow.sublabel.length > 0
+                        text: entryRow.sublabel
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        elide: Text.ElideRight
+                        color: entryPill.colOn
+                        opacity: 0.75
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.preferredWidth: root.rowHeight
+            Layout.preferredHeight: root.rowHeight
+            Layout.alignment: Qt.AlignVCenter
+            radius: height / 2
+            visible: entryRow.deletable
+            color: deleteMouse.containsPress ? Appearance.colors.colErrorContainerActive
+                : deleteMouse.containsMouse ? Appearance.colors.colErrorContainerHover
+                : Appearance.colors.colErrorContainer
+
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
+
+            MouseArea {
+                id: deleteMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
                 onClicked: entryRow.deleteRequested()
-
-                contentItem: MaterialSymbol {
-                    anchors.centerIn: parent
-                    horizontalAlignment: Text.AlignHCenter
-                    text: "delete"
-                    iconSize: Appearance.font.pixelSize.larger
-                    color: Appearance.colors.colOnLayer2
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Delete this persona")
-                }
             }
 
             MaterialSymbol {
-                visible: entryRow.selected
+                anchors.centerIn: parent
+                text: "delete"
+                fill: 1
+                iconSize: 24
+                color: Appearance.colors.colOnErrorContainer
+            }
+
+            StyledToolTip {
+                extraVisibleCondition: false
+                alternativeVisibleCondition: deleteMouse.containsMouse
+                text: Translation.tr("Delete this persona")
+            }
+        }
+
+        Rectangle {
+            Layout.preferredWidth: root.rowHeight
+            Layout.preferredHeight: root.rowHeight
+            Layout.alignment: Qt.AlignVCenter
+            radius: height / 2
+            visible: entryRow.selected
+            color: Appearance.colors.colPrimaryContainer
+
+            MaterialSymbol {
+                anchors.centerIn: parent
                 text: "check"
-                iconSize: Appearance.font.pixelSize.larger
-                color: Appearance.m3colors.m3onSecondaryContainer
+                fill: 1
+                iconSize: 24
+                color: Appearance.colors.colOnPrimaryContainer
             }
         }
     }
@@ -142,6 +214,9 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
+        // Reaches the bottom when the host gives this a height, so the list
+        // scrolls inside the view instead of running past its edge.
+        anchors.bottom: root.height > listColumnLayout.implicitHeight ? parent.bottom : undefined
         visible: root.view === "list"
         spacing: 2
 
@@ -187,7 +262,8 @@ Item {
 
         StyledFlickable {
             Layout.fillWidth: true
-            implicitHeight: Math.min(entriesColumnLayout.implicitHeight, 320)
+            Layout.fillHeight: true
+            implicitHeight: entriesColumnLayout.implicitHeight
             contentWidth: width
             contentHeight: entriesColumnLayout.implicitHeight
             clip: true
@@ -195,7 +271,7 @@ Item {
             ColumnLayout {
                 id: entriesColumnLayout
                 width: parent.width
-                spacing: 2
+                spacing: root.gap
 
                 EntryRow {
                     symbol: "chat"

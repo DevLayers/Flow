@@ -29,11 +29,219 @@ Item {
 
     implicitHeight: contentColumnLayout.implicitHeight
 
+    /** Each mode gets a face, since the row is wide enough to carry one. */
+    readonly property var modeIcons: ({
+        "functions": "service_toolbox",
+        "search": "travel_explore",
+        "none": "block"
+    })
+
+    readonly property real rowHeight: Math.round(Appearance.font.pixelSize.huge * 2.5)
+    readonly property real gap: Appearance.rounding.unsharpenmore
+    readonly property real inset: Appearance.rounding.large
+
     component SectionLabel: StyledText {
         Layout.fillWidth: true
-        Layout.topMargin: 4
-        font.pixelSize: Appearance.font.pixelSize.smaller
+        Layout.topMargin: root.gap
+        font.pixelSize: Appearance.font.pixelSize.normal
         color: Appearance.colors.colSubtext
+        wrapMode: Text.Wrap
+    }
+
+    /** What the model may reach for. One filled, check-marked pill per mode. */
+    component ModeOption: RowLayout {
+        id: mode
+
+        property string label: ""
+        property string description: ""
+        property string symbol: ""
+        property bool selected: false
+        signal triggered
+
+        Layout.fillWidth: true
+        spacing: root.gap
+
+        Rectangle {
+            id: modePill
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.max(root.rowHeight, modeColumn.implicitHeight + root.gap * 2)
+            radius: Appearance.rounding.large
+            color: mode.selected
+                ? (modeMouse.containsPress ? Appearance.colors.colPrimaryActive
+                    : modeMouse.containsMouse ? Appearance.colors.colPrimaryHover
+                    : Appearance.colors.colPrimary)
+                : (modeMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                    : modeMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                    : Appearance.colors.colSurfaceContainerHighest)
+
+            readonly property color colOn: mode.selected
+                ? Appearance.colors.colOnPrimary
+                : Appearance.colors.colOnSurface
+
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
+
+            MouseArea {
+                id: modeMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: mode.triggered()
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: root.inset
+                anchors.rightMargin: root.gap
+                spacing: 12
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: mode.symbol.length > 0
+                    text: mode.symbol
+                    fill: 1
+                    iconSize: 24
+                    color: modePill.colOn
+                }
+
+                ColumnLayout {
+                    id: modeColumn
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: mode.label
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        font.bold: true
+                        color: modePill.colOn
+                        elide: Text.ElideRight
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: mode.description.length > 0
+                        text: mode.description
+                        // Two lines at most. A long description used to stretch
+                        // its pill to nearly twice the height of the ones beside
+                        // it, which broke the row rhythm the whole view is built on.
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: modePill.colOn
+                        opacity: 0.75
+                        wrapMode: Text.Wrap
+                    }
+                }
+
+            }
+        }
+
+        // Outside the pill, matching the option rows elsewhere in the chat.
+        Rectangle {
+            Layout.preferredWidth: root.rowHeight
+            Layout.preferredHeight: root.rowHeight
+            Layout.alignment: Qt.AlignVCenter
+            radius: height / 2
+            visible: mode.selected
+            color: Appearance.colors.colPrimaryContainer
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "check"
+                fill: 1
+                iconSize: 24
+                color: Appearance.colors.colOnPrimaryContainer
+            }
+        }
+    }
+
+    /**
+     * When a tool may run, as a segmented track whose selection is a filled
+     * pill that slides between the three. Denying a tool is the one choice
+     * that changes what the model can do to the machine, so it is the only
+     * segment that takes the error colour.
+     */
+    component PermissionSegments: Rectangle {
+        id: segments
+
+        property string value: ""
+        property bool danger: false
+        signal picked(string value)
+
+        readonly property var values: Ai.toolbox.permissionValues
+        readonly property int selectedIndex: Math.max(0, segments.values.indexOf(segments.value))
+        readonly property real segmentWidth: segments.width / Math.max(1, segments.values.length)
+
+        implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.6)
+        radius: height / 2
+        color: Appearance.colors.colLayer2
+
+        // The selection itself, moving rather than reappearing elsewhere.
+        Rectangle {
+            width: segments.segmentWidth
+            height: parent.height
+            radius: height / 2
+            x: segments.selectedIndex * segments.segmentWidth
+            color: segments.value === "deny"
+                ? Appearance.colors.colErrorContainer
+                : (segments.danger && segments.value === "allow"
+                    ? Appearance.colors.colErrorContainer
+                    : Appearance.colors.colPrimary)
+
+            Behavior on x {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                }
+            }
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
+        }
+
+        Row {
+            anchors.fill: parent
+
+            Repeater {
+                model: segments.values
+
+                delegate: Item {
+                    required property var modelData
+                    required property int index
+
+                    width: segments.segmentWidth
+                    height: segments.height
+
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: segments.picked(modelData)
+                    }
+
+                    StyledText {
+                        anchors.centerIn: parent
+                        text: Ai.toolbox.permissionLabels[modelData] ?? modelData
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.bold: index === segments.selectedIndex
+                        color: index === segments.selectedIndex
+                            ? (segments.value === "deny" || (segments.danger && segments.value === "allow")
+                                ? Appearance.colors.colOnErrorContainer
+                                : Appearance.colors.colOnPrimary)
+                            : Appearance.colors.colOnLayer2
+                        elide: Text.ElideRight
+
+                        Behavior on color {
+                            ColorAnimation { duration: 150 }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     ColumnLayout {
@@ -41,7 +249,11 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        spacing: 6
+        // Without a bottom the column ran past the view and the scroller below
+        // inherited an unbounded height, so the last tools were simply cut off
+        // with nothing to scroll.
+        anchors.bottom: root.height > contentColumnLayout.implicitHeight ? undefined : parent.bottom
+        spacing: root.gap
 
         SectionLabel {
             Layout.topMargin: 0
@@ -53,47 +265,22 @@ Item {
                 values: Array.from(Ai.availableTools)
             }
 
-            RippleButton {
-                id: modeButton
+            delegate: ModeOption {
                 required property var modelData
 
-                Layout.fillWidth: true
-                leftPadding: 10
-                rightPadding: 10
-                topPadding: 8
-                bottomPadding: 8
-                buttonRadius: Appearance.rounding.small
-                toggled: Ai.currentTool === modeButton.modelData
-                colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colRipple: Appearance.colors.colLayer2Active
-                colBackgroundToggled: Appearance.colors.colSecondaryContainer
-                colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-                onClicked: Ai.setTool(modeButton.modelData)
-
-                contentItem: ColumnLayout {
-                    spacing: 0
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Ai.toolbox.modeLabels[modeButton.modelData] ?? modeButton.modelData
-                        color: modeButton.toggled ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer2
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Ai.toolbox.modeDescriptions[modeButton.modelData] ?? ""
-                        wrapMode: Text.Wrap
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colSubtext
-                    }
-                }
+                symbol: root.modeIcons[modelData] ?? "handyman"
+                label: Ai.toolbox.modeLabels[modelData] ?? modelData
+                description: Ai.toolbox.modeDescriptions[modelData] ?? ""
+                selected: Ai.currentTool === modelData
+                onTriggered: Ai.setTool(modelData)
             }
         }
 
         StyledFlickable {
             Layout.fillWidth: true
-            implicitHeight: Math.min(scrolledColumnLayout.implicitHeight, 320)
+            // Fills the view rather than stopping at a panel's worth of height.
+            Layout.fillHeight: true
+            implicitHeight: scrolledColumnLayout.implicitHeight
             contentWidth: width
             contentHeight: scrolledColumnLayout.implicitHeight
             clip: true
@@ -101,7 +288,7 @@ Item {
             ColumnLayout {
                 id: scrolledColumnLayout
                 width: parent.width
-                spacing: 6
+                spacing: root.gap
 
                 SectionLabel {
                     visible: root.functionsMode
@@ -113,70 +300,90 @@ Item {
                         values: root.functionsMode ? root.definitions : []
                     }
 
-                    ColumnLayout {
+                    delegate: Rectangle {
                         id: toolRow
                         required property var modelData
 
                         readonly property string permission: Ai.toolbox.permission(toolRow.modelData.id)
+                        readonly property bool denied: toolRow.permission === "deny"
+                        readonly property bool risky: toolRow.modelData.risk === "danger"
 
                         Layout.fillWidth: true
-                        Layout.topMargin: 2
-                        spacing: 2
+                        Layout.preferredHeight: toolCardColumn.implicitHeight + root.inset * 2
+                        radius: Appearance.rounding.large
+                        color: Appearance.colors.colSurfaceContainerHighest
+                        // A denied tool stays legible instead of disappearing:
+                        // what the model cannot reach is worth reading too.
+                        opacity: toolRow.denied ? 0.6 : 1
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-
-                            MaterialSymbol {
-                                Layout.alignment: Qt.AlignTop
-                                text: toolRow.modelData.icon
-                                iconSize: Appearance.font.pixelSize.larger
-                                color: toolRow.permission === "deny" ? Appearance.colors.colSubtext : (toolRow.modelData.risk === "danger" ? Appearance.m3colors.m3error : Appearance.colors.colOnLayer2)
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: toolRow.modelData.title
-                                    color: Appearance.colors.colOnLayer2
-                                }
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: toolRow.modelData.summary
-                                    wrapMode: Text.Wrap
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    color: Appearance.colors.colSubtext
-                                }
-                            }
+                        Behavior on opacity {
+                            NumberAnimation { duration: 150 }
                         }
 
-                        ButtonGroup {
-                            // Sizes itself to its buttons, so it is left where
-                            // the tool it belongs to starts rather than
-                            // stretched across the panel.
-                            Layout.leftMargin: 28
+                        ColumnLayout {
+                            id: toolCardColumn
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: root.inset
+                            anchors.rightMargin: root.inset
+                            spacing: root.gap
 
-                            Repeater {
-                                model: Ai.toolbox.permissionValues
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 12
 
-                                GroupButton {
-                                    id: permissionButton
-                                    required property var modelData
+                                // The tool's face, in a circle that carries the
+                                // warning when the tool is one of the risky ones.
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignTop
+                                    Layout.preferredWidth: Math.round(Appearance.font.pixelSize.huge * 1.8)
+                                    Layout.preferredHeight: Layout.preferredWidth
+                                    radius: height / 2
+                                    color: toolRow.risky
+                                        ? Appearance.colors.colErrorContainer
+                                        : Appearance.colors.colLayer2
 
-                                    toggled: toolRow.permission === permissionButton.modelData
-                                    onClicked: Ai.toolbox.setPermission(toolRow.modelData.id, permissionButton.modelData)
-
-                                    contentItem: StyledText {
-                                        horizontalAlignment: Text.AlignHCenter
-                                        text: Ai.toolbox.permissionLabels[permissionButton.modelData] ?? permissionButton.modelData
-                                        font.pixelSize: Appearance.font.pixelSize.smaller
-                                        color: permissionButton.toggled ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer2
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        text: toolRow.modelData.icon
+                                        fill: 1
+                                        iconSize: 24
+                                        color: toolRow.risky
+                                            ? Appearance.colors.colOnErrorContainer
+                                            : Appearance.colors.colOnLayer2
                                     }
                                 }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: toolRow.modelData.title
+                                        font.pixelSize: Appearance.font.pixelSize.normal
+                                        font.bold: true
+                                        color: Appearance.colors.colOnSurface
+                                        wrapMode: Text.Wrap
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: toolRow.modelData.summary
+                                        wrapMode: Text.Wrap
+                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        color: Appearance.colors.colOnSurface
+                                        opacity: 0.75
+                                    }
+                                }
+                            }
+
+                            PermissionSegments {
+                                Layout.fillWidth: true
+                                value: toolRow.permission
+                                danger: toolRow.risky
+                                onPicked: value => Ai.toolbox.setPermission(toolRow.modelData.id, value)
                             }
                         }
                     }

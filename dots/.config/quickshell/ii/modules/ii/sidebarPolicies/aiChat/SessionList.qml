@@ -57,6 +57,146 @@ Item {
 
     Component.onCompleted: root.sessions.ensureLoaded()
 
+    /**
+     * Row metrics, shared by both pages so the circle, the card and the pills
+     * are one height and the two pages line up as the row slides between them.
+     */
+    readonly property real rowHeight: Math.round(Appearance.font.pixelSize.huge * 2.5)
+    readonly property real rowSpacing: Appearance.rounding.unsharpenmore
+    readonly property real rowInset: Appearance.rounding.large
+    readonly property real searchHeight: Math.round(Appearance.font.pixelSize.huge * 2)
+    /** Side padding inside an action pill — a pill's inset, not a card's. */
+    readonly property real pillPadding: Appearance.rounding.normal
+    /**
+     * Roughly what the five labelled pills and the back circle need side by
+     * side. Below it the labels step aside and the tooltips carry the names,
+     * which beats having the last pill cut off by the row's edge. Derived from
+     * the type scale so it moves with the user's font size.
+     */
+    readonly property real actionsLabelledWidth: Appearance.font.pixelSize.small * 42
+
+    /** The round control at either end of a row. */
+    component RowActionCircle: Rectangle {
+        id: rowCircle
+
+        property string symbol: ""
+        property color tint: Appearance.colors.colOnSurface
+        property bool filled: false
+        signal triggered
+
+        Layout.preferredWidth: root.rowHeight
+        Layout.fillHeight: true
+        radius: height / 2
+        color: rowCircle.filled
+            ? (rowCircleMouse.containsPress ? Appearance.colors.colPrimaryActive
+                : rowCircleMouse.containsMouse ? Appearance.colors.colPrimaryHover
+                : Appearance.colors.colPrimary)
+            : (rowCircleMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                : rowCircleMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                : Appearance.colors.colSurfaceContainerHighest)
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
+
+        MouseArea {
+            id: rowCircleMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: rowCircle.triggered()
+        }
+
+        MaterialSymbol {
+            anchors.centerIn: parent
+            text: rowCircle.symbol
+            fill: 1
+            iconSize: 24
+            color: rowCircle.tint
+        }
+    }
+
+    /**
+     * An inline action. Outlined by default and filled in the error colour
+     * when it throws something away, the way the Bluetooth dialog separates
+     * Connect from Forget.
+     */
+    component RowActionPill: Rectangle {
+        id: rowPill
+
+        property string symbol: ""
+        property string label: ""
+        property bool destructive: false
+        property bool showLabel: true
+        signal triggered
+
+        // Hugs its own content. The pills live in a Row inside a scroller, so
+        // the width is theirs to state — a layout that could squeeze them
+        // below their label is what left the text spilling outside the shape.
+        implicitWidth: rowPillRow.implicitWidth + root.pillPadding * 2
+        width: implicitWidth
+        height: parent ? parent.height : root.rowHeight
+        radius: height / 2
+
+        color: rowPill.destructive
+            ? (rowPillMouse.containsPress ? Appearance.colors.colErrorContainerActive
+                : rowPillMouse.containsMouse ? Appearance.colors.colErrorContainerHover
+                : Appearance.colors.colErrorContainer)
+            : "transparent"
+        border.width: rowPill.destructive ? 0 : 2
+        border.color: rowPillMouse.containsMouse
+            ? Appearance.colors.colOnSurface
+            : Appearance.colors.colOutline
+
+        readonly property color colOn: rowPill.destructive
+            ? Appearance.colors.colOnErrorContainer
+            : (rowPillMouse.containsMouse ? Appearance.colors.colOnSurface : Appearance.colors.colOutline)
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
+        Behavior on border.color {
+            ColorAnimation { duration: 150 }
+        }
+
+        MouseArea {
+            id: rowPillMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: rowPill.triggered()
+        }
+
+        RowLayout {
+            id: rowPillRow
+            anchors.centerIn: parent
+            spacing: 6
+
+            MaterialSymbol {
+                text: rowPill.symbol
+                fill: 1
+                iconSize: 18
+                color: rowPill.colOn
+                Behavior on color { ColorAnimation { duration: 150 } }
+            }
+
+            StyledText {
+                visible: rowPill.showLabel
+                text: rowPill.label
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.bold: true
+                color: rowPill.colOn
+                elide: Text.ElideRight
+                Behavior on color { ColorAnimation { duration: 150 } }
+            }
+        }
+
+        StyledToolTip {
+            text: rowPill.label
+            extraVisibleCondition: !rowPill.showLabel && rowPillMouse.containsMouse
+        }
+    }
+
     component ActionButton: RippleButton {
         id: actionButton
 
@@ -87,75 +227,70 @@ Item {
         anchors.fill: parent
         spacing: 6
 
-        RowLayout {
+        // No new-chat button here: the tools bar above this view already has
+        // one, and two of them a few pixels apart read as two different things.
+        Rectangle {
             Layout.fillWidth: true
-            spacing: 6
+            implicitHeight: root.searchHeight
+            radius: height / 2
+            color: Appearance.colors.colLayer2
 
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 36
-                radius: height / 2
-                color: Appearance.colors.colLayer2
+            MouseArea {
+                // The whole field is a text target, not just the glyphs in it.
+                anchors.fill: parent
+                cursorShape: Qt.IBeamCursor
+                acceptedButtons: Qt.LeftButton
+                onClicked: searchField.forceActiveFocus()
+            }
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 6
-                    spacing: 6
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: root.rowInset
+                anchors.rightMargin: Appearance.rounding.unsharpenmore
+                spacing: Appearance.rounding.unsharpenmore
 
-                    MaterialSymbol {
-                        text: "search"
-                        iconSize: Appearance.font.pixelSize.larger
+                MaterialSymbol {
+                    text: "search"
+                    fill: 1
+                    iconSize: 24
+                    color: Appearance.colors.colSubtext
+                }
+
+                StyledTextInput {
+                    id: searchField
+                    Layout.fillWidth: true
+                    color: Appearance.colors.colOnLayer2
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    onTextChanged: searchDebounce.restart()
+                    onAccepted: {
+                        searchDebounce.stop();
+                        root.sessions.search(searchField.text);
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.IBeamCursor
+                        acceptedButtons: Qt.NoButton
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: searchField.text.length === 0
+                        text: Translation.tr("Search chats")
                         color: Appearance.colors.colSubtext
-                    }
-
-                    StyledTextInput {
-                        id: searchField
-                        Layout.fillWidth: true
-                        color: Appearance.colors.colOnLayer2
-                        onTextChanged: searchDebounce.restart()
-                        onAccepted: {
-                            searchDebounce.stop();
-                            root.sessions.search(searchField.text);
-                        }
-
-                        StyledText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: searchField.text.length === 0
-                            text: Translation.tr("Search chats")
-                            color: Appearance.colors.colSubtext
-                            font: searchField.font
-                        }
-                    }
-
-                    ActionButton {
-                        visible: searchField.text.length > 0
-                        implicitWidth: 24
-                        implicitHeight: 24
-                        symbol: "close"
-                        tooltipText: Translation.tr("Clear")
-                        onClicked: {
-                            searchField.clear();
-                            root.sessions.search("");
-                        }
+                        font: searchField.font
                     }
                 }
-            }
 
-            ActionButton {
-                symbol: "add_comment"
-                tooltipText: Translation.tr("New chat")
-                onClicked: {
-                    Ai.newChat();
-                    root.closeRequested();
+                ActionButton {
+                    visible: searchField.text.length > 0
+                    symbol: "close"
+                    tooltipText: Translation.tr("Clear")
+                    onClicked: {
+                        searchField.clear();
+                        root.sessions.search("");
+                    }
                 }
-            }
-
-            ActionButton {
-                visible: root.showCloseButton
-                symbol: "left_panel_close"
-                tooltipText: Translation.tr("Close")
-                onClicked: root.closeRequested()
             }
         }
 
@@ -165,162 +300,324 @@ Item {
 
             StyledListView {
                 id: sessionListView
+        // The canvas already slides this whole view in; animating
+        // every row on top of that read as a second, different
+        // entrance. Rows added later by the search still animate.
+        animatePopulate: false
                 anchors.fill: parent
-                spacing: 2
+                spacing: root.rowSpacing
                 clip: true
 
                 model: ScriptModel {
                     values: root.visibleEntries
                 }
 
-                delegate: Rectangle {
+                delegate: Item {
                     id: sessionRow
                     required property var modelData
 
                     readonly property bool current: sessionRow.modelData.id === root.sessions.currentId
-                    readonly property bool expanded: sessionRow.modelData.id === root.expandedId
                     readonly property bool renaming: sessionRow.modelData.id === root.renamingId
 
                     anchors.left: parent?.left
                     anchors.right: parent?.right
-                    implicitHeight: rowColumnLayout.implicitHeight + 8 * 2
-                    radius: Appearance.rounding.small
-                    color: sessionRow.current ? Appearance.colors.colSecondaryContainer : (rowMouseArea.containsMouse ? Appearance.colors.colLayer2Hover : ColorUtils.transparentize(Appearance.colors.colLayer2, 1))
+                    implicitHeight: root.rowHeight
+                    height: implicitHeight
 
-                    Behavior on color {
-                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                    }
+                    readonly property real rFull: height / 2
 
-                    MouseArea {
-                        id: rowMouseArea
+                    // Two pages side by side, the way the Bluetooth dialog
+                    // shows a device and then what can be done with it: the
+                    // circle on the right slides the row over rather than
+                    // growing a panel underneath it.
+                    Flickable {
+                        id: rowFlick
                         anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (sessionRow.renaming)
-                                return;
-                            Ai.openSession(sessionRow.modelData.id);
-                            root.closeRequested();
-                        }
-                    }
+                        contentWidth: rowFlick.width * 2 + root.rowSpacing
+                        contentHeight: rowFlick.height
+                        interactive: false
+                        clip: true
 
-                    ColumnLayout {
-                        id: rowColumnLayout
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 6
-                        spacing: 2
+                        property bool showActions: false
+                        contentX: rowFlick.showActions ? (rowFlick.width + root.rowSpacing) : 0
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-
-                            MaterialSymbol {
-                                visible: sessionRow.modelData.pinned
-                                text: "keep"
-                                iconSize: Appearance.font.pixelSize.small
-                                color: Appearance.colors.colSubtext
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                visible: !sessionRow.renaming
-                                text: sessionRow.modelData.title.length > 0 ? sessionRow.modelData.title : Translation.tr("Untitled chat")
-                                elide: Text.ElideRight
-                                color: sessionRow.current ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer1
-                            }
-
-                            Loader {
-                                Layout.fillWidth: true
-                                active: sessionRow.renaming
-                                visible: active
-                                sourceComponent: StyledTextInput {
-                                    text: sessionRow.modelData.title
-                                    color: Appearance.colors.colOnLayer1
-                                    Component.onCompleted: {
-                                        forceActiveFocus();
-                                        selectAll();
-                                    }
-                                    onAccepted: {
-                                        root.sessions.rename(sessionRow.modelData.id, text);
-                                        root.renamingId = "";
-                                    }
-                                    Keys.onEscapePressed: root.renamingId = ""
-                                }
-                            }
-
-                            StyledText {
-                                text: root.whenText(sessionRow.modelData.updatedAt)
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colSubtext
-                            }
-
-                            ActionButton {
-                                implicitWidth: 26
-                                implicitHeight: 26
-                                symbol: sessionRow.expanded ? "expand_less" : "more_horiz"
-                                tooltipText: Translation.tr("More")
-                                onClicked: root.expandedId = sessionRow.expanded ? "" : sessionRow.modelData.id
+                        Behavior on contentX {
+                            NumberAnimation {
+                                duration: 400
+                                easing.type: Easing.OutExpo
                             }
                         }
 
-                        StyledText {
-                            Layout.fillWidth: true
-                            visible: sessionRow.modelData.preview.length > 0 && !sessionRow.expanded
-                            text: sessionRow.modelData.preview
-                            maximumLineCount: 1
-                            elide: Text.ElideRight
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colSubtext
-                        }
+                        Row {
+                            height: rowFlick.height
+                            spacing: root.rowSpacing
 
-                        Loader {
-                            Layout.fillWidth: true
-                            active: sessionRow.expanded
-                            visible: active
-                            sourceComponent: RowLayout {
-                                spacing: 2
+                            // PAGE 1 — the chat itself
+                            RowLayout {
+                                width: rowFlick.width
+                                height: rowFlick.height
+                                spacing: root.rowSpacing
 
-                                ActionButton {
-                                    symbol: "edit"
-                                    tooltipText: Translation.tr("Rename")
-                                    onClicked: {
-                                        root.renamingId = sessionRow.modelData.id;
-                                        root.expandedId = "";
-                                    }
-                                }
-
-                                ActionButton {
-                                    symbol: sessionRow.modelData.pinned ? "keep_off" : "keep"
-                                    tooltipText: sessionRow.modelData.pinned ? Translation.tr("Unpin") : Translation.tr("Pin to the top")
-                                    onClicked: root.sessions.setPinned(sessionRow.modelData.id, !sessionRow.modelData.pinned)
-                                }
-
-                                ActionButton {
-                                    symbol: "content_copy"
-                                    tooltipText: Translation.tr("Duplicate")
-                                    onClicked: root.sessions.duplicate(sessionRow.modelData.id)
-                                }
-
-                                ActionButton {
-                                    symbol: "download"
-                                    tooltipText: Translation.tr("Export as Markdown")
-                                    onClicked: root.sessions.exportMarkdown(sessionRow.modelData.id)
-                                }
-
-                                Item {
+                                Rectangle {
+                                    id: sessionCard
                                     Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    radius: sessionRow.rFull
+
+                                    color: sessionRow.current
+                                        ? (cardMouse.containsPress ? Appearance.colors.colPrimaryActive
+                                            : cardMouse.containsMouse ? Appearance.colors.colPrimaryHover
+                                            : Appearance.colors.colPrimary)
+                                        : (cardMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                                            : cardMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                                            : Appearance.colors.colSurfaceContainerHighest)
+
+                                    readonly property color colOn: sessionRow.current
+                                        ? Appearance.colors.colOnPrimary
+                                        : Appearance.colors.colOnSurface
+
+                                    Behavior on color {
+                                        ColorAnimation { duration: 150 }
+                                    }
+
+                                    MouseArea {
+                                        id: cardMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        enabled: !sessionRow.renaming
+                                        onClicked: {
+                                            Ai.openSession(sessionRow.modelData.id);
+                                            root.closeRequested();
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: root.rowInset
+                                        anchors.rightMargin: root.rowInset
+                                        spacing: 12
+
+                                        MaterialSymbol {
+                                            text: sessionRow.modelData.pinned ? "keep" : "forum"
+                                            fill: 1
+                                            iconSize: 24
+                                            color: sessionCard.colOn
+                                        }
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            visible: !sessionRow.renaming
+                                            text: sessionRow.modelData.title.length > 0
+                                                ? sessionRow.modelData.title
+                                                : Translation.tr("Untitled chat")
+                                            font.pixelSize: Appearance.font.pixelSize.normal
+                                            font.bold: true
+                                            color: sessionCard.colOn
+                                            elide: Text.ElideRight
+                                        }
+
+                                        Loader {
+                                            Layout.fillWidth: true
+                                            active: sessionRow.renaming
+                                            visible: active
+                                            sourceComponent: StyledTextInput {
+                                                text: sessionRow.modelData.title
+                                                color: sessionCard.colOn
+                                                Component.onCompleted: {
+                                                    forceActiveFocus();
+                                                    selectAll();
+                                                }
+                                                onAccepted: {
+                                                    root.sessions.rename(sessionRow.modelData.id, text);
+                                                    root.renamingId = "";
+                                                }
+                                                Keys.onEscapePressed: root.renamingId = ""
+                                            }
+                                        }
+
+                                        StyledText {
+                                            text: root.whenText(sessionRow.modelData.updatedAt)
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.bold: true
+                                            color: sessionCard.colOn
+                                            opacity: 0.7
+                                        }
+                                    }
                                 }
 
-                                ActionButton {
-                                    symbol: "delete"
-                                    tooltipText: Translation.tr("Delete")
-                                    onClicked: {
-                                        root.expandedId = "";
-                                        root.sessions.remove(sessionRow.modelData.id);
+                                // The circle beside the row. Its icon turns
+                                // into the direction it will travel on hover.
+                                Rectangle {
+                                    id: actionCircle
+                                    Layout.preferredWidth: root.rowHeight
+                                    Layout.fillHeight: true
+                                    radius: sessionRow.rFull
+                                    color: sessionRow.current
+                                        ? (actionCircleMouse.containsPress ? Appearance.colors.colPrimaryActive
+                                            : actionCircleMouse.containsMouse ? Appearance.colors.colPrimaryHover
+                                            : Appearance.colors.colPrimary)
+                                        : (actionCircleMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                                            : actionCircleMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                                            : Appearance.colors.colSurfaceContainerHighest)
+
+                                    Behavior on color {
+                                        ColorAnimation { duration: 150 }
                                     }
+
+                                    MouseArea {
+                                        id: actionCircleMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: rowFlick.showActions = true
+                                    }
+
+                                    Item {
+                                        anchors.centerIn: parent
+                                        width: 24
+                                        height: 24
+
+                                        MaterialSymbol {
+                                            anchors.centerIn: parent
+                                            text: sessionRow.current ? "check" : "more_horiz"
+                                            fill: 1
+                                            iconSize: 24
+                                            color: sessionCard.colOn
+                                            opacity: actionCircleMouse.containsMouse ? 0 : 1
+                                            scale: actionCircleMouse.containsMouse ? 0.5 : 1
+                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                            Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
+                                        }
+
+                                        MaterialSymbol {
+                                            anchors.centerIn: parent
+                                            text: "arrow_back"
+                                            fill: 1
+                                            iconSize: 24
+                                            color: sessionCard.colOn
+                                            opacity: actionCircleMouse.containsMouse ? 1 : 0
+                                            scale: actionCircleMouse.containsMouse ? 1 : 0.5
+                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                            Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // PAGE 2 — what can be done with the chat
+                            RowLayout {
+                                width: rowFlick.width
+                                height: rowFlick.height
+                                spacing: root.rowSpacing
+
+                                RowActionCircle {
+                                    symbol: "arrow_forward"
+                                    tint: sessionCard.colOn
+                                    filled: sessionRow.current
+                                    onTriggered: rowFlick.showActions = false
+                                }
+
+                                // The actions scroll on their own. The row is
+                                // as wide as the sidebar and the list of things
+                                // a chat can do is not, so the alternative was
+                                // the last pill being cut by the row's edge.
+                                Flickable {
+                                    id: actionsFlick
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    contentWidth: actionsRow.implicitWidth
+                                    contentHeight: height
+                                    flickableDirection: Flickable.HorizontalFlick
+                                    boundsBehavior: Flickable.StopAtBounds
+                                    interactive: actionsFlick.contentWidth > actionsFlick.width
+                                    clip: true
+
+                                    MouseArea {
+                                        // Most mice only send a vertical wheel,
+                                        // so it is turned sideways here. Left
+                                        // alone when everything already fits,
+                                        // where the list below should get it.
+                                        anchors.fill: parent
+                                        acceptedButtons: Qt.NoButton
+                                        enabled: actionsFlick.interactive
+                                        onWheel: wheel => {
+                                            const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
+                                            const limit = actionsFlick.contentWidth - actionsFlick.width;
+                                            actionsFlick.contentX = Math.max(0, Math.min(limit, actionsFlick.contentX - delta));
+                                            wheel.accepted = true;
+                                        }
+                                    }
+
+                                    Row {
+                                        id: actionsRow
+                                        height: actionsFlick.height
+                                        spacing: root.rowSpacing
+
+                                        RowActionPill {
+                                            showLabel: rowFlick.width >= root.actionsLabelledWidth
+                                            symbol: "edit"
+                                            label: Translation.tr("Rename")
+                                            onTriggered: {
+                                                root.renamingId = sessionRow.modelData.id;
+                                                rowFlick.showActions = false;
+                                            }
+                                        }
+
+                                        RowActionPill {
+                                            showLabel: rowFlick.width >= root.actionsLabelledWidth
+                                            symbol: sessionRow.modelData.pinned ? "keep_off" : "keep"
+                                            label: sessionRow.modelData.pinned ? Translation.tr("Unpin") : Translation.tr("Pin")
+                                            onTriggered: {
+                                                root.sessions.setPinned(sessionRow.modelData.id, !sessionRow.modelData.pinned);
+                                                rowFlick.showActions = false;
+                                            }
+                                        }
+
+                                        RowActionPill {
+                                            showLabel: rowFlick.width >= root.actionsLabelledWidth
+                                            symbol: "content_copy"
+                                            label: Translation.tr("Duplicate")
+                                            onTriggered: {
+                                                root.sessions.duplicate(sessionRow.modelData.id);
+                                                rowFlick.showActions = false;
+                                            }
+                                        }
+
+                                        RowActionPill {
+                                            showLabel: rowFlick.width >= root.actionsLabelledWidth
+                                            symbol: "download"
+                                            label: Translation.tr("Export")
+                                            onTriggered: {
+                                                root.sessions.exportMarkdown(sessionRow.modelData.id);
+                                                rowFlick.showActions = false;
+                                            }
+                                        }
+
+                                        RowActionPill {
+                                            showLabel: rowFlick.width >= root.actionsLabelledWidth
+                                            symbol: "delete"
+                                            label: Translation.tr("Delete")
+                                            destructive: true
+                                            onTriggered: {
+                                                rowFlick.showActions = false;
+                                                root.sessions.remove(sessionRow.modelData.id);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Says there is more to the right, and fades
+                                // out once the end has been reached.
+                                ScrollEdgeFade {
+                                    // Overlays the viewport rather than the
+                                    // scrolling content, and anchors itself to
+                                    // its target, so no layout slot and no
+                                    // anchors of our own here.
+                                    parent: actionsFlick
+                                    target: actionsFlick
+                                    vertical: false
+                                    color: Appearance.colors.colLayer1
                                 }
                             }
                         }
