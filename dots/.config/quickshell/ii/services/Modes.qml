@@ -294,6 +294,7 @@ Singleton {
     function removeRoutine(id) {
         if (root.isRoutineRunning(id))
             root.stopRoutine(id, "deleted");
+        root.setStep("routine", id, null);
         root.saveRoutines(root.routines.filter(r => r.id !== id));
         root.setRoutineSuppressed(id, false);
         root.state.routineFired = ModeSchema.toArray(root.state.routineFired).filter(f => f.id !== id);
@@ -386,22 +387,58 @@ Singleton {
         root.historyAppended(entry);
     }
 
+    // Failures that surfaced after a pause land on the entry that started
+    // the sequence, so the Activity tab shows them where the run is.
+    function amendHistoryFailed(kind, id, failed) {
+        const list = ModeSchema.toArray(root.state.history);
+        const idx = list.findIndex(h => h.kind === kind && h.id === id
+            && (h.event === "start" || h.event === "run"));
+        if (idx === -1)
+            return;
+        const entry = ModeSchema.clone(list[idx]);
+        const next = ModeSchema.toArray(failed);
+        if (ModeSchema.valuesEqual(ModeSchema.toArray(entry.failed), next))
+            return;
+        if (next.length)
+            entry.failed = next;
+        else
+            delete entry.failed;
+        list[idx] = entry;
+        root.state.history = list;
+    }
+
     function clearHistory() {
         root.state.history = [];
     }
 
     // ---------------------------------------------------------------- engine
 
-    // Runs `actions` in order. `persist(snapshot)` is called after every
-    // successful apply so a crash loses at most one entry. Returns the final
-    // snapshot and the list of skipped/failed actions; a failure never stops
-    // the rest.
-    function applyActions(ownerId, actions, persist) {
-        const snapshot = [];
-        const failed = [];
-        for (const action of actions) {
+    // Runs `actions` in order from `start`. `persist(snapshot)` is called
+    // after every successful apply so a crash loses at most one entry. A
+    // failure never stops the rest; a wait step or a delayed action does:
+    // the rest is handed back as `deferred` for the step queue to resume.
+    // `resumed` means the first action's delay has already elapsed.
+    function applyActions(ownerId, actions, persist, start = 0, snapshot = [], failed = [], resumed = false) {
+        snapshot = snapshot.slice();
+        failed = failed.slice();
+        for (let i = start; i < actions.length; ++i) {
+            const action = actions[i];
+            if (action.type === "wait") {
+                const sec = ModeSchema.actionPauseSec(action);
+                return {
+                    snapshot: snapshot, failed: failed,
+                    deferred: { index: i + 1, dueAt: Date.now() + sec * 1000, resumed: false }
+                };
+            }
+            const delay = ModeSchema.actionPauseSec(action);
+            if (delay > 0 && !(resumed && i === start)) {
+                return {
+                    snapshot: snapshot, failed: failed,
+                    deferred: { index: i, dueAt: Date.now() + delay * 1000, resumed: true }
+                };
+            }
             const entry = root.actions.get(action.type);
-            if (!entry) {
+            if (!entry || !entry.apply) {
                 failed.push(`${action.type}: unknown action`);
                 continue;
             }
@@ -422,7 +459,7 @@ Singleton {
                 failed.push(`${action.type}: ${e}`);
             }
         }
-        return { snapshot: snapshot, failed: failed };
+        return { snapshot: snapshot, failed: failed, deferred: null };
     }
 
     // Replays a snapshot in reverse. Entries whose value no longer matches
@@ -475,6 +512,7 @@ Singleton {
         const result = root.applyActions(id, def.actions, snap => { root.state.snapshot = snap; });
         const failed = result.failed;
         root.state.failed = failed;
+        root.setStep("mode", id, result.deferred, source, failed);
 
         if (def.end.autoOffMin > 0) {
             root.state.activeEndsAt = Date.now() + def.end.autoOffMin * 60000;
@@ -526,6 +564,7 @@ Singleton {
 
         graceTimer.stop();
         autoOffTimer.stop();
+        root.setStep("mode", id, null);
         root.state.activeId = "";
         root.state.activeSource = "";
         root.state.activeSince = 0;
@@ -764,6 +803,7 @@ Singleton {
             } finally {
                 root.runDepth -= 1;
             }
+            root.setStep("routine", id, result.deferred, source, result.failed);
             root.appendHistory("routine", id, "run", source, result.failed);
             const skipped = result.failed.length ? `, skipped: ${result.failed.join("; ")}` : "";
             console.log(`[Modes] routine "${id}" ran (${source})${skipped}`);
@@ -789,6 +829,7 @@ Singleton {
         run.snapshot = result.snapshot;
         run.failed = result.failed;
         root.setRoutineRun(id, ModeSchema.clone(run));
+        root.setStep("routine", id, result.deferred, source, result.failed);
         root.routineWatcherFor(id)?.grace.stop();
         if (source === "manual")
             root.setRoutineSuppressed(id, false);
@@ -816,6 +857,7 @@ Singleton {
         // false and true again, like a mode.
         if (reason === "manual" && root.triggersHold(w))
             root.setRoutineSuppressed(id, true);
+        root.setStep("routine", id, null);
         root.setRoutineRun(id, null);
         root.appendHistory("routine", id, "end", reason);
         console.log(`[Modes] routine "${id}" ended (${reason})`);
@@ -860,6 +902,127 @@ Singleton {
         }
         w.grace.interval = Math.max(0, root.graceSec) * 1000;
         w.grace.restart();
+    }
+
+    // ---------------------------------------------------------------- steps
+
+    // Sequences paused on a wait or a delayed action, one entry per owner.
+    readonly property var pendingSteps: root.ready ? ModeSchema.toArray(root.state.pendingSteps) : []
+
+    function stepFor(kind, id) {
+        return root.pendingSteps.find(s => s.kind === kind && s.id === id) ?? null;
+    }
+
+    // Replaces (or with `deferred` null, drops) the pending step of an owner.
+    function setStep(kind, id, deferred, source, failed) {
+        const list = ModeSchema.toArray(root.state.pendingSteps).filter(s => !(s.kind === kind && s.id === id));
+        if (deferred) {
+            list.push({
+                kind: kind, id: id, index: deferred.index, dueAt: deferred.dueAt,
+                resumed: deferred.resumed === true, source: source ?? "manual",
+                failed: ModeSchema.toArray(failed)
+            });
+        }
+        if (list.length === 0 && ModeSchema.toArray(root.state.pendingSteps).length === 0)
+            return;
+        root.state.pendingSteps = list;
+        root.armSteps();
+    }
+
+    function armSteps() {
+        stepTimer.stop();
+        let due = 0;
+        for (const s of ModeSchema.toArray(root.state.pendingSteps)) {
+            if (due === 0 || s.dueAt < due)
+                due = s.dueAt;
+        }
+        if (due === 0)
+            return;
+        stepTimer.interval = Math.max(250, due - Date.now() + 50);
+        stepTimer.start();
+    }
+
+    // Timers do not tick through suspend; the clock tick calls this too.
+    function runDueSteps() {
+        if (!root.ready)
+            return;
+        const now = Date.now();
+        for (const step of ModeSchema.toArray(root.state.pendingSteps)) {
+            if (step.dueAt > now)
+                continue;
+            root.setStep(step.kind, step.id, null);
+            root.resumeStep(step);
+        }
+        root.armSteps();
+    }
+
+    // Picks a sequence up where it paused. The owner must still be on;
+    // anything else has been cleaned up by whoever ended it.
+    function resumeStep(step) {
+        if (step.kind === "mode") {
+            const def = root.modeById(step.id);
+            if (!def || root.activeModeId !== step.id)
+                return;
+            const result = root.applyActions(step.id, def.actions, snap => { root.state.snapshot = snap; },
+                step.index, ModeSchema.toArray(root.state.snapshot), ModeSchema.toArray(root.state.failed),
+                step.resumed === true);
+            root.state.snapshot = result.snapshot;
+            root.state.failed = result.failed;
+            root.setStep("mode", step.id, result.deferred, step.source, result.failed);
+            root.amendHistoryFailed("mode", step.id, result.failed);
+            root.logStep(step, result);
+            return;
+        }
+        const def = root.routineById(step.id);
+        if (!def)
+            return;
+        if (def.kind === "once") {
+            const result = root.applyActions(step.id, def.actions, null, step.index, [],
+                ModeSchema.toArray(step.failed), step.resumed === true);
+            root.setStep("routine", step.id, result.deferred, step.source, result.failed);
+            root.amendHistoryFailed("routine", step.id, result.failed);
+            root.logStep(step, result);
+            return;
+        }
+        const run = root.routineRun(step.id);
+        if (!run)
+            return;
+        const result = root.applyActions(step.id, def.actions, snap => {
+            run.snapshot = snap;
+            root.setRoutineRun(step.id, ModeSchema.clone(run));
+        }, step.index, ModeSchema.toArray(run.snapshot), ModeSchema.toArray(run.failed), step.resumed === true);
+        run.snapshot = result.snapshot;
+        run.failed = result.failed;
+        root.setRoutineRun(step.id, ModeSchema.clone(run));
+        root.setStep("routine", step.id, result.deferred, step.source, result.failed);
+        root.amendHistoryFailed("routine", step.id, result.failed);
+        root.logStep(step, result);
+    }
+
+    function logStep(step, result) {
+        const next = result.deferred
+            ? `, paused again until ${root.clockText(result.deferred.dueAt, "hh:mm:ss")}` : ", done";
+        console.log(`[Modes] ${step.kind} "${step.id}" resumed at action ${step.index + 1}${next}`);
+    }
+
+    // Drops steps whose owner is no longer on (after a reload or a crash).
+    function pruneSteps() {
+        const kept = ModeSchema.toArray(root.state.pendingSteps).filter(s => {
+            if (s.kind === "mode")
+                return root.state.activeId === s.id && root.modeById(s.id) !== null;
+            const def = root.routineById(s.id);
+            if (!def)
+                return false;
+            return def.kind === "once" || root.isRoutineRunning(s.id);
+        });
+        if (kept.length !== ModeSchema.toArray(root.state.pendingSteps).length)
+            root.state.pendingSteps = kept;
+    }
+
+    Timer {
+        id: stepTimer
+        repeat: false
+        onTriggered: root.runDueSteps()
     }
 
     // ---------------------------------------------------------------- startup
@@ -918,6 +1081,8 @@ Singleton {
         root.ready = true;
         root.armAutoOff();
         root.checkAutoOff();
+        root.pruneSteps();
+        root.runDueSteps();
     }
 
     onStoresReadyChanged: root.reconcile()
@@ -1016,6 +1181,7 @@ Singleton {
         target: DateTime.clock
         function onDateChanged() {
             root.checkAutoOff();
+            root.runDueSteps();
         }
     }
 
@@ -1043,7 +1209,9 @@ Singleton {
                 : (item ? (item.satisfied ? "on" : "off") : "loading");
             const reason = item?.reason ? ` (${item.reason})` : "";
             const inverted = loader?.modelData?.not ? " [inverted]" : "";
-            lines.push(`  ${type}: ${verdict}${reason}${inverted}`);
+            const dwell = (loader?.forSec ?? 0) > 0
+                ? ` [for ${loader.forSec}s: ${loader.held ? "held" : (loader.counting ? "counting" : "idle")}]` : "";
+            lines.push(`  ${type}: ${verdict}${reason}${inverted}${dwell}`);
         }
         return lines;
     }
@@ -1106,6 +1274,10 @@ Singleton {
                 lines.push(`  ${e.type}: ${JSON.stringify(e.was)} -> ${JSON.stringify(e.set)}`);
             for (const f of ModeSchema.toArray(run.failed))
                 lines.push(`  skipped ${f}`);
+        }
+        for (const s of root.pendingSteps) {
+            lines.push(`paused: ${s.kind} ${s.id} resumes at action ${s.index + 1} `
+                + `at ${root.clockText(s.dueAt, "hh:mm:ss")}`);
         }
         const h = root.history[0];
         if (h)

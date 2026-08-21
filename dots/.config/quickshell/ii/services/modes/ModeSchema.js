@@ -138,10 +138,22 @@ function optionalInt(value, min, max) {
     return Math.max(min, Math.min(max, Math.round(n)));
 }
 
+var MAX_DURATION_SEC = 86400;
+
+function durationSec(value) {
+    var n = Number(value);
+    if (!isFinite(n) || n <= 0)
+        return 0;
+    return Math.min(MAX_DURATION_SEC, Math.round(n));
+}
+
+// Every trigger also accepts `forSec`: the verdict must hold that long
+// before it counts ("idle for 10 min", "in a game for 5 min").
 function normalizeTrigger(raw) {
     var t = (raw && typeof raw === "object") ? clone(raw) : {};
     t.type = typeof t.type === "string" ? t.type : "";
     t.not = t.not === true;
+    t.forSec = durationSec(t.forSec);
     switch (t.type) {
     case "schedule":
         t.from = validTime(t.from) ? t.from : "22:00";
@@ -222,6 +234,8 @@ function windowMatches(win, regexes) {
 
 // `revert: false` keeps an action's effect when its owner ends (routines
 // offer it per action); absent means revert like everything else.
+// `delaySec` holds the action — and everything below it — that long after
+// the previous step; a `wait` action is the same pause as a row of its own.
 function normalizeAction(raw) {
     var a = (raw && typeof raw === "object") ? clone(raw) : {};
     a.type = typeof a.type === "string" ? a.type : "";
@@ -229,7 +243,31 @@ function normalizeAction(raw) {
         a.value = null;
     if (typeof a.revert !== "boolean")
         delete a.revert;
+    var delay = durationSec(a.delaySec);
+    if (delay > 0)
+        a.delaySec = delay;
+    else
+        delete a.delaySec;
+    if (a.type === "wait")
+        a.value = Math.max(1, durationSec(a.value) || 60);
     return a;
+}
+
+// Seconds an action holds the sequence before it runs (its own delay, or
+// the length of a wait step).
+function actionPauseSec(action) {
+    if (!action)
+        return 0;
+    if (action.type === "wait")
+        return durationSec(action.value);
+    return durationSec(action.delaySec);
+}
+
+// Total time from start to the last action, for the editor's summary.
+function sequenceSpanSec(actions) {
+    var total = 0;
+    toArray(actions).forEach(function (a) { total += actionPauseSec(a); });
+    return total;
 }
 
 function normalizeMode(raw) {

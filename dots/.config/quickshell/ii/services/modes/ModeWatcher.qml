@@ -51,7 +51,43 @@ QtObject {
             readonly property string conditionType: loader.modelData?.type ?? ""
             readonly property bool supported: ModeSchema.CONDITION_SOURCES[conditionType] !== undefined
             readonly property bool conditionSatisfied: loader.item?.satisfied ?? false
-            onConditionSatisfiedChanged: root.recompute()
+            readonly property bool negated: loader.modelData?.not === true
+            // Seconds the verdict must hold before it counts (0: at once).
+            readonly property int forSec: ModeSchema.durationSec(loader.modelData?.forSec)
+            // The verdict before the dwell: satisfied, read through `not`.
+            readonly property bool rawOk: loader.conditionSatisfied !== loader.negated
+            // The verdict the watcher combines: rawOk once it has held long enough.
+            readonly property bool ok: loader.forSec > 0 ? loader.held : loader.rawOk
+            readonly property bool counting: loader.forSec > 0 && loader.rawOk && !loader.held
+            property bool held: false
+            property real heldSince: 0
+            readonly property Timer hold: Timer {
+                interval: Math.max(1, loader.forSec) * 1000
+                repeat: false
+                onTriggered: loader.held = true
+            }
+
+            function syncHold() {
+                if (loader.forSec <= 0) {
+                    loader.hold.stop();
+                    loader.held = false;
+                    return;
+                }
+                if (!loader.rawOk) {
+                    loader.hold.stop();
+                    loader.held = false;
+                    loader.heldSince = 0;
+                    return;
+                }
+                if (loader.held || loader.hold.running)
+                    return;
+                loader.heldSince = Date.now();
+                loader.hold.restart();
+            }
+
+            onRawOkChanged: loader.syncHold()
+            onForSecChanged: loader.syncHold()
+            onOkChanged: root.recompute()
             Component.onCompleted: {
                 if (!supported) {
                     console.log(`[Modes] ${root.modeId}: trigger "${conditionType}" has no watcher yet, `
@@ -64,7 +100,10 @@ QtObject {
                     armed: Qt.binding(() => root.armed)
                 });
             }
-            onLoaded: root.recompute()
+            onLoaded: {
+                loader.syncHold();
+                root.recompute();
+            }
         }
     }
 
@@ -85,8 +124,8 @@ QtObject {
         for (let i = 0; i < count; ++i) {
             const loader = root.conditionAt(i);
             const type = loader?.conditionType ?? "";
-            const negated = loader?.modelData?.not === true;
-            const ok = (loader?.conditionSatisfied ?? false) !== negated;
+            const negated = loader?.negated ?? false;
+            const ok = loader?.ok ?? false;
             if (ok) {
                 anyTrue = true;
                 if (firstSource === "manual") {

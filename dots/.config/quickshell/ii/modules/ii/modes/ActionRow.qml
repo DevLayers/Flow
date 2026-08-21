@@ -32,6 +32,11 @@ Rectangle {
         ? root.value : ({})
     readonly property bool inlineEditor: ModeUi.inlineActionEditors.indexOf(root.editor) !== -1
     readonly property bool hasForm: !root.inlineEditor && root.editor !== "none"
+    readonly property bool isWait: root.type === "wait"
+    readonly property int delaySec: ModeSchema.durationSec(root.action?.delaySec)
+    /// Whether the row may move up / down in its list (set by the editor).
+    property bool canMoveUp: false
+    property bool canMoveDown: false
     // Only actions the engine can put back offer the "undo at end" choice.
     readonly property bool revertible: root.routineKind === "while" && !!root.entry?.read && !!root.entry?.revert
     readonly property bool undoAtEnd: root.action?.revert !== false
@@ -47,6 +52,7 @@ Rectangle {
 
     signal changed(var action)
     signal removeRequested()
+    signal moveRequested(int delta)
 
     function setValue(v) {
         root.changed(Object.assign({}, ModeSchema.clone(root.action), { value: v }));
@@ -62,6 +68,15 @@ Rectangle {
             delete next.revert;
         else
             next.revert = false;
+        root.changed(next);
+    }
+
+    function setDelay(sec) {
+        const next = ModeSchema.clone(root.action);
+        if (sec > 0)
+            next.delaySec = sec;
+        else
+            delete next.delaySec;
         root.changed(next);
     }
 
@@ -137,6 +152,33 @@ Rectangle {
                             text: Translation.tr("Not available here")
                             font.pixelSize: Appearance.font.pixelSize.smallest
                             color: Appearance.colors.colOnErrorContainer
+                        }
+                    }
+
+                    // Delayed: the sequence pauses here before this action.
+                    Rectangle {
+                        visible: root.delaySec > 0
+                        implicitWidth: delayRow.implicitWidth + 14
+                        implicitHeight: 20
+                        radius: Appearance.rounding.full
+                        color: Appearance.colors.colTertiaryContainer
+
+                        RowLayout {
+                            id: delayRow
+                            anchors.centerIn: parent
+                            spacing: 3
+
+                            MaterialSymbol {
+                                text: "timer"
+                                iconSize: 12
+                                color: Appearance.colors.colOnTertiaryContainer
+                            }
+
+                            StyledText {
+                                text: ModeUi.actionDelayText(root.action)
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                color: Appearance.colors.colOnTertiaryContainer
+                            }
                         }
                     }
 
@@ -234,6 +276,13 @@ Rectangle {
                 onValueModified: root.setValue(value)
             }
 
+            DurationField {
+                visible: root.editor === "wait"
+                seconds: ModeSchema.durationSec(root.value) || 60
+                minimum: 1
+                onCommitted: sec => root.setValue(sec)
+            }
+
             // Routines: keep the effect after the routine ends, or put it back.
             RowLayout {
                 visible: root.revertible
@@ -255,9 +304,24 @@ Rectangle {
                 }
             }
 
+            // Order matters once waits and delays are in the list.
+            FormIconButton {
+                buttonIcon: "keyboard_arrow_up"
+                enabled: root.canMoveUp
+                opacity: enabled ? 1 : 0.3
+                onClicked: root.moveRequested(-1)
+            }
+
+            FormIconButton {
+                buttonIcon: "keyboard_arrow_down"
+                enabled: root.canMoveDown
+                opacity: enabled ? 1 : 0.3
+                onClicked: root.moveRequested(1)
+            }
+
             FormIconButton {
                 buttonIcon: root.expanded ? "expand_less" : "expand_more"
-                visible: root.hasForm
+                visible: !root.isWait
                 onClicked: root.expanded = !root.expanded
             }
 
@@ -297,6 +361,44 @@ Rectangle {
                     return;
                 }
                 formLoader.setSource(formLoader.formUrl, { row: root });
+            }
+        }
+
+        // "Screens off ten minutes after Sleep starts": the list pauses here
+        // before this action, so anything below waits too.
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 34
+            Layout.rightMargin: 6
+            Layout.bottomMargin: 4
+            visible: root.expanded && !root.isWait
+            spacing: 10
+
+            StyledSwitch {
+                checked: root.delaySec > 0
+                onClicked: root.setDelay(checked ? 300 : 0)
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
+
+                FormLabel {
+                    text: Translation.tr("Delay")
+                }
+
+                FormHint {
+                    text: root.delaySec > 0
+                        ? Translation.tr("Runs %1 after the step above; the rest of the list waits with it").arg(ModeUi.durationText(root.delaySec))
+                        : Translation.tr("Runs as soon as its turn comes")
+                }
+            }
+
+            DurationField {
+                visible: root.delaySec > 0
+                seconds: root.delaySec
+                minimum: 1
+                onCommitted: sec => root.setDelay(sec)
             }
         }
     }

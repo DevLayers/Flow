@@ -23,6 +23,9 @@ import "ModeSchema.js" as ModeSchema
  *    override check compares like with like.
  *  - extra() captures anything revert needs beyond the plain value.
  *  - editor / choices are metadata for the overlay's action rows.
+ *  - repeatable entries may appear more than once in one mode (a mode
+ *    otherwise holds each setting once); flow entries are sequence steps
+ *    the engine handles itself, never applied or reverted.
  *
  * `engine` is the Modes singleton; only the routine-only entries (mode,
  * routine) need it.
@@ -713,6 +716,16 @@ QtObject {
             }
         },
 
+        // ------------------------------------------------- flow
+        // Not an action: a pause the engine honours while walking the list.
+        // It is in the registry so the editor can offer and describe it.
+        wait: {
+            id: "wait", category: "flow", label: "Wait", icon: "hourglass_top",
+            editor: "wait", volatile: false, flow: true, repeatable: true,
+            // value: seconds
+            available: () => true
+        },
+
         // ------------------------------------------------- advanced
         shell: {
             id: "shell", category: "advanced", label: "Shell command", icon: "terminal",
@@ -794,6 +807,7 @@ QtObject {
         hyprland: { label: "Hyprland", icon: "window" },
         apps: { label: "Apps", icon: "apps" },
         radios: { label: "Connectivity", icon: "settings_input_antenna" },
+        flow: { label: "Timing", icon: "hourglass_top" },
         advanced: { label: "Advanced", icon: "code" }
     })
 
@@ -822,7 +836,9 @@ QtObject {
         if (!e)
             return `${type}: unknown`;
         const flags = [];
-        if (!e.read)
+        if (e.flow)
+            flags.push("sequence step");
+        else if (!e.read)
             flags.push("one-shot");
         if (e.volatile)
             flags.push("volatile");

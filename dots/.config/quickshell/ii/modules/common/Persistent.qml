@@ -330,6 +330,9 @@ Singleton {
                 property list<var> routineRuns: []
                 // Last fire time of `once` routines for cooldowns: [{id, t}]
                 property list<var> routineFired: []
+                // Action sequences paused on a wait or a delay, resumed by the
+                // engine when due: [{kind, id, index, dueAt, resumed, source, failed}]
+                property list<var> pendingSteps: []
             }
 
             property JsonObject overlay: JsonObject {

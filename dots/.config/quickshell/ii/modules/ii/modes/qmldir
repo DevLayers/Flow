@@ -30,3 +30,4 @@ FormIconButton 1.0 FormIconButton.qml
 SmallButton 1.0 SmallButton.qml
 TimeField 1.0 TimeField.qml
 PercentField 1.0 PercentField.qml
+DurationField 1.0 DurationField.qml

@@ -244,8 +244,12 @@ Item {
             EditorSection {
                 title: Translation.tr("Then")
                 icon: "bolt"
-                subtitle: root.actions.length === 1 ? Translation.tr("1 action")
-                    : Translation.tr("%1 actions, in this order").arg(root.actions.length)
+                subtitle: {
+                    const span = ModeSchema.sequenceSpanSec(root.actions);
+                    const base = root.actions.length === 1 ? Translation.tr("1 action")
+                        : Translation.tr("%1 actions, in this order").arg(root.actions.length);
+                    return span > 0 ? Translation.tr("%1, over %2").arg(base).arg(ModeUi.durationText(span)) : base;
+                }
 
                 Repeater {
                     model: root.actions
@@ -256,7 +260,11 @@ Item {
 
                         icon: ModeUi.actionIcon(actionRow.modelData.type)
                         label: ModeUi.actionLabel(actionRow.modelData.type)
-                        hint: ModeUi.actionValueText(actionRow.modelData)
+                        hint: {
+                            const delay = ModeUi.actionDelayText(actionRow.modelData);
+                            const value = ModeUi.actionValueText(actionRow.modelData);
+                            return delay.length ? `${delay} · ${value}` : value;
+                        }
                     }
                 }
             }

@@ -25,7 +25,12 @@ Rectangle {
     readonly property var condition: root.watcher?.conditionAt(root.triggerIndex) ?? null
     readonly property bool supported: root.condition?.supported ?? true
     readonly property bool negated: root.trigger?.not === true
-    readonly property bool holds: (root.condition?.item?.satisfied ?? false) !== root.negated
+    readonly property int forSec: ModeSchema.durationSec(root.trigger?.forSec)
+    // The verdict the engine uses (after the dwell); `counting` is the gap
+    // between the condition turning true and the dwell running out.
+    readonly property bool holds: root.condition ? (root.condition.ok ?? false)
+        : ((root.condition?.item?.satisfied ?? false) !== root.negated)
+    readonly property bool counting: root.condition?.counting ?? false
     readonly property string liveReason: root.condition?.item?.reason ?? ""
 
     onExpandedChanged: formLoader.sync()
@@ -95,7 +100,8 @@ Rectangle {
                 implicitHeight: 24
                 radius: Appearance.rounding.full
                 color: !root.supported ? Appearance.colors.colErrorContainer
-                    : (root.holds ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer3)
+                    : (root.holds ? Appearance.colors.colPrimaryContainer
+                    : (root.counting ? Appearance.colors.colTertiaryContainer : Appearance.colors.colLayer3))
 
                 MouseArea {
                     id: verdictArea
@@ -105,8 +111,10 @@ Rectangle {
                 }
 
                 StyledToolTip {
-                    extraVisibleCondition: verdictArea.containsMouse && root.liveReason.length > 0
-                    text: root.liveReason
+                    extraVisibleCondition: verdictArea.containsMouse && (root.liveReason.length > 0 || root.counting)
+                    text: root.counting
+                        ? Translation.tr("True right now; counts once it has held for %1").arg(ModeUi.durationText(root.forSec))
+                        : root.liveReason
                 }
 
                 RowLayout {
@@ -114,19 +122,22 @@ Rectangle {
                     anchors.centerIn: parent
                     spacing: 4
 
+                    readonly property color fg: !root.supported ? Appearance.colors.colOnErrorContainer
+                        : (root.holds ? Appearance.colors.colOnPrimaryContainer
+                        : (root.counting ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colSubtext))
+
                     MaterialSymbol {
-                        text: !root.supported ? "error" : (root.holds ? "check" : "remove")
+                        text: !root.supported ? "error" : (root.holds ? "check" : (root.counting ? "timer" : "remove"))
                         iconSize: 14
-                        color: !root.supported ? Appearance.colors.colOnErrorContainer
-                            : (root.holds ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext)
+                        color: verdictRow.fg
                     }
 
                     StyledText {
                         text: !root.supported ? Translation.tr("Unsupported")
-                            : (root.holds ? Translation.tr("Holds now") : Translation.tr("Not now"))
+                            : (root.holds ? Translation.tr("Holds now")
+                            : (root.counting ? Translation.tr("Counting") : Translation.tr("Not now")))
                         font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: !root.supported ? Appearance.colors.colOnErrorContainer
-                            : (root.holds ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext)
+                        color: verdictRow.fg
                     }
                 }
             }
@@ -189,6 +200,44 @@ Rectangle {
                     text: root.negated ? Translation.tr("Holds while the above is not the case")
                         : Translation.tr("Hold when the above is not the case instead")
                 }
+            }
+        }
+
+        // "Idle for 10 minutes", "in a game for 5 minutes": the verdict has
+        // to last this long before it counts. Zero means at once.
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 34
+            Layout.rightMargin: 6
+            Layout.bottomMargin: 4
+            visible: root.expanded
+            spacing: 10
+
+            StyledSwitch {
+                checked: root.forSec > 0
+                onClicked: root.set({ forSec: checked ? 300 : 0 })
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
+
+                FormLabel {
+                    text: Translation.tr("For at least")
+                }
+
+                FormHint {
+                    text: root.forSec > 0
+                        ? Translation.tr("Counts only once it has held for %1 without a break").arg(ModeUi.durationText(root.forSec))
+                        : Translation.tr("Counts the moment it holds")
+                }
+            }
+
+            DurationField {
+                visible: root.forSec > 0
+                seconds: root.forSec
+                minimum: 1
+                onCommitted: sec => root.set({ forSec: sec })
             }
         }
     }

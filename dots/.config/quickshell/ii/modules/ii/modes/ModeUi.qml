@@ -138,7 +138,36 @@ Singleton {
         if (!t)
             return "";
         const plain = root.plainTriggerText(t);
-        return t.not ? Translation.tr("Not: %1").arg(plain) : plain;
+        const text = t.not ? Translation.tr("Not: %1").arg(plain) : plain;
+        const dwell = ModeSchema.durationSec(t.forSec);
+        return dwell > 0 ? Translation.tr("%1 · for %2").arg(text).arg(root.durationText(dwell)) : text;
+    }
+
+    // "30 s", "5 min", "1 h 30 min".
+    function durationText(sec) {
+        const s = Math.max(0, Math.round(Number(sec) || 0));
+        if (s === 0)
+            return Translation.tr("0 s");
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const r = s % 60;
+        const parts = [];
+        if (h > 0)
+            parts.push(Translation.tr("%1 h").arg(h));
+        if (m > 0)
+            parts.push(Translation.tr("%1 min").arg(m));
+        if (r > 0 || parts.length === 0)
+            parts.push(Translation.tr("%1 s").arg(r));
+        return parts.join(" ");
+    }
+
+    // "After 5 min" for a delayed action, "" otherwise (wait steps say it
+    // through their value instead).
+    function actionDelayText(a) {
+        if (!a || a.type === "wait")
+            return "";
+        const d = ModeSchema.durationSec(a.delaySec);
+        return d > 0 ? Translation.tr("After %1").arg(root.durationText(d)) : "";
     }
 
     function plainTriggerText(t) {
@@ -398,6 +427,8 @@ Singleton {
             return { action: "start", id: Modes.modes[0]?.id ?? "" };
         case "routine":
             return { action: "run", id: "" };
+        case "wait":
+            return 60;
         }
         return type === "closeApps" ? [] : "";
     }
@@ -436,7 +467,7 @@ Singleton {
     }
 
     // Editors drawn right on the action row instead of in a form.
-    readonly property var inlineActionEditors: ["switch", "segmented", "dropdown", "stepper", "text"]
+    readonly property var inlineActionEditors: ["switch", "segmented", "dropdown", "stepper", "text", "wait"]
 
     // Open windows as chip suggestions: class as the value, title as the label.
     function windowSuggestions() {
@@ -549,6 +580,8 @@ Singleton {
             const name = Modes.routineById(obj?.id)?.name ?? obj?.id ?? "";
             return (obj?.action === "stop" ? Translation.tr("Stop %1") : Translation.tr("Run %1")).arg(name);
         }
+        case "wait":
+            return Translation.tr("Wait %1, then go on").arg(root.durationText(ModeSchema.durationSec(v)));
         }
         return v === null || v === undefined ? "" : String(v);
     }

@@ -25,6 +25,7 @@ ColumnLayout {
         }
 
         StyledSpinBox {
+            implicitHeight: baseHeight
             from: 1
             to: 16
             value: row.trigger.count

@@ -84,6 +84,18 @@ Item {
             root.actionsEdited = true;
     }
 
+    function moveAction(index, delta) {
+        const list = ModeSchema.clone(root.mode.actions);
+        const to = index + delta;
+        if (to < 0 || to >= list.length)
+            return;
+        const [item] = list.splice(index, 1);
+        list.splice(to, 0, item);
+        root.patch({ actions: list });
+        if (root.isActive)
+            root.actionsEdited = true;
+    }
+
     function addAction(type) {
         const list = ModeSchema.clone(root.mode.actions);
         list.push({ type: type, value: ModeUi.defaultActionValue(type) });
@@ -147,7 +159,7 @@ Item {
             if (entry.routineOnly)
                 continue;
             const available = Modes.actions.isAvailable(type);
-            const taken = used.indexOf(type) !== -1;
+            const taken = !entry.repeatable && used.indexOf(type) !== -1;
             out.push({
                 key: type,
                 label: entry.label,
@@ -448,8 +460,10 @@ Item {
                     const n = root.mode?.actions.length ?? 0;
                     if (n === 0)
                         return Translation.tr("Nothing yet — add what the mode should change");
-                    return n === 1 ? Translation.tr("1 setting applied")
+                    const span = ModeSchema.sequenceSpanSec(root.mode?.actions);
+                    const base = n === 1 ? Translation.tr("1 setting applied")
                         : Translation.tr("%1 settings applied, in this order").arg(n);
+                    return span > 0 ? Translation.tr("%1, over %2").arg(base).arg(ModeUi.durationText(span)) : base;
                 }
 
                 Repeater {
@@ -461,6 +475,9 @@ Item {
 
                         Layout.fillWidth: true
                         action: modelData
+                        canMoveUp: index > 0
+                        canMoveDown: index < (root.mode?.actions.length ?? 0) - 1
+                        onMoveRequested: delta => root.moveAction(index, delta)
                         onChanged: a => root.setAction(index, a)
                         onRemoveRequested: root.removeAction(index)
                     }

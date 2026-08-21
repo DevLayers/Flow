@@ -83,6 +83,18 @@ Item {
             root.actionsEdited = true;
     }
 
+    function moveAction(index, delta) {
+        const list = ModeSchema.clone(root.routine.actions);
+        const to = index + delta;
+        if (to < 0 || to >= list.length)
+            return;
+        const [item] = list.splice(index, 1);
+        list.splice(to, 0, item);
+        root.patch({ actions: list });
+        if (root.isRunning)
+            root.actionsEdited = true;
+    }
+
     function addAction(type) {
         const list = ModeSchema.clone(root.routine.actions);
         list.push({ type: type, value: ModeUi.defaultActionValue(type) });
@@ -438,7 +450,9 @@ Item {
                     const n = root.routine?.actions.length ?? 0;
                     if (n === 0)
                         return Translation.tr("Nothing yet — add what the routine should do");
-                    return n === 1 ? Translation.tr("1 action") : Translation.tr("%1 actions, in this order").arg(n);
+                    const span = ModeSchema.sequenceSpanSec(root.routine?.actions);
+                    const base = n === 1 ? Translation.tr("1 action") : Translation.tr("%1 actions, in this order").arg(n);
+                    return span > 0 ? Translation.tr("%1, over %2").arg(base).arg(ModeUi.durationText(span)) : base;
                 }
 
                 Repeater {
@@ -450,6 +464,9 @@ Item {
 
                         Layout.fillWidth: true
                         action: modelData
+                        canMoveUp: index > 0
+                        canMoveDown: index < (root.routine?.actions.length ?? 0) - 1
+                        onMoveRequested: delta => root.moveAction(index, delta)
                         routineKind: root.routine?.kind ?? "while"
                         ownerId: root.routineId
                         onChanged: a => root.setAction(index, a)
