@@ -118,7 +118,7 @@ Scope {
     /** Conversation-scoped choices are supplied and persisted by Ai.qml. */
     property bool perConversationScope: false
     property var conversationPermissions: ({ "alwaysAllow": [], "alwaysDeny": [] })
-    signal conversationPermissionsChanged(var permissions)
+    signal conversationPermissionsCommitted(var permissions)
 
     function permissionsForScope(): var {
         if (root.perConversationScope)
@@ -166,7 +166,7 @@ Scope {
         else if (value === "deny")
             deny.push(id);
         if (root.perConversationScope) {
-            root.conversationPermissionsChanged({
+            root.conversationPermissionsCommitted({
                 "alwaysAllow": allow,
                 "alwaysDeny": deny
             });

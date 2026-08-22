@@ -206,7 +206,7 @@ class ConversationPermissionScopeTests(unittest.TestCase):
     def test_tool_permissions_can_be_scoped_to_the_open_conversation(self):
         self.assertIn("property bool perConversationScope", TOOLS)
         self.assertIn("function permissionsForScope", TOOLS)
-        self.assertIn("conversationPermissionsChanged", TOOLS)
+        self.assertIn("conversationPermissionsCommitted", TOOLS)
         self.assertIn("scopePerConversation", AI_QML)
         self.assertIn("sessionToolPermissions", AI_QML)
         self.assertIn('"toolPermissions": root.sessionToolPermissions', AI_QML)

@@ -1581,7 +1581,7 @@ Singleton {
         localOnly: root.localOnly
         perConversationScope: Config.options?.ai?.tools?.scopePerConversation ?? false
         conversationPermissions: root.sessionToolPermissions
-        onConversationPermissionsChanged: permissions => root.setSessionToolPermissions(permissions)
+        onConversationPermissionsCommitted: permissions => root.setSessionToolPermissions(permissions)
         // Whether the network may be reached at all, asked separately from
         // whether the model is local. A local model with policy Yes may still
         // search; a remote model under a local-only policy may not exist.
