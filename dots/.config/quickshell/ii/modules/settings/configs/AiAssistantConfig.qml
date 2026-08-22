@@ -134,10 +134,6 @@ Item {
                 entryDescription: Translation.tr("Add models from any provider or your own endpoint to the picker")
                 entryAccent: Appearance.colors.colPrimary
                 entryOnAccent: Appearance.colors.colOnPrimary
-                entryContainer: Appearance.colors.colPrimaryContainer
-                entryContainerHover: Appearance.colors.colPrimaryContainerHover
-                entryContainerActive: Appearance.colors.colPrimaryContainerActive
-                entryOnContainer: Appearance.colors.colOnPrimaryContainer
                 onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/CustomModelsConfig.qml")
             }
 
@@ -147,10 +143,6 @@ Item {
                 entryDescription: Translation.tr("Tool permissions, request limits and attachments")
                 entryAccent: Appearance.colors.colTertiary
                 entryOnAccent: Appearance.colors.colOnTertiary
-                entryContainer: Appearance.colors.colTertiaryContainer
-                entryContainerHover: Appearance.colors.colTertiaryContainerHover
-                entryContainerActive: Appearance.colors.colTertiaryContainerActive
-                entryOnContainer: Appearance.colors.colOnTertiaryContainer
                 onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AdvancedAiConfig.qml")
             }
 
@@ -160,10 +152,6 @@ Item {
                 entryDescription: Translation.tr("Let it search folders you index locally, embedded through Ollama")
                 entryAccent: Appearance.colors.colSecondary
                 entryOnAccent: Appearance.colors.colOnSecondary
-                entryContainer: Appearance.colors.colSecondaryContainer
-                entryContainerHover: Appearance.colors.colSecondaryContainerHover
-                entryContainerActive: Appearance.colors.colSecondaryContainerActive
-                entryOnContainer: Appearance.colors.colOnSecondaryContainer
                 onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/RagConfig.qml")
             }
         }
@@ -272,69 +260,4 @@ Item {
         z: 10
     }
 
-    component SubPageEntryButton: RippleButton {
-        id: entryButton
-
-        property string entryIcon: ""
-        property string entryTitle: ""
-        property string entryDescription: ""
-        property color entryAccent: Appearance.colors.colPrimary
-        property color entryOnAccent: Appearance.colors.colOnPrimary
-        property color entryContainer: Appearance.colors.colPrimaryContainer
-        property color entryContainerHover: Appearance.colors.colPrimaryContainerHover
-        property color entryContainerActive: Appearance.colors.colPrimaryContainerActive
-        property color entryOnContainer: Appearance.colors.colOnPrimaryContainer
-
-        Layout.fillWidth: true
-        implicitHeight: entryRow.implicitHeight + 32
-        buttonRadius: Appearance.rounding.full
-        colBackground: entryButton.entryContainer
-        colBackgroundHover: entryButton.entryContainerHover
-        colBackgroundActive: entryButton.entryContainerActive
-        colRipple: entryButton.entryContainerActive
-
-        contentItem: RowLayout {
-            id: entryRow
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 12
-
-            MaterialShapeWrappedMaterialSymbol {
-                Layout.alignment: Qt.AlignVCenter
-                text: entryButton.entryIcon
-                shape: MaterialShape.Shape.Circle
-                iconSize: Appearance.font.pixelSize.large
-                padding: 8
-                color: entryButton.entryAccent
-                colSymbol: entryButton.entryOnAccent
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 2
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: entryButton.entryTitle
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    color: entryButton.entryOnContainer
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: entryButton.entryDescription
-                    wrapMode: Text.WordWrap
-                    color: entryButton.entryOnContainer
-                    opacity: 0.82
-                }
-            }
-
-            MaterialSymbol {
-                Layout.alignment: Qt.AlignVCenter
-                text: "arrow_forward"
-                iconSize: Appearance.font.pixelSize.large
-                color: entryButton.entryOnContainer
-            }
-        }
-    }
 }
