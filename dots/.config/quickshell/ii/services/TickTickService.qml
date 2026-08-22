@@ -20,6 +20,13 @@ Singleton {
     property bool syncing: false
     property var tasks: []
     property string inboxProjectId: "inbox"
+    // Why the last request failed, empty when it did not. The service used to
+    // log "Task created." whatever came back, including an expired token.
+    property string lastError: ""
+
+    /** Emitted with the id TickTick assigned, so a caller can point at it. */
+    signal taskCreated(string taskId, string title)
+    signal requestFailed(string operation, string reason)
 
     // ── Credentials (loaded from .env) ────────────────────────────
     property string clientId: ""
@@ -28,11 +35,37 @@ Singleton {
 
     readonly property string apiBase: "https://api.ticktick.com/open/v1"
     readonly property string envPath: Quickshell.shellPath(".env")
+    readonly property string helperPath: FileUtils.trimFileProtocol(Quickshell.shellPath("scripts/ticktick/api.py"))
 
     // ── Refresh interval (5 minutes) ──────────────────────────────
     readonly property int refreshInterval: 5 * 60 * 1000
 
     // ── Public API ────────────────────────────────────────────────
+
+    /**
+     * Sends one request to the helper.
+     *
+     * The token and every field travel as JSON on the helper's stdin. Nothing
+     * is interpolated into a command line: a task title is data, and a title
+     * with an apostrophe in it — or a semicolon, which is the same bug with a
+     * worse ending — has to stay data all the way to the API.
+     */
+    function send(process, payload) {
+        if (!root.available) {
+            root.lastError = qsTr("TickTick is not connected.");
+            return false;
+        }
+        if (process.running) {
+            root.lastError = qsTr("That request is already running.");
+            return false;
+        }
+        process.running = true;
+        process.write(JSON.stringify(Object.assign({
+            token: root.accessToken,
+            projectId: root.inboxProjectId
+        }, payload)) + "\n");
+        return true;
+    }
 
     function refresh() {
         if (!root.available)
@@ -42,39 +75,50 @@ Singleton {
     }
 
     function fetchTasksFromInbox() {
-        let cmd = `curl -s -X GET "${root.apiBase}/project/${root.inboxProjectId}/data" -H "Authorization: Bearer ${root.accessToken}"`;
-        fetchTasksProcess.command[2] = cmd;
-        fetchTasksProcess.running = true;
+        if (!root.send(fetchTasksProcess, { op: "list" }))
+            root.syncing = false;
     }
 
-    function createTask(title) {
-        if (!root.available)
-            return;
-        let body = JSON.stringify({
-            "title": title,
-            "projectId": root.inboxProjectId
-        });
-        let cmd = `curl -s -X POST "${root.apiBase}/task" -H "Authorization: Bearer ${root.accessToken}" -H "Content-Type: application/json" -d '${body}'`;
-        createTaskProcess.command[2] = cmd;
-        createTaskProcess.running = true;
+    function createTask(title, extra = null) {
+        return root.send(createTaskProcess, Object.assign({
+            op: "create",
+            title: String(title ?? "")
+        }, extra ?? ({})));
     }
 
     function completeTask(taskId, projectId) {
-        if (!root.available)
-            return;
-        let pid = projectId || root.inboxProjectId;
-        let cmd = `curl -s -X POST "${root.apiBase}/project/${pid}/task/${taskId}/complete" -H "Authorization: Bearer ${root.accessToken}"`;
-        completeTaskProcess.command[2] = cmd;
-        completeTaskProcess.running = true;
+        return root.send(completeTaskProcess, {
+            op: "complete",
+            taskId: String(taskId ?? ""),
+            projectId: projectId || root.inboxProjectId
+        });
     }
 
     function deleteTask(taskId, projectId) {
-        if (!root.available)
-            return;
-        let pid = projectId || root.inboxProjectId;
-        let cmd = `curl -s -X DELETE "${root.apiBase}/project/${pid}/task/${taskId}" -H "Authorization: Bearer ${root.accessToken}"`;
-        deleteTaskProcess.command[2] = cmd;
-        deleteTaskProcess.running = true;
+        return root.send(deleteTaskProcess, {
+            op: "delete",
+            taskId: String(taskId ?? ""),
+            projectId: projectId || root.inboxProjectId
+        });
+    }
+
+    /** Turns one helper reply into either an error or its payload. */
+    function readReply(line, what): var {
+        let reply = null;
+        try {
+            reply = JSON.parse(line);
+        } catch (e) {
+            root.lastError = qsTr("TickTick sent something unreadable.");
+            console.warn("[TickTick] unreadable reply for", what, ":", String(line).substring(0, 200));
+            return null;
+        }
+        if (!reply.ok) {
+            root.lastError = String(reply.error ?? qsTr("The request failed."));
+            console.warn("[TickTick]", what, "failed:", root.lastError);
+            return null;
+        }
+        root.lastError = "";
+        return reply;
     }
 
     // ── Init ──────────────────────────────────────────────────────
@@ -114,7 +158,6 @@ Singleton {
     }
 
     function loadEnv() {
-        loadEnvProcess.command[2] = `cat "${FileUtils.trimFileProtocol(root.envPath)}" 2>/dev/null || echo ""`;
         loadEnvProcess.running = true;
     }
 
@@ -160,42 +203,48 @@ Singleton {
     // Load .env
     Process {
         id: loadEnvProcess
-        command: ["bash", "-c", ""]
+        command: ["cat", FileUtils.trimFileProtocol(root.envPath)]
         stdout: StdioCollector {
             onStreamFinished: {
                 root.parseEnv(text);
             }
+        }
+        onExited: (exitCode, exitStatus) => {
+            // No .env is the normal case once the keyring holds the token.
+            if (exitCode !== 0)
+                root.parseEnv("");
         }
     }
 
     // Fetch tasks from inbox
     Process {
         id: fetchTasksProcess
-        command: ["bash", "-c", ""]
+        command: ["python3", root.helperPath]
+        stdinEnabled: true
         stdout: StdioCollector {
             onStreamFinished: {
-                try {
-                    let data = JSON.parse(text);
-                    // The /project/{id}/data endpoint returns { tasks: [...], ... }
-                    let rawTasks = data.tasks || data || [];
-                    let parsed = [];
-                    for (let i = 0; i < rawTasks.length; i++) {
-                        let t = rawTasks[i];
-                        parsed.push({
-                            "id": t.id || "",
-                            "projectId": t.projectId || root.inboxProjectId,
-                            "content": t.title || "",
-                            "done": (t.status !== undefined) ? (t.status === 2) : false,
-                            "date": t.dueDate ? new Date(t.dueDate) : new Date(),
-                            "hasDate": t.dueDate !== undefined && t.dueDate !== null
-                        });
-                    }
-                    root.tasks = parsed;
-                    console.log("[TickTick] Fetched " + parsed.length + " tasks.");
-                } catch (e) {
-                    console.error("[TickTick] Failed to parse tasks: " + e.message + " | raw: " + text.substring(0, 200));
-                }
+                const reply = root.readReply(text, "list");
                 root.syncing = false;
+                if (!reply) {
+                    root.requestFailed("list", root.lastError);
+                    return;
+                }
+                const data = reply.data ?? ({});
+                const rawTasks = data.tasks || [];
+                const parsed = [];
+                for (let i = 0; i < rawTasks.length; i++) {
+                    const task = rawTasks[i];
+                    parsed.push({
+                        "id": task.id || "",
+                        "projectId": task.projectId || root.inboxProjectId,
+                        "content": task.title || "",
+                        "done": (task.status !== undefined) ? (task.status === 2) : false,
+                        "date": task.dueDate ? new Date(task.dueDate) : new Date(),
+                        "hasDate": task.dueDate !== undefined && task.dueDate !== null
+                    });
+                }
+                root.tasks = parsed;
+                console.log("[TickTick] Fetched " + parsed.length + " tasks.");
             }
         }
     }
@@ -203,10 +252,20 @@ Singleton {
     // Create task
     Process {
         id: createTaskProcess
-        command: ["bash", "-c", ""]
+        command: ["python3", root.helperPath]
+        stdinEnabled: true
         stdout: StdioCollector {
             onStreamFinished: {
-                console.log("[TickTick] Task created. Refreshing...");
+                const reply = root.readReply(text, "create");
+                if (!reply) {
+                    root.requestFailed("create", root.lastError);
+                    return;
+                }
+                // The id TickTick assigned, rather than the assumption that
+                // something was created because the process exited.
+                const created = reply.data ?? ({});
+                root.taskCreated(String(created.id ?? ""), String(created.title ?? ""));
+                console.log("[TickTick] Task created:", created.id ?? "(no id)");
                 root.refresh();
             }
         }
@@ -215,9 +274,14 @@ Singleton {
     // Complete task
     Process {
         id: completeTaskProcess
-        command: ["bash", "-c", ""]
+        command: ["python3", root.helperPath]
+        stdinEnabled: true
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!root.readReply(text, "complete")) {
+                    root.requestFailed("complete", root.lastError);
+                    return;
+                }
                 console.log("[TickTick] Task completed. Refreshing...");
                 root.refresh();
             }
@@ -227,9 +291,14 @@ Singleton {
     // Delete task
     Process {
         id: deleteTaskProcess
-        command: ["bash", "-c", ""]
+        command: ["python3", root.helperPath]
+        stdinEnabled: true
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!root.readReply(text, "delete")) {
+                    root.requestFailed("delete", root.lastError);
+                    return;
+                }
                 console.log("[TickTick] Task deleted. Refreshing...");
                 root.refresh();
             }

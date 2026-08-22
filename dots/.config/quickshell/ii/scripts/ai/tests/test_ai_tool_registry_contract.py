@@ -174,3 +174,26 @@ class UserFacingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WebModePropertyBindingTests(unittest.TestCase):
+    """`AiTools.webMode` has to exist for `Ai.qml`'s own binding to it.
+
+    `AiToolRegistry.availability()` reads `context?.webMode` to gate
+    `web_search`/`fetch_url`, and `Ai.qml` assigns `webMode: root.webMode`
+    onto the `AiTools` it instantiates. The property itself was missing on
+    `AiTools`, which is not a lint warning — it is "Cannot assign to
+    non-existent property webMode" at runtime, and it took the whole `Ai`
+    singleton down with it, exactly like the QtObject-default-property bugs
+    elsewhere in this file's neighbours.
+    """
+
+    AI_QML = (ROOT / "services" / "Ai.qml").read_text(encoding="utf-8")
+
+    def test_ai_tools_declares_the_property_ai_qml_assigns(self):
+        self.assertIn("webMode: root.webMode", self.AI_QML)
+        self.assertIn("property string webMode:", TOOLS)
+
+    def test_the_context_the_registry_reads_actually_carries_it(self):
+        context = TOOLS.split("readonly property var availabilityContext: ({", 1)[1].split("})", 1)[0]
+        self.assertIn("webMode: root.webMode", context)

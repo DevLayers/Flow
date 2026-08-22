@@ -93,7 +93,7 @@ Item {
         const byId = Ai.messageByID ?? ({});
         root.visibleMessageIds = ids.filter(id => {
             const message = byId[id];
-            return message && message.role !== Ai.interfaceRole && (message.visibleToUser ?? true);
+            return message && message.role !== Ai.interfaceRole && Ai.isTranscriptEntry(id);
         });
     }
 

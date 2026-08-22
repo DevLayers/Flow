@@ -61,9 +61,17 @@ class RenderingTests(unittest.TestCase):
         self.assertIn('case "memoryFact":', MESSAGE)
 
     def test_completed_settings_results_remain_visible_with_pending_cards(self):
+        # `settingsResults` was joined by `fileResults` (Phase 2): both are
+        # "the result is the point" cards, kept once done the same way a
+        # search engine's results page does not disappear once read. The
+        # allowlist moved into `resultCardKinds` so a new one is one entry,
+        # not a second inline check.
         visible_cards = body_between(AI_QML, "function visibleToolCards(message): var", "/** The broker's key")
         self.assertIn('card.state === "pending"', visible_cards)
-        self.assertIn('card.kind === "settingsResults"', visible_cards)
+        self.assertIn("root.resultCardKinds.indexOf(card.kind) >= 0", visible_cards)
+        kinds = body_between(AI_QML, "readonly property var resultCardKinds:", "\n\n    function visibleToolCards")
+        self.assertIn('"settingsResults"', kinds)
+        self.assertIn('"fileResults"', kinds)
 
     def test_an_unknown_kind_still_draws_something(self):
         # A session written by a newer build must open, not blank out.

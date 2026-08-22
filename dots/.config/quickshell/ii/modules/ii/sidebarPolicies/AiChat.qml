@@ -71,6 +71,53 @@ Item {
     // ── Editing a question ────────────────────────────────────────────────
     /** The question being rewritten, "" when the composer is writing a new one. */
     property string editingMessageId: ""
+
+    // ── Prompt history (Up/Down, like a shell) ──────────────────────────
+    // -1 means "not navigating": the composer holds whatever the user is
+    // actually writing. Pressing Up from an empty draft starts the walk at
+    // the most recent prompt; Down retraces it and hands the original draft
+    // back once it walks off the newest end.
+    property int promptHistoryIndex: -1
+    property string promptHistoryDraftBackup: ""
+    property bool navigatingPromptHistory: false
+
+    function applyPromptHistoryText(text) {
+        root.navigatingPromptHistory = true;
+        messageInputField.text = text;
+        messageInputField.cursorPosition = messageInputField.text.length;
+        root.navigatingPromptHistory = false;
+    }
+
+    function resetPromptHistory() {
+        root.promptHistoryIndex = -1;
+        root.promptHistoryDraftBackup = "";
+    }
+
+    /** delta -1 walks to an older prompt (Up); +1 walks back toward the live draft (Down). */
+    function stepPromptHistory(delta: int): bool {
+        const history = Ai.ownPromptHistory;
+        if (history.length === 0)
+            return false;
+        if (root.promptHistoryIndex === -1) {
+            if (delta > 0)
+                return false; // already at the live draft, nothing newer
+            root.promptHistoryDraftBackup = messageInputField.text;
+            root.promptHistoryIndex = history.length - 1;
+        } else if (delta < 0) {
+            if (root.promptHistoryIndex === 0)
+                return true; // already at the oldest prompt; consume the key
+            root.promptHistoryIndex -= 1;
+        } else {
+            if (root.promptHistoryIndex >= history.length - 1) {
+                root.applyPromptHistoryText(root.promptHistoryDraftBackup);
+                root.resetPromptHistory();
+                return true;
+            }
+            root.promptHistoryIndex += 1;
+        }
+        root.applyPromptHistoryText(history[root.promptHistoryIndex]);
+        return true;
+    }
     // ── Finding something in this chat ────────────────────────────────────
     /** Whether the find-in-chat field is open over the transcript. */
     property bool transcriptSearchOpen: false
@@ -82,7 +129,7 @@ Item {
         const needle = root.transcriptQuery.trim().toLowerCase();
         if (needle.length === 0)
             return [];
-        const ids = Ai.messageIDs.filter(id => Ai.messageByID[id]?.visibleToUser ?? true);
+        const ids = Ai.messageIDs.filter(id => Ai.isTranscriptEntry(id));
         const found = [];
         for (let i = 0; i < ids.length; i++) {
             const message = Ai.messageByID[ids[i]];
@@ -184,10 +231,7 @@ Item {
         const index = messageListView.indexAt(8, probeY);
         if (index < 0)
             return anchor;
-        const modelIds = Ai.messageIDs.filter(id => {
-            const message = Ai.messageByID[id];
-            return message?.visibleToUser ?? true;
-        });
+        const modelIds = Ai.messageIDs.filter(id => Ai.isTranscriptEntry(id));
         anchor.messageId = String(modelIds[index] ?? "");
         const delegate = messageListView.itemAtIndex(index);
         if (delegate)
@@ -201,10 +245,7 @@ Item {
             messageListView.pinToEnd();
             return true;
         }
-        const modelIds = Ai.messageIDs.filter(id => {
-            const message = Ai.messageByID[id];
-            return message?.visibleToUser ?? true;
-        });
+        const modelIds = Ai.messageIDs.filter(id => Ai.isTranscriptEntry(id));
         const index = modelIds.indexOf(String(source.messageId ?? ""));
         if (index < 0)
             return false;
@@ -218,10 +259,7 @@ Item {
 
     function focusMessageTarget(messageId, anchor) {
         const targetId = String(messageId ?? "");
-        const modelIds = Ai.messageIDs.filter(id => {
-            const message = Ai.messageByID[id];
-            return message?.visibleToUser ?? true;
-        });
+        const modelIds = Ai.messageIDs.filter(id => Ai.isTranscriptEntry(id));
         const index = modelIds.indexOf(targetId);
         if (index < 0)
             return false;
@@ -748,6 +786,42 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         function onDraftRestored(text) {
             messageInputField.text = text;
             messageInputField.cursorPosition = messageInputField.text.length;
+            // A different chat has its own prompts; a walk started in the
+            // old one has nothing to do with them.
+            root.resetPromptHistory();
+        }
+        // `Ai.draft` is the source of truth once a submission actually
+        // clears it (accepted chat message, or a slash command via
+        // `clearDraftIfCurrent()`): that happens asynchronously, well after
+        // the click/Enter that triggered `handleInput()` returns, so nothing
+        // in this file can clear the field synchronously without risking
+        // wiping text the service decided to keep (a rejected submission,
+        // or a newer draft typed while the old one was still dispatching).
+        function onDraftChanged() {
+            if (messageInputField.text !== Ai.draft)
+                messageInputField.text = Ai.draft;
+        }
+    }
+
+    Connections {
+        // Voice dictation lands here rather than through a signal on `Ai`
+        // itself: the recorder is one service shared by both composers, and
+        // `activeSurface` is how it remembers which one asked — so a
+        // recording started from the sidebar never inserts itself into a
+        // Search composer sitting loaded but hidden elsewhere.
+        target: Ai.voiceService
+        function onStateChanged() {
+            if (Ai.voiceService.state !== "review" || Ai.voiceService.activeSurface !== "sidebar")
+                return;
+            const text = Ai.voiceService.draftText;
+            Ai.voiceService.attachDraft(text);
+            if (text.length === 0)
+                return;
+            messageInputField.text = messageInputField.text.length > 0
+                ? `${messageInputField.text} ${text}`
+                : text;
+            messageInputField.cursorPosition = messageInputField.text.length;
+            messageInputField.forceActiveFocus();
         }
     }
 
@@ -845,6 +919,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         id: circleButton
 
         property string symbol: ""
+        // Set while the button represents ongoing background work (e.g.
+        // transcription) rather than an idle/pressable action — spins the
+        // icon the same way the bar's own recording indicator does.
+        property bool spinning: false
 
         signal triggered
 
@@ -867,7 +945,15 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             text: circleButton.symbol
             fill: 1
             iconSize: 24
-            color: Appearance.colors.colOnLayer2
+            color: circleButton.toggled ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
+
+            RotationAnimator on rotation {
+                running: circleButton.spinning
+                from: 0
+                to: 360
+                duration: 900
+                loops: Animation.Infinite
+            }
         }
     }
 
@@ -1406,10 +1492,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         add: null // Prevent function calls from being janky
 
                         model: ScriptModel {
-                            values: Ai.messageIDs.filter(id => {
-                                const message = Ai.messageByID[id];
-                                return message?.visibleToUser ?? true;
-                            })
+                            values: Ai.messageIDs.filter(id => Ai.isTranscriptEntry(id))
                         }
                         delegate: AiMessage {
                             required property var modelData
@@ -1917,6 +2000,13 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                     // not throw away a half-written message.
                                     Ai.draft = messageInputField.text;
 
+                                    // Any change that did not come from
+                                    // walking the history — typing, pasting,
+                                    // the async draft clear after a send —
+                                    // means the reader is done recalling.
+                                    if (!root.navigatingPromptHistory && root.promptHistoryIndex !== -1)
+                                        root.resetPromptHistory();
+
                                     // Handle suggestions
                                     if (messageInputField.text.length === 0) {
                                         root.suggestionQuery = "";
@@ -2051,11 +2141,6 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                     }
                                 }
 
-                                function accept() {
-                                    root.handleInput(text);
-                                    text = "";
-                                }
-
                                 Keys.onPressed: event => {
                                     // `?` on an empty composer is the way into the
                                     // list of keys; with anything typed it is just a
@@ -2082,6 +2167,17 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                     } else if (event.key === Qt.Key_Down && suggestions.visible) {
                                         suggestions.selectedIndex = Math.min(root.suggestionList.length - 1, suggestions.selectedIndex + 1);
                                         event.accepted = true;
+                                    } else if (event.key === Qt.Key_Up && event.modifiers === Qt.NoModifier && root.editingMessageId.length === 0
+                                            && (messageInputField.text.length === 0 || root.promptHistoryIndex !== -1)) {
+                                        // Recall an earlier prompt, like a shell's history — only
+                                        // from an empty draft, so mid-line cursor movement in a
+                                        // real multi-line message is never hijacked.
+                                        if (root.stepPromptHistory(-1))
+                                            event.accepted = true;
+                                    } else if (event.key === Qt.Key_Down && event.modifiers === Qt.NoModifier && root.editingMessageId.length === 0
+                                            && (messageInputField.text.length === 0 || root.promptHistoryIndex !== -1)) {
+                                        if (root.stepPromptHistory(1))
+                                            event.accepted = true;
                                     } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return)) {
                                         if (event.modifiers & Qt.ShiftModifier) {
                                             // Insert newline
@@ -2246,6 +2342,54 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                                 if (!Ai.currentModelThinks || root.thinkingShortLabel.length === 0)
                                                     return Translation.tr("Model: %1").arg(name);
                                                 return Translation.tr("Model: %1\nThinking: %2").arg(name).arg(root.thinkingShortLabel);
+                                            }
+                                        }
+                                    }
+
+                                    ComposerCircleButton { // Dictate a message with the local voice backend
+                                        id: voiceButton
+                                        visible: Config.options.ai.voice.enabled
+                                        toggled: Ai.voiceService.state === "recording"
+                                        spinning: Ai.voiceService.state === "transcribing"
+                                        enabled: Ai.voiceService.state !== "transcribing"
+                                        symbol: {
+                                            switch (Ai.voiceService.state) {
+                                            case "recording": return "stop";
+                                            case "transcribing": return "progress_activity";
+                                            default: return "mic";
+                                            }
+                                        }
+                                        onTriggered: {
+                                            switch (Ai.voiceService.state) {
+                                            case "recording":
+                                                Ai.voiceService.stopRecording();
+                                                break;
+                                            case "transcribing":
+                                                break;
+                                            case "error":
+                                                Ai.voiceService.cancel();
+                                                Ai.voiceService.startRecording("sidebar");
+                                                break;
+                                            default:
+                                                Ai.voiceService.startRecording("sidebar");
+                                                break;
+                                            }
+                                        }
+
+                                        StyledToolTip {
+                                            extraVisibleCondition: false
+                                            alternativeVisibleCondition: parent.hovered
+                                            text: {
+                                                switch (Ai.voiceService.state) {
+                                                case "recording":
+                                                    return Translation.tr("Recording… %1s — click to stop").arg(Math.round(Ai.voiceService.recordingElapsedMs / 1000));
+                                                case "transcribing":
+                                                    return Translation.tr("Transcribing…");
+                                                case "error":
+                                                    return Ai.voiceService.errorText;
+                                                default:
+                                                    return Ai.voiceService.available ? Translation.tr("Dictate a message") : Ai.voiceService.unavailableReason();
+                                                }
                                             }
                                         }
                                     }

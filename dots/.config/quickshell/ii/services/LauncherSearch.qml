@@ -1297,7 +1297,10 @@ Singleton {
     }
 
     function settingsIntegrationSearch(query: string): var {
-        return Ai.settingsIntegration.search(query, 8);
+        // Three at most: the launcher list is shared with apps, commands and
+        // everything else, and a settings match is a suggestion rather than
+        // the answer to the whole query.
+        return Ai.settingsIntegration.search(query, 3);
     }
 
     readonly property var resultComp: {

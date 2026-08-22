@@ -29,7 +29,15 @@ Rectangle {
     property int listIndex: -1
     property int listCount: 0
     property int listCurrentIndex: -1
-    property var currentValue: root.readCurrentValue()
+    /**
+     * What the config holds right now.
+     *
+     * A binding, never assigned. `writeValue` used to set this to the value it
+     * had just written, which broke the binding on the first change — after
+     * that the card showed its own last write and stopped following the
+     * setting, so a change made in the Settings window never reached it.
+     */
+    readonly property var currentValue: root.readCurrentValue()
     property string writeError: ""
 
     readonly property string key: String(root.setting?.key ?? "")
@@ -56,10 +64,14 @@ Rectangle {
     readonly property color secondaryColor: root.launcherStyle && root.isSelected
         ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
     readonly property bool isHovered: cardHover.hovered
-    readonly property string displayLabel: String(root.setting?.labelLocalized ?? root.setting?.label ?? root.key)
+    // One label, already in the language the interface is showing. The index
+    // used to carry two and pick between them here, which is how an English
+    // interface displayed Portuguese names.
+    readonly property string displayLabel: String(root.setting?.label ?? "") || root.key
+    readonly property string sectionTitle: String(root.setting?.sectionTitle ?? "")
     readonly property string sectionPath: [
-        root.setting?.pageNameLocalized ?? root.setting?.pageName ?? "",
-        root.setting?.sectionTitleLocalized ?? root.setting?.sectionTitle ?? ""
+        root.setting?.pageName ?? "",
+        root.sectionTitle
     ].filter(part => String(part).length > 0).join(" › ")
 
     function readCurrentValue(): var {
@@ -73,11 +85,14 @@ Rectangle {
             return false;
         const verdict = Ai.settingsIntegration.validate(root.key, value);
         if (!verdict.ok) {
-            root.writeError = String(verdict.reason ?? Translation.tr("This value is not valid for this setting."));
+            root.writeError = Ai.settingsIntegration.reasonText(verdict);
             return false;
         }
         try {
-            root.currentValue = Config.setNestedValue(root.key, value, true);
+            // Nothing is assigned back: `currentValue` reads the config, so
+            // writing it is what updates the card, here and everywhere else
+            // showing the same setting.
+            Config.setNestedValue(root.key, value, true);
             root.writeError = "";
             return true;
         } catch (error) {
@@ -107,6 +122,21 @@ Rectangle {
         return root.settingType === "int" ? Math.round(result) : result;
     }
 
+    /**
+     * Commits a number a control produced, ignoring the echo.
+     *
+     * A control gets `value` assigned both when someone presses its button and
+     * when the setting it is bound to changes. Writing on every change would
+     * send the second case straight back to the config; comparing against what
+     * is stored tells the two apart.
+     */
+    function commitNumber(value: real): bool {
+        const wanted = root.boundedNumericValue(value);
+        if (Number(root.currentValue) === wanted)
+            return false;
+        return root.writeValue(wanted);
+    }
+
     /** Applies one horizontal keyboard move without giving the control focus. */
     function adjustBy(direction: int): bool {
         const stepDirection = direction < 0 ? -1 : (direction > 0 ? 1 : 0);
@@ -134,12 +164,20 @@ Rectangle {
         return false;
     }
 
+    /**
+     * Opens Settings on the page, at the section, with it highlighted.
+     *
+     * The section is matched by its title against the ContentSection on the
+     * page, so it has to be the title as the running interface shows it. When
+     * the index was built in another language this silently did nothing but
+     * open the page.
+     */
     function openInSettings() {
         Ai.toolSettingsOpen({
             args: {
                 pageId: String(root.setting?.pageId ?? ""),
                 subPage: String(root.setting?.subPage ?? ""),
-                sectionTitle: String(root.setting?.sectionTitleLocalized ?? root.setting?.sectionTitle ?? "")
+                sectionTitle: root.sectionTitle
             }
         });
     }
@@ -173,7 +211,7 @@ Rectangle {
     }
 
     function explain() {
-        const description = String(root.setting?.descriptionLocalized ?? root.setting?.description ?? "");
+        const description = String(root.setting?.description ?? "");
         const prompt = Translation.tr("Explain the setting %1 (%2). %3").arg(root.displayLabel).arg(root.key).arg(description);
         Ai.sendUserMessage(prompt);
     }
@@ -374,11 +412,30 @@ Rectangle {
             Item { Layout.fillWidth: true }
 
             StyledSpinBox {
+                id: numberBox
                 from: root.hasRange ? Number(root.range.from) : -1000000
                 to: root.hasRange ? Number(root.range.to) : 1000000
-                stepSize: Number(root.range?.step ?? 1)
+                stepSize: Number(root.numericStep())
                 value: Number(root.currentValue ?? 0)
-                onValueModified: root.writeValue(value)
+                // `valueModified` is the signal for "the user changed this",
+                // but StyledSpinBox replaces the content item with a text
+                // field that assigns `value` itself, and a plain assignment
+                // emits no such thing. The plus and minus buttons therefore
+                // moved the number on screen and wrote nothing. Every change
+                // is committed instead, with the echo filtered out below.
+                onValueChanged: root.commitNumber(value)
+
+                Connections {
+                    target: root
+                    function onCurrentValueChanged() {
+                        // Interacting with a SpinBox breaks the declarative
+                        // binding above, so the control has to be told when
+                        // the setting changes somewhere else.
+                        const stored = Number(root.currentValue ?? 0);
+                        if (Number(numberBox.value) !== stored)
+                            numberBox.value = stored;
+                    }
+                }
             }
         }
     }
@@ -387,13 +444,24 @@ Rectangle {
         id: realControl
 
         StyledSlider {
+            id: numberSlider
             Layout.fillWidth: true
             from: Number(root.range.from)
             to: Number(root.range.to)
             stepSize: Number(root.range?.step ?? 0)
             value: Number(root.currentValue ?? root.range.from)
             usePercentTooltip: false
-            onMoved: root.writeValue(value)
+            onMoved: root.commitNumber(value)
+
+            Connections {
+                target: root
+                function onCurrentValueChanged() {
+                    // Dragging breaks the binding above, same as the spin box.
+                    const stored = Number(root.currentValue ?? numberSlider.from);
+                    if (Number(numberSlider.value) !== stored)
+                        numberSlider.value = stored;
+                }
+            }
         }
     }
 

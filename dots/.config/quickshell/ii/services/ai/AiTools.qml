@@ -29,6 +29,8 @@ Scope {
     property bool localOnly: false
     /** Whether the current policy lets anything reach the network at all. */
     property bool online: true
+    /** off | auto | on — this chat's web mode, separate from the network policy above. */
+    property string webMode: ""
     /** What the model itself can do, when it has been resolved. Null means unknown. */
     property var modelCapabilities: null
 
@@ -39,6 +41,7 @@ Scope {
             exposure: root.functionExposure,
             localOnly: root.localOnly,
             online: root.online,
+            webMode: root.webMode,
             capabilities: root.modelCapabilities,
             services: root.serviceAvailability
         })
@@ -46,6 +49,8 @@ Scope {
     /** Services a tool may depend on, by the name it declares in `requiredServices`. */
     readonly property var serviceAvailability: ({
             memory: AiMemory.enabled,
+            files: Ai.filesIntegration.rootsConfigured,
+            ocr: Ai.ocrAvailable,
             sports: true,
             gmail: EmailService.authenticated
         })

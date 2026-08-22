@@ -98,6 +98,18 @@ Item {
     readonly property bool streaming: root.isAssistant && !root.done
     readonly property var sentFiles: Array.from(root.messageData?.attachments ?? [])
 
+    /**
+     * Every message in the same exchange as this one, oldest first, ending
+     * with this one. A tool round-trip issues one assistant message per
+     * network turn — the model calling a tool, then continuing once the
+     * result is back — and `Ai.leadingActivityMessages()` finds the ones
+     * that led to this delegate's own message and only exist because of
+     * that. `AiChat.qml`/`AiChatPanel.qml` already hide those from getting
+     * a row of their own; this is what the terminal message folds them
+     * into instead.
+     */
+    readonly property var stepGroup: root.isAssistant ? [...Ai.leadingActivityMessages(root.messageId), root.messageData] : [root.messageData]
+
     // ── Measures ──────────────────────────────────────────────────────────
     /** Inside a bubble, from its edge to its text. */
     readonly property real bubblePadding: root.compact ? Appearance.rounding.unsharpenmore : Appearance.rounding.small
@@ -453,200 +465,292 @@ Item {
             visible: root.isAssistant
             spacing: 0
 
+            // One message's own thinking + search + tool steps. Used
+            // directly for the common single-message turn, and once per
+            // message inside the "N steps" accordion below for a chain of
+            // tool round-trips — each of those used to render as a full
+            // turn of its own, which is what turned a several-step
+            // exchange into a page-long scroll. Self-contained on purpose:
+            // nothing here reads `root`, so it works the same whether it
+            // is instantiated directly or from inside that accordion's
+            // Repeater.
+            component StepActivity: ColumnLayout {
+                id: step
+                required property var stepData
+                readonly property bool stepDone: step.stepData?.done ?? true
+                readonly property bool stepStreaming: !step.stepDone
+
+                Layout.fillWidth: true
+                spacing: 0
+
+                AiActivityRow {
+                    id: stepThinkingRow
+                    property bool userChoice: false
+                    property bool userExpanded: false
+
+                    Layout.fillWidth: true
+                    shown: (step.stepData?.thought?.length ?? 0) > 0
+                    symbol: "lightbulb"
+                    running: step.stepStreaming && !stepThinkingRow.thoughtComplete
+                    expandable: true
+                    expanded: stepThinkingRow.userChoice ? stepThinkingRow.userExpanded : !stepThinkingRow.thoughtComplete
+                    maximumContentHeight: Appearance.font.pixelSize.huge * 8
+
+                    readonly property bool thoughtComplete: ((step.stepData?.content?.length ?? 0) > 0) || step.stepDone
+                    readonly property real durationMs: step.stepData?.thoughtDurationMs ?? 0
+                    readonly property int thoughtTokens: step.stepData?.thoughtTokens ?? -1
+
+                    label: {
+                        if (!stepThinkingRow.thoughtComplete)
+                            return Translation.tr("Thinking");
+                        let parts = [];
+                        if (stepThinkingRow.durationMs >= 100)
+                            parts.push(Translation.tr("Thought for %1 s").arg((stepThinkingRow.durationMs / 1000).toFixed(1)));
+                        else
+                            parts.push(Translation.tr("Thought"));
+                        if (stepThinkingRow.thoughtTokens > 0)
+                            parts.push(Translation.tr("%1 tokens").arg(stepThinkingRow.thoughtTokens));
+                        return parts.join(" · ");
+                    }
+
+                    onToggled: {
+                        stepThinkingRow.userExpanded = !stepThinkingRow.expanded;
+                        stepThinkingRow.userChoice = true;
+                    }
+
+                    onThoughtCompleteChanged: {
+                        if (stepThinkingRow.thoughtComplete) {
+                            stepThinkingRow.userChoice = false;
+                            stepThinkingRow.userExpanded = false;
+                        }
+                    }
+
+                    expandedContent: Component {
+                        Flickable {
+                            id: thoughtFlickable
+                            implicitHeight: Math.min(thoughtColumn.implicitHeight, stepThinkingRow.maximumContentHeight)
+                            height: implicitHeight
+                            contentWidth: width
+                            contentHeight: thoughtColumn.implicitHeight
+                            interactive: contentHeight > height
+                            boundsBehavior: Flickable.StopAtBounds
+                            clip: true
+
+                            // While it is still arriving, stay at the newest line.
+                            onContentHeightChanged: {
+                                if (step.stepStreaming)
+                                    contentY = Math.max(0, contentHeight - height);
+                            }
+
+                            Column {
+                                id: thoughtColumn
+                                width: thoughtFlickable.width
+
+                                AiMessageTextBlock {
+                                    width: parent.width
+                                    messageData: step.stepData
+                                    done: step.stepDone
+                                    segmentContent: step.stepData?.thought ?? ""
+                                    forceDisableChunkSplitting: true
+                                }
+                            }
+                        }
+                    }
+                }
+
+                AiActivityRow {
+                    // What it looked up. The queries are the interesting part and
+                    // they are one click away rather than in the answer.
+                    id: stepSearchRow
+                    property bool searchExpanded: false
+
+                    readonly property var queries: Array.from(step.stepData?.searchQueries ?? [])
+
+                    Layout.fillWidth: true
+                    shown: stepSearchRow.queries.length > 0
+                    symbol: "language"
+                    running: step.stepStreaming
+                    expandable: true
+                    expanded: stepSearchRow.searchExpanded
+                    label: step.stepStreaming ? Translation.tr("Searching the web") : Translation.tr("Searched the web")
+                    onToggled: stepSearchRow.searchExpanded = !stepSearchRow.searchExpanded
+
+                    // A peek taken while it was still running should not
+                    // linger once the turn is done and there is an answer to
+                    // read instead.
+                    Connections {
+                        target: step
+                        function onStepDoneChanged() {
+                            if (step.stepDone)
+                                stepSearchRow.searchExpanded = false;
+                        }
+                    }
+
+                    expandedContent: Component {
+                        Flow {
+                            spacing: Appearance.rounding.unsharpenmore
+
+                            Repeater {
+                                model: ScriptModel {
+                                    values: stepSearchRow.queries
+                                }
+
+                                delegate: AiSearchQueryButton {
+                                    required property var modelData
+                                    query: modelData
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Repeater {
+                    // Everything else it reached for, in the order it did.
+                    model: ScriptModel {
+                        values: Array.from(step.stepData?.toolCalls ?? [])
+                    }
+
+                    delegate: AiActivityRow {
+                        id: stepToolRow
+                        required property var modelData
+                        property bool toolExpanded: false
+
+                        readonly property string toolId: String(stepToolRow.modelData?.name ?? "")
+                        readonly property var definition: Ai.toolbox.definitionFor(stepToolRow.toolId)
+                        readonly property string detail: Ai.toolbox.describeArgs(stepToolRow.toolId, stepToolRow.modelData?.args)
+                        // Written by the broker onto the call itself as it goes.
+                        // A call with no state at all is one from a session saved
+                        // before the broker existed.
+                        readonly property string state: String(stepToolRow.modelData?.state ?? "")
+                        readonly property string outcome: String(stepToolRow.modelData?.summary ?? "")
+                        readonly property bool waiting: stepToolRow.state === "running"
+                            || (stepToolRow.state.length === 0 && (step.stepStreaming || (step.stepData?.functionPending ?? false)))
+                        readonly property bool wentWrong: ["error", "unavailable", "needsInspection"].indexOf(stepToolRow.state) >= 0
+                        readonly property bool refused: ["denied", "cancelled"].indexOf(stepToolRow.state) >= 0
+
+                        Layout.fillWidth: true
+                        symbol: {
+                            if (stepToolRow.state === "needsInspection")
+                                return "help";
+                            if (stepToolRow.wentWrong)
+                                return "error";
+                            if (stepToolRow.refused)
+                                return "block";
+                            return (stepToolRow.definition?.icon ?? "").length > 0 ? stepToolRow.definition.icon : "build";
+                        }
+                        // The outcome next to the name, because "Search the web"
+                        // and "Search the web · nothing came back" are different
+                        // things to have read in a transcript.
+                        label: stepToolRow.outcome.length > 0 && !stepToolRow.waiting
+                            ? `${Ai.toolbox.titleFor(stepToolRow.toolId)} · ${stepToolRow.outcome}`
+                            : Ai.toolbox.titleFor(stepToolRow.toolId)
+                        running: stepToolRow.waiting
+                        expandable: stepToolRow.detail.length > 0
+                        expanded: stepToolRow.expandable && stepToolRow.toolExpanded
+                        onToggled: stepToolRow.toolExpanded = !stepToolRow.toolExpanded
+
+                        Connections {
+                            target: step
+                            function onStepDoneChanged() {
+                                if (step.stepDone)
+                                    stepToolRow.toolExpanded = false;
+                            }
+                        }
+
+                        expandedContent: Component {
+                            ColumnLayout {
+                                spacing: Appearance.rounding.unsharpenmore
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: stepToolRow.detail
+                                    wrapMode: Text.Wrap
+                                    font.family: Appearance.font.family.monospace
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colSubtext
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    visible: stepToolRow.modelData?.networkUsed === true || stepToolRow.modelData?.truncated === true
+                                    spacing: Appearance.rounding.unsharpenmore
+
+                                    StyledText {
+                                        visible: stepToolRow.modelData?.networkUsed === true
+                                        text: Translation.tr("used the network")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.colors.colSubtext
+                                    }
+
+                                    StyledText {
+                                        visible: stepToolRow.modelData?.truncated === true
+                                        text: Translation.tr("result was cut to fit")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.colors.colSubtext
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // The common case: the question was answered in one go.
+            // Rendered exactly as a lone step, with no extra wrapper.
+            StepActivity {
+                visible: root.stepGroup.length <= 1
+                stepData: root.messageData
+            }
+
+            // A chain of tool round-trips: every step folds into this one
+            // line instead of each getting a full turn's worth of chrome.
+            // Open while it is happening, so the steps are watchable live;
+            // folded the moment the exchange is done, with the steps still
+            // one click away.
             AiActivityRow {
-                // The reasoning, as an accordion: open while it is the only
-                // thing happening, folded away once the answer starts, and
-                // whichever of the two the reader last chose after that.
-                id: thinkingRow
+                id: stepsSummaryRow
                 property bool userChoice: false
                 property bool userExpanded: false
 
                 Layout.fillWidth: true
-                shown: (root.messageData?.thought?.length ?? 0) > 0
-                symbol: "lightbulb"
-                running: root.streaming && !thinkingRow.thoughtComplete
-                expandable: true
-                expanded: thinkingRow.userChoice ? thinkingRow.userExpanded : !thinkingRow.thoughtComplete
-                maximumContentHeight: Appearance.font.pixelSize.huge * 8
-
-                readonly property bool thoughtComplete: ((root.messageData?.content?.length ?? 0) > 0) || root.done
-                readonly property real durationMs: root.messageData?.thoughtDurationMs ?? 0
-                readonly property int thoughtTokens: root.messageData?.thoughtTokens ?? -1
-
-                label: {
-                    if (!thinkingRow.thoughtComplete)
-                        return Translation.tr("Thinking");
-                    let parts = [];
-                    if (thinkingRow.durationMs >= 100)
-                        parts.push(Translation.tr("Thought for %1 s").arg((thinkingRow.durationMs / 1000).toFixed(1)));
-                    else
-                        parts.push(Translation.tr("Thought"));
-                    if (thinkingRow.thoughtTokens > 0)
-                        parts.push(Translation.tr("%1 tokens").arg(thinkingRow.thoughtTokens));
-                    return parts.join(" · ");
-                }
-
-                onToggled: {
-                    thinkingRow.userExpanded = !thinkingRow.expanded;
-                    thinkingRow.userChoice = true;
-                    // Only a deliberate choice on a finished thought is worth
-                    // remembering: opening one still being written is simply
-                    // what happens by default.
-                    if (thinkingRow.thoughtComplete && Persistent.states?.ai)
-                        Persistent.states.ai.expandThoughts = thinkingRow.userExpanded;
-                }
-
-                Component.onCompleted: {
-                    if (Persistent.states?.ai?.expandThoughts) {
-                        thinkingRow.userChoice = true;
-                        thinkingRow.userExpanded = true;
-                    }
-                }
-
-                expandedContent: Component {
-                    Flickable {
-                        id: thoughtFlickable
-                        implicitHeight: Math.min(thoughtColumn.implicitHeight, thinkingRow.maximumContentHeight)
-                        height: implicitHeight
-                        contentWidth: width
-                        contentHeight: thoughtColumn.implicitHeight
-                        interactive: contentHeight > height
-                        boundsBehavior: Flickable.StopAtBounds
-                        clip: true
-
-                        // While it is still arriving, stay at the newest line.
-                        onContentHeightChanged: {
-                            if (root.streaming)
-                                contentY = Math.max(0, contentHeight - height);
-                        }
-
-                        Column {
-                            id: thoughtColumn
-                            width: thoughtFlickable.width
-
-                            AiMessageTextBlock {
-                                width: parent.width
-                                messageData: root.messageData
-                                done: root.done
-                                segmentContent: root.messageData?.thought ?? ""
-                                forceDisableChunkSplitting: true
-                            }
-                        }
-                    }
-                }
-            }
-
-            AiActivityRow {
-                // What it looked up. The queries are the interesting part and
-                // they are one click away rather than in the answer.
-                id: searchRow
-                property bool searchExpanded: false
-
-                readonly property var queries: Array.from(root.messageData?.searchQueries ?? [])
-
-                Layout.fillWidth: true
-                shown: searchRow.queries.length > 0
-                symbol: "language"
+                shown: root.stepGroup.length > 1
+                symbol: "checklist"
                 running: root.streaming
                 expandable: true
-                expanded: searchRow.searchExpanded
-                label: root.streaming ? Translation.tr("Searching the web") : Translation.tr("Searched the web")
-                onToggled: searchRow.searchExpanded = !searchRow.searchExpanded
+                expanded: stepsSummaryRow.userChoice ? stepsSummaryRow.userExpanded : root.streaming
+                label: root.streaming
+                    ? Translation.tr("Working through %1 steps…").arg(root.stepGroup.length)
+                    : Translation.tr("%1 steps").arg(root.stepGroup.length)
+
+                onToggled: {
+                    stepsSummaryRow.userExpanded = !stepsSummaryRow.expanded;
+                    stepsSummaryRow.userChoice = true;
+                }
+
+                Connections {
+                    target: root
+                    function onDoneChanged() {
+                        if (root.done) {
+                            stepsSummaryRow.userChoice = false;
+                            stepsSummaryRow.userExpanded = false;
+                        }
+                    }
+                }
 
                 expandedContent: Component {
-                    Flow {
-                        spacing: Appearance.rounding.unsharpenmore
+                    ColumnLayout {
+                        spacing: Appearance.rounding.small
 
                         Repeater {
                             model: ScriptModel {
-                                values: searchRow.queries
+                                values: root.stepGroup
                             }
 
-                            delegate: AiSearchQueryButton {
+                            delegate: StepActivity {
+                                id: groupedStep
                                 required property var modelData
-                                query: modelData
-                            }
-                        }
-                    }
-                }
-            }
-
-            Repeater {
-                // Everything else it reached for, in the order it did.
-                model: ScriptModel {
-                    values: Array.from(root.messageData?.toolCalls ?? [])
-                }
-
-                delegate: AiActivityRow {
-                    id: toolRow
-                    required property var modelData
-                    property bool toolExpanded: false
-
-                    readonly property string toolId: String(toolRow.modelData?.name ?? "")
-                    readonly property var definition: Ai.toolbox.definitionFor(toolRow.toolId)
-                    readonly property string detail: Ai.toolbox.describeArgs(toolRow.toolId, toolRow.modelData?.args)
-                    // Written by the broker onto the call itself as it goes.
-                    // A call with no state at all is one from a session saved
-                    // before the broker existed.
-                    readonly property string state: String(toolRow.modelData?.state ?? "")
-                    readonly property string outcome: String(toolRow.modelData?.summary ?? "")
-                    readonly property bool waiting: toolRow.state === "running"
-                        || (toolRow.state.length === 0 && (root.streaming || (root.messageData?.functionPending ?? false)))
-                    readonly property bool wentWrong: ["error", "unavailable", "needsInspection"].indexOf(toolRow.state) >= 0
-                    readonly property bool refused: ["denied", "cancelled"].indexOf(toolRow.state) >= 0
-
-                    Layout.fillWidth: true
-                    symbol: {
-                        if (toolRow.state === "needsInspection")
-                            return "help";
-                        if (toolRow.wentWrong)
-                            return "error";
-                        if (toolRow.refused)
-                            return "block";
-                        return (toolRow.definition?.icon ?? "").length > 0 ? toolRow.definition.icon : "build";
-                    }
-                    // The outcome next to the name, because "Search the web"
-                    // and "Search the web · nothing came back" are different
-                    // things to have read in a transcript.
-                    label: toolRow.outcome.length > 0 && !toolRow.waiting
-                        ? `${Ai.toolbox.titleFor(toolRow.toolId)} · ${toolRow.outcome}`
-                        : Ai.toolbox.titleFor(toolRow.toolId)
-                    running: toolRow.waiting
-                    expandable: toolRow.detail.length > 0
-                    expanded: toolRow.expandable && toolRow.toolExpanded
-                    onToggled: toolRow.toolExpanded = !toolRow.toolExpanded
-
-                    expandedContent: Component {
-                        ColumnLayout {
-                            spacing: Appearance.rounding.unsharpenmore
-
-                            StyledText {
                                 Layout.fillWidth: true
-                                text: toolRow.detail
-                                wrapMode: Text.Wrap
-                                font.family: Appearance.font.family.monospace
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colSubtext
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                visible: toolRow.modelData?.networkUsed === true || toolRow.modelData?.truncated === true
-                                spacing: Appearance.rounding.unsharpenmore
-
-                                StyledText {
-                                    visible: toolRow.modelData?.networkUsed === true
-                                    text: Translation.tr("used the network")
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    color: Appearance.colors.colSubtext
-                                }
-
-                                StyledText {
-                                    visible: toolRow.modelData?.truncated === true
-                                    text: Translation.tr("result was cut to fit")
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    color: Appearance.colors.colSubtext
-                                }
+                                stepData: groupedStep.modelData
                             }
                         }
                     }
@@ -834,6 +938,10 @@ Item {
                         return reminderPreviewCard;
                     case "memoryFact":
                         return memoryFactCard;
+                    case "fileResults":
+                        return fileResultsCard;
+                    case "fileAttachPreview":
+                        return fileAttachCard;
                     }
                     // A kind this build does not know: a session written by a
                     // newer one still opens, showing what the card says about
@@ -866,6 +974,35 @@ Item {
                                 setting: modelData
                             }
                         }
+                    }
+                }
+
+                Component {
+                    id: fileResultsCard
+
+                    ColumnLayout {
+                        spacing: Appearance.rounding.unsharpenmore
+
+                        Repeater {
+                            model: ScriptModel {
+                                values: Array.from(cardHost.card?.data?.files ?? [])
+                            }
+
+                            delegate: AiFileResultCard {
+                                required property var modelData
+                                file: modelData
+                                compact: root.compact
+                            }
+                        }
+                    }
+                }
+
+                Component {
+                    id: fileAttachCard
+
+                    AiFileAttachCard {
+                        messageData: root.messageData
+                        card: cardHost.card
                     }
                 }
 

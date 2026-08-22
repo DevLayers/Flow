@@ -96,6 +96,22 @@ class AiGmailContractTests(unittest.TestCase):
         self.assertEqual(len(result["messages"]), 2)
         self.assertTrue(all("format=full" not in path for path in calls))
 
+    def test_ai_purchase_query_does_not_turn_recency_into_an_and_term(self):
+        import scripts.ai.ai_gmail as gmail
+
+        query = gmail.normalize_ai_search_query("(compras OR pedido OR recibo) (recente OR último OR novo)")
+        self.assertEqual(query, "{compra compras pedido recibo}")
+
+    def test_search_response_keeps_original_and_effective_query(self):
+        import scripts.ai.ai_gmail as gmail
+
+        with patch.object(gmail, "api_get", return_value={"messages": [], "nextPageToken": ""}):
+            result = gmail.search_messages("token", {"query": "compra recente", "limit": 5})
+
+        self.assertEqual(result["query"], "compra recente")
+        self.assertIn("queryUsed", result)
+        self.assertEqual(result["queryUsed"], "{compra compras pedido recibo}")
+
     def test_thread_metadata_precedes_explicit_bodies(self):
         import scripts.ai.ai_gmail as gmail
 
@@ -114,6 +130,38 @@ class AiGmailContractTests(unittest.TestCase):
         self.assertEqual(result["messages"][0]["body"], "thread body")
         self.assertIn("format=metadata", calls[0])
         self.assertIn("format=full", calls[1])
+
+
+class QmlLoadabilityTests(unittest.TestCase):
+    """Two structural bugs that text-only assertions above never touched.
+
+    Both left the adapter file present and syntactically fine to `qmllint`,
+    but broken the moment Quickshell actually tried to instantiate the type —
+    which cascades: `Ai.qml` holds a `readonly property AiGmailIntegration
+    gmailIntegration: AiGmailIntegration {}`, so a broken Gmail adapter took
+    the whole `Ai` singleton down, and with it every other tool. Nothing
+    running through `Ai` — Settings, files, OCR, none of it — worked while
+    this was broken, and no earlier test in this file caught it because none
+    of them load the file as QML.
+    """
+
+    def test_globalstates_and_persistent_are_actually_importable(self):
+        # GlobalStates and Persistent live in the root `qs` module; the file
+        # used `qs.modules.common` and `qs.services` only, so both types were
+        # unresolved the moment `openInClient()` touched them. The failure
+        # mode was not a lint warning: it was "Type AiGmailIntegration
+        # unavailable" at runtime.
+        self.assertIn("import qs\n", ADAPTER)
+        self.assertIn("GlobalStates.cheatsheetOpen", ADAPTER)
+        self.assertIn("Persistent.states.cheatsheet.tabIndex", ADAPTER)
+
+    def test_the_request_component_is_a_named_property(self):
+        # QtObject has no default property. A bare `Component { id:
+        # requestComponent ... }` inside one has nowhere to attach, and fails
+        # with "Cannot assign to non-existent default property" — this is
+        # the same class of bug AiVoiceService hit for the same reason.
+        self.assertIn("property Component requestComponent: Component {", ADAPTER)
+        self.assertNotIn("\n    Component {\n        id: requestComponent", ADAPTER)
 
 
 if __name__ == "__main__":

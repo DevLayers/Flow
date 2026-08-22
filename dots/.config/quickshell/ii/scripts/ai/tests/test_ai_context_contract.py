@@ -104,17 +104,28 @@ class TruncationContractTests(unittest.TestCase):
 
 
 class WebToolContractTests(unittest.TestCase):
+    # The definitions moved out of AiTools into the registry when the tool
+    # layer was split; what they have to say has not changed.
+    AI_REGISTRY = (ROOT / "services" / "ai" / "AiToolRegistry.qml").read_text(encoding="utf-8")
+
     def test_the_web_is_a_tool_so_a_local_model_can_use_it(self):
         for tool in ('id: "web_search"', 'id: "fetch_url"'):
-            self.assertIn(tool, AI_TOOLS)
+            self.assertIn(tool, self.AI_REGISTRY)
         # Available to every dialect, not only the ones with search of their own.
-        search = AI_TOOLS.split('id: "web_search"', 1)[1].split("},\n        {", 1)[0]
+        search = self.AI_REGISTRY.split('id: "web_search"', 1)[1].split("},\n        {", 1)[0]
         self.assertIn('formats: ["gemini", "openai", "anthropic"]', search)
         self.assertIn("needsSearch: false", search)
 
     def test_reaching_the_web_is_refused_under_a_local_only_policy(self):
-        self.assertIn('if (root.localOnly && (def.id === "web_search" || def.id === "fetch_url"))', AI_TOOLS)
-        self.assertIn("Reaching the web is disabled by the current AI policy.", AI_SERVICE)
+        # Declared as needing the network, and refused generically when the
+        # policy does not allow it — rather than by naming the two web tools
+        # in a condition, which is what stopped anything else being added.
+        for tool in ('id: "web_search"', 'id: "fetch_url"'):
+            block = self.AI_REGISTRY.split(tool, 1)[1].split("},\n        {", 1)[0]
+            with self.subTest(tool=tool):
+                self.assertIn('network: "required"', block)
+        self.assertIn('def.network === "required"', self.AI_REGISTRY)
+        self.assertIn("Needs the network, which the current policy does not allow", self.AI_REGISTRY)
 
     def test_fetch_refuses_anything_that_is_not_http(self):
         result = ai_web.fetch("file:///etc/passwd")

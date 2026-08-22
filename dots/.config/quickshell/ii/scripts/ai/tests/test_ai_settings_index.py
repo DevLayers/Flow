@@ -95,23 +95,27 @@ class SettingsIndexTests(unittest.TestCase):
     def tearDown(self):
         self.tempdir.cleanup()
 
-    def build(self):
+    def build(self, language="pt_BR"):
         return ai_settings_index.build_index(
             root=self.root,
             config_path=self.config,
-            language="pt_BR",
+            language=language,
             output_path=self.out,
         )
 
-    def test_extracts_keys_types_ranges_dependencies_and_localized_labels(self):
+    def test_extracts_keys_types_ranges_dependencies_and_labels(self):
         index = self.build()
         entries = {entry["key"]: entry for entry in index["entries"]}
 
         automatic = entries["battery.automaticSuspend"]
         self.assertEqual(automatic["type"], "bool")
         self.assertEqual(automatic["widget"], "ConfigSwitch")
-        self.assertEqual(automatic["labelLocalized"], "Suspensão automática")
-        self.assertEqual(automatic["sectionTitleLocalized"], "Gerenciamento de Energia e Bateria")
+        # One label, in the requested language. The index used to carry both
+        # and hand both onwards, which is how an English interface answered
+        # with Portuguese toggle names.
+        self.assertEqual(automatic["label"], "Suspensão automática")
+        self.assertEqual(automatic["sectionTitle"], "Gerenciamento de Energia e Bateria")
+        self.assertNotIn("labelLocalized", automatic)
         self.assertEqual(automatic["pageId"], "power")
         self.assertEqual(automatic["currentValue"], True)
         self.assertEqual(automatic["alsoIn"], [{"pageId": "power", "subPage": "widgets/CorePowerConfig.qml"}])
@@ -126,7 +130,14 @@ class SettingsIndexTests(unittest.TestCase):
         self.assertFalse(entries["battery.headlessValue"]["hasUi"])
         self.assertEqual(entries["battery.headlessValue"]["type"], "string")
 
-    def test_search_uses_localized_labels_and_domain_synonyms(self):
+    def test_no_language_leaves_the_source_strings_alone(self):
+        # What an English interface asks for: nothing to translate into, so
+        # the labels written in the QML are what comes back.
+        entries = {entry["key"]: entry for entry in self.build(language="")["entries"]}
+        self.assertEqual(entries["battery.automaticSuspend"]["label"], "Automatic suspend")
+        self.assertEqual(entries["battery.automaticSuspend"]["sectionTitle"], "Power & Battery Management")
+
+    def test_search_finds_by_the_translated_label_and_by_synonym(self):
         index = self.build()
         localized = ai_settings_index.search_entries(index, "suspensão automática")
         self.assertEqual(localized[0]["key"], "battery.automaticSuspend")
@@ -134,6 +145,13 @@ class SettingsIndexTests(unittest.TestCase):
         synonym = ai_settings_index.search_entries(index, "dormir")
         self.assertEqual(synonym[0]["key"], "battery.automaticSuspend")
         self.assertGreater(synonym[0]["score"], 0)
+
+    def test_a_translated_index_is_still_searchable_in_english(self):
+        # The untranslated strings stay in `match` for exactly this: someone
+        # who knows the option by its English name, in a Portuguese interface.
+        index = self.build()
+        results = ai_settings_index.search_entries(index, "automatic suspend")
+        self.assertEqual(results[0]["key"], "battery.automaticSuspend")
 
     def test_check_detects_source_changes(self):
         index = self.build()

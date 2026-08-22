@@ -30,6 +30,11 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
+# How far below the best match a result may score and still be worth showing.
+RELEVANCE_FLOOR = 0.5
+# A hard ceiling on results, whatever the caller asks for. A question has a
+# handful of answers; a list of twenty is a search page, not an answer.
+MAX_RESULTS = 6
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_ROOT = SCRIPT_DIR.parents[1]
 DEFAULT_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "illogical-impulse/config.json"
@@ -56,6 +61,49 @@ def normalize(value: object) -> str:
 
 def tokenize(value: object) -> list[str]:
     return [token for token in re.split(r"[^\w]+", normalize(value)) if len(token) > 1]
+
+
+# Words that carry no signal about which setting is meant. A question asked in
+# full sentences — "where can I enable automatic suspend?" — otherwise scores
+# every option containing "enable", and coverage rewards the ones that happen
+# to contain the most filler.
+STOPWORDS = frozenset("""
+about and are can change configure disable do does enable find for from get
+have how i in is it its me my of on onde option options or set setting settings
+show that the their there this to turn use want was what when where which who
+why with you your
+como configurar de do dos das em como habilitar ligar desligar meu minha na no
+onde opcao opcoes para por qual que quero seu sua tem ter um uma
+""".split())
+
+
+# The shortest prefix worth treating as the same word. "suspension" and
+# "suspend" are the same question asked twice; "sus" is not a question. Six
+# rather than five because five made "suspend" match "suspect", and one page's
+# aliases mention hiding suspect wallpapers.
+STEM_LENGTH = 6
+
+
+def stem_of(token: str) -> str:
+    return token[:STEM_LENGTH] if len(token) > STEM_LENGTH else ""
+
+
+def stem_hit(stem: str, text: str) -> bool:
+    """Whether any word in `text` starts with `stem`."""
+    if not stem:
+        return False
+    for word in re.split(r"[^\w]+", text):
+        if len(word) > STEM_LENGTH and word.startswith(stem):
+            return True
+    return False
+
+
+def query_tokens_of(value: object) -> list[str]:
+    """The words of a question that actually name something."""
+    tokens = tokenize(value)
+    meaningful = [token for token in tokens if token not in STOPWORDS]
+    # Everything was filler: fall back rather than answer nothing at all.
+    return meaningful or tokens
 
 
 def _matching_end(text: str, start: int, opening: str = "{", closing: str = "}") -> int | None:
@@ -296,7 +344,9 @@ def value_type(value: Any) -> str:
 
 def source_fingerprint(root: Path, language: str) -> str:
     records = source_records(root)
-    paths = [root / "modules/common/SettingsPageRegistry.qml", root / "translations" / f"{language}.json", root / "scripts/ai/settings_synonyms.json"]
+    paths = [root / "modules/common/SettingsPageRegistry.qml", root / "scripts/ai/settings_synonyms.json"]
+    if language:
+        paths.append(root / "translations" / f"{language}.json")
     paths.extend(record["path"] for record in records)
     digest = hashlib.sha256()
     for path in sorted({path.resolve() for path in paths if path.exists()}):
@@ -345,26 +395,30 @@ def extract_entries(record: dict[str, Any], root: Path, translations: dict[str, 
             icon = text_from_expression(property_expression(block["inner"], "icon"))
             if not icon:
                 icon = text_from_expression(property_expression(block["inner"], "buttonIcon")) or section_icon
+            source_label = label or key.rsplit(".", 1)[-1]
             entry: dict[str, Any] = {
                 "key": key,
                 "type": widget_type,
                 "widget": widget,
                 "hasUi": True,
-                "label": label or key.rsplit(".", 1)[-1],
-                "labelLocalized": localized(label or key.rsplit(".", 1)[-1], translations),
-                "description": description,
-                "descriptionLocalized": localized(description, translations),
+                # One label, in the language the interface is showing. The
+                # index used to carry both and hand both to the model, which
+                # is how an English interface got Portuguese toggles back.
+                "label": localized(source_label, translations),
+                "description": localized(description, translations),
                 "icon": icon,
                 "pageId": record["id"],
-                "pageName": record["name"],
-                "pageNameLocalized": localized(record["name"], translations),
-                "sectionTitle": section,
-                "sectionTitleLocalized": section_localized,
+                "pageName": localized(record["name"], translations),
+                "sectionTitle": section_localized or section,
                 "subPage": record["subPage"],
                 "aliases": list(record["aliases"]),
                 "source": str(path.relative_to(root)),
                 "blockStart": block["start"],
                 "blockEnd": block["end"],
+                # Only for matching: the untranslated strings stay searchable
+                # so a key someone knows in English is still findable in a
+                # translated interface. Never shown, never sent to a model.
+                "match": " ".join(filter(None, [source_label, description, section, record["name"]])),
             }
             if widget in ("ConfigSpinBox", "ConfigSlider"):
                 lower = qml_value(property_expression(block["inner"], "from"))
@@ -389,10 +443,13 @@ def load_json(path: Path, default: Any) -> Any:
         return default
 
 
-def build_index(*, root: Path = DEFAULT_ROOT, config_path: Path = DEFAULT_CONFIG, language: str = "pt_BR", output_path: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
+def build_index(*, root: Path = DEFAULT_ROOT, config_path: Path = DEFAULT_CONFIG, language: str = "", output_path: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
     root = Path(root).resolve()
     config_path = Path(config_path)
-    translations = load_json(root / "translations" / f"{language}.json", {})
+    # An empty locale, or one with no catalogue, means the source strings —
+    # which are already English. Defaulting to any particular language here is
+    # what made an English interface answer in Portuguese.
+    translations = load_json(root / "translations" / f"{language}.json", {}) if language else {}
     synonyms = load_json(root / "scripts/ai/settings_synonyms.json", {})
     config = load_json(config_path, {})
     leaves = dict(flat_config(config))
@@ -423,26 +480,30 @@ def build_index(*, root: Path = DEFAULT_ROOT, config_path: Path = DEFAULT_CONFIG
             "type": value_type(value),
             "widget": "",
             "hasUi": False,
-            "label": key.rsplit(".", 1)[-1],
-            "labelLocalized": key.rsplit(".", 1)[-1],
+            # No control anywhere, so there is no label to show. The last
+            # segment of the key is a stand-in, and `label` stays empty so
+            # ranking can tell "named by a person" from "named by the path".
+            "label": "",
             "description": "",
-            "descriptionLocalized": "",
             "icon": "settings",
             "pageId": "",
             "pageName": "",
-            "pageNameLocalized": "",
             "sectionTitle": "",
-            "sectionTitleLocalized": "",
             "subPage": "",
             "aliases": [],
             "source": "config.json",
             "blockStart": -1,
             "blockEnd": -1,
             "currentValue": value,
+            "match": "",
         }
 
     for entry in merged.values():
-        haystack = " ".join([entry["key"], entry["label"], entry["labelLocalized"], entry["description"], entry["descriptionLocalized"], entry["sectionTitle"], entry["sectionTitleLocalized"], entry["pageName"], *entry["aliases"]])
+        # Only what the entry says about itself. Including the page name, its
+        # section and its aliases gave every option on the Power page the
+        # synonyms for "suspend", so a search for "automatic suspend" answered
+        # with the low-battery warning threshold.
+        haystack = " ".join([entry["key"], entry["label"], entry["description"], entry["match"]])
         domains = [domain for domain in synonyms if domain in normalize(haystack)]
         keywords = sorted({word for domain in domains for word in [domain, *synonyms.get(domain, [])]})
         entry["keywords"] = keywords
@@ -459,7 +520,7 @@ def build_index(*, root: Path = DEFAULT_ROOT, config_path: Path = DEFAULT_CONFIG
     return index
 
 
-def index_is_current(index: dict[str, Any], root: Path = DEFAULT_ROOT, language: str = "pt_BR") -> bool:
+def index_is_current(index: dict[str, Any], root: Path = DEFAULT_ROOT, language: str = "") -> bool:
     return index.get("schema") == SCHEMA_VERSION and index.get("language") == language and index.get("sourceHash") == source_fingerprint(Path(root).resolve(), language)
 
 
@@ -470,57 +531,161 @@ def load_index(path: Path) -> dict[str, Any]:
     return index
 
 
-def search_entries(index: dict[str, Any], query: str, limit: int = 8) -> list[dict[str, Any]]:
-    """Score lexical matches using the ranking published in the integration plan."""
+def score_entry(original: dict[str, Any], query_tokens: list[str], query_normalized: str) -> dict[str, int]:
+    """How well one entry answers a query.
+
+    Three numbers come back, because ranking needs to tell apart three things
+    that a single score blurs together:
+
+    `covered`  — how much of the question this entry speaks to. A setting that
+                 answers the whole question beats one that answers half of it,
+                 whatever either scores. Without this, an entry whose label is
+                 the single word "mode" beat the actual dark-mode switch for
+                 the query "dark mode".
+
+    `identity` — how much of that came from the entry *itself* rather than from
+                 the page it happens to sit on. Sharing a page with something
+                 called "Automatic suspend" is not the same as being it.
+
+    `score`    — the ordering, phrase bonus included.
+    """
+    label = normalize(original.get("label"))
+    key = normalize(original.get("key"))
+    last_key = key.rsplit(".", 1)[-1]
+    key_words = tokenize(key)
+    description = normalize(original.get("description"))
+    navigation = normalize(" ".join([
+        *original.get("aliases", []),
+        original.get("pageName", ""),
+        original.get("sectionTitle", ""),
+    ]))
+    # The untranslated strings, so a key someone knows in English stays
+    # findable in a translated interface.
+    fallback = normalize(original.get("match", ""))
+    keywords = [normalize(keyword) for keyword in original.get("keywords", [])]
+    has_ui = bool(original.get("hasUi"))
+
+    score = 40 if has_ui else 0
+    covered = 0
+    identity = 0
+    for token in query_tokens:
+        stem = stem_of(token)
+        own = 0
+        if token == label:
+            own = max(own, 500)
+        elif label.startswith(token):
+            own = max(own, 220)
+        elif token in label:
+            own = max(own, 150)
+        elif stem_hit(stem, label):
+            own = max(own, 110)
+        if token == last_key or token in tokenize(last_key):
+            own = max(own, 180)
+        elif token in key_words or any(word.startswith(token) for word in key_words):
+            own = max(own, 120)
+        elif stem_hit(stem, key):
+            own = max(own, 90)
+        if token in description:
+            own = max(own, 120)
+        elif stem_hit(stem, description):
+            own = max(own, 80)
+        if token in fallback:
+            own = max(own, 90)
+        elif stem_hit(stem, fallback):
+            own = max(own, 70)
+
+        # A domain synonym is curated for this entry — "dormir" really is what
+        # this switch does — so it counts as the entry's own evidence. It is
+        # the bridge that lets someone search in one language an interface
+        # that is showing another.
+        if token in keywords:
+            own = max(own, 90)
+
+        # Borrowed evidence is not stemmed, and never stands alone. Sharing a
+        # page with a word is weak enough already; matching it approximately
+        # turns every option on that page into an answer.
+        borrowed = 0
+        if token in navigation:
+            borrowed = max(borrowed, 100)
+
+        best = max(own, borrowed)
+        if best:
+            covered += 1
+            score += best
+            identity += own
+
+    base = score
+    if query_normalized and query_normalized == label:
+        score += 500
+    # A key with no control anywhere has no label of its own; it should turn up
+    # when someone names it, not when they describe something else.
+    if not has_ui:
+        score = int(score * 0.6)
+        base = int(base * 0.6)
+    return {"score": score, "base": base, "covered": covered, "identity": identity}
+
+
+def search_entries(index: dict[str, Any], query: str, limit: int = 5) -> list[dict[str, Any]]:
+    """The settings that answer a query, best first and few.
+
+    Three rules keep the list short enough to read:
+
+      * an entry has to speak to the whole question, when anything does;
+      * it has to do so on its own account, not only because of the page it
+        lives on — otherwise every option on the Power page answers "automatic
+        suspend";
+      * and it has to score within reach of the best match.
+
+    Eight results for "automatic suspend" was not eight answers. It was two
+    answers and six things that contain the word "suspend".
+    """
     query_normalized = normalize(query).strip()
-    query_tokens = tokenize(query_normalized)
+    query_tokens = query_tokens_of(query_normalized)
     if not query_tokens:
         return []
-    found: list[dict[str, Any]] = []
+
+    scored: list[tuple[dict[str, int], dict[str, Any]]] = []
     for original in index.get("entries", []):
-        label = normalize(original.get("label"))
-        localized_label = normalize(original.get("labelLocalized"))
-        key = normalize(original.get("key"))
-        last_key = key.rsplit(".", 1)[-1]
-        description = normalize(f"{original.get('description', '')} {original.get('descriptionLocalized', '')}")
-        navigation = normalize(" ".join([*original.get("aliases", []), original.get("pageName", ""), original.get("sectionTitle", ""), original.get("sectionTitleLocalized", "")]))
-        keywords = [normalize(keyword) for keyword in original.get("keywords", [])]
-        score = 40 if original.get("hasUi") else 0
-        for token in query_tokens:
-            if token == label or token == localized_label:
-                score += 500
-            elif label.startswith(token) or localized_label.startswith(token):
-                score += 200
-            if token == last_key or token in tokenize(last_key):
-                score += 180
-            if token in description:
-                score += 120
-            if token in navigation:
-                score += 100
-            if token in keywords:
-                score += 90
-        if query_normalized == label or query_normalized == localized_label:
-            score += 500
-        if score <= (40 if original.get("hasUi") else 0):
+        verdict = score_entry(original, query_tokens, query_normalized)
+        if verdict["covered"] == 0 or verdict["identity"] == 0:
             continue
+        scored.append((verdict, original))
+
+    if not scored:
+        return []
+
+    best_coverage = max(verdict["covered"] for verdict, _ in scored)
+    scored = [item for item in scored if item[0]["covered"] == best_coverage]
+
+    # The floor is measured against the best match *without* its exact-phrase
+    # bonus. Measuring against the bonus lets one perfect hit push out every
+    # other reasonable answer — which is how "Suspend at (%)" disappeared from
+    # a search for "automatic suspend".
+    top_base = max(verdict["base"] for verdict, _ in scored)
+    floor = top_base * RELEVANCE_FLOOR
+    scored = [item for item in scored if item[0]["base"] >= floor]
+
+    scored.sort(key=lambda item: (-item[0]["score"], not item[1].get("hasUi"), item[1]["key"]))
+    results = []
+    for verdict, original in scored[:max(1, min(int(limit), MAX_RESULTS))]:
         entry = dict(original)
-        entry["score"] = score
-        found.append(entry)
-    return sorted(found, key=lambda entry: (-entry["score"], not entry.get("hasUi"), entry["key"]))[:max(1, min(int(limit), 8))]
+        entry["score"] = verdict["score"]
+        results.append(entry)
+    return results
 
 
 def _arguments() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT, help="II repository root")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help="config.json to introspect")
-    parser.add_argument("--lang", default="pt_BR", help="translation locale")
+    parser.add_argument("--lang", default="", help="interface locale; empty means the untranslated source strings")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT, help="index JSON path")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("build")
     commands.add_parser("check")
     search = commands.add_parser("search")
     search.add_argument("query")
-    search.add_argument("--limit", type=int, default=8)
+    search.add_argument("--limit", type=int, default=5)
     get = commands.add_parser("get")
     get.add_argument("key")
     return parser

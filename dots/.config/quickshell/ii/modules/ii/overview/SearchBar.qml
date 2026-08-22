@@ -347,10 +347,13 @@ RowLayout {
                 return;
             }
             if (appResults.count > 0) {
-                let currentItem = appResults.itemAtIndex(appResults.currentIndex);
-                if (currentItem && currentItem.clicked) {
-                    currentItem.clicked();
-                }
+                // The delegate became a Loader when settings results joined the
+                // list, so the row that answers to `clicked` is one level down.
+                // Enter stopped opening anything and only the mouse worked.
+                const delegate = appResults.itemAtIndex(appResults.currentIndex);
+                const row = delegate?.item ?? delegate;
+                if (row && typeof row.clicked === "function")
+                    row.clicked();
             }
         }
 

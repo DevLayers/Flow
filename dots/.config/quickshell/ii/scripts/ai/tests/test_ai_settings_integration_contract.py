@@ -88,7 +88,7 @@ class SemanticSettingsToolsTests(unittest.TestCase):
         for token in (
             "Ai.settingsIntegration.ready",
             "function settingsIntegrationSearch(",
-            "Ai.settingsIntegration.search(query, 8)",
+            "Ai.settingsIntegration.search(query, 3)",
             "function createSettingsResultObject(",
             "settingRef: setting",
         ):

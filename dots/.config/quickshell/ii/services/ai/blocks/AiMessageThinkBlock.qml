@@ -74,18 +74,19 @@ Item {
         }
     }
 
-    readonly property bool sticky: Persistent.states?.ai?.expandThoughts ?? false
     property bool expanded: true
 
-    onCompletedChanged: root.expanded = root.completed ? root.sticky : true
-    Component.onCompleted: root.expanded = root.completed ? root.sticky : true
+    // Finishing collapses it: reasoning is worth watching live and worth
+    // getting out of the way once there is an answer to read instead. A
+    // manual peek after that lasts for this one block only — it used to be
+    // remembered as a standing preference, which pinned every thought in
+    // every future message open the first time anyone clicked one, and the
+    // transcript never got shorter again.
+    onCompletedChanged: root.expanded = !root.completed
+    Component.onCompleted: root.expanded = !root.completed
 
     function toggle() {
         root.expanded = !root.expanded;
-        // Only a deliberate choice is remembered: while the thought is still
-        // being written, opening it is the default, not a preference.
-        if (root.completed && Persistent.states?.ai)
-            Persistent.states.ai.expandThoughts = root.expanded;
     }
 
     function summary(): string {

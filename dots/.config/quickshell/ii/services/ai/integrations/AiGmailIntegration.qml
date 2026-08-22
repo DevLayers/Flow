@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs
 import qs.modules.common
 import qs.services
 
@@ -22,7 +23,7 @@ QtObject {
 
     signal resultReady(string key, string callId, string sessionId, var outcome)
 
-    Component {
+    property Component requestComponent: Component {
         id: requestComponent
 
         Process {

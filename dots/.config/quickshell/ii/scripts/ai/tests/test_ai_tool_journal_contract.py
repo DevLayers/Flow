@@ -103,14 +103,14 @@ class ActivityTests(unittest.TestCase):
 
     def test_the_transcript_shows_the_outcome_not_only_the_request(self):
         row = body_between(MESSAGE, "delegate: AiActivityRow {", "// ── The answer")
-        self.assertIn("toolRow.outcome", row)
+        self.assertIn("stepToolRow.outcome", row)
         self.assertIn('"needsInspection"', row)
         self.assertIn("networkUsed", row)
 
     def test_a_session_without_states_still_animates_sensibly(self):
         # Saved before the broker existed: no state on the call at all.
         row = body_between(MESSAGE, "delegate: AiActivityRow {", "// ── The answer")
-        self.assertIn("toolRow.state.length === 0", row)
+        self.assertIn("stepToolRow.state.length === 0", row)
 
 
 if __name__ == "__main__":

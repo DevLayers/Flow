@@ -1405,6 +1405,31 @@ Singleton {
                 // Documents a model cannot read natively are turned into text
                 // on this machine instead of being dropped on the way out.
                 property bool extractDocuments: true
+                // Where the assistant may look for a file by itself, without
+                // one having been chosen by hand first. Empty by default:
+                // reaching the filesystem is something the user opts into,
+                // never a folder guessed on their behalf.
+                property JsonObject files: JsonObject {
+                    property list<string> roots: []
+                }
+                // Read text out of an image with the OCR engine already on
+                // the machine, when one is. The tool itself only ever runs on
+                // a path the model already has — from a search result or a
+                // file the user attached — never on a screenshot taken for
+                // it, so leaving this on does not mean anything is captured
+                // automatically.
+                property JsonObject vision: JsonObject {
+                    property bool ocrEnabled: true
+                }
+                property JsonObject voice: JsonObject {
+                    // Turning speech into a draft the user still has to send.
+                    // Off by default: nothing installs a transcription
+                    // backend automatically, so a fresh install would
+                    // otherwise show a microphone button that can only ever
+                    // land on "error" until the user follows the Settings
+                    // guide and turns this on themselves.
+                    property bool enabled: false
+                }
                 // A desktop notification when an answer lands. Only while the
                 // chat is not on screen: telling someone what they are already
                 // reading is noise.

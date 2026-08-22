@@ -391,10 +391,11 @@ ApiStrategy {
                 id: call.id
             };
             calls.push(parsedCall);
-            const newContent = `\n\n[[ Function: ${call.name}(${JSON.stringify(args, null, 2)}) ]]\n`;
+            // The call is already a row in the transcript's activity list,
+            // with its arguments one click away. Repeating it as a block of
+            // JSON inside the answer was a debugging aid that outstayed its
+            // welcome.
             closeThought(message);
-            message.rawContent += newContent;
-            message.content += newContent;
         }
         return calls;
     }

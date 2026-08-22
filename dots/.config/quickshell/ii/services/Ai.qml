@@ -927,6 +927,76 @@ Singleton {
     property var messageByID: ({})
 
     /**
+     * The user's own prompts in this chat, oldest first — the shell-history
+     * source composers read for arrow-key prompt recall (Up/Down from an
+     * empty draft), so a question can be resent without retyping it or
+     * scrolling back to copy it. Hidden carriers (tool-output turns, the
+     * silent "continue" instruction) are not prompts anyone typed.
+     */
+    readonly property var ownPromptHistory: {
+        const list = [];
+        for (let i = 0; i < root.messageIDs.length; i++) {
+            const message = root.messageByID[root.messageIDs[i]];
+            if (message?.role !== "user" || message.visibleToUser === false)
+                continue;
+            const text = String(message.rawContent ?? message.content ?? "").trim();
+            if (text.length > 0)
+                list.push(text);
+        }
+        return list;
+    }
+
+    /**
+     * Ids of assistant messages immediately followed by another assistant
+     * message — an internal continuation mid-exchange (the model called a
+     * tool and kept going once the result came back), not a turn of its
+     * own. The message that actually answers renders every step that led
+     * to it in one accordion; see `leadingActivityMessages()`. Recomputed
+     * only when the id list itself changes (a new message arriving), never
+     * per streamed token, since streaming mutates a message in place.
+     */
+    readonly property var nonTerminalRunMessageIds: {
+        const ids = root.messageIDs;
+        const hidden = {};
+        for (let i = 0; i + 1 < ids.length; i++) {
+            if (root.messageByID[ids[i]]?.role === "assistant" && root.messageByID[ids[i + 1]]?.role === "assistant")
+                hidden[ids[i]] = true;
+        }
+        return hidden;
+    }
+
+    /**
+     * Whether a message gets its own row in the transcript. False for a
+     * hidden carrier (`visibleToUser: false`) and for a non-terminal
+     * assistant message in a tool round-trip (see above) — the single
+     * predicate every transcript host filters `messageIDs` through, so
+     * none of them can drift out of step with the others.
+     */
+    function isTranscriptEntry(id: string): bool {
+        const message = root.messageByID[id];
+        return !!message && message.visibleToUser !== false && !root.nonTerminalRunMessageIds[id];
+    }
+
+    /**
+     * The earlier steps of the same exchange as `id`, oldest first — every
+     * assistant message immediately before it, for as long as they too are
+     * assistant turns. Empty for a question answered in a single turn.
+     */
+    function leadingActivityMessages(id: string): var {
+        const ids = root.messageIDs;
+        const at = ids.indexOf(id);
+        if (at <= 0)
+            return [];
+        const leading = [];
+        let i = at - 1;
+        while (i >= 0 && root.messageByID[ids[i]]?.role === "assistant") {
+            leading.unshift(root.messageByID[ids[i]]);
+            i -= 1;
+        }
+        return leading;
+    }
+
+    /**
      * The turn that has just arrived, so a transcript can animate its entrance
      * without animating every delegate a ListView recycles while scrolling.
      * Only a list that grew by exactly one counts: loading a saved chat
@@ -1449,6 +1519,10 @@ Singleton {
     readonly property AiSportsIntegration sportsIntegration: AiSportsIntegration {}
     /** Read-only Gmail metadata/body bridge with correlated helper calls. */
     readonly property AiGmailIntegration gmailIntegration: AiGmailIntegration {}
+    /** The one path to the filesystem the assistant may use by itself. */
+    readonly property AiFilesIntegration filesIntegration: AiFilesIntegration {}
+    /** Local speech-to-text: recording, detection and the review draft. */
+    readonly property AiVoiceService voiceService: AiVoiceService {}
     /** Preview id → immutable proposed changes until the user decides. */
     property var settingsPreviews: ({})
 
@@ -1544,6 +1618,11 @@ Singleton {
             "gmail_get_message": call => root.toolGmail(call, "get"),
             "gmail_get_thread": call => root.toolGmail(call, "thread"),
             "gmail_open_in_client": call => root.toolGmailOpen(call),
+            "files_search": call => root.toolFilesSearch(call),
+            "files_preview": call => root.toolFilesPreview(call),
+            "files_attach": call => root.toolFilesAttach(call),
+            "files_open_location": call => root.toolFilesOpenLocation(call),
+            "image_ocr": call => root.toolImageOcr(call),
             "set_shell_config": call => root.toolSetShellConfig(call),
             "remember_fact": call => root.toolRememberFact(call),
             "web_search": call => root.toolWeb(call, true),
@@ -1604,9 +1683,15 @@ Singleton {
      * approvals disappear, but a Settings result contains a live control and
      * must stay available for the user to inspect or change it.
      */
+    // Kinds whose result is the point, not just a step on the way to a
+    // pending approval: these stay in the transcript once done, the same way
+    // a search engine's results page does not disappear once you have read
+    // it.
+    readonly property var resultCardKinds: ["settingsResults", "fileResults"]
+
     function visibleToolCards(message): var {
         return Array.from(message?.toolCards ?? []).filter(card => card.state === "pending"
-            || (card.kind === "settingsResults" && card.state === "done"));
+            || (root.resultCardKinds.indexOf(card.kind) >= 0 && card.state === "done"));
     }
 
     /** The broker's key for the call a message is waiting on. */
@@ -1750,6 +1835,20 @@ Singleton {
             // ready first.
             if (Config.ready)
                 Qt.callLater(() => root.migrateToolPermissions());
+        }
+    }
+
+    // Whether local OCR is available, checked once and cheaply: `which` exits
+    // in a few milliseconds, and image_ocr's presence in the wire schema
+    // depends on knowing the answer before the first turn, not after it.
+    property bool tesseractPresent: false
+    readonly property bool ocrAvailable: root.tesseractPresent && (Config.options?.ai?.vision?.ocrEnabled ?? true)
+    Process {
+        id: ocrCheckProc
+        running: root.enabled
+        command: ["bash", "-c", "command -v tesseract >/dev/null 2>&1 && echo yes || echo no"]
+        stdout: StdioCollector {
+            onStreamFinished: root.tesseractPresent = text.trim() === "yes"
         }
     }
 
@@ -2197,7 +2296,14 @@ Singleton {
             message.inputTokens, message.outputTokens,
             message.thoughtTokens, message.totalTokens,
             (message.errorKind ?? "").length === 0);
-        root.notifyResponseFinished(message);
+        // A message that just issued a tool call is not the end of the
+        // exchange: `AiToolBroker.finish()` always asks for a follow-up
+        // turn next, sync or async. Notifying here as well as for the
+        // message that actually answers turned one finished exchange into
+        // one notification per tool round-trip (a web search followed by
+        // reading a page was three notifications for one answer).
+        if ((message.toolCalls?.length ?? 0) === 0)
+            root.notifyResponseFinished(message);
         if (root.postResponseHook) {
             root.postResponseHook();
             root.postResponseHook = null; // Reset hook after use
@@ -2709,6 +2815,19 @@ Singleton {
             return;
         }
 
+        // Internal continuations (tool follow-up, regenerate, continue,
+        // edit-and-resend) skip the durable staging pipeline above, which is
+        // the only place a run is otherwise moved out of "preparing". Left
+        // there, the first `activity()`/`finish()` call this run receives
+        // (`streaming`, then `completed`) is an illegal transition from
+        // "preparing" and is silently rejected — the run never reaches a
+        // terminal state, `activeRunId` never clears, and every later
+        // submission anywhere (including a brand-new chat) is refused as
+        // "busy" forever, until the shell restarts.
+        root.runCoordinator.transition(runResult.runId, "thinking", "followUp", {
+            "executionStarted": false,
+            "networkStartedAt": Date.now()
+        });
         root.commitSession(true);
         requester.model = model;
         requester.strategy = strategy;
@@ -3269,18 +3388,32 @@ Singleton {
         root.makeRequest();
     }
 
-    function createFunctionOutputMessage(name, output, includeOutputInChat = true, callId = "") {
+    /**
+     * The turn that carries a tool's output back to the model.
+     *
+     * It is a real message — the providers read `functionResponse` out of it
+     * to build the next request — but it is not something to read. It used to
+     * be drawn in the transcript as a bubble from the user containing
+     * `[[ Output of settings_search ]]` and a screenful of JSON. What the tool
+     * did is already an activity row, and what it found is already a card.
+     *
+     * `visible` is for the one caller that wants the opposite: a shell command
+     * streams its output into this message as it runs, and that is the whole
+     * point of it being on screen.
+     */
+    function createFunctionOutputMessage(name, output, includeOutputInChat = true, callId = "", visible = false) {
         const resolvedCallId = callId || root.activeToolCallId;
+        const body = `[[ Output of ${name} ]]${includeOutputInChat ? ("\n\n<think>\n" + output + "\n</think>") : ""}`;
         return aiMessageComponent.createObject(root, {
             "role": "user",
-            "content": `[[ Output of ${name} ]]${includeOutputInChat ? ("\n\n<think>\n" + output + "\n</think>") : ""}`,
-            "rawContent": `[[ Output of ${name} ]]${includeOutputInChat ? ("\n\n<think>\n" + output + "\n</think>") : ""}`,
+            "content": body,
+            "rawContent": body,
             "functionName": name,
             "functionCallId": resolvedCallId,
             "functionResponse": output,
             "thinking": false,
-            "done": true
-        // "visibleToUser": false,
+            "done": true,
+            "visibleToUser": visible === true
         });
     }
 
@@ -3642,7 +3775,9 @@ Singleton {
     }
 
     function startShellCommand(message: AiMessageData, command: string, sessionId = "") {
-        const responseMessage = createFunctionOutputMessage(message.functionName, "", false, message.functionCallId);
+        // Visible on purpose: the command's output arrives in this message
+        // line by line, and watching it is the point.
+        const responseMessage = createFunctionOutputMessage(message.functionName, "", false, message.functionCallId, true);
         const id = idForMessage(responseMessage);
         const targetSessionId = String(sessionId || root.currentRunSessionId || root.sessions.currentId);
         const belongsToRun = targetSessionId.length > 0
@@ -4079,21 +4214,26 @@ Singleton {
             };
         }
         const query = String(call.args.query ?? "").trim();
-        const matches = root.settingsIntegration.search(query, Number(call.args.limit ?? 8));
+        const matches = root.settingsIntegration.search(query, Number(call.args.limit ?? 5));
+        const summary = matches.length === 1 ? Translation.tr("1 setting found") : Translation.tr("%1 settings found").arg(matches.length);
         if (matches.length > 0) {
+            // The card gets the full record, because it draws the control.
             root.addToolCard(call.message, {
                 callId: call.key,
                 tool: "settings_search",
                 kind: "settingsResults",
                 state: "done",
-                summary: matches.length === 1 ? Translation.tr("1 setting found") : Translation.tr("%1 settings found").arg(matches.length),
+                summary: summary,
                 data: { matches: matches }
             });
         }
         return {
             status: "success",
-            summary: matches.length === 1 ? Translation.tr("1 setting found") : Translation.tr("%1 settings found").arg(matches.length),
-            data: { query: query, matches: matches }
+            summary: summary,
+            // The model gets key, label, type and value — not the index record
+            // with both languages, the synonym list and the byte offsets of
+            // the QML it was parsed from.
+            data: { query: query, matches: root.settingsIntegration.modelRefs(matches) }
         };
     }
 
@@ -4107,7 +4247,11 @@ Singleton {
         return {
             status: missing === settings.length ? "error" : "success",
             summary: Translation.tr("%1 settings read").arg(settings.length - missing),
-            data: { settings: settings },
+            data: {
+                settings: settings.map(setting => setting.error !== undefined
+                    ? { key: setting.key, error: setting.error }
+                    : root.settingsIntegration.modelRef(setting))
+            },
             retryable: missing > 0
         };
     }
@@ -4376,6 +4520,279 @@ Singleton {
 
     function toolGmailOpen(call: var): var {
         return root.gmailIntegration.openInClient(call.args);
+    }
+
+    // ── Files ─────────────────────────────────────────────────────────────
+    // The one path by which the assistant reaches the filesystem by itself.
+    // Every call is checked against `filesIntegration.pathAllowed` again here
+    // — the registry's `requiredServices: ["files"]` only gates whether the
+    // tool is offered at all, not which path a particular call names.
+
+    function refusedFilePath(path: string): var {
+        if (root.filesIntegration.pathAllowed(path))
+            return null;
+        return {
+            status: "denied",
+            summary: Translation.tr("That path is outside the configured folders"),
+            data: { error: "pathNotAllowed" },
+            retryable: false
+        };
+    }
+
+    function toolFilesSearch(call: var): var {
+        if (filesToolProc.running)
+            return { status: "error", summary: Translation.tr("Another file lookup is already running."), data: null, retryable: true };
+        const query = String(call.args.query ?? "").trim();
+        if (query.length === 0)
+            return { status: "error", summary: Translation.tr("Nothing to search for"), data: null, retryable: true };
+        const limit = Math.max(1, Math.min(20, Number(call.args.limit ?? 20)));
+        const kinds = Array.from(call.args.kinds ?? []);
+        filesToolProc.op = "search";
+        filesToolProc.toolKey = call.key;
+        filesToolProc.command = ["python3", root.filesIntegration.scriptPath, "search",
+            JSON.stringify(root.filesIntegration.roots), query, String(limit), JSON.stringify(kinds)];
+        filesToolProc.running = true;
+        return { status: "pending" };
+    }
+
+    function toolFilesPreview(call: var): var {
+        const path = String(call.args.path ?? "").trim();
+        const refusal = root.refusedFilePath(path);
+        if (refusal)
+            return refusal;
+        if (filesToolProc.running)
+            return { status: "error", summary: Translation.tr("Another file lookup is already running."), data: null, retryable: true };
+        filesToolProc.op = "preview";
+        filesToolProc.toolKey = call.key;
+        filesToolProc.command = ["python3", root.filesIntegration.scriptPath, "peek", path,
+            String(root.filesIntegration.maxPreviewCharacters)];
+        filesToolProc.running = true;
+        return { status: "pending" };
+    }
+
+    function toolFilesAttach(call: var): var {
+        const message = call.message;
+        message.toolCallSerial = call.serial;
+        const path = String(call.args.path ?? "").trim();
+        const refusal = root.refusedFilePath(path);
+        if (refusal)
+            return refusal;
+        root.addToolCard(message, {
+            callId: call.key,
+            tool: "files_attach",
+            kind: "fileAttachPreview",
+            state: "pending",
+            summary: Translation.tr("It wants to read a file"),
+            data: { path: path, name: path.split("/").pop() }
+        });
+        message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function approveFileAttach(message: AiMessageData) {
+        if (!message?.functionPending)
+            return;
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const path = String(card?.data?.path ?? "");
+        message.functionPending = false;
+        if (path.length === 0 || filesToolProc.running) {
+            root.updateToolCard(message, key, { state: "failed", summary: Translation.tr("Could not read the file") });
+            root.broker.settle(key, { status: "error", summary: Translation.tr("Could not read the file"), data: null, retryable: true });
+            return;
+        }
+        root.updateToolCard(message, key, { state: "done", summary: Translation.tr("Reading…") });
+        filesToolProc.op = "attach";
+        filesToolProc.toolKey = key;
+        filesToolProc.attachMessage = message;
+        filesToolProc.command = ["python3", root.filesIntegration.scriptPath, "peek", path,
+            String(root.filesIntegration.maxAttachCharacters)];
+        filesToolProc.running = true;
+    }
+
+    function rejectFileAttach(message: AiMessageData) {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("Not read") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Not read"),
+            data: Translation.tr("The user chose not to have that file read.")
+        });
+    }
+
+    function toolFilesOpenLocation(call: var): var {
+        const path = String(call.args.path ?? "").trim();
+        const refusal = root.refusedFilePath(path);
+        if (refusal)
+            return refusal;
+        const lastSlash = path.lastIndexOf("/");
+        const dir = lastSlash > 0 ? path.slice(0, lastSlash) : path;
+        Quickshell.execDetached(["xdg-open", dir]);
+        return { status: "success", summary: Translation.tr("Opened the folder"), data: { opened: true } };
+    }
+
+    /**
+     * Search, preview and attach share one Process: only one file operation
+     * is ever worth having in flight, the same restriction the web tools use.
+     */
+    property Process filesToolProc: Process {
+        id: filesToolProc
+        property string op: ""
+        property string toolKey: ""
+        property var attachMessage: null
+
+        stdout: StdioCollector {
+            id: filesToolCollector
+            onStreamFinished: {
+                const raw = String(text ?? "").trim();
+                let parsed = null;
+                try {
+                    parsed = JSON.parse(raw);
+                } catch (e) {
+                    parsed = null;
+                }
+                if (filesToolProc.op === "search") {
+                    if (!parsed || parsed.error) {
+                        root.broker.settle(filesToolProc.toolKey, {
+                            status: "error",
+                            summary: String(parsed?.error ?? Translation.tr("The search failed")),
+                            data: null,
+                            retryable: true
+                        });
+                        return;
+                    }
+                    const results = Array.from(parsed.results ?? []);
+                    const summary = results.length === 1 ? Translation.tr("1 file found") : Translation.tr("%1 files found").arg(results.length);
+                    // The card carries the full FileRef (path included) so its
+                    // buttons can act on it directly; the model only ever sees
+                    // the smaller projection below.
+                    if (results.length > 0) {
+                        const record = root.broker.recordFor(filesToolProc.toolKey);
+                        if (record?.message)
+                            root.addToolCard(record.message, {
+                                callId: filesToolProc.toolKey,
+                                tool: "files_search",
+                                kind: "fileResults",
+                                state: "done",
+                                summary: summary,
+                                data: { files: results }
+                            });
+                    }
+                    root.broker.settle(filesToolProc.toolKey, {
+                        status: "success",
+                        summary: summary,
+                        data: { query: parsed.query, files: results.map(entry => root.filesIntegration.modelRef(entry)) }
+                    });
+                    return;
+                }
+                if (filesToolProc.op === "preview") {
+                    if (!parsed || parsed.error) {
+                        root.broker.settle(filesToolProc.toolKey, {
+                            status: parsed?.sensitive === true ? "denied" : "error",
+                            summary: String(parsed?.error ?? Translation.tr("Could not read that file")),
+                            data: null,
+                            retryable: parsed?.sensitive !== true
+                        });
+                        return;
+                    }
+                    root.broker.settle(filesToolProc.toolKey, {
+                        status: "success",
+                        summary: parsed.truncated ? Translation.tr("Preview (truncated)") : Translation.tr("Preview"),
+                        data: { name: parsed.name, mime: parsed.mime, text: parsed.text, truncated: parsed.truncated === true }
+                    });
+                    return;
+                }
+                // attach
+                const message = filesToolProc.attachMessage;
+                filesToolProc.attachMessage = null;
+                if (!parsed || parsed.error || !parsed.text) {
+                    const reason = String(parsed?.error ?? Translation.tr("Nothing could be read from that file"));
+                    if (message)
+                        root.updateToolCard(message, filesToolProc.toolKey, { state: "failed", summary: reason });
+                    root.broker.settle(filesToolProc.toolKey, {
+                        status: parsed?.sensitive === true ? "denied" : "error",
+                        summary: reason,
+                        data: null,
+                        retryable: parsed?.sensitive !== true
+                    });
+                    return;
+                }
+                if (message)
+                    root.updateToolCard(message, filesToolProc.toolKey, { state: "done", summary: parsed.truncated ? Translation.tr("Read (truncated)") : Translation.tr("Read") });
+                root.broker.settle(filesToolProc.toolKey, {
+                    status: "success",
+                    summary: parsed.truncated ? Translation.tr("%1 (truncated)").arg(parsed.name) : String(parsed.name),
+                    data: parsed.text
+                });
+            }
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0 && root.broker.isPending(filesToolProc.toolKey))
+                root.broker.settle(filesToolProc.toolKey, {
+                    status: "error",
+                    summary: Translation.tr("The file helper stopped with code %1.").arg(exitCode),
+                    data: null,
+                    retryable: true
+                });
+        }
+    }
+
+    // ── Vision: OCR ───────────────────────────────────────────────────────
+
+    function toolImageOcr(call: var): var {
+        const path = String(call.args.path ?? "").trim();
+        const refusal = root.refusedFilePath(path);
+        if (refusal)
+            return refusal;
+        if (ocrToolProc.running)
+            return { status: "error", summary: Translation.tr("Another OCR run is already in progress."), data: null, retryable: true };
+        const lang = String(call.args.lang ?? "").trim() || "eng";
+        ocrToolProc.toolKey = call.key;
+        // `stdout` as the output target ("-") keeps this to one process and
+        // one temp-free round trip; tesseract's own file-based mode would
+        // leave a `.txt` next to a possibly read-only source directory.
+        ocrToolProc.command = ["tesseract", path, "stdout", "-l", lang];
+        ocrToolProc.running = true;
+        return { status: "pending" };
+    }
+
+    property Process ocrToolProc: Process {
+        id: ocrToolProc
+        property string toolKey: ""
+
+        stdout: StdioCollector {
+            id: ocrCollector
+            onStreamFinished: {
+                const trimmed = String(text ?? "").trim();
+                if (trimmed.length === 0) {
+                    root.broker.settle(ocrToolProc.toolKey, {
+                        status: "success",
+                        summary: Translation.tr("No text found in the image"),
+                        data: ""
+                    });
+                    return;
+                }
+                root.broker.settle(ocrToolProc.toolKey, {
+                    status: "success",
+                    summary: Translation.tr("Text extracted"),
+                    data: trimmed
+                });
+            }
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0 && root.broker.isPending(ocrToolProc.toolKey))
+                root.broker.settle(ocrToolProc.toolKey, {
+                    status: "error",
+                    summary: Translation.tr("OCR failed (exit code %1). Check the language code.").arg(exitCode),
+                    data: null,
+                    retryable: true
+                });
+        }
     }
 
     function toolShellCommand(call: var): var {

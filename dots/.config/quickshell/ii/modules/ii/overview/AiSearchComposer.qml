@@ -43,7 +43,11 @@ ColumnLayout {
     readonly property real railSlideDistance: Math.max(root.controlExtent, Appearance.rounding.large)
     readonly property bool hasDraft: draftInput.text.trim().length > 0
     readonly property real maximumCompactModelWidth: Math.max(root.controlExtent * 2, composerSurface.width * 0.45)
-    readonly property real compactDraftWidth: Math.max(0, composerStage.width - root.controlExtent * 2 - root.controlGap * 2 - modelButton.implicitWidth)
+    // Zero when the voice button is hidden, so the reserved margin below
+    // collapses back to the original two-button layout instead of leaving
+    // a gap where a disabled feature used to be.
+    readonly property real voiceButtonReserve: Config.options.ai.voice.enabled ? (root.controlExtent + root.controlGap) : 0
+    readonly property real compactDraftWidth: Math.max(0, composerStage.width - root.controlExtent * 2 - root.controlGap * 2 - modelButton.implicitWidth - root.voiceButtonReserve)
     // The probe is always measured at the compact-row width. Unlike the live
     // editor, its width never changes when this condition turns true, which
     // prevents multiline expansion from feeding back into itself.
@@ -59,6 +63,16 @@ ColumnLayout {
     // used by the Wi-Fi and Bluetooth dialogs.
     property string activeRail: "composer"
     property bool syncingDraft: false
+
+    // ── Prompt history (Up/Down, like a shell) ──────────────────────────
+    // -1 means "not navigating": the composer holds whatever the user is
+    // actually writing. Pressing Up from an empty draft starts the walk at
+    // the most recent prompt; Down retraces it and hands the original draft
+    // back once it walks off the newest end. Shared with the sidebar
+    // composer through `Ai.ownPromptHistory` — one conversation, one history.
+    property int promptHistoryIndex: -1
+    property string promptHistoryDraftBackup: ""
+    property bool navigatingPromptHistory: false
     property bool modelsOpen: false
 
     readonly property var orderedModels: {
@@ -80,6 +94,45 @@ ColumnLayout {
         root.syncingDraft = true;
         draftInput.text = String(value ?? "");
         root.syncingDraft = false;
+    }
+
+    function applyPromptHistoryText(text) {
+        root.navigatingPromptHistory = true;
+        root.setDraft(text);
+        Ai.draft = text;
+        draftInput.cursorPosition = draftInput.length;
+        root.navigatingPromptHistory = false;
+    }
+
+    function resetPromptHistory() {
+        root.promptHistoryIndex = -1;
+        root.promptHistoryDraftBackup = "";
+    }
+
+    /** delta -1 walks to an older prompt (Up); +1 walks back toward the live draft (Down). */
+    function stepPromptHistory(delta) {
+        const history = Ai.ownPromptHistory;
+        if (history.length === 0)
+            return false;
+        if (root.promptHistoryIndex === -1) {
+            if (delta > 0)
+                return false; // already at the live draft, nothing newer
+            root.promptHistoryDraftBackup = draftInput.text;
+            root.promptHistoryIndex = history.length - 1;
+        } else if (delta < 0) {
+            if (root.promptHistoryIndex === 0)
+                return true; // already at the oldest prompt; consume the key
+            root.promptHistoryIndex -= 1;
+        } else {
+            if (root.promptHistoryIndex >= history.length - 1) {
+                root.applyPromptHistoryText(root.promptHistoryDraftBackup);
+                root.resetPromptHistory();
+                return true;
+            }
+            root.promptHistoryIndex += 1;
+        }
+        root.applyPromptHistoryText(history[root.promptHistoryIndex]);
+        return true;
     }
 
     function send() {
@@ -169,6 +222,34 @@ ColumnLayout {
         root.focusInput();
     }
 
+    /** Start/stop/retry, driven by the shared voice service's own state. */
+    function activateVoice() {
+        switch (Ai.voiceService.state) {
+        case "recording":
+            Ai.voiceService.stopRecording();
+            break;
+        case "transcribing":
+            break;
+        case "error":
+            Ai.voiceService.cancel();
+            Ai.voiceService.startRecording("search");
+            break;
+        default:
+            Ai.voiceService.startRecording("search");
+            break;
+        }
+    }
+
+    /** Appends a finished dictation into the draft, the same way pasting does. */
+    function insertVoiceText(text) {
+        if (text.length === 0)
+            return;
+        const next = (draftInput.text.length > 0 ? `${draftInput.text} ${text}` : text).slice(0, root.maximumCharacters);
+        root.setDraft(next);
+        Ai.draft = next;
+        root.focusInput();
+    }
+
     function selectModel(modelId) {
         if (Ai.setModel(modelId, false))
             root.focusInput();
@@ -253,6 +334,24 @@ ColumnLayout {
         function onDraftChanged() {
             if (draftInput.text !== Ai.draft)
                 root.setDraft(Ai.draft);
+            // A change that did not come from walking the history — typing,
+            // sending, switching chats — means the reader is done recalling.
+            if (!root.navigatingPromptHistory && root.promptHistoryIndex !== -1)
+                root.resetPromptHistory();
+        }
+    }
+
+    Connections {
+        // The voice service is shared with the sidebar composer, so only the
+        // surface that started the recording — tracked by `activeSurface` —
+        // consumes the finished draft here.
+        target: Ai.voiceService
+        function onStateChanged() {
+            if (Ai.voiceService.state !== "review" || Ai.voiceService.activeSurface !== "search")
+                return;
+            const text = Ai.voiceService.draftText;
+            Ai.voiceService.attachDraft(text);
+            root.insertVoiceText(text);
         }
     }
 
@@ -344,7 +443,7 @@ ColumnLayout {
                         right: parent.right
                         top: parent.top
                         leftMargin: root.longDraft ? root.horizontalInset : root.controlExtent + root.controlGap
-                        rightMargin: root.longDraft ? root.horizontalInset : modelButton.implicitWidth + sendButton.implicitWidth + root.controlGap * 2
+                        rightMargin: root.longDraft ? root.horizontalInset : modelButton.implicitWidth + sendButton.implicitWidth + root.voiceButtonReserve + root.controlGap * 2
                     }
                     height: root.longDraft ? root.expandedEditorHeight : root.controlExtent
                     color: Appearance.colors.colOnLayer1
@@ -410,6 +509,17 @@ ColumnLayout {
                         } else if (event.key === Qt.Key_Backtab) {
                             root.requestFocusPrev();
                             event.accepted = true;
+                        } else if (event.key === Qt.Key_Up && event.modifiers === Qt.NoModifier
+                                && (draftInput.text.length === 0 || root.promptHistoryIndex !== -1)) {
+                            // Recall an earlier prompt, like a shell's history — only
+                            // from an empty draft, so mid-line cursor movement in a
+                            // real multi-line message is never hijacked.
+                            if (root.stepPromptHistory(-1))
+                                event.accepted = true;
+                        } else if (event.key === Qt.Key_Down && event.modifiers === Qt.NoModifier
+                                && (draftInput.text.length === 0 || root.promptHistoryIndex !== -1)) {
+                            if (root.stepPromptHistory(1))
+                                event.accepted = true;
                         }
                     }
                 }
@@ -482,10 +592,34 @@ ColumnLayout {
                                 if (event.modifiers & Qt.ShiftModifier)
                                     compactChevron.forceActiveFocus();
                                 else
-                                    sendButton.forceActiveFocus();
+                                    (voiceButton.visible ? voiceButton : sendButton).forceActiveFocus();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Backtab) {
                                 compactChevron.forceActiveFocus();
+                                event.accepted = true;
+                            }
+                        }
+                    }
+
+                    VoiceButton {
+                        id: voiceButton
+                        Layout.alignment: Qt.AlignVCenter
+
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
+                                root.activateVoice();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Escape) {
+                                root.focusInput();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Tab) {
+                                if (event.modifiers & Qt.ShiftModifier)
+                                    modelButton.forceActiveFocus();
+                                else
+                                    sendButton.forceActiveFocus();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Backtab) {
+                                modelButton.forceActiveFocus();
                                 event.accepted = true;
                             }
                         }
@@ -504,12 +638,12 @@ ColumnLayout {
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Tab) {
                                 if (event.modifiers & Qt.ShiftModifier)
-                                    modelButton.forceActiveFocus();
+                                    (voiceButton.visible ? voiceButton : modelButton).forceActiveFocus();
                                 else
                                     root.requestFocusNext();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Backtab) {
-                                modelButton.forceActiveFocus();
+                                (voiceButton.visible ? voiceButton : modelButton).forceActiveFocus();
                                 event.accepted = true;
                             }
                         }
@@ -747,6 +881,9 @@ ColumnLayout {
         property string symbol: ""
         property string tooltip: ""
         property bool active: false
+        // Set while the button represents ongoing background work (e.g.
+        // transcription) rather than an idle/pressable action.
+        property bool spinning: false
 
         implicitWidth: root.controlExtent
         implicitHeight: root.controlExtent
@@ -770,6 +907,14 @@ ColumnLayout {
             iconSize: Appearance.font.pixelSize.larger
             fill: 1
             color: (iconButton.active || iconButton.activeFocus) ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
+
+            RotationAnimator on rotation {
+                running: iconButton.spinning
+                from: 0
+                to: 360
+                duration: 900
+                loops: Animation.Infinite
+            }
         }
 
         StyledToolTip {
@@ -863,5 +1008,32 @@ ColumnLayout {
         enabled: Ai.isGenerating || root.hasDraft
         opacity: 1
         onClicked: root.send()
+    }
+
+    component VoiceButton: RailIconButton {
+        visible: Config.options.ai.voice.enabled
+        symbol: {
+            switch (Ai.voiceService.state) {
+            case "recording": return "stop";
+            case "transcribing": return "progress_activity";
+            default: return "mic";
+            }
+        }
+        active: Ai.voiceService.state === "recording"
+        spinning: Ai.voiceService.state === "transcribing"
+        enabled: Ai.voiceService.state !== "transcribing"
+        tooltip: {
+            switch (Ai.voiceService.state) {
+            case "recording":
+                return Translation.tr("Recording… %1s — click to stop").arg(Math.round(Ai.voiceService.recordingElapsedMs / 1000));
+            case "transcribing":
+                return Translation.tr("Transcribing…");
+            case "error":
+                return Ai.voiceService.errorText;
+            default:
+                return Ai.voiceService.available ? Translation.tr("Dictate a message") : Ai.voiceService.unavailableReason();
+            }
+        }
+        onClicked: root.activateVoice()
     }
 }

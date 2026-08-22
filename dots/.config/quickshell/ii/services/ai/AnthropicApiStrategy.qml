@@ -291,10 +291,11 @@ ApiStrategy {
         toolId = "";
         toolArgs = "";
 
-        const newContent = `\n\n[[ Function: ${name}(${JSON.stringify(args, null, 2)}) ]]\n`;
+        // The call is already a row in the transcript's activity list,
+        // with its arguments one click away. Repeating it as a block of
+        // JSON inside the answer was a debugging aid that outstayed its
+        // welcome.
         closeThought(message);
-        message.rawContent += newContent;
-        message.content += newContent;
         message.functionName = name;
         message.functionCall = {
             name: name,

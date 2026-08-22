@@ -26,11 +26,15 @@ class AiSportsIntegrationTests(unittest.TestCase):
     def test_adapter_is_parameterized_and_independent_of_widget_config(self):
         self.assertIn("XMLHttpRequest", ADAPTER)
         self.assertIn("cacheTtlMs", ADAPTER)
+        self.assertIn("site.web.api.espn.com", ADAPTER)
+        self.assertIn("hostIndex", ADAPTER)
         self.assertIn("fetchedAt", ADAPTER)
         self.assertIn("venue", ADAPTER)
         self.assertIn("broadcast", ADAPTER)
         self.assertIn("const eventStatus = item.status", ADAPTER)
         self.assertIn("competitors", ADAPTER)
+        self.assertIn("statusValues", ADAPTER)
+        self.assertIn("localIsoDate", ADAPTER)
         self.assertNotIn("Config.options", ADAPTER)
         self.assertNotIn("monitoredLeagues", ADAPTER)
 

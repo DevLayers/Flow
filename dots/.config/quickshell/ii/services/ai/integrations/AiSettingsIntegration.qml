@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 
@@ -21,6 +22,18 @@ QtObject {
     readonly property string indexPath: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/settings_index.json`)
     readonly property string generatorPath: Directories.aiSettingsIndexScriptPath
     property var index: ({ schema: 0, entries: [] })
+    /** How far below the best match a result may score and still be shown. */
+    readonly property real relevanceFloor: 0.5
+    /** A question has a handful of answers, not a search page of them. */
+    readonly property int maxResults: 6
+    /**
+     * The locale the index has to be built in.
+     *
+     * The generator used to default to a language of its own, so an English
+     * interface got Portuguese labels back and the section deep-link stopped
+     * matching the section titles on screen.
+     */
+    readonly property string language: Translation.languageCode
     property bool ready: false
     property bool rebuilding: false
     property string lastError: ""
@@ -64,6 +77,12 @@ QtObject {
         return Config.getNestedValue(Config.options, String(key).split("."));
     }
 
+    /**
+     * The full record, for the card that draws the control.
+     *
+     * It carries what a widget needs — type, range, options, where the page
+     * is — and a few things only the index cares about.
+     */
     function settingRef(entry: var, score = 0): var {
         if (!entry)
             return null;
@@ -73,47 +92,225 @@ QtObject {
         return ref;
     }
 
+    /**
+     * The same setting, cut down to what a model can act on.
+     *
+     * A search used to hand back the whole index record: both languages of
+     * every label, the synonym list, the byte offsets of the QML block it was
+     * parsed from. That is a screenful of JSON per result, and the model read
+     * it aloud — which is how an English conversation ended up quoting
+     * Portuguese toggle names.
+     */
+    function modelRef(ref: var): var {
+        if (!ref)
+            return null;
+        const where = [String(ref.pageName ?? ""), String(ref.sectionTitle ?? "")]
+            .filter(part => part.length > 0).join(" › ");
+        const projected = {
+            key: String(ref.key ?? ""),
+            label: String(ref.label ?? "") || String(ref.key ?? "").split(".").pop(),
+            type: String(ref.type ?? ""),
+            value: ref.currentValue
+        };
+        if (where.length > 0)
+            projected.where = where;
+        if (String(ref.description ?? "").length > 0)
+            projected.description = String(ref.description);
+        if (ref.hasUi !== true)
+            projected.hasUi = false;
+        return projected;
+    }
+
+    function modelRefs(refs: var): var {
+        return Array.from(refs ?? []).map(ref => root.modelRef(ref)).filter(ref => ref !== null);
+    }
+
+    /** Words that name something, filler removed. Mirrors the generator. */
+    readonly property var stopwords: new Set(String(`
+        about and are can change configure disable do does enable find for from get
+        have how i in is it its me my of on onde option options or set setting settings
+        show that the their there this to turn use want was what when where which who
+        why with you your
+        como configurar de do dos das em como habilitar ligar desligar meu minha na no
+        onde opcao opcoes para por qual que quero seu sua tem ter um uma
+    `).trim().split(/\s+/))
+
+    readonly property int stemLength: 6
+
+    /**
+     * Accent-free lowercase, so "suspensão" and "suspensao" are one word.
+     */
+    function normalize(value: string): string {
+        return String(value ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    }
+
+    /**
+     * The words in a string.
+     *
+     * Split on a plain character class, not on `\p{L}` — Qt's JavaScript
+     * engine does not honour unicode property escapes, so that pattern matched
+     * nothing and "automatic suspend" came through as a single token with a
+     * space in it. Everything is accent-free by the time it gets here, so the
+     * plain class loses nothing.
+     */
     function tokens(value: string): var {
-        return String(value ?? "").toLocaleLowerCase().normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .split(/[^\p{L}\p{N}_]+/u)
+        return root.normalize(value)
+            .split(/[^a-z0-9_]+/)
             .filter(token => token.length > 1);
     }
 
-    function search(query: string, limit = 8): var {
-        const normalized = String(query ?? "").trim().toLocaleLowerCase();
-        const queryTokens = root.tokens(normalized);
-        if (queryTokens.length === 0)
-            return [];
-        const results = [];
-        for (const entry of root.entries) {
-            const label = String(entry.label ?? "").toLocaleLowerCase();
-            const localLabel = String(entry.labelLocalized ?? "").toLocaleLowerCase();
-            const key = String(entry.key ?? "").toLocaleLowerCase();
-            const keyParts = key.split(".");
-            const lastKey = keyParts.length > 0 ? keyParts[keyParts.length - 1] : "";
-            const description = `${entry.description ?? ""} ${entry.descriptionLocalized ?? ""}`.toLocaleLowerCase();
-            const navigation = `${Array.from(entry.aliases ?? []).join(" ")} ${entry.pageName ?? ""} ${entry.sectionTitle ?? ""} ${entry.sectionTitleLocalized ?? ""}`.toLocaleLowerCase();
-            const keywords = Array.from(entry.keywords ?? []).map(word => String(word).toLocaleLowerCase());
-            let score = entry.hasUi === true ? 40 : 0;
-            for (const token of queryTokens) {
-                if (token === label || token === localLabel)
-                    score += 500;
-                else if (label.startsWith(token) || localLabel.startsWith(token))
-                    score += 200;
-                if (lastKey === token || root.tokens(lastKey).indexOf(token) >= 0)
-                    score += 180;
-                if (description.indexOf(token) >= 0)
-                    score += 120;
-                if (navigation.indexOf(token) >= 0)
-                    score += 100;
-                if (keywords.indexOf(token) >= 0)
-                    score += 90;
-            }
-            if (score > (entry.hasUi === true ? 40 : 0))
-                results.push(root.settingRef(entry, score));
+    /** The words of a question that actually name something. */
+    function queryTokens(value: string): var {
+        const all = root.tokens(value);
+        const meaningful = all.filter(token => !root.stopwords.has(token));
+        return meaningful.length > 0 ? meaningful : all;
+    }
+
+    function stemOf(token: string): string {
+        return token.length > root.stemLength ? token.slice(0, root.stemLength) : "";
+    }
+
+    /** Whether any word in `text` starts with `stem`. */
+    function stemHit(stem: string, text: string): bool {
+        if (stem.length === 0)
+            return false;
+        const words = String(text ?? "").split(/[^a-z0-9_]+/);
+        for (const word of words) {
+            if (word.length > root.stemLength && word.startsWith(stem))
+                return true;
         }
-        return results.sort((left, right) => Number(right.score) - Number(left.score)).slice(0, Math.max(1, Math.min(8, Number(limit) || 8)));
+        return false;
+    }
+
+    /**
+     * How well one entry answers a query.
+     *
+     * `covered` is how much of the question it speaks to, `identity` how much
+     * of that came from the entry itself rather than from the page it happens
+     * to sit on. Both are needed: a setting whose label is the single word
+     * "mode" used to beat the real dark-mode switch for "dark mode", and every
+     * option on the Power page used to answer "automatic suspend".
+     */
+    function scoreEntry(entry: var, queryTokens: var, queryNormalized: string): var {
+        const label = root.normalize(entry.label);
+        const key = root.normalize(entry.key);
+        const keyParts = key.split(".");
+        const lastKey = keyParts.length > 0 ? keyParts[keyParts.length - 1] : "";
+        const lastKeyTokens = root.tokens(lastKey);
+        const keyWords = root.tokens(key);
+        const description = root.normalize(entry.description);
+        const navigation = root.normalize([
+            Array.from(entry.aliases ?? []).join(" "),
+            entry.pageName ?? "",
+            entry.sectionTitle ?? ""
+        ].join(" "));
+        // The untranslated strings, so a key someone knows in English stays
+        // findable in a translated interface.
+        const fallback = root.normalize(entry.match ?? "");
+        const keywords = Array.from(entry.keywords ?? []).map(word => root.normalize(word));
+        const hasUi = entry.hasUi === true;
+
+        let score = hasUi ? 40 : 0;
+        let covered = 0;
+        let identity = 0;
+
+        for (const token of queryTokens) {
+            const stem = root.stemOf(token);
+            let own = 0;
+            if (token === label)
+                own = Math.max(own, 500);
+            else if (label.startsWith(token))
+                own = Math.max(own, 220);
+            else if (label.indexOf(token) >= 0)
+                own = Math.max(own, 150);
+            else if (root.stemHit(stem, label))
+                own = Math.max(own, 110);
+
+            if (token === lastKey || lastKeyTokens.indexOf(token) >= 0)
+                own = Math.max(own, 180);
+            else if (keyWords.indexOf(token) >= 0 || keyWords.some(word => word.startsWith(token)))
+                own = Math.max(own, 120);
+            else if (root.stemHit(stem, key))
+                own = Math.max(own, 90);
+
+            if (description.indexOf(token) >= 0)
+                own = Math.max(own, 120);
+            else if (root.stemHit(stem, description))
+                own = Math.max(own, 80);
+
+            if (fallback.indexOf(token) >= 0)
+                own = Math.max(own, 90);
+            else if (root.stemHit(stem, fallback))
+                own = Math.max(own, 70);
+
+            // A domain synonym is curated for this entry — "dormir" really is
+            // what this switch does — so it counts as the entry's own
+            // evidence. It is the bridge that lets someone search in one
+            // language an interface that is showing another.
+            if (keywords.indexOf(token) >= 0)
+                own = Math.max(own, 90);
+
+            // Borrowed evidence is not stemmed, and never stands alone.
+            // Sharing a page with a word is weak enough already; matching it
+            // approximately turns every option on that page into an answer.
+            let borrowed = 0;
+            if (navigation.indexOf(token) >= 0)
+                borrowed = Math.max(borrowed, 100);
+
+            const best = Math.max(own, borrowed);
+            if (best > 0) {
+                covered += 1;
+                score += best;
+                identity += own;
+            }
+        }
+
+        let base = score;
+        if (queryNormalized.length > 0 && queryNormalized === label)
+            score += 500;
+        if (!hasUi) {
+            score = Math.round(score * 0.6);
+            base = Math.round(base * 0.6);
+        }
+        return { score: score, base: base, covered: covered, identity: identity };
+    }
+
+    /**
+     * The settings that answer a query, best first and few.
+     *
+     * Eight results for "automatic suspend" was not eight answers: it was two
+     * answers and six things containing the word "suspend".
+     */
+    function search(query: string, limit = 5): var {
+        const queryNormalized = root.normalize(String(query ?? "").trim());
+        const words = root.queryTokens(queryNormalized);
+        if (words.length === 0)
+            return [];
+
+        const scored = [];
+        for (const entry of root.entries) {
+            const verdict = root.scoreEntry(entry, words, queryNormalized);
+            if (verdict.covered === 0 || verdict.identity === 0)
+                continue;
+            scored.push({ verdict: verdict, entry: entry });
+        }
+        if (scored.length === 0)
+            return [];
+
+        const bestCoverage = scored.reduce((best, item) => Math.max(best, item.verdict.covered), 0);
+        let kept = scored.filter(item => item.verdict.covered === bestCoverage);
+
+        // The floor is measured against the best match *without* its
+        // exact-phrase bonus: measuring against the bonus lets one perfect hit
+        // push out every other reasonable answer, which is how "Suspend at (%)"
+        // vanished from a search for "automatic suspend".
+        const topBase = kept.reduce((best, item) => Math.max(best, item.verdict.base), 0);
+        kept = kept.filter(item => item.verdict.base >= topBase * root.relevanceFloor);
+
+        kept.sort((left, right) => right.verdict.score - left.verdict.score);
+        return kept
+            .slice(0, Math.max(1, Math.min(root.maxResults, Number(limit) || 5)))
+            .map(item => root.settingRef(item.entry, item.verdict.score));
     }
 
     function get(keys: var): var {
@@ -132,28 +329,29 @@ QtObject {
             return { ok: false, reason: "unknownKey" };
         const type = String(entry.type ?? "unknown");
         if (type === "bool" && typeof value !== "boolean")
-            return { ok: false, reason: "expectedBool" };
+            return { ok: false, reason: "expectedBool", entry: entry };
         if (type === "int" && (typeof value !== "number" || !Number.isInteger(value)))
-            return { ok: false, reason: "expectedInteger" };
+            return { ok: false, reason: "expectedInteger", entry: entry };
         if (type === "real" && (typeof value !== "number" || !Number.isFinite(value)))
-            return { ok: false, reason: "expectedNumber" };
+            return { ok: false, reason: "expectedNumber", entry: entry };
         if (type === "string" && typeof value !== "string")
-            return { ok: false, reason: "expectedString" };
+            return { ok: false, reason: "expectedString", entry: entry };
         if (type === "enum") {
             const options = Array.from(entry.options ?? []).map(option => option.value);
             if (options.length > 0 && options.indexOf(value) < 0)
-                return { ok: false, reason: "outsideOptions" };
+                return { ok: false, reason: "outsideOptions", entry: entry };
         }
         const range = entry.range ?? null;
         if (range && typeof value === "number") {
             if (range.from !== null && range.from !== undefined && value < Number(range.from))
-                return { ok: false, reason: "belowRange" };
+                return { ok: false, reason: "belowRange", entry: entry };
             if (range.to !== null && range.to !== undefined && value > Number(range.to))
-                return { ok: false, reason: "aboveRange" };
-            const step = Number(range.step ?? 0);
-            if (step > 0 && range.from !== null && range.from !== undefined
-                    && Math.abs(((value - Number(range.from)) / step) - Math.round((value - Number(range.from)) / step)) > 0.000001)
-                return { ok: false, reason: "outsideStep" };
+                return { ok: false, reason: "aboveRange", entry: entry };
+            // `stepSize` is how far one click of the spin box moves the value,
+            // not a rule about which values are legal. Treating it as a rule
+            // refused everything the arrows produced — `battery.suspend` sat
+            // at 3, the step is 5, so every press landed on 8, 13, 18 and was
+            // rejected — and refused the value already stored, too.
         }
         try {
             const strict = Config.validateNestedValue(key, value);
@@ -165,6 +363,39 @@ QtObject {
         return { ok: true, reason: "", value: value, entry: entry };
     }
 
+    /**
+     * A refusal in words, for the card that has to show it.
+     *
+     * `reason` stays a code — the model reads it, and tests pin it — but a
+     * code is not something to put in front of someone who just pressed a
+     * plus button. This used to print `outsideStep` under the control.
+     */
+    function reasonText(verdict: var): string {
+        const entry = verdict?.entry ?? null;
+        const range = entry?.range ?? null;
+        switch (String(verdict?.reason ?? "")) {
+        case "unknownKey":
+            return Translation.tr("There is no such setting.");
+        case "expectedBool":
+            return Translation.tr("This setting is on or off.");
+        case "expectedInteger":
+            return Translation.tr("This setting takes a whole number.");
+        case "expectedNumber":
+            return Translation.tr("This setting takes a number.");
+        case "expectedString":
+            return Translation.tr("This setting takes text.");
+        case "outsideOptions":
+            return Translation.tr("Choose one of: %1")
+                .arg(Array.from(entry?.options ?? []).map(option => String(option?.label ?? option?.value ?? "")).join(", "));
+        case "belowRange":
+            return Translation.tr("The lowest this setting goes is %1.").arg(String(range?.from ?? ""));
+        case "aboveRange":
+            return Translation.tr("The highest this setting goes is %1.").arg(String(range?.to ?? ""));
+        }
+        const reason = String(verdict?.reason ?? "");
+        return reason.length > 0 ? reason : Translation.tr("This value is not valid for this setting.");
+    }
+
     function propose(changes: var): var {
         const preview = [];
         const warnings = [];
@@ -174,7 +405,7 @@ QtObject {
             const entry = verdict.entry ?? root.entryFor(key);
             const item = {
                 key: key,
-                label: entry?.labelLocalized ?? entry?.label ?? key,
+                label: entry?.label ?? key,
                 current: root.currentValue(key),
                 proposed: change?.value,
                 valid: verdict.ok === true,
@@ -224,7 +455,7 @@ QtObject {
 
     readonly property Process indexCheck: Process {
         id: indexCheck
-        command: ["python3", root.generatorPath, "--out", root.indexPath, "check"]
+        command: ["python3", root.generatorPath, "--lang", root.language, "--out", root.indexPath, "check"]
         onExited: exitCode => {
             if (exitCode === 0)
                 indexFile.reload();
@@ -235,7 +466,7 @@ QtObject {
 
     readonly property Process indexBuild: Process {
         id: indexBuild
-        command: ["python3", root.generatorPath, "--out", root.indexPath, "build"]
+        command: ["python3", root.generatorPath, "--lang", root.language, "--out", root.indexPath, "build"]
         onExited: exitCode => {
             root.rebuilding = false;
             if (exitCode === 0)
@@ -244,6 +475,10 @@ QtObject {
                 root.lastError = "settings index build failed";
         }
     }
+
+    // Switching the interface language makes every label in the index wrong,
+    // including the section titles the deep-link matches on.
+    onLanguageChanged: root.rebuild()
 
     Component.onCompleted: root.ensureIndex()
 }
