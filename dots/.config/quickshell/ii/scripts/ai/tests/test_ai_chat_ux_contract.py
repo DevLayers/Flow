@@ -147,6 +147,11 @@ class CompletedActivityAccordionTests(unittest.TestCase):
         self.assertIn("visible: !root.done && root.stepGroup.length <= 1", AI_MESSAGE_QML)
         self.assertIn("shown: root.done ? root.hasActivity : root.stepGroup.length > 1", AI_MESSAGE_QML)
 
+    def test_short_thinking_also_keeps_the_completed_outer_accordion(self):
+        summary = body_between(AI_MESSAGE_QML, "function summarizeActivity(): var {", "\n    readonly property var activitySummary")
+        self.assertIn('hasThought = hasThought || String(step?.thought ?? "").length > 0', summary)
+        self.assertIn("hasActivity: hasActivity", summary)
+
 
 class PromptHistoryTests(unittest.TestCase):
     def test_ai_exposes_the_users_own_prompts_oldest_first(self):

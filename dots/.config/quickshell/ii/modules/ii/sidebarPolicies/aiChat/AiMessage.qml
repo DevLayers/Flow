@@ -120,8 +120,10 @@ Item {
         let thoughtTokens = 0;
         let searchCount = 0;
         let toolCount = 0;
+        let hasThought = false;
 
         for (const step of root.stepGroup) {
+            hasThought = hasThought || String(step?.thought ?? "").length > 0;
             thoughtDurationMs += Number(step?.thoughtDurationMs ?? 0);
             const tokens = Number(step?.thoughtTokens ?? 0);
             if (tokens > 0)
@@ -140,8 +142,9 @@ Item {
         if (toolCount > 0)
             parts.push(Translation.tr("%1 tool calls").arg(String(toolCount)));
 
+        const hasActivity = hasThought || searchCount > 0 || toolCount > 0;
         return {
-            hasActivity: parts.length > 0,
+            hasActivity: hasActivity,
             label: parts.length > 0 ? parts.join(" · ") : Translation.tr("Completed activity")
         };
     }

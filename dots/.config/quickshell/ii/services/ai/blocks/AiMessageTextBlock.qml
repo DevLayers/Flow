@@ -43,26 +43,45 @@ ColumnLayout {
     }
 
     function splitDisplaySegments(text): var {
+        const content = String(text ?? "");
+        if (root.editing || !root.renderMarkdown)
+            return [{ type: "text", content: content }];
+
         const chunks = root.fadeChunkSplitting
-            ? String(text ?? "").split(/\n\n(?= {0,2})|\n(?= {0,2}[-\*])/g).filter(line => line.trim() !== "")
-            : [String(text ?? "")];
+            ? content.split(/\n\n(?= {0,2})|\n(?= {0,2}[-\*])/g).filter(line => line.trim() !== "")
+            : [content];
 
-        return chunks.map(chunk => {
-            const content = String(chunk);
-            const match = content.trim().match(/^!\[([^\]]*)\]\((?:<([^>]+)>|([^\s)]+))\)$/);
-            if (!match)
-                return { type: "text", content: content };
+        let segments = [];
+        for (const chunk of chunks)
+            segments = segments.concat(root.splitChunkDisplaySegments(String(chunk)));
+        return segments;
+    }
 
+    function splitChunkDisplaySegments(content): var {
+        const imagePattern = /!\[([^\]]*)\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g;
+        const segments = [];
+        let lastIndex = 0;
+        let match;
+
+        while ((match = imagePattern.exec(content)) !== null) {
             const source = root.localImageSource(match[2] ?? match[3] ?? "");
             if (source.length === 0)
-                return { type: "text", content: content };
+                continue;
 
-            return {
+            if (match.index > lastIndex)
+                segments.push({ type: "text", content: content.slice(lastIndex, match.index) });
+
+            segments.push({
                 type: "image",
                 source: source,
                 alt: String(match[1] ?? "")
-            };
-        });
+            });
+            lastIndex = imagePattern.lastIndex;
+        }
+
+        if (segments.length === 0 || lastIndex < content.length)
+            segments.push({ type: "text", content: content.slice(lastIndex) });
+        return segments.filter(segment => segment.type === "image" || segment.content.length > 0);
     }
 
     Timer {
