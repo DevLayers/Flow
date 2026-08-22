@@ -1576,6 +1576,9 @@ Singleton {
         searchAvailable: root.currentModelEntry?.builtinSearch ?? false
         functionExposure: root.responseProfile.functionExposure
         localOnly: root.localOnly
+        perConversationScope: Config.options?.ai?.tools?.scopePerConversation ?? false
+        conversationPermissions: root.sessionToolPermissions
+        onConversationPermissionsChanged: permissions => root.setSessionToolPermissions(permissions)
         // Whether the network may be reached at all, asked separately from
         // whether the model is local. A local model with policy Yes may still
         // search; a remote model under a local-only policy may not exist.
@@ -6368,6 +6371,8 @@ Singleton {
      */
     property string sessionParentId: ""
     property string sessionBranchMessageId: ""
+    /** Per-chat tool decisions, used only when the global scope toggle is on. */
+    property var sessionToolPermissions: ({ "alwaysAllow": [], "alwaysDeny": [] })
     /** Free-form labels, and the project this chat belongs to. */
     property var sessionTags: []
     property string sessionProjectId: ""
@@ -6377,6 +6382,21 @@ Singleton {
     property bool isProvisionalTitle: true
     property string titleRequestSessionId: ""
     property int titleRequestRevision: -1
+
+    function normalizedSessionToolPermissions(value): var {
+        const raw = value && typeof value === "object" ? value : ({});
+        const allow = Array.from(raw.alwaysAllow ?? []).map(id => String(id)).filter(id => id.length > 0);
+        const deny = Array.from(raw.alwaysDeny ?? []).map(id => String(id)).filter(id => id.length > 0 && allow.indexOf(id) < 0);
+        return {
+            "alwaysAllow": allow.filter((id, index) => allow.indexOf(id) === index),
+            "alwaysDeny": deny.filter((id, index) => deny.indexOf(id) === index)
+        };
+    }
+
+    function setSessionToolPermissions(value): void {
+        root.sessionToolPermissions = root.normalizedSessionToolPermissions(value);
+        root.sessions.scheduleSave();
+    }
 
     function serializeMessageFrom(id, source) {
         const message = source?.[id];
@@ -6614,6 +6634,7 @@ Singleton {
                 "promptOverride": root.promptOverride,
                 "parentId": root.sessionParentId,
                 "branchMessageId": root.sessionBranchMessageId,
+                "toolPermissions": root.sessionToolPermissions,
                 "tags": root.sessionTags,
                 "projectId": root.sessionProjectId,
                 "messages": root.chatToJson(),
@@ -6654,6 +6675,7 @@ Singleton {
             responseMode: root.responseMode,
             webMode: root.webMode,
             functionExposure: root.functionExposure,
+            toolPermissions: root.sessionToolPermissions,
             messages: root.runningChatToJson(),
             run: root.conversations.records[sessionId]?.run ?? null,
             searchQueries: sessionId === root.sessions.currentId ? root.sessionSearchQueries : (base.searchQueries ?? []),
@@ -6706,6 +6728,7 @@ Singleton {
         root.sessionCreatedAt = 0;
         root.sessionParentId = "";
         root.sessionBranchMessageId = "";
+        root.sessionToolPermissions = ({ "alwaysAllow": [], "alwaysDeny": [] });
         root.sessionTags = [];
         root.contextSummary = "";
         root.contextSummaryKey = "";
@@ -6814,6 +6837,7 @@ Singleton {
         root.sessionPersonaId = session.personaId ?? root.defaultPersonaId;
         root.sessionParentId = String(session.parentId ?? "");
         root.sessionBranchMessageId = String(session.branchMessageId ?? "");
+        root.sessionToolPermissions = root.normalizedSessionToolPermissions(session.toolPermissions);
         root.sessionTags = Array.from(session.tags ?? []).map(tag => String(tag));
         root.sessionProjectId = String(session.projectId ?? "");
         root.clearAttachments();
@@ -6890,6 +6914,7 @@ Singleton {
         root.sessionResponseMode = "";
         root.sessionWebMode = "";
         root.sessionFunctionExposure = "";
+        root.sessionToolPermissions = ({ "alwaysAllow": [], "alwaysDeny": [] });
     }
 
     /**
@@ -6915,6 +6940,7 @@ Singleton {
         // answer this one replaced instead of losing it in the chat list.
         root.sessionParentId = previousSessionId;
         root.sessionBranchMessageId = messageId;
+        root.sessionToolPermissions = ({ "alwaysAllow": [], "alwaysDeny": [] });
         root.contextSummary = "";
         root.contextSummaryKey = "";
         root.contextCutMessageId = "";

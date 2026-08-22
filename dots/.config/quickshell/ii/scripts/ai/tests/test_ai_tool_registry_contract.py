@@ -200,3 +200,14 @@ class WebModePropertyBindingTests(unittest.TestCase):
     def test_the_context_the_registry_reads_actually_carries_it(self):
         context = TOOLS.split("readonly property var availabilityContext: ({", 1)[1].split("})", 1)[0]
         self.assertIn("webMode: root.webMode", context)
+
+
+class ConversationPermissionScopeTests(unittest.TestCase):
+    def test_tool_permissions_can_be_scoped_to_the_open_conversation(self):
+        self.assertIn("property bool perConversationScope", TOOLS)
+        self.assertIn("function permissionsForScope", TOOLS)
+        self.assertIn("conversationPermissionsChanged", TOOLS)
+        self.assertIn("scopePerConversation", AI_QML)
+        self.assertIn("sessionToolPermissions", AI_QML)
+        self.assertIn('"toolPermissions": root.sessionToolPermissions', AI_QML)
+        self.assertIn("scopePerConversation", ADVANCED)

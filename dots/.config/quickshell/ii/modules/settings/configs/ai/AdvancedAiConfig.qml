@@ -201,6 +201,24 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "forum"
+            text: Translation.tr("Keep tool permissions within each conversation")
+            checked: Config.options.ai.tools.scopePerConversation
+            onCheckedChanged: {
+                Config.options.ai.tools.scopePerConversation = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("When enabled, Allow and Never choices apply only to the chat that is open now. New chats ask again.")
+            }
+        }
+
+        TipBox {
+            Layout.fillWidth: true
+            visible: Config.options.ai.tools.scopePerConversation
+            text: Translation.tr("This conversation has its own tool decisions. They are saved with it and do not change the global defaults.")
+        }
+
+        ConfigSwitch {
             buttonIcon: "home_storage"
             text: Translation.tr("Let local models use tools")
             checked: Config.options.ai.tools.localModels

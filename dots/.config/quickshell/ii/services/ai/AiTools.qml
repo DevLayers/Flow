@@ -115,6 +115,16 @@ Scope {
     // where a map with tool ids for keys has no schema to repair against.
     // A tool in neither list asks.
     readonly property var permissionValues: ["allow", "ask", "deny"]
+    /** Conversation-scoped choices are supplied and persisted by Ai.qml. */
+    property bool perConversationScope: false
+    property var conversationPermissions: ({ "alwaysAllow": [], "alwaysDeny": [] })
+    signal conversationPermissionsChanged(var permissions)
+
+    function permissionsForScope(): var {
+        if (root.perConversationScope)
+            return root.conversationPermissions ?? ({ "alwaysAllow": [], "alwaysDeny": [] });
+        return Config.options?.ai?.tools ?? null;
+    }
 
     /**
      * The answers a given tool may be given.
@@ -132,7 +142,7 @@ Scope {
 
     function permission(id: string): string {
         const def = AiToolRegistry.definitionFor(id);
-        const tools = Config.options?.ai?.tools;
+        const tools = root.permissionsForScope();
         if (!tools)
             return def?.neverAutoApprove === true ? "ask" : "ask";
         if (Array.from(tools.alwaysDeny ?? []).indexOf(id) !== -1)
@@ -146,7 +156,7 @@ Scope {
     }
 
     function setPermission(id: string, value: string) {
-        const tools = Config.options?.ai?.tools;
+        const tools = root.permissionsForScope();
         if (!tools || root.permissionValuesFor(id).indexOf(value) === -1)
             return;
         const allow = Array.from(tools.alwaysAllow ?? []).filter(entry => entry !== id);
@@ -155,6 +165,13 @@ Scope {
             allow.push(id);
         else if (value === "deny")
             deny.push(id);
+        if (root.perConversationScope) {
+            root.conversationPermissionsChanged({
+                "alwaysAllow": allow,
+                "alwaysDeny": deny
+            });
+            return;
+        }
         tools.alwaysAllow = allow;
         tools.alwaysDeny = deny;
     }

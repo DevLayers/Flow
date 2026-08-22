@@ -1368,6 +1368,10 @@ Singleton {
                     // Show every proposed settings change next to its current
                     // value before writing any of them.
                     property bool reviewConfigChanges: true
+                    // When enabled, choices made in the tools panel stay with
+                    // the open conversation instead of becoming a global
+                    // standing permission for every future chat.
+                    property bool scopePerConversation: false
                     // How many tool calls the log remembers. 0 keeps none.
                     property int logSize: 50
                     // A local-only policy is about reducing what the assistant
