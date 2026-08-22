@@ -633,9 +633,14 @@ Singleton {
     function onRunFinished(run: var) {
         root.conversations.setRun(run.sessionId, run);
         const pending = root.pendingSubmission;
+        // An approval card is shown after the provider round has ended. Keep
+        // the run id attached to that card until the broker receives the
+        // user's decision; otherwise the card's click cannot be journalled
+        // back to the run that created it.
+        const waitingOnApproval = root.broker.pendingCount > 0;
         if (pending && pending.submissionId === root.pendingSubmissionId && pending.sessionId === run.sessionId && pending.state !== "started") {
             root.pendingRunJournal = null;
-            if (root.currentRunId === run.runId)
+            if (root.currentRunId === run.runId && !waitingOnApproval)
                 root.currentRunId = "";
             if (run.resultReason === "cancelledByPolicy" || run.resultReason === "disabledByPolicy") {
                 pending.stateBeforeCompensation = pending.state;
@@ -648,7 +653,7 @@ Singleton {
         root.pendingRunJournal = null;
         runJournalTimer.stop();
         root.commitRunSession(run.sessionId, true);
-        if (root.currentRunId === run.runId)
+        if (root.currentRunId === run.runId && !waitingOnApproval)
             root.currentRunId = "";
         if (pending && pending.submissionId === root.pendingSubmissionId && pending.sessionId === run.sessionId) {
             root.pendingSubmission = null;
@@ -3660,7 +3665,11 @@ Singleton {
         const runId = root.currentRunId;
         const run = root.runCoordinator.runFor(runId);
         const sessionId = root.currentRunSessionId || root.sessions.currentId;
-        if (!run || !root.runCoordinator.activeStates.includes(run.state) || sessionId.length === 0) {
+        const approvalKey = root.toolKeyFor(message);
+        const approvalIsPending = root.broker.isPending(approvalKey);
+        const runIsActive = run && root.runCoordinator.activeStates.includes(run.state);
+        const completedRunOwnsApproval = run && run.state === "completed" && approvalIsPending;
+        if (!run || (!runIsActive && !completedRunOwnsApproval) || sessionId.length === 0) {
             root.failToolExecution(message, message.toolCallSerial, Translation.tr("This tool call is no longer attached to an active run."));
             return false;
         }
