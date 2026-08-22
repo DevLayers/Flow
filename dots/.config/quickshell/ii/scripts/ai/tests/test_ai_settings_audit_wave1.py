@@ -17,7 +17,9 @@ class SubPageEntryButtonTests(unittest.TestCase):
     def test_ai_entries_use_the_shared_navigation_component(self):
         source = AI_SETTINGS.read_text(encoding="utf-8")
 
-        self.assertEqual(source.count("SubPageEntryButton {"), 5)
+        # One entry per subject. Remote access became the sixth when the
+        # IPC guidance moved off the main page.
+        self.assertEqual(source.count("SubPageEntryButton {"), 6)
         self.assertNotIn("component SubPageEntryButton:", source)
 
     def test_shared_entry_is_neutral_and_keeps_colour_on_its_icon(self):

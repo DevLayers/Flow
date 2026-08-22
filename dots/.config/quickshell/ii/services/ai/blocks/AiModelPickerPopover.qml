@@ -349,10 +349,11 @@ Item {
     StyledListView {
         id: modelListView
         visible: !root.modelCatalogueOpen
-        // The canvas already slides this whole view in; animating
-        // every row on top of that read as a second, different
-        // entrance. Rows added later by the search still animate.
-        animatePopulate: false
+        // The canvas slides this whole view in; rows used to be held
+        // back because entering all at once read as a second, competing
+        // entrance. Staggered they read as one motion instead — the page
+        // filling top-down behind the slide — so they enter again.
+        staggerStep: 22
         anchors {
             top: searchBox.bottom
             topMargin: root.gap

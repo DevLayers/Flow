@@ -243,7 +243,7 @@ Singleton {
             "name": "AI Assistant",
             "icon": "neurology",
             "component": "modules/settings/configs/AiAssistantConfig.qml",
-            "subPages": ["ai/AdvancedAiConfig.qml", "ai/CustomModelsConfig.qml", "ai/RagConfig.qml"],
+            "subPages": ["ai/AdvancedAiConfig.qml", "ai/CustomModelsConfig.qml", "ai/RagConfig.qml", "ai/AiRemoteAccessConfig.qml"],
             "searchSources": ["ai/AiUsageDashboard.qml"],
             "aliases": ["Core Services", "Gemini", "AI", "System prompt", "Tokens", "Usage"]
         },

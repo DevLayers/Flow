@@ -152,11 +152,17 @@ Item {
                     delegate: Rectangle {
                         id: factRow
                         required property var modelData
+                        required property int index
 
                         Layout.fillWidth: true
                         implicitHeight: Math.max(root.rowHeight, factText.implicitHeight + Appearance.rounding.small * 2)
                         radius: Appearance.rounding.large
                         color: Appearance.colors.colLayer2
+
+                        StaggeredEntrance {
+                            target: factRow
+                            index: factRow.index
+                        }
 
                         RowLayout {
                             anchors.left: parent.left

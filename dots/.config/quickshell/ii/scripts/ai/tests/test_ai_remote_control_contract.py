@@ -24,7 +24,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 AI_QML = (ROOT / "services" / "Ai.qml").read_text(encoding="utf-8")
 DIRECTORIES_QML = (ROOT / "modules" / "common" / "Directories.qml").read_text(encoding="utf-8")
-CONFIG_PAGE = (ROOT / "modules" / "settings" / "configs" / "AiAssistantConfig.qml").read_text(encoding="utf-8")
+# The remote-access guidance moved off the main AI page and onto its own
+# sub-page when the settings were split by subject. Same content, new home.
+CONFIG_PAGE = (ROOT / "modules" / "settings" / "configs" / "ai" / "AiRemoteAccessConfig.qml").read_text(encoding="utf-8")
 
 
 def body_between(source: str, start: str, end: str) -> str:

@@ -708,7 +708,9 @@ Item {
             else if (root.isMaterialSymbolsMode)
                 baseW = 380;
             else if (root.isAiMode)
-                baseW = Config.options.search.ai?.panelWidth ?? 720;
+                // Fixed width: the old `search.ai.panelWidth` key had no
+                // writer anywhere, so the value was always this literal.
+                baseW = 720;
             else
                 baseW = Math.max(Config.options.search.baseWidth, gridLayout.implicitWidth);
 

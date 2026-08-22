@@ -1543,23 +1543,7 @@ Singleton {
                 // `provider` naming a built-in provider is added to it;
                 // anything else stands on its own under "Others" and brings
                 // its own endpoint, dialect and key id.
-                property list<var> customModels: [
-                        {
-                            "modelProvider": "google",
-                            "provider": "openrouter",
-                            "title": "Gemini 2.5 Flash",
-                            "value": "gemini-2.5-flash"
-                        },
-                        {
-                            "api_format": "mistral",
-                            "endpoint": "https://api.mistral.ai/v1/chat/completions",
-                            "icon": "mistral-symbolic",
-                            "key_id": "mistral",
-                            "model": "mistral-medium-2505",
-                            "name": "Mistral Medium",
-                            "requires_key": true
-                        }
-                ]
+                property list<var> customModels: []
             }
 
             property JsonObject appearance: JsonObject {
@@ -3523,7 +3507,6 @@ Singleton {
                     // "suggest" — adds an "Ask AI" fallback row to the results
                     // "auto" — switches to the AI chat when the query matches nothing
                     property string trigger: "suggest"
-                    property int panelWidth: 720
                 }
                 property JsonObject imageSearch: JsonObject {
                     property string imageSearchEngineBaseUrl: "https://lens.google.com/uploadbyurl?url=" //lens.google.com/uploadbyurl?url="

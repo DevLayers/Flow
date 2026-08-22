@@ -292,6 +292,12 @@ Item {
                     delegate: EntryRow {
                         id: personaRow
                         required property var modelData
+                        required property int index
+
+                        StaggeredEntrance {
+                            target: personaRow
+                            index: personaRow.index
+                        }
 
                         symbol: personaRow.modelData.icon ?? "person"
                         label: personaRow.modelData.name ?? personaRow.modelData.id
@@ -331,6 +337,12 @@ Item {
                     delegate: EntryRow {
                         id: promptRow
                         required property var modelData
+                        required property int index
+
+                        StaggeredEntrance {
+                            target: promptRow
+                            index: promptRow.index
+                        }
 
                         readonly property bool userWritten: Array.from(Ai.userPrompts).indexOf(promptRow.modelData) >= 0
 

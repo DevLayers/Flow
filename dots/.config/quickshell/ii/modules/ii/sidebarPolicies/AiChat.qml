@@ -207,8 +207,31 @@ Item {
         messageListView.pinToEnd();
     }
 
+    /**
+     * Play the whole panel in. Called when the chat becomes the page on
+     * screen, which is also the moment the transcript should cascade rather
+     * than simply be there — a chat with history used to fade its container
+     * in around messages that were already settled inside it.
+     */
     function triggerContentEntrance() {
         root.entranceTrigger++;
+        root.revealTranscript();
+    }
+
+    /** Stagger whatever turns are in view, once. */
+    function revealTranscript() {
+        if (root.reducedMotion)
+            return;
+        // Never mid-answer. A reveal is an opening transition, and replaying
+        // it over a turn that is still being written asks every settled turn
+        // to enter again around it — on top of which the turn in flight
+        // cannot take part, having nothing finished to show yet.
+        if (Ai.isGenerating)
+            return;
+        // Delegates in view receive the same token; offscreen rows are
+        // created settled, so only what is actually visible enters.
+        root.transcriptRevealToken = Math.max(0, root.transcriptRevealToken + 1);
+        transcriptRevealWindow.restart();
     }
 
     // ── Empty-state hello ────────────────────────────────────────────────
@@ -232,10 +255,17 @@ Item {
     Connections {
         target: Ai.sessions
         function onSessionOpened(session) {
-            // Delegates in view receive the same token; offscreen rows are
-            // created settled, so only what is actually visible enters.
-            root.transcriptRevealToken = Math.max(0, root.transcriptRevealToken + 1);
-            transcriptRevealWindow.restart();
+            root.revealTranscript();
+        }
+    }
+
+    Connections {
+        // Coming back from a control's view is an arrival too: the transcript
+        // slides in from the left with nothing moving inside it otherwise.
+        target: controlBar
+        function onViewOpenChanged() {
+            if (!controlBar.viewOpen)
+                root.revealTranscript();
         }
     }
 
@@ -1086,6 +1116,33 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         }
     }
 
+    /**
+     * Files land anywhere on the chat, not only on the composer.
+     *
+     * The drop target used to be the input box alone, which meant aiming at a
+     * strip a few rows tall while the transcript above it — the part of the
+     * panel the eye is actually on — turned every file away. A DropArea
+     * accepts drag events without taking mouse input, so covering the whole
+     * panel costs the controls underneath nothing.
+     */
+    DropArea {
+        id: panelDropArea
+        anchors.fill: parent
+        z: 200
+
+        onContainsDragChanged: root.containsDrag = panelDropArea.containsDrag
+
+        onDropped: drop => {
+            if (!drop.hasUrls)
+                return;
+            // Gating happens per file, in the service: a text file is
+            // readable by every model, whatever it can otherwise take.
+            for (let i = 0; i < drop.urls.length; i++)
+                Ai.attachFile(drop.urls[i]);
+            drop.accept(Qt.CopyAction);
+        }
+    }
+
     ColumnLayout {
         id: columnLayout
         anchors {
@@ -1132,6 +1189,71 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             color: Appearance.colors.colLayer1
             radius: Appearance.rounding.large
             clip: true
+
+            Loader {
+                // Says where the file is going while it is still in the air.
+                // Over the transcript rather than the composer: the drop is
+                // accepted anywhere on the panel now, so the hint belongs on
+                // the surface the eye is already on.
+                id: dropOverlay
+                anchors.fill: parent
+                z: 199
+                active: root.containsDrag
+                opacity: active ? 1 : 0
+                visible: opacity > 0.01
+
+                Behavior on opacity {
+                    enabled: !root.reducedMotion
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+
+                sourceComponent: Rectangle {
+                    radius: Appearance.rounding.large
+                    color: ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 0.12)
+
+                    DashedBorder {
+                        anchors.fill: parent
+                        anchors.margins: borderWidth
+                        radius: Appearance.rounding.large
+                        borderWidth: Math.max(2, Math.round(Appearance.font.pixelSize.smaller / 5))
+                        dashLength: Appearance.font.pixelSize.small
+                        gapLength: Appearance.rounding.verysmall
+                        color: Appearance.colors.colPrimary
+                    }
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: Appearance.rounding.unsharpenmore
+
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Ai.currentModelTakesFiles ? "attach_file_add" : "description"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.huge * 2
+                            color: Appearance.colors.colOnPrimaryContainer
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Ai.currentModelTakesFiles
+                                ? Translation.tr("Drop to attach")
+                                : Translation.tr("Drop to attach — text files only")
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.weight: Font.DemiBold
+                            color: Appearance.colors.colOnPrimaryContainer
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            visible: !Ai.currentModelTakesFiles
+                            text: Translation.tr("%1 cannot read files").arg(Ai.currentModelEntry?.title ?? Translation.tr("This model"))
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colOnPrimaryContainer
+                            opacity: 0.78
+                        }
+                    }
+                }
+            }
 
             ColumnLayout {
                 id: chatAreaColumn
@@ -1505,6 +1627,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             entranceTrigger: root.entranceTrigger
                             Component.onCompleted: root.refreshEmptyStateGreeting()
                         }
+
                     }
 
                     Loader {
@@ -1920,32 +2043,11 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             right: parent.right
                             margins: visible ? 5 : 0
                         }
-                        // A drop that will be turned away says so while it is still a
-                        // drag, rather than looking like it never registered.
-                        dragHint: {
-                            if (!root.containsDrag)
-                                return "";
-                            if (Ai.currentModelTakesFiles)
-                                return Translation.tr("Drop to attach");
-                            return Translation.tr("%1 cannot read files — text ones will still be pasted in").arg(Ai.currentModelEntry?.title ?? Translation.tr("This model"));
-                        }
-                    }
-
-                    DropArea {
-                        id: dropArea
-                        anchors.fill: parent
-
-                        onContainsDragChanged: root.containsDrag = dropArea.containsDrag
-
-                        onDropped: drop => {
-                            if (!drop.hasUrls)
-                                return;
-                            // Gating happens per file, in the service: a text file is
-                            // readable by every model, whatever it can otherwise take.
-                            for (let i = 0; i < drop.urls.length; i++)
-                                Ai.attachFile(drop.urls[i]);
-                            drop.accept(Qt.CopyAction);
-                        }
+                        // The sheet over the transcript is the one that speaks
+                        // during a drag now that the whole panel accepts one.
+                        // Saying it here too put the same sentence on screen
+                        // twice, a few rows apart.
+                        dragHint: ""
                     }
 
                     ColumnLayout {
@@ -2366,14 +2468,38 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                     // change it without leaving the composer.
                                     RippleButton {
                                         id: composerModelPill
+
+                                        /**
+                                         * Everything the fixed controls leave over.
+                                         *
+                                         * This was a flat 62% of the row, which on a
+                                         * narrow sidebar is more than what is actually
+                                         * free: the plus, the microphone and the send
+                                         * button plus their gaps take the rest and then
+                                         * some. A RowLayout cannot shrink an item below
+                                         * its implicit width, so the overflow went to
+                                         * the trailing controls and pushed them off the
+                                         * edge. Counting the circles exactly is what
+                                         * keeps a long model name cutting itself
+                                         * instead of cutting the send button.
+                                         */
+                                        readonly property int fixedCircles: 2 + (voiceButton.visible ? 1 : 0)
+                                        readonly property real widthLimit: Math.max(root.composerControlExtent,
+                                            composerControlsRow.width
+                                                - root.composerControlExtent * composerModelPill.fixedCircles
+                                                - root.composerGap * (composerModelPill.fixedCircles + 1))
+
                                         Layout.alignment: Qt.AlignVCenter
-                                        Layout.maximumWidth: composerControlsRow.width * 0.62
+                                        Layout.maximumWidth: composerModelPill.widthLimit
+                                        // Says the pill may be squeezed. Without it the
+                                        // layout would rather overflow than shrink it.
+                                        Layout.minimumWidth: root.composerControlExtent
                                         implicitHeight: root.composerControlExtent
                                         // Measured off the label rather than off the row
                                         // it sits in: a filling child inside a Control's
                                         // content item feeds the Control's own width back
                                         // into itself, and Layouts abort the pass.
-                                        implicitWidth: Math.min(composerModelPill.Layout.maximumWidth,
+                                        implicitWidth: Math.min(composerModelPill.widthLimit,
                                             composerModelLabel.implicitWidth + composerModelIcon.implicitWidth
                                             + composerModelRow.spacing + root.composerControlExtent * 0.6)
                                         buttonRadius: Appearance.rounding.full
@@ -2398,7 +2524,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
                                             StyledText {
                                                 id: composerModelLabel
-                                                Layout.maximumWidth: Math.max(0, composerModelPill.Layout.maximumWidth
+                                                Layout.maximumWidth: Math.max(0, composerModelPill.widthLimit
                                                     - composerModelIcon.implicitWidth - composerModelRow.spacing
                                                     - root.composerControlExtent * 0.6)
                                                 text: Ai.currentModelEntry?.title ?? Translation.tr("No model")

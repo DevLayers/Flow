@@ -104,8 +104,29 @@ class MultiStepAccordionTests(unittest.TestCase):
     def test_leading_activity_messages_walks_backward_from_the_id(self):
         body = body_between(AI_QML, "function leadingActivityMessages(id: string): var {", "\n    }")
         self.assertIn("ids.indexOf(id)", body)
-        self.assertIn('role === "assistant"', body)
+        self.assertIn('role !== "assistant"', body)
         self.assertIn("leading.unshift(", body)
+
+    def test_a_tool_round_trip_is_folded_across_its_hidden_carriers(self):
+        """The carrier that hands a tool's result back to the model is
+        written with `role: "user"` because that is what the wire format
+        wants, and it sits between the two assistant messages of every
+        round-trip. Both sides of the fold used to read plain adjacency in
+        `messageIDs`, so no continuation was ever recognised as one: a turn
+        that called three tools drew three "Thought for ..." rows and named
+        the model three times instead of folding into a single line.
+        """
+        carrier = body_between(AI_QML, "function isHiddenCarrier(id: string): bool {", "\n    }")
+        self.assertIn("visibleToUser === false", carrier)
+
+        # Looking ahead for the next continuation steps over carriers.
+        hidden = body_between(AI_QML, "readonly property var nonTerminalRunMessageIds: {", "\n    }")
+        self.assertIn("root.isHiddenCarrier(ids[next])", hidden)
+        self.assertNotIn("ids[i + 1]", hidden)
+
+        # Walking back to collect the steps skips them the same way.
+        leading = body_between(AI_QML, "function leadingActivityMessages(id: string): var {", "\n    }")
+        self.assertIn("root.isHiddenCarrier(ids[i])", leading)
 
     def test_message_computes_its_own_step_group(self):
         body = body_between(AI_MESSAGE_QML, "readonly property var stepGroup:", "\n")
@@ -195,3 +216,118 @@ class PromptHistoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VanishingTurnTests(unittest.TestCase):
+    """Two ways a turn could disappear out from under the reader.
+
+    Both were reported from real use, minutes apart.
+
+    1. A finished answer went blank and only came back after closing and
+       reopening the chat. `AiMessage.opacity` is bound to
+       `shouldAnimateArrival`, and the arrival animation is the only thing
+       that ever drives it back up. A turn that was still streaming when a
+       reveal was requested declined the entrance and left the token
+       unclaimed, so the instant it stopped streaming `reopening` turned
+       true, the binding drove opacity to zero, and nothing was left to
+       animate it back.
+    2. A prompt was accepted, the composer cleared, and the submission then
+       rolled back — leaving no message, no chat, and no text: the draft is
+       cleared once the request is on the wire and was never restored when
+       the transaction failed after that point.
+    """
+
+    def test_declining_an_entrance_writes_the_turn_visible(self):
+        """Declining has to drop the bindings, not just skip the animation.
+
+        `opacity` and the arrival transform are bound to
+        `shouldAnimateArrival`. An answer is built while it is still
+        streaming, which is exactly when that condition reads false, so it
+        declines — and if the decline only returns, the bindings survive with
+        no animation ever having run to break them. The answer then finishes,
+        `streaming` goes false against an `arriving` that is `Date.now()`
+        based and so never re-evaluates, the condition flips true, and the
+        binding drives opacity to zero with nothing left to raise it. The
+        turn stayed laid out and kept answering the mouse; it was simply
+        never painted again until the chat was reopened.
+        """
+        body = body_between(AI_MESSAGE_QML, "function startArrival() {", "\n    }")
+        early_return = body.split("if (root.reopening)", 1)[0]
+        self.assertIn("root.settleVisible()", early_return)
+
+        settle = body_between(AI_MESSAGE_QML, "function settleVisible() {", "\n    }")
+        # Written, not bound: that is the whole point.
+        self.assertIn("root.opacity = 1", settle)
+        self.assertIn("arrivalTransform.y = 0", settle)
+        self.assertIn("root.handledRevealToken = root.transcriptRevealToken", settle)
+
+    def test_a_finished_answer_settles_rather_than_replaying_an_entrance(self):
+        # The token never changes in this path, so `onTranscriptRevealTokenChanged`
+        # cannot be the only place the decision is made — and the answer has
+        # been on screen throughout, so it must not fade in over itself.
+        self.assertIn("onStreamingChanged:", AI_MESSAGE_QML)
+        body = body_between(AI_MESSAGE_QML, "onStreamingChanged:", "\n    }")
+        self.assertIn("!root.streaming", body)
+        self.assertIn("root.settleVisible()", body)
+        self.assertNotIn("startArrival", body)
+
+    def test_a_reveal_is_never_played_over_a_live_answer(self):
+        body = body_between(SIDEBAR_QML, "function revealTranscript() {", "\n    }")
+        self.assertIn("Ai.isGenerating", body)
+        self.assertIn("return", body)
+
+    def test_a_rolled_back_submission_gives_the_prompt_back(self):
+        body = body_between(AI_QML, "function restoreDraftAfterFailedSubmission(pending) {", "\n    }")
+        self.assertIn("pending?.draftTextAtSubmit", body)
+        self.assertIn("root.draft = text", body)
+        self.assertIn("root.draftRestored(text)", body)
+        # Never over the top of something newer the user has started typing.
+        self.assertIn("root.draft.length > 0", body)
+
+    def test_the_failure_path_is_the_one_that_restores(self):
+        # `finishPendingSubmission` handles failure and cancellation only —
+        # the success path clears `pendingSubmission` inline after the
+        # request starts — so restoring there cannot resurrect a sent prompt.
+        body = body_between(AI_QML, "function finishPendingSubmission(pending, cancelled, reason) {", "\n    function ")
+        self.assertIn("root.restoreDraftAfterFailedSubmission(pending)", body)
+        self.assertIn("root.rollbackPendingMessages(pending)", body)
+
+
+class ComposerAndAttachmentChromeTests(unittest.TestCase):
+    """Two pieces of chrome that misbehaved on a narrow sidebar."""
+
+    def test_the_composer_model_pill_is_capped_by_what_is_actually_free(self):
+        """A fraction of the row is not the same as the room left in it.
+
+        The cap was a flat 62% of the composer row. The plus, the microphone
+        and the send button plus their four gaps take about 148px, so on any
+        row narrower than ~390px the two together came to more than the row.
+        A RowLayout will not shrink an item below its implicit width, so the
+        overflow went to the trailing controls and pushed the send button off
+        the edge instead of cutting the model's name.
+        """
+        body = body_between(SIDEBAR_QML, "id: composerModelPill", "contentItem: RowLayout {")
+        self.assertNotIn("composerControlsRow.width * 0.62", body)
+        # Counted, not guessed: three circles and one gap more than circles.
+        self.assertIn("readonly property int fixedCircles", body)
+        self.assertIn("composerControlExtent * composerModelPill.fixedCircles", body)
+        self.assertIn("root.composerGap * (composerModelPill.fixedCircles + 1)", body)
+        # And the pill must say it can be squeezed, or the layout overflows
+        # rather than shrinking it.
+        self.assertIn("Layout.minimumWidth: root.composerControlExtent", body)
+
+    def test_the_pill_and_its_label_both_measure_against_that_cap(self):
+        body = body_between(SIDEBAR_QML, "id: composerModelPill", "StyledToolTip {")
+        # Both the pill's own width and the elide budget for the name.
+        self.assertEqual(body.count("composerModelPill.widthLimit"), 3)
+
+    def test_an_attached_document_only_shows_its_path_on_hover(self):
+        """`StyledToolTip` reads `parent.hovered` and treats a parent that has
+        no such property as *always visible*. The chip for a sent file is a
+        plain Rectangle, so every attached document pinned its full path open
+        over the transcript from the moment the chat was opened.
+        """
+        body = body_between(AI_MESSAGE_QML, "id: sentFile", "\n            }\n        }")
+        self.assertIn("HoverHandler", body)
+        self.assertIn("extraVisibleCondition: false", body)
+        self.assertIn("alternativeVisibleCondition: sentFileHover.hovered", body)

@@ -121,7 +121,10 @@ Item {
                             // rounding scale instead of straddling its edge.
                             anchors.fill: parent
                             anchors.margins: borderWidth / 2
-                            radius: Math.max(0, fileChip.radius - anchors.margins)
+                            // Passed whole: the border clamps a radius its own
+                            // path cannot take, and subtracting the inset here
+                            // as well left the arc a hair too tight for a pill.
+                            radius: fileChip.radius
                             // Fine and close together: a long dash on a short
                             // pill spends most of its length in the corners,
                             // where it reads as a broken outline rather than

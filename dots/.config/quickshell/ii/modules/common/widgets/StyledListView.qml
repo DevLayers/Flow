@@ -20,6 +20,18 @@ ListView {
      * for later additions without playing it over its own arrival.
      */
     property bool animatePopulate: true
+    /**
+     * Milliseconds between one row entering and the next, on the first fill
+     * only. Zero — the default everywhere that has not asked for it — leaves
+     * `populate` exactly as it was: every row entering at once.
+     *
+     * Only `populate` staggers. Delaying `add` would hold a row that arrived
+     * on its own behind rows it has nothing to do with, which on a chat
+     * transcript means an answer landing late for no reason.
+     */
+    property int staggerStep: 0
+    /** Caps the wait for the last row of a long list. */
+    property int staggerMaximum: 320
     property bool animateMovement: false
     property bool dismissToLeft: false
     property bool useSlideInAnimation: false
@@ -150,25 +162,48 @@ ListView {
     }
 
     populate: Transition {
+        id: populateTransition
         enabled: root.animateAppearance && root.animatePopulate
-        ParallelAnimation {
-            // Slide Animation
-            NumberAnimation {
-                property: "x"
-                from: root.dismissToLeft ? -((root.width < 100 ? Appearance.sizes.notificationPopupWidth : root.width) + root.removeOvershoot) : ((root.width < 100 ? Appearance.sizes.notificationPopupWidth : root.width) + root.removeOvershoot)
-                to: 0
-                duration: root.useSlideInAnimation ? Appearance.animation.elementMoveEnter.duration : 0
-                easing.type: Appearance.animation.elementMoveEnter.type
-                easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+
+        SequentialAnimation {
+            // Each row waits its turn, so a page fills top-down instead of
+            // appearing all at once. `ViewTransition.index` is the row's place
+            // in the fill, which is the only thing a Transition knows about it.
+            PauseAnimation {
+                duration: root.staggerStep <= 0 ? 0
+                    : Math.min(root.staggerMaximum, populateTransition.ViewTransition.index * root.staggerStep)
             }
-            // Fade Animation
-            NumberAnimation {
-                properties: root.popin ? "opacity,scale" : "opacity"
-                from: !root.useSlideInAnimation ? 0 : 1
-                to: 1
-                duration: !root.useSlideInAnimation ? Appearance.animation.elementMoveEnter.duration : 0
-                easing.type: Appearance.animation.elementMoveEnter.type
-                easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+
+            ParallelAnimation {
+                // Slide Animation
+                NumberAnimation {
+                    property: "x"
+                    from: root.dismissToLeft ? -((root.width < 100 ? Appearance.sizes.notificationPopupWidth : root.width) + root.removeOvershoot) : ((root.width < 100 ? Appearance.sizes.notificationPopupWidth : root.width) + root.removeOvershoot)
+                    to: 0
+                    duration: root.useSlideInAnimation ? Appearance.animation.elementMoveEnter.duration : 0
+                    easing.type: Appearance.animation.elementMoveEnter.type
+                    easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+                }
+                // A row that waits also rises into place: a pure fade at the
+                // end of a delay reads as a dropped frame rather than as entry.
+                NumberAnimation {
+                    property: "y"
+                    from: populateTransition.ViewTransition.destination.y
+                        + (root.staggerStep > 0 ? Appearance.rounding.normal : 0)
+                    to: populateTransition.ViewTransition.destination.y
+                    duration: root.staggerStep > 0 ? Appearance.animation.elementMoveEnter.duration : 0
+                    easing.type: Appearance.animation.elementMoveEnter.type
+                    easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+                }
+                // Fade Animation
+                NumberAnimation {
+                    properties: root.popin ? "opacity,scale" : "opacity"
+                    from: !root.useSlideInAnimation ? 0 : 1
+                    to: 1
+                    duration: !root.useSlideInAnimation ? Appearance.animation.elementMoveEnter.duration : 0
+                    easing.type: Appearance.animation.elementMoveEnter.type
+                    easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+                }
             }
         }
     }

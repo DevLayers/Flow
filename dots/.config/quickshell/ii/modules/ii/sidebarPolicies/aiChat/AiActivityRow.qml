@@ -47,6 +47,17 @@ Item {
      */
     property bool shown: true
 
+    /**
+     * Whether a timeline rule runs down this row's icon column. Set by the
+     * step group that draws the rule, so a lone row does not pay for one.
+     * The row answers by clearing a disc for its own icon and carrying the
+     * rule on down whatever it opens, which is what makes a sequence of
+     * steps read as one thread rather than as stacked rows.
+     */
+    property bool onTimeline: false
+    /** The surface the rule is drawn on, so the disc can hide it. */
+    property color timelineSurface: Appearance.colors.colLayer1
+
     signal toggled
 
     readonly property real rowSpacing: Appearance.rounding.unsharpenmore
@@ -116,6 +127,7 @@ Item {
                 spacing: root.rowSpacing
 
                 MaterialSymbol {
+                    id: leadingGlyph
                     Layout.alignment: Qt.AlignVCenter
                     text: root.symbol
                     fill: 1
@@ -126,6 +138,19 @@ Item {
                     Behavior on opacity {
                         enabled: !root.reducedMotion
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+
+                    Rectangle {
+                        // Behind the glyph, wide enough to swallow the rule
+                        // passing through: a timeline reads as a thread with
+                        // beads on it, not as a line drawn over icons.
+                        z: -1
+                        anchors.centerIn: parent
+                        visible: root.onTimeline
+                        implicitWidth: root.iconSize + Appearance.rounding.unsharpenmore
+                        implicitHeight: implicitWidth
+                        radius: Appearance.rounding.full
+                        color: root.timelineSurface
                     }
                 }
 

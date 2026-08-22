@@ -244,13 +244,48 @@ Item {
     }
 
     function startArrival() {
-        if (!root.shouldAnimateArrival)
+        if (!root.shouldAnimateArrival) {
+            // Declining is permanent, and has to be written rather than left
+            // to the binding.
+            //
+            // `opacity` and the arrival transform are bound to
+            // `shouldAnimateArrival`, and the animation is the only thing
+            // that ever drives them back. An answer is created while it is
+            // still streaming, which is exactly when that condition is false
+            // — so it declines here, the binding stays intact, and no
+            // animation ever runs to break it. Then the answer finishes,
+            // `streaming` goes false, `arriving` is still reading true (it
+            // is `Date.now()`-based and so never re-evaluates on its own),
+            // the condition flips true, and the binding drives opacity to
+            // zero with nothing left to bring it back. The turn stayed laid
+            // out and still answered the mouse — tooltips and all — it was
+            // simply never painted again until the chat was reopened.
+            //
+            // Writing both values drops those bindings for good: a turn that
+            // is already on screen cannot be taken off it later.
+            root.settleVisible();
             return;
+        }
         if (root.reopening) {
             root.revealAnimationRunning = true;
             root.handledRevealToken = root.transcriptRevealToken;
         }
         arrivalAnimation.restart();
+    }
+
+    /**
+     * Put this turn on screen and leave it there.
+     *
+     * Writing the two values is the point: both are bound to
+     * `shouldAnimateArrival`, and dropping those bindings is what stops a
+     * later flip of that condition from hiding a turn the reader is already
+     * looking at.
+     */
+    function settleVisible() {
+        root.handledRevealToken = root.transcriptRevealToken;
+        root.revealAnimationRunning = false;
+        root.opacity = 1;
+        arrivalTransform.y = 0;
     }
 
     Component.onCompleted: {
@@ -261,6 +296,14 @@ Item {
     onTranscriptRevealTokenChanged: {
         if (root.transcriptRevealToken >= 0)
             Qt.callLater(root.startArrival);
+    }
+
+    onStreamingChanged: {
+        // Settle, never animate. An answer that has just finished writing
+        // itself has been on screen the whole time — replaying an entrance
+        // over it would fade out something the reader is mid-sentence in.
+        if (!root.streaming && !arrivalAnimation.running)
+            root.settleVisible();
     }
 
     SequentialAnimation {
@@ -408,7 +451,20 @@ Item {
                         }
                     }
 
+                    HoverHandler {
+                        id: sentFileHover
+                    }
+
                     StyledToolTip {
+                        // Driven by a handler of its own because the chip is a
+                        // plain Rectangle. `StyledToolTip` reads `parent.hovered`
+                        // and treats "no such property" as *always visible*, so
+                        // attached to anything that is not a Control it pins
+                        // itself open — which is how the path of every attached
+                        // document ended up floating over the transcript from
+                        // the moment the chat was opened.
+                        extraVisibleCondition: false
+                        alternativeVisibleCondition: sentFileHover.hovered
                         text: `${sentFile.modelData.path ?? ""}\n${Ai.humanSize(sentFile.modelData.bytes ?? 0)}`
                     }
                 }
@@ -625,6 +681,7 @@ Item {
 
                     AiActivityRow {
                     id: stepThinkingRow
+                    onTimeline: step.visibleStepCount > 1
                     property bool userChoice: false
                     property bool userExpanded: false
 
@@ -703,6 +760,7 @@ Item {
                     // What it looked up. The queries are the interesting part and
                     // they are one click away rather than in the answer.
                     id: stepSearchRow
+                    onTimeline: step.visibleStepCount > 1
                     property bool searchExpanded: false
 
                     readonly property var queries: Array.from(step.stepData?.searchQueries ?? [])
@@ -753,6 +811,7 @@ Item {
 
                     delegate: AiActivityRow {
                         id: stepToolRow
+                        onTimeline: step.visibleStepCount > 1
                         required property var modelData
                         property bool toolExpanded: false
 
@@ -1171,11 +1230,24 @@ Item {
         }
 
         RowLayout {
+            id: metaRow
+            /**
+             * The actions bar under a finished answer already carries the
+             * model's logo and name, so naming it here too printed it twice
+             * under every reply. This line keeps the model only when that
+             * bar is not the one saying it.
+             */
+            readonly property bool modelNamedElsewhere: answerActions.visible
+            readonly property bool showsModel: root.isAssistant
+                && Config.options.sidebar.ai.showAnswerModel
+                && !metaRow.modelNamedElsewhere
+                && String(root.messageData?.model ?? "").length > 0
+
             Layout.fillWidth: true
             Layout.maximumWidth: root.answerMaximumWidth
             visible: root.done && ((Config.options.sidebar.ai.showTimestamps && root.timestampLabel().length > 0)
                 || (root.isAssistant && Config.options.sidebar.ai.showResponseTime && root.responseTimeLabel().length > 0)
-                || (root.isAssistant && Config.options.sidebar.ai.showAnswerModel && String(root.messageData?.model ?? "").length > 0))
+                || metaRow.showsModel)
             spacing: Appearance.rounding.unsharpenmore
 
             StyledText {
@@ -1193,7 +1265,7 @@ Item {
             }
 
             StyledText {
-                visible: root.isAssistant && Config.options.sidebar.ai.showAnswerModel && String(root.messageData?.model ?? "").length > 0
+                visible: metaRow.showsModel
                 text: Ai.catalog.models[root.messageData?.model]?.title ?? String(root.messageData?.model ?? "")
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colSubtext

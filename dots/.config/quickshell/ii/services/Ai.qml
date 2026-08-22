@@ -352,6 +352,7 @@ Singleton {
         }
         root.pendingSubmission = null;
         root.pendingSubmissionId = "";
+        root.restoreDraftAfterFailedSubmission(pending);
         root.submissionNotice = cancelled ? Translation.tr("Message cancelled before it was sent.") : (pending.errorMessage ?? Translation.tr("The message could not be sent."));
         root.submissionStateChanged({
             submissionId: pending.submissionId,
@@ -362,6 +363,25 @@ Singleton {
             root.submissionCancelled(pending.submissionId, reason);
         else
             root.submissionFailed(pending.submissionId, pending.operationId ?? "", reason, pending.recoveryActionIds ?? []);
+    }
+
+    /**
+     * Puts a rolled-back prompt back in the composer.
+     *
+     * The draft is cleared once the request is on the wire, which is right —
+     * up to the point where the submission fails *after* that and
+     * `rollbackPendingMessages` takes the turn back out of the transcript.
+     * What was left then was nothing at all: no message, no chat, and the
+     * typed text gone with them. Restoring is only safe while the composer
+     * is still empty; a prompt already being typed is newer than this one and
+     * must never be overwritten by it.
+     */
+    function restoreDraftAfterFailedSubmission(pending) {
+        const text = String(pending?.draftTextAtSubmit ?? "");
+        if (text.length === 0 || root.draft.length > 0)
+            return;
+        root.draft = text;
+        root.draftRestored(text);
     }
 
     function failPendingSubmission(errorCode, userMessage, recoveryActionIds) {
@@ -958,19 +978,40 @@ Singleton {
     }
 
     /**
-     * Ids of assistant messages immediately followed by another assistant
-     * message — an internal continuation mid-exchange (the model called a
-     * tool and kept going once the result came back), not a turn of its
-     * own. The message that actually answers renders every step that led
-     * to it in one accordion; see `leadingActivityMessages()`. Recomputed
-     * only when the id list itself changes (a new message arriving), never
-     * per streamed token, since streaming mutates a message in place.
+     * A message nobody ever sees a row for: the carrier that hands a tool's
+     * output back to the model. It is written with `role: "user"` because
+     * that is what the wire format wants, which means plain adjacency in
+     * `messageIDs` cannot tell a tool round-trip from a real question.
+     */
+    function isHiddenCarrier(id: string): bool {
+        const message = root.messageByID[id];
+        return !!message && message.visibleToUser === false;
+    }
+
+    /**
+     * Ids of assistant messages followed by another assistant message — an
+     * internal continuation mid-exchange (the model called a tool and kept
+     * going once the result came back), not a turn of its own. The message
+     * that actually answers renders every step that led to it in one
+     * accordion; see `leadingActivityMessages()`. Recomputed only when the
+     * id list itself changes (a new message arriving), never per streamed
+     * token, since streaming mutates a message in place.
+     *
+     * Adjacency skips hidden carriers. Reading `ids[i + 1]` directly was
+     * the bug behind a turn drawing one "Thought for …" row and one model
+     * name per tool call: every round-trip puts a carrier between the two
+     * assistant messages, so no continuation was ever recognised as one.
      */
     readonly property var nonTerminalRunMessageIds: {
         const ids = root.messageIDs;
         const hidden = {};
-        for (let i = 0; i + 1 < ids.length; i++) {
-            if (root.messageByID[ids[i]]?.role === "assistant" && root.messageByID[ids[i + 1]]?.role === "assistant")
+        for (let i = 0; i < ids.length; i++) {
+            if (root.messageByID[ids[i]]?.role !== "assistant")
+                continue;
+            let next = i + 1;
+            while (next < ids.length && root.isHiddenCarrier(ids[next]))
+                next += 1;
+            if (next < ids.length && root.messageByID[ids[next]]?.role === "assistant")
                 hidden[ids[i]] = true;
         }
         return hidden;
@@ -990,8 +1031,13 @@ Singleton {
 
     /**
      * The earlier steps of the same exchange as `id`, oldest first — every
-     * assistant message immediately before it, for as long as they too are
-     * assistant turns. Empty for a question answered in a single turn.
+     * assistant message before it, for as long as they too are assistant
+     * turns. Empty for a question answered in a single turn.
+     *
+     * Walks back over hidden carriers for the same reason
+     * `nonTerminalRunMessageIds` looks past them: a tool round-trip leaves
+     * one between every pair of assistant messages, and stopping at the
+     * first one left the answering message folding nothing at all.
      */
     function leadingActivityMessages(id: string): var {
         const ids = root.messageIDs;
@@ -1000,7 +1046,13 @@ Singleton {
             return [];
         const leading = [];
         let i = at - 1;
-        while (i >= 0 && root.messageByID[ids[i]]?.role === "assistant") {
+        while (i >= 0) {
+            if (root.isHiddenCarrier(ids[i])) {
+                i -= 1;
+                continue;
+            }
+            if (root.messageByID[ids[i]]?.role !== "assistant")
+                break;
             leading.unshift(root.messageByID[ids[i]]);
             i -= 1;
         }

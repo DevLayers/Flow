@@ -200,9 +200,15 @@ Item {
                 delegate: ColumnLayout {
                     id: group
                     required property var modelData
+                    required property int index
 
                     Layout.fillWidth: true
                     spacing: Appearance.rounding.unsharpenmore
+
+                    StaggeredEntrance {
+                        target: group
+                        index: group.index
+                    }
 
                     RowLayout {
                         Layout.fillWidth: true

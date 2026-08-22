@@ -119,6 +119,15 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "psychology"
+                text: Translation.tr("Remember facts between conversations")
+                checked: Config.options.ai.memory.enabled
+                onCheckedChanged: {
+                    Config.options.ai.memory.enabled = checked;
+                }
+            }
+
             ConfigSpinBox {
                 enabled: Config.options.ai.memory.enabled
                 icon: "memory"
@@ -383,43 +392,6 @@ Item {
         }
 
         ContentSection {
-            icon: "terminal"
-            title: Translation.tr("Remote access")
-
-            NoticeBox {
-                Layout.fillWidth: true
-                materialIcon: "dns"
-                isFirst: true
-                text: Translation.tr("This chat can be asked a question from outside the shell entirely — a script, a cron job, another shell over SSH — through Quickshell's own IPC socket. It runs like a message typed into the composer: same chat, same tools, same model, one exchange at a time.")
-            }
-
-            HelperCodeBox {
-                Layout.fillWidth: true
-                icon: "send"
-                title: Translation.tr("Ask a question")
-                text: Translation.tr("Returns immediately with accepted/rejected as JSON — busy, a missing key, a disabled policy. The answer itself is not in that reply; it lands separately once the model is done.")
-                codeSnippet: "qs -c ii ipc call ai ask \"What is using the most memory right now?\""
-                snippetWrapMode: Text.WrapAnywhere
-            }
-
-            HelperCodeBox {
-                Layout.fillWidth: true
-                icon: "chat"
-                title: Translation.tr("Read the answer back")
-                text: Translation.tr("Either works: the IPC call below returns the same JSON that is kept on disk, updated once per finished exchange.")
-                codeSnippet: "qs -c ii ipc call ai lastAnswer\ncat " + Directories.aiLastAnswer
-                snippetWrapMode: Text.WrapAnywhere
-            }
-
-            NoticeBox {
-                Layout.fillWidth: true
-                materialIcon: "warning"
-                isLast: true
-                text: Translation.tr("A real limit, not a bug: running a shell command always asks for approval first, and that approval has no deadline — it waits for a click in the transcript. Asked this way, with no window open to click anything, that wait never ends until you open the chat yourself and answer the card. Read-only tools (settings lookups, system status, file search) need no approval and work exactly as well remotely as they do in the composer.")
-            }
-        }
-
-        ContentSection {
             icon: "extension"
             title: Translation.tr("Configuration")
 
@@ -466,6 +438,15 @@ Item {
                 entryAccent: Appearance.colors.colTertiary
                 entryOnAccent: Appearance.colors.colOnTertiary
                 onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiRequestLimitsConfig.qml")
+            }
+
+            SubPageEntryButton {
+                entryIcon: "terminal"
+                entryTitle: Translation.tr("Remote Access & IPC")
+                entryDescription: Translation.tr("Ask this chat from scripts, cron or SSH via Quickshell IPC")
+                entryAccent: Appearance.colors.colSecondary
+                entryOnAccent: Appearance.colors.colOnSecondary
+                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiRemoteAccessConfig.qml")
             }
 
         }

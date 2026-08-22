@@ -51,7 +51,13 @@ Rectangle {
      * nobody which model answered.
      */
     readonly property bool compact: root.width < Appearance.font.pixelSize.huge * 19
-    readonly property real controlExtent: Math.round(Appearance.font.pixelSize.huge * (root.compact ? 1.5 : 1.75))
+    readonly property real controlExtent: Math.round(Appearance.font.pixelSize.huge * (root.compact ? 1.95 : 2.15))
+    /**
+     * The glyph follows the circle rather than a fixed step of the type
+     * scale, so growing the bar grows what is drawn on it instead of leaving
+     * the same small icon adrift in a wider button.
+     */
+    readonly property real symbolSize: Math.round(root.controlExtent * 0.48)
     // Both measures follow the control, so a taller bar is a tighter one
     // rather than a taller one with the same holes in it.
     readonly property real controlGap: Math.max(2, Math.round(root.controlExtent * 0.12))
@@ -130,8 +136,8 @@ Rectangle {
                     visible: active
 
                     sourceComponent: CustomIcon {
-                        implicitWidth: Appearance.font.pixelSize.larger
-                        implicitHeight: Appearance.font.pixelSize.larger
+                        implicitWidth: root.symbolSize
+                        implicitHeight: root.symbolSize
                         width: implicitWidth
                         height: implicitHeight
                         source: root.modelEntry?.icon ?? ""
@@ -146,7 +152,7 @@ Rectangle {
                     visible: (root.modelEntry?.icon ?? "").length === 0
                     text: (root.modelEntry?.materialIcon ?? "").length > 0 ? root.modelEntry.materialIcon : "auto_awesome"
                     fill: 1
-                    iconSize: Appearance.font.pixelSize.larger
+                    iconSize: root.symbolSize
                     color: Appearance.colors.colOnPrimary
                 }
 
@@ -264,7 +270,7 @@ Rectangle {
             verticalAlignment: Text.AlignVCenter
             text: actionButton.symbol
             fill: 1
-            iconSize: Appearance.font.pixelSize.larger
+            iconSize: root.symbolSize
             color: actionButton.accented ? Appearance.colors.colOnPrimary : root.buttonInk
             // The glyph itself answers the press, so a control that swaps its
             // icon (copy → copied) does not simply cut from one to the other.
