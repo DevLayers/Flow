@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
+import qs.modules.common.widgets
 
 /**
  * Shared entry point for a Settings sub-page.
