@@ -116,18 +116,17 @@ Item {
         return "";
     }
 
-    function isPinned(modelId: string): bool {
-        return Array.from(Config.options.sidebar.ai.pinnedModels ?? []).indexOf(modelId) >= 0;
+    function pinnedModelShortcut(modelId: string): string {
+        const index = Array.from(Config.options.sidebar.ai.pinnedModels ?? []).indexOf(modelId);
+        return index >= 0 && index < 9 ? "Ctrl+" + String(index + 1) : "";
     }
 
-    function togglePinned(modelId: string) {
-        const id = String(modelId ?? "");
-        if (id.length === 0)
-            return;
-        const pinned = Array.from(Config.options.sidebar.ai.pinnedModels ?? []);
-        Config.options.sidebar.ai.pinnedModels = pinned.indexOf(id) >= 0
-            ? pinned.filter(candidate => candidate !== id)
-            : pinned.concat([id]);
+    function modelSelectionTooltip(model): string {
+        const title = String(model?.title ?? "");
+        const shortcut = root.pinnedModelShortcut(String(model?.id ?? ""));
+        if (shortcut.length > 0)
+            return Translation.tr("Select %1\nShortcut: %2").arg(title).arg(shortcut);
+        return Translation.tr("Select %1").arg(title);
     }
 
     /**
@@ -475,47 +474,38 @@ Item {
                     readonly property var entry: rowItem.modelData.model
                     readonly property bool keyed: root.hasKey(modelRow.entry)
                     readonly property bool selected: modelRow.entry.id === Ai.currentModelId
-                    readonly property bool pinned: root.isPinned(modelRow.entry.id)
 
                     spacing: root.gap
 
-                    Rectangle {
-                        id: modelPill
+                    RippleButton {
+                        id: modelSelectButton
 
                         Layout.fillWidth: true
                         Layout.preferredHeight: Math.max(root.rowHeight, modelColumn.implicitHeight + root.gap * 2)
-                        radius: Appearance.rounding.large
-                        color: modelRow.selected
-                            ? (modelMouse.containsPress ? Appearance.colors.colPrimaryActive
-                                : modelMouse.containsMouse ? Appearance.colors.colPrimaryHover
-                                : Appearance.colors.colPrimary)
-                            : (modelMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
-                                : modelMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
-                                : Appearance.colors.colSurfaceContainerHighest)
+                        leftPadding: root.inset
+                        rightPadding: root.inset
+                        topPadding: root.gap
+                        bottomPadding: root.gap
+                        buttonRadius: Appearance.rounding.large
+                        toggled: modelRow.selected
+                        colBackground: Appearance.colors.colSurfaceContainerHighest
+                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                        colBackgroundActive: Appearance.colors.colSurfaceContainerHighestActive
+                        colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                        colBackgroundToggled: Appearance.colors.colPrimary
+                        colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+                        colBackgroundToggledActive: Appearance.colors.colPrimaryActive
+                        colRippleToggled: Appearance.colors.colPrimaryActive
+                        onClicked: root.picked(modelRow.entry.id)
 
-                        readonly property color colOn: modelRow.selected
+                        Accessible.name: root.modelSelectionTooltip(modelRow.entry)
+
+                        readonly property color colOn: modelSelectButton.toggled
                             ? Appearance.colors.colOnPrimary
                             : Appearance.colors.colOnSurface
 
-                        Behavior on color {
-                            ColorAnimation { duration: 150 }
-                        }
-
-                        MouseArea {
-                            id: modelMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.picked(modelRow.entry.id)
-                        }
-
-                        ColumnLayout {
+                        contentItem: ColumnLayout {
                             id: modelColumn
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.leftMargin: root.inset
-                            anchors.rightMargin: root.inset
                             spacing: 2
 
                             StyledText {
@@ -524,7 +514,7 @@ Item {
                                 font.pixelSize: Appearance.font.pixelSize.normal
                                 font.bold: true
                                 elide: Text.ElideRight
-                                color: modelPill.colOn
+                                color: modelSelectButton.colOn
                             }
 
                             RowLayout {
@@ -539,7 +529,7 @@ Item {
 
                                         symbol: modelData.symbol
                                         label: modelData.label
-                                        tint: modelPill.colOn
+                                        tint: modelSelectButton.colOn
                                         opacity: 0.75
                                     }
                                 }
@@ -555,7 +545,7 @@ Item {
                                     text: "key_off"
                                     fill: 1
                                     iconSize: Appearance.font.pixelSize.larger
-                                    color: modelPill.colOn
+                                    color: modelSelectButton.colOn
                                     opacity: 0.75
                                 }
 
@@ -566,39 +556,14 @@ Item {
                                         : Translation.tr("No API key yet")
                                     elide: Text.ElideRight
                                     font.pixelSize: Appearance.font.pixelSize.small
-                                    color: modelPill.colOn
+                                    color: modelSelectButton.colOn
                                     opacity: 0.75
                                 }
                             }
                         }
-                    }
-
-                    RippleButton {
-                        Layout.preferredWidth: root.rowHeight
-                        Layout.preferredHeight: root.rowHeight
-                        Layout.alignment: Qt.AlignVCenter
-                        buttonRadius: Appearance.rounding.full
-                        colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
-                        colBackgroundHover: Appearance.colors.colLayer2Hover
-                        colRipple: Appearance.colors.colLayer2Active
-                        onClicked: root.togglePinned(modelRow.entry.id)
-
-                        Accessible.name: modelRow.pinned
-                            ? Translation.tr("Unpin %1").arg(modelRow.entry.title)
-                            : Translation.tr("Pin %1 for Ctrl shortcuts").arg(modelRow.entry.title)
-
-                        contentItem: MaterialSymbol {
-                            anchors.centerIn: parent
-                            text: modelRow.pinned ? "keep" : "keep_off"
-                            fill: modelRow.pinned ? 1 : 0
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: modelRow.pinned ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
-                        }
 
                         StyledToolTip {
-                            text: modelRow.pinned
-                                ? Translation.tr("Remove from Ctrl+1 … Ctrl+9")
-                                : Translation.tr("Pin for Ctrl+1 … Ctrl+9")
+                            text: root.modelSelectionTooltip(modelRow.entry)
                         }
                     }
 

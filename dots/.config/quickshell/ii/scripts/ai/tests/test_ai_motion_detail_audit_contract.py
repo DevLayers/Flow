@@ -71,7 +71,12 @@ class DetailTests(unittest.TestCase):
         ):
             with self.subTest(token=token):
                 self.assertIn(token, CHAT if token != "onDoubleClicked: root.editRequested" else MESSAGE)
-        self.assertIn("togglePinned", PICKER)
+        self.assertIn("function pinnedModelShortcut", PICKER)
+        self.assertIn("function modelSelectionTooltip", PICKER)
+        self.assertIn("id: modelSelectButton", PICKER)
+        self.assertIn("root.modelSelectionTooltip", PICKER)
+        self.assertNotIn("togglePinned", PICKER)
+        self.assertNotIn('text: modelRow.pinned ? "keep" : "keep_off"', PICKER)
         self.assertIn("modelChipTooltip", CONTROL_BAR)
 
 
