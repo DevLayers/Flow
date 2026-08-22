@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.services
 
 /** Shows a typed local system change and its captured undo value. */
 Rectangle {

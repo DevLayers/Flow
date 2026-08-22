@@ -8,6 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 AI = (ROOT / "services/Ai.qml").read_text(encoding="utf-8")
 BROKER = (ROOT / "services/ai/AiToolBroker.qml").read_text(encoding="utf-8")
+REGISTRY = (ROOT / "services/ai/AiToolRegistry.qml").read_text(encoding="utf-8")
+SONG_CARD = (ROOT / "services/ai/blocks/AiSongIdentifyCard.qml").read_text(encoding="utf-8")
 
 
 def body_between(source: str, start: str, end: str) -> str:
@@ -25,6 +27,30 @@ class ApprovalLifecycleTests(unittest.TestCase):
         self.assertIn('run.state === "completed"', begin)
         self.assertIn("root.broker.isPending(approvalKey)", begin)
         self.assertIn("completedRunOwnsApproval", begin)
+
+
+class ApprovalRenderingTests(unittest.TestCase):
+    def test_cards_that_call_ai_import_the_service_namespace_they_use(self):
+        for name in (
+            "AiFileAttachCard.qml",
+            "AiMediaControlCard.qml",
+            "AiNotesCard.qml",
+            "AiReminderCard.qml",
+            "AiSystemControlCard.qml",
+            "AiWallpaperCard.qml",
+            "AiWindowMoveCard.qml",
+        ):
+            card = (ROOT / "services/ai/blocks" / name).read_text(encoding="utf-8")
+            with self.subTest(card=name):
+                self.assertIn("import qs.services", card)
+
+
+class SongIconTests(unittest.TestCase):
+    def test_song_identification_uses_a_glyph_present_in_the_bundled_font(self):
+        self.assertNotIn('"music_search"', SONG_CARD)
+        self.assertNotIn('icon: "music_search"', REGISTRY)
+        self.assertIn('text: root.listening ? "graphic_eq" : "music_note"', SONG_CARD)
+        self.assertIn('icon: "music_note"', REGISTRY)
 
 
 if __name__ == "__main__":

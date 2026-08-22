@@ -972,7 +972,7 @@ Singleton {
             domain: "media",
             title: Translation.tr("Identify a song"),
             summary: Translation.tr("Listens to the selected audio source with a visible indicator."),
-            icon: "music_search",
+            icon: "music_note",
             kind: "localWrite",
             network: "never",
             sensitivity: "personal",

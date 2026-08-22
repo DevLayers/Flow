@@ -30,7 +30,7 @@ Rectangle {
 
             MaterialSymbol {
                 Layout.alignment: Qt.AlignTop
-                text: root.listening ? "graphic_eq" : "music_search"
+                text: root.listening ? "graphic_eq" : "music_note"
                 iconSize: Appearance.font.pixelSize.larger
                 color: Appearance.m3colors.m3onSecondaryContainer
             }

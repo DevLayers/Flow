@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.services
 
 /** Shows the exact note destination and bounded Markdown before a write. */
 Rectangle {
