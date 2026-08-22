@@ -341,6 +341,7 @@ PanelWindow {
         root.nextBadgeNumber = Config.options.regionSelector.annotation.badgeStartNumber;
         root.currentTool = "none";
         root.inlineEditorActive = false;
+        root.exporting = false;
         root.phase = RegionSelection.Phase.Select;
         root.dragging = false;
         root.dragStartX = 0;
@@ -365,15 +366,27 @@ PanelWindow {
     // resolution (e.g. 2880x1800 on a 1.5x display), hiding editor chrome for
     // the single frame of the grab, then hand the path to cb.
     function grabAnnotated(cb) {
-        var targetW = Math.round(root.editorRegionW * root.captureScale);
-        var targetH = Math.round(root.editorRegionH * root.captureScale);
+        const target = editorOverlayLoader.item?.grabTarget ?? null;
+        if (!target) {
+            console.warn("[Region Selector] No editor content to grab.");
+            root.exporting = false;
+            return;
+        }
+        const targetW = Math.round(root.editorRegionW * root.captureScale);
+        const targetH = Math.round(root.editorRegionH * root.captureScale);
         root.exporting = true;
-        editorContent.grabToImage(function (result) {
+        // grabToImage returns false when the item can't be rendered; without
+        // this, exporting sticks true and hides the toolbar for every later run.
+        const started = target.grabToImage(function (result) {
             var tempPath = "/tmp/quickshell-snip-" + Date.now() + ".png";
             result.saveToFile(tempPath);
             root.exporting = false;
             cb(tempPath);
         }, Qt.size(targetW, targetH));
+        if (!started) {
+            console.warn("[Region Selector] grabToImage failed to start.");
+            root.exporting = false;
+        }
     }
 
     function defaultSaveDir() {
@@ -568,12 +581,7 @@ PanelWindow {
     }
     function setRegionToTargeted() {
         const padding = Config.options.regionSelector.targetRegions.selectionPadding; // Make borders not cut off n stuff
-        root.setRegion(
-					root.targetedRegionX - padding, 
-					root.targetedRegionY - padding, 
-					root.targetedRegionWidth + padding * 2, 
-					root.targetedRegionHeight + padding * 2
-					);
+        root.setRegion(root.targetedRegionX - padding, root.targetedRegionY - padding, root.targetedRegionWidth + padding * 2, root.targetedRegionHeight + padding * 2);
     }
 
     function updateTargetedRegion(x, y) {
@@ -1084,6 +1092,9 @@ PanelWindow {
             id: editorOverlay
             anchors.fill: parent
             focus: true
+            // editorContent is scoped to this Component, so grabAnnotated() on
+            // the outer root can only reach it through the Loader's item.
+            readonly property Item grabTarget: editorContent
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
                 root.dismiss();
