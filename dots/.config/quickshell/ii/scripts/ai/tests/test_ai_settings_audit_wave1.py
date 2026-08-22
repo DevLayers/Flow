@@ -48,5 +48,29 @@ class ToolPermissionGroupingTests(unittest.TestCase):
         self.assertIn("Ai.toolbox.unavailableReason", source)
 
 
+class ContextAndNotificationSettingsTests(unittest.TestCase):
+    def test_settings_expose_the_existing_context_controls(self):
+        source = AI_SETTINGS.read_text(encoding="utf-8")
+
+        for setting in (
+            "Config.options.ai.context.manage",
+            "Config.options.ai.context.summarise",
+            "Config.options.ai.context.reserveTokens",
+            "Config.options.ai.extractDocuments",
+            "Config.options.ai.memory.limit",
+        ):
+            self.assertIn(setting, source)
+
+    def test_settings_expose_the_existing_notification_controls(self):
+        source = AI_SETTINGS.read_text(encoding="utf-8")
+
+        for setting in (
+            "Config.options.ai.notify.whenDone",
+            "Config.options.ai.notify.onlyWhenAway",
+            "Config.options.ai.notify.minimumSeconds",
+        ):
+            self.assertIn(setting, source)
+
+
 if __name__ == "__main__":
     unittest.main()

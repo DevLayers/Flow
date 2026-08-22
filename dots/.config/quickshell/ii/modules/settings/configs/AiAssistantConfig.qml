@@ -88,6 +88,102 @@ Item {
         }
 
         ContentSection {
+            icon: "account_tree"
+            title: Translation.tr("Context")
+
+            ConfigSwitch {
+                buttonIcon: "summarize"
+                text: Translation.tr("Manage long conversations")
+                checked: Config.options.ai.context.manage
+                onCheckedChanged: {
+                    Config.options.ai.context.manage = checked;
+                }
+            }
+
+            ConfigSwitch {
+                enabled: Config.options.ai.context.manage
+                buttonIcon: "auto_awesome"
+                text: Translation.tr("Summarise earlier messages when needed")
+                checked: Config.options.ai.context.summarise
+                onCheckedChanged: {
+                    Config.options.ai.context.summarise = checked;
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.ai.context.manage
+                icon: "data_usage"
+                text: Translation.tr("Tokens reserved for each answer")
+                value: Config.options.ai.context.reserveTokens
+                from: 256
+                to: 32768
+                stepSize: 256
+                onValueChanged: {
+                    Config.options.ai.context.reserveTokens = value;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "text_snippet"
+                text: Translation.tr("Extract text from attached documents")
+                checked: Config.options.ai.extractDocuments
+                onCheckedChanged: {
+                    Config.options.ai.extractDocuments = checked;
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.ai.memory.enabled
+                icon: "memory"
+                text: Translation.tr("Facts remembered between conversations")
+                value: Config.options.ai.memory.limit
+                from: 0
+                to: 200
+                stepSize: 1
+                onValueChanged: {
+                    Config.options.ai.memory.limit = value;
+                }
+            }
+        }
+
+        ContentSection {
+            icon: "notifications"
+            title: Translation.tr("Notifications")
+
+            ConfigSwitch {
+                buttonIcon: "notifications_active"
+                text: Translation.tr("Notify when an answer is ready")
+                checked: Config.options.ai.notify.whenDone
+                onCheckedChanged: {
+                    Config.options.ai.notify.whenDone = checked;
+                }
+            }
+
+            ConfigSwitch {
+                enabled: Config.options.ai.notify.whenDone
+                buttonIcon: "visibility_off"
+                text: Translation.tr("Only while the chat is out of view")
+                checked: Config.options.ai.notify.onlyWhenAway
+                onCheckedChanged: {
+                    Config.options.ai.notify.onlyWhenAway = checked;
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.ai.notify.whenDone
+                icon: "timer"
+                text: Translation.tr("Minimum answer time before notifying (seconds)")
+                value: Config.options.ai.notify.minimumSeconds
+                from: 0
+                to: 60
+                stepSize: 1
+                onValueChanged: {
+                    Config.options.ai.notify.minimumSeconds = value;
+                }
+            }
+        }
+
+        ContentSection {
             icon: "terminal"
             title: Translation.tr("Remote access")
 
