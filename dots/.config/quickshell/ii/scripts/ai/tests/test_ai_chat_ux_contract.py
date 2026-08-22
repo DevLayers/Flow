@@ -111,9 +111,9 @@ class MultiStepAccordionTests(unittest.TestCase):
         body = body_between(AI_MESSAGE_QML, "readonly property var stepGroup:", "\n")
         self.assertIn("Ai.leadingActivityMessages(root.messageId)", body)
 
-    def test_the_summary_row_only_appears_for_more_than_one_step(self):
+    def test_the_summary_row_is_live_only_for_multi_step_turns_and_final_for_any_activity(self):
         row = body_between(AI_MESSAGE_QML, "id: stepsSummaryRow", "\n            }\n        }")
-        self.assertIn("shown: root.stepGroup.length > 1", row)
+        self.assertIn("shown: root.done ? root.hasActivity : root.stepGroup.length > 1", row)
         self.assertIn("root.stepGroup.length", row)
 
     def test_the_summary_row_is_open_live_and_folds_when_done(self):
@@ -130,9 +130,22 @@ class MultiStepAccordionTests(unittest.TestCase):
     def test_step_activity_is_self_contained_reused_directly_and_in_the_group(self):
         # No free `root.*` reference: it is instantiated both directly and
         # from inside the summary row's own Repeater delegate.
-        component = body_between(AI_MESSAGE_QML, "component StepActivity: ColumnLayout {", "\n            }\n\n            // The common case")
+        component = body_between(AI_MESSAGE_QML, "component StepActivity: ColumnLayout {", "\n            }\n\n            // While a single-step")
         self.assertNotIn("root.", component)
         self.assertIn("required property var stepData", component)
+
+
+class CompletedActivityAccordionTests(unittest.TestCase):
+    def test_completed_activity_uses_one_outer_accordion_for_single_step_turns(self):
+        row = body_between(AI_MESSAGE_QML, "id: stepsSummaryRow", "\n            }\n        }")
+        self.assertIn("shown: root.done ? root.hasActivity : root.stepGroup.length > 1", row)
+        self.assertIn("label: root.done", row)
+        self.assertIn("root.finalActivityLabel", row)
+        self.assertIn("values: root.stepGroup", row)
+
+    def test_inner_activity_rows_are_hidden_until_the_final_row_is_expanded(self):
+        self.assertIn("visible: !root.done && root.stepGroup.length <= 1", AI_MESSAGE_QML)
+        self.assertIn("shown: root.done ? root.hasActivity : root.stepGroup.length > 1", AI_MESSAGE_QML)
 
 
 class PromptHistoryTests(unittest.TestCase):

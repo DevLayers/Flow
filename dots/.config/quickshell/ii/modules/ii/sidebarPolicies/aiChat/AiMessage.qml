@@ -110,6 +110,46 @@ Item {
      */
     readonly property var stepGroup: root.isAssistant ? [...Ai.leadingActivityMessages(root.messageId), root.messageData] : [root.messageData]
 
+    /**
+     * Once a turn is complete, its activity is represented by one outer row.
+     * Keep the summary derived from the same step group as the expanded
+     * content so a single-step turn and a tool round-trip settle identically.
+     */
+    function summarizeActivity(): var {
+        let thoughtDurationMs = 0;
+        let thoughtTokens = 0;
+        let searchCount = 0;
+        let toolCount = 0;
+
+        for (const step of root.stepGroup) {
+            thoughtDurationMs += Number(step?.thoughtDurationMs ?? 0);
+            const tokens = Number(step?.thoughtTokens ?? 0);
+            if (tokens > 0)
+                thoughtTokens += tokens;
+            searchCount += Array.from(step?.searchQueries ?? []).length;
+            toolCount += Array.from(step?.toolCalls ?? []).length;
+        }
+
+        const parts = [];
+        if (thoughtDurationMs >= 100)
+            parts.push(Translation.tr("Thought for %1 s").arg(String((thoughtDurationMs / 1000).toFixed(1))));
+        else if (thoughtTokens > 0)
+            parts.push(Translation.tr("%1 tokens").arg(String(thoughtTokens)));
+        if (searchCount > 0)
+            parts.push(Translation.tr("%1 searches").arg(String(searchCount)));
+        if (toolCount > 0)
+            parts.push(Translation.tr("%1 tool calls").arg(String(toolCount)));
+
+        return {
+            hasActivity: parts.length > 0,
+            label: parts.length > 0 ? parts.join(" · ") : Translation.tr("Completed activity")
+        };
+    }
+
+    readonly property var activitySummary: root.summarizeActivity()
+    readonly property bool hasActivity: root.activitySummary.hasActivity
+    readonly property string finalActivityLabel: root.activitySummary.label
+
     // ── Measures ──────────────────────────────────────────────────────────
     /** Inside a bubble, from its edge to its text. */
     readonly property real bubblePadding: root.compact ? Appearance.rounding.unsharpenmore : Appearance.rounding.small
@@ -695,32 +735,32 @@ Item {
                 }
             }
 
-            // The common case: the question was answered in one go.
-            // Rendered exactly as a lone step, with no extra wrapper.
+            // While a single-step answer is streaming, keep its activity rows
+            // directly visible so the user can follow it as it happens. Once
+            // done, the rows move into the final accordion below.
             StepActivity {
-                visible: root.stepGroup.length <= 1
+                visible: !root.done && root.stepGroup.length <= 1
                 stepData: root.messageData
             }
 
-            // A chain of tool round-trips: every step folds into this one
-            // line instead of each getting a full turn's worth of chrome.
-            // Open while it is happening, so the steps are watchable live;
-            // folded the moment the exchange is done, with the steps still
-            // one click away.
+            // Every completed turn folds its activity into this one line.
+            // Multi-step turns use the same row while streaming; single-step
+            // turns join it only at completion. In both cases the details
+            // remain one click away in the existing StepActivity delegates.
             AiActivityRow {
                 id: stepsSummaryRow
                 property bool userChoice: false
                 property bool userExpanded: false
 
                 Layout.fillWidth: true
-                shown: root.stepGroup.length > 1
+                shown: root.done ? root.hasActivity : root.stepGroup.length > 1
                 symbol: "checklist"
                 running: root.streaming
                 expandable: true
                 expanded: stepsSummaryRow.userChoice ? stepsSummaryRow.userExpanded : root.streaming
-                label: root.streaming
-                    ? Translation.tr("Working through %1 steps…").arg(root.stepGroup.length)
-                    : Translation.tr("%1 steps").arg(root.stepGroup.length)
+                label: root.done
+                    ? root.finalActivityLabel
+                    : Translation.tr("Working through %1 steps…").arg(String(root.stepGroup.length))
 
                 onToggled: {
                     stepsSummaryRow.userExpanded = !stepsSummaryRow.expanded;
