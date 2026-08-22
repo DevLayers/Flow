@@ -354,6 +354,93 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "notes_preview_append",
+            version: 1,
+            domain: "notes",
+            title: Translation.tr("Preview note append"),
+            summary: Translation.tr("Formats text and shows the note that would receive it."),
+            icon: "preview",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["notes"],
+            defaultApproval: "allow",
+            timeoutMs: 3000,
+            maxResultTokens: 300,
+            idempotent: true,
+            description: "Prepare a bounded Markdown append to an existing note. Use the exact tabIndex from the notes list and show the destination; this does not write anything.",
+            parameters: {
+                type: "object",
+                properties: {
+                    tabIndex: { type: "integer", description: "Existing note index from the local notes list" },
+                    text: { type: "string", description: "Short Markdown text to append" },
+                    provenance: { type: "object", properties: { sessionId: { type: "string" }, messageId: { type: "string" } } }
+                },
+                required: ["tabIndex", "text"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "notes_append",
+            version: 1,
+            domain: "notes",
+            title: Translation.tr("Append to a note"),
+            summary: Translation.tr("Adds reviewed Markdown to an existing note."),
+            icon: "note_add",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["notes"],
+            defaultApproval: "ask",
+            timeoutMs: 5000,
+            maxResultTokens: 220,
+            idempotent: false,
+            description: "Append Markdown to an existing note only after the user approves the preview. Never replace existing content and never create a note implicitly.",
+            parameters: {
+                type: "object",
+                properties: {
+                    tabIndex: { type: "integer", description: "Existing note index from the local notes list" },
+                    text: { type: "string", description: "Short Markdown text to append" },
+                    provenance: { type: "object", properties: { sessionId: { type: "string" }, messageId: { type: "string" } } }
+                },
+                required: ["tabIndex", "text"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "notes_create_from_answer",
+            version: 1,
+            domain: "notes",
+            title: Translation.tr("Create note from answer"),
+            summary: Translation.tr("Shows a suggested title and content before creating a note."),
+            icon: "note_add",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["notes"],
+            defaultApproval: "ask",
+            timeoutMs: 5000,
+            maxResultTokens: 220,
+            idempotent: false,
+            description: "Create a new note from a bounded answer excerpt after the user approves its title and content. Do not include the hidden conversation or sensitive request text.",
+            parameters: {
+                type: "object",
+                properties: {
+                    title: { type: "string", description: "Suggested note title" },
+                    text: { type: "string", description: "Markdown note content" },
+                    provenance: { type: "object", properties: { sessionId: { type: "string" }, messageId: { type: "string" } } }
+                },
+                required: ["title", "text"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "sports_search_games",
             version: 1,
             domain: "sports",

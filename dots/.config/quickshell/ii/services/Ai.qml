@@ -1521,6 +1521,8 @@ Singleton {
     readonly property AiGmailIntegration gmailIntegration: AiGmailIntegration {}
     /** The one path to the filesystem the assistant may use by itself. */
     readonly property AiFilesIntegration filesIntegration: AiFilesIntegration {}
+    /** Local notes previews and reviewed append/create operations. */
+    readonly property AiNotesIntegration notesIntegration: AiNotesIntegration {}
     /** Local speech-to-text: recording, detection and the review draft. */
     readonly property AiVoiceService voiceService: AiVoiceService {}
     /** Preview id → immutable proposed changes until the user decides. */
@@ -1609,6 +1611,9 @@ Singleton {
             "alarms_list": call => root.toolAlarmsList(call),
             "calendar_list_events": call => root.toolCalendarListEvents(call),
             "weather_get": call => root.toolWeatherGet(call),
+            "notes_preview_append": call => root.toolNotesPreviewAppend(call),
+            "notes_append": call => root.toolNotesAppend(call),
+            "notes_create_from_answer": call => root.toolNotesCreate(call),
             "system_get_status": call => root.toolSystemGetStatus(call),
             "system_health": call => root.toolSystemHealth(call),
             "keybinds_search": call => root.toolKeybindsSearch(call),
@@ -3745,7 +3750,9 @@ Singleton {
             "run_shell_command": pending => root.startShellCommand(pending.message, String(pending.args?.command ?? ""), pending.sessionId),
             "set_shell_config": pending => root.applyConfigChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
             "settings_apply_changes": pending => root.applySettingsChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
-            "reminder_create": pending => root.createReminderNow(pending.message, pending.args, pending.sessionId)
+            "reminder_create": pending => root.createReminderNow(pending.message, pending.args, pending.sessionId),
+            "notes_append": pending => root.appendNoteNow(pending.message, pending.args),
+            "notes_create_from_answer": pending => root.createNoteNow(pending.message, pending.args)
         })
 
     function handleToolJournalSaveFailed(operationId: string, sessionId: string, reason: string): bool {
@@ -4363,6 +4370,112 @@ Singleton {
             summary: Translation.tr("Weather read"),
             data: root.timeIntegration.weather()
         };
+    }
+
+    function notesProvenance(call): var {
+        return {
+            sessionId: String(root.currentRunSessionId || root.sessions.currentId || ""),
+            messageId: String(call?.message?.id ?? call?.message?.messageId ?? "")
+        };
+    }
+
+    function toolNotesPreviewAppend(call: var): var {
+        const args = Object.assign({}, call.args, { provenance: root.notesProvenance(call) });
+        const preview = root.notesIntegration.previewAppend(args);
+        if (!preview.ok)
+            return { status: "error", summary: Translation.tr("That note append is not valid"), data: preview, retryable: true };
+        return {
+            status: "success",
+            summary: Translation.tr("Note append preview ready"),
+            data: { preview: preview, destination: preview.destination }
+        };
+    }
+
+    function toolNotesAppend(call: var): var {
+        const preview = root.notesIntegration.previewAppend(Object.assign({}, call.args, { provenance: root.notesProvenance(call) }));
+        if (!preview.ok)
+            return { status: "error", summary: Translation.tr("That note append is not valid"), data: preview, retryable: true };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "notes_append",
+            kind: "notesPreview",
+            state: "pending",
+            summary: Translation.tr("Note append needs approval"),
+            data: { operation: "append", preview: preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function toolNotesCreate(call: var): var {
+        const preview = root.notesIntegration.previewCreate(Object.assign({}, call.args, { provenance: root.notesProvenance(call) }));
+        if (!preview.ok)
+            return { status: "error", summary: Translation.tr("That note is not valid"), data: preview, retryable: true };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "notes_create_from_answer",
+            kind: "notesPreview",
+            state: "pending",
+            summary: Translation.tr("New note needs approval"),
+            data: { operation: "create", preview: preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function approveNotes(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const preview = card?.data?.preview;
+        if (!preview) {
+            root.rejectNotes(message);
+            return;
+        }
+        const args = preview.operation === "append"
+            ? { tabIndex: preview.tabIndex, text: preview.text, provenance: preview.provenance }
+            : { title: preview.title, text: preview.text, provenance: preview.provenance };
+        root.beginToolExecution(message, preview.operation === "append" ? "notes_append" : "notes_create_from_answer", { args: args });
+    }
+
+    function rejectNotes(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("Note change discarded") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Note change discarded"),
+            data: Translation.tr("The user chose not to change notes.")
+        });
+    }
+
+    function appendNoteNow(message: AiMessageData, args: var): void {
+        const result = root.notesIntegration.append(args);
+        root.finishNoteAction(message, result, Translation.tr("Note updated"));
+    }
+
+    function createNoteNow(message: AiMessageData, args: var): void {
+        const result = root.notesIntegration.create(args);
+        root.finishNoteAction(message, result, Translation.tr("Note created"));
+    }
+
+    function finishNoteAction(message: AiMessageData, result: var, successSummary: string): void {
+        const key = root.toolKeyFor(message);
+        message.functionPending = false;
+        const ok = result?.ok === true;
+        const summary = ok ? successSummary : Translation.tr("The note could not be changed");
+        root.updateToolCard(message, key, { state: ok ? "done" : "failed", summary: summary });
+        root.broker.settle(key, {
+            status: ok ? "success" : "error",
+            summary: summary,
+            data: ok ? { title: result.title, index: result.index, provenance: result.provenance } : result,
+            retryable: !ok
+        });
     }
 
     function toolSystemGetStatus(call: var): var {

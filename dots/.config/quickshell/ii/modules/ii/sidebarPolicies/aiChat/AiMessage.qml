@@ -942,6 +942,8 @@ Item {
                         return fileResultsCard;
                     case "fileAttachPreview":
                         return fileAttachCard;
+                    case "notesPreview":
+                        return notesPreviewCard;
                     }
                     // A kind this build does not know: a session written by a
                     // newer one still opens, showing what the card says about
@@ -1010,6 +1012,15 @@ Item {
                     id: reminderPreviewCard
 
                     AiReminderCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: notesPreviewCard
+
+                    AiNotesCard {
                         messageData: root.messageData
                         card: cardHost.card
                     }

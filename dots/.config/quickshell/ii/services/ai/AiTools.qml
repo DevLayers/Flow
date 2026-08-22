@@ -52,7 +52,8 @@ Scope {
             files: Ai.filesIntegration.rootsConfigured,
             ocr: Ai.ocrAvailable,
             sports: true,
-            gmail: EmailService.authenticated
+            gmail: EmailService.authenticated,
+            notes: NotesService.ready
         })
 
     // ── Registry, passed through ──────────────────────────────────────────
