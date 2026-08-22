@@ -946,6 +946,8 @@ Item {
                         return notesPreviewCard;
                     case "systemControlPreview":
                         return systemControlPreviewCard;
+                    case "windowMovePreview":
+                        return windowMovePreviewCard;
                     }
                     // A kind this build does not know: a session written by a
                     // newer one still opens, showing what the card says about
@@ -1032,6 +1034,15 @@ Item {
                     id: systemControlPreviewCard
 
                     AiSystemControlCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: windowMovePreviewCard
+
+                    AiWindowMoveCard {
                         messageData: root.messageData
                         card: cardHost.card
                     }

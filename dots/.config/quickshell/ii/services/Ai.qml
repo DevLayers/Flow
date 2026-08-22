@@ -1525,6 +1525,8 @@ Singleton {
     readonly property AiNotesIntegration notesIntegration: AiNotesIntegration {}
     /** Typed previews and reversible writes to existing local system services. */
     readonly property AiSystemControlsIntegration systemControlsIntegration: AiSystemControlsIntegration {}
+    /** Live Hyprland window/workspace references and reviewed movement. */
+    readonly property AiWindowsIntegration windowsIntegration: AiWindowsIntegration {}
     /** Local speech-to-text: recording, detection and the review draft. */
     readonly property AiVoiceService voiceService: AiVoiceService {}
     /** Preview id → immutable proposed changes until the user decides. */
@@ -1621,6 +1623,10 @@ Singleton {
             "dnd_set": call => root.toolSystemControl(call),
             "nightlight_set": call => root.toolSystemControl(call),
             "theme_set_mode": call => root.toolSystemControl(call),
+            "windows_list": call => root.toolWindowsList(call),
+            "window_focus": call => root.toolWindowFocus(call),
+            "window_move_to_workspace": call => root.toolWindowMove(call),
+            "workspace_switch": call => root.toolWorkspaceSwitch(call),
             "system_get_status": call => root.toolSystemGetStatus(call),
             "system_health": call => root.toolSystemHealth(call),
             "keybinds_search": call => root.toolKeybindsSearch(call),
@@ -3764,7 +3770,8 @@ Singleton {
             "brightness_set": pending => root.applySystemControl(pending.message, pending.args),
             "dnd_set": pending => root.applySystemControl(pending.message, pending.args),
             "nightlight_set": pending => root.applySystemControl(pending.message, pending.args),
-            "theme_set_mode": pending => root.applySystemControl(pending.message, pending.args)
+            "theme_set_mode": pending => root.applySystemControl(pending.message, pending.args),
+            "window_move_to_workspace": pending => root.applyWindowMove(pending.message, pending.args)
         })
 
     function handleToolJournalSaveFailed(operationId: string, sessionId: string, reason: string): bool {
@@ -4549,6 +4556,90 @@ Singleton {
             data: result,
             retryable: !ok
         });
+    }
+
+    function toolWindowsList(call: var): var {
+        const windows = root.windowsIntegration.list();
+        return {
+            status: "success",
+            summary: windows.length === 1 ? Translation.tr("1 window") : Translation.tr("%1 windows").arg(windows.length),
+            data: { windows: windows }
+        };
+    }
+
+    function toolWindowFocus(call: var): var {
+        const result = root.windowsIntegration.focus(call.args);
+        return {
+            status: result.ok ? "success" : "error",
+            summary: result.ok ? Translation.tr("Window focused") : Translation.tr("That window is no longer available"),
+            data: result,
+            retryable: !result.ok
+        };
+    }
+
+    function toolWindowMove(call: var): var {
+        const preview = root.windowsIntegration.previewMove(call.args);
+        if (!preview.ok)
+            return { status: "error", summary: Translation.tr("That window move is not valid"), data: preview, retryable: true };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "window_move_to_workspace",
+            kind: "windowMovePreview",
+            state: "pending",
+            summary: Translation.tr("Window move needs approval"),
+            data: { preview: preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function approveWindowMove(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const preview = card?.data?.preview;
+        if (!preview) {
+            root.rejectWindowMove(message);
+            return;
+        }
+        root.beginToolExecution(message, "window_move_to_workspace", {
+            args: { address: preview.address, workspace: preview.workspace, fromWorkspace: preview.fromWorkspace }
+        });
+    }
+
+    function rejectWindowMove(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("Window move discarded") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Window move discarded"),
+            data: Translation.tr("The user chose not to move that window.")
+        });
+    }
+
+    function applyWindowMove(message: AiMessageData, args: var): void {
+        const result = root.windowsIntegration.move(args);
+        const key = root.toolKeyFor(message);
+        message.functionPending = false;
+        const ok = result?.ok === true;
+        const summary = ok ? Translation.tr("Window moved") : Translation.tr("The window could not be moved");
+        root.updateToolCard(message, key, { state: ok ? "done" : "failed", summary: summary });
+        root.broker.settle(key, { status: ok ? "success" : "error", summary: summary, data: result, retryable: !ok });
+    }
+
+    function toolWorkspaceSwitch(call: var): var {
+        const result = root.windowsIntegration.switchWorkspace(call.args);
+        return {
+            status: result.ok ? "success" : "error",
+            summary: result.ok ? Translation.tr("Workspace switched") : Translation.tr("That workspace is not valid"),
+            data: result,
+            retryable: !result.ok
+        };
     }
 
     function toolSystemGetStatus(call: var): var {
