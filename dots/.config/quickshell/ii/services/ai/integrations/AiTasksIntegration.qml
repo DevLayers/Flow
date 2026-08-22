@@ -169,7 +169,8 @@ QtObject {
         if (!resolved.ok)
             return { status: "error", summary: resolved.error, data: resolved, retryable: true };
         if (resolved.provider.id === root.localProviderId) {
-            const tasks = Todo.aiListTasks({ query: args?.query });
+            const tasks = Todo.aiListTasks({ query: args?.query, listId: args?.listId, includeCompleted: args?.includeCompleted === true })
+                .slice(0, Math.max(1, Math.min(50, Number(args?.limit ?? 50))));
             return {
                 status: "success",
                 summary: qsTr("%1 local tasks").arg(tasks.length),
@@ -177,7 +178,7 @@ QtObject {
             };
         }
         const operationId = "tasks-list-" + String(key ?? "") + "-" + Date.now().toString(36);
-        root.pendingOperations[operationId] = { key: String(key ?? ""), provider: resolved.provider, filters: args ?? ({}), operation: "list" };
+        root.pendingOperations[operationId] = { key: String(key ?? ""), provider: resolved.provider, filters: args ?? ({}), operation: "list", operationId: operationId };
         if (!TickTickService.aiListTasks(operationId, args?.listId || TickTickService.inboxProjectId)) {
             delete root.pendingOperations[operationId];
             return { status: "error", summary: qsTr("TickTick is already busy"), data: null, retryable: true };
@@ -215,6 +216,10 @@ QtObject {
             const rawTasks = Array.from(raw?.tasks ?? []);
             const query = String(job.filters?.query ?? "").trim().toLowerCase();
             const tasks = rawTasks.map(task => root.mapTask(task, job.provider)).filter(task => {
+                if (job.filters?.includeCompleted !== true && task.status === "completed")
+                    return false;
+                if (String(job.filters?.listId ?? "").length > 0 && String(job.filters.listId) !== task.listId)
+                    return false;
                 if (query.length === 0)
                     return true;
                 return task.title.toLowerCase().includes(query) || task.notes.toLowerCase().includes(query);

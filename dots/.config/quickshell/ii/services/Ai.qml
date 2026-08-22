@@ -4620,7 +4620,7 @@ Singleton {
     }
 
     function approveTask(message: AiMessageData): void {
-        if (!message?.functionPending)
+        if (!message?.functionPending || root.pendingToolExecution?.message === message)
             return;
         const key = root.toolKeyFor(message);
         const card = root.toolCardFor(message, key);
@@ -4633,7 +4633,7 @@ Singleton {
     }
 
     function approveTaskMutation(message: AiMessageData): void {
-        if (!message?.functionPending)
+        if (!message?.functionPending || root.pendingToolExecution?.message === message)
             return;
         const key = root.toolKeyFor(message);
         const card = root.toolCardFor(message, key);

@@ -54,6 +54,10 @@ Singleton {
     function aiListTasks(filters = null) {
         const query = String(filters?.query ?? "").trim().toLowerCase();
         return root.localList.filter(task => {
+            if (filters?.includeCompleted !== true && task?.done === true)
+                return false;
+            if (String(filters?.listId ?? "").length > 0 && String(filters.listId) !== root.aiListId)
+                return false;
             if (query.length === 0)
                 return true;
             return String(task?.content ?? task?.title ?? "").toLowerCase().includes(query)
