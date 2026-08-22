@@ -57,10 +57,22 @@ Rectangle {
             }
         }
 
+        // Sits above the list. Never grows past its content and never
+        // shrinks below what it says it needs; between the two it splits
+        // the height with the list.
+        Loader {
+            id: footerSlot
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.maximumHeight: item ? item.implicitHeight : 0
+            Layout.minimumHeight: item ? Math.min(item.implicitHeight, item.minimumHeight ?? 0) : 0
+            visible: sourceComponent !== null && sourceComponent !== undefined
+        }
+
         StyledListView {
             id: list
 
-            // Shares the column with the footer: asks for its content, gives
+            // Shares the column with the slot above: asks for its content, gives
             // way down to a few rows, and takes whatever is left over.
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -206,18 +218,6 @@ Rectangle {
                 }
                 onDragEnded: list.endDrag()
             }
-        }
-
-        // The footer never grows past its content and never shrinks below
-        // what it says it needs; between the two it splits the height with
-        // the list.
-        Loader {
-            id: footerSlot
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.maximumHeight: item ? item.implicitHeight : 0
-            Layout.minimumHeight: item ? Math.min(item.implicitHeight, item.minimumHeight ?? 0) : 0
-            visible: sourceComponent !== null && sourceComponent !== undefined
         }
 
         // Keeps the New button at the bottom while there is nothing to list.
