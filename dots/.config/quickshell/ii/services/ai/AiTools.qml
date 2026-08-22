@@ -54,7 +54,8 @@ Scope {
             sports: true,
             gmail: EmailService.authenticated,
             notes: NotesService.ready,
-            tasks: true
+            tasks: true,
+            rag: Ai.ragIntegration.ready
         })
 
     // ── Registry, passed through ──────────────────────────────────────────

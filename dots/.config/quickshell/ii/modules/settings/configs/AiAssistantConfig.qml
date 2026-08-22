@@ -153,6 +153,19 @@ Item {
                 entryOnContainer: Appearance.colors.colOnTertiaryContainer
                 onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AdvancedAiConfig.qml")
             }
+
+            SubPageEntryButton {
+                entryIcon: "manage_search"
+                entryTitle: Translation.tr("Local retrieval (RAG)")
+                entryDescription: Translation.tr("Let it search folders you index locally, embedded through Ollama")
+                entryAccent: Appearance.colors.colSecondary
+                entryOnAccent: Appearance.colors.colOnSecondary
+                entryContainer: Appearance.colors.colSecondaryContainer
+                entryContainerHover: Appearance.colors.colSecondaryContainerHover
+                entryContainerActive: Appearance.colors.colSecondaryContainerActive
+                entryOnContainer: Appearance.colors.colOnSecondaryContainer
+                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/RagConfig.qml")
+            }
         }
 
         ContentSection {

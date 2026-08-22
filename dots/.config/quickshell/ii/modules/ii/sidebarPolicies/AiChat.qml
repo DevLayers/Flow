@@ -973,6 +973,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
         property string symbol: ""
         property string label: ""
+        /** Shown instead of `label` in the tooltip while `enabled` is false. */
+        property string disabledReason: ""
 
         signal triggered
 
@@ -1008,7 +1010,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         }
 
         StyledToolTip {
-            text: actionPill.label
+            text: actionPill.enabled || actionPill.disabledReason.length === 0 ? actionPill.label : actionPill.disabledReason
         }
     }
 
@@ -1450,24 +1452,44 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         }
                     }
 
-                    PagePlaceholder {
-                        id: emptyStatePlaceholder
+                    Item {
+                        id: emptyStateStage
                         z: 2
-                        shown: Ai.messageIDs.length === 0
-                        icon: Ai.currentPersona?.icon ?? "neurology"
-                        // A persona speaks with its own name; without one,
-                        // the greeting rolls a fresh hello for this opening.
-                        title: {
-                            const personaName = Ai.currentPersona?.name;
-                            if (personaName)
-                                return personaName;
-                            return root.emptyStateGreeting.length > 0 ? root.emptyStateGreeting : Translation.tr("Hello");
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            top: parent.top
+                            bottom: emptyStateKeys.top
+                            bottomMargin: Appearance.rounding.large
                         }
-                        description: Ai.currentPersona?.description ?? Translation.tr("Ask anything")
-                        shape: MaterialShape.Shape.PixelCircle
-                        animateIconOnShow: true
-                        entranceTrigger: root.entranceTrigger
-                        Component.onCompleted: root.refreshEmptyStateGreeting()
+                        visible: emptyStatePlaceholder.shown
+
+                        // Reserve the hint rail before centering the hero. The
+                        // empty state therefore sits in the usable area from
+                        // the rectangle's top to the hints, not behind them.
+                        PagePlaceholder {
+                            id: emptyStatePlaceholder
+                            anchors.fill: parent
+                            shown: Ai.messageIDs.length === 0
+                            icon: Ai.currentPersona?.icon ?? "neurology"
+                            iconSize: Appearance.font.pixelSize.huge * 3
+                            iconPadding: Appearance.rounding.normal
+                            titlePixelSize: Appearance.font.pixelSize.huge
+                            descriptionPixelSize: Appearance.font.pixelSize.normal
+                            // A persona speaks with its own name; without one,
+                            // the greeting rolls a fresh hello for this opening.
+                            title: {
+                                const personaName = Ai.currentPersona?.name;
+                                if (personaName)
+                                    return personaName;
+                                return root.emptyStateGreeting.length > 0 ? root.emptyStateGreeting : Translation.tr("Hello");
+                            }
+                            description: Ai.currentPersona?.description ?? Translation.tr("Ask anything")
+                            shape: MaterialShape.Shape.PixelCircle
+                            animateIconOnShow: true
+                            entranceTrigger: root.entranceTrigger
+                            Component.onCompleted: root.refreshEmptyStateGreeting()
+                        }
                     }
 
                     Loader {
@@ -2465,6 +2487,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                             ComposerActionPill {
                                                 symbol: "screenshot_region"
                                                 label: Translation.tr("Send part of the screen")
+                                                enabled: Ai.currentModelSupportsVision
+                                                disabledReason: Translation.tr("%1 cannot look at images.").arg(Ai.currentModelEntry?.title ?? Translation.tr("This model"))
                                                 onTriggered: {
                                                     if (!root.snipHeld) {
                                                         root.snipHeld = true;

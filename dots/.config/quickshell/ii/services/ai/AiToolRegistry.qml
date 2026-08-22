@@ -242,7 +242,7 @@ Singleton {
             sensitivity: "device",
             requiredModelCapabilities: ["tools"],
             defaultApproval: "ask",
-            timeoutMs: 0,
+            timeoutMs: 8000,
             maxResultTokens: 160,
             idempotent: false,
             description: "Apply a previously approved Settings preview by id. This only accepts a preview created in this active conversation; it never writes arbitrary key/value pairs.",
@@ -269,7 +269,7 @@ Singleton {
             sensitivity: "personal",
             requiredModelCapabilities: ["tools"],
             defaultApproval: "ask",
-            timeoutMs: 0,
+            timeoutMs: 8000,
             maxResultTokens: 120,
             idempotent: false,
             description: "Create a local reminder after the user approves its preview. Pass exactly one time: `whenRelative` is a duration string such as `20 minutes`, `20 minutos`, `2 hours`, or `1 hora`; while `whenAbsolute` is a future ISO 8601 date-time with a time. Never pass bare seconds or a number with no unit. Pass a short label. A duration or time of day is a reminder; something to do with no time is a task. If the distinction is unclear, ask the user.",
@@ -1347,7 +1347,7 @@ Singleton {
             requiredModelCapabilities: ["tools"],
             defaultApproval: "ask",
             deprecatedBy: ["settings_propose_changes"],
-            timeoutMs: 0,
+            timeoutMs: 8000,
             maxResultTokens: 300,
             idempotent: false,
             description: "Deprecated. Use settings_propose_changes, which validates the typed Settings index before showing a diff.",
@@ -1391,7 +1391,7 @@ Singleton {
             requiredModelCapabilities: ["tools"],
             requiredServices: ["memory"],
             defaultApproval: "ask",
-            timeoutMs: 0,
+            timeoutMs: 8000,
             maxResultTokens: 60,
             idempotent: false,
             description: "Store one durable fact about the user so later conversations start knowing it — their distro, editor, preferences, recurring projects. Keep it to one short sentence. Do not store secrets, credentials, or anything the user asked you to forget.",
@@ -1467,6 +1467,35 @@ Singleton {
                     }
                 },
                 required: ["url"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "rag_search",
+            version: 1,
+            domain: "rag",
+            title: Translation.tr("Search indexed folders"),
+            summary: Translation.tr("Searches only the folders the user indexed for retrieval, embedded locally with Ollama. Nothing outside them is read."),
+            icon: "manage_search",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["rag"],
+            defaultApproval: "allow",
+            timeoutMs: 20000,
+            maxResultTokens: 500,
+            idempotent: true,
+            description: "Search only the folders the user explicitly indexed for retrieval through Settings — never a folder guessed on their behalf. Returns the closest matching chunks, each with its collection, file, line range and a short snippet. If nothing is indexed or the search comes back empty, say so instead of guessing at the answer.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "What to search for" },
+                    collectionIds: { type: "array", items: { type: "string" }, description: "Optional exact collection ids to search; omit to search everything indexed" },
+                    limit: { type: "integer", description: "Maximum results, from 1 to 10" }
+                },
+                required: ["query"]
             },
             formats: ["gemini", "openai", "anthropic"],
             needsSearch: false
@@ -1649,6 +1678,8 @@ Singleton {
             return Translation.tr("selected audio source");
         case "set_shell_config":
             return Array.from(args.changes ?? []).map(change => `${change.key} = ${change.value}`).join(", ");
+        case "rag_search":
+            return String(args.query ?? "");
         }
         return "";
     }

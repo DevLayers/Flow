@@ -1017,10 +1017,50 @@ Singleton {
         const ids = root.messageIDs;
         const grewByOne = ids.length === root._knownMessageCount + 1;
         root._knownMessageCount = ids.length;
+        if (ids.length > root.maxLiveMessages)
+            Qt.callLater(root.trimMessageHistoryIfNeeded);
         if (!grewByOne)
             return;
         root.lastAppendedId = String(ids[ids.length - 1] ?? "");
         root.lastAppendedAt = Date.now();
+    }
+
+    /**
+     * A conversation kept open for enough turns would otherwise grow forever:
+     * nothing besides `clearMessages()`/`forkFrom()`/explicit removal ever
+     * shrinks the live list, and those only run on a deliberate user action.
+     * This is a backstop against a genuinely runaway session — `ai ask`
+     * scripted in a loop for hours without ever starting a new chat — not a
+     * performance tweak for ordinary use; reaching it already means
+     * something unusual is going on. The persisted session file
+     * (commitSession) already holds full history on disk, so trimming the
+     * live list only frees RAM, never durable state.
+     */
+    readonly property int maxLiveMessages: 1000
+
+    function trimMessageHistoryIfNeeded() {
+        const overflow = root.messageIDs.length - root.maxLiveMessages;
+        if (overflow <= 0)
+            return;
+        // Never trim a message still anchoring the run in flight.
+        const keepIds = new Set([root.currentRunRequestId, root.currentRunResponseId].filter(id => id.length > 0));
+        const drop = [];
+        for (let i = 0; i < root.messageIDs.length && drop.length < overflow; i++) {
+            const id = root.messageIDs[i];
+            if (!keepIds.has(id))
+                drop.push(id);
+        }
+        if (drop.length === 0)
+            return;
+        const dropSet = new Set(drop);
+        root.messageIDs = root.messageIDs.filter(id => !dropSet.has(id));
+        for (const id of drop) {
+            const message = root.messageByID[id];
+            delete root.messageByID[id];
+            if (message)
+                message.destroy();
+        }
+        console.log(`[Ai] Trimmed ${drop.length} old message(s) from a very long live conversation (kept the newest ${root.maxLiveMessages}); the full history remains saved on disk.`);
     }
     on_KnownMessageCountChanged: root.recomputeContextEstimate()
 
@@ -1599,6 +1639,8 @@ Singleton {
     readonly property AiFilesIntegration filesIntegration: AiFilesIntegration {}
     /** Local notes previews and reviewed append/create operations. */
     readonly property AiNotesIntegration notesIntegration: AiNotesIntegration {}
+    /** Local retrieval over folders the user indexed for search. */
+    readonly property AiRagIntegration ragIntegration: AiRagIntegration {}
     /** Typed previews and reversible writes to existing local system services. */
     readonly property AiSystemControlsIntegration systemControlsIntegration: AiSystemControlsIntegration {}
     /** Live Hyprland window/workspace references and reviewed movement. */
@@ -1786,7 +1828,8 @@ Singleton {
             "remember_fact": call => root.toolRememberFact(call),
             "web_search": call => root.toolWeb(call, true),
             "fetch_url": call => root.toolWeb(call, false),
-            "run_shell_command": call => root.toolShellCommand(call)
+            "run_shell_command": call => root.toolShellCommand(call),
+            "rag_search": call => root.toolRagSearch(call)
         })
 
     // ── Tool cards ────────────────────────────────────────────────────────
@@ -1856,7 +1899,7 @@ Singleton {
     // pending approval: these stay in the transcript once done, the same way
     // a search engine's results page does not disappear once you have read
     // it.
-    readonly property var resultCardKinds: ["settingsResults", "fileResults", "songIdentifyPreview", "taskResults"]
+    readonly property var resultCardKinds: ["settingsResults", "fileResults", "songIdentifyPreview", "taskResults", "ragResults"]
 
     function visibleToolCards(message): var {
         return Array.from(message?.toolCards ?? []).filter(card => card.state === "pending"
@@ -2653,6 +2696,21 @@ Singleton {
         function lastAnswer(): string {
             return JSON.stringify(root.lastAnswerRecord ?? {});
         }
+
+        /** DEBUG: trigger active-window capture; caller waits then calls ask(). */
+        function debugCaptureActiveWindow(): string {
+            const started = root.attachActiveWindowContext();
+            return JSON.stringify({ started: started });
+        }
+
+        function debugAttachments(): string {
+            return JSON.stringify(root.attachments.map(a => ({ kind: a.kind, name: a.name, bytes: a.bytes })));
+        }
+
+        function debugState(): string {
+            return JSON.stringify({ requesterRunning: requester.running, activeRunId: root.runCoordinator.activeRunId });
+        }
+
     }
 
     function transportErrorKind(status: int, code: int): string {
@@ -3098,6 +3156,25 @@ Singleton {
         // mutation already sent stays sent — the broker says so rather than
         // pretending it was undone.
         root.broker.cancelAll(Translation.tr("Stopped"));
+        // The cancellation above is bookkeeping only — the broker has no
+        // handle on an OS process a handler already started. Left alone,
+        // each of these keeps running to completion after "Stop", wasting
+        // the roundtrip and leaving a shared Process busy for whatever the
+        // next run tries to use it for.
+        if (commandExecutionProc.running)
+            commandExecutionProc.running = false;
+        if (filesToolProc.running)
+            filesToolProc.running = false;
+        if (ocrToolProc.running)
+            ocrToolProc.running = false;
+        if (webToolProc.running)
+            webToolProc.running = false;
+        if (ragToolProc.running)
+            ragToolProc.running = false;
+        if (root.pendingSongIdentify) {
+            root.pendingSongIdentify = null;
+            root.mediaIntegration.stopIdentify();
+        }
         if (root.pendingSubmissionId.length > 0 && !requester.running)
             return root.cancelPendingSubmission("user");
         return requester.abort();
@@ -3235,6 +3312,8 @@ Singleton {
 
     /** Whether the model in use can take files at all, kinds aside. */
     readonly property bool currentModelTakesFiles: root.currentModelEntry?.attachments ?? false
+    /** Whether the model in use can look at images at all. */
+    readonly property bool currentModelSupportsVision: root.currentModelEntry?.vision ?? false
 
     function humanSize(bytes: int): string {
         if (bytes >= 1024 * 1024)
@@ -3309,7 +3388,7 @@ Singleton {
             return { action: "send" };
         }
         if (kind === "image") {
-            if (!root.currentModelTakesFiles || !(root.currentModelEntry?.vision ?? false))
+            if (!root.currentModelTakesFiles || !root.currentModelSupportsVision)
                 return { action: "reject", reason: Translation.tr("%1 cannot look at images.").arg(modelName) };
             if (file.bytes > root.maxAttachmentBytes)
                 return { action: "reject", reason: Translation.tr("%1 is %2. The limit is %3.").arg(file.name).arg(root.humanSize(file.bytes)).arg(root.humanSize(root.maxAttachmentBytes)) };
@@ -3338,7 +3417,7 @@ Singleton {
         }
         if (!root.currentModelTakesFiles)
             return Translation.tr("%1 cannot read files. Pick a model that can, or paste the text in.").arg(modelName);
-        if (file.kind === "image" && !(root.currentModelEntry?.vision ?? false))
+        if (file.kind === "image" && !root.currentModelSupportsVision)
             return Translation.tr("%1 cannot look at images.").arg(modelName);
         if (file.bytes > root.maxAttachmentBytes)
             return Translation.tr("%1 is %2. The limit is %3.").arg(file.name).arg(root.humanSize(file.bytes)).arg(root.humanSize(root.maxAttachmentBytes));
@@ -3414,8 +3493,126 @@ Singleton {
         return root.attachContext(root.shellContext.launcherContext());
     }
 
+    /**
+     * Attaches the active window: its name and title always ride along as
+     * the caption, and either the window itself (a model that can look at
+     * it) or what tesseract can read off it (a model that cannot) goes with
+     * it. A model with neither capability still gets the metadata alone -
+     * never worse than what this attached before screenshots existed here.
+     */
     function attachActiveWindowContext(): bool {
-        return root.attachContext(root.shellContext.activeWindowContext());
+        const toplevel = ToplevelManager.activeToplevel;
+        const appId = String(toplevel?.appId ?? "");
+        if (appId.length === 0) {
+            root.attachmentNotice = Translation.tr("There is no active application to attach.");
+            return false;
+        }
+        if (activeWindowCaptureProc.running || activeWindowOcrProc.running) {
+            root.attachmentNotice = Translation.tr("Still capturing the active window. Try again in a moment.");
+            return false;
+        }
+        if (!root.currentModelSupportsVision && !root.ocrAvailable)
+            return root.attachContext(root.shellContext.activeWindowContext());
+        const client = HyprlandData.clientForToplevel(toplevel);
+        const at = Array.isArray(client?.at) ? client.at : null;
+        const size = Array.isArray(client?.size) ? client.size : null;
+        if (!at || !size || size[0] <= 0 || size[1] <= 0)
+            // No Hyprland geometry for this toplevel (e.g. a layer-shell
+            // surface) - the metadata-only path is all that is possible.
+            return root.attachContext(root.shellContext.activeWindowContext());
+        root.activeWindowCaptureLabel = root.shellContext.activeWindowLabel(toplevel);
+        const dir = Directories.screenshotTemp;
+        const path = `${dir}/ai-window-${Date.now()}.png`;
+        root.activeWindowCapturePath = path;
+        const geometry = `${at[0]},${at[1]} ${size[0]}x${size[1]}`;
+        activeWindowCaptureProc.command = ["bash", "-c", `mkdir -p '${CF.StringUtils.shellSingleQuoteEscape(dir)}' && grim -g '${geometry}' '${CF.StringUtils.shellSingleQuoteEscape(path)}'`];
+        activeWindowCaptureProc.running = true;
+        return true;
+    }
+
+    property string activeWindowCapturePath: ""
+    property string activeWindowCaptureLabel: ""
+
+    Timer {
+        id: activeWindowCaptureWatchdog
+        interval: 10000
+        repeat: false
+        onTriggered: {
+            if (!activeWindowCaptureProc.running)
+                return;
+            activeWindowCaptureProc.running = false;
+            root.attachmentNotice = Translation.tr("Capturing the active window took too long, and was skipped.");
+        }
+    }
+
+    Process {
+        id: activeWindowCaptureProc
+        onRunningChanged: {
+            if (activeWindowCaptureProc.running)
+                activeWindowCaptureWatchdog.restart();
+            else
+                activeWindowCaptureWatchdog.stop();
+        }
+        onExited: exitCode => {
+            const path = root.activeWindowCapturePath;
+            if (exitCode !== 0 || path.length === 0) {
+                root.attachmentNotice = Translation.tr("Could not capture the active window.");
+                return;
+            }
+            if (root.currentModelSupportsVision) {
+                root.attachFile(path);
+                return;
+            }
+            activeWindowOcrProc.capturePath = path;
+            activeWindowOcrProc.command = ["tesseract", path, "stdout"];
+            activeWindowOcrProc.running = true;
+        }
+    }
+
+    Timer {
+        id: activeWindowOcrWatchdog
+        interval: 20000
+        repeat: false
+        onTriggered: {
+            if (!activeWindowOcrProc.running)
+                return;
+            activeWindowOcrProc.running = false;
+            root.attachmentNotice = Translation.tr("Reading the active window's screen text took too long, and was skipped.");
+        }
+    }
+
+    Process {
+        id: activeWindowOcrProc
+        property string capturePath: ""
+        onRunningChanged: {
+            if (activeWindowOcrProc.running)
+                activeWindowOcrWatchdog.restart();
+            else
+                activeWindowOcrWatchdog.stop();
+        }
+        stdout: StdioCollector {
+            id: activeWindowOcrCollector
+            onStreamFinished: {
+                const path = activeWindowOcrProc.capturePath;
+                if (path.length > 0)
+                    Quickshell.execDetached(["rm", "-f", path]);
+                const text = String(activeWindowOcrCollector.text ?? "").trim();
+                if (text.length === 0) {
+                    root.attachmentNotice = Translation.tr("No text was found on %1's screen.").arg(root.activeWindowCaptureLabel);
+                    return;
+                }
+                const label = root.activeWindowCaptureLabel;
+                root.attachContext(root.shellContext.makeContext("window", "active-window-ocr", Translation.tr("Active application (screen text)"), `${label}\n\n${text}`, true));
+            }
+        }
+        onExited: exitCode => {
+            if (exitCode !== 0 && activeWindowOcrCollector.text.length === 0) {
+                const path = activeWindowOcrProc.capturePath;
+                if (path.length > 0)
+                    Quickshell.execDetached(["rm", "-f", path]);
+                root.attachmentNotice = Translation.tr("Could not read the active window's screen text.");
+            }
+        }
     }
 
     function clearAttachments() {
@@ -3428,6 +3625,10 @@ Singleton {
         root.activeProbeGeneration = -1;
         if (probeProc.running)
             probeProc.running = false;
+        if (activeWindowCaptureProc.running)
+            activeWindowCaptureProc.running = false;
+        if (activeWindowOcrProc.running)
+            activeWindowOcrProc.running = false;
         root.attachments = [];
         root.attachmentNotice = "";
     }
@@ -3531,6 +3732,24 @@ Singleton {
             : "";
     }
 
+    Timer {
+        id: extractWatchdog
+        interval: 75000
+        repeat: false
+        onTriggered: {
+            if (!extractProc.running)
+                return;
+            // A hung `python3 ai_attach.py extract` would otherwise freeze
+            // this job - and every job queued behind it - forever. Killing
+            // it here lets the existing onExited handler self-heal the
+            // queue exactly as it already does for a crash.
+            extractProc.running = false;
+            const job = root.activeExtract;
+            if (job)
+                root.attachmentNotice = Translation.tr("Reading %1 took too long, and was skipped.").arg(job.file.name);
+        }
+    }
+
     Process {
         id: extractProc
         stdout: StdioCollector {
@@ -3539,12 +3758,28 @@ Singleton {
         }
         property var job: null
         onRunningChanged: {
-            if (extractProc.running)
+            if (extractProc.running) {
                 extractProc.job = root.activeExtract;
+                extractWatchdog.restart();
+            } else {
+                extractWatchdog.stop();
+            }
         }
         onExited: {
             root.activeExtract = null;
             Qt.callLater(root.runExtract);
+        }
+    }
+
+    Timer {
+        id: probeWatchdog
+        interval: 30000
+        repeat: false
+        onTriggered: {
+            if (!probeProc.running)
+                return;
+            probeProc.running = false;
+            root.attachmentNotice = Translation.tr("Reading that file took too long, and was skipped.");
         }
     }
 
@@ -3560,6 +3795,9 @@ Singleton {
             if (probeProc.running) {
                 probeProc.probePath = root.activeProbePath;
                 probeProc.probeGeneration = root.activeProbeGeneration;
+                probeWatchdog.restart();
+            } else {
+                probeWatchdog.stop();
             }
         }
         onExited: {
@@ -5859,6 +6097,88 @@ Singleton {
                 root.broker.settle(webToolProc.toolKey, {
                     status: "error",
                     summary: Translation.tr("The web helper stopped with code %1.").arg(exitCode),
+                    data: null,
+                    retryable: true
+                });
+        }
+    }
+
+    // ── Local retrieval (RAG) ────────────────────────────────────────────
+    // Read-only, and only over folders the user indexed explicitly through
+    // Settings. `AiRagIntegration` validates the call and shapes the
+    // request; `AiRagService` owns the collections and the index files
+    // themselves, since Settings drives the same state.
+
+    function toolRagSearch(call: var): var {
+        const built = root.ragIntegration.buildSearchRequest(call.args);
+        if (built.error)
+            return { status: "unavailable", summary: built.error, data: null, retryable: false };
+        if (ragToolProc.running)
+            return { status: "error", summary: Translation.tr("Another search is already running."), data: null, retryable: true };
+        ragToolProc.toolKey = call.key;
+        ragToolProc.query = built.query;
+        ragToolProc.command = ["python3", Directories.aiRagScriptPath, "search"];
+        ragToolProc.stdinEnabled = true;
+        ragToolProc.running = true;
+        // ai_rag.py reads stdin to EOF, not to a newline; the pipe must be
+        // closed after the write or the helper blocks forever waiting for
+        // more input that will never come.
+        ragToolProc.write(JSON.stringify(built.request) + "\n");
+        ragToolProc.stdinEnabled = false;
+        return { status: "pending" };
+    }
+
+    Process {
+        id: ragToolProc
+        stdinEnabled: true
+        property string toolKey: ""
+        property string query: ""
+
+        stdout: StdioCollector {
+            id: ragToolCollector
+            onStreamFinished: {
+                let parsed = null;
+                try {
+                    parsed = JSON.parse(ragToolCollector.text);
+                } catch (e) {
+                    parsed = null;
+                }
+                if (!parsed?.ok) {
+                    root.broker.settle(ragToolProc.toolKey, {
+                        status: "error",
+                        summary: String(parsed?.error ?? Translation.tr("The search failed")),
+                        data: null,
+                        retryable: true
+                    });
+                    return;
+                }
+                const rawResults = Array.from(parsed.results ?? []);
+                const summary = rawResults.length === 1 ? Translation.tr("1 result found") : Translation.tr("%1 results found").arg(rawResults.length);
+                if (rawResults.length > 0) {
+                    const record = root.broker.recordFor(ragToolProc.toolKey);
+                    if (record?.message)
+                        root.addToolCard(record.message, {
+                            callId: ragToolProc.toolKey,
+                            tool: "rag_search",
+                            kind: "ragResults",
+                            state: "done",
+                            summary: summary,
+                            data: { query: ragToolProc.query, results: rawResults.map(hit => root.ragIntegration.resultRef(hit)) }
+                        });
+                }
+                root.broker.settle(ragToolProc.toolKey, {
+                    status: "success",
+                    summary: summary,
+                    data: { query: ragToolProc.query, results: rawResults.map(hit => root.ragIntegration.resultRef(hit)) }
+                });
+            }
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0 && root.broker.isPending(ragToolProc.toolKey))
+                root.broker.settle(ragToolProc.toolKey, {
+                    status: "error",
+                    summary: Translation.tr("The retrieval helper stopped with code %1.").arg(exitCode),
                     data: null,
                     retryable: true
                 });

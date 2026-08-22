@@ -56,14 +56,21 @@ QtObject {
 
     function availableProviders() {
         const providers = [root.providerInfo(root.localProviderId)];
-        if (TickTickService.available)
+        if (TickTickService.available && !Ai.localOnly)
             providers.push(root.providerInfo(root.tickTickProviderId));
         return providers;
     }
 
     function resolveProvider(requested) {
         const wanted = String(requested ?? "").trim();
-        const id = wanted.length > 0 ? wanted : (TickTickService.available ? root.tickTickProviderId : root.localProviderId);
+        const id = wanted.length > 0 ? wanted : (TickTickService.available && !Ai.localOnly ? root.tickTickProviderId : root.localProviderId);
+        // TickTick needs its own network round trip; the local provider
+        // never does. The tool itself is declared network:"optional" so it
+        // can still serve the local list under Local-only, but this is the
+        // one place every read and mutation funnels through, so it is where
+        // that distinction actually gets enforced rather than assumed.
+        if (Ai.localOnly && id !== root.localProviderId)
+            return { ok: false, error: "TickTick needs the network, which the current policy does not allow. Use the local task list instead.", provider: id };
         const provider = root.providerInfo(id);
         if (!provider)
             return { ok: false, error: "Unknown task provider", provider: id };

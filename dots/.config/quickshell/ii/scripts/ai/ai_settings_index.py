@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 # How far below the best match a result may score and still be worth showing.
 RELEVANCE_FLOOR = 0.5
 # A hard ceiling on results, whatever the caller asks for. A question has a
@@ -49,6 +49,9 @@ WIDGETS: dict[str, tuple[str, str]] = {
     "DynamicConfigSelectionArray": ("enum", "currentValue"),
     "ConfigTextField": ("string", "inputText"),
     "ConfigLightDarkToggle": ("enum", "currentValue"),
+    # Multi-line string editors bound straight to a config key (the AI system
+    # prompt, for one) are settings like any other and take text writes.
+    "MaterialTextArea": ("string", "text"),
 }
 
 
@@ -180,9 +183,12 @@ def extract_blocks(text: str, component: str) -> list[dict[str, Any]]:
 
 def property_expression(block: str, name: str) -> str:
     """Read a simple QML property expression without evaluating it."""
-    pattern = re.compile(rf"(?:^|\n)\s*{re.escape(name)}\s*:\s*([^\n]+)")
+    # Option objects inside `options: [...]` are written JSON-style with the
+    # key quoted ("displayName": ...), which the plain-identifier pattern
+    # never matched — every selection array came back with zero options.
+    pattern = re.compile(rf"(?:^|\n)\s*\"?{re.escape(name)}\"?\s*:\s*([^\n]+)")
     match = pattern.search(block)
-    return match.group(1).strip().rstrip(";") if match else ""
+    return match.group(1).strip().rstrip(";").strip().rstrip(",") if match else ""
 
 
 def text_from_expression(expression: str) -> str:
@@ -201,13 +207,31 @@ def config_key(expression: str) -> str:
     return match.group(1) if match else ""
 
 
-def config_key_for_widget(block: str, binding: str) -> str:
-    key = config_key(property_expression(block, binding))
-    if key:
-        return key
-    # A few older controls bind through an alias.  Preserve the first direct
-    # Config binding rather than silently losing an otherwise usable setting.
-    return config_key(block)
+
+CONFIG_ASSIGNMENT = re.compile(
+    r"\bConfig\.options\.([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)"
+    r"\s*(?<![+\-*/%&|^=!<>])=(?![=>])"
+)
+
+
+def assigned_keys(block: str) -> set[str]:
+    """Every config path the block's handlers write to.
+
+    Only real assignments count: comparisons (`==`, `!=`, `>=`) and arrow
+    functions (`=>`) are not writes, and compound assignments would bypass a
+    control that claims to own the key alone.
+    """
+    return set(CONFIG_ASSIGNMENT.findall(block))
+
+
+def direct_binding(expression: str) -> str:
+    """The config path when a binding reads exactly one, bare."""
+    expression = expression.strip()
+    if not expression.startswith("Config.options."):
+        # A computed value (`a ? "x" : "b"`, `page.opts.helper`) cannot be
+        # written back safely by anything that only knows the entry key.
+        return ""
+    return config_key(expression)
 
 
 def qml_value(expression: str) -> Any:
@@ -225,6 +249,31 @@ def qml_value(expression: str) -> Any:
         return None
 
 
+def _object_property(block: str, name: str) -> str:
+    """Read one key from an option object, however the lines are packed.
+
+    Real pages spread `{ displayName, value }` over several lines, but packed
+    single-line options exist too, and the line-anchored property reader only
+    ever saw the first key of such an object.
+    """
+    match = re.search(rf"[\"']?{re.escape(name)}[\"']?\s*:", block)
+    if not match:
+        return ""
+    rest = block[match.end():].lstrip()
+    depth = 0
+    end = len(rest)
+    for index, char in enumerate(rest):
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            end = index
+            break
+        elif char == "," and depth == 0:
+            end = index
+            break
+    return rest[:end].strip().rstrip(";").strip()
+
+
 def option_values(block: str) -> list[dict[str, Any]]:
     """Extract the stable display/value pairs from ConfigSelectionArray."""
     match = re.search(r"(?:^|\n)\s*options\s*:\s*\[", block)
@@ -235,11 +284,6 @@ def option_values(block: str) -> list[dict[str, Any]]:
     if end is None:
         return []
     values: list[dict[str, Any]] = []
-    for option in extract_blocks(block[opening + 1:end], ""):
-        # extract_blocks needs a component name; objects in an array have no
-        # name, so this branch is deliberately unreachable.  Keep the robust
-        # parser below explicit instead of treating JS object text as JSON.
-        del option
     array = block[opening + 1:end]
     index = 0
     while index < len(array):
@@ -250,10 +294,10 @@ def option_values(block: str) -> list[dict[str, Any]]:
         if finish is None:
             break
         entry = array[start + 1:finish]
-        value = qml_value(property_expression(entry, "value"))
+        value = qml_value(_object_property(entry, "value"))
         if value is not None:
             values.append({
-                "label": text_from_expression(property_expression(entry, "displayName")),
+                "label": text_from_expression(_object_property(entry, "displayName")),
                 "value": value,
             })
         index = finish + 1
@@ -377,7 +421,26 @@ def extract_entries(record: dict[str, Any], root: Path, translations: dict[str, 
     entries: list[dict[str, Any]] = []
     for widget, (widget_type, binding) in WIDGETS.items():
         for block in extract_blocks(text, widget):
-            key = config_key_for_widget(block["inner"], binding)
+            binding_key = direct_binding(property_expression(block["inner"], binding))
+            writes = assigned_keys(block["inner"])
+            key = binding_key
+            if not key and len(writes) == 1:
+                # Controls that keep the current value on a helper object and
+                # write the choice to config from the handler
+                # (`currentValue: page.opts.x` + `onSelected: … appStats.x = v`).
+                key = next(iter(writes))
+            # A control driving several settings at once (the bar-position
+            # selector packs bottom+vertical into one bitmask) must stay
+            # findable and openable, but nothing may claim to write it
+            # directly: writing one of its keys alone would corrupt the pair.
+            if key:
+                has_ui = len(writes) == 0 or writes == {key}
+            else:
+                # Last resort for identity only — the first config path the
+                # block happens to mention. Never writable, still searchable
+                # and deep-linkable like any other entry.
+                key = config_key(block["inner"])
+                has_ui = False
             if not key:
                 continue
             label = ""
@@ -395,12 +458,22 @@ def extract_entries(record: dict[str, Any], root: Path, translations: dict[str, 
             icon = text_from_expression(property_expression(block["inner"], "icon"))
             if not icon:
                 icon = text_from_expression(property_expression(block["inner"], "buttonIcon")) or section_icon
-            source_label = label or key.rsplit(".", 1)[-1]
+            options = option_values(block["inner"])
+            option_labels = [str(option.get("label", "")) for option in options]
+            if label:
+                source_label = label
+            elif section:
+                # Arrays and text areas often carry no title of their own;
+                # the subsection heading is what the interface shows right
+                # above them, so it is the name a person would search.
+                source_label = section
+            else:
+                source_label = key.rsplit(".", 1)[-1]
             entry: dict[str, Any] = {
                 "key": key,
                 "type": widget_type,
                 "widget": widget,
-                "hasUi": True,
+                "hasUi": has_ui,
                 # One label, in the language the interface is showing. The
                 # index used to carry both and hand both to the model, which
                 # is how an English interface got Portuguese toggles back.
@@ -418,7 +491,9 @@ def extract_entries(record: dict[str, Any], root: Path, translations: dict[str, 
                 # Only for matching: the untranslated strings stay searchable
                 # so a key someone knows in English is still findable in a
                 # translated interface. Never shown, never sent to a model.
-                "match": " ".join(filter(None, [source_label, description, section, record["name"]])),
+                # Option names belong here too — "Week" is what someone sees
+                # on the control, not just `defaultGranularity`.
+                "match": " ".join(filter(None, [source_label, description, *option_labels, section, record["name"]])),
             }
             if widget in ("ConfigSpinBox", "ConfigSlider"):
                 lower = qml_value(property_expression(block["inner"], "from"))
@@ -426,7 +501,6 @@ def extract_entries(record: dict[str, Any], root: Path, translations: dict[str, 
                 step = qml_value(property_expression(block["inner"], "stepSize"))
                 if lower is not None or upper is not None or step is not None:
                     entry["range"] = {"from": lower, "to": upper, "step": step}
-            options = option_values(block["inner"])
             if options:
                 entry["options"] = options
             enabled_key = config_key(property_expression(block["inner"], "enabled"))
@@ -562,6 +636,9 @@ def score_entry(original: dict[str, Any], query_tokens: list[str], query_normali
     # The untranslated strings, so a key someone knows in English stays
     # findable in a translated interface.
     fallback = normalize(original.get("match", ""))
+    option_labels = normalize(" ".join(
+        str(option.get("label", "")) for option in original.get("options", [])
+    ))
     keywords = [normalize(keyword) for keyword in original.get("keywords", [])]
     has_ui = bool(original.get("hasUi"))
 
@@ -600,6 +677,15 @@ def score_entry(original: dict[str, Any], query_tokens: list[str], query_normali
         # that is showing another.
         if token in keywords:
             own = max(own, 90)
+
+        # The visible option names are the control's own words — someone
+        # searching "week" means the Day/Week/Month selector, not whatever
+        # else on the page contains the letters. Stronger than page-sharing,
+        # weaker than the label itself.
+        if token in tokenize(option_labels):
+            own = max(own, 130)
+        elif stem_hit(stem, option_labels):
+            own = max(own, 100)
 
         # Borrowed evidence is not stemmed, and never stands alone. Sharing a
         # page with a word is weak enough already; matching it approximately

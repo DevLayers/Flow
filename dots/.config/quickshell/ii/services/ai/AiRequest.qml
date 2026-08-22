@@ -44,6 +44,14 @@ Scope {
     // ── Tunables ──────────────────────────────────────────────────────────
     readonly property int connectTimeout: Math.max(1, Config.options?.ai?.connectTimeout ?? 15)
     readonly property int requestTimeout: Math.max(0, Config.options?.ai?.requestTimeout ?? 300)
+    // A value of exactly 0 only reaches this file by hand-editing config.json
+    // outside the Settings UI's [30, 1800] clamp. Zero must never mean "no
+    // timeout at all" for a network call: that would drop both the watchdog
+    // and curl's own --max-time together, leaving only the TCP handshake
+    // bound (--connect-timeout) to catch a server that connects and then
+    // goes silent forever.
+    readonly property int hardMaxRequestSeconds: 1800
+    readonly property int effectiveRequestTimeout: root.requestTimeout > 0 ? root.requestTimeout : root.hardMaxRequestSeconds
     // Not readonly: a caller whose request is not worth retrying — testing
     // whether a key works — says so by setting it to zero.
     property int maxRetries: Math.max(0, Config.options?.ai?.maxRetries ?? 2)
@@ -171,12 +179,10 @@ Scope {
             }) : ({});
         requestProc.command = ["bash", scriptFilePath];
         requestProc.running = true;
-        if (root.requestTimeout > 0) {
-            // curl bounds itself with --max-time; this only catches the case
-            // where curl or the shell around it stops responding entirely.
-            watchdog.interval = (root.requestTimeout + 15) * 1000;
-            watchdog.restart();
-        }
+        // curl bounds itself with --max-time; the watchdog only catches the
+        // case where curl or the shell around it stops responding entirely.
+        watchdog.interval = (root.effectiveRequestTimeout + 15) * 1000;
+        watchdog.restart();
     }
 
     function buildScript(): string {
@@ -200,7 +206,7 @@ Scope {
             content += `attachResult=$(python3 ${attachScript} inject ${quotedBody} '${spec}'); attachExit=$?; if [ $attachExit -ne 0 ]; then printf '%s%s\\n' '${root.attachmentErrorMarker}' "$attachResult"; exit ${root.attachmentFailureExitCode}; fi\n`;
         }
 
-        content += "curl --no-buffer -sS" + ` --connect-timeout ${root.connectTimeout}` + (root.requestTimeout > 0 ? ` --max-time ${root.requestTimeout}` : "") + ` -w '\\n${root.statusMarker}%{http_code}@@\\n'` + ` ${quotedEndpoint}` + ` ${headerString}` + (authHeader ? ` ${authHeader}` : "") + ` --data-binary @${quotedBody}` + "\n";
+        content += "curl --no-buffer -sS" + ` --connect-timeout ${root.connectTimeout}` + ` --max-time ${root.effectiveRequestTimeout}` + ` -w '\\n${root.statusMarker}%{http_code}@@\\n'` + ` ${quotedEndpoint}` + ` ${headerString}` + (authHeader ? ` ${authHeader}` : "") + ` --data-binary @${quotedBody}` + "\n";
 
         return content;
     }
@@ -220,8 +226,7 @@ Scope {
         }
         if (data.length === 0)
             return;
-        if (root.requestTimeout > 0)
-            watchdog.restart();
+        watchdog.restart();
         root.line(data);
     }
 

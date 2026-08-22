@@ -470,6 +470,10 @@ Rectangle {
 
         ConfigSelectionArray {
             Layout.fillWidth: true
+            // The control is a Flow and wraps onto new rows by itself; a
+            // minimum width of zero keeps narrow launcher columns from
+            // stretching the row to fit one long option line.
+            Layout.minimumWidth: 0
             options: root.enumOptions
             currentValue: root.currentValue
             onSelected: value => root.writeValue(value)
@@ -481,8 +485,18 @@ Rectangle {
 
         MaterialTextField {
             Layout.fillWidth: true
+            // Single-line values only: the base field wraps while column
+            // widths are still being resolved, which published huge
+            // intermediate heights and broke the launcher row geometry.
+            wrapMode: TextEdit.NoWrap
+            Layout.minimumWidth: 80
             text: String(root.currentValue ?? "")
-            onEditingFinished: root.writeValue(text)
+            onEditingFinished: {
+                // Focus loss also fires editingFinished; committing that echo
+                // would mark an untouched field as changed.
+                if (text !== String(root.currentValue ?? ""))
+                    root.writeValue(text);
+            }
         }
     }
 }

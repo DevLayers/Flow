@@ -1005,6 +1005,8 @@ Item {
                         return taskPreviewCard;
                     case "taskResults":
                         return taskResultsCard;
+                    case "ragResults":
+                        return ragResultsCard;
                     case "taskMutationPreview":
                         return taskMutationPreviewCard;
                     }
@@ -1057,6 +1059,25 @@ Item {
                                 required property var modelData
                                 file: modelData
                                 compact: root.compact
+                            }
+                        }
+                    }
+                }
+
+                Component {
+                    id: ragResultsCard
+
+                    ColumnLayout {
+                        spacing: Appearance.rounding.unsharpenmore
+
+                        Repeater {
+                            model: ScriptModel {
+                                values: Array.from(cardHost.card?.data?.results ?? [])
+                            }
+
+                            delegate: AiRagResultCard {
+                                required property var modelData
+                                hit: modelData
                             }
                         }
                     }

@@ -161,5 +161,134 @@ class SettingsIndexTests(unittest.TestCase):
         self.assertFalse(ai_settings_index.index_is_current(index, self.root, "pt_BR"))
 
 
+SELECTION_REGISTRY = '''
+pragma Singleton
+Singleton {
+    readonly property var pages: [
+        {
+            "id": "usage",
+            "name": "Usage Stats",
+            "icon": "leaderboard",
+            "component": "modules/settings/configs/UsageConfig.qml",
+            "subPages": [],
+            "aliases": []
+        }
+    ]
+}
+'''
+
+# The shapes that used to fall through the cracks: a selection array whose
+# current value lives on a helper object and whose options are written
+# JSON-style with quoted keys, a multi-line editor bound straight to config,
+# and one composite control driving two settings from one bitmask.
+SELECTION_PAGE = '''
+ContentPage {
+    ContentSection {
+        title: Translation.tr("Recorded data")
+
+        ConfigSelectionArray {
+            currentValue: root.granularity
+            onSelected: newValue => {
+                Config.options.usage.granularity = newValue;
+            }
+            options: [
+                {
+                    "displayName": Translation.tr("Day"),
+                    "value": "day"
+                },
+                {
+                    "displayName": Translation.tr("Week"),
+                    "value": "week"
+                }
+            ]
+        }
+
+        MaterialTextArea {
+            placeholderText: Translation.tr("Retention note")
+            text: Config.options.usage.note
+        }
+
+        ConfigSelectionArray {
+            currentValue: (Config.options.usage.a ? 1 : 0) | (Config.options.usage.b ? 2 : 0)
+            onSelected: newValue => {
+                Config.options.usage.a = (newValue & 1) !== 0;
+                Config.options.usage.b = (newValue & 2) !== 0;
+            }
+            options: [
+                { "displayName": Translation.tr("Both"), "value": 3 }
+            ]
+        }
+    }
+}
+'''
+
+
+class SettingsWidgetCoverageTests(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tempdir.name)
+        (self.root / "modules/common").mkdir(parents=True)
+        (self.root / "modules/settings/configs").mkdir(parents=True)
+        (self.root / "scripts/ai").mkdir(parents=True)
+        (self.root / "modules/common/SettingsPageRegistry.qml").write_text(SELECTION_REGISTRY, encoding="utf-8")
+        (self.root / "modules/settings/configs/UsageConfig.qml").write_text(SELECTION_PAGE, encoding="utf-8")
+        self.config = self.root / "config.json"
+        self.config.write_text(json.dumps({"usage": {
+            "granularity": "day",
+            "note": "",
+            "a": False,
+            "b": False,
+        }}), encoding="utf-8")
+        self.out = self.root / "settings_index.json"
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def build(self):
+        return ai_settings_index.build_index(
+            root=self.root,
+            config_path=self.config,
+            language="",
+            output_path=self.out,
+        )
+
+    def test_a_helper_bound_array_gets_its_options_and_its_heading(self):
+        entries = {entry["key"]: entry for entry in self.build()["entries"]}
+        array = entries["usage.granularity"]
+        self.assertEqual(array["widget"], "ConfigSelectionArray")
+        # No inline title anywhere: the section heading above it is what a
+        # person sees, so it is the label — not the raw key segment.
+        self.assertEqual(array["label"], "Recorded data")
+        # Quoted JSON-style keys used to never match, leaving every array
+        # with zero options and nothing to render or validate against.
+        self.assertEqual(array["options"], [
+            {"label": "Day", "value": "day"},
+            {"label": "Week", "value": "week"},
+        ])
+        # The write happens in the handler, on exactly one config path, so
+        # the card may write directly.
+        self.assertTrue(array["hasUi"])
+
+    def test_an_option_name_is_the_control_s_own_evidence(self):
+        index = self.build()
+        results = ai_settings_index.search_entries(index, "week")
+        self.assertEqual(results[0]["key"], "usage.granularity")
+
+    def test_a_multi_line_editor_is_a_string_setting(self):
+        entries = {entry["key"]: entry for entry in self.build()["entries"]}
+        note = entries["usage.note"]
+        self.assertEqual(note["type"], "string")
+        self.assertEqual(note["widget"], "MaterialTextArea")
+        self.assertTrue(note["hasUi"])
+
+    def test_a_composite_control_stays_findable_but_never_writable(self):
+        index = self.build()
+        entries = {entry["key"]: entry for entry in index["entries"]}
+        composite = entries["usage.a"]
+        self.assertEqual(composite["widget"], "ConfigSelectionArray")
+        self.assertFalse(composite["hasUi"])
+        self.assertEqual(composite["options"], [{"label": "Both", "value": 3}])
+
+
 if __name__ == "__main__":
     unittest.main()

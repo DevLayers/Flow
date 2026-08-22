@@ -106,6 +106,7 @@ Scope {
             if (root.activeRunId === runId)
                 root.activeRunId = "";
             root.runFinished(next);
+            root.pruneTerminalRuns();
         } else {
             root.runActivity(next, {
                 type: "state",
@@ -115,6 +116,30 @@ Scope {
             });
         }
         return true;
+    }
+
+    /**
+     * Nothing ever looks a run up by id once a newer one has replaced it as
+     * `activeRunId` - every caller keys off `currentRunId`, which moves on
+     * to the next run. Without this, `root.runs` would grow by one entry
+     * per exchange for the life of the process. A small tail is kept rather
+     * than dropping immediately, in case something is mid-lookup on the run
+     * that only just finished.
+     */
+    readonly property int maxTerminalRuns: 50
+
+    function pruneTerminalRuns() {
+        const entries = Object.entries(root.runs);
+        const terminal = entries.filter(([, run]) => root.terminalStates.includes(run.state));
+        if (terminal.length <= root.maxTerminalRuns)
+            return;
+        terminal.sort((a, b) => (a[1].finishedAt || 0) - (b[1].finishedAt || 0));
+        const dropCount = terminal.length - root.maxTerminalRuns;
+        const next = Object.assign({}, root.runs);
+        for (let i = 0; i < dropCount; i++) {
+            delete next[terminal[i][0]];
+        }
+        root.runs = next;
     }
 
     function activity(runId: string, type: string, data = null) {
@@ -194,6 +219,7 @@ Scope {
         root.runs = Object.assign({}, root.runs, {
             [restored.runId]: restored
         });
+        root.pruneTerminalRuns();
         return restored;
     }
 }

@@ -207,6 +207,8 @@ QtObject {
         // The untranslated strings, so a key someone knows in English stays
         // findable in a translated interface.
         const fallback = root.normalize(entry.match ?? "");
+        const optionLabels = root.normalize(Array.from(entry.options ?? [])
+            .map(option => String(option?.label ?? "")).join(" "));
         const keywords = Array.from(entry.keywords ?? []).map(word => root.normalize(word));
         const hasUi = entry.hasUi === true;
 
@@ -242,6 +244,15 @@ QtObject {
                 own = Math.max(own, 90);
             else if (root.stemHit(stem, fallback))
                 own = Math.max(own, 70);
+
+            // The visible option names are the control's own words — someone
+            // searching "week" means the Day/Week/Month selector, not whatever
+            // else on the page contains the letters. Stronger than page-sharing,
+            // weaker than the label itself. Mirrors the generator's score_entry.
+            if (root.tokens(optionLabels).indexOf(token) >= 0)
+                own = Math.max(own, 130);
+            else if (root.stemHit(stem, optionLabels))
+                own = Math.max(own, 100);
 
             // A domain synonym is curated for this entry — "dormir" really is
             // what this switch does — so it counts as the entry's own

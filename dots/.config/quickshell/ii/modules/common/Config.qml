@@ -1438,6 +1438,18 @@ Singleton {
                     // guide and turns this on themselves.
                     property bool enabled: false
                 }
+                // Local retrieval over folders the user pointed at
+                // explicitly through Settings. Off by default: nothing is
+                // chunked, embedded, or indexed until a collection exists.
+                property JsonObject rag: JsonObject {
+                    property bool enabled: false
+                    // An Ollama model id, chosen from the ones detected as
+                    // embedding-capable. Empty until the user picks one.
+                    property string embeddingModel: ""
+                    // {id, name, path}. The index files themselves live
+                    // outside config.json, under Directories.state.
+                    property list<var> collections: []
+                }
                 // A desktop notification when an answer lands. Only while the
                 // chat is not on screen: telling someone what they are already
                 // reading is noise.
@@ -3309,6 +3321,7 @@ Singleton {
             property JsonObject search: JsonObject {
                 property bool enableSystemControls: true
                 property bool enableMathPreview: true
+                property bool showSettings: false
                 property bool alwaysListApps: false
                 property int nonAppResultDelay: 30
                 property string engineBaseUrl: "https://www.google.com/search?q=" //www.google.com/search?q="
@@ -3342,7 +3355,7 @@ Singleton {
                     // "prefix" — only via the configured prefix
                     // "suggest" — adds an "Ask AI" fallback row to the results
                     // "auto" — switches to the AI chat when the query matches nothing
-                    property string trigger: "prefix"
+                    property string trigger: "suggest"
                     property int panelWidth: 720
                 }
                 property JsonObject imageSearch: JsonObject {

@@ -41,6 +41,34 @@ ApiStrategy {
         const files = attachmentsOf(message, model);
         if (files.length === 0)
             return turn;
+        // Ollama's native /api/chat has its own image shape: a plain string
+        // `content` plus a sibling `images` array of bare base64 (no data
+        // URI, no content-part wrapper). Handing it OpenAI's `image_url`
+        // part instead is not a softer failure - it is a flat HTTP 400,
+        // because /api/chat never learned that shape at all.
+        if (quirk(model, "nativeOllama", false)) {
+            let text = String(turn.content ?? "");
+            const images = [];
+            for (const file of files) {
+                if (file.kind === "context") {
+                    text += (text.length > 0 ? "\n\n" : "") + String(file.content ?? "");
+                    continue;
+                }
+                if (file.kind === "image" && (model?.vision ?? false)) {
+                    images.push(attachmentMarker(file.path, "b64"));
+                    continue;
+                }
+                if (file.kind !== "text")
+                    continue;
+                text += (text.length > 0 ? "\n\n" : "") + `[[ ${file.name} ]]\n${attachmentMarker(file.path, textModeFor(file))}`;
+            }
+            if (images.length === 0 && text === String(turn.content ?? ""))
+                return turn;
+            const result = Object.assign({}, turn, { "content": text });
+            if (images.length > 0)
+                result.images = images;
+            return result;
+        }
         const parts = [];
         if ((turn.content ?? "").length > 0)
             parts.push({
@@ -184,6 +212,18 @@ ApiStrategy {
             baseData.options = Object.assign({}, baseData.options ?? {}, {
                 num_predict: maxOutputTokens(model)
             });
+            // Ollama loads a model with a 4096-token window unless the
+            // client asks for more, no matter how large `context_length`
+            // from `/api/show` says the model actually supports. The shell's
+            // own budgeting (`historyWithinWindow`) already trusts that
+            // number as the real ceiling; without repeating it here, that
+            // trust is one-sided, and a full system prompt plus a handful of
+            // tool schemas - or one attached image, which can cost thousands
+            // of vision tokens on its own - silently exceeds the 4096 Ollama
+            // actually allocated. The failure is a fast, opaque HTTP 400
+            // ("exceeds the available context size"), not a graceful trim.
+            if (model.contextWindow > 0)
+                baseData.options.num_ctx = model.contextWindow;
         } else {
             baseData[quirk(model, "maxTokensKey", "max_tokens")] = maxOutputTokens(model);
         }

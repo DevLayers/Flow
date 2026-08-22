@@ -792,7 +792,7 @@ Singleton {
         // MPRIS handled above (empty query case)
 
         const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).slice(0, 60).map(entry => root.createAppResultObject(entry));
-        const settingsResultObjects = root.isSettingsSearchQuery(root.query)
+        const settingsResultObjects = (root.isSettingsSearchQuery(root.query) && (Config.options.search.showSettings ?? true))
             ? (root.settingsIndexReady
                 ? root.settingsIntegrationSearch(root.query).map(setting => root.createSettingsResultObject(setting))
                 : (Ai.settingsIntegration.ensureIndex(), []))

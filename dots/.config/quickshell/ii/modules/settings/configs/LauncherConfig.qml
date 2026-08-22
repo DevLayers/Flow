@@ -162,6 +162,19 @@ ContentPage {
             }
 
             ConfigSwitch {
+                buttonIcon: "tune"
+                text: Translation.tr("Show settings in search results")
+                checked: Config.options.search.showSettings
+                onCheckedChanged: {
+                    Config.options.search.showSettings = checked;
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Displays matching Settings options as interactive results while searching")
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "blur_on"
                 text: Translation.tr("Blur file search result previews")
                 checked: Config.options.search.blurFileSearchResultPreviews
