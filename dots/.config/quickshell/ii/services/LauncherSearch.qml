@@ -1141,7 +1141,8 @@ Singleton {
                         return false;
                     if (alias.type === "folder" && item.key.startsWith("file:")) {
                         const filePath = item.key.slice(5);
-                        const targetNormalized = alias.target.startsWith("/") ? alias.target : alias.target.startsWith("~") ? alias.target.replace("~", Directories.home) : Directories.home + "/" + alias.target;
+                        const homePath = FileUtils.trimFileProtocol(Directories.home);
+                        const targetNormalized = alias.target.startsWith("/") ? alias.target : alias.target.startsWith("~") ? alias.target.replace("~", homePath) : homePath + "/" + alias.target;
                         const cleanFilePath = filePath.replace(/\/+$/, "");
                         const cleanTarget = targetNormalized.replace(/\/+$/, "");
                         if (cleanFilePath === cleanTarget)
