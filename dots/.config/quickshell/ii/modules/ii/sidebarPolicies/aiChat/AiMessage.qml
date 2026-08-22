@@ -950,6 +950,10 @@ Item {
                         return windowMovePreviewCard;
                     case "wallpaperPreview":
                         return wallpaperPreviewCard;
+                    case "mediaControlPreview":
+                        return mediaControlPreviewCard;
+                    case "songIdentifyPreview":
+                        return songIdentifyPreviewCard;
                     }
                     // A kind this build does not know: a session written by a
                     // newer one still opens, showing what the card says about
@@ -1054,6 +1058,24 @@ Item {
                     id: wallpaperPreviewCard
 
                     AiWallpaperCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: mediaControlPreviewCard
+
+                    AiMediaControlCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: songIdentifyPreviewCard
+
+                    AiSongIdentifyCard {
                         messageData: root.messageData
                         card: cardHost.card
                     }

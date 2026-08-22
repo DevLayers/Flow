@@ -907,6 +907,86 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "media_status",
+            version: 1,
+            domain: "media",
+            title: Translation.tr("Read media status"),
+            summary: Translation.tr("Reads the active player and current track without changing playback."),
+            icon: "music_note",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 3000,
+            maxResultTokens: 260,
+            idempotent: true,
+            description: "Read the active MPRIS player, track, artist, album, playback state and supported controls. Nothing is changed.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "media_control",
+            version: 1,
+            domain: "media",
+            title: Translation.tr("Control media"),
+            summary: Translation.tr("Shows the player and action before changing playback."),
+            icon: "play_pause",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "ask",
+            timeoutMs: 5000,
+            maxResultTokens: 180,
+            idempotent: false,
+            description: "Control only the active MPRIS player with play, pause, toggle, next or previous. Always show the player and ask before changing playback.",
+            parameters: { type: "object", properties: { action: { type: "string", enum: ["play", "pause", "toggle", "next", "previous"], description: "Playback action" } }, required: ["action"] },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "lyrics_get",
+            version: 1,
+            domain: "media",
+            title: Translation.tr("Get lyrics"),
+            summary: Translation.tr("Fetches bounded lyrics for the active track and reports network use."),
+            icon: "lyrics",
+            kind: "externalRead",
+            network: "optional",
+            sensitivity: "none",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 12000,
+            maxResultTokens: 1200,
+            idempotent: true,
+            description: "Get lyrics for the active track through the configured LyricsService provider. The result is bounded and explicitly says when a network provider was used.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "song_identify",
+            version: 1,
+            domain: "media",
+            title: Translation.tr("Identify a song"),
+            summary: Translation.tr("Listens to the selected audio source with a visible indicator."),
+            icon: "music_search",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "audio",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "ask",
+            timeoutMs: 35000,
+            maxResultTokens: 260,
+            idempotent: false,
+            description: "Start SongRec only after approval. Show the monitor or input source, keep the listening indicator visible, and report that the temporary FIFO is removed by the recognizer.",
+            parameters: { type: "object", properties: {}, required: [] },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "files_search",
             version: 1,
             domain: "files",
@@ -1371,6 +1451,10 @@ Singleton {
             return String(args.query ?? "");
         case "wallpaper_set":
             return String(args.ref ?? "");
+        case "media_control":
+            return String(args.action ?? "");
+        case "song_identify":
+            return Translation.tr("selected audio source");
         case "set_shell_config":
             return Array.from(args.changes ?? []).map(change => `${change.key} = ${change.value}`).join(", ");
         }

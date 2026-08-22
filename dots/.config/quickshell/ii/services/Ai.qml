@@ -1529,6 +1529,8 @@ Singleton {
     readonly property AiWindowsIntegration windowsIntegration: AiWindowsIntegration {}
     /** Configured-local wallpaper search and reviewed reversible theme changes. */
     readonly property AiThemeIntegration themeIntegration: AiThemeIntegration {}
+    /** Active MPRIS state, lyrics and reviewed SongRec identification. */
+    readonly property AiMediaIntegration mediaIntegration: AiMediaIntegration {}
     /** Local speech-to-text: recording, detection and the review draft. */
     readonly property AiVoiceService voiceService: AiVoiceService {}
     /** Preview id → immutable proposed changes until the user decides. */
@@ -1631,6 +1633,10 @@ Singleton {
             "workspace_switch": call => root.toolWorkspaceSwitch(call),
             "wallpaper_search": call => root.toolWallpaperSearch(call),
             "wallpaper_set": call => root.toolWallpaperSet(call),
+            "media_status": call => root.toolMediaStatus(call),
+            "media_control": call => root.toolMediaControl(call),
+            "lyrics_get": call => root.toolLyricsGet(call),
+            "song_identify": call => root.toolSongIdentify(call),
             "system_get_status": call => root.toolSystemGetStatus(call),
             "system_health": call => root.toolSystemHealth(call),
             "keybinds_search": call => root.toolKeybindsSearch(call),
@@ -1709,11 +1715,11 @@ Singleton {
     // pending approval: these stay in the transcript once done, the same way
     // a search engine's results page does not disappear once you have read
     // it.
-    readonly property var resultCardKinds: ["settingsResults", "fileResults"]
+    readonly property var resultCardKinds: ["settingsResults", "fileResults", "songIdentifyPreview"]
 
     function visibleToolCards(message): var {
         return Array.from(message?.toolCards ?? []).filter(card => card.state === "pending"
-            || (root.resultCardKinds.indexOf(card.kind) >= 0 && card.state === "done"));
+            || (root.resultCardKinds.indexOf(card.kind) >= 0 && (card.state === "done" || card.state === "running")));
     }
 
     /** The broker's key for the call a message is waiting on. */
@@ -3776,7 +3782,9 @@ Singleton {
             "nightlight_set": pending => root.applySystemControl(pending.message, pending.args),
             "theme_set_mode": pending => root.applySystemControl(pending.message, pending.args),
             "window_move_to_workspace": pending => root.applyWindowMove(pending.message, pending.args),
-            "wallpaper_set": pending => root.applyWallpaperSet(pending.message, pending.args)
+            "wallpaper_set": pending => root.applyWallpaperSet(pending.message, pending.args),
+            "media_control": pending => root.applyMediaControl(pending.message, pending.args),
+            "song_identify": pending => root.startSongIdentify(pending.message, pending.args)
         })
 
     function handleToolJournalSaveFailed(operationId: string, sessionId: string, reason: string): bool {
@@ -4720,6 +4728,137 @@ Singleton {
             data: result,
             retryable: !ok
         });
+    }
+
+    function toolMediaStatus(call: var): var {
+        const result = root.mediaIntegration.status();
+        return {
+            status: "success",
+            summary: result.available ? Translation.tr("Media status read") : Translation.tr("No active media player"),
+            data: result
+        };
+    }
+
+    function toolMediaControl(call: var): var {
+        const preview = root.mediaIntegration.previewControl(call.args);
+        if (!preview.ok)
+            return { status: "error", summary: Translation.tr("That media action is not available"), data: preview, retryable: true };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "media_control",
+            kind: "mediaControlPreview",
+            state: "pending",
+            summary: Translation.tr("Media change needs approval"),
+            data: { preview: preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function approveMediaControl(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        const key = root.toolKeyFor(message);
+        const preview = root.toolCardFor(message, key)?.data?.preview;
+        if (!preview) {
+            root.rejectMediaControl(message);
+            return;
+        }
+        root.beginToolExecution(message, "media_control", { args: { action: preview.action } });
+    }
+
+    function rejectMediaControl(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("Media change discarded") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Media change discarded"),
+            data: Translation.tr("The user chose not to change playback.")
+        });
+    }
+
+    function applyMediaControl(message: AiMessageData, args: var): void {
+        const result = root.mediaIntegration.control(args);
+        const key = root.toolKeyFor(message);
+        message.functionPending = false;
+        const ok = result?.ok === true;
+        const summary = ok ? Translation.tr("Media changed") : Translation.tr("The media action failed");
+        root.updateToolCard(message, key, { state: ok ? "done" : "failed", summary: summary });
+        root.broker.settle(key, { status: ok ? "success" : "error", summary: summary, data: result, retryable: !ok });
+    }
+
+    function toolLyricsGet(call: var): var {
+        const result = root.mediaIntegration.lyrics();
+        return {
+            status: result.ok ? "success" : (result.loading ? "unavailable" : "error"),
+            summary: result.ok ? Translation.tr("Lyrics read") : (result.loading ? Translation.tr("Lyrics are still loading") : Translation.tr("Lyrics are unavailable")),
+            data: result,
+            networkUsed: result.networkUsed === true,
+            retryable: result.loading === true
+        };
+    }
+
+    function toolSongIdentify(call: var): var {
+        if (SongRec.running)
+            return { status: "error", summary: Translation.tr("Song identification is already running"), data: { running: true }, retryable: true };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "song_identify",
+            kind: "songIdentifyPreview",
+            state: "pending",
+            summary: Translation.tr("Song identification needs approval"),
+            data: { preview: { monitorSource: SongRec.monitorSourceString, temporaryAudioDeleted: true } }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function approveSongIdentify(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        const key = root.toolKeyFor(message);
+        const preview = root.toolCardFor(message, key)?.data?.preview;
+        if (!preview) {
+            root.rejectSongIdentify(message);
+            return;
+        }
+        root.beginToolExecution(message, "song_identify", { args: { monitorSource: preview.monitorSource } });
+    }
+
+    function rejectSongIdentify(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("Song identification discarded") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Song identification discarded"),
+            data: Translation.tr("The user chose not to listen to the audio source.")
+        });
+    }
+
+    function startSongIdentify(message: AiMessageData, args: var): void {
+        const result = root.mediaIntegration.identify(args);
+        const key = root.toolKeyFor(message);
+        message.functionPending = false;
+        const ok = result?.ok === true;
+        const summary = ok ? Translation.tr("Listening for a song") : Translation.tr("Song identification could not start");
+        root.updateToolCard(message, key, { state: ok ? "done" : "failed", summary: summary, data: { preview: result } });
+        root.broker.settle(key, { status: ok ? "success" : "error", summary: summary, data: result, retryable: !ok });
+    }
+
+    function stopSongIdentify(message: AiMessageData): void {
+        const result = root.mediaIntegration.stopIdentify();
+        if (!message)
+            return;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { summary: result.ok ? Translation.tr("Listening stopped") : Translation.tr("Could not stop listening") });
     }
 
     function toolSystemGetStatus(call: var): var {
