@@ -39,6 +39,10 @@ QtObject {
     property int inputTokens: -1
     property int outputTokens: -1
     property int totalTokens: -1
+    // OpenRouter reports the amount it actually charged in the terminal usage
+    // frame. It is kept per response, so mixed-provider chats only total the
+    // OpenRouter turns and sessions retain the exact amount after reopening.
+    property real requestCost: -1
     property bool thinking: true
     property bool done: false
     // Why the provider stopped. Normalised by `Ai.stopKind()`: what matters

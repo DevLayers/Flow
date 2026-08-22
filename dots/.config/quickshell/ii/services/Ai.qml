@@ -1070,6 +1070,24 @@ Singleton {
         return Math.max(0, root.tokenCount.total);
     }
 
+    /** Exact charges returned by OpenRouter's terminal usage frames. */
+    readonly property real sessionOpenRouterCost: {
+        let total = 0;
+        let reported = false;
+        const ids = root.messageIDs;
+        for (let i = 0; i < ids.length; i++) {
+            const message = root.messageByID[ids[i]];
+            if (!message || !String(message.model ?? "").startsWith("openrouter:"))
+                continue;
+            const cost = Number(message.requestCost ?? -1);
+            if (!isFinite(cost) || cost < 0)
+                continue;
+            total += cost;
+            reported = true;
+        }
+        return reported ? total : -1;
+    }
+
     // ── Context window ────────────────────────────────────────────────────
     // Nothing here asks a provider anything. A conversation that outgrows the
     // model's window used to be sent whole and refused whole; now the oldest
@@ -1368,6 +1386,22 @@ Singleton {
         if (value < 10000)
             return `${(value / 1000).toFixed(1)}k`;
         return `${Math.round(value / 1000)}k`;
+    }
+
+    /** Formats the USD-denominated amount OpenRouter reports in `usage.cost`. */
+    function formatOpenRouterCost(cost: real): string {
+        const value = Number(cost ?? -1);
+        if (!isFinite(value) || value < 0)
+            return "—";
+        if (value === 0)
+            return "$0.00";
+        if (value < 0.0001)
+            return "$" + value.toFixed(6);
+        if (value < 0.01)
+            return "$" + value.toFixed(4);
+        if (value < 1)
+            return "$" + value.toFixed(3);
+        return "$" + value.toFixed(2);
     }
 
     /**
@@ -2743,6 +2777,8 @@ Singleton {
                     requester.message.inputTokens = result.tokenUsage.input;
                     requester.message.outputTokens = result.tokenUsage.output;
                     requester.message.totalTokens = result.tokenUsage.total;
+                    if (result.tokenUsage.cost >= 0)
+                        requester.message.requestCost = result.tokenUsage.cost;
                     const thinkingTokens = result.tokenUsage.thinking ?? -1;
                     root.tokenCount.thinking = thinkingTokens;
                     // Counted per message too: the think block says what this
@@ -6057,6 +6093,7 @@ Singleton {
                 "inputTokens": message.inputTokens,
                 "outputTokens": message.outputTokens,
                 "totalTokens": message.totalTokens,
+                "requestCost": message.requestCost,
                 "thinking": false,
                 "done": true,
                 "finishReason": message.finishReason,
@@ -6165,6 +6202,7 @@ Singleton {
             "inputTokens": data.inputTokens ?? -1,
             "outputTokens": data.outputTokens ?? -1,
             "totalTokens": data.totalTokens ?? -1,
+            "requestCost": data.requestCost ?? -1,
             "thinking": data.thinking ?? false,
             "done": data.done ?? true,
             "annotations": data.annotations ?? [],

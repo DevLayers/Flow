@@ -910,6 +910,8 @@ Item {
             readonly property int spent: Ai.sessionTokenTotal
             readonly property bool estimated: tokenIndicator.spent <= 0
             readonly property int total: tokenIndicator.estimated ? Ai.estimatedContextTokens : tokenIndicator.spent
+            readonly property bool costMode: Config.options.ai.showOpenRouterSessionCost
+            readonly property real sessionCost: Ai.sessionOpenRouterCost
             readonly property bool perSecond: Config.options.ai.showTokensPerSecond
             readonly property real rate: Ai.lastAnswerTokensPerSecond
             readonly property int window: Ai.currentModelEntry?.contextWindow ?? 0
@@ -918,11 +920,13 @@ Item {
                 : 0
             // A window filling up is the one thing here worth a colour: past
             // three quarters the oldest turns are about to be dropped.
-            readonly property color tint: tokenIndicator.perSecond
+            readonly property color tint: tokenIndicator.costMode || tokenIndicator.perSecond
                 ? Appearance.colors.colOnLayer2
                 : (tokenIndicator.fraction >= 0.75 ? Appearance.m3colors.m3tertiary : Appearance.colors.colOnLayer2)
 
-            visible: tokenIndicator.perSecond ? tokenIndicator.rate > 0 : tokenIndicator.total > 0
+            visible: tokenIndicator.costMode
+                ? tokenIndicator.sessionCost >= 0
+                : (tokenIndicator.perSecond ? tokenIndicator.rate > 0 : tokenIndicator.total > 0)
             implicitHeight: root.controlExtent
             implicitWidth: tokenRow.implicitWidth + root.controlExtent * 0.7
             radius: Appearance.rounding.full
@@ -941,7 +945,8 @@ Item {
 
                 MaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
-                    text: tokenIndicator.perSecond ? "speed" : (tokenIndicator.fraction >= 0.75 ? "data_alert" : "token")
+                    text: tokenIndicator.costMode ? "payments"
+                        : (tokenIndicator.perSecond ? "speed" : (tokenIndicator.fraction >= 0.75 ? "data_alert" : "token"))
                     iconSize: Appearance.font.pixelSize.larger
                     fill: 1
                     color: tokenIndicator.tint
@@ -953,9 +958,11 @@ Item {
 
                 StyledText {
                     Layout.alignment: Qt.AlignVCenter
-                    text: tokenIndicator.perSecond
-                        ? Ai.formatTokensPerSecond(tokenIndicator.rate)
-                        : ((tokenIndicator.estimated ? "~" : "") + Ai.shortTokenCount(tokenIndicator.total))
+                    text: tokenIndicator.costMode
+                        ? Ai.formatOpenRouterCost(tokenIndicator.sessionCost)
+                        : (tokenIndicator.perSecond
+                            ? Ai.formatTokensPerSecond(tokenIndicator.rate)
+                            : ((tokenIndicator.estimated ? "~" : "") + Ai.shortTokenCount(tokenIndicator.total)))
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
                     color: tokenIndicator.tint
@@ -967,11 +974,11 @@ Item {
                 extraVisibleCondition: false
                 alternativeVisibleCondition: tokenHover.containsMouse
                 text: {
-                    if (tokenIndicator.perSecond)
-                        return Translation.tr("Latest answer speed: %1").arg(Ai.formatTokensPerSecond(tokenIndicator.rate));
-                    let lines = [tokenIndicator.estimated
-                        ? Translation.tr("About %1 tokens would go out with the next message").arg(String(tokenIndicator.total))
-                        : Translation.tr("%1 tokens in this chat").arg(String(tokenIndicator.total))];
+                    let lines = [
+                        Translation.tr("OpenRouter session cost: %1").arg(Ai.formatOpenRouterCost(tokenIndicator.sessionCost)),
+                        Translation.tr("Latest answer speed: %1").arg(Ai.formatTokensPerSecond(tokenIndicator.rate)),
+                        Translation.tr("Total chat tokens: %1").arg((tokenIndicator.estimated ? "~" : "") + String(tokenIndicator.total))
+                    ];
                     if (Ai.prunedTurnCount > 0)
                         lines.push(Translation.tr("%1 earlier turns are no longer sent").arg(String(Ai.prunedTurnCount)));
                     if (Ai.tokenCount.input > 0 || Ai.tokenCount.output > 0)

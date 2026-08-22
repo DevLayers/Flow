@@ -317,17 +317,25 @@ ApiStrategy {
         const output = knownToken(usage.completion_tokens ?? usage.output_tokens ?? data?.eval_count);
         const thinking = knownToken(usage.completion_tokens_details?.reasoning_tokens
             ?? usage.output_tokens_details?.reasoning_tokens ?? data?.thinking_eval_count);
+        const cost = knownCost(usage.cost);
         let total = knownToken(usage.total_tokens ?? usage.total_token_count);
         if (total < 0 && input >= 0 && output >= 0)
             total = input + output;
-        if (input < 0 && output < 0 && thinking < 0 && total < 0)
+        if (input < 0 && output < 0 && thinking < 0 && total < 0 && cost < 0)
             return null;
         return {
             input: input,
             output: output,
             thinking: thinking,
-            total: total
+            total: total,
+            cost: cost
         };
+    }
+
+    /** The reported charge is a decimal currency amount; -1 means absent. */
+    function knownCost(value): real {
+        const number = Number(value);
+        return isFinite(number) && number >= 0 ? number : -1;
     }
 
     function knownToken(value): int {

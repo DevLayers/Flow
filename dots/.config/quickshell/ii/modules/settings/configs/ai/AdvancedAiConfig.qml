@@ -324,6 +324,19 @@ ContentPage {
                 text: Translation.tr("Shows the generated tokens per second from the latest completed answer instead of accumulated token usage.")
             }
         }
+
+        ConfigSwitch {
+            buttonIcon: "payments"
+            text: Translation.tr("Show OpenRouter session cost in the chat toolbar")
+            checked: Config.options.ai.showOpenRouterSessionCost
+            onCheckedChanged: {
+                if (Config.options.ai.showOpenRouterSessionCost !== checked)
+                    Config.options.ai.showOpenRouterSessionCost = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Shows the exact OpenRouter charges reported for this chat instead of a token metric. Free responses show $0.00.")
+            }
+        }
     }
 
     ContentSection {

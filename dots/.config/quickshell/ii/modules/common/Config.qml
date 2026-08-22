@@ -1384,6 +1384,10 @@ Singleton {
                 // When enabled it shows the latest completed answer's
                 // generated tokens per second instead.
                 property bool showTokensPerSecond: false
+                // When the session contains OpenRouter responses with a
+                // reported charge, show their exact accumulated cost instead
+                // of either token metric in the compact chat toolbar.
+                property bool showOpenRouterSessionCost: false
                 // Seconds before giving up on reaching the endpoint, and
                 // before abandoning a reply that is still being written.
                 property int connectTimeout: 15
