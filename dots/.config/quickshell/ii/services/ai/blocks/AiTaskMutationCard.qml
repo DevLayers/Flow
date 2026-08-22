@@ -7,7 +7,10 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 
-/** Shared preview for update, complete and delete task mutations. */
+/**
+ * Shared preview for update, complete and delete task mutations. Ambiguous
+ * external results are checked through a fresh list; no repeat action is shown.
+ */
 Rectangle {
     id: root
 
