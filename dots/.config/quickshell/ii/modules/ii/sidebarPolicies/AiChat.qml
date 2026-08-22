@@ -445,6 +445,11 @@ Item {
             event.accepted = true;
             return;
         }
+        // A canvas page can own a text field. Some printable keys do not mark
+        // themselves accepted on every Qt input method, so forcing the
+        // composer here would move its focus and send that key to the chat.
+        if (root.canvasViewOpen)
+            return;
         messageInputField.forceActiveFocus();
         if (event.modifiers === Qt.NoModifier) {
             if (event.key === Qt.Key_PageUp) {

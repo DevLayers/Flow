@@ -10,11 +10,15 @@ AI = (ROOT / "services/Ai.qml").read_text(encoding="utf-8")
 PAGE = (ROOT / "services/ai/blocks/AiOllamaModelsPage.qml").read_text(encoding="utf-8")
 PICKER = (ROOT / "services/ai/blocks/AiModelPickerPopover.qml").read_text(encoding="utf-8")
 CONTROL_BAR = (ROOT / "modules/ii/sidebarPolicies/aiChat/ChatControlBar.qml").read_text(encoding="utf-8")
+AI_CHAT = (ROOT / "modules/ii/sidebarPolicies/AiChat.qml").read_text(encoding="utf-8")
 
 
 class OllamaPullServiceTests(unittest.TestCase):
     def test_service_imports_the_quickshell_singleton_type(self):
         self.assertIn("\nimport Quickshell\n", SERVICE)
+
+    def test_service_imports_the_translation_singleton_used_by_suggestions(self):
+        self.assertIn("\nimport qs.services\n", SERVICE)
 
     def test_catalogue_is_curated_but_accepts_any_valid_library_tag(self):
         self.assertIn("readonly property var models", SERVICE)
@@ -72,6 +76,16 @@ class OllamaSidebarCatalogueTests(unittest.TestCase):
         self.assertIn("readonly property bool modelCatalogueOpen", CONTROL_BAR)
         self.assertIn("modelCatalogueTitle", CONTROL_BAR)
         self.assertIn("picker.closeModelCatalogue()", CONTROL_BAR)
+
+    def test_sidebar_does_not_steal_unaccepted_input_keys_from_a_canvas_field(self):
+        keys_handler = AI_CHAT.split("Keys.onPressed: event => {", 1)[1].split("// ── References", 1)[0]
+        self.assertIn("if (root.canvasViewOpen)", keys_handler)
+        self.assertLess(keys_handler.index("if (root.canvasViewOpen)"), keys_handler.index("messageInputField.forceActiveFocus()"))
+
+    def test_more_controls_can_open_the_ollama_catalogue_directly(self):
+        self.assertIn('root.activePopover === "ollamaModels"', CONTROL_BAR)
+        self.assertIn("id: ollamaModelsComponent", CONTROL_BAR)
+        self.assertIn('root.openView("ollamaModels", "more")', CONTROL_BAR)
 
 
 if __name__ == "__main__":

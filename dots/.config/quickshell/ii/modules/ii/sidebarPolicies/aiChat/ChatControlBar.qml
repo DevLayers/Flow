@@ -314,6 +314,7 @@ Item {
         "advanced": Translation.tr("Sampling & limits"),
         "sessions": Translation.tr("Saved chats"),
         "keys": Translation.tr("API keys"),
+        "ollamaModels": Translation.tr("Ollama models"),
         "shortcuts": Translation.tr("Keys"),
         "capabilities": Translation.tr("Capabilities"),
         "memory": Translation.tr("What it remembers"),
@@ -1187,6 +1188,8 @@ Item {
                     sourceComponent: {
                         if (root.activePopover === "model")
                             return modelPickerComponent;
+                        if (root.activePopover === "ollamaModels")
+                            return ollamaModelsComponent;
                         if (root.activePopover === "regenerate")
                             return regenerateComponent;
                         if (root.activePopover === "thinking")
@@ -1225,6 +1228,15 @@ Item {
                 Ai.setModel(modelId, false);
                 root.closePopover();
             }
+        }
+    }
+
+    Component {
+        id: ollamaModelsComponent
+        AiOllamaModelsPage {
+            active: true
+            showHeader: false
+            fillAvailableHeight: true
         }
     }
 
@@ -1348,6 +1360,14 @@ Item {
                     available: entry?.available ?? true
                     onTriggered: root.openView(modelData, "more")
                 }
+            }
+
+            CanvasRow {
+                Layout.fillWidth: true
+                symbol: "download"
+                label: Translation.tr("Ollama models")
+                valueText: Translation.tr("Browse and pull")
+                onTriggered: root.openView("ollamaModels", "more")
             }
 
             Item {
