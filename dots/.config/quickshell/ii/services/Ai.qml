@@ -1517,6 +1517,9 @@ Singleton {
         return explicit >= 0 ? explicit : (Persistent.states?.ai?.temperature ?? 0.5);
     }
     readonly property string defaultThinkingLevel: {
+        const configured = String(Config.options?.sidebar?.ai?.thinkingDefault ?? "");
+        if (root.thinkingLevels.indexOf(configured) >= 0)
+            return configured;
         const explicit = Persistent.states?.ai?.defaultThinkingLevel ?? "";
         return explicit.length > 0 ? explicit : (Persistent.states?.ai?.thinkingLevel ?? "medium");
     }
@@ -2522,6 +2525,7 @@ Singleton {
         // reading a page was three notifications for one answer).
         if ((message.toolCalls?.length ?? 0) === 0) {
             root.notifyResponseFinished(message);
+            root.playAnswerSound(message);
             root.writeLastAnswerFile(message);
         }
         if (root.postResponseHook) {
@@ -2529,7 +2533,7 @@ Singleton {
             root.postResponseHook = null; // Reset hook after use
         }
         const runSessionId = root.currentRunSessionId;
-        if (!runSessionId || runSessionId === root.sessions.currentId)
+        if (Config.options?.ai?.autoTitle !== false && (!runSessionId || runSessionId === root.sessions.currentId))
             root.autoTitle(); // Names it first, so the write below carries the name
         root.commitRunSession(runSessionId || root.sessions.currentId, true);
         root.responseFinished({
@@ -2631,6 +2635,14 @@ Singleton {
         if (iconName.length > 0)
             command.push(`--icon=${iconName}`);
         Quickshell.execDetached(command);
+    }
+
+    function playAnswerSound(message: AiMessageData) {
+        if (!Config.options?.sidebar?.ai?.soundOnAnswer)
+            return;
+        if (String(message?.errorKind ?? "").length > 0)
+            return;
+        SoundService.playEvent("notifications", ["message-new-instant"]);
     }
 
     // ── Answering from outside the UI ───────────────────────────────────
@@ -6472,7 +6484,9 @@ Singleton {
     }
 
     function chatToJson() {
-        return root.messageIDs.map(id => root.serializeMessage(id)).filter(message => message !== null);
+        const omitInterfaceMessages = Config.options?.ai?.ephemeralInterfaceMessages === true;
+        return root.messageIDs.map(id => root.serializeMessage(id)).filter(message => message !== null
+            && (!omitInterfaceMessages || message.role !== root.interfaceRole));
     }
 
     function runningChatToJson() {

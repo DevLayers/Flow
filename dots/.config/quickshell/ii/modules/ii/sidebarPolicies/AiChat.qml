@@ -18,6 +18,7 @@ Item {
     property real padding: 4
     property var inputField: messageInputField
     property string commandPrefix: "/"
+    readonly property bool autoScrollEnabled: Config.options.sidebar.ai.autoScroll
 
     property var suggestionQuery: ""
     property var suggestionList: []
@@ -201,7 +202,16 @@ Item {
     property string emptyStateGreeting: ""
 
     function refreshEmptyStateGreeting() {
-        root.emptyStateGreeting = AiTranscriptRegistry.greetingLine();
+        const configured = String(Config.options.sidebar.ai.greeting ?? "").trim();
+        root.emptyStateGreeting = configured.length > 0 ? configured : AiTranscriptRegistry.greetingLine();
+    }
+
+    Connections {
+        target: Config.options.sidebar.ai
+        function onGreetingChanged() {
+            if (emptyStatePlaceholder.shown)
+                root.refreshEmptyStateGreeting();
+        }
     }
 
     Connections {
@@ -1404,7 +1414,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             messageListView.following = messageListView.bottomGap <= messageListView.followThreshold;
                         }
                         onContentHeightChanged: {
-                            if (!messageListView.following)
+                            if (!root.autoScrollEnabled || !messageListView.following)
                                 return;
                             Qt.callLater(function () {
                                 messageListView.pinToEnd();
@@ -1414,7 +1424,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         // walked back up the chat. Sending does — see
                         // `handleInput`, which pins deliberately.
                         onCountChanged: {
-                            if (!messageListView.following)
+                            if (!root.autoScrollEnabled || !messageListView.following)
                                 return;
                             Qt.callLater(function () {
                                 messageListView.pinToEnd();
@@ -1424,7 +1434,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         // reopened from disk, or filled before the sidebar was
                         // ever shown — opens where it was left off, at the end.
                         onHeightChanged: {
-                            if (messageListView.following)
+                            if (root.autoScrollEnabled && messageListView.following)
                                 Qt.callLater(function () {
                                     messageListView.pinToEnd();
                                 });
@@ -1504,7 +1514,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             bottomMargin: root.messageListInset * 2
                         }
                         width: Math.min(parent.width - root.messageListInset * 2, Appearance.font.pixelSize.huge * 20)
-                        active: Ai.messageIDs.length === 0 && !root.canvasViewOpen
+                        active: Config.options.sidebar.ai.emptyStateKeys && Ai.messageIDs.length === 0 && !root.canvasViewOpen
                         opacity: active ? 1 : 0
                         visible: opacity > 0.01
 
@@ -2148,14 +2158,22 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                         if (root.stepPromptHistory(1))
                                             event.accepted = true;
                                     } else if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return)) {
-                                        if (event.modifiers & Qt.ShiftModifier) {
-                                            // Insert newline
-                                            messageInputField.insert(messageInputField.cursorPosition, "\n");
-                                            event.accepted = true;
-                                        } else {
-                                            // Accept text
+                                        const useCtrlEnter = Config.options.sidebar.ai.sendKey === "ctrlEnter";
+                                        const holdsControl = (event.modifiers & Qt.ControlModifier) !== 0;
+                                        const holdsShift = (event.modifiers & Qt.ShiftModifier) !== 0;
+                                        const shouldSend = useCtrlEnter
+                                            ? (holdsControl && !holdsShift)
+                                            : (!holdsControl && !holdsShift);
+                                        if (shouldSend) {
                                             const inputText = messageInputField.text;
                                             root.handleInput(inputText);
+                                            event.accepted = true;
+                                        } else {
+                                            // Shift+Enter always writes a new
+                                            // line; Ctrl+Enter does too when
+                                            // the configured send shortcut is
+                                            // the ordinary Enter key.
+                                            messageInputField.insert(messageInputField.cursorPosition, "\n");
                                             event.accepted = true;
                                         }
                                     } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_V) {

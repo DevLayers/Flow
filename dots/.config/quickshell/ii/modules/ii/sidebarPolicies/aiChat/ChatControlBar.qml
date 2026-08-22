@@ -280,7 +280,13 @@ Item {
      * controls now rather than a flow that measured what fell off it, so what
      * the overflow button holds is decided here instead of by the width.
      */
-    readonly property var barKeys: ["keys", "advanced", "sessions", "newChat"]
+    readonly property var barKeys: {
+        const allowed = ["keys", "advanced", "sessions", "newChat", "model", "thinking", "tools", "prompt", "projects", "memory", "slash"];
+        const configured = Array.from(Config.options.sidebar.ai.barKeys ?? [])
+            .map(key => String(key))
+            .filter((key, index, all) => allowed.indexOf(key) >= 0 && all.indexOf(key) === index);
+        return configured.length > 0 ? configured : ["keys", "advanced", "sessions", "newChat"];
+    }
 
     /**
      * What each control is, as opposed to what it currently holds. A chip in
