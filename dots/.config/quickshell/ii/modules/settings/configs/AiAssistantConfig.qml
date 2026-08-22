@@ -35,16 +35,6 @@ Item {
         opacity: subPageOverlay.slideProgress
 
         ContentSection {
-            icon: "monitoring"
-            title: Translation.tr("Usage overview")
-            customBackgroundColor: Appearance.colors.colLayer0
-
-            AiUsageDashboard {
-                Layout.fillWidth: true
-            }
-        }
-
-        ContentSection {
             icon: "neurology"
             title: Translation.tr("AI Assistant")
 
@@ -184,6 +174,211 @@ Item {
         }
 
         ContentSection {
+            icon: "forum"
+            title: Translation.tr("Conversation")
+
+            ConfigSwitch {
+                buttonIcon: "auto_awesome"
+                text: Translation.tr("Name new conversations automatically")
+                checked: Config.options.ai.autoTitle
+                onCheckedChanged: Config.options.ai.autoTitle = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "inventory_2"
+                text: Translation.tr("Keep status messages in saved conversations")
+                checked: !Config.options.ai.ephemeralInterfaceMessages
+                onCheckedChanged: Config.options.ai.ephemeralInterfaceMessages = !checked
+            }
+
+            ConfigSpinBox {
+                icon: "delete_sweep"
+                text: Translation.tr("Days to keep deleted conversations")
+                value: Config.options.ai.sessions.retentionDays
+                from: 1
+                to: 3650
+                stepSize: 1
+                onValueChanged: Config.options.ai.sessions.retentionDays = value
+            }
+        }
+
+        ContentSection {
+            icon: "chat"
+            title: Translation.tr("Chat experience")
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                title: Translation.tr("Transcript density")
+                icon: "density_medium"
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.sidebar.ai.density
+                    onSelected: newValue => Config.options.sidebar.ai.density = newValue
+                    options: [
+                        { displayName: Translation.tr("Comfortable"), icon: "view_agenda", value: "comfortable" },
+                        { displayName: Translation.tr("Compact"), icon: "view_headline", value: "compact" }
+                    ]
+                }
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                title: Translation.tr("Default thinking")
+                icon: "psychology"
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.sidebar.ai.thinkingDefault
+                    onSelected: newValue => Config.options.sidebar.ai.thinkingDefault = newValue
+                    options: [
+                        { displayName: Translation.tr("Remembered"), icon: "bookmark", value: "" },
+                        { displayName: Translation.tr("Off"), icon: "block", value: "off" },
+                        { displayName: Translation.tr("Low"), icon: "speed", value: "low" },
+                        { displayName: Translation.tr("Medium"), icon: "balance", value: "medium" },
+                        { displayName: Translation.tr("High"), icon: "psychology", value: "high" }
+                    ]
+                }
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                title: Translation.tr("Activity details")
+                icon: "pending_actions"
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.sidebar.ai.activityDefault
+                    onSelected: newValue => Config.options.sidebar.ai.activityDefault = newValue
+                    options: [
+                        { displayName: Translation.tr("Automatic"), icon: "auto_mode", value: "auto" },
+                        { displayName: Translation.tr("Expanded"), icon: "unfold_more", value: "expanded" },
+                        { displayName: Translation.tr("Collapsed"), icon: "unfold_less", value: "collapsed" }
+                    ]
+                }
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                title: Translation.tr("Send message with")
+                icon: "keyboard_return"
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.sidebar.ai.sendKey
+                    onSelected: newValue => Config.options.sidebar.ai.sendKey = newValue
+                    options: [
+                        { displayName: Translation.tr("Enter"), icon: "keyboard_return", value: "enter" },
+                        { displayName: Translation.tr("Ctrl+Enter"), icon: "keyboard", value: "ctrlEnter" }
+                    ]
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "schedule"
+                text: Translation.tr("Show message timestamps")
+                checked: Config.options.sidebar.ai.showTimestamps
+                onCheckedChanged: Config.options.sidebar.ai.showTimestamps = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "timer"
+                text: Translation.tr("Show answer time")
+                checked: Config.options.sidebar.ai.showResponseTime
+                onCheckedChanged: Config.options.sidebar.ai.showResponseTime = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "smart_toy"
+                text: Translation.tr("Show the answering model")
+                checked: Config.options.sidebar.ai.showAnswerModel
+                onCheckedChanged: Config.options.sidebar.ai.showAnswerModel = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "vertical_align_bottom"
+                text: Translation.tr("Follow new answers automatically")
+                checked: Config.options.sidebar.ai.autoScroll
+                onCheckedChanged: Config.options.sidebar.ai.autoScroll = checked
+            }
+        }
+
+        ContentSection {
+            icon: "code"
+            title: Translation.tr("Answer formatting")
+
+            ConfigSwitch {
+                buttonIcon: "markdown"
+                text: Translation.tr("Render Markdown")
+                checked: Config.options.sidebar.ai.renderMarkdown
+                onCheckedChanged: Config.options.sidebar.ai.renderMarkdown = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "functions"
+                text: Translation.tr("Render mathematical notation")
+                checked: Config.options.sidebar.ai.renderLatex
+                onCheckedChanged: Config.options.sidebar.ai.renderLatex = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "wrap_text"
+                text: Translation.tr("Wrap code blocks")
+                checked: Config.options.sidebar.ai.codeWrap
+                onCheckedChanged: Config.options.sidebar.ai.codeWrap = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "format_list_numbered"
+                text: Translation.tr("Show code line numbers")
+                checked: Config.options.sidebar.ai.codeLineNumbers
+                onCheckedChanged: Config.options.sidebar.ai.codeLineNumbers = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "unfold_less"
+                text: Translation.tr("Collapse long answers")
+                checked: Config.options.sidebar.ai.collapseLongAnswers
+                onCheckedChanged: Config.options.sidebar.ai.collapseLongAnswers = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "keyboard"
+                text: Translation.tr("Show empty-chat keyboard hints")
+                checked: Config.options.sidebar.ai.emptyStateKeys
+                onCheckedChanged: Config.options.sidebar.ai.emptyStateKeys = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "volume_up"
+                text: Translation.tr("Play a sound when an answer is ready")
+                checked: Config.options.sidebar.ai.soundOnAnswer
+                onCheckedChanged: Config.options.sidebar.ai.soundOnAnswer = checked
+            }
+
+            ConfigTextField {
+                Layout.fillWidth: true
+                text: Translation.tr("Empty-chat greeting")
+                icon: "waving_hand"
+                placeholderText: Translation.tr("Use a rotating greeting")
+                tooltip: Translation.tr("Leave empty to use the built-in rotating greeting.")
+                inputText: Config.options.sidebar.ai.greeting
+                textField.onEditingFinished: Config.options.sidebar.ai.greeting = textField.text
+            }
+
+            ConfigTextField {
+                Layout.fillWidth: true
+                text: Translation.tr("Toolbar items")
+                icon: "toolbar"
+                placeholderText: "keys, advanced, sessions, newChat"
+                tooltip: Translation.tr("Comma-separated: keys, advanced, sessions, newChat, model, thinking, tools, prompt, projects, memory, slash.")
+                inputText: Array.from(Config.options.sidebar.ai.barKeys ?? []).join(", ")
+                textField.onEditingFinished: {
+                    const allowed = ["keys", "advanced", "sessions", "newChat", "model", "thinking", "tools", "prompt", "projects", "memory", "slash"];
+                    const items = textField.text.split(",").map(item => item.trim())
+                        .filter((item, index, all) => allowed.indexOf(item) >= 0 && all.indexOf(item) === index);
+                    Config.options.sidebar.ai.barKeys = items;
+                }
+            }
+        }
+
+        ContentSection {
             icon: "terminal"
             title: Translation.tr("Remote access")
 
@@ -222,33 +417,60 @@ Item {
 
         ContentSection {
             icon: "extension"
-            title: Translation.tr("Models & advanced")
+            title: Translation.tr("Configuration")
 
             SubPageEntryButton {
-                entryIcon: "dataset"
-                entryTitle: Translation.tr("Custom models")
-                entryDescription: Translation.tr("Add models from any provider or your own endpoint to the picker")
+                entryIcon: "key"
+                entryTitle: Translation.tr("Models & Keys")
+                entryDescription: Translation.tr("Manage provider credentials and add custom models")
                 entryAccent: Appearance.colors.colPrimary
                 entryOnAccent: Appearance.colors.colOnPrimary
-                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/CustomModelsConfig.qml")
+                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiModelsKeysConfig.qml")
             }
 
             SubPageEntryButton {
-                entryIcon: "tune"
-                entryTitle: Translation.tr("Advanced settings")
-                entryDescription: Translation.tr("Tool permissions, request limits and attachments")
+                entryIcon: "service_toolbox"
+                entryTitle: Translation.tr("Tools & Permissions")
+                entryDescription: Translation.tr("Choose available tools and decide when they need approval")
                 entryAccent: Appearance.colors.colTertiary
                 entryOnAccent: Appearance.colors.colOnTertiary
-                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AdvancedAiConfig.qml")
+                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiToolsPermissionsConfig.qml")
+            }
+
+            SubPageEntryButton {
+                entryIcon: "attach_file"
+                entryTitle: Translation.tr("Files, Vision & Voice")
+                entryDescription: Translation.tr("Attachments, local file search, OCR and dictation")
+                entryAccent: Appearance.colors.colSecondary
+                entryOnAccent: Appearance.colors.colOnSecondary
+                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiFilesVisionVoiceConfig.qml")
             }
 
             SubPageEntryButton {
                 entryIcon: "manage_search"
-                entryTitle: Translation.tr("Local retrieval (RAG)")
-                entryDescription: Translation.tr("Let it search folders you index locally, embedded through Ollama")
+                entryTitle: Translation.tr("Local Retrieval (RAG)")
+                entryDescription: Translation.tr("Index chosen folders locally through Ollama")
+                entryAccent: Appearance.colors.colPrimary
+                entryOnAccent: Appearance.colors.colOnPrimary
+                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/RagConfig.qml")
+            }
+
+            SubPageEntryButton {
+                entryIcon: "tune"
+                entryTitle: Translation.tr("Request Limits")
+                entryDescription: Translation.tr("Answer size, timeouts, retries and chat-toolbar metrics")
+                entryAccent: Appearance.colors.colTertiary
+                entryOnAccent: Appearance.colors.colOnTertiary
+                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiRequestLimitsConfig.qml")
+            }
+
+            SubPageEntryButton {
+                entryIcon: "monitoring"
+                entryTitle: Translation.tr("Usage & Cost")
+                entryDescription: Translation.tr("Token history, outcome rates, models and reported charges")
                 entryAccent: Appearance.colors.colSecondary
                 entryOnAccent: Appearance.colors.colOnSecondary
-                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/RagConfig.qml")
+                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiUsageCostConfig.qml")
             }
         }
 

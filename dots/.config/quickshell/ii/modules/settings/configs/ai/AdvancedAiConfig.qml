@@ -20,6 +20,12 @@ ContentPage {
 
     property bool showBackButton: false
     signal goBack()
+    // The old page remains a complete view for compatibility. Focused pages
+    // below reuse its controls instead of maintaining six drifting copies.
+    property string sectionMode: "all" // all | tools | files | requests
+    readonly property bool showingTools: sectionMode === "all" || sectionMode === "tools"
+    readonly property bool showingFiles: sectionMode === "all" || sectionMode === "files"
+    readonly property bool showingRequests: sectionMode === "all" || sectionMode === "requests"
 
     forceWidth: false
 
@@ -27,7 +33,10 @@ ContentPage {
     // manual "Check again" — reached without either on a page whose whole
     // point is showing whether whisper.cpp is there yet, which would
     // stick on "Checking…" until the user tried the microphone once.
-    Component.onCompleted: Ai.voiceService.ensureDetected()
+    Component.onCompleted: {
+        if (page.showingFiles)
+            Ai.voiceService.ensureDetected();
+    }
 
     property string folderPickerError: ""
 
@@ -151,7 +160,10 @@ ContentPage {
         }
 
         StyledText {
-            text: Translation.tr("Advanced AI Settings")
+            text: page.sectionMode === "tools" ? Translation.tr("Tools & Permissions")
+                : page.sectionMode === "files" ? Translation.tr("Files, Vision & Voice")
+                : page.sectionMode === "requests" ? Translation.tr("Request Limits")
+                : Translation.tr("Advanced AI Settings")
             font.pixelSize: Appearance.font.pixelSize.large
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
@@ -159,6 +171,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: page.showingTools
         icon: "service_toolbox"
         title: Translation.tr("Tools")
 
@@ -253,6 +266,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: page.showingRequests
         icon: "speed"
         title: Translation.tr("Chat toolbar")
 
@@ -284,6 +298,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: page.showingRequests
         icon: "tune"
         title: Translation.tr("Requests")
 
@@ -337,6 +352,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: page.showingFiles
         icon: "attach_file"
         title: Translation.tr("Attachments")
 
@@ -371,6 +387,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: page.showingFiles
         icon: "folder_shared"
         title: Translation.tr("Files the assistant may search")
 
@@ -477,6 +494,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: page.showingFiles
         icon: "text_snippet"
         title: Translation.tr("Vision")
 
@@ -510,6 +528,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: page.showingFiles
         icon: "mic"
         title: Translation.tr("Voice")
 

@@ -17,7 +17,7 @@ class SubPageEntryButtonTests(unittest.TestCase):
     def test_ai_entries_use_the_shared_navigation_component(self):
         source = AI_SETTINGS.read_text(encoding="utf-8")
 
-        self.assertEqual(source.count("SubPageEntryButton {"), 3)
+        self.assertEqual(source.count("SubPageEntryButton {"), 6)
         self.assertNotIn("component SubPageEntryButton:", source)
 
     def test_shared_entry_is_neutral_and_keeps_colour_on_its_icon(self):
@@ -93,7 +93,47 @@ class RetryRecoveryTests(unittest.TestCase):
             "Config.options.ai.notify.onlyWhenAway",
             "Config.options.ai.notify.minimumSeconds",
         ):
-            self.assertIn(setting, source)
+                self.assertIn(setting, source)
+
+
+class WaveTwoSettingsOrganizationTests(unittest.TestCase):
+    def test_configuration_routes_are_split_by_concern(self):
+        source = AI_SETTINGS.read_text(encoding="utf-8")
+        for label in (
+            "Models & Keys",
+            "Tools & Permissions",
+            "Files, Vision & Voice",
+            "Local Retrieval (RAG)",
+            "Request Limits",
+            "Usage & Cost",
+        ):
+            with self.subTest(label=label):
+                self.assertIn(label, source)
+
+        for file_name in (
+            "AiModelsKeysConfig.qml",
+            "AiToolsPermissionsConfig.qml",
+            "AiFilesVisionVoiceConfig.qml",
+            "AiRequestLimitsConfig.qml",
+            "AiUsageCostConfig.qml",
+        ):
+            self.assertTrue((ROOT / "modules/settings/configs/ai" / file_name).exists())
+
+    def test_chat_preferences_are_exposed_in_settings(self):
+        source = AI_SETTINGS.read_text(encoding="utf-8")
+        for setting in (
+            "Config.options.ai.autoTitle",
+            "Config.options.ai.ephemeralInterfaceMessages",
+            "Config.options.ai.sessions.retentionDays",
+            "Config.options.sidebar.ai.thinkingDefault",
+            "Config.options.sidebar.ai.density",
+            "Config.options.sidebar.ai.activityDefault",
+            "Config.options.sidebar.ai.sendKey",
+            "Config.options.sidebar.ai.barKeys",
+            "Config.options.sidebar.ai.greeting",
+        ):
+            with self.subTest(setting=setting):
+                self.assertIn(setting, source)
 
 
 if __name__ == "__main__":

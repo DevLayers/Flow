@@ -115,7 +115,11 @@ class VoiceSectionTests(unittest.TestCase):
         # Otherwise the status row and the install guide both stick on
         # "checking" until the user tries the microphone once or hits
         # Check again — on a page whose purpose is answering that question.
-        self.assertIn("Component.onCompleted: Ai.voiceService.ensureDetected()", CONFIG_PAGE)
+        # The focused Files/Vision/Voice route still detects on entry; the
+        # tools and request routes reuse this source but do not need to start
+        # a voice probe in the background.
+        self.assertIn("if (page.showingFiles)", CONFIG_PAGE)
+        self.assertIn("Ai.voiceService.ensureDetected();", CONFIG_PAGE)
 
     def test_the_install_guide_is_shown_regardless_of_detection_status(self):
         # A reference for reinstalling, or for reading the exact command
