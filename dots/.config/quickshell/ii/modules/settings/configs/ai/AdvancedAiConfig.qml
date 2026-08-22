@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.services
+import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
 
@@ -28,7 +29,6 @@ ContentPage {
     // stick on "Checking…" until the user tried the microphone once.
     Component.onCompleted: Ai.voiceService.ensureDetected()
 
-    readonly property var toolDefinitions: Array.from(Ai.toolbox.definitions)
     property string folderPickerError: ""
 
     function openFolderPicker(): void {
@@ -187,82 +187,8 @@ ContentPage {
             ]
         }
 
-        ContentSubsection {
-            title: Translation.tr("When each tool may run")
-            tooltip: Translation.tr("Applies to the Tools mode. A tool set to ask stops for approval every time, and shows what it would do first.")
-
-            Repeater {
-                model: page.toolDefinitions
-
-                ColumnLayout {
-                    id: toolEntry
-                    required property var modelData
-
-                    Layout.fillWidth: true
-                    Layout.topMargin: 4
-                    spacing: 4
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
-
-                        MaterialSymbol {
-                            Layout.alignment: Qt.AlignTop
-                            text: toolEntry.modelData.icon
-                            iconSize: Appearance.font.pixelSize.huge
-                            color: toolEntry.modelData.risk === "danger" ? Appearance.m3colors.m3error : Appearance.colors.colOnLayer1
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: toolEntry.modelData.title
-                                wrapMode: Text.Wrap
-                                color: Appearance.colors.colOnLayer1
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: toolEntry.modelData.summary
-                                wrapMode: Text.Wrap
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colSubtext
-                            }
-                        }
-                    }
-
-                    ConfigSelectionArray {
-                        Layout.fillWidth: true
-                        currentValue: Ai.toolbox.permission(toolEntry.modelData.id)
-                        onSelected: newValue => {
-                            Ai.toolbox.setPermission(toolEntry.modelData.id, newValue);
-                        }
-                        // "Always" is missing for a tool that cannot be given
-                        // standing permission — a shell is not one capability
-                        // to trust once, and the command differs every time.
-                        options: [
-                            {
-                                displayName: Translation.tr("Always"),
-                                icon: "check_circle",
-                                value: "allow"
-                            },
-                            {
-                                displayName: Translation.tr("Ask first"),
-                                icon: "help",
-                                value: "ask"
-                            },
-                            {
-                                displayName: Translation.tr("Never"),
-                                icon: "block",
-                                value: "deny"
-                            }
-                        ].filter(option => Ai.toolbox.permissionValuesFor(toolEntry.modelData.id).indexOf(option.value) >= 0)
-                    }
-                }
-            }
+        AiToolPermissionList {
+            definitions: Array.from(Ai.toolbox.definitions)
         }
 
         ConfigSwitch {

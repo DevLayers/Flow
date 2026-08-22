@@ -19,6 +19,7 @@ TOOLS = (ROOT / "services" / "ai" / "AiTools.qml").read_text(encoding="utf-8")
 AI_QML = (ROOT / "services" / "Ai.qml").read_text(encoding="utf-8")
 POPOVER = (ROOT / "services" / "ai" / "blocks" / "AiToolsPopover.qml").read_text(encoding="utf-8")
 ADVANCED = (ROOT / "modules" / "settings" / "configs" / "ai" / "AdvancedAiConfig.qml").read_text(encoding="utf-8")
+PERMISSION_LIST = (ROOT / "services" / "ai" / "blocks" / "AiToolPermissionList.qml").read_text(encoding="utf-8")
 
 KINDS = {"localRead", "explicitContextRead", "navigation", "externalRead",
          "localWrite", "externalWrite", "dangerous"}
@@ -159,12 +160,14 @@ class SingleSourceTests(unittest.TestCase):
 
 class UserFacingTests(unittest.TestCase):
     def test_the_tools_page_says_why_a_tool_is_unavailable(self):
-        self.assertIn("Ai.toolbox.unavailableReason(", POPOVER)
-        self.assertIn("blockedReason", POPOVER)
+        self.assertIn("AiToolPermissionList {", POPOVER)
+        self.assertIn("Ai.toolbox.unavailableReason(", PERMISSION_LIST)
+        self.assertIn("unavailableReason", PERMISSION_LIST)
 
     def test_neither_settings_surface_offers_always_for_a_shell(self):
-        self.assertIn("Ai.toolbox.permissionValuesFor(", POPOVER)
-        self.assertIn("Ai.toolbox.permissionValuesFor(", ADVANCED)
+        self.assertIn("AiToolPermissionList {", POPOVER)
+        self.assertIn("AiToolPermissionList {", ADVANCED)
+        self.assertIn("Ai.toolbox.permissionValuesFor(", PERMISSION_LIST)
 
     def test_a_stored_always_is_clamped_for_such_a_tool(self):
         # Config written before the rule existed must not keep granting it.
