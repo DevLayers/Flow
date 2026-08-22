@@ -19,7 +19,11 @@ ColumnLayout {
     property var expandedDomains: ({})
 
     Layout.fillWidth: true
-    spacing: root.density === "compact" ? Appearance.rounding.small : Appearance.rounding.normal
+    // Domain accordions belong to one permission list. A normal section gap
+    // makes them read as unrelated cards; keep a compact token gap instead.
+    spacing: root.density === "compact"
+        ? Appearance.rounding.unsharpenmore / 2
+        : Appearance.rounding.unsharpenmore
 
     readonly property var visibleDomains: AiToolRegistry.domains.filter(domain => root.toolsForDomain(domain).length > 0)
 
@@ -32,6 +36,8 @@ ColumnLayout {
     }
 
     function setExpanded(domain: string, expanded: bool) {
+        if (root.expandedFor(domain) === expanded)
+            return;
         const next = Object.assign({}, root.expandedDomains);
         next[domain] = expanded;
         root.expandedDomains = next;

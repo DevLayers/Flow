@@ -13,13 +13,10 @@ import qs.modules.ii.usage
 /**
  * The AI settings page.
  *
- * A dashboard, not a manual: what a user touches day to day (model list,
- * answer animation, system prompt) stays here, while everything that is set
- * once and left alone lives behind two entry buttons — custom models get a
- * form-driven sub-page instead of the raw JSON array, and tools, requests
- * and attachments share the advanced sub-page. Keys are deliberately still
- * absent: they belong in the chat's key panel, next to the model that needs
- * one.
+ * A dashboard, not a manual: the usage view and daily preferences stay on
+ * this page, while focused configuration tasks live behind their own entry
+ * buttons. Keys are deliberately still absent: they belong in the chat's
+ * key panel, next to the model that needs one.
  */
 Item {
     id: aiRoot
@@ -464,13 +461,15 @@ Item {
                 onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiRequestLimitsConfig.qml")
             }
 
-            SubPageEntryButton {
-                entryIcon: "monitoring"
-                entryTitle: Translation.tr("Usage & Cost")
-                entryDescription: Translation.tr("Token history, outcome rates, models and reported charges")
-                entryAccent: Appearance.colors.colSecondary
-                entryOnAccent: Appearance.colors.colOnSecondary
-                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiUsageCostConfig.qml")
+        }
+
+        ContentSection {
+            icon: "monitoring"
+            title: Translation.tr("Usage & Cost")
+            customBackgroundColor: Appearance.colors.colLayer0
+
+            AiUsageDashboard {
+                Layout.fillWidth: true
             }
         }
 

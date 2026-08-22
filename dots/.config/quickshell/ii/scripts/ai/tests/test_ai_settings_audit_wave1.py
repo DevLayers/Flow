@@ -17,7 +17,7 @@ class SubPageEntryButtonTests(unittest.TestCase):
     def test_ai_entries_use_the_shared_navigation_component(self):
         source = AI_SETTINGS.read_text(encoding="utf-8")
 
-        self.assertEqual(source.count("SubPageEntryButton {"), 6)
+        self.assertEqual(source.count("SubPageEntryButton {"), 5)
         self.assertNotIn("component SubPageEntryButton:", source)
 
     def test_shared_entry_is_neutral_and_keeps_colour_on_its_icon(self):
@@ -47,6 +47,18 @@ class ToolPermissionGroupingTests(unittest.TestCase):
         self.assertIn("Ai.toolbox.setPermission", source)
         self.assertIn("collapsible: true", source)
         self.assertIn("Ai.toolbox.unavailableReason", source)
+
+    def test_permission_accordions_keep_a_compact_group_spacing(self):
+        source = PERMISSION_LIST.read_text(encoding="utf-8")
+
+        self.assertIn("Appearance.rounding.unsharpenmore", source)
+        self.assertNotIn('spacing: root.density === "compact" ? Appearance.rounding.small : Appearance.rounding.normal', source)
+
+    def test_permission_accordion_state_does_not_write_back_unchanged_values(self):
+        source = PERMISSION_LIST.read_text(encoding="utf-8")
+
+        self.assertIn("if (root.expandedFor(domain) === expanded)", source)
+        self.assertIn("return;", source)
 
 
 class ContextAndNotificationSettingsTests(unittest.TestCase):
@@ -105,7 +117,6 @@ class WaveTwoSettingsOrganizationTests(unittest.TestCase):
             "Files, Vision & Voice",
             "Local Retrieval (RAG)",
             "Request Limits",
-            "Usage & Cost",
         ):
             with self.subTest(label=label):
                 self.assertIn(label, source)
@@ -115,9 +126,12 @@ class WaveTwoSettingsOrganizationTests(unittest.TestCase):
             "AiToolsPermissionsConfig.qml",
             "AiFilesVisionVoiceConfig.qml",
             "AiRequestLimitsConfig.qml",
-            "AiUsageCostConfig.qml",
         ):
             self.assertTrue((ROOT / "modules/settings/configs/ai" / file_name).exists())
+
+        self.assertIn('title: Translation.tr("Usage & Cost")', source)
+        self.assertIn("AiUsageDashboard {", source)
+        self.assertFalse((ROOT / "modules/settings/configs/ai/AiUsageCostConfig.qml").exists())
 
     def test_chat_preferences_are_exposed_in_settings(self):
         source = AI_SETTINGS.read_text(encoding="utf-8")

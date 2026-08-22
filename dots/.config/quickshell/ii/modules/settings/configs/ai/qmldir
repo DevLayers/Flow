@@ -7,5 +7,4 @@ AiPeriodDropdown 1.0 AiPeriodDropdown.qml
 AiRequestLimitsConfig 1.0 AiRequestLimitsConfig.qml
 AiToolsPermissionsConfig 1.0 AiToolsPermissionsConfig.qml
 AiUsageDashboard 1.0 AiUsageDashboard.qml
-AiUsageCostConfig 1.0 AiUsageCostConfig.qml
 CustomModelsConfig 1.0 CustomModelsConfig.qml
