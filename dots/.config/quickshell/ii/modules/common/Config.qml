@@ -1380,6 +1380,10 @@ Singleton {
                 // a positive value caps it and is clamped to the model's own
                 // limit.
                 property int maxOutputTokens: 0
+                // The compact chat toolbar normally shows accumulated usage.
+                // When enabled it shows the latest completed answer's
+                // generated tokens per second instead.
+                property bool showTokensPerSecond: false
                 // Seconds before giving up on reaching the endpoint, and
                 // before abandoning a reply that is still being written.
                 property int connectTimeout: 15

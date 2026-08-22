@@ -88,6 +88,7 @@ Singleton {
     property string aiDraftsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/ai/ai_drafts.py`)
     property string aiAttachScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/ai/ai_attach.py`)
     property string aiSettingsIndexPath: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/settings_index.json`)
+    property string aiLastAnswer: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/last_answer.json`)
     property string aiSettingsIndexScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/ai/ai_settings_index.py`)
     property string aiWebScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/ai/ai_web.py`)
     property string aiTranslationScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/ai/gemini-translate.sh`)

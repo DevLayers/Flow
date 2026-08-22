@@ -49,18 +49,21 @@ Item {
     property bool historyOpen: false
     property bool modelsOpen: false
     property bool shortcutsOpen: false
+    property bool capabilitiesOpen: false
     property string loadingSessionId: ""
 
     onModelsOpenChanged: {
         if (root.modelsOpen) {
             root.historyOpen = false;
             root.shortcutsOpen = false;
+            root.capabilitiesOpen = false;
         }
     }
     onHistoryOpenChanged: {
         if (root.historyOpen) {
             root.modelsOpen = false;
             root.shortcutsOpen = false;
+            root.capabilitiesOpen = false;
             Ai.sessions.ensureLoaded();
         }
     }
@@ -68,6 +71,14 @@ Item {
         if (root.shortcutsOpen) {
             root.historyOpen = false;
             root.modelsOpen = false;
+            root.capabilitiesOpen = false;
+        }
+    }
+    onCapabilitiesOpenChanged: {
+        if (root.capabilitiesOpen) {
+            root.historyOpen = false;
+            root.modelsOpen = false;
+            root.shortcutsOpen = false;
         }
     }
 
@@ -158,7 +169,7 @@ Item {
     function refreshEmptyStateGreeting() {
         root.emptyStateGreeting = AiTranscriptRegistry.greetingLine();
     }
-    readonly property bool canvasViewOpen: root.historyOpen || root.modelsOpen || root.shortcutsOpen
+    readonly property bool canvasViewOpen: root.historyOpen || root.modelsOpen || root.shortcutsOpen || root.capabilitiesOpen
 
     implicitWidth: 720
     implicitHeight: headerHeight + canvasHeight + composerHeight + columnSpacing * 2
@@ -182,6 +193,10 @@ Item {
             shortcutSheetLoader.item?.navigateUp?.();
             return;
         }
+        if (root.capabilitiesOpen) {
+            capabilitiesSheetLoader.item?.navigateUp?.();
+            return;
+        }
         if (messageList.contentHeight > messageList.height)
             messageList.contentY = Math.max(0, messageList.contentY - messageList.height / 2);
     }
@@ -201,6 +216,10 @@ Item {
         }
         if (root.shortcutsOpen) {
             shortcutSheetLoader.item?.navigateDown?.();
+            return;
+        }
+        if (root.capabilitiesOpen) {
+            capabilitiesSheetLoader.item?.navigateDown?.();
             return;
         }
         if (messageList.contentHeight > messageList.height)
@@ -288,6 +307,11 @@ Item {
             root.focusComposer();
             return true;
         }
+        if (root.capabilitiesOpen) {
+            root.capabilitiesOpen = false;
+            root.focusComposer();
+            return true;
+        }
         if (root.historyOpen) {
             root.historyOpen = false;
             return true;
@@ -304,6 +328,15 @@ Item {
         Qt.callLater(function() {
             if (root.shortcutsOpen)
                 shortcutsBackButton.forceActiveFocus();
+        });
+    }
+
+    /** The tool catalog and example prompts — the same canvas as "Keys". */
+    function openCapabilities() {
+        root.capabilitiesOpen = true;
+        Qt.callLater(function() {
+            if (root.capabilitiesOpen)
+                capabilitiesBackButton.forceActiveFocus();
         });
     }
 
@@ -334,6 +367,10 @@ Item {
             shortcutsBackButton.forceActiveFocus();
             return;
         }
+        if (root.capabilitiesOpen) {
+            capabilitiesBackButton.forceActiveFocus();
+            return;
+        }
         if (brainBackButton.activeFocus)
             historyToggleBtn.forceActiveFocus();
         else if (historyToggleBtn.activeFocus)
@@ -347,6 +384,10 @@ Item {
     function focusPrev() {
         if (root.shortcutsOpen) {
             shortcutsBackButton.forceActiveFocus();
+            return;
+        }
+        if (root.capabilitiesOpen) {
+            capabilitiesBackButton.forceActiveFocus();
             return;
         }
         if (brainBackButton.activeFocus)
@@ -377,11 +418,11 @@ Item {
         } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_M) {
             root.modelsOpen = !root.modelsOpen;
             event.accepted = true;
-        } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_T) {
-            composer.showRail("actions");
-            event.accepted = true;
         } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_J) {
             root.requestContinueInSidebar();
+            event.accepted = true;
+        } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_I) {
+            root.openCapabilities();
             event.accepted = true;
         } else if (event.key === Qt.Key_Escape) {
             if (!root.handleEscape())
@@ -406,7 +447,7 @@ Item {
             Ai.newChat();
             root.historyOpen = false;
             root.shortcutsOpen = false;
-            event.accepted = true;
+            root.capabilitiesOpen = false;
         }
     }
 
@@ -571,6 +612,7 @@ Item {
                             Ai.newChat();
                             root.historyOpen = false;
                             root.shortcutsOpen = false;
+                            root.capabilitiesOpen = false;
                             root.requestFocusComposer();
                         }
 
@@ -581,6 +623,7 @@ Item {
                                 Ai.newChat();
                                 root.historyOpen = false;
                                 root.shortcutsOpen = false;
+                                root.capabilitiesOpen = false;
                                 root.focusComposer();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Escape) {
@@ -686,64 +729,107 @@ Item {
                     }
                 }
 
-                RippleButton {
-                    id: shortcutsHint
+                RowLayout {
+                    id: emptyStateHints
                     z: 3
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: Appearance.rounding.normal
-                    implicitHeight: root.headerControlExtent
-                    implicitWidth: hintContent.implicitWidth + Appearance.rounding.normal * 2
+                    spacing: Appearance.rounding.verysmall
                     visible: root.visibleMessageIds.length === 0 && !root.canvasViewOpen
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colLayer2
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    colBackgroundActive: Appearance.colors.colLayer2Active
-                    colRipple: Appearance.colors.colLayer2Active
-                    onClicked: root.openShortcuts()
 
-                    Accessible.name: Translation.tr("Keyboard shortcuts")
+                    RippleButton {
+                        id: shortcutsHint
+                        implicitHeight: root.headerControlExtent
+                        implicitWidth: shortcutsHintContent.implicitWidth + Appearance.rounding.normal * 2
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colBackgroundActive: Appearance.colors.colLayer2Active
+                        colRipple: Appearance.colors.colLayer2Active
+                        onClicked: root.openShortcuts()
 
-                    contentItem: RowLayout {
-                        id: hintContent
-                        spacing: Appearance.rounding.verysmall
+                        Accessible.name: Translation.tr("Keyboard shortcuts")
 
-                        MaterialSymbol {
-                            Layout.alignment: Qt.AlignVCenter
-                            text: "keyboard"
-                            fill: 1
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: Appearance.colors.colOnLayer2
-                        }
+                        contentItem: RowLayout {
+                            id: shortcutsHintContent
+                            spacing: Appearance.rounding.verysmall
 
-                        StyledText {
-                            Layout.alignment: Qt.AlignVCenter
-                            text: Translation.tr("Keyboard shortcuts")
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnLayer2
-                        }
-
-                        Rectangle {
-                            Layout.alignment: Qt.AlignVCenter
-                            implicitWidth: Math.max(
-                                Appearance.font.pixelSize.small + Appearance.rounding.small,
-                                Appearance.font.pixelSize.huge * 0.65)
-                            implicitHeight: Appearance.font.pixelSize.huge
-                            radius: Appearance.rounding.verysmall
-                            color: Appearance.colors.colLayer3
+                            MaterialSymbol {
+                                Layout.alignment: Qt.AlignVCenter
+                                text: "keyboard"
+                                fill: 1
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: Appearance.colors.colOnLayer2
+                            }
 
                             StyledText {
-                                anchors.centerIn: parent
-                                text: "?"
-                                font.family: Appearance.font.family.monospace
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colOnLayer3
+                                Layout.alignment: Qt.AlignVCenter
+                                text: Translation.tr("Keyboard shortcuts")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnLayer2
                             }
+
+                            Rectangle {
+                                Layout.alignment: Qt.AlignVCenter
+                                implicitWidth: Math.max(
+                                    Appearance.font.pixelSize.small + Appearance.rounding.small,
+                                    Appearance.font.pixelSize.huge * 0.65)
+                                implicitHeight: Appearance.font.pixelSize.huge
+                                radius: Appearance.rounding.verysmall
+                                color: Appearance.colors.colLayer3
+
+                                StyledText {
+                                    anchors.centerIn: parent
+                                    text: "?"
+                                    font.family: Appearance.font.family.monospace
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colOnLayer3
+                                }
+                            }
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Keyboard shortcuts (?)")
                         }
                     }
 
-                    StyledToolTip {
-                        text: Translation.tr("Keyboard shortcuts (?)")
+                    RippleButton {
+                        id: capabilitiesHint
+                        implicitHeight: root.headerControlExtent
+                        implicitWidth: capabilitiesHintContent.implicitWidth + Appearance.rounding.normal * 2
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colBackgroundActive: Appearance.colors.colLayer2Active
+                        colRipple: Appearance.colors.colLayer2Active
+                        onClicked: root.openCapabilities()
+
+                        Accessible.name: Translation.tr("What this chat can do")
+
+                        contentItem: RowLayout {
+                            id: capabilitiesHintContent
+                            spacing: Appearance.rounding.verysmall
+
+                            MaterialSymbol {
+                                Layout.alignment: Qt.AlignVCenter
+                                text: "auto_awesome"
+                                fill: 1
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: Appearance.colors.colOnLayer2
+                            }
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignVCenter
+                                text: Translation.tr("What this chat can do")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnLayer2
+                            }
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Capabilities and example prompts (Ctrl+I)")
+                        }
                     }
                 }
 
@@ -1361,6 +1447,112 @@ Item {
                     // does not replace the content with a blank frame.
                     active: true
                     source: Qt.resolvedUrl("../sidebarPolicies/aiChat/ChatShortcutSheet.qml")
+                }
+            }
+        }
+
+        // Tool catalog and example prompts — the same canvas page as "Keys",
+        // shared with the sidebar chat via the same component.
+        Item {
+            id: capabilitiesView
+            parent: canvasSurface
+            anchors.fill: parent
+            z: 2
+            opacity: root.capabilitiesOpen ? 1.0 : 0.0
+            visible: opacity > 0.001
+            transform: Translate {
+                id: capabilitiesViewSlide
+                x: root.capabilitiesOpen ? 0 : root.pageSlideDistance
+
+                Behavior on x {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+            }
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(capabilitiesView)
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: Appearance.rounding.large
+                spacing: Appearance.rounding.small
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Appearance.rounding.normal
+
+                    RippleButton {
+                        id: capabilitiesBackButton
+                        implicitWidth: root.headerControlExtent
+                        implicitHeight: root.headerControlExtent
+                        buttonRadius: Appearance.rounding.full
+                        focusPolicy: Qt.StrongFocus
+                        colBackground: capabilitiesBackButton.activeFocus
+                            ? Appearance.colors.colLayer2Active
+                            : (capabilitiesBackButton.hovered ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2)
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colRipple: Appearance.colors.colLayer2Active
+                        onClicked: root.handleEscape()
+
+                        Accessible.name: Translation.tr("Back to chat")
+
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Space || event.key === Qt.Key_Enter) {
+                                root.handleEscape();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Escape) {
+                                root.handleEscape();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+                                root.focusComposer();
+                                event.accepted = true;
+                            }
+                        }
+
+                        contentItem: MaterialSymbol {
+                            text: "arrow_back"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: capabilitiesBackButton.activeFocus
+                                ? Appearance.m3colors.m3primary
+                                : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Back to chat (Esc)")
+                        }
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Capabilities")
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnLayer1
+                    }
+                }
+
+                Loader {
+                    id: capabilitiesSheetLoader
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    // Keep the page mounted while it fades out so closing
+                    // does not replace the content with a blank frame.
+                    active: true
+                    source: Qt.resolvedUrl("../sidebarPolicies/aiChat/AiCapabilitiesSheet.qml")
+
+                    Connections {
+                        target: capabilitiesSheetLoader.item
+                        function onPromptChosen(text) {
+                            root.capabilitiesOpen = false;
+                            composer.insertPromptExample(text);
+                        }
+                    }
                 }
             }
         }

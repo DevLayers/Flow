@@ -250,6 +250,15 @@ ColumnLayout {
         root.focusInput();
     }
 
+    /** Drops an example prompt from the Capabilities page straight into the draft, replacing whatever was there — a fresh start, not an append. */
+    function insertPromptExample(text) {
+        if (text.length === 0)
+            return;
+        root.setDraft(text);
+        Ai.draft = text;
+        root.focusInput();
+    }
+
     function selectModel(modelId) {
         if (Ai.setModel(modelId, false))
             root.focusInput();

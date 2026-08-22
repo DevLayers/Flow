@@ -52,7 +52,8 @@ Item {
                 { keys: ["Ctrl", "M"], what: Translation.tr("Pick the model") },
                 { keys: ["Ctrl", "T"], what: Translation.tr("Tools") },
                 { keys: ["Ctrl", "P"], what: Translation.tr("Persona and prompt") },
-                { keys: ["Ctrl", "K"], what: Translation.tr("API keys") }
+                { keys: ["Ctrl", "K"], what: Translation.tr("API keys") },
+                { keys: ["Ctrl", "I"], what: Translation.tr("What the tools can do, with example prompts") }
             ]
         },
         {

@@ -76,6 +76,12 @@ class VisionSectionTests(unittest.TestCase):
         vision_block = body_between(CONFIG_QML, "property JsonObject vision: JsonObject {", "}")
         self.assertIn("property bool ocrEnabled: true", vision_block)
 
+    def test_the_install_guide_is_shown_regardless_of_detection_status(self):
+        section = body_between(CONFIG_PAGE, 'title: Translation.tr("Vision")', "\n    ContentSection {")
+        guide = body_between(section, "HelperCodeBox {", "\n        }")
+        self.assertNotIn("visible:", guide)
+        self.assertNotIn("Ai.tesseractPresent", guide)
+
 
 class VoiceSectionTests(unittest.TestCase):
     def voice_section(self) -> str:
@@ -86,9 +92,14 @@ class VoiceSectionTests(unittest.TestCase):
         self.assertIn("checked: Config.options.ai.voice.enabled", section)
         self.assertIn("Config.options.ai.voice.enabled = checked;", section)
 
-    def test_the_config_default_is_on(self):
+    def test_the_config_defaults_off_until_a_backend_is_installed(self):
+        # Superseded: nothing installs whisper.cpp automatically, so a
+        # fresh install defaulting the switch on would show a microphone
+        # button that can only ever land on "error" until the person
+        # follows this very page's install guide and turns it on
+        # themselves. See the comment right above this property.
         voice_block = body_between(CONFIG_QML, "property JsonObject voice: JsonObject {", "}")
-        self.assertIn("property bool enabled: true", voice_block)
+        self.assertIn("property bool enabled: false", voice_block)
 
     def test_status_row_reflects_the_shared_service_not_a_local_guess(self):
         section = self.voice_section()
@@ -99,6 +110,37 @@ class VoiceSectionTests(unittest.TestCase):
     def test_check_again_forces_redetection_not_a_shell_restart(self):
         section = self.voice_section()
         self.assertIn("Ai.voiceService.redetect()", section)
+
+    def test_detection_runs_on_page_open_not_only_on_first_recording(self):
+        # Otherwise the status row and the install guide both stick on
+        # "checking" until the user tries the microphone once or hits
+        # Check again — on a page whose purpose is answering that question.
+        self.assertIn("Component.onCompleted: Ai.voiceService.ensureDetected()", CONFIG_PAGE)
+
+    def test_the_install_guide_is_shown_regardless_of_detection_status(self):
+        # A reference for reinstalling, or for reading the exact command
+        # before running it, is useful whether or not whisper.cpp already
+        # works — gating it behind "still missing" hid it the moment it
+        # stopped being needed, right when someone would want to double
+        # check what the switch above is actually driving.
+        section = self.voice_section()
+        guide = body_between(section, "HelperCodeBox {", "\n        }")
+        self.assertNotIn("visible:", guide)
+        self.assertNotIn("Ai.voiceService.detectionSettled", guide)
+        self.assertNotIn("Ai.voiceService.recorderAvailable", guide)
+        self.assertNotIn("Ai.voiceService.backendAvailable", guide)
+
+    def test_the_install_guide_is_distro_aware_and_copies_the_real_command(self):
+        section = self.voice_section()
+        guide = body_between(section, "HelperCodeBox {", "\n        }")
+        self.assertIn("page.linuxFamily", guide)
+        self.assertIn("codeSnippet: page.voiceDepsInstallCommand", guide)
+
+    def test_the_install_command_builds_and_links_whisper_cli(self):
+        command = body_between(CONFIG_PAGE, "function voiceDepsInstallCommandFor(value: string): string {", "\n    }")
+        self.assertIn("whisper.cpp", command)
+        self.assertIn("whisper-cli", command)
+        self.assertIn("download-ggml-model.sh", command)
 
 
 if __name__ == "__main__":

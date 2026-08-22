@@ -91,6 +91,13 @@ Item {
         root.activePopover = "shortcuts";
     }
 
+    /** The tool catalog and example prompts — the same canvas as "Keys". */
+    function openCapabilities() {
+        root.viewDirection = 1;
+        root.viewReturnTo = "";
+        root.activePopover = "capabilities";
+    }
+
     /** Opens the model list for one answer only, without changing the chat's. */
     function openRegenerate(messageId: string) {
         root.regenerateMessageId = messageId;
@@ -302,6 +309,7 @@ Item {
         "sessions": Translation.tr("Saved chats"),
         "keys": Translation.tr("API keys"),
         "shortcuts": Translation.tr("Keys"),
+        "capabilities": Translation.tr("Capabilities"),
         "memory": Translation.tr("What it remembers"),
         "projects": Translation.tr("Projects")
     })
@@ -900,15 +908,19 @@ Item {
             readonly property int spent: Ai.sessionTokenTotal
             readonly property bool estimated: tokenIndicator.spent <= 0
             readonly property int total: tokenIndicator.estimated ? Ai.estimatedContextTokens : tokenIndicator.spent
+            readonly property bool perSecond: Config.options.ai.showTokensPerSecond
+            readonly property real rate: Ai.lastAnswerTokensPerSecond
             readonly property int window: Ai.currentModelEntry?.contextWindow ?? 0
             readonly property real fraction: tokenIndicator.window > 0
                 ? Math.min(1, Math.max(Ai.estimatedContextTokens, Ai.tokenCount.total) / tokenIndicator.window)
                 : 0
             // A window filling up is the one thing here worth a colour: past
             // three quarters the oldest turns are about to be dropped.
-            readonly property color tint: tokenIndicator.fraction >= 0.75 ? Appearance.m3colors.m3tertiary : Appearance.colors.colOnLayer2
+            readonly property color tint: tokenIndicator.perSecond
+                ? Appearance.colors.colOnLayer2
+                : (tokenIndicator.fraction >= 0.75 ? Appearance.m3colors.m3tertiary : Appearance.colors.colOnLayer2)
 
-            visible: tokenIndicator.total > 0
+            visible: tokenIndicator.perSecond ? tokenIndicator.rate > 0 : tokenIndicator.total > 0
             implicitHeight: root.controlExtent
             implicitWidth: tokenRow.implicitWidth + root.controlExtent * 0.7
             radius: Appearance.rounding.full
@@ -927,7 +939,7 @@ Item {
 
                 MaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
-                    text: tokenIndicator.fraction >= 0.75 ? "data_alert" : "token"
+                    text: tokenIndicator.perSecond ? "speed" : (tokenIndicator.fraction >= 0.75 ? "data_alert" : "token")
                     iconSize: Appearance.font.pixelSize.larger
                     fill: 1
                     color: tokenIndicator.tint
@@ -939,7 +951,9 @@ Item {
 
                 StyledText {
                     Layout.alignment: Qt.AlignVCenter
-                    text: (tokenIndicator.estimated ? "~" : "") + Ai.shortTokenCount(tokenIndicator.total)
+                    text: tokenIndicator.perSecond
+                        ? Ai.formatTokensPerSecond(tokenIndicator.rate)
+                        : ((tokenIndicator.estimated ? "~" : "") + Ai.shortTokenCount(tokenIndicator.total))
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
                     color: tokenIndicator.tint
@@ -951,15 +965,17 @@ Item {
                 extraVisibleCondition: false
                 alternativeVisibleCondition: tokenHover.containsMouse
                 text: {
+                    if (tokenIndicator.perSecond)
+                        return Translation.tr("Latest answer speed: %1").arg(Ai.formatTokensPerSecond(tokenIndicator.rate));
                     let lines = [tokenIndicator.estimated
-                        ? Translation.tr("About %1 tokens would go out with the next message").arg(tokenIndicator.total)
-                        : Translation.tr("%1 tokens in this chat").arg(tokenIndicator.total)];
+                        ? Translation.tr("About %1 tokens would go out with the next message").arg(String(tokenIndicator.total))
+                        : Translation.tr("%1 tokens in this chat").arg(String(tokenIndicator.total))];
                     if (Ai.prunedTurnCount > 0)
-                        lines.push(Translation.tr("%1 earlier turns are no longer sent").arg(Ai.prunedTurnCount));
+                        lines.push(Translation.tr("%1 earlier turns are no longer sent").arg(String(Ai.prunedTurnCount)));
                     if (Ai.tokenCount.input > 0 || Ai.tokenCount.output > 0)
-                        lines.push(Translation.tr("Last turn — in: %1, out: %2").arg(Math.max(0, Ai.tokenCount.input)).arg(Math.max(0, Ai.tokenCount.output)));
+                        lines.push(Translation.tr("Last turn — in: %1, out: %2").arg(String(Math.max(0, Ai.tokenCount.input))).arg(String(Math.max(0, Ai.tokenCount.output))));
                     if (tokenIndicator.window > 0)
-                        lines.push(Translation.tr("%1% of the %2 token window").arg(Math.round(tokenIndicator.fraction * 100)).arg(tokenIndicator.window));
+                        lines.push(Translation.tr("%1% of the %2 token window").arg(String(Math.round(tokenIndicator.fraction * 100))).arg(String(tokenIndicator.window)));
                     return lines.join("\n");
                 }
             }
@@ -1143,6 +1159,8 @@ Item {
                             return keysComponent;
                         if (root.activePopover === "shortcuts")
                             return shortcutsComponent;
+                        if (root.activePopover === "capabilities")
+                            return capabilitiesComponent;
                         if (root.activePopover === "memory")
                             return memoryComponent;
                         if (root.activePopover === "projects")
@@ -1226,6 +1244,20 @@ Item {
     Component {
         id: shortcutsComponent
         ChatShortcutSheet {}
+    }
+
+    Component {
+        id: capabilitiesComponent
+        AiCapabilitiesSheet {
+            onPromptChosen: text => {
+                root.closePopover();
+                if (!root.inputField)
+                    return;
+                root.inputField.text = text;
+                root.inputField.cursorPosition = root.inputField.text.length;
+                root.inputField.forceActiveFocus();
+            }
+        }
     }
 
     Component {

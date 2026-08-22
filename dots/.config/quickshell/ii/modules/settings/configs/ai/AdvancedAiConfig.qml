@@ -22,6 +22,12 @@ ContentPage {
 
     forceWidth: false
 
+    // Detection only otherwise runs on the first recording attempt or a
+    // manual "Check again" — reached without either on a page whose whole
+    // point is showing whether whisper.cpp is there yet, which would
+    // stick on "Checking…" until the user tried the microphone once.
+    Component.onCompleted: Ai.voiceService.ensureDetected()
+
     readonly property var toolDefinitions: Array.from(Ai.toolbox.definitions)
     property string folderPickerError: ""
 
@@ -303,6 +309,24 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "speed"
+        title: Translation.tr("Chat toolbar")
+
+        ConfigSwitch {
+            buttonIcon: "speed"
+            text: Translation.tr("Show tokens per second in the chat toolbar")
+            checked: Config.options.ai.showTokensPerSecond
+            onCheckedChanged: {
+                if (Config.options.ai.showTokensPerSecond !== checked)
+                    Config.options.ai.showTokensPerSecond = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Shows the generated tokens per second from the latest completed answer instead of accumulated token usage.")
+            }
+        }
+    }
+
+    ContentSection {
         icon: "tune"
         title: Translation.tr("Requests")
 
@@ -516,7 +540,6 @@ ContentPage {
         HelperCodeBox {
             Layout.fillWidth: true
             Layout.topMargin: 4
-            visible: !Ai.tesseractPresent
             topLeftRadius: Appearance.rounding.large
             topRightRadius: Appearance.rounding.large
             bottomLeftRadius: Appearance.rounding.large
@@ -586,6 +609,20 @@ ContentPage {
                 materialIcon: "refresh"
                 onClicked: Ai.voiceService.redetect()
             }
+        }
+
+        HelperCodeBox {
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            topLeftRadius: Appearance.rounding.large
+            topRightRadius: Appearance.rounding.large
+            bottomLeftRadius: Appearance.rounding.large
+            bottomRightRadius: Appearance.rounding.large
+            icon: "terminal"
+            title: Translation.tr("Build whisper.cpp · %1").arg(page.linuxFamily)
+            text: Translation.tr("Compiles a small local speech-to-text engine, links it as `whisper-cli`, and downloads its base model (about 150 MB, once). Runs entirely on this machine — nothing spoken is ever sent anywhere. Copy the command for your system, run it in a terminal, then press Check again above.")
+            codeSnippet: page.voiceDepsInstallCommand
+            snippetWrapMode: Text.Wrap
         }
     }
 }

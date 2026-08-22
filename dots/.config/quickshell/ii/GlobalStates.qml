@@ -402,7 +402,6 @@ Singleton {
         }
 
     }
-
     IpcHandler {
         target: "welcome"
 

@@ -1370,6 +1370,38 @@ Singleton {
         return `${Math.round(value / 1000)}k`;
     }
 
+    /**
+     * Generation speed of the latest user-visible answer.
+     *
+     * The response's output tokens include the provider's generated stream
+     * (including reasoning where the provider reports it that way). Input
+     * context tokens are deliberately excluded: they describe request size,
+     * not how quickly the model generated the answer.
+     */
+    readonly property real lastAnswerTokensPerSecond: {
+        const ids = root.messageIDs;
+        for (let i = ids.length - 1; i >= 0; i--) {
+            const message = root.messageByID[ids[i]];
+            if (!message || message.role !== "assistant" || !message.done)
+                continue;
+            if (Array.from(message.toolCalls ?? []).length > 0 || String(message.content ?? "").trim().length === 0)
+                continue;
+            const outputTokens = Number(message.outputTokens ?? -1);
+            const elapsedMs = Number(message.completedAt ?? 0) - Number(message.createdAt ?? 0);
+            if (outputTokens <= 0 || elapsedMs <= 0)
+                continue;
+            return outputTokens / (elapsedMs / 1000);
+        }
+        return 0;
+    }
+
+    function formatTokensPerSecond(rate: real): string {
+        const value = Number(rate ?? 0);
+        if (isNaN(value) || value <= 0)
+            return "—";
+        return (value < 10 ? value.toFixed(1) : String(Math.round(value))) + " tok/s";
+    }
+
     property real temperature: 0.5
     property QtObject tokenCount: QtObject {
         property int input: -1
@@ -2405,8 +2437,10 @@ Singleton {
         // message that actually answers turned one finished exchange into
         // one notification per tool round-trip (a web search followed by
         // reading a page was three notifications for one answer).
-        if ((message.toolCalls?.length ?? 0) === 0)
+        if ((message.toolCalls?.length ?? 0) === 0) {
             root.notifyResponseFinished(message);
+            root.writeLastAnswerFile(message);
+        }
         if (root.postResponseHook) {
             root.postResponseHook();
             root.postResponseHook = null; // Reset hook after use
@@ -2514,6 +2548,77 @@ Singleton {
         if (iconName.length > 0)
             command.push(`--icon=${iconName}`);
         Quickshell.execDetached(command);
+    }
+
+    // ── Answering from outside the UI ───────────────────────────────────
+    /**
+     * The last completed exchange, kept in memory and mirrored to
+     * `Directories.aiLastAnswer` on disk, so a question that came in over
+     * `qs -c ii ipc call ai ask` — never touching the transcript, no window,
+     * nothing to look at — has somewhere to read the answer back from.
+     * Whichever chat is active answers; there is only ever one running
+     * exchange, on screen or not, so "the last one" is unambiguous.
+     */
+    property var lastAnswerRecord: null
+
+    function writeLastAnswerFile(message: AiMessageData) {
+        const request = root.messageByID[root.currentRunRequestId] ?? null;
+        const failed = String(message?.errorKind ?? "").length > 0;
+        const record = {
+            "requestText": String(request?.rawContent ?? request?.content ?? ""),
+            "answer": failed ? "" : String(message?.content ?? ""),
+            "errorKind": String(message?.errorKind ?? ""),
+            "errorText": String(message?.errorText ?? ""),
+            "sessionId": root.currentRunSessionId || root.sessions.currentId,
+            "sessionTitle": root.sessionTitle,
+            "model": message?.model ?? root.currentModelId,
+            "completedAt": Date.now()
+        };
+        root.lastAnswerRecord = record;
+        lastAnswerFile.setText(JSON.stringify(record, null, 2));
+    }
+
+    // Write-only: nothing here ever reads this back into the shell, so
+    // there is no adapter, no load guard, no retry-then-create dance —
+    // just the one thing that matters for a file a stranger process polls,
+    // atomic writes, so it is never caught half-written.
+    FileView {
+        id: lastAnswerFile
+        path: Qt.resolvedUrl(Directories.aiLastAnswer)
+        blockWrites: true
+        atomicWrites: true
+        printErrors: false
+        onSaveFailed: error => console.log(`[Ai] Could not write the last-answer file: ${error}`)
+    }
+
+    /**
+     * Lets a request that never touches the UI ask the model something,
+     * from another shell over SSH, a script, whatever can reach the local
+     * `qs` socket. `ask` runs exactly like a message typed into the
+     * composer — same chat, same tools, same one-at-a-time rule — and its
+     * return value is `sendUserMessage()`'s own accept/reject verdict as
+     * JSON: busy, a missing key, a disabled policy, whatever it is, the
+     * caller sees it at once. The answer is not in that return value — it
+     * still has to be generated — so it lands later, in `lastAnswer()` or
+     * the file at `Directories.aiLastAnswer`, once the model is done.
+     *
+     * One real limitation, not a bug: a tool call that needs approval —
+     * `run_shell_command` always does, by design — has no deadline and
+     * waits for a person to click it in the transcript. Asked this way,
+     * with no window open to click anything, that wait never ends until
+     * someone opens the chat and answers the card by hand.
+     */
+    IpcHandler {
+        target: "ai"
+
+        function ask(text: string): string {
+            return JSON.stringify(root.sendUserMessage(text));
+        }
+
+        /** The last completed answer, whoever asked for it. */
+        function lastAnswer(): string {
+            return JSON.stringify(root.lastAnswerRecord ?? {});
+        }
     }
 
     function transportErrorKind(status: int, code: int): string {

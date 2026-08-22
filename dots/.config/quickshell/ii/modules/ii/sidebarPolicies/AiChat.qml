@@ -413,6 +413,9 @@ Item {
         case Qt.Key_K:
             controlBar.togglePopover("keys");
             return true;
+        case Qt.Key_I:
+            controlBar.togglePopover("capabilities");
+            return true;
         case Qt.Key_F:
             root.transcriptSearchOpen = !root.transcriptSearchOpen;
             return true;
@@ -598,6 +601,13 @@ Item {
                 } else {
                     Ai.setApiKey(args[0]);
                 }
+            }
+        },
+        {
+            name: "capabilities",
+            description: Translation.tr("Show what this chat's tools can do, with example prompts for each."),
+            execute: () => {
+                controlBar.openCapabilities();
             }
         },
         {
@@ -1037,77 +1047,6 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
         StyledToolTip {
             text: findStep.tooltipText
-        }
-    }
-
-    /** One line of the empty state: what the key is, and what it does. */
-    component EmptyStateKey: Rectangle {
-        id: emptyKey
-
-        property var keys: []
-        property string label: ""
-        /** Set when pressing the row does the same thing the key does. */
-        property bool actionable: false
-
-        signal triggered
-
-        implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.6)
-        radius: Appearance.rounding.full
-        color: emptyKeyMouse.containsMouse && emptyKey.actionable ? Appearance.colors.colLayer2Hover : "transparent"
-
-        Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-        }
-
-        MouseArea {
-            id: emptyKeyMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            enabled: emptyKey.actionable
-            cursorShape: emptyKey.actionable ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: emptyKey.triggered()
-        }
-
-        RowLayout {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Appearance.rounding.unsharpenmore
-            anchors.rightMargin: Appearance.rounding.small
-            spacing: Appearance.rounding.unsharpenmore
-
-            Repeater {
-                model: ScriptModel {
-                    values: emptyKey.keys
-                }
-
-                delegate: Rectangle {
-                    id: emptyKeyCap
-                    required property var modelData
-
-                    implicitWidth: Math.max(emptyKeyLabel.implicitWidth + Appearance.rounding.small, emptyKey.implicitHeight * 0.66)
-                    implicitHeight: Math.round(emptyKey.implicitHeight * 0.66)
-                    radius: Appearance.rounding.verysmall
-                    color: Appearance.colors.colLayer2
-
-                    StyledText {
-                        id: emptyKeyLabel
-                        anchors.centerIn: parent
-                        text: emptyKeyCap.modelData
-                        font.family: Appearance.font.family.monospace
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colOnLayer2
-                    }
-                }
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                text: emptyKey.label
-                elide: Text.ElideRight
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
-            }
         }
     }
 
@@ -1560,6 +1499,14 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                 label: Translation.tr("All the keys this chat answers to")
                                 actionable: true
                                 onTriggered: controlBar.openShortcuts()
+                            }
+
+                            EmptyStateKey {
+                                Layout.fillWidth: true
+                                keys: ["Ctrl", "I"]
+                                label: Translation.tr("What this chat can do, with example prompts")
+                                actionable: true
+                                onTriggered: controlBar.openCapabilities()
                             }
 
                             EmptyStateKey {
