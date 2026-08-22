@@ -3469,6 +3469,11 @@ Singleton {
                     property string thinkingDefault: ""
                     property string activityDefault: "auto" // auto | expanded | collapsed
                     property bool autoScroll: true
+                    // One source of truth for chat motion. Search forwards
+                    // this same preference into its navigator.
+                    property bool reducedMotion: false
+                    // Ordered shortcuts for Ctrl+1 … Ctrl+9 in the sidebar.
+                    property list<string> pinnedModels: []
                     property string sendKey: "enter" // enter | ctrlEnter
                     property bool renderMarkdown: true
                     property bool renderLatex: true

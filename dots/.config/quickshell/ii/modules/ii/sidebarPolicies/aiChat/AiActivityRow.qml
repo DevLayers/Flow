@@ -27,6 +27,8 @@ Item {
     /** Whether there is anything behind the row worth opening. */
     property bool expandable: false
     property bool expanded: false
+    /** Shared with Search so activity never moves when motion is reduced. */
+    property bool reducedMotion: Config.options.sidebar.ai.reducedMotion
     /** How tall the opened strip may get before it scrolls on its own. */
     property real maximumContentHeight: Appearance.font.pixelSize.huge * 9
 
@@ -75,11 +77,13 @@ Item {
         y: root.shown ? 0 : -Appearance.rounding.small
 
         Behavior on y {
+            enabled: !root.reducedMotion
             animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
         }
     }
 
     Behavior on opacity {
+        enabled: !root.reducedMotion
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
@@ -120,6 +124,7 @@ Item {
                     opacity: headerMouse.containsMouse || root.activeFocus ? 1 : 0.9
 
                     Behavior on opacity {
+                        enabled: !root.reducedMotion
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                 }
@@ -144,10 +149,12 @@ Item {
                     rotation: root.expanded ? 90 : 0
 
                     Behavior on rotation {
+                        enabled: !root.reducedMotion
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
 
                     Behavior on color {
+                        enabled: !root.reducedMotion
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
                 }
@@ -173,10 +180,12 @@ Item {
             visible: root.expanded || contentClip.implicitHeight > 0.5
 
             Behavior on implicitHeight {
+                enabled: !root.reducedMotion
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
 
             Behavior on opacity {
+                enabled: !root.reducedMotion
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
 
@@ -209,6 +218,7 @@ Item {
         property color color: Appearance.colors.colSubtext
         property color highlight: Appearance.m3colors.m3onSurface
         property bool running: false
+        readonly property bool animating: sheen.running && !root.reducedMotion
 
         implicitWidth: sheenLabel.implicitWidth
         implicitHeight: sheenLabel.implicitHeight
@@ -224,16 +234,17 @@ Item {
             color: sheen.color
             // While the sweep is on, this same text is the mask it is cut
             // with, and drawing it twice would only thicken it.
-            visible: !sheen.running
+            visible: !sheen.animating
 
             Behavior on color {
+                enabled: !root.reducedMotion
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
             }
         }
 
         Loader {
             anchors.fill: parent
-            active: sheen.running
+            active: sheen.animating
 
             sourceComponent: Item {
                 Item {

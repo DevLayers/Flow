@@ -143,6 +143,42 @@ Item {
         return Translation.tr("Persona: %1").arg(Ai.currentPersona.name);
     }
 
+    function modelChipTooltip(): string {
+        const model = root.currentModel;
+        if (!model)
+            return Translation.tr("No model selected");
+        const provider = Ai.providers[model.providerId] ?? null;
+        const lines = [
+            Translation.tr("Model: %1").arg(String(model.name ?? model.title ?? "")),
+            Translation.tr("Provider: %1").arg(String(provider?.name ?? model.providerId ?? ""))
+        ];
+        const window = Number(model.contextWindow ?? 0);
+        if (window > 0)
+            lines.push(Translation.tr("Context: %1 tokens").arg(String(window)));
+        if (Ai.catalog.isModelLocal(model)) {
+            lines.push(Translation.tr("Price: local — no API cost"));
+        } else if (String(model.promptPrice ?? "").length > 0 || String(model.completionPrice ?? "").length > 0) {
+            const input = model.promptPriceIsFree ? Translation.tr("free") : String(model.promptPrice ?? "—");
+            const output = model.completionPriceIsFree ? Translation.tr("free") : String(model.completionPrice ?? "—");
+            lines.push(Translation.tr("Price / 1M: in %1 · out %2").arg(input).arg(output));
+        }
+        const capabilities = [];
+        if (model.thinking)
+            capabilities.push(Translation.tr("reasoning"));
+        if (model.vision)
+            capabilities.push(Translation.tr("vision"));
+        if (model.attachments)
+            capabilities.push(Translation.tr("files"));
+        if (model.tools)
+            capabilities.push(Translation.tr("tools"));
+        if (model.builtinSearch)
+            capabilities.push(Translation.tr("web search"));
+        if (capabilities.length > 0)
+            lines.push(Translation.tr("Capabilities: %1").arg(capabilities.join(", ")));
+        lines.push(Translation.tr("Also %1model MODEL").arg(root.commandPrefix));
+        return lines.join("\n");
+    }
+
     /**
      * Every chip, in the order it gives way. The list is read twice — once by
      * the bar, once by the overflow menu — and the order is the priority: what
@@ -189,7 +225,7 @@ Item {
             "customIcon": root.currentModel?.icon ?? "",
             "label": root.currentModel?.title ?? Translation.tr("No model"),
             "alwaysLabel": true,
-            "tooltip": Translation.tr("Model: %1\nAlso %2model MODEL").arg(root.currentModel?.name ?? Translation.tr("none")).arg(root.commandPrefix)
+            "tooltip": root.modelChipTooltip()
         },
         {
             "key": "thinking",

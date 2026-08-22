@@ -23,7 +23,9 @@ Item {
     focus: true
     activeFocusOnTab: true
     property AiSearchNavigator navigator: AiSearchNavigator {}
-    property bool reducedMotion: false
+    // Search and the sidebar transcript intentionally share this preference:
+    // choosing less motion must not depend on which AI surface is open.
+    property bool reducedMotion: Config.options.sidebar.ai.reducedMotion
     property string pageTitle: root.navigator.currentPage
     default property alias contentData: chatPage.data
 

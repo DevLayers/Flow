@@ -22,7 +22,7 @@ QtObject {
     property int transitionDirection: 1
     property real transitionProgress: 1.0
     property bool transitioning: false
-    property bool reducedMotion: false
+    property bool reducedMotion: Config.options.sidebar.ai.reducedMotion
     property bool pendingPop: false
     property list<string> pageStack: [root.rootPage]
     property var focusAnchors: ({})

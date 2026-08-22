@@ -19,6 +19,7 @@ Item {
     property var inputField: messageInputField
     property string commandPrefix: "/"
     readonly property bool autoScrollEnabled: Config.options.sidebar.ai.autoScroll
+    readonly property bool reducedMotion: Config.options.sidebar.ai.reducedMotion
 
     property var suggestionQuery: ""
     property var suggestionList: []
@@ -68,6 +69,20 @@ Item {
     readonly property string thinkingShortLabel: root.thinkingShortLabels[Ai.thinkingLevel] ?? ""
 
     property int entranceTrigger: -1
+    // New delegates are the only ones that animate while a response streams.
+    // Reopening a saved chat explicitly advances this token once, letting the
+    // already visible turns make a short, ordered entrance instead.
+    property int transcriptRevealToken: -1
+
+    function pinnedModelIds(): var {
+        return Array.from(Config.options.sidebar.ai.pinnedModels ?? [])
+            .filter(id => Ai.catalog.models[id]);
+    }
+
+    function selectPinnedModel(index: int): bool {
+        const id = root.pinnedModelIds()[index];
+        return id ? Ai.setModel(id, false) : false;
+    }
 
     // ── Editing a question ────────────────────────────────────────────────
     /** The question being rewritten, "" when the composer is writing a new one. */
@@ -212,6 +227,25 @@ Item {
             if (emptyStatePlaceholder.shown)
                 root.refreshEmptyStateGreeting();
         }
+    }
+
+    Connections {
+        target: Ai.sessions
+        function onSessionOpened(session) {
+            // Delegates in view receive the same token; offscreen rows are
+            // created settled, so only what is actually visible enters.
+            root.transcriptRevealToken = Math.max(0, root.transcriptRevealToken + 1);
+            transcriptRevealWindow.restart();
+        }
+    }
+
+    Timer {
+        id: transcriptRevealWindow
+        // Covers the stagger while keeping delegates later created by scrolling
+        // settled. This is an opening transition, never a list-populate one.
+        interval: Appearance.animation.elementMoveEnter.duration
+            + Appearance.animation.elementMoveSmall.duration * 2
+        onTriggered: root.transcriptRevealToken = -1
     }
 
     Connections {
@@ -396,6 +430,13 @@ Item {
 
         if (!control)
             return false;
+
+        if (!shift && !alt) {
+            const pinnedIndex = [Qt.Key_1, Qt.Key_2, Qt.Key_3, Qt.Key_4, Qt.Key_5,
+                                 Qt.Key_6, Qt.Key_7, Qt.Key_8, Qt.Key_9].indexOf(event.key);
+            if (pinnedIndex >= 0)
+                return root.selectPinnedModel(pinnedIndex);
+        }
 
         if (shift && event.key === Qt.Key_O) {
             Ai.newChat();
@@ -1292,6 +1333,9 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                          * first token, and offer a button back to where it already was.
                          */
                         property bool pinning: false
+                        /** Number of messages received below the reader. */
+                        property int unseenMessageCount: 0
+                        property int observedCount: 0
 
                         /**
                          * The very end, margins included. `positionViewAtEnd`
@@ -1305,10 +1349,18 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
                         function pinToEnd() {
                             messageListView.following = true;
+                            messageListView.unseenMessageCount = 0;
                             messageListView.pinning = true;
                             messageListView.contentY = messageListView.maximumContentY;
                             messageListView.previousContentY = messageListView.contentY;
                             pinReleaseTimer.restart();
+                        }
+
+                        Component.onCompleted: messageListView.observedCount = messageListView.count
+
+                        onFollowingChanged: {
+                            if (messageListView.following)
+                                messageListView.unseenMessageCount = 0;
                         }
 
                         Timer {
@@ -1369,6 +1421,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         // walked back up the chat. Sending does — see
                         // `handleInput`, which pins deliberately.
                         onCountChanged: {
+                            const added = messageListView.count - messageListView.observedCount;
+                            if (added > 0 && !messageListView.following)
+                                messageListView.unseenMessageCount += added;
+                            messageListView.observedCount = messageListView.count;
                             if (!root.autoScrollEnabled || !messageListView.following)
                                 return;
                             Qt.callLater(function () {
@@ -1401,6 +1457,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             messageData: {
                                 Ai.messageByID[modelData];
                             }
+                            reducedMotion: root.reducedMotion
+                            transcriptRevealToken: root.transcriptRevealToken
+                            transcriptRevealDelay: index * Math.max(1,
+                                Math.round(Appearance.animation.elementMoveSmall.duration / 14))
                             onRegenerateRequested: id => controlBar.openRegenerate(id)
                             onModelPickerRequested: controlBar.togglePopover("model")
                             onEditRequested: (id, content) => root.beginEdit(id, content)
@@ -1611,6 +1671,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         // and this would offer a way back to where the reader already
                         // was on every token.
                         shown: !messageListView.following
+                        newItemCount: messageListView.unseenMessageCount
                         downAction: () => messageListView.pinToEnd()
                     }
                 }
@@ -1896,6 +1957,92 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             margins: root.composerInset
                         }
                         spacing: root.composerGap
+
+                        // A quiet ruler makes the request budget legible
+                        // before sending. The service estimates the same
+                        // prompt, attachments, history and saved summary that
+                        // `historyWithinWindow()` will use when it submits.
+                        Item {
+                            id: contextRuler
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.max(Appearance.rounding.small,
+                                contextRuler.thickness + Appearance.rounding.unsharpenmore)
+                            visible: contextRuler.window > 0
+
+                            readonly property int window: Number(Ai.currentModelEntry?.contextWindow ?? 0)
+                            readonly property int historyTokens: Number(Ai.estimatedContextTokens ?? 0)
+                            readonly property int memoryTokens: Ai.estimateTokens(Ai.contextSummary)
+                            readonly property int promptTokens: Ai.estimateTokens(messageInputField.text)
+                            readonly property int attachmentTokens: Ai.estimateMessageTokens({ attachments: Ai.attachments })
+                            readonly property int totalTokens: historyTokens + promptTokens + attachmentTokens
+                            readonly property int safeLimit: Math.max(0, window - Ai.contextReserve)
+                            readonly property bool pruningOnNextPrompt: totalTokens > safeLimit
+                            readonly property real fraction: window > 0 ? Math.min(1, totalTokens / window) : 0
+                            readonly property real thickness: Math.max(1, Math.round(Appearance.rounding.unsharpenmore / 3))
+                            readonly property color tint: pruningOnNextPrompt
+                                ? Appearance.m3colors.m3tertiary
+                                : Appearance.colors.colPrimary
+
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                height: contextRuler.thickness
+                                radius: Appearance.rounding.full
+                                color: Appearance.colors.colOutlineVariant
+                            }
+
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                width: parent.width * contextRuler.fraction
+                                height: contextRuler.thickness
+                                radius: Appearance.rounding.full
+                                color: contextRuler.tint
+
+                                Behavior on width {
+                                    enabled: !root.reducedMotion
+                                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
+                                }
+
+                                Behavior on color {
+                                    enabled: !root.reducedMotion
+                                    ColorAnimation {
+                                        duration: Appearance.animation.elementMoveSmall.duration
+                                        easing.type: Appearance.animation.elementMoveSmall.type
+                                        easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: contextRulerHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.NoButton
+                            }
+
+                            StyledToolTip {
+                                extraVisibleCondition: false
+                                alternativeVisibleCondition: contextRulerHover.containsMouse
+                                text: {
+                                    const parts = [
+                                        Translation.tr("History: %1 tokens").arg(String(contextRuler.historyTokens)),
+                                        Translation.tr("Saved memory: %1 tokens").arg(String(contextRuler.memoryTokens)),
+                                        Translation.tr("Draft: %1 tokens").arg(String(contextRuler.promptTokens)),
+                                        Translation.tr("Attachments: %1 tokens").arg(String(contextRuler.attachmentTokens)),
+                                        Translation.tr("Reserve for the answer: %1 tokens").arg(String(Ai.contextReserve))
+                                    ];
+                                    if (contextRuler.pruningOnNextPrompt)
+                                        parts.push(Translation.tr("Sending this prompt will summarize the oldest turns."));
+                                    return parts.join("\n");
+                                }
+                            }
+
+                            Accessible.name: contextRuler.pruningOnNextPrompt
+                                ? Translation.tr("Context ruler: the next prompt will summarize older turns")
+                                : Translation.tr("Context ruler: %1 of %2 tokens").arg(String(contextRuler.totalTokens)).arg(String(contextRuler.window))
+                        }
 
                         // ── the message, always on its own line above the controls ──
                         ScrollView {

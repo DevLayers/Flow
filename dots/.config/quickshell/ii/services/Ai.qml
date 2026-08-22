@@ -1909,9 +1909,16 @@ Singleton {
     // a search engine's results page does not disappear once you have read
     // it.
     readonly property var resultCardKinds: ["settingsResults", "fileResults", "songIdentifyPreview", "taskResults", "ragResults"]
+    // Approval bodies are actionable only while pending. Keeping their final
+    // state in the model lets the transcript turn the card into one outcome
+    // row instead of removing it from under the reader.
+    readonly property var approvalCardKinds: ["settingsDiff", "reminderPreview", "memoryFact", "fileAttachPreview", "notesPreview", "systemControlPreview", "windowMovePreview", "wallpaperPreview", "mediaControlPreview", "songIdentifyPreview", "taskPreview", "taskMutationPreview"]
+    readonly property var resolvedApprovalStates: ["done", "denied", "failed", "needsInspection"]
 
     function visibleToolCards(message): var {
         return Array.from(message?.toolCards ?? []).filter(card => card.state === "pending"
+            || (root.approvalCardKinds.indexOf(card.kind) >= 0
+                && root.resolvedApprovalStates.indexOf(card.state) >= 0)
             || (root.resultCardKinds.indexOf(card.kind) >= 0 && (card.state === "done" || card.state === "running")));
     }
 

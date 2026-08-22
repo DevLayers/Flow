@@ -294,6 +294,13 @@ Item {
                 checked: Config.options.sidebar.ai.autoScroll
                 onCheckedChanged: Config.options.sidebar.ai.autoScroll = checked
             }
+
+            ConfigSwitch {
+                buttonIcon: "motion_photos_off"
+                text: Translation.tr("Reduce motion in AI chat")
+                checked: Config.options.sidebar.ai.reducedMotion
+                onCheckedChanged: Config.options.sidebar.ai.reducedMotion = checked
+            }
         }
 
         ContentSection {

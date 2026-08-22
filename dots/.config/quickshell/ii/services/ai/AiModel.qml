@@ -76,5 +76,11 @@ QtObject {
     property real maxTemperature: 2.0
     property int contextWindow: 0
     property int maxOutput: 0
+    /** OpenRouter's USD price per million input tokens, empty when unknown. */
+    property string promptPrice: ""
+    /** OpenRouter's USD price per million output tokens, empty when unknown. */
+    property string completionPrice: ""
+    property bool promptPriceIsFree: false
+    property bool completionPriceIsFree: false
     property var quirks: ({})
 }

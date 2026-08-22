@@ -40,6 +40,13 @@ Item {
      */
     property string density: Config.options.sidebar.ai.density === "compact" ? "compact" : "comfortable"
     readonly property bool compact: root.density === "compact"
+    property bool reducedMotion: Config.options.sidebar.ai.reducedMotion
+    /** Advanced by the sidebar only when a saved conversation is opened. */
+    property int transcriptRevealToken: -1
+    /** Ordered by the currently visible delegate index. */
+    property int transcriptRevealDelay: 0
+    property int handledRevealToken: -1
+    property bool revealAnimationRunning: false
 
     /** Asks the control bar for another model to redo this answer with. */
     signal regenerateRequested(string messageId)
@@ -223,50 +230,68 @@ Item {
     // ── Arrival ───────────────────────────────────────────────────────────
     // A message that has just been sent lands, the way one does in a chat
     // app. One that a recycled delegate is merely rebuilding does not.
-    opacity: root.arriving ? 0 : 1
+    readonly property bool reopening: root.transcriptRevealToken >= 0
+        && root.transcriptRevealToken !== root.handledRevealToken
+        && !root.arriving && !root.streaming
+    readonly property bool shouldAnimateArrival: !root.reducedMotion && !root.streaming
+        && (root.arriving || root.reopening || root.revealAnimationRunning)
+    readonly property int arrivalDelay: root.reopening ? root.transcriptRevealDelay : 0
+
+    opacity: root.shouldAnimateArrival ? 0 : 1
     transform: Translate {
         id: arrivalTransform
-        y: root.arriving ? Appearance.font.pixelSize.huge : 0
+        y: root.shouldAnimateArrival ? Appearance.rounding.verysmall : 0
+    }
+
+    function startArrival() {
+        if (!root.shouldAnimateArrival)
+            return;
+        if (root.reopening) {
+            root.revealAnimationRunning = true;
+            root.handledRevealToken = root.transcriptRevealToken;
+        }
+        arrivalAnimation.restart();
     }
 
     Component.onCompleted: {
         root.rebuildBlocks();
-        if (root.arriving)
-            arrivalAnimation.start();
+        Qt.callLater(root.startArrival);
     }
 
-    ParallelAnimation {
+    onTranscriptRevealTokenChanged: {
+        if (root.transcriptRevealToken >= 0)
+            Qt.callLater(root.startArrival);
+    }
+
+    SequentialAnimation {
         id: arrivalAnimation
+        onFinished: root.revealAnimationRunning = false
 
-        NumberAnimation {
-            target: root
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        PauseAnimation {
+            duration: root.arrivalDelay
         }
 
-        NumberAnimation {
-            target: arrivalTransform
-            property: "y"
-            to: 0
-            duration: Appearance.animation.elementMove.duration
-            easing.type: Appearance.animation.elementMove.type
-            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-        }
+        ParallelAnimation {
 
-        NumberAnimation {
-            // The one bounce in the transcript, and it is the feedback for
-            // having sent something rather than decoration.
-            target: root
-            property: "scale"
-            from: 0.92
-            to: 1
-            duration: Appearance.animation.clickBounce.duration
-            easing.type: Appearance.animation.clickBounce.type
-            easing.bezierCurve: Appearance.animation.clickBounce.bezierCurve
+            NumberAnimation {
+                target: root
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: Appearance.animation.elementMoveEnter.duration
+                easing.type: Appearance.animation.elementMoveEnter.type
+                easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+            }
+
+            NumberAnimation {
+                target: arrivalTransform
+                property: "y"
+                from: Appearance.rounding.verysmall
+                to: 0
+                duration: Appearance.animation.elementMoveEnter.duration
+                easing.type: Appearance.animation.elementMoveEnter.type
+                easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+            }
         }
     }
 
@@ -481,6 +506,14 @@ Item {
                     font.weight: Font.DemiBold
                     color: root.questionInk
                 }
+
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.IBeamCursor
+                    onDoubleClicked: root.editRequested(root.messageId,
+                        String(root.messageData?.content ?? ""))
+                }
             }
         }
 
@@ -542,17 +575,55 @@ Item {
             // nothing here reads `root`, so it works the same whether it
             // is instantiated directly or from inside that accordion's
             // Repeater.
-            component StepActivity: ColumnLayout {
+            component StepActivity: Item {
                 id: step
                 required property var stepData
                 property string activityDefault: "auto"
                 readonly property bool stepDone: step.stepData?.done ?? true
                 readonly property bool stepStreaming: !step.stepDone
+                readonly property int visibleStepCount: ((step.stepData?.thought?.length ?? 0) > 0 ? 1 : 0)
+                    + (Array.from(step.stepData?.searchQueries ?? []).length > 0 ? 1 : 0)
+                    + Array.from(step.stepData?.toolCalls ?? []).length
+                readonly property bool timelineActive: step.stepStreaming
+                    || Array.from(step.stepData?.toolCalls ?? []).some(call => String(call?.state ?? "") === "running")
+                readonly property real rulerThickness: Math.max(1, Math.round(Appearance.rounding.unsharpenmore / 3))
 
                 Layout.fillWidth: true
-                spacing: 0
+                implicitHeight: stepRows.implicitHeight
 
-                AiActivityRow {
+                // A timeline reads the sequence as a single operation, rather
+                // than as unrelated accordions. Its length follows the live
+                // rows, so it grows when the next tool step is reported.
+                Rectangle {
+                    id: timelineRuler
+                    visible: step.visibleStepCount > 1
+                    x: Math.round((Appearance.font.pixelSize.larger - width) / 2)
+                    y: Appearance.rounding.unsharpenmore
+                    width: step.rulerThickness
+                    height: Math.max(0, stepRows.implicitHeight - y * 2)
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colOutlineVariant
+                    opacity: step.timelineActive ? 0.82 : 0.42
+
+                    Behavior on height {
+                        enabled: !Config.options.sidebar.ai.reducedMotion
+                        animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
+                    }
+
+                    Behavior on opacity {
+                        enabled: !Config.options.sidebar.ai.reducedMotion
+                        animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
+                    }
+                }
+
+                ColumnLayout {
+                    id: stepRows
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    spacing: 0
+
+                    AiActivityRow {
                     id: stepThinkingRow
                     property bool userChoice: false
                     property bool userExpanded: false
@@ -628,7 +699,7 @@ Item {
                     }
                 }
 
-                AiActivityRow {
+                    AiActivityRow {
                     // What it looked up. The queries are the interesting part and
                     // they are one click away rather than in the answer.
                     id: stepSearchRow
@@ -674,7 +745,7 @@ Item {
                     }
                 }
 
-                Repeater {
+                    Repeater {
                     // Everything else it reached for, in the order it did.
                     model: ScriptModel {
                         values: Array.from(step.stepData?.toolCalls ?? [])
@@ -761,6 +832,7 @@ Item {
                                 }
                             }
                         }
+                    }
                     }
                 }
             }
@@ -1141,14 +1213,56 @@ Item {
                 values: Ai.visibleToolCards(root.messageData)
             }
 
-            delegate: Loader {
+            delegate: Item {
                 id: cardHost
                 required property var modelData
                 readonly property var card: cardHost.modelData
+                readonly property string cardState: String(cardHost.card?.state ?? "")
+                readonly property bool approvalCard: Ai.approvalCardKinds.indexOf(cardHost.card?.kind) >= 0
+                readonly property bool pending: cardHost.cardState === "pending"
+                readonly property bool resolvedApproval: cardHost.approvalCard && !cardHost.pending
+                property bool retainPendingBody: cardHost.pending
 
                 Layout.fillWidth: true
                 Layout.maximumWidth: root.answerMaximumWidth
-                sourceComponent: {
+                implicitHeight: Math.max(pendingCard.height,
+                    cardHost.resolvedApproval ? resolutionRow.implicitHeight : 0)
+
+                onPendingChanged: {
+                    if (cardHost.pending) {
+                        cardHost.retainPendingBody = true;
+                        approvalExitCleanup.stop();
+                    } else if (cardHost.retainPendingBody) {
+                        if (root.reducedMotion)
+                            cardHost.retainPendingBody = false;
+                        else
+                            approvalExitCleanup.restart();
+                    }
+                }
+
+                Loader {
+                    id: pendingCard
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    active: cardHost.pending || cardHost.retainPendingBody
+                    height: item?.implicitHeight ?? 0
+                    opacity: cardHost.pending ? 1 : 0
+                    transform: Translate {
+                        y: cardHost.pending ? 0 : -Appearance.rounding.verysmall
+
+                        Behavior on y {
+                            enabled: !root.reducedMotion
+                            animation: Appearance.animation.elementMoveExit.numberAnimation.createObject(this)
+                        }
+                    }
+
+                    Behavior on opacity {
+                        enabled: !root.reducedMotion
+                        animation: Appearance.animation.elementMoveExit.numberAnimation.createObject(this)
+                    }
+
+                    sourceComponent: {
                     switch (String(cardHost.card?.kind ?? "")) {
                     case "settingsDiff":
                         return settingsDiffCard;
@@ -1191,6 +1305,74 @@ Item {
                     // newer one still opens, showing what the card says about
                     // itself rather than nothing at all.
                     return unknownCard;
+                    }
+                }
+
+                Item {
+                    id: resolutionRow
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    implicitHeight: resolutionContent.implicitHeight
+                    visible: cardHost.resolvedApproval || opacity > 0.01
+                    opacity: cardHost.resolvedApproval ? 1 : 0
+                    transform: Translate {
+                        y: cardHost.resolvedApproval ? 0 : Appearance.rounding.verysmall
+
+                        Behavior on y {
+                            enabled: !root.reducedMotion
+                            animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                        }
+                    }
+
+                    Behavior on opacity {
+                        enabled: !root.reducedMotion
+                        animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                    }
+
+                    RowLayout {
+                        id: resolutionContent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        spacing: Appearance.rounding.unsharpenmore
+
+                        MaterialSymbol {
+                            text: {
+                                if (cardHost.cardState === "done")
+                                    return "check_circle";
+                                if (cardHost.cardState === "denied")
+                                    return "block";
+                                if (cardHost.cardState === "needsInspection")
+                                    return "help";
+                                return "error";
+                            }
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: cardHost.cardState === "done"
+                                ? Appearance.colors.colPrimary
+                                : cardHost.cardState === "failed"
+                                    ? Appearance.m3colors.m3error
+                                    : Appearance.colors.colSubtext
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: String(cardHost.card?.summary ?? "").length > 0
+                                ? String(cardHost.card.summary)
+                                : cardHost.cardState === "done"
+                                    ? Translation.tr("Approved action completed")
+                                    : Translation.tr("Approved action was not completed")
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+                }
+
+                Timer {
+                    id: approvalExitCleanup
+                    interval: Appearance.animation.elementMoveExit.duration
+                    onTriggered: cardHost.retainPendingBody = false
                 }
 
                 Component {

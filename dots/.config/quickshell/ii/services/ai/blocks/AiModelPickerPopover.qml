@@ -116,6 +116,20 @@ Item {
         return "";
     }
 
+    function isPinned(modelId: string): bool {
+        return Array.from(Config.options.sidebar.ai.pinnedModels ?? []).indexOf(modelId) >= 0;
+    }
+
+    function togglePinned(modelId: string) {
+        const id = String(modelId ?? "");
+        if (id.length === 0)
+            return;
+        const pinned = Array.from(Config.options.sidebar.ai.pinnedModels ?? []);
+        Config.options.sidebar.ai.pinnedModels = pinned.indexOf(id) >= 0
+            ? pinned.filter(candidate => candidate !== id)
+            : pinned.concat([id]);
+    }
+
     /**
      * Headers and models in one flat list, so a single view draws both.
      *
@@ -460,6 +474,7 @@ Item {
                     readonly property var entry: rowItem.modelData.model
                     readonly property bool keyed: root.hasKey(modelRow.entry)
                     readonly property bool selected: modelRow.entry.id === Ai.currentModelId
+                    readonly property bool pinned: root.isPinned(modelRow.entry.id)
 
                     spacing: root.gap
 
@@ -554,6 +569,35 @@ Item {
                                     opacity: 0.75
                                 }
                             }
+                        }
+                    }
+
+                    RippleButton {
+                        Layout.preferredWidth: root.rowHeight
+                        Layout.preferredHeight: root.rowHeight
+                        Layout.alignment: Qt.AlignVCenter
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colRipple: Appearance.colors.colLayer2Active
+                        onClicked: root.togglePinned(modelRow.entry.id)
+
+                        Accessible.name: modelRow.pinned
+                            ? Translation.tr("Unpin %1").arg(modelRow.entry.title)
+                            : Translation.tr("Pin %1 for Ctrl shortcuts").arg(modelRow.entry.title)
+
+                        contentItem: MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: modelRow.pinned ? "keep" : "keep_off"
+                            fill: modelRow.pinned ? 1 : 0
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: modelRow.pinned ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
+                        }
+
+                        StyledToolTip {
+                            text: modelRow.pinned
+                                ? Translation.tr("Remove from Ctrl+1 … Ctrl+9")
+                                : Translation.tr("Pin for Ctrl+1 … Ctrl+9")
                         }
                     }
 

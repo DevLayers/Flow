@@ -131,6 +131,10 @@ Item {
             samplingParams: model.supportsSampling,
             contextWindow: model.contextWindow,
             maxOutput: model.maxOutput,
+            promptPrice: model.promptPrice,
+            completionPrice: model.completionPrice,
+            promptPriceIsFree: model.promptPriceIsFree,
+            completionPriceIsFree: model.completionPriceIsFree,
             capabilitySource: "detected"
         });
         Config.options.ai.customModels = list;

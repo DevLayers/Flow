@@ -130,7 +130,7 @@ class MultiStepAccordionTests(unittest.TestCase):
     def test_step_activity_is_self_contained_reused_directly_and_in_the_group(self):
         # No free `root.*` reference: it is instantiated both directly and
         # from inside the summary row's own Repeater delegate.
-        component = body_between(AI_MESSAGE_QML, "component StepActivity: ColumnLayout {", "\n            }\n\n            // While a single-step")
+        component = body_between(AI_MESSAGE_QML, "component StepActivity: Item {", "\n            }\n\n            // While a single-step")
         self.assertNotIn("root.", component)
         self.assertIn("required property var stepData", component)
 

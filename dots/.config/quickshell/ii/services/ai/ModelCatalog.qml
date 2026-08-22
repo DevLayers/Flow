@@ -28,7 +28,7 @@ QtObject {
     property var ollamaModelNames: []
 
     /** Keys accepted from a standalone `ai.customModels` entry. */
-    readonly property var customModelKeys: ["name", "title", "icon", "description", "homepage", "endpoint", "model", "value", "requires_key", "key_id", "key_get_link", "key_get_description", "api_format", "extraParams", "modelProvider", "thinking", "thinkingKind", "thinkingAlwaysOn", "quirks", "attachments", "vision", "embeddings", "tools", "builtinSearch", "samplingParams", "maxTemperature", "contextWindow", "maxOutput", "capabilitySource"]
+    readonly property var customModelKeys: ["name", "title", "icon", "description", "homepage", "endpoint", "model", "value", "requires_key", "key_id", "key_get_link", "key_get_description", "api_format", "extraParams", "modelProvider", "thinking", "thinkingKind", "thinkingAlwaysOn", "quirks", "attachments", "vision", "embeddings", "tools", "builtinSearch", "samplingParams", "maxTemperature", "contextWindow", "maxOutput", "promptPrice", "completionPrice", "promptPriceIsFree", "completionPriceIsFree", "capabilitySource"]
 
     readonly property var providerDefs: [
         {
@@ -542,6 +542,10 @@ QtObject {
             maxTemperature: pick("maxTemperature", 2.0),
             contextWindow: pick("contextWindow", 0),
             maxOutput: pick("maxOutput", 0),
+            promptPrice: pick("promptPrice", ""),
+            completionPrice: pick("completionPrice", ""),
+            promptPriceIsFree: pick("promptPriceIsFree", false),
+            completionPriceIsFree: pick("completionPriceIsFree", false),
             // Merged, not picked: a model overrides single quirks without
             // having to restate the ones its provider already declared.
             quirks: Object.assign({}, def.quirks ?? ({}), entry.quirks ?? ({}))
