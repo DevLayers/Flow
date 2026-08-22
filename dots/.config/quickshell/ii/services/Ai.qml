@@ -690,6 +690,9 @@ Singleton {
     // Set while a failed request waits to be sent again, so the UI can say so
     // instead of looking stuck.
     property string retryNotice: ""
+    property string retryMessageId: ""
+    property int retryAttempt: 0
+    property int retryDelaySeconds: 0
     // A tool exchange asked for another turn while the current one was still
     // streaming. Sent as soon as it ends.
     property bool followUpQueued: false
@@ -2860,12 +2863,18 @@ Singleton {
             // Whatever the failed attempt wrote has already been rolled back,
             // so the message goes back to looking like it is being thought
             // about — which it is.
+            root.retryMessageId = root.messageIDs.find(id => root.messageByID[id] === requester.message) ?? "";
+            root.retryAttempt = attempt;
+            root.retryDelaySeconds = delaySeconds;
             root.retryNotice = Translation.tr("Retrying in %1 s (%2/%3)").arg(delaySeconds).arg(attempt).arg(requester.maxRetries);
         }
 
         onFinished: (reason, status, code) => {
             const message = requester.message;
             root.retryNotice = "";
+            root.retryMessageId = "";
+            root.retryAttempt = 0;
+            root.retryDelaySeconds = 0;
             if (!message)
                 return;
 

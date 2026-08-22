@@ -72,6 +72,19 @@ class TrashRetentionTests(unittest.TestCase):
         self.assertIn("Config.options.ai.sessions.retentionDays", sessions)
         self.assertIn('"purge-expired", root.dir, String(root.retentionDays)', sessions)
 
+
+class RetryRecoveryTests(unittest.TestCase):
+    def test_retry_notice_is_bound_to_its_answer_with_cancel_and_model_change(self):
+        ai = (ROOT / "services/Ai.qml").read_text(encoding="utf-8")
+        message = (ROOT / "modules/ii/sidebarPolicies/aiChat/AiMessage.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property string retryMessageId", ai)
+        self.assertIn("root.retryMessageId = root.messageIDs.find", ai)
+        self.assertIn("readonly property bool retrying", message)
+        self.assertIn("text: Ai.retryNotice", message)
+        self.assertIn("onClicked: Ai.stopGeneration()", message)
+        self.assertIn("root.modelPickerRequested();", message)
+
     def test_settings_expose_the_existing_notification_controls(self):
         source = AI_SETTINGS.read_text(encoding="utf-8")
 

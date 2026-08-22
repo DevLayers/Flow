@@ -956,6 +956,7 @@ Item {
                         messageId: modelData
                         messageData: Ai.messageByID[modelData]
                         onRegenerateRequested: id => Ai.regenerate(id)
+                        onModelPickerRequested: root.modelsOpen = true
                     }
                 }
             }

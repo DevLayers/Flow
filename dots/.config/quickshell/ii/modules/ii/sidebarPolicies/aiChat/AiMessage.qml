@@ -97,6 +97,8 @@ Item {
     /** True while the answer is still being written into this turn. */
     readonly property bool streaming: root.isAssistant && !root.done
     readonly property var sentFiles: Array.from(root.messageData?.attachments ?? [])
+    /** This exact answer is paused between automatic transport attempts. */
+    readonly property bool retrying: root.isAssistant && root.messageId === Ai.retryMessageId && Ai.retryNotice.length > 0
 
     /**
      * Every message in the same exchange as this one, oldest first, ending
@@ -845,6 +847,91 @@ Item {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     spacing: root.blockGap
+
+                    Loader {
+                        // A retry has no tokens to animate, so putting the
+                        // status in the answer itself is the only reliable
+                        // indication that it is still alive. It is scoped to
+                        // this message; old completed turns never inherit it.
+                        Layout.fillWidth: true
+                        active: root.retrying
+                        visible: active
+
+                        sourceComponent: Rectangle {
+                            implicitHeight: retryRow.implicitHeight + root.bubblePadding
+                            radius: Appearance.rounding.normal
+                            color: Appearance.colors.colTertiaryContainer
+
+                            RowLayout {
+                                id: retryRow
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: root.bubblePadding
+                                anchors.rightMargin: root.bubblePadding
+                                spacing: Appearance.rounding.unsharpenmore
+
+                                MaterialSymbol {
+                                    text: "sync"
+                                    fill: 1
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: Appearance.colors.colOnTertiaryContainer
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Ai.retryNotice
+                                    wrapMode: Text.Wrap
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colOnTertiaryContainer
+                                }
+
+                                RippleButton {
+                                    implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.5)
+                                    leftPadding: Appearance.rounding.small
+                                    rightPadding: Appearance.rounding.small
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: Appearance.colors.colTertiaryContainerHover
+                                    colBackgroundHover: Appearance.colors.colTertiaryContainerActive
+                                    colRipple: Appearance.colors.colTertiaryContainerActive
+                                    onClicked: Ai.stopGeneration()
+
+                                    Accessible.name: Translation.tr("Cancel retry")
+
+                                    contentItem: StyledText {
+                                        text: Translation.tr("Cancel")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.colors.colOnTertiaryContainer
+                                    }
+                                }
+
+                                RippleButton {
+                                    implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.5)
+                                    leftPadding: Appearance.rounding.small
+                                    rightPadding: Appearance.rounding.small
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: Appearance.colors.colTertiaryContainerHover
+                                    colBackgroundHover: Appearance.colors.colTertiaryContainerActive
+                                    colRipple: Appearance.colors.colTertiaryContainerActive
+                                    onClicked: {
+                                        // Selecting another model must not let
+                                        // the old retry leave while the picker
+                                        // is open.
+                                        Ai.stopGeneration();
+                                        root.modelPickerRequested();
+                                    }
+
+                                    Accessible.name: Translation.tr("Cancel retry and change model")
+
+                                    contentItem: StyledText {
+                                        text: Translation.tr("Change model")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.colors.colOnTertiaryContainer
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     Item {
                         // Before the first token there is nothing to show but
