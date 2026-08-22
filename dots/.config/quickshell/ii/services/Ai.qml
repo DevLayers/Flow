@@ -1681,6 +1681,9 @@ Singleton {
             "tasks_list": call => root.toolTasksList(call),
             "tasks_search": call => root.toolTasksSearch(call),
             "tasks_create": call => root.toolTasksCreate(call),
+            "tasks_update": call => root.toolTasksUpdate(call),
+            "tasks_complete": call => root.toolTasksComplete(call),
+            "tasks_delete": call => root.toolTasksDelete(call),
             "notes_preview_append": call => root.toolNotesPreviewAppend(call),
             "notes_append": call => root.toolNotesAppend(call),
             "notes_create_from_answer": call => root.toolNotesCreate(call),
@@ -3855,6 +3858,9 @@ Singleton {
             "settings_apply_changes": pending => root.applySettingsChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
             "reminder_create": pending => root.createReminderNow(pending.message, pending.args, pending.sessionId),
             "tasks_create": pending => root.startTaskCreate(pending),
+            "tasks_update": pending => root.startTaskMutation(pending, "update"),
+            "tasks_complete": pending => root.startTaskMutation(pending, "complete"),
+            "tasks_delete": pending => root.startTaskMutation(pending, "delete"),
             "notes_append": pending => root.appendNoteNow(pending.message, pending.args),
             "notes_create_from_answer": pending => root.createNoteNow(pending.message, pending.args),
             "audio_set": pending => root.applySystemControl(pending.message, pending.args),
@@ -4524,6 +4530,95 @@ Singleton {
         return { status: "approval" };
     }
 
+    function taskMutationPreview(call, operation): var {
+        const reference = root.tasksIntegration.normalizeRef(call.args);
+        if (!reference.ok)
+            return { status: "error", summary: reference.error, data: reference, retryable: true };
+        const changes = {};
+        if (operation === "update") {
+            if (call.args.title !== undefined)
+                changes.title = String(call.args.title).trim();
+            if (call.args.notes !== undefined)
+                changes.notes = String(call.args.notes);
+            if (call.args.dueDate !== undefined) {
+                const due = root.tasksIntegration.dueDate(call.args.dueDate);
+                if (due.error)
+                    return { status: "error", summary: due.error, data: due, retryable: true };
+                changes.dueDate = due.value;
+                changes.dueDateDisplay = due.display;
+            }
+            if (Object.keys(changes).length === 0)
+                return { status: "error", summary: Translation.tr("No task changes were requested"), data: null, retryable: true };
+            if (changes.title !== undefined && changes.title.length === 0)
+                return { status: "error", summary: Translation.tr("A task needs a title"), data: null, retryable: true };
+        }
+        return {
+            status: "approval",
+            preview: {
+                operation: operation,
+                provider: reference.provider,
+                providerId: reference.providerId,
+                accountId: reference.accountId,
+                listId: reference.listId,
+                listName: reference.providerId === "ticktick" ? "TickTick Inbox" : Translation.tr("Local tasks"),
+                taskId: reference.taskId,
+                title: String(call.args.title ?? ""),
+                changes: changes
+            }
+        };
+    }
+
+    function toolTasksUpdate(call: var): var {
+        const prepared = root.taskMutationPreview(call, "update");
+        if (prepared.status !== "approval")
+            return prepared;
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "tasks_update",
+            kind: "taskMutationPreview",
+            state: "pending",
+            summary: Translation.tr("Task update needs approval"),
+            data: { operation: "update", preview: prepared.preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function toolTasksComplete(call: var): var {
+        const prepared = root.taskMutationPreview(call, "complete");
+        if (prepared.status !== "approval")
+            return prepared;
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "tasks_complete",
+            kind: "taskMutationPreview",
+            state: "pending",
+            summary: Translation.tr("Task completion needs approval"),
+            data: { operation: "complete", preview: prepared.preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function toolTasksDelete(call: var): var {
+        const prepared = root.taskMutationPreview(call, "delete");
+        if (prepared.status !== "approval")
+            return prepared;
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "tasks_delete",
+            kind: "taskMutationPreview",
+            state: "pending",
+            summary: Translation.tr("Deletion always needs approval"),
+            data: { operation: "delete", preview: prepared.preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
     function approveTask(message: AiMessageData): void {
         if (!message?.functionPending)
             return;
@@ -4535,6 +4630,28 @@ Singleton {
             return;
         }
         root.beginToolExecution(message, "tasks_create", { args: preview });
+    }
+
+    function approveTaskMutation(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const preview = card?.data?.preview;
+        const operation = String(preview?.operation ?? "");
+        if (!preview || ["update", "complete", "delete"].indexOf(operation) < 0) {
+            root.rejectTaskMutation(message);
+            return;
+        }
+        const args = {
+            provider: preview.providerId,
+            listId: preview.listId,
+            taskId: preview.taskId,
+            title: preview.changes?.title,
+            notes: preview.changes?.notes,
+            dueDate: preview.changes?.dueDate
+        };
+        root.beginToolExecution(message, "tasks_" + operation, { args: args });
     }
 
     function rejectTask(message: AiMessageData): void {
@@ -4551,6 +4668,20 @@ Singleton {
         });
     }
 
+    function rejectTaskMutation(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("Task change discarded") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Task change discarded"),
+            data: Translation.tr("The user chose not to change that task."),
+            retryable: false
+        });
+    }
+
     function finishTaskMutation(message: AiMessageData, outcome): void {
         const key = root.toolKeyFor(message);
         message.functionPending = false;
@@ -4563,6 +4694,19 @@ Singleton {
 
     function startTaskCreate(pending): void {
         const outcome = root.tasksIntegration.createTask(pending.args, root.toolKeyFor(pending.message), pending.operationId);
+        if (outcome.status !== "pending")
+            root.finishTaskMutation(pending.message, outcome);
+    }
+
+    function startTaskMutation(pending, operation): void {
+        let outcome = null;
+        const key = root.toolKeyFor(pending.message);
+        if (operation === "update")
+            outcome = root.tasksIntegration.updateTask(pending.args, key, pending.operationId);
+        else if (operation === "complete")
+            outcome = root.tasksIntegration.completeTask(pending.args, key, pending.operationId);
+        else
+            outcome = root.tasksIntegration.deleteTask(pending.args, key, pending.operationId);
         if (outcome.status !== "pending")
             root.finishTaskMutation(pending.message, outcome);
     }

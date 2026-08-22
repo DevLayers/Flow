@@ -228,9 +228,12 @@ QtObject {
             };
         }
         const rawTask = raw?.task ?? raw;
+        const taskSource = (rawTask?.id ?? rawTask?.taskId)
+            ? rawTask
+            : Object.assign({}, base, rawTask ?? ({}));
         const task = operation === "delete"
             ? root.mapTask(base, job.provider)
-            : root.mapTask(rawTask, job.provider);
+            : root.mapTask(taskSource, job.provider);
         return {
             status: "success",
             summary: operation === "create" ? qsTr("Task created in %1").arg(job.provider.name) : qsTr("Task updated in %1").arg(job.provider.name),

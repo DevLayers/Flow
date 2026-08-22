@@ -533,6 +533,96 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "tasks_update",
+            version: 1,
+            domain: "tasks",
+            title: Translation.tr("Update task"),
+            summary: Translation.tr("Shows the exact task and changes before updating it."),
+            icon: "edit_note",
+            kind: "externalWrite",
+            network: "optional",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["tasks"],
+            defaultApproval: "ask",
+            timeoutMs: 20000,
+            maxResultTokens: 500,
+            idempotent: false,
+            description: "Prepare a reviewed update to a task identified by the exact provider and taskId. At least one of title, notes or dueDate is required. Never guess a task from a title alone.",
+            parameters: {
+                type: "object",
+                properties: {
+                    provider: { type: "string", description: "Exact provider id: local or ticktick" },
+                    listId: { type: "string", description: "Optional exact list/project id" },
+                    taskId: { type: "string", description: "Exact task id from tasks_list or tasks_search" },
+                    title: { type: "string", description: "Optional replacement title" },
+                    notes: { type: "string", description: "Optional replacement notes" },
+                    dueDate: { type: "string", description: "Optional ISO date or date-time; empty removes it" }
+                },
+                required: ["provider", "taskId"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "tasks_complete",
+            version: 1,
+            domain: "tasks",
+            title: Translation.tr("Complete task"),
+            summary: Translation.tr("Shows the exact task before marking it complete."),
+            icon: "task_alt",
+            kind: "externalWrite",
+            network: "optional",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["tasks"],
+            defaultApproval: "ask",
+            timeoutMs: 20000,
+            maxResultTokens: 400,
+            idempotent: false,
+            description: "Mark a task complete only after approval. The provider and taskId must come from a live tasks_list or tasks_search result; never invent either value.",
+            parameters: {
+                type: "object",
+                properties: {
+                    provider: { type: "string", description: "Exact provider id: local or ticktick" },
+                    listId: { type: "string", description: "Optional exact list/project id" },
+                    taskId: { type: "string", description: "Exact task id from a task result" }
+                },
+                required: ["provider", "taskId"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "tasks_delete",
+            version: 1,
+            domain: "tasks",
+            title: Translation.tr("Delete task"),
+            summary: Translation.tr("Always asks before deleting the exact task."),
+            icon: "delete",
+            kind: "externalWrite",
+            network: "optional",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["tasks"],
+            defaultApproval: "ask",
+            timeoutMs: 20000,
+            maxResultTokens: 400,
+            idempotent: false,
+            description: "Delete a task only after an explicit preview and approval. The provider and taskId must come from a live task result. This tool is never auto-approved.",
+            parameters: {
+                type: "object",
+                properties: {
+                    provider: { type: "string", description: "Exact provider id: local or ticktick" },
+                    listId: { type: "string", description: "Optional exact list/project id" },
+                    taskId: { type: "string", description: "Exact task id from a task result" }
+                },
+                required: ["provider", "taskId"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "sports_search_games",
             version: 1,
             domain: "sports",
@@ -1541,6 +1631,10 @@ Singleton {
             return String(args.query ?? "");
         case "tasks_create":
             return String(args.title ?? "") + " · " + String(args.listId ?? "default list");
+        case "tasks_update":
+        case "tasks_complete":
+        case "tasks_delete":
+            return String(args.provider ?? "") + " · " + String(args.taskId ?? "");
         case "calendar_list_events":
             return [args.from ?? "", args.to ?? ""].filter(value => String(value).length > 0).join(" → ");
         case "keybinds_search":

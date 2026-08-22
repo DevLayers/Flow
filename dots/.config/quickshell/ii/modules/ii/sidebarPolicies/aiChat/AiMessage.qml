@@ -1005,6 +1005,8 @@ Item {
                         return taskPreviewCard;
                     case "taskResults":
                         return taskResultsCard;
+                    case "taskMutationPreview":
+                        return taskMutationPreviewCard;
                     }
                     // A kind this build does not know: a session written by a
                     // newer one still opens, showing what the card says about
@@ -1161,6 +1163,15 @@ Item {
                     id: taskResultsCard
 
                     AiTaskResultCard {
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: taskMutationPreviewCard
+
+                    AiTaskMutationCard {
+                        messageData: root.messageData
                         card: cardHost.card
                     }
                 }

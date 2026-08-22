@@ -63,6 +63,22 @@ class ProviderContractTests(unittest.TestCase):
         for token in ('case "taskPreview":', 'case "taskResults":', "id: taskPreviewCard", "id: taskResultsCard"):
             self.assertIn(token, MESSAGE)
 
+    def test_mutations_are_explicitly_reviewed(self):
+        for tool_id in ("tasks_update", "tasks_complete", "tasks_delete"):
+            block = REGISTRY.split(f'id: "{tool_id}"', 1)[1].split('id: "', 1)[0]
+            self.assertIn('kind: "externalWrite"', block)
+            self.assertIn('defaultApproval: "ask"', block)
+            self.assertIn('required: ["provider", "taskId"]', block)
+        self.assertIn('"tasks_update": pending => root.startTaskMutation(pending, "update")', AI)
+        self.assertIn('"tasks_delete": pending => root.startTaskMutation(pending, "delete")', AI)
+
+    def test_mutation_card_has_no_retry_action(self):
+        card = (ROOT / "services" / "ai" / "blocks" / "AiTaskMutationCard.qml").read_text(encoding="utf-8")
+        self.assertIn("approveTaskMutation", card)
+        self.assertIn("rejectTaskMutation", card)
+        self.assertNotIn("retry", card.lower())
+        self.assertIn('case "taskMutationPreview":', MESSAGE)
+
 
 if __name__ == "__main__":
     unittest.main()
