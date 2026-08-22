@@ -36,6 +36,7 @@ Rectangle {
         spacing: 8
 
         RowLayout {
+            id: header
             Layout.fillWidth: true
             Layout.leftMargin: 8
             Layout.rightMargin: 4
@@ -57,27 +58,31 @@ Rectangle {
             }
         }
 
-        // Sits above the list. Never grows past its content and never
-        // shrinks below what it says it needs; between the two it splits
-        // the height with the list.
+        // Sits above the list and gets its content height first; the list
+        // fits in what is left. Capped so that the header, one list row and
+        // the New button always stay inside the column.
         Loader {
             id: footerSlot
+
+            readonly property real roomLeft: column.height - header.implicitHeight - newButton.implicitHeight
+                - (root.items.length > 0 ? list.rowStride : 0) - 3 * column.spacing
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.maximumHeight: item ? item.implicitHeight : 0
-            Layout.minimumHeight: item ? Math.min(item.implicitHeight, item.minimumHeight ?? 0) : 0
+            Layout.minimumHeight: item ? Math.max(0, Math.min(item.implicitHeight, item.minimumHeight ?? 0, roomLeft)) : 0
             visible: sourceComponent !== null && sourceComponent !== undefined
         }
 
         StyledListView {
             id: list
 
-            // Shares the column with the slot above: asks for its content, gives
-            // way down to a few rows, and takes whatever is left over.
+            // Takes whatever the slot above leaves: asks for its content,
+            // gives way down to a single row, and scrolls past that.
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.preferredHeight: contentHeight
-            Layout.minimumHeight: Math.min(contentHeight, 3 * list.rowStride)
+            Layout.minimumHeight: Math.min(contentHeight, list.rowStride)
             visible: root.items.length > 0
             clip: true
             spacing: 4

@@ -19,7 +19,9 @@ ColumnLayout {
 
     property bool expanded: false
     /// Header plus a couple of rows: the least the block is worth showing at.
-    readonly property real minimumHeight: root.expanded ? 40 + root.spacing + 2.5 * 58 : 40
+    // Expanded, it wants every template on screen; the routine list is
+    // what scrolls.
+    readonly property real minimumHeight: implicitHeight
     /// Template shown in the right pane, "" for none.
     property string previewKey: ""
 
