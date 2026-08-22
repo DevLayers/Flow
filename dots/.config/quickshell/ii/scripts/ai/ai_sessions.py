@@ -17,12 +17,15 @@ preview.
 
 Subcommands, each printing one JSON object on stdout:
 
-    bootstrap DIR [LEGACY_DIR]   make the dir, import old chats once, return the index
+    bootstrap DIR [LEGACY_DIR] [RETENTION_DAYS]
+                                 make the dir, prune expired trash, import old
+                                 chats once, and return the index
     save      DIR ID             read the session from stdin, write it, return the index
     open      DIR ID             return the whole session
     delete    DIR ID             move it to the trash, return the index
     restore   DIR ID             take it back out of the trash, return the index
     purge     DIR ID             permanently remove one trashed chat
+    purge-expired DIR DAYS       permanently remove expired trashed chats
     duplicate DIR ID NEW_ID      copy it under a new id, return the index
     patch     DIR ID [--title T] [--pinned 0|1]
     export    DIR ID OUT_PATH    write Markdown, return the path
@@ -316,6 +319,48 @@ def prune_staging(directory: str) -> int:
     return removed
 
 
+def retention_days(value: Any) -> int:
+    """Keep the destructive retention window bounded even for manual calls."""
+    try:
+        return max(1, min(3650, int(value)))
+    except (TypeError, ValueError):
+        return 30
+
+
+def prune_expired_trash(directory: str, days: Any) -> int:
+    """Remove only aged, valid session files from this store's trash folder.
+
+    Moving a chat into `.trash` refreshes its mtime, so retention measures the
+    time since deletion rather than the date the conversation was last edited.
+    Unknown files are deliberately left untouched.
+    """
+    cutoff = time.time() - (retention_days(days) * 24 * 60 * 60)
+    trash = os.path.join(directory, TRASH_NAME)
+    removed = 0
+    try:
+        names = os.listdir(trash)
+    except OSError:
+        return 0
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(trash, name)
+        session_id = name[: -len(".json")]
+        raw = read_json(path)
+        # Do not turn this maintenance task into a broad delete: it owns only
+        # well-formed session files whose id agrees with their filename.
+        if not isinstance(raw, dict) or str(raw.get("id") or "") != session_id:
+            continue
+        try:
+            if os.path.getmtime(path) > cutoff:
+                continue
+            os.unlink(path)
+            removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 def markdown_of(session: dict) -> str:
     lines = [f"# {session['title'] or 'Untitled chat'}", ""]
     stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(session["updatedAt"] / 1000))
@@ -348,9 +393,10 @@ def cmd_bootstrap(argv: list) -> int:
     legacy = argv[1] if len(argv) > 1 else ""
     os.makedirs(directory, exist_ok=True)
     pruned = prune_staging(directory)
+    trash_pruned = prune_expired_trash(directory, argv[2] if len(argv) > 2 else 30)
     imported = import_legacy(directory, legacy)
     entries = rebuild_index(directory) if imported else load_index(directory)
-    return emit_index(directory, entries, imported=imported, stagingPruned=pruned)
+    return emit_index(directory, entries, imported=imported, stagingPruned=pruned, trashPurged=trash_pruned)
 
 
 def cmd_save(argv: list) -> int:
@@ -438,7 +484,11 @@ def cmd_delete(argv: list) -> int:
         return emit_index(directory, load_index(directory))
     os.makedirs(os.path.join(directory, TRASH_NAME), exist_ok=True)
     try:
-        shutil.move(source, trash_path(directory, session_id))
+        destination = trash_path(directory, session_id)
+        # Both paths live in the same store. `replace` is atomic and touching
+        # the destination records the moment it entered the trash.
+        os.replace(source, destination)
+        os.utime(destination, None)
     except OSError:
         return emit({"error": "Could not delete that chat"})
     entries = [entry for entry in load_index(directory) if entry.get("id") != session_id]
@@ -472,6 +522,13 @@ def cmd_purge(argv: list) -> int:
     except OSError:
         return emit({"error": "Could not permanently remove that chat"})
     return emit_index(directory, load_index(directory), purged=session_id)
+
+
+def cmd_purge_expired(argv: list) -> int:
+    directory, days = argv[0], argv[1]
+    os.makedirs(directory, exist_ok=True)
+    removed = prune_expired_trash(directory, days)
+    return emit_index(directory, load_index(directory), trashPurged=removed)
 
 
 def cmd_duplicate(argv: list) -> int:
@@ -563,6 +620,7 @@ COMMANDS = {
     "delete": (2, cmd_delete),
     "restore": (2, cmd_restore),
     "purge": (2, cmd_purge),
+    "purge-expired": (2, cmd_purge_expired),
     "duplicate": (3, cmd_duplicate),
     "patch": (2, cmd_patch),
     "export": (3, cmd_export),

@@ -6,6 +6,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 AI_SETTINGS = ROOT / "modules/settings/configs/AiAssistantConfig.qml"
+CONFIG = ROOT / "modules/common/Config.qml"
 ENTRY_BUTTON = ROOT / "modules/common/widgets/SubPageEntryButton.qml"
 ADVANCED = ROOT / "modules/settings/configs/ai/AdvancedAiConfig.qml"
 POPOVER = ROOT / "services/ai/blocks/AiToolsPopover.qml"
@@ -60,6 +61,16 @@ class ContextAndNotificationSettingsTests(unittest.TestCase):
             "Config.options.ai.memory.limit",
         ):
             self.assertIn(setting, source)
+
+
+class TrashRetentionTests(unittest.TestCase):
+    def test_retention_is_persisted_and_the_session_store_enforces_it(self):
+        config = CONFIG.read_text(encoding="utf-8")
+        sessions = (ROOT / "services/ai/AiSessions.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property int retentionDays: 30", config)
+        self.assertIn("Config.options.ai.sessions.retentionDays", sessions)
+        self.assertIn('"purge-expired", root.dir, String(root.retentionDays)', sessions)
 
     def test_settings_expose_the_existing_notification_controls(self):
         source = AI_SETTINGS.read_text(encoding="utf-8")

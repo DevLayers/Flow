@@ -4,6 +4,7 @@
 import json
 import contextlib
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -141,6 +142,26 @@ class AiSessionsContractTests(unittest.TestCase):
             purged = call("purge", directory, "chat-trash")
             self.assertEqual(purged["purged"], "chat-trash")
             self.assertFalse((Path(directory) / ".trash" / "chat-trash.json").exists())
+
+    def test_bootstrap_prunes_only_sessions_expired_since_they_were_trashed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for session_id in ("expired", "recent"):
+                call("save", directory, session_id, payload={"id": session_id, "messages": []})
+                call("delete", directory, session_id)
+
+            trash = Path(directory) / ".trash"
+            expired = trash / "expired.json"
+            old = 1000
+            os.utime(expired, (old, old))
+            unknown = trash / "not-a-session.json"
+            unknown.write_text('{"id": "different"}')
+            os.utime(unknown, (old, old))
+
+            bootstrapped = call("bootstrap", directory, "", "30")
+            self.assertEqual(bootstrapped["trashPurged"], 1)
+            self.assertFalse(expired.exists())
+            self.assertTrue((trash / "recent.json").exists())
+            self.assertTrue(unknown.exists())
 
 
 if __name__ == "__main__":

@@ -175,7 +175,7 @@ Item {
                 }
 
                 StyledText {
-                    text: Translation.tr("Trash after %1 days").arg(String(Ai.sessions?.retentionDays ?? 30))
+                    text: Translation.tr("Permanently remove trashed chats after %1 days").arg(String(Ai.sessions?.retentionDays ?? 30))
                     font.pixelSize: Appearance.font.pixelSize.smallie
                     color: Appearance.colors.colSubtext
                 }
@@ -197,7 +197,7 @@ Item {
                         color: Appearance.colors.colOnLayer1
                     }
 
-                    StyledToolTip { text: Translation.tr("Cycle retention") }
+                    StyledToolTip { text: Translation.tr("Cycle trash retention") }
                 }
             }
 

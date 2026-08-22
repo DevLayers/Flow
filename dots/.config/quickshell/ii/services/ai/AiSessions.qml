@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.modules.common
 
 /**
  * The store behind the chat list: one file per conversation, an index that
@@ -40,8 +41,8 @@ Scope {
 
     /** The chat just deleted, kept until the undo offer goes away. */
     property var deletedEntry: null
-    /** Retention is a UI policy; destructive purge always requires an id. */
-    property int retentionDays: 30
+    /** Trashed sessions are permanently removed after this configured window. */
+    readonly property int retentionDays: Math.max(1, Math.min(3650, Number(Config.options.ai.sessions.retentionDays) || 30))
 
     readonly property var currentEntry: root.entryFor(root.currentId)
 
@@ -98,7 +99,7 @@ Scope {
         root.loading = true;
         root.enqueue({
             kind: "bootstrap",
-            args: ["bootstrap", root.dir, root.legacyDir]
+            args: ["bootstrap", root.dir, root.legacyDir, String(root.retentionDays)]
         });
     }
 
@@ -318,7 +319,19 @@ Scope {
     }
 
     function setRetentionDays(days: int) {
-        root.retentionDays = Math.max(1, Math.min(3650, Number(days) || 30));
+        Config.options.ai.sessions.retentionDays = Math.max(1, Math.min(3650, Number(days) || 30));
+    }
+
+    onRetentionDaysChanged: {
+        // Bootstrap applies the same policy before exposing the index. Later
+        // edits take effect immediately, so shortening retention is real and
+        // does not wait for the next shell restart.
+        if (root.loaded && root.dir.length > 0) {
+            root.enqueue({
+                kind: "retention",
+                args: ["purge-expired", root.dir, String(root.retentionDays)]
+            });
+        }
     }
 
     function undoDelete() {

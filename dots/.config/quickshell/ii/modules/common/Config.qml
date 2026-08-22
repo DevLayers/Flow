@@ -1467,6 +1467,12 @@ Singleton {
                     property bool enabled: true
                     property int limit: 40
                 }
+                // Chats are first moved to .trash so undo and manual recovery
+                // remain possible. The session store prunes that folder by
+                // this retention window on startup and whenever it changes.
+                property JsonObject sessions: JsonObject {
+                    property int retentionDays: 30
+                }
                 // Projects: a name, a prompt of its own and files that go with
                 // every chat filed under it. {id, name, icon, prompt, files[]}
                 property list<var> projects: []
