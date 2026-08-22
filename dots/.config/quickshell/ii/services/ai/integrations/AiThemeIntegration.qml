@@ -13,18 +13,19 @@ QtObject {
     }
 
     function search(query, limit = 8): var {
-        const needle = root.bounded(query, 80).toLocaleLowerCase();
+        const needle = String(query ?? "").trim().slice(0, 80).toLocaleLowerCase();
         const results = [];
         const model = Wallpapers.sortedFolderModel;
         for (let i = 0; i < model.count && results.length < Math.max(1, Math.min(20, Number(limit) || 8)); i++) {
-            const path = String(model.get(i, "filePath") ?? "");
-            const name = String(model.get(i, "fileName") ?? "");
+            const entry = model.get(i);
+            const path = String(entry?.filePath ?? "");
+            const name = String(entry?.fileName ?? "");
             if (path.length === 0 || (needle.length > 0 && name.toLocaleLowerCase().indexOf(needle) < 0))
                 continue;
             results.push({
                 ref: path,
                 title: name,
-                thumbnail: String(model.get(i, "fileURL") ?? path),
+                thumbnail: String(entry?.fileUrl ?? path),
                 source: "configured-local-folder",
                 networkUsed: false
             });

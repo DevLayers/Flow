@@ -10,6 +10,7 @@ AI = (ROOT / "services/Ai.qml").read_text(encoding="utf-8")
 BROKER = (ROOT / "services/ai/AiToolBroker.qml").read_text(encoding="utf-8")
 REGISTRY = (ROOT / "services/ai/AiToolRegistry.qml").read_text(encoding="utf-8")
 SONG_CARD = (ROOT / "services/ai/blocks/AiSongIdentifyCard.qml").read_text(encoding="utf-8")
+THEME = (ROOT / "services/ai/integrations/AiThemeIntegration.qml").read_text(encoding="utf-8")
 
 
 def body_between(source: str, start: str, end: str) -> str:
@@ -51,6 +52,17 @@ class SongIconTests(unittest.TestCase):
         self.assertNotIn('icon: "music_search"', REGISTRY)
         self.assertIn('text: root.listening ? "graphic_eq" : "music_note"', SONG_CARD)
         self.assertIn('icon: "music_note"', REGISTRY)
+
+
+class WallpaperSearchTests(unittest.TestCase):
+    def test_wallpaper_search_reads_plain_list_model_roles(self):
+        self.assertIn("const entry = model.get(i);", THEME)
+        self.assertIn("entry?.filePath", THEME)
+        self.assertIn("entry?.fileName", THEME)
+        self.assertIn("entry?.fileUrl", THEME)
+        self.assertNotIn('model.get(i, "filePath")', THEME)
+        self.assertNotIn('model.get(i, "fileName")', THEME)
+        self.assertNotIn('model.get(i, "fileURL")', THEME)
 
 
 if __name__ == "__main__":
