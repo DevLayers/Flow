@@ -4,7 +4,7 @@
 > Branch auditada: `feat/ai-rebuild`
 > Revisão: **v2 — auditada contra o código**, 2026-08-21
 > Documento-base: `AI_SEARCH_REDESIGN_PLAN.md`
-> Status: **plano técnico e registro de implementação; as Fases 3 e 5 foram implementadas nesta branch**
+> Status: **plano técnico e registro de implementação; as Fases 3, 4 e 5 foram implementadas nesta branch**
 
 ---
 
@@ -1820,6 +1820,17 @@ Os primeiros prompts de produção encontraram três problemas de transporte/qua
 | ~~`feat(tasks): add Google Tasks service`~~ | **Não fazer aqui.** Já existe na branch `dev`; chega por merge |
 | `feat(ai-tasks): add reviewed task creation` | destino, preview com data absoluta, journal e idempotência. Um provider nesta branch, dois depois do merge |
 | `feat(ai-tasks): add update, complete and delete` | só após soak da criação; delete sempre pergunta |
+
+#### Estado: **concluída e verificada** (2026-08-22)
+
+| Commit | O que entrou | Verificação |
+|---|---|---|
+| `2d496f88a refactor(tasks): introduce provider contract` | contrato comum em `AiTasksIntegration.qml` para `local` e `ticktick`; IDs reais/sintéticos estáveis; seleção explícita de provider/lista; preview com data ISO absoluta e representação local; TickTick recebe `content`, `dueDate`, `projectId`, `priority` e `update` por JSON em stdin, sem shell nem token em argv | `test_ai_tasks_provider_contract.py`, `test_ticktick_api.py` e `py_compile` do helper: 23 testes passaram |
+| `ef63a9efb feat(ai-tasks): add reviewed task creation` | `tasks_list`, `tasks_search` e `tasks_create`; cartão nativo com provider, conta, lista, título, notas e data; criação local/TickTick passa pelo journal genérico (`prepared` → `executionStarted` → resultado) e o DTO devolve o task ID real | 62 testes de tasks, registry, cards e API passaram; arquivos concorrentes da Fase 2 ficaram fora do commit |
+| `91ad31454 feat(ai-tasks): add update complete and delete` | `tasks_update`, `tasks_complete` e `tasks_delete`; cartão único de mutação, referência exata de provider/taskId, delete sempre pede aprovação e callback externo sem resposta vira `needsInspection`, sem retry automático | 64 testes direcionados passaram; `git diff --check` passou |
+| `96be5c6a4 fix(ai-tasks): honor filters and duplicate approvals` | filtros de concluídas/lista/limite respeitados nos dois providers e duplo clique de aprovação ignorado enquanto o journal está em voo | contratos direcionados e `py_compile` passaram |
+
+**Limites intencionais desta branch:** Google Tasks não foi recriado; o encaixe segue no contrato para receber o serviço da `dev`. A conta TickTick não foi exercitada com uma mutação real nesta rodada porque isso exigiria alterar dados externos; o transporte, payloads, IDs, erro ambíguo e proteção contra shell foram cobertos por contrato/mocks. A instância do Quickshell não foi reiniciada nem chamada via IPC para não interferir no agente concorrente; a verificação de logs fica na checagem final conjunta.
 
 ### Fase 5 — Ações no shell e continuidade
 
