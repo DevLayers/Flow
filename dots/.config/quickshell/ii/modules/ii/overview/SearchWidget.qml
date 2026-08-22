@@ -489,7 +489,7 @@ Item {
             if (root.executeAiCommand(parsed))
                 Ai.clearDraftIfCurrent();
         } else {
-            Ai.sendUserMessage(parsed.text);
+            Ai.sendUserMessage(Ai.expandComposerReferences(parsed.text));
         }
         if (aiPanelLoader.item && typeof aiPanelLoader.item.focusComposer === "function")
             aiPanelLoader.item.focusComposer();

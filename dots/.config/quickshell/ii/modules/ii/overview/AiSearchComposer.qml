@@ -456,7 +456,7 @@ ColumnLayout {
                     }
                     height: root.longDraft ? root.expandedEditorHeight : root.controlExtent
                     color: Appearance.colors.colOnLayer1
-                    placeholderText: Translation.tr("Ask something")
+                    placeholderText: Translation.tr("Ask something · @window or @clipboard")
                     wrapMode: TextEdit.Wrap
                     textFormat: TextEdit.PlainText
                     verticalAlignment: root.longDraft ? TextEdit.AlignTop : TextEdit.AlignVCenter
@@ -468,7 +468,7 @@ ColumnLayout {
                     persistentSelection: true
                     background: Item {}
                     Accessible.name: Translation.tr("AI message")
-                    Accessible.description: Translation.tr("Multiline draft. Enter sends; Shift+Enter inserts a line break; ? opens keyboard shortcuts when empty.")
+                    Accessible.description: Translation.tr("Multiline draft. Enter sends; Shift+Enter inserts a line break; @window and @clipboard add visible context; ? opens keyboard shortcuts when empty.")
 
                     Behavior on height {
                         animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(draftInput)

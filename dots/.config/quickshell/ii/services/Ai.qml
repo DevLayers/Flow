@@ -3658,6 +3658,72 @@ Singleton {
         root.attachmentNotice = "";
     }
 
+    /**
+     * Suggestions inserted by `@` in either composer. They describe only
+     * context the user can already see or explicitly attached; resolving one
+     * expands its marker in the outgoing message and never starts a tool.
+     */
+    function composerReferenceSources(): var {
+        const list = [];
+        const activeWindow = HyprlandData.activeWindow;
+        if (activeWindow?.class) {
+            list.push({
+                token: "window",
+                icon: "web_asset",
+                label: Translation.tr("Window in front"),
+                detail: String(activeWindow.title ?? activeWindow.class),
+                resolve: () => `[[ ${Translation.tr("Window in front")} ]]\nclass: ${activeWindow.class}\ntitle: ${activeWindow.title ?? ""}`
+            });
+        }
+        const clipboard = String(Quickshell.clipboardText ?? "");
+        if (clipboard.length > 0) {
+            list.push({
+                token: "clipboard",
+                icon: "content_paste",
+                label: Translation.tr("Clipboard"),
+                detail: clipboard.slice(0, 60).replace(/\n/g, " "),
+                resolve: () => `[[ ${Translation.tr("Clipboard")} ]]\n${clipboard}`
+            });
+        }
+        const attachments = Array.from(root.attachments ?? []);
+        for (let index = 0; index < attachments.length; index++) {
+            const file = attachments[index];
+            list.push({
+                token: `file:${index + 1}`,
+                icon: "description",
+                label: String(file?.name ?? Translation.tr("Attached file")),
+                detail: Translation.tr("Attached file"),
+                resolve: () => `[[ ${String(file?.name ?? Translation.tr("Attached file"))} ]]`
+            });
+        }
+        const sessions = Array.from(root.sessions.index ?? []).slice(0, 8);
+        for (let index = 0; index < sessions.length; index++) {
+            const entry = sessions[index];
+            if (!entry?.title || entry.id === root.sessions.currentId)
+                continue;
+            list.push({
+                token: `chat:${index + 1}`,
+                icon: "forum",
+                label: String(entry.title),
+                detail: Translation.tr("Earlier chat"),
+                resolve: () => `[[ ${Translation.tr("From the chat “%1”").arg(String(entry.title))} ]]\n${String(entry.preview ?? "")}`
+            });
+        }
+        return list;
+    }
+
+    function expandComposerReferences(text: string): string {
+        let expanded = String(text ?? "");
+        const sources = root.composerReferenceSources();
+        for (let index = 0; index < sources.length; index++) {
+            const source = sources[index];
+            const marker = `@${source.token}`;
+            if (expanded.indexOf(marker) >= 0)
+                expanded = expanded.split(marker).join(`\n\n${source.resolve()}\n\n`);
+        }
+        return expanded.trim();
+    }
+
     function runProbe() {
         if (probeProc.running || root.probeQueue.length === 0)
             return;

@@ -458,69 +458,9 @@ Item {
     }
 
     // ── References ────────────────────────────────────────────────────────
-    // `@` pulls context in without leaving the composer: the window in front,
-    // what is in the clipboard, a file that was just attached, an earlier
-    // chat. Each one resolves to text that goes out with the message.
-
-    readonly property var referenceSources: {
-        const list = [];
-        const activeWindow = HyprlandData.activeWindow;
-        if (activeWindow?.class)
-            list.push({
-                token: "window",
-                icon: "web_asset",
-                label: Translation.tr("Window in front"),
-                detail: `${activeWindow.title ?? activeWindow.class}`,
-                resolve: () => `[[ ${Translation.tr("Window in front")} ]]\nclass: ${activeWindow.class}\ntitle: ${activeWindow.title ?? ""}`
-            });
-        if (Quickshell.clipboardText && Quickshell.clipboardText.length > 0)
-            list.push({
-                token: "clipboard",
-                icon: "content_paste",
-                label: Translation.tr("Clipboard"),
-                detail: Quickshell.clipboardText.slice(0, 60).replace(/\n/g, " "),
-                resolve: () => `[[ ${Translation.tr("Clipboard")} ]]\n${Quickshell.clipboardText}`
-            });
-        const attachments = Array.from(Ai.attachments ?? []);
-        for (let i = 0; i < attachments.length; i++) {
-            const file = attachments[i];
-            list.push({
-                token: `file:${file.name}`,
-                icon: "description",
-                label: file.name,
-                detail: Translation.tr("Attached file"),
-                resolve: () => `[[ ${file.name} ]]`
-            });
-        }
-        const sessions = Array.from(Ai.sessions.index ?? []).slice(0, 8);
-        for (let i = 0; i < sessions.length; i++) {
-            const entry = sessions[i];
-            if (!entry?.title || entry.id === Ai.sessions.currentId)
-                continue;
-            list.push({
-                token: `chat:${entry.title}`,
-                icon: "forum",
-                label: entry.title,
-                detail: Translation.tr("Earlier chat"),
-                resolve: () => `[[ ${Translation.tr("From the chat “%1”").arg(entry.title)} ]]\n${entry.preview ?? ""}`
-            });
-        }
-        return list;
-    }
-
-    /** Turns every `@token` in the message into the text it stands for. */
-    function expandReferences(text: string): string {
-        let out = String(text ?? "");
-        const sources = root.referenceSources;
-        for (let i = 0; i < sources.length; i++) {
-            const source = sources[i];
-            const marker = `@${source.token}`;
-            if (out.indexOf(marker) < 0)
-                continue;
-            out = out.split(marker).join(`\n\n${source.resolve()}\n\n`);
-        }
-        return out.trim();
-    }
+    // `@` pulls a visible or explicitly attached item into the prompt. The
+    // service owns these sources so Search resolves the same marker too.
+    readonly property var referenceSources: Ai.composerReferenceSources()
 
     property var allCommands: [
         {
@@ -788,7 +728,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 return { accepted: false, state: "rejected", errorCode: "unknown-command" };
             }
         } else {
-            const result = Ai.sendUserMessage(root.expandReferences(parsed.text));
+            const result = Ai.sendUserMessage(Ai.expandComposerReferences(parsed.text));
             // The AI service owns clearing accepted prompts. Rejected prompts
             // stay in the field so the user can correct or retry them.
             messageListView.pinToEnd();
