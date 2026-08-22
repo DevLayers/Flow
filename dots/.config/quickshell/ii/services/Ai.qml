@@ -6396,6 +6396,56 @@ Singleton {
     property string titleRequestSessionId: ""
     property int titleRequestRevision: -1
 
+    /**
+     * Session ids that hold alternate answers for a branch point. The trunk
+     * is always position one; forks are ordered by creation time so the
+     * compact <2/3> control stays stable while the index refreshes.
+     */
+    function answerVariantSessionIds(messageId: string): var {
+        const currentId = String(root.sessions.currentId ?? "");
+        if (currentId.length === 0)
+            return [];
+        const child = root.sessionParentId.length > 0;
+        const parentId = child ? root.sessionParentId : currentId;
+        const branchMessageId = child ? root.sessionBranchMessageId : String(messageId ?? "");
+        if (branchMessageId.length === 0)
+            return [];
+        const forks = Array.from(root.sessions.index ?? []).filter(entry => String(entry?.parentId ?? "") === parentId
+            && String(entry?.branchMessageId ?? "") === branchMessageId)
+            .sort((left, right) => Number(left?.createdAt ?? 0) - Number(right?.createdAt ?? 0));
+        if (forks.length === 0)
+            return [];
+        const ids = [parentId, ...forks.map(entry => String(entry.id ?? ""))];
+        return ids.filter((id, index) => id.length > 0 && ids.indexOf(id) === index);
+    }
+
+    function latestVisibleAssistantMessageId(): string {
+        for (let index = root.messageIDs.length - 1; index >= 0; index--) {
+            const id = root.messageIDs[index];
+            const message = root.messageByID[id];
+            if (message?.role === "assistant" && message.visibleToUser !== false)
+                return id;
+        }
+        return "";
+    }
+
+    function shouldShowAnswerVariants(messageId: string): bool {
+        return String(messageId ?? "") === root.latestVisibleAssistantMessageId()
+            && root.answerVariantSessionIds(messageId).length > 1;
+    }
+
+    function openAnswerVariant(messageId: string, offset: int) {
+        if (root.isGenerating)
+            return;
+        const ids = root.answerVariantSessionIds(messageId);
+        const current = ids.indexOf(root.sessions.currentId);
+        if (ids.length < 2 || current < 0)
+            return;
+        const target = ids[(current + offset + ids.length) % ids.length];
+        if (target && target !== root.sessions.currentId)
+            root.openSession(target);
+    }
+
     function normalizedSessionToolPermissions(value): var {
         const raw = value && typeof value === "object" ? value : ({});
         const allow = Array.from(raw.alwaysAllow ?? []).map(id => String(id)).filter(id => id.length > 0);

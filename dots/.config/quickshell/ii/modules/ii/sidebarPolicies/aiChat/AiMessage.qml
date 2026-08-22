@@ -105,6 +105,10 @@ Item {
     property bool longAnswerExpanded: false
     readonly property bool collapseLongAnswer: root.hasLongAnswer && Config.options.sidebar.ai.collapseLongAnswers && !root.longAnswerExpanded
     readonly property real longAnswerCollapsedHeight: Appearance.font.pixelSize.huge * 18
+    readonly property var answerVariantIds: Ai.answerVariantSessionIds(root.messageId)
+    readonly property int answerVariantIndex: root.answerVariantIds.indexOf(Ai.sessions.currentId)
+    readonly property bool showAnswerVariants: root.isAssistant && root.done
+        && Ai.shouldShowAnswerVariants(root.messageId)
 
     function timestampLabel(): string {
         const timestamp = Number(root.messageData?.createdAt ?? 0);
@@ -1759,6 +1763,54 @@ Item {
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: Appearance.m3colors.m3onSecondaryContainer
                     }
+                }
+            }
+        }
+
+        RowLayout {
+            Layout.maximumWidth: root.answerMaximumWidth
+            visible: root.showAnswerVariants
+            spacing: Appearance.rounding.unsharpenmore / 2
+
+            RippleButton {
+                implicitWidth: implicitHeight
+                implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.45)
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colRipple: Appearance.colors.colLayer2Active
+                onClicked: Ai.openAnswerVariant(root.messageId, -1)
+                Accessible.name: Translation.tr("Previous answer variant")
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "chevron_left"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnLayer2
+                }
+            }
+
+            StyledText {
+                text: "<" + String(root.answerVariantIndex + 1) + "/" + String(root.answerVariantIds.length) + ">"
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+
+            RippleButton {
+                implicitWidth: implicitHeight
+                implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.45)
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colRipple: Appearance.colors.colLayer2Active
+                onClicked: Ai.openAnswerVariant(root.messageId, 1)
+                Accessible.name: Translation.tr("Next answer variant")
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "chevron_right"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnLayer2
                 }
             }
         }
