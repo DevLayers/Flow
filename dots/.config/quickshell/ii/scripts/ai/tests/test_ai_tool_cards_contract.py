@@ -60,6 +60,15 @@ class RenderingTests(unittest.TestCase):
         self.assertIn('case "settingsDiff":', MESSAGE)
         self.assertIn('case "memoryFact":', MESSAGE)
 
+    def test_external_read_cards_are_wired_to_the_shared_transcript(self):
+        for kind, component in (
+            ("gmailResults", "gmailResultsCard"),
+            ("sportsResults", "sportsResultsCard"),
+        ):
+            with self.subTest(kind=kind):
+                self.assertIn(f'case "{kind}":', MESSAGE)
+                self.assertIn(f"id: {component}", MESSAGE)
+
     def test_completed_settings_results_remain_visible_with_pending_cards(self):
         # `settingsResults` was joined by `fileResults` (Phase 2): both are
         # "the result is the point" cards, kept once done the same way a

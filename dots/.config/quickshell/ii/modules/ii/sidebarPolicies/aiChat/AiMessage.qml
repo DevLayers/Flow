@@ -997,6 +997,10 @@ Item {
                         return mediaControlPreviewCard;
                     case "songIdentifyPreview":
                         return songIdentifyPreviewCard;
+                    case "gmailResults":
+                        return gmailResultsCard;
+                    case "sportsResults":
+                        return sportsResultsCard;
                     }
                     // A kind this build does not know: a session written by a
                     // newer one still opens, showing what the card says about
@@ -1120,6 +1124,22 @@ Item {
 
                     AiSongIdentifyCard {
                         messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: gmailResultsCard
+
+                    AiGmailResultCard {
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: sportsResultsCard
+
+                    AiSportsGameCard {
                         card: cardHost.card
                     }
                 }
