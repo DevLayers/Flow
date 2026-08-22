@@ -354,6 +354,7 @@ Item {
         "shortcuts": Translation.tr("Keys"),
         "capabilities": Translation.tr("Capabilities"),
         "memory": Translation.tr("What it remembers"),
+        "diagnostics": Translation.tr("Assistant diagnostics"),
         "projects": Translation.tr("Projects")
     })
 
@@ -1242,8 +1243,8 @@ Item {
                             return shortcutsComponent;
                         if (root.activePopover === "capabilities")
                             return capabilitiesComponent;
-                        if (root.activePopover === "memory")
-                            return memoryComponent;
+                        if (root.activePopover === "diagnostics")
+                            return diagnosticsComponent;
                         if (root.activePopover === "projects")
                             return projectsComponent;
                         if (root.activePopover === "more")
@@ -1355,6 +1356,11 @@ Item {
     }
 
     Component {
+        id: diagnosticsComponent
+        AiDiagnosticsPage {}
+    }
+
+    Component {
         id: memoryComponent
         AiMemoryView {
             onClosed: root.goBack()
@@ -1404,6 +1410,14 @@ Item {
                 label: Translation.tr("Ollama models")
                 valueText: Translation.tr("Browse and pull")
                 onTriggered: root.openView("ollamaModels", "more")
+            }
+
+            CanvasRow {
+                Layout.fillWidth: true
+                symbol: "monitor_heart"
+                label: Translation.tr("Assistant diagnostics")
+                valueText: Translation.tr("Test what the chat needs")
+                onTriggered: root.openView("diagnostics", "more")
             }
 
             Item {
