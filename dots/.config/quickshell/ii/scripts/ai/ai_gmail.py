@@ -9,6 +9,7 @@ returns attachment payloads.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -27,6 +28,63 @@ API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
 MAX_RESULTS = 10
 MAX_BODY_CHARS = 12000
 MAX_QUERY_CHARS = 500
+
+_PURCHASE_TERMS = {
+    "compra", "compras", "pedido", "pedidos", "recibo", "recibos",
+    "pagamento", "pagamentos", "purchase", "purchases", "order",
+    "orders", "receipt", "receipts",
+}
+_RECENCY_TERMS = {
+    "recente", "recentes", "recent", "último", "última", "últimos",
+    "últimas", "ultimo", "ultima", "ultimos", "ultimas", "novo", "nova",
+    "novos", "novas", "latest", "new", "newest",
+}
+_EXPLICIT_QUERY = re.compile(
+    r"(?i)(?:\b(?:from|to|subject|after|before|newer|older|has|label|in|is|filename|cc|bcc):|[{}\"])",
+)
+_PURCHASE_QUERY = "{compra compras pedido recibo}"
+
+
+def _contains_term(text: str, terms: set[str]) -> bool:
+    return any(re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text, re.IGNORECASE) for term in terms)
+
+
+def normalize_ai_search_query(value: object) -> str:
+    """Turn common model paraphrases into Gmail's intended search semantics.
+
+    Gmail treats whitespace as AND, does not stem ``compra``/``compras``, and
+    treats words such as ``recente`` as literal search terms. Local models
+    frequently emit all three mistakes for a request like "o último email
+    sobre uma compra". Keep explicit Gmail operators intact, but replace a
+    free-form purchase intent with an OR group that Gmail can actually match.
+    """
+    original = str(value or "").strip()[:MAX_QUERY_CHARS]
+    if not original:
+        return original
+    lowered = original.lower()
+    if not _contains_term(lowered, _PURCHASE_TERMS):
+        return original
+
+    # A model often emits `(recente OR último OR novo)` as if Gmail supported
+    # semantic recency. Remove that group before deciding whether this is a
+    # free-form intent or an explicitly constrained Gmail query.
+    removed_recency_group = False
+
+    def remove_recency_group(match: re.Match[str]) -> str:
+        nonlocal removed_recency_group
+        words = re.findall(r"[\wÀ-ÿ]+", match.group(1).lower())
+        if words and all(word == "or" or word in _RECENCY_TERMS for word in words):
+            removed_recency_group = True
+            return ""
+        return match.group(0)
+
+    candidate = re.sub(r"\(([^()]*)\)", remove_recency_group, original)
+    candidate = re.sub(r"(?i)(?<!\w)(?:recente|recentes|recent|último|última|últimos|últimas|ultimo|ultima|ultimos|ultimas|novo|nova|novos|novas|latest|new|newest)(?!\w)", " ", candidate)
+    candidate = re.sub(r"\s+", " ", candidate).strip()
+
+    if not _EXPLICIT_QUERY.search(original) and (removed_recency_group or candidate != original):
+        return _PURCHASE_QUERY
+    return candidate or _PURCHASE_QUERY
 
 
 def api_get(path: str, token: str) -> dict:
@@ -65,8 +123,8 @@ def metadata_dto(message: dict) -> dict:
         "to": headers.get("to", ""),
         "date": headers.get("date", ""),
         "timestamp": timestamp,
-        "snippet": str(message.get("snippet", ""))[:360],
-        "labels": [str(label) for label in message.get("labelIds", [])[:12]],
+        "snippet": str(message.get("snippet", ""))[:220],
+        "labels": [str(label) for label in message.get("labelIds", [])[:6]],
     }
 
 
@@ -110,8 +168,9 @@ def valid_body_mode(value: object) -> str:
 
 
 def search_messages(token: str, request: dict) -> dict:
-    query_text = str(request.get("query", "")).strip()[:MAX_QUERY_CHARS]
-    if not query_text:
+    original_query = str(request.get("query", "")).strip()[:MAX_QUERY_CHARS]
+    query_text = normalize_ai_search_query(original_query)
+    if not original_query:
         raise ValueError("query is required")
     limit = max(1, min(MAX_RESULTS, int(request.get("limit", 5))))
     params = [("q", query_text), ("maxResults", str(limit))]
@@ -127,7 +186,8 @@ def search_messages(token: str, request: dict) -> dict:
         metadata = message_metadata(token, message_id)
         messages.append(metadata_dto(metadata))
     return {
-        "query": query_text,
+        "query": original_query,
+        "queryUsed": query_text,
         "messages": messages,
         "nextPageToken": str(listing.get("nextPageToken", ""))[:200],
         "limit": limit,
