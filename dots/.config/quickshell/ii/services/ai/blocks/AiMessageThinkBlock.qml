@@ -23,7 +23,7 @@ Item {
 
     // Passed through to the text block, and set by the legacy markdown path.
     property bool editing: false
-    property bool renderMarkdown: true
+    property bool renderMarkdown: Config.options.sidebar.ai.renderMarkdown
     property bool enableMouseSelection: false
     property var segmentContent: ({})
     property var messageData: null

@@ -16,7 +16,8 @@ ColumnLayout {
     id: root
     // These are needed on the parent loader
     property bool editing: false
-    property bool renderMarkdown: true
+    property bool renderMarkdown: Config.options.sidebar.ai.renderMarkdown
+    property bool latexEnabled: Config.options.sidebar.ai.renderLatex
     property bool enableMouseSelection: false
     property var segmentContent: ""
     property var messageData: null
@@ -97,6 +98,8 @@ ColumnLayout {
     }
 
     function renderLatex() {
+        if (!root.latexEnabled || root.editing)
+            return;
         // Regex for $...$, $$...$$, \[...\]
         // Note: This is a simple approach and may need refinement for edge cases
         let regex = /(\$\$([\s\S]+?)\$\$)|(\$([^\$]+?)\$)|(\\\[((?:.|\n)+?)\\\])|(\\\(([\s\S]+?)\\\))/g;
@@ -125,19 +128,26 @@ ColumnLayout {
     }
 
     onDoneChanged: {
-        renderTimer.restart();
+        if (root.latexEnabled)
+            renderTimer.restart();
     }
     onEditingChanged: {
-        if (!editing) {
+        if (!editing && root.latexEnabled) {
             renderLatex()
         } else {
             root.renderedSegmentContent = String(segmentContent ?? "");
         }
     }
 
+    onLatexEnabledChanged: {
+        root.renderedSegmentContent = String(segmentContent ?? "");
+        if (root.latexEnabled && !root.editing)
+            root.renderLatex();
+    }
+
     onSegmentContentChanged: {
         renderedSegmentContent = String(segmentContent ?? "");
-        if (!root.editing && segmentContent) {
+        if (!root.editing && root.latexEnabled && segmentContent) {
             root.renderLatex();
         }
     }

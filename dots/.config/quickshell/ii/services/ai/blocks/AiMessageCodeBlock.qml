@@ -17,6 +17,8 @@ ColumnLayout {
     property bool editing: false
     property bool renderMarkdown: true
     property bool enableMouseSelection: false
+    property bool wrapCode: Config.options.sidebar.ai.codeWrap
+    property bool showLineNumbers: Config.options.sidebar.ai.codeLineNumbers
     property var segmentContent: ({})
     property var segmentLang: "txt"
     property var messageData: {}
@@ -123,6 +125,7 @@ ColumnLayout {
         spacing: codeBlockComponentSpacing
 
         Rectangle { // Line numbers
+            visible: root.showLineNumbers
             implicitWidth: 40
             implicitHeight: lineNumberColumnLayout.implicitHeight
             Layout.fillHeight: true
@@ -179,7 +182,7 @@ ColumnLayout {
                     // Layout.fillHeight: true
                     implicitWidth: parent.width
                     implicitHeight: codeTextArea.implicitHeight + 1
-                    contentWidth: codeTextArea.width - 1
+                    contentWidth: root.wrapCode ? width : codeTextArea.width - 1
                     // contentHeight: codeTextArea.contentHeight
                     clip: true
                     ScrollBar.vertical.policy: ScrollBar.AlwaysOff
@@ -219,7 +222,7 @@ ColumnLayout {
                         font.pixelSize: Appearance.font.pixelSize.small
                         selectedTextColor: Appearance.m3colors.m3onSecondaryContainer
                         selectionColor: Appearance.colors.colSecondaryContainer
-                        // wrapMode: TextEdit.Wrap
+                        wrapMode: root.wrapCode ? TextEdit.Wrap : TextEdit.NoWrap
                         color: messageData?.thinking ? Appearance.colors.colSubtext : Appearance.colors.colOnLayer1
 
                         text: segmentContent

@@ -38,7 +38,7 @@ Item {
      * becomes the two controls worth having, so one component serves both
      * instead of two that drift apart.
      */
-    property string density: "comfortable"
+    property string density: Config.options.sidebar.ai.density === "compact" ? "compact" : "comfortable"
     readonly property bool compact: root.density === "compact"
 
     /** Asks the control bar for another model to redo this answer with. */
@@ -99,6 +99,25 @@ Item {
     readonly property var sentFiles: Array.from(root.messageData?.attachments ?? [])
     /** This exact answer is paused between automatic transport attempts. */
     readonly property bool retrying: root.isAssistant && root.messageId === Ai.retryMessageId && Ai.retryNotice.length > 0
+    readonly property string activityDefaultMode: ["auto", "expanded", "collapsed"].indexOf(Config.options.sidebar.ai.activityDefault) >= 0
+        ? Config.options.sidebar.ai.activityDefault : "auto"
+    readonly property bool hasLongAnswer: root.isAssistant && root.done && root.transcriptContent.length > 3600
+    property bool longAnswerExpanded: false
+    readonly property bool collapseLongAnswer: root.hasLongAnswer && Config.options.sidebar.ai.collapseLongAnswers && !root.longAnswerExpanded
+    readonly property real longAnswerCollapsedHeight: Appearance.font.pixelSize.huge * 18
+
+    function timestampLabel(): string {
+        const timestamp = Number(root.messageData?.createdAt ?? 0);
+        return timestamp > 0 ? Qt.formatDateTime(new Date(timestamp), "HH:mm") : "";
+    }
+
+    function responseTimeLabel(): string {
+        const elapsedMs = Number(root.messageData?.completedAt ?? 0) - Number(root.messageData?.createdAt ?? 0);
+        if (elapsedMs <= 0)
+            return "";
+        const seconds = elapsedMs / 1000;
+        return seconds < 10 ? seconds.toFixed(1) + " s" : String(Math.round(seconds)) + " s";
+    }
 
     /**
      * Every message in the same exchange as this one, oldest first, ending
@@ -522,6 +541,7 @@ Item {
             component StepActivity: ColumnLayout {
                 id: step
                 required property var stepData
+                property string activityDefault: "auto"
                 readonly property bool stepDone: step.stepData?.done ?? true
                 readonly property bool stepStreaming: !step.stepDone
 
@@ -538,7 +558,8 @@ Item {
                     symbol: "lightbulb"
                     running: step.stepStreaming && !stepThinkingRow.thoughtComplete
                     expandable: true
-                    expanded: stepThinkingRow.userChoice ? stepThinkingRow.userExpanded : !stepThinkingRow.thoughtComplete
+                    expanded: stepThinkingRow.userChoice ? stepThinkingRow.userExpanded
+                        : (step.activityDefault === "expanded" || (step.activityDefault === "auto" && !stepThinkingRow.thoughtComplete))
                     maximumContentHeight: Appearance.font.pixelSize.huge * 8
 
                     readonly property bool thoughtComplete: ((step.stepData?.content?.length ?? 0) > 0) || step.stepDone
@@ -746,6 +767,7 @@ Item {
             StepActivity {
                 visible: !root.done && root.stepGroup.length <= 1
                 stepData: root.messageData
+                activityDefault: root.activityDefaultMode
             }
 
             // Every completed turn folds its activity into this one line.
@@ -763,6 +785,7 @@ Item {
                 running: root.streaming
                 expandable: true
                 expanded: stepsSummaryRow.userChoice ? stepsSummaryRow.userExpanded : root.streaming
+                    || root.activityDefaultMode === "expanded"
                 label: root.done
                     ? root.finalActivityLabel
                     : Translation.tr("Working through %1 steps…").arg(String(root.stepGroup.length))
@@ -796,6 +819,7 @@ Item {
                                 required property var modelData
                                 Layout.fillWidth: true
                                 stepData: groupedStep.modelData
+                                activityDefault: root.activityDefaultMode
                             }
                         }
                     }
@@ -811,7 +835,7 @@ Item {
             Layout.fillWidth: true
             Layout.maximumWidth: root.answerMaximumWidth
             visible: root.isAssistant && (root.messageBlocks.length > 0 || root.streaming)
-            implicitHeight: visible ? answerContent.implicitHeight + root.bubblePadding * 2 : 0
+            implicitHeight: visible ? answerContentClip.implicitHeight + root.bubblePadding * 2 : 0
             radius: Math.min(answerBubble.height / 2, Appearance.rounding.large)
             // An empty bubble is a box with nothing in it. The ground arrives
             // with the first block, so the wait reads as the model about to
@@ -838,8 +862,11 @@ Item {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.margins: root.bubblePadding
-                implicitHeight: answerContent.implicitHeight
+                implicitHeight: root.collapseLongAnswer
+                    ? Math.min(answerContent.implicitHeight, root.longAnswerCollapsedHeight)
+                    : answerContent.implicitHeight
                 height: implicitHeight
+                clip: root.collapseLongAnswer
 
                 ColumnLayout {
                     id: answerContent
@@ -1035,6 +1062,65 @@ Item {
                         }
                     }
                 }
+            }
+        }
+
+        RippleButton {
+            Layout.alignment: Qt.AlignLeft
+            visible: root.hasLongAnswer && Config.options.sidebar.ai.collapseLongAnswers
+            implicitHeight: Math.round(Appearance.font.pixelSize.huge * 1.55)
+            leftPadding: Appearance.rounding.small
+            rightPadding: Appearance.rounding.small
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colLayer2
+            colBackgroundHover: Appearance.colors.colLayer2Hover
+            colRipple: Appearance.colors.colLayer2Active
+            onClicked: root.longAnswerExpanded = !root.longAnswerExpanded
+
+            contentItem: RowLayout {
+                spacing: Appearance.rounding.unsharpenmore / 2
+
+                MaterialSymbol {
+                    text: root.longAnswerExpanded ? "unfold_less" : "unfold_more"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnLayer2
+                }
+
+                StyledText {
+                    text: root.longAnswerExpanded ? Translation.tr("Show less") : Translation.tr("Show full answer")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colOnLayer2
+                }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.maximumWidth: root.answerMaximumWidth
+            visible: root.done && ((Config.options.sidebar.ai.showTimestamps && root.timestampLabel().length > 0)
+                || (root.isAssistant && Config.options.sidebar.ai.showResponseTime && root.responseTimeLabel().length > 0)
+                || (root.isAssistant && Config.options.sidebar.ai.showAnswerModel && String(root.messageData?.model ?? "").length > 0))
+            spacing: Appearance.rounding.unsharpenmore
+
+            StyledText {
+                visible: Config.options.sidebar.ai.showTimestamps && root.timestampLabel().length > 0
+                text: root.timestampLabel()
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+
+            StyledText {
+                visible: root.isAssistant && Config.options.sidebar.ai.showResponseTime && root.responseTimeLabel().length > 0
+                text: Translation.tr("Answered in %1").arg(root.responseTimeLabel())
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+
+            StyledText {
+                visible: root.isAssistant && Config.options.sidebar.ai.showAnswerModel && String(root.messageData?.model ?? "").length > 0
+                text: Ai.catalog.models[root.messageData?.model]?.title ?? String(root.messageData?.model ?? "")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
             }
         }
 

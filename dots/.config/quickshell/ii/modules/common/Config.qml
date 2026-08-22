@@ -3451,6 +3451,25 @@ Singleton {
                 }
                 property JsonObject ai: JsonObject {
                     property bool textFadeIn: false
+                    // Transcript presentation. These values deliberately live
+                    // beside the sidebar because Search keeps its compact
+                    // density regardless of this chat-specific preference.
+                    property string density: "comfortable" // comfortable | compact
+                    property bool showTimestamps: false
+                    property bool showResponseTime: false
+                    property bool showAnswerModel: true
+                    property string activityDefault: "auto" // auto | expanded | collapsed
+                    property bool autoScroll: true
+                    property string sendKey: "enter" // enter | ctrlEnter
+                    property bool renderMarkdown: true
+                    property bool renderLatex: true
+                    property bool codeWrap: false
+                    property bool codeLineNumbers: true
+                    property bool collapseLongAnswers: true
+                    property list<string> barKeys: ["keys", "advanced", "sessions", "newChat"]
+                    property string greeting: ""
+                    property bool emptyStateKeys: true
+                    property bool soundOnAnswer: false
                 }
                 property JsonObject booru: JsonObject {
                     property bool allowNsfw: false
