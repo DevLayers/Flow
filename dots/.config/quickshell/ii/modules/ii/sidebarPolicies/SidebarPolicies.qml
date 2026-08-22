@@ -236,7 +236,21 @@ Scope { // Scope
             Connections {
                 target: GlobalFocusGrab
                 function onDismissed() {
-                    if (!root.pin) panelWindow.hide();
+                    if (root.pin) return;
+                    // Something the sidebar opened has the focus. The grab was
+                    // given up all the same, so it is taken back once that
+                    // thing is done with — see below.
+                    if (GlobalStates.policiesHoldOpen > 0) return;
+                    panelWindow.hide();
+                }
+            }
+
+            Connections {
+                target: GlobalStates
+                function onPoliciesHoldOpenChanged() {
+                    if (GlobalStates.policiesHoldOpen > 0) return;
+                    if (!panelWindow.visible || root.pin) return;
+                    GlobalFocusGrab.addDismissable(panelWindow);
                 }
             }
 

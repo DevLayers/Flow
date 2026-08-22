@@ -24,6 +24,20 @@ RowLayout {
     property bool isMediaDownloaderPanelFocused: false
     property bool isMaterialSymbolsPanelFocused: false
     property bool showSuggestionsPanel: false
+    readonly property bool selectedResultSupportsHorizontalNavigation: {
+        const results = LauncherSearch.results;
+        if (root.currentResultIndex < 0 || root.currentResultIndex >= results.length)
+            return false;
+        const type = String(results[root.currentResultIndex]?.settingRef?.type ?? "");
+        return type === "bool" || type === "int" || type === "real" || type === "enum";
+    }
+    // True while the overview search widget is in AI chat mode — the field
+    // becomes the chat composer.
+    property bool aiModeActive: false
+    // Do not echo a programmatic handoff back into the launcher query. The
+    // query is cleared when AI takes over; echoing that assignment through the
+    // hidden field creates a query/isAiMode feedback loop and drops focus.
+    property bool syncingSearchText: false
 
     BarThemes {
         id: barThemes
@@ -32,7 +46,9 @@ RowLayout {
 
     onSearchingTextChanged: {
         if (searchInput.text !== searchingText) {
+            root.syncingSearchText = true;
             searchInput.text = searchingText;
+            root.syncingSearchText = false;
         }
     }
 
@@ -44,6 +60,11 @@ RowLayout {
     signal deleteSelected
     signal ctrlKPressed
     signal copySvgPressed
+    // Fired when Esc is pressed while the text is empty in AI mode — asks the
+    // host to leave AI chat and return to the plain search.
+    signal escapeToSearch
+    // Fired when Enter is pressed in AI mode — sends the text as a message.
+    signal sendMessage
 
     function forceFocus() {
         searchInput.forceActiveFocus();
@@ -62,6 +83,7 @@ RowLayout {
         Translator,
         MediaDownloader,
         MaterialSymbols,
+        AiChat,
         Suggestions,
         DefaultSearch
     }
@@ -91,6 +113,8 @@ RowLayout {
             return SearchBar.SearchPrefixType.MediaDownloader;
         if (root.searchingText.startsWith(Config.options.search.prefix.materialSymbols))
             return SearchBar.SearchPrefixType.MaterialSymbols;
+        if (root.aiModeActive)
+            return SearchBar.SearchPrefixType.AiChat;
         if (root.showSuggestionsPanel && root.searchingText === "")
             return SearchBar.SearchPrefixType.Suggestions;
         return SearchBar.SearchPrefixType.DefaultSearch;
@@ -132,6 +156,8 @@ RowLayout {
                 return 40;     // Cookie9Sided
             case SearchBar.SearchPrefixType.MaterialSymbols:
                 return 45;     // SoftBurst
+            case SearchBar.SearchPrefixType.AiChat:
+                return 90;             // Clover4Leaf
             case SearchBar.SearchPrefixType.Suggestions:
                 return 45;     // SoftBurst
             default:
@@ -229,6 +255,8 @@ RowLayout {
             return MaterialShape.Shape.Cookie9Sided;
         case SearchBar.SearchPrefixType.MaterialSymbols:
             return MaterialShape.Shape.SoftBurst;
+        case SearchBar.SearchPrefixType.AiChat:
+            return MaterialShape.Shape.Clover4Leaf;
         case SearchBar.SearchPrefixType.Suggestions:
             return MaterialShape.Shape.SoftBurst;
         default:
@@ -259,6 +287,8 @@ RowLayout {
             return "download";
         case SearchBar.SearchPrefixType.MaterialSymbols:
             return "font_download";
+        case SearchBar.SearchPrefixType.AiChat:
+            return "auto_awesome";
         case SearchBar.SearchPrefixType.Suggestions:
             return "explore";
         case SearchBar.SearchPrefixType.DefaultSearch:
@@ -277,7 +307,7 @@ RowLayout {
         implicitWidth: root.clipboardMode ? root.clipboardWidth : ((root.searchingText === "" && !Config.options.search.alwaysListApps && !root.showSuggestionsPanel) ? Appearance.sizes.searchWidthCollapsed : Appearance.sizes.searchWidth)
         focus: GlobalStates.overviewOpen
         font.pixelSize: Appearance.font.pixelSize.small
-        placeholderText: Translation.tr("Search, calculate or run")
+        placeholderText: root.aiModeActive ? Translation.tr("Message the model — Esc to go back") : Translation.tr("Search, calculate or run")
 
         // Placeholder fades smoothly when text is entered or mode changes
         placeholderTextColor: (root.searchingText === "" && !root.clipboardMode) ? Appearance.colors.colSubtext : Qt.rgba(Appearance.colors.colSubtext.r, Appearance.colors.colSubtext.g, Appearance.colors.colSubtext.b, 0)
@@ -298,24 +328,48 @@ RowLayout {
             }
         }
 
-        onTextChanged: LauncherSearch.query = text
+        onTextChanged: {
+            if (!root.syncingSearchText)
+                LauncherSearch.query = text;
+        }
 
         onAccepted: {
+            if (root.aiModeActive) {
+                root.sendMessage();
+                return;
+            }
             if (root.clipboardMode) {
                 root.activate();
                 return;
             }
+            if (root.showSuggestionsPanel) {
+                root.activate();
+                return;
+            }
             if (appResults.count > 0) {
-                let currentItem = appResults.itemAtIndex(appResults.currentIndex);
-                if (currentItem && currentItem.clicked) {
-                    currentItem.clicked();
-                }
+                // The delegate became a Loader when settings results joined the
+                // list, so the row that answers to `clicked` is one level down.
+                // Enter stopped opening anything and only the mouse worked.
+                const delegate = appResults.itemAtIndex(appResults.currentIndex);
+                const row = delegate?.item ?? delegate;
+                if (row && typeof row.clicked === "function")
+                    row.clicked();
             }
         }
 
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
-                GlobalStates.overviewOpen = false;
+                // In AI mode the first Esc leaves the chat and returns to the
+                // plain search; a second Esc closes the overview.
+                if (root.aiModeActive)
+                    root.escapeToSearch();
+                else
+                    GlobalStates.overviewOpen = false;
+                event.accepted = true;
+                return;
+            }
+            if ((event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && root.aiModeActive && (event.modifiers & Qt.ShiftModifier)) {
+                searchInput.insert(searchInput.cursorPosition, "\n");
                 event.accepted = true;
                 return;
             }
@@ -330,6 +384,16 @@ RowLayout {
                 return;
             } else if (event.key === Qt.Key_Down) {
                 root.navigateDown();
+                event.accepted = true;
+                return;
+            }
+            if (root.selectedResultSupportsHorizontalNavigation && event.key === Qt.Key_Left) {
+                root.navigateLeft();
+                event.accepted = true;
+                return;
+            }
+            if (root.selectedResultSupportsHorizontalNavigation && event.key === Qt.Key_Right) {
+                root.navigateRight();
                 event.accepted = true;
                 return;
             }

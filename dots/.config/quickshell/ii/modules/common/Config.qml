@@ -33,8 +33,283 @@ Singleton {
     // shell hot-reload while Phone services are initializing.
     property int writeGuardDelay: 5000
 
-    function setNestedValue(nestedKey, value) {
+    /**
+     * What kind of thing a config value is, in the vocabulary the checks below
+     * and the assistant both use.
+     */
+    function valueKind(value): string {
+        if (value === undefined)
+            return "unset";
+        if (value === null)
+            return "null";
+        if (Array.isArray(value))
+            return "list";
+        if (typeof value === "boolean")
+            return "bool";
+        if (typeof value === "number")
+            return Number.isInteger(value) ? "int" : "real";
+        if (typeof value === "string")
+            return "string";
+        if (typeof value === "object") {
+            // A JsonObject is a group of options; an array-like one is a list.
+            if (typeof value.length === "number" && Object.keys(value).every(key => !isNaN(key) || key === "length"))
+                return "list";
+            return "group";
+        }
+        return "unknown";
+    }
+
+    /**
+     * Whether a value may be written to a key, and as what.
+     *
+     * The loose path below converts anything that merely looks numeric, which
+     * is how a string option set to "007" became the number 7 and how an enum
+     * could be handed a value it never accepts. This decides against the type
+     * the key already holds instead of against the shape of the incoming
+     * string, and returns the converted value so the caller writes exactly
+     * what was checked.
+     *
+     * Returns {ok, reason, value, kind}.
+     */
+    function validateNestedValue(nestedKey, value): var {
+        const keys = String(nestedKey ?? "").split(".").filter(part => part.length > 0);
+        if (keys.length === 0)
+            return { ok: false, reason: "No key given.", value: undefined, kind: "unset" };
+
+        let node = root.options;
+        for (let i = 0; i < keys.length - 1; ++i) {
+            if (node === undefined || node === null || typeof node !== "object")
+                return { ok: false, reason: `\`${keys.slice(0, i + 1).join(".")}\` is not a group of settings.`, value: undefined, kind: "unset" };
+            node = node[keys[i]];
+        }
+        if (node === undefined || node === null || typeof node !== "object")
+            return { ok: false, reason: `\`${nestedKey}\` does not exist.`, value: undefined, kind: "unset" };
+
+        const leaf = keys[keys.length - 1];
+        const current = node[leaf];
+        const kind = root.valueKind(current);
+        if (kind === "unset")
+            return { ok: false, reason: `\`${nestedKey}\` does not exist.`, value: undefined, kind: kind };
+        if (kind === "group")
+            return { ok: false, reason: `\`${nestedKey}\` is a group of settings, not a single value. Set the options inside it.`, value: undefined, kind: kind };
+
+        const raw = typeof value === "string" ? value.trim() : value;
+        let converted = raw;
+
+        if (kind === "bool") {
+            if (typeof raw === "boolean")
+                converted = raw;
+            else if (raw === "true" || raw === "false")
+                converted = raw === "true";
+            else
+                return { ok: false, reason: `\`${nestedKey}\` is a switch. It takes true or false.`, value: undefined, kind: kind };
+        } else if (kind === "int" || kind === "real") {
+            if (typeof raw === "number")
+                converted = raw;
+            else if (typeof raw === "string" && /^-?(?:\d+|\d*\.\d+)$/.test(raw))
+                converted = Number(raw);
+            else
+                return { ok: false, reason: `\`${nestedKey}\` is a number.`, value: undefined, kind: kind };
+            if (!isFinite(converted))
+                return { ok: false, reason: `\`${nestedKey}\` is a number.`, value: undefined, kind: kind };
+            // Whole against fractional is deliberately not enforced. The kind
+            // comes from the value the option happens to hold, and a `real`
+            // sitting at 1 is indistinguishable from an `int` — rejecting 1.5
+            // there would refuse a change that is perfectly legal. QML rounds
+            // a fraction assigned to an int property, which is the mild half
+            // of the two failures.
+        } else if (kind === "list") {
+            if (Array.isArray(raw))
+                converted = raw;
+            else if (typeof raw === "string") {
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (!Array.isArray(parsed))
+                        throw new Error("not a list");
+                    converted = parsed;
+                } catch (e) {
+                    return { ok: false, reason: `\`${nestedKey}\` is a list. Give it a JSON array.`, value: undefined, kind: kind };
+                }
+            } else
+                return { ok: false, reason: `\`${nestedKey}\` is a list.`, value: undefined, kind: kind };
+        } else if (kind === "string") {
+            // Deliberately no conversion: a string option keeps what it was
+            // given, leading zeroes and all.
+            if (typeof raw === "object")
+                return { ok: false, reason: `\`${nestedKey}\` is text.`, value: undefined, kind: kind };
+            converted = String(raw);
+        }
+
+        const allowed = root.enumConstraints[keys.join(".")];
+        if (allowed !== undefined && allowed.indexOf(converted) === -1)
+            return {
+                ok: false,
+                reason: `\`${nestedKey}\` only takes ${allowed.map(entry => JSON.stringify(entry)).join(", ")}.`,
+                value: undefined,
+                kind: kind
+            };
+
+        return { ok: true, reason: "", value: converted, kind: kind };
+    }
+
+    /**
+     * Every option path in the config, as dotted keys.
+     *
+     * Built once: the shape comes from the QML declarations, so it changes
+     * with the shell version and not with what the user sets. It exists so a
+     * key can be looked for by name instead of the whole file being read out
+     * to find one — the assistant used to be handed all of config.json, some
+     * forty-six kilobytes of it, to change a single switch.
+     */
+    property var cachedKeyPaths: null
+
+    function keyPaths(): var {
+        if (root.cachedKeyPaths !== null)
+            return root.cachedKeyPaths;
+        const paths = [];
+        const walk = (node, prefix) => {
+            if (paths.length > 4000)
+                return;
+            for (const name in node) {
+                if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children")
+                    || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
+                    continue;
+                const value = node[name];
+                if (typeof value === "function")
+                    continue;
+                const path = prefix.length > 0 ? `${prefix}.${name}` : name;
+                if (root.valueKind(value) === "group")
+                    walk(value, path);
+                else
+                    paths.push(path);
+            }
+        };
+        walk(root.options, "");
+        root.cachedKeyPaths = paths;
+        return paths;
+    }
+
+    /** A value short enough to hand to a reader, with a note when it was cut. */
+    function summariseValue(value, maxLength = 120): var {
+        const kind = root.valueKind(value);
+        if (kind === "group")
+            return { kind: kind, value: "…" };
+        if (kind === "list") {
+            const list = Array.from(value ?? []);
+            const text = JSON.stringify(list);
+            return text.length <= maxLength
+                ? { kind: kind, value: list }
+                : { kind: kind, value: `${list.length} entries`, truncated: true };
+        }
+        if (kind === "string") {
+            const text = String(value);
+            return text.length <= maxLength
+                ? { kind: kind, value: text }
+                : { kind: kind, value: `${text.slice(0, maxLength)}…`, truncated: true };
+        }
+        return { kind: kind, value: value };
+    }
+
+    /**
+     * Options whose key path matches every word given.
+     *
+     * Matching is on the key path alone, which is what the shell knows without
+     * the settings window open. Labels, pages and translations belong to the
+     * settings index, which is a separate thing.
+     */
+    function findKeys(query, limit = 25): var {
+        const words = String(query ?? "").toLowerCase().split(/[\s._-]+/).filter(word => word.length > 1);
+        if (words.length === 0)
+            return [];
+        const paths = root.keyPaths();
+        const scored = [];
+        for (let i = 0; i < paths.length; i++) {
+            const path = paths[i];
+            const lower = path.toLowerCase();
+            // A key path is camelCase, so the words in it need separating
+            // before "automatic suspend" can match "battery.automaticSuspend".
+            const spaced = lower.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
+                + " " + path.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().replace(/\./g, " ");
+            let score = 0;
+            let matchedAll = true;
+            for (let w = 0; w < words.length; w++) {
+                const word = words[w];
+                if (lower.endsWith(word))
+                    score += 300;
+                else if (spaced.indexOf(` ${word} `) >= 0 || spaced.indexOf(` ${word}`) >= 0)
+                    score += 200;
+                else if (lower.indexOf(word) >= 0)
+                    score += 100;
+                else {
+                    matchedAll = false;
+                    break;
+                }
+            }
+            if (!matchedAll)
+                continue;
+            // A short path that matched is more likely the option itself than
+            // a long one that merely contains the word.
+            score -= path.length;
+            scored.push({ path: path, score: score });
+        }
+        scored.sort((a, b) => b.score - a.score);
+        return scored.slice(0, Math.max(1, limit)).map(entry => {
+            const summary = root.summariseValue(root.getNestedValue(root.options, entry.path.split(".")));
+            return { key: entry.path, type: summary.kind, value: summary.value };
+        });
+    }
+
+    /** What sits directly under one group, one level deep. */
+    function listGroup(prefix, limit = 60): var {
+        const keys = String(prefix ?? "").split(".").filter(part => part.length > 0);
+        const node = keys.length === 0 ? root.options : root.getNestedValue(root.options, keys);
+        if (node === undefined || root.valueKind(node) !== "group")
+            return null;
+        const entries = [];
+        for (const name in node) {
+            if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children")
+                || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
+                continue;
+            const value = node[name];
+            if (typeof value === "function")
+                continue;
+            const path = keys.length > 0 ? `${keys.join(".")}.${name}` : name;
+            const summary = root.summariseValue(value, 60);
+            const entry = { key: path, type: summary.kind };
+            if (summary.kind !== "group")
+                entry.value = summary.value;
+            entries.push(entry);
+            if (entries.length >= Math.max(1, limit))
+                break;
+        }
+        return entries;
+    }
+
+    /**
+     * Writes one option.
+     *
+     * `strict` is for callers that did not write the key themselves — the
+     * assistant, above all. Loose writing creates whatever path it is handed
+     * and converts by guessing, which is fine for a switch in the settings
+     * window bound to a key that provably exists, and is not fine for a key a
+     * model produced from memory. Strict refuses an unknown key, refuses a
+     * value of the wrong kind, and refuses a value outside a declared enum.
+     */
+    function setNestedValue(nestedKey, value, strict = false) {
         let keys = nestedKey.split(".");
+
+        if (strict) {
+            const verdict = root.validateNestedValue(nestedKey, value);
+            if (!verdict.ok)
+                throw new Error(verdict.reason);
+            let target = root.options;
+            for (let i = 0; i < keys.length - 1; ++i) {
+                target = target[keys[i]];
+            }
+            target[keys[keys.length - 1]] = verdict.value;
+            return verdict.value;
+        }
+
         let obj = root.options;
         let parents = [obj];
 
@@ -61,6 +336,7 @@ Singleton {
         }
 
         obj[keys[keys.length - 1]] = convertedValue;
+        return convertedValue;
     }
 
     // Persist options immediately (e.g. kill dialog "Always" in a short-lived process).
@@ -304,7 +580,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 7
+    readonly property int currentConfigVersion: 8
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -420,7 +696,10 @@ Singleton {
         // identity and explicit dimensions. The normalizer is shared with the
         // sidebar so migration and runtime cannot disagree about defaults,
         // duplicate handling, or allowed sizes.
-        if (from < 6 && raw.sidebar?.quickToggles?.android !== undefined) {
+        // The v7 branch of this PR used the same version number for the AI
+        // schema, so a missing layoutVersion remains a reliable migration cue.
+        if (raw.sidebar?.quickToggles?.android !== undefined
+                && (from < 6 || raw.sidebar.quickToggles.android.layoutVersion !== 2)) {
             const android = raw.sidebar.quickToggles.android;
             android.pages = QuickToggleCatalog.normalizePages(android.pages, android.columns, {
                 warn: function(message) { console.warn(message); }
@@ -429,10 +708,10 @@ Singleton {
             console.log("[Config] Migrated sidebar.quickToggles.android to canonical layout records");
         }
 
-        // v6 -> v7: the bar gained the Modes & Routines indicator. It hides
-        // itself while no mode is active, so appending it to an existing
-        // layout changes nothing visible until a mode starts.
-        if (from < 7 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
+        // Originally v6 -> v7: the bar gained the Modes & Routines indicator.
+        // It hides itself while no mode is active, so appending it to an
+        // existing layout changes nothing visible until a mode starts.
+        if (from < 8 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
                 && typeof raw.bar.layouts === "object") {
             const layouts = raw.bar.layouts;
             const sections = ["left", "center", "right"];
@@ -446,6 +725,65 @@ Singleton {
                 layouts.left.splice(after === -1 ? layouts.left.length : after + 1, 0, entry);
                 console.log("[Config] Migrated bar layout: added mode_indicator");
             }
+        }
+
+        // v7 -> v8: reconcile settings that were introduced independently by
+        // the AI rebuild and the dev branch. The checks are intentionally
+        // shape-based so users already at either former v7 receive only the
+        // migration their file is still missing.
+        if (from < 8) {
+            const ai = raw.ai;
+            if (ai !== undefined && ai !== null && typeof ai === "object" && !Array.isArray(ai)) {
+                if (typeof ai.tool === "string" || typeof ai.localModelTools === "boolean") {
+                    const tools = (ai.tools !== undefined && ai.tools !== null && typeof ai.tools === "object" && !Array.isArray(ai.tools)) ? ai.tools : {};
+                    if (typeof ai.tool === "string" && tools.mode === undefined)
+                        tools.mode = ai.tool;
+                    if (typeof ai.localModelTools === "boolean" && tools.localModels === undefined)
+                        tools.localModels = ai.localModelTools;
+                    ai.tools = tools;
+                    console.log(`[Config] Migrated ai.tool "${ai.tool}" -> ai.tools.mode`);
+                }
+                delete ai.tool;
+                delete ai.localModelTools;
+
+                if (ai.customModels === undefined && (Array.isArray(ai.models) || Array.isArray(ai.otherModels))) {
+                    const merged = [];
+                    for (const group of (ai.models ?? [])) {
+                        if (group === null || typeof group !== "object")
+                            continue;
+                        for (const providerId in group) {
+                            const entries = group[providerId];
+                            if (!Array.isArray(entries))
+                                continue;
+                            for (const entry of entries) {
+                                if (entry === null || typeof entry !== "object")
+                                    continue;
+                                const moved = Object.assign({}, entry);
+                                moved.provider = providerId;
+                                merged.push(moved);
+                            }
+                        }
+                    }
+                    for (const entry of (ai.otherModels ?? [])) {
+                        if (entry === null || typeof entry !== "object")
+                            continue;
+                        merged.push(entry);
+                    }
+                    ai.customModels = merged;
+                    console.log(`[Config] Merged ${merged.length} custom AI model(s) into ai.customModels`);
+                }
+                delete ai.models;
+                delete ai.otherModels;
+            }
+            if (raw.sidebar?.ai !== undefined && raw.sidebar.ai !== null) {
+                delete raw.sidebar.ai.showProviderAndModelButtons;
+                if (raw.ai === undefined || raw.ai === null || typeof raw.ai !== "object" || Array.isArray(raw.ai))
+                    raw.ai = {};
+                if (raw.ai.indexAtStartup === undefined && typeof raw.sidebar.ai.enable === "boolean")
+                    raw.ai.indexAtStartup = raw.sidebar.ai.enable;
+                delete raw.sidebar.ai.enable;
+            }
+            console.log("[Config] Reconciled AI settings and sidebar startup policy");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -549,6 +887,7 @@ Singleton {
     // aliases) is left out on purpose.
     readonly property var enumConstraints: ({
             "panelFamily": ["ii", "waffle"],
+            "ai.tools.mode": ["functions", "search", "none"],
             "policies.ai": [0, 1, 2],
             "policies.weeb": [0, 1, 2],
             "policies.wallpapers": [0, 1],
@@ -1055,33 +1394,156 @@ Singleton {
             }
 
             property JsonObject ai: JsonObject {
+                // Controls only proactive model/prompt indexing at startup;
+                // policy availability is Config.options.policies.ai.
+                property bool indexAtStartup: true
+                // Name chats automatically from their first completed turn.
+                // Turn this off when session titles must remain manual.
+                property bool autoTitle: true
+                // Interface/status rows are useful while a chat is open, but
+                // can be omitted from the saved transcript when wanted.
+                property bool ephemeralInterfaceMessages: false
                 property string systemPrompt: "## Style\n- Use casual tone, don't be formal!\n- Always be brief and to the point, unless asked otherwise\n- Don't repeat the user's question\n- Be approachable: Avoid using overly complicated, domain-specific terms and provide analogies when asked to explain a concept\n\n## Context (ignore when irrelevant)\n- You are a helpful and inspiring sidebar assistant on a {DISTRO} Linux system\n- Desktop environment: {DE}\n- Current date & time: {DATETIME}\n- Focused app: {WINDOWCLASS}\n\n## Presentation\n- Use Markdown features in your response: \n  - **Bold** text to **highlight keywords** in your response\n  - **Split long information into small sections** with h2 headers and a relevant emoji at the start of it (for example `## \ud83d\udc27 Linux`). Bullet points are preferred over long paragraphs, unless you're offering writing support or instructed otherwise by the user.\n- Asked to compare different options? You should firstly use a table to compare the main aspects, then elaborate or include relevant comments from online forums *after* the table. Make sure to provide a final recommendation for the user's use case!\n- Use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX '$$' delimiters. NEVER generate LaTeX code in a latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular documents (resumes, letters, essays, CVs, etc.).\n\nThanks!\n"
-                property string tool: "functions" // search, functions, or none
-                property list<var> models: [
-                        {
-                            "openrouter": [
-                                {
-                                    "modelProvider": "google",
-                                    "title": "Gemini 2.5 Flash",
-                                    "value": "gemini-2.5-flash"
-                                }
-                            ]
-                        },
-                        {
-                            "google": []
-                        }
-                ]
-                property list<var> otherModels: [
-                        {
-                            "api_format": "mistral",
-                            "endpoint": "https://api.mistral.ai/v1/chat/completions",
-                            "icon": "mistral-symbolic",
-                            "key_id": "mistral",
-                            "model": "mistral-medium-2505",
-                            "name": "Mistral Medium",
-                            "requires_key": true
-                        }
-                ]
+                property JsonObject tools: JsonObject {
+                    // What the assistant may reach for: "functions" (settings,
+                    // commands, a hop to search), "search" (the provider's own
+                    // web search) or "none".
+                    property string mode: "functions"
+                    // Locally served models advertise no capabilities, so tools
+                    // stay off for them until the user says their models can
+                    // handle function calling.
+                    property bool localModels: false
+                    // Permission per tool, by tool id. A tool named in neither
+                    // list asks before it runs, which is the default for
+                    // anything that writes.
+                    // Reading is allowed outright; anything that writes or runs
+                    // still asks. Searching and fetching a page only read.
+                    property list<string> alwaysAllow: ["settings_search", "settings_get", "switch_to_search_mode", "web_search", "fetch_url"]
+                    property list<string> alwaysDeny: []
+                    // Show every proposed settings change next to its current
+                    // value before writing any of them.
+                    property bool reviewConfigChanges: true
+                    // When enabled, choices made in the tools panel stay with
+                    // the open conversation instead of becoming a global
+                    // standing permission for every future chat.
+                    property bool scopePerConversation: false
+                    // How many tool calls the log remembers. 0 keeps none.
+                    property int logSize: 50
+                    // A local-only policy is about reducing what the assistant
+                    // can reach, not only about the network, so shell commands
+                    // stay off under it. Set true to disagree.
+                    property bool allowShellInLocalPolicy: false
+                }
+                // Longest answer to ask for, in tokens. 0 uses whatever the
+                // model itself supports, which is what most people want;
+                // a positive value caps it and is clamped to the model's own
+                // limit.
+                property int maxOutputTokens: 0
+                // The compact chat toolbar normally shows accumulated usage.
+                // When enabled it shows the latest completed answer's
+                // generated tokens per second instead.
+                property bool showTokensPerSecond: false
+                // When the session contains OpenRouter responses with a
+                // reported charge, show their exact accumulated cost instead
+                // of either token metric in the compact chat toolbar.
+                property bool showOpenRouterSessionCost: false
+                // Seconds before giving up on reaching the endpoint, and
+                // before abandoning a reply that is still being written.
+                property int connectTimeout: 15
+                property int requestTimeout: 300
+                // Extra attempts after a rate limit or a server error.
+                property int maxRetries: 2
+                // Biggest file that may be sent, in MiB, and how many may go
+                // with one message. Both are about what a request can carry:
+                // providers refuse bodies past roughly 20 MiB, and every file
+                // is sent again with every following turn.
+                property int maxAttachmentMib: 8
+                property int maxAttachments: 6
+                // What happens when a conversation outgrows the model's
+                // context window. Sending it whole is how a long chat starts
+                // failing outright, so the oldest turns are left behind and,
+                // if asked, folded into a summary that goes in their place.
+                property JsonObject context: JsonObject {
+                    property bool manage: true
+                    property bool summarise: true
+                    // Room kept for the answer itself.
+                    property int reserveTokens: 4096
+                }
+                // Documents a model cannot read natively are turned into text
+                // on this machine instead of being dropped on the way out.
+                property bool extractDocuments: true
+                // Where the assistant may look for a file by itself, without
+                // one having been chosen by hand first. Empty by default:
+                // reaching the filesystem is something the user opts into,
+                // never a folder guessed on their behalf.
+                property JsonObject files: JsonObject {
+                    property list<string> roots: []
+                }
+                // Read text out of an image with the OCR engine already on
+                // the machine, when one is. The tool itself only ever runs on
+                // a path the model already has — from a search result or a
+                // file the user attached — never on a screenshot taken for
+                // it, so leaving this on does not mean anything is captured
+                // automatically.
+                property JsonObject vision: JsonObject {
+                    property bool ocrEnabled: true
+                }
+                property JsonObject voice: JsonObject {
+                    // Turning speech into a draft the user still has to send.
+                    // Off by default: nothing installs a transcription
+                    // backend automatically, so a fresh install would
+                    // otherwise show a microphone button that can only ever
+                    // land on "error" until the user follows the Settings
+                    // guide and turns this on themselves.
+                    property bool enabled: false
+                }
+                // Local retrieval over folders the user pointed at
+                // explicitly through Settings. Off by default: nothing is
+                // chunked, embedded, or indexed until a collection exists.
+                property JsonObject rag: JsonObject {
+                    property bool enabled: false
+                    // An Ollama model id, chosen from the ones detected as
+                    // embedding-capable. Empty until the user picks one.
+                    property string embeddingModel: ""
+                    // {id, name, path}. The index files themselves live
+                    // outside config.json, under Directories.state.
+                    property list<var> collections: []
+                }
+                // A desktop notification when an answer lands. Only while the
+                // chat is not on screen: telling someone what they are already
+                // reading is noise.
+                property JsonObject notify: JsonObject {
+                    property bool whenDone: true
+                    property bool onlyWhenAway: true
+                    // An answer that came back before this many seconds is one
+                    // the user almost certainly waited for.
+                    property int minimumSeconds: 4
+                }
+                // Facts the assistant carries between conversations. Each one
+                // is a line the user can read and delete; the model can only
+                // propose one through a tool that asks first.
+                property JsonObject memory: JsonObject {
+                    property bool enabled: true
+                    property int limit: 40
+                }
+                // Chats are first moved to .trash so undo and manual recovery
+                // remain possible. The session store prunes that folder by
+                // this retention window on startup and whenever it changes.
+                property JsonObject sessions: JsonObject {
+                    property int retentionDays: 30
+                }
+                // Projects: a name, a prompt of its own and files that go with
+                // every chat filed under it. {id, name, icon, prompt, files[]}
+                property list<var> projects: []
+                // Personas the user wrote: {id, name, icon, description,
+                // systemPrompt, modelId, thinking, temperature, starters[]}.
+                // The ones that ship with the shell are not in here.
+                property list<var> personas: []
+                // Models the user added, in one flat list. An entry with a
+                // `provider` naming a built-in provider is added to it;
+                // anything else stands on its own under "Others" and brings
+                // its own endpoint, dialect and key id.
+                property list<var> customModels: []
             }
 
             property JsonObject appearance: JsonObject {
@@ -3010,6 +3472,7 @@ Singleton {
             property JsonObject search: JsonObject {
                 property bool enableSystemControls: true
                 property bool enableMathPreview: true
+                property bool showSettings: false
                 property bool alwaysListApps: false
                 property int nonAppResultDelay: 30
                 property string engineBaseUrl: "https://www.google.com/search?q=" //www.google.com/search?q="
@@ -3036,6 +3499,14 @@ Singleton {
                     property string translator: "@"
                     property string mediaDownloader: "!"
                     property string materialSymbols: "*"
+                    property string ai: "&"
+                }
+                property JsonObject ai: JsonObject {
+                    // How the AI chat is triggered from the search:
+                    // "prefix" — only via the configured prefix
+                    // "suggest" — adds an "Ask AI" fallback row to the results
+                    // "auto" — switches to the AI chat when the query matches nothing
+                    property string trigger: "suggest"
                 }
                 property JsonObject imageSearch: JsonObject {
                     property string imageSearchEngineBaseUrl: "https://lens.google.com/uploadbyurl?url=" //lens.google.com/uploadbyurl?url="
@@ -3120,13 +3591,33 @@ Singleton {
                 }
                 property JsonObject ai: JsonObject {
                     property bool textFadeIn: false
-                    property bool showProviderAndModelButtons: true
-                    // When false, the Ai service never spawns its index
-                    // probe at boot (saves one Python fork + ollama
-                    // listing). The panel itself still loads on demand
-                    // via policies.ai; this only gates the proactive
-                    // model listing.
-                    property bool enable: true
+                    // Transcript presentation. These values deliberately live
+                    // beside the sidebar because Search keeps its compact
+                    // density regardless of this chat-specific preference.
+                    property string density: "comfortable" // comfortable | compact
+                    property bool showTimestamps: false
+                    property bool showResponseTime: false
+                    property bool showAnswerModel: true
+                    // Empty follows the persisted per-model default; valid
+                    // values are off, low, medium and high.
+                    property string thinkingDefault: ""
+                    property string activityDefault: "auto" // auto | expanded | collapsed
+                    property bool autoScroll: true
+                    // One source of truth for chat motion. Search forwards
+                    // this same preference into its navigator.
+                    property bool reducedMotion: false
+                    // Ordered shortcuts for Ctrl+1 … Ctrl+9 in the sidebar.
+                    property list<string> pinnedModels: []
+                    property string sendKey: "enter" // enter | ctrlEnter
+                    property bool renderMarkdown: true
+                    property bool renderLatex: true
+                    property bool codeWrap: false
+                    property bool codeLineNumbers: true
+                    property bool collapseLongAnswers: true
+                    property list<string> barKeys: ["keys", "advanced", "sessions", "newChat"]
+                    property string greeting: ""
+                    property bool emptyStateKeys: true
+                    property bool soundOnAnswer: false
                 }
                 property JsonObject booru: JsonObject {
                     property bool allowNsfw: false

@@ -82,12 +82,7 @@ ColumnLayout {
     onParentChanged: findFlickable()
 
     readonly property string currentSearch: SearchRegistry.currentSearch
-    onCurrentSearchChanged: {
-        if (matchesCurrent(SearchRegistry.currentSearch)) {
-            doScrollAndHighlight();
-            SearchRegistry.currentSearch = "";
-        }
-    }
+    onCurrentSearchChanged: root.tryPendingHighlight()
 
     function matchesCurrent(query) {
         if (!query || query.length === 0)
@@ -96,10 +91,18 @@ ColumnLayout {
     }
 
     function tryPendingHighlight() {
-        if (matchesCurrent(SearchRegistry.currentSearch)) {
-            doScrollAndHighlight();
-            SearchRegistry.currentSearch = "";
-        }
+        if (!matchesCurrent(SearchRegistry.currentSearch))
+            return;
+        doScrollAndHighlight();
+        // Cleared on the next tick rather than here: `currentSearch` above is
+        // bound to the very property being written, so clearing it inside the
+        // change handler re-enters the binding and Qt reports a loop. It
+        // worked, loudly. Deferring the write takes it out of the binding's
+        // own evaluation.
+        Qt.callLater(() => {
+            if (SearchRegistry.currentSearch === root.title)
+                SearchRegistry.currentSearch = "";
+        });
     }
 
     function doScrollAndHighlight() {

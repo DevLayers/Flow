@@ -858,9 +858,6 @@ def _generate_locked():
     # Update index.theme Directories if needed (ensure scavenged dirs are listed)
     _ensure_directories_in_index(dst_index)
 
-    print("[Phase 3] Updating icon cache...")
-    subprocess.run(["gtk-update-icon-cache", "-f", TARGET_THEME_PATH], capture_output=True)
-
     # ── Atomic swap: replace old DynamicTheme with new one ───────────────
     # Restores TARGET_THEME_PATH global to original value before swapping
     TARGET_THEME_PATH = OLD_TARGET
@@ -872,6 +869,12 @@ def _generate_locked():
     os.rename(NEW_THEME_PATH, TARGET_THEME_PATH)
     if os.path.exists(OLD_PATH):
         shutil.rmtree(OLD_PATH)
+
+    print("[Phase 3] Updating GTK3 and GTK4 icon caches...")
+    if shutil.which("gtk4-update-icon-cache"):
+        subprocess.run(["gtk4-update-icon-cache", "-f", "-q", "-t", TARGET_THEME_PATH], capture_output=True)
+    if shutil.which("gtk-update-icon-cache"):
+        subprocess.run(["gtk-update-icon-cache", "-f", "-q", "-t", TARGET_THEME_PATH], capture_output=True)
 
     # Save hash + base theme fingerprint so next run can skip if nothing changed
     try:

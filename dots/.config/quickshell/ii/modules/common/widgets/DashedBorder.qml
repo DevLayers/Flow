@@ -15,6 +15,10 @@ Canvas {
     onRadiusChanged: requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
+    // A repaint on colour and stroke too: without these the dashes kept the
+    // palette they were first drawn in and survived a theme change unchanged.
+    onColorChanged: requestPaint()
+    onBorderWidthChanged: requestPaint()
     onPaint: {
         var ctx = getContext("2d");
         ctx.clearRect(0, 0, width, height);
@@ -25,10 +29,29 @@ Canvas {
             ctx.setLineDash([root.dashLength, root.gapLength]); // Set dash pattern
         }
         if (root.radius > 0) {
-            var r = root.radius;
             var w = width;
             var h = height;
             var b = root.borderWidth / 2;
+            // The stroke is centred on the path, so the path itself runs half
+            // a stroke inside the item. That leaves the corner arc only
+            // `(h - 2b) / 2` to work with — asking for more makes `arcTo`
+            // fall back on a degenerate curve, which is what turned a pill
+            // into a box with broken corners at full rounding.
+            var r = Math.max(0, Math.min(root.radius, Math.min(w - b * 2, h - b * 2) / 2));
+            if (root.gapLength > 0) {
+                // A dash pattern that does not divide the outline evenly
+                // leaves a stub where the path closes. Stretching the pattern
+                // to the nearest whole number of repeats hides that seam and
+                // costs a fraction of a pixel per dash.
+                var straight = (w - b * 2 - r * 2) * 2 + (h - b * 2 - r * 2) * 2;
+                var perimeter = straight + 2 * Math.PI * r;
+                var unit = root.dashLength + root.gapLength;
+                if (perimeter > unit) {
+                    var repeats = Math.max(1, Math.round(perimeter / unit));
+                    var factor = perimeter / (repeats * unit);
+                    ctx.setLineDash([root.dashLength * factor, root.gapLength * factor]);
+                }
+            }
             ctx.beginPath();
             ctx.moveTo(b + r, b);
             ctx.lineTo(w - b - r, b);

@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 
-import Qt.labs.synchronizer
 import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Effects
@@ -10,6 +9,8 @@ import Quickshell.Io
 
 import qs
 import qs.services
+import qs.services.ai
+import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -21,6 +22,10 @@ Item {
     focus: true
     signal requestToggleActions
     property bool inNotchMode: false
+    // Set by the per-monitor Overview host so a deep-link is acknowledged by
+    // the monitor that is actually rendering the Search surface.
+    property string surfaceMonitorName: ""
+    property string routedSessionRequestId: ""
 
     readonly property string xdgConfigHome: Directories.config
     readonly property int typingDebounceInterval: 200
@@ -35,6 +40,9 @@ Item {
     readonly property bool showSkeletons: false
 
     property int loadedResultsCount: 50
+    // Left/Right stays available to edit the query unless the selected row is
+    // one of the Settings controls that can consume a horizontal adjustment.
+    property bool selectedResultHandlesHorizontalNavigation: false
 
     function getFilteredResultsCount() {
         const results = LauncherSearch.results;
@@ -58,13 +66,137 @@ Item {
         }
     }
 
-    property string searchingText: LauncherSearch.query
+    // Keep one authoritative query path. Binding this property directly to
+    // LauncherSearch while also synchronizing it from SearchBar created a
+    // QML binding loop during the AI handoff (the query is intentionally
+    // cleared when the chat surface takes over).
+    property string searchingText: ""
+
+    Connections {
+        target: LauncherSearch
+        function onQueryChanged() {
+            if (root.searchingText !== LauncherSearch.query)
+                root.searchingText = LauncherSearch.query;
+        }
+    }
     readonly property bool isClipboardMode: root.searchingText.startsWith(Config.options.search.prefix.clipboard)
     readonly property bool isBluetoothMode: root.searchingText.startsWith(Config.options.search.prefix.bluetooth)
     readonly property bool isTranslatorMode: root.searchingText.startsWith(Config.options.search.prefix.translator)
     readonly property bool isMediaDownloaderMode: Config.options.mediaDownloader.enabled && root.searchingText.startsWith(Config.options.search.prefix.mediaDownloader)
     readonly property bool isMaterialSymbolsMode: root.searchingText.startsWith(Config.options.search.prefix.materialSymbols)
-    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
+    /**
+     * Whether the AI surface owns the search.
+     *
+     * This is state, not a formula. It used to be derived from the query —
+     * and entering AI mode clears the query, which fed straight back into the
+     * formula. Qt saw a binding loop and froze the property, so Escape and
+     * the back button had nothing left to change and the panel could not be
+     * left. Every way in sets the latch; only `exitAiMode()` clears it.
+     */
+    readonly property bool isAiMode: Ai.enabled && root.aiModeLocked
+    // Auto AI recognition: when enabled, a settled query that matches no app,
+    // command or prefix hands the search over to the AI chat. Kept apart from
+    // the latch so the timer cannot fire twice for one query.
+    property bool aiAutoEngaged: false
+    property bool aiModeLocked: false
+    // Prevents a query that entered AI mode from being copied repeatedly when
+    // the launcher query is cleared or the draft is restored asynchronously.
+    property bool aiDraftHydrated: false
+    readonly property bool aiAutoTriggerEnabled: Ai.enabled && (Config.options.search.ai?.trigger ?? "prefix") === "auto"
+    readonly property var searchPrefixValues: {
+        const p = Config.options.search.prefix;
+        return [p.action, p.app, p.bluetooth, p.clipboard, p.fileSearch, p.emojis, p.math, p.shellCommand, p.webSearch, p.windowSearch, p.fileBrowser, p.translator, p.mediaDownloader, p.materialSymbols, p.ai]
+            .filter(v => v && v.length > 0 && (Ai.enabled || v !== p.ai));
+    }
+    readonly property bool queryHasAnyPrefix: root.searchPrefixValues.some(prefix => root.searchingText.startsWith(prefix))
+    // Results that are actual matches — the always-there fallback rows
+    // (shell command, math, web, ask-AI) never count.
+    readonly property int realResultCount: LauncherSearch.results.filter(r => r && r.key !== "cmd:shell" && r.key !== "web:search" && r.key !== "ai:ask" && r.key !== "mpris:now-playing" && !r.key.startsWith("math:")).length
+    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode || root.isAiMode
+
+    // Latch: however AI mode was entered (prefix typed, suggestion row or
+    // auto detection), it stays on until back/Esc — deleting the text must
+    // not yank the panel away mid-conversation.
+    onIsAiModeChanged: {
+        if (root.isAiMode) {
+            if (!root.aiDraftHydrated) {
+                root.aiDraftHydrated = true;
+                const initialDraft = StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.ai]).trim();
+                if (Ai.draft.trim().length === 0 && initialDraft.length > 0)
+                    Ai.draft = initialDraft;
+                LauncherSearch.query = "";
+            }
+            // Focus the AI composer immediately so the user can type without
+            // clicking. The latch is *not* set here: `isAiMode` reads
+            // `aiModeLocked`, so writing it back from this handler made the
+            // binding depend on its own result — Qt broke the loop by
+            // freezing the property, and Escape then had nothing to change.
+            Qt.callLater(root.focusSearchInput);
+        } else {
+            root.aiDraftHydrated = false;
+        }
+        root.tryConsumeSurfaceIntent();
+    }
+
+    /**
+     * Enters AI mode and keeps it: however it was entered, deleting the text
+     * must not yank the panel away mid-conversation. Every way in calls this;
+     * only the back button and Escape call `exitAiMode()`.
+     */
+    function engageAiMode() {
+        if (!Ai.enabled)
+            return;
+        root.aiModeLocked = true;
+    }
+
+    // Debounce so a query that is still matching things asynchronously does
+    // not flip the whole widget into AI mode between keystrokes.
+    Timer {
+        id: aiAutoEngageTimer
+        interval: 350
+        onTriggered: {
+            if (root.aiAutoTriggerEnabled && !root.aiAutoEngaged && !root.queryHasAnyPrefix && root.searchingText.trim().length >= 3 && root.realResultCount === 0) {
+                root.aiAutoEngaged = true;
+                root.engageAiMode();
+            }
+        }
+    }
+
+    onSearchingTextChanged: {
+        // Typing the prefix is one of the ways in, so it latches here rather
+        // than as a reaction to the mode changing.
+        if (Ai.enabled && root.searchingText.startsWith(Config.options.search.prefix.ai))
+            root.engageAiMode();
+        if (root.searchingText === "" || root.queryHasAnyPrefix) {
+            root.aiAutoEngaged = false;
+            aiAutoEngageTimer.stop();
+        } else if (root.aiAutoTriggerEnabled && !root.aiAutoEngaged && root.searchingText.trim().length >= 3 && root.realResultCount === 0) {
+            aiAutoEngageTimer.restart();
+        }
+    }
+
+    Component.onCompleted: root.searchingText = LauncherSearch.query
+
+    onRealResultCountChanged: {
+        if (root.aiAutoEngaged)
+            return;
+        if (root.aiAutoTriggerEnabled && !root.queryHasAnyPrefix && root.searchingText.trim().length >= 3 && root.realResultCount === 0)
+            aiAutoEngageTimer.restart();
+        else
+            aiAutoEngageTimer.stop();
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (!GlobalStates.overviewOpen) {
+                if (root.isAiMode || root.aiAutoEngaged || root.aiModeLocked)
+                    root.resetAiSearchState(false);
+                else
+                    root.cancelSearch();
+            }
+        }
+    }
     readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !root.isAnySpecialMode && root.searchingText === ""
     readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
     property bool showResults: searchingText != "" || isAnySpecialMode || alwaysListAppsMode || (searchingText === "" && LauncherSearch.results.length > 0)
@@ -158,7 +290,10 @@ Item {
     readonly property bool openStateStable: root.inNotchMode ? false : (!root._heightAnimating && !root._widthAnimating)
 
     function focusFirstItem() {
-        if (root.isBluetoothMode) {} else if (root.isClipboardMode) {} else if (root.isTranslatorMode) {
+        if (root.showSuggestionsPanel) {
+            if (suggestionsPanelLoader.item)
+                suggestionsPanelLoader.item.focusFirst();
+        } else if (root.isBluetoothMode) {} else if (root.isClipboardMode) {} else if (root.isTranslatorMode) {
             if (translatorPanelLoader.item)
                 translatorPanelLoader.item.focusInput();
         } else if (root.isMediaDownloaderMode) {
@@ -167,13 +302,126 @@ Item {
         } else if (root.isMaterialSymbolsMode) {
             if (materialSymbolsPanelLoader.item)
                 materialSymbolsPanelLoader.item.focusInput();
+        } else if (root.isAiMode) {
+            root.focusSearchInput();
         } else {
             appResults.currentIndex = 0;
         }
     }
 
     function focusSearchInput() {
+        if (root.isAiMode && aiPanelLoader.item) {
+            aiPanelLoader.item.focusComposer();
+            return;
+        }
         searchBar.forceFocus();
+    }
+
+    function selectedResultRow(): var {
+        if (appResults.currentIndex < 0 || appResults.currentIndex >= appResults.count)
+            return null;
+        const delegate = appResults.itemAtIndex(appResults.currentIndex);
+        return delegate?.item ?? delegate ?? null;
+    }
+
+    function refreshSelectedResultNavigation() {
+        const row = root.selectedResultRow();
+        root.selectedResultHandlesHorizontalNavigation = row?.supportsHorizontalNavigation === true;
+    }
+
+    function navigateSelectedResult(direction: string): bool {
+        const row = root.selectedResultRow();
+        if (!row)
+            return false;
+        if (direction === "left" && typeof row.navigateLeft === "function")
+            return row.navigateLeft();
+        if (direction === "right" && typeof row.navigateRight === "function")
+            return row.navigateRight();
+        return false;
+    }
+
+    function continueInSidebar() {
+        const panel = aiPanelLoader.item;
+        Ai.surfaceRouter.open({
+            surface: "sidebar",
+            monitorName: root.surfaceMonitorName,
+            sessionId: Ai.sessions.currentId,
+            focusIntent: "composer",
+            scrollAnchor: panel && typeof panel.captureHandoffState === "function"
+                ? panel.captureHandoffState()
+                : null
+        });
+    }
+
+    // A router request is consumed only after this per-monitor Search host is
+    // visible and the AI panel exists. Session loading is also acknowledged
+    // only after Ai has selected the requested session, so a deep-link cannot
+    // clear itself while another conversation is still on screen.
+    function tryConsumeSurfaceIntent() {
+        const intent = Ai.surfaceRouter.pendingIntent;
+        if (!intent || intent.surface !== "search" || intent.monitorName !== root.surfaceMonitorName)
+            return;
+        // A chat handed over from the sidebar opens the panel rather than
+        // waiting for someone to type the prefix first.
+        if (GlobalStates.overviewOpen && !root.isAiMode)
+            root.engageAiMode();
+        if (!GlobalStates.overviewOpen || !root.isAiMode || !aiPanelLoader.item)
+            return;
+        if (intent.sessionId.length > 0 && Ai.sessions.currentId !== intent.sessionId) {
+            if (root.routedSessionRequestId !== intent.requestId) {
+                root.routedSessionRequestId = intent.requestId;
+                Ai.openSession(intent.sessionId);
+            }
+            return;
+        }
+        const panel = aiPanelLoader.item;
+        if (!panel || typeof panel.applySurfaceIntent !== "function")
+            return;
+        if (!panel.applySurfaceIntent(intent))
+            return;
+        Ai.surfaceRouter.acknowledge(intent.requestId);
+        root.routedSessionRequestId = "";
+    }
+
+    Connections {
+        target: Ai.surfaceRouter
+        function onPendingIntentChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
+    Connections {
+        target: Ai.sessions
+        function onCurrentIdChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+        function onLoadedChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
+    Connections {
+        target: Ai
+        function onMessageIDsChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+        function onMessageByIDChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
+    Connections {
+        target: aiPanelLoader
+        function onStatusChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            root.tryConsumeSurfaceIntent();
+        }
     }
 
     function disableExpandAnimation() {
@@ -181,9 +429,119 @@ Item {
     }
 
     function cancelSearch() {
-        searchBar.searchInput.selectAll();
+        // Normal Search is intentionally ephemeral. The AI composer owns its
+        // draft per session; the launcher query must not become a second draft
+        // store that brings the last ordinary search back on the next open.
+        root.searchingText = "";
         LauncherSearch.query = "";
+        searchBar.searchInput.text = "";
         searchBar.animateWidth = true;
+    }
+
+    // AI state belongs to the AI surface, never to the normal launcher. Clear
+    // both halves of the query synchronizer so a previous "&" handoff cannot
+    // immediately relatch the panel when the ordinary Search opens again.
+    // `Ai.draft` remains untouched: the AI panel alone owns that unsent text.
+    function resetAiSearchState(focusNormalSearch = false) {
+        root.aiAutoEngaged = false;
+        root.aiModeLocked = false;
+        root.aiDraftHydrated = false;
+        aiAutoEngageTimer.stop();
+        root.searchingText = "";
+        LauncherSearch.query = "";
+        searchBar.searchInput.text = "";
+        if (focusNormalSearch) {
+            Qt.callLater(() => {
+                root.focusSearchInput();
+                searchBar.searchInput.forceActiveFocus();
+            });
+        }
+    }
+
+    // Leave AI chat and return to the plain search without discarding an
+    // unsent AI draft. Sent drafts are cleared by Ai after submission starts.
+    function exitAiMode() {
+        root.resetAiSearchState(true);
+    }
+
+    // One Escape path for the whole overview surface. A PanelWindow cannot
+    // host a Keys attached property, so Overview's window shortcut delegates
+    // here; the focused composer and child controls use the same function.
+    function handleEscape(): bool {
+        if (!root.isAiMode)
+            return false;
+        if (aiPanelLoader.item && typeof aiPanelLoader.item.handleEscape === "function" && aiPanelLoader.item.handleEscape())
+            return true;
+        root.exitAiMode();
+        return true;
+    }
+
+    // Send the current search bar text as a chat message. The search bar is
+    // the composer in AI mode, so both Enter in the field and the send button
+    // in the panel funnel through here.
+    function sendAiMessage(messageText) {
+        const raw = (typeof messageText === "string" && messageText.length > 0) ? messageText : Ai.draft;
+        const cleaned = StringUtils.cleanOnePrefix(raw, [Config.options.search.prefix.ai]).trim();
+        if (!cleaned)
+            return;
+        const parsed = AiActionRegistry.parseInput(cleaned, "/");
+        if (parsed.kind === "command" || parsed.kind === "unknown-command") {
+            if (root.executeAiCommand(parsed))
+                Ai.clearDraftIfCurrent();
+        } else {
+            Ai.sendUserMessage(Ai.expandComposerReferences(parsed.text));
+        }
+        if (aiPanelLoader.item && typeof aiPanelLoader.item.focusComposer === "function")
+            aiPanelLoader.item.focusComposer();
+    }
+
+    // Search and sidebar share the parser; commands that need a sidebar host
+    // hand off through the same router instead of becoming accidental prompts.
+    function executeAiCommand(parsed: var) {
+        if (parsed.kind === "unknown-command") {
+            Ai.submissionNotice = Translation.tr("Unknown AI command: %1").arg(parsed.name);
+            return false;
+        }
+        const args = parsed.args ?? [];
+        switch (parsed.id) {
+        case "model":
+            Ai.setModel(args.join(" ").trim());
+            break;
+        case "provider":
+            Ai.setProvider(args.join(" ").trim());
+            break;
+        case "temp":
+        case "temperature":
+            Ai.setTemperature(Number(args[0] ?? 0.7));
+            break;
+        case "think":
+            Ai.setThinkingLevel(args[0] ?? "medium");
+            break;
+        case "effort":
+            Ai.setResponseMode(args[0] ?? "balanced");
+            break;
+        case "web":
+            Ai.setWebMode(args[0] ?? "auto");
+            break;
+        case "tools":
+            Ai.setFunctionExposure(args[0] ?? "all");
+            break;
+        case "tool":
+            Ai.setTool(args[0] ?? "");
+            break;
+        case "chats":
+            if (aiPanelLoader.item)
+                aiPanelLoader.item.historyOpen = true;
+            break;
+        case "clear":
+        case "new":
+            Ai.newChat();
+            break;
+        default:
+            Ai.submissionNotice = Translation.tr("/%1 is available in the sidebar.").arg(parsed.name);
+            return false;
+        }
+        return true;
     }
 
     function setSearchingText(text) {
@@ -205,7 +563,19 @@ Item {
     }
 
     Keys.onPressed: event => {
+        if (event.key === Qt.Key_J && (event.modifiers & Qt.ControlModifier) && root.isAiMode) {
+            root.continueInSidebar();
+            event.accepted = true;
+            return;
+        }
         if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
+            if (root.isAiMode) {
+                // The app result list is hidden while AI owns the surface;
+                // never toggle an action panel the user cannot see.
+                root.focusSearchInput();
+                event.accepted = true;
+                return;
+            }
             if (appResults.visible) {
                 root.requestToggleActions();
                 event.accepted = true;
@@ -213,12 +583,36 @@ Item {
             return;
         }
 
-        // Prevent Esc and Backspace from registering
-        if (event.key === Qt.Key_Escape)
+        // ESC: in AI mode, delegate to panel (closes history first, then exits AI mode)
+        if (event.key === Qt.Key_Escape) {
+            if (root.isAiMode) {
+                root.handleEscape();
+                event.accepted = true;
+            }
+            // In non-AI mode, let the event propagate to OverviewWindow for closing
             return;
+        }
+
+        // TAB / Backtab: route navigation inside AI panel when in AI mode
+        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+            if (root.isAiMode) {
+                if (aiPanelLoader.item) {
+                    if (event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier))
+                        aiPanelLoader.item.focusPrev();
+                    else
+                        aiPanelLoader.item.focusNext();
+                }
+                event.accepted = true;
+                return;
+            }
+        }
 
         // Handle Backspace: focus and delete character if not focused
         if (event.key === Qt.Key_Backspace) {
+            if (root.isAiMode) {
+                root.focusSearchInput();
+                return;
+            }
             if (!searchBar.searchInput.activeFocus) {
                 root.focusSearchInput();
                 if (event.modifiers & Qt.ControlModifier) {
@@ -249,8 +643,17 @@ Item {
         }
 
         // Only handle visible printable characters (ignore control chars, arrows, etc.)
-        if (event.text && event.text.length === 1 && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Return && event.key !== Qt.Key_Delete && event.text.charCodeAt(0) >= 0x20) // ignore control chars like Backspace, Tab, etc.
+        if (event.text && event.text.length === 1 && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Return && event.key !== Qt.Key_Delete && event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backtab && event.text.charCodeAt(0) >= 0x20)
         {
+            if (root.isAiMode) {
+                root.focusSearchInput();
+                const input = searchBar.searchInput;
+                const position = input.cursorPosition;
+                input.text = input.text.slice(0, position) + event.text + input.text.slice(position);
+                input.cursorPosition = position + event.text.length;
+                event.accepted = true;
+                return;
+            }
             if (!searchBar.searchInput.activeFocus) {
                 root.focusSearchInput();
                 // Insert the character at the cursor position
@@ -272,17 +675,25 @@ Item {
     }
     Rectangle {
         id: searchWidgetContent
+        // Centered vertically like every other mode — the AI panel is just
+        // another panel below the search bar, same as clipboard/translator.
         anchors.centerIn: parent
         width: GlobalStates.searchConnectActive ? parent.width : implicitWidth
         height: GlobalStates.searchConnectActive ? parent.height : implicitHeight
         clip: true
-        layer.enabled: true
+        layer.enabled: !GlobalStates.searchConnectActive
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: searchWidgetContent.width
                 height: searchWidgetContent.height
                 radius: searchWidgetContent.radius
             }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            // Absorb clicks inside search widget so they do not hit the full-screen dismiss MouseArea
+            onClicked: {}
         }
         implicitWidth: {
             let baseW = 0;
@@ -296,6 +707,10 @@ Item {
                 baseW = Config.options.search.clipboard.panelWidth ?? 860;
             else if (root.isMaterialSymbolsMode)
                 baseW = 380;
+            else if (root.isAiMode)
+                // Fixed width: the old `search.ai.panelWidth` key had no
+                // writer anywhere, so the value was always this literal.
+                baseW = 720;
             else
                 baseW = Math.max(Config.options.search.baseWidth, gridLayout.implicitWidth);
 
@@ -319,9 +734,13 @@ Item {
                 return (mediaDownloaderPanelLoader.item ? mediaDownloaderPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
             if (root.isMaterialSymbolsMode)
                 return (materialSymbolsPanelLoader.item ? materialSymbolsPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
+            if (root.isAiMode) {
+                const panelH = aiPanelLoader.item ? aiPanelLoader.item.implicitHeight : 520;
+                return panelH + 16;
+            }
             return gridLayout.implicitHeight;
         }
-        radius: Appearance.rounding.windowRounding
+        radius: root.isAiMode ? Appearance.rounding.verylarge : Appearance.rounding.windowRounding
         color: GlobalStates.searchConnectActive ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
 
         Behavior on implicitWidth {
@@ -348,6 +767,15 @@ Item {
             }
         }
 
+        Behavior on radius {
+            enabled: !root.inNotchMode
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveSmall.duration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+            }
+        }
+
         GridLayout {
             id: gridLayout
             anchors.left: parent.left
@@ -357,20 +785,27 @@ Item {
             anchors.rightMargin: (GlobalStates.searchConnectActive && !root.inNotchMode) ? 24 : 0
             anchors.top: parent.top
             columns: 1
+            rowSpacing: root.isAiMode ? 0 : 5
             clip: true
 
             SearchBar {
                 id: searchBar
                 property real verticalPadding: 4
                 Layout.fillWidth: true
+                Layout.preferredHeight: root.isAiMode ? 0 : implicitHeight
+                Layout.minimumHeight: 0
                 Layout.leftMargin: 10
                 Layout.rightMargin: 10
-                Layout.topMargin: verticalPadding
-                Layout.bottomMargin: verticalPadding
+                Layout.topMargin: root.isAiMode ? 0 : verticalPadding
+                Layout.bottomMargin: root.isAiMode ? 0 : verticalPadding
                 Layout.row: root.overviewPosition == "bottom" ? 1 : 0
+                visible: !root.isAiMode
                 animateWidth: true
-                Synchronizer on searchingText {
-                    property alias source: root.searchingText
+                aiModeActive: root.isAiMode
+                Binding {
+                    target: searchBar
+                    property: "searchingText"
+                    value: root.searchingText
                 }
 
                 clipboardMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
@@ -379,6 +814,25 @@ Item {
                 isTranslatorPanelFocused: root.isTranslatorMode && translatorPanelLoader.item && translatorPanelLoader.item.focusedControlIndex !== -1
                 isMediaDownloaderPanelFocused: root.isMediaDownloaderMode && mediaDownloaderPanelLoader.item && mediaDownloaderPanelLoader.item.focusedControlIndex !== -1
                 isMaterialSymbolsPanelFocused: root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item && materialSymbolsPanelLoader.item.focusedControlIndex !== -1
+                showSuggestionsPanel: root.showSuggestionsPanel
+                enabled: !root.isAiMode
+                opacity: root.isAiMode ? 0 : 1
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
+
+                Behavior on Layout.preferredHeight {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveSmall.duration
+                        easing.type: Appearance.animation.elementMoveSmall.type
+                        easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
+                    }
+                }
 
                 onCtrlKPressed: {
                     if (appResults.visible) {
@@ -386,8 +840,21 @@ Item {
                     }
                 }
 
+                onEscapeToSearch: {
+                    if (root.isAiMode)
+                        root.handleEscape();
+                }
+
+                onSendMessage: {
+                    if (root.isAiMode)
+                        root.sendAiMessage();
+                }
+
                 onNavigateUp: {
-                    if (root.isBluetoothMode) {
+                    if (root.isAiMode) {
+                        if (aiPanelLoader.item && typeof aiPanelLoader.item.navigateUp === "function")
+                            aiPanelLoader.item.navigateUp();
+                    } else if (root.isBluetoothMode) {
                         if (bluetoothPanelLoader.item)
                             bluetoothPanelLoader.item.navigateUp();
                     } else if (root.isClipboardMode) {
@@ -402,6 +869,9 @@ Item {
                     } else if (root.isMaterialSymbolsMode) {
                         if (materialSymbolsPanelLoader.item)
                             materialSymbolsPanelLoader.item.navigateUp();
+                    } else if (root.showSuggestionsPanel) {
+                        if (suggestionsPanelLoader.item)
+                            suggestionsPanelLoader.item.navigateUp();
                     } else {
                         if (appResults.count > 0 && appResults.currentIndex > 0)
                             appResults.currentIndex--;
@@ -409,7 +879,10 @@ Item {
                 }
 
                 onNavigateDown: {
-                    if (root.isBluetoothMode) {
+                    if (root.isAiMode) {
+                        if (aiPanelLoader.item && typeof aiPanelLoader.item.navigateDown === "function")
+                            aiPanelLoader.item.navigateDown();
+                    } else if (root.isBluetoothMode) {
                         if (bluetoothPanelLoader.item)
                             bluetoothPanelLoader.item.navigateDown();
                     } else if (root.isClipboardMode) {
@@ -424,6 +897,9 @@ Item {
                     } else if (root.isMaterialSymbolsMode) {
                         if (materialSymbolsPanelLoader.item)
                             materialSymbolsPanelLoader.item.navigateDown();
+                    } else if (root.showSuggestionsPanel) {
+                        if (suggestionsPanelLoader.item)
+                            suggestionsPanelLoader.item.navigateDown();
                     } else {
                         if (appResults.count > 0 && appResults.currentIndex < appResults.count - 1)
                             appResults.currentIndex++;
@@ -441,6 +917,8 @@ Item {
                         mediaDownloaderPanelLoader.item.navigateLeft();
                     else if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item)
                         materialSymbolsPanelLoader.item.navigateLeft();
+                    else if (root.selectedResultHandlesHorizontalNavigation)
+                        root.navigateSelectedResult("left");
                 }
 
                 onNavigateRight: {
@@ -454,6 +932,8 @@ Item {
                         mediaDownloaderPanelLoader.item.navigateRight();
                     else if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item)
                         materialSymbolsPanelLoader.item.navigateRight();
+                    else if (root.selectedResultHandlesHorizontalNavigation)
+                        root.navigateSelectedResult("right");
                 }
 
                 onActivate: {
@@ -467,6 +947,8 @@ Item {
                         mediaDownloaderPanelLoader.item.activateSelected();
                     else if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item)
                         materialSymbolsPanelLoader.item.activateSelected();
+                    else if (root.showSuggestionsPanel && suggestionsPanelLoader.item)
+                        suggestionsPanelLoader.item.activateSelected();
                 }
 
                 onDeleteSelected: {
@@ -663,6 +1145,11 @@ Item {
                     }
 
                     onCurrentIndexChanged: {
+                        const selected = currentIndex >= 0 && currentIndex < resultModel.count
+                            ? resultModel.get(currentIndex)?.modelRef ?? null
+                            : null;
+                        LauncherSearch.selectedResult = selected;
+                        root.refreshSelectedResultNavigation();
                         if (currentIndex >= count - 5 && count < root.getFilteredResultsCount()) {
                             root.loadMoreResults();
                         }
@@ -783,17 +1270,14 @@ Item {
                         applyResultDiff(root.processResults(LauncherSearch.results));
                     }
 
-                    delegate: SearchItem {
-                        id: searchItem
+                    delegate: Loader {
+                        id: resultDelegate
                         required property int index
-                        listIndex: index
-                        listCurrentIndex: appResults.currentIndex
                         required property var modelData
-                        anchors.left: parent?.left
-                        anchors.right: parent?.right
-                        // modelData is {key, modelRef} from ListModel — pass the actual result object
-                        entry: modelData.modelRef
-                        query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.emojis, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
+                        width: appResults.width
+                        height: item ? item.implicitHeight : 0
+                        sourceComponent: resultDelegate.modelData.modelRef?.settingRef ? settingResultCard : normalSearchItem
+                        onLoaded: root.refreshSelectedResultNavigation()
 
                         // Animate y when ListView repositions this delegate (via move/displaced)
                         Behavior on y {
@@ -804,41 +1288,98 @@ Item {
                             }
                         }
 
-                        Connections {
-                            target: root
-                            function onRequestToggleActions() {
-                                if (searchItem.listIndex === appResults.currentIndex) {
-                                    searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
-                                    searchItem.actionSelectedIndex = 0;
-                                    if (searchItem.actionPanelOpen) {
-                                        searchItem.forceActiveFocus();
-                                    } else {
-                                        root.focusSearchInput();
-                                    }
+                        Component {
+                            id: settingResultCard
+
+                            // Loader owns this item's explicit width and
+                            // resizes it to the delegate. The card must be a
+                            // child instead: a direct child gets stretched
+                            // back to full width after its x inset is applied.
+                            Item {
+                                implicitHeight: settingCardItem.implicitHeight
+                                readonly property bool supportsHorizontalNavigation: settingCardItem.supportsHorizontalNavigation
+
+                                function activate(): bool {
+                                    return settingCardItem.activate();
+                                }
+
+                                function clicked(): bool {
+                                    return settingCardItem.clicked();
+                                }
+
+                                function navigateLeft(): bool {
+                                    return settingCardItem.navigateLeft();
+                                }
+
+                                function navigateRight(): bool {
+                                    return settingCardItem.navigateRight();
+                                }
+
+                                AiSettingResultCard {
+                                    id: settingCardItem
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.margins: Appearance.sizes.elevationMargin
+                                    height: implicitHeight
+                                    setting: resultDelegate.modelData.modelRef.settingRef
+                                    compact: true
+                                    launcherStyle: true
+                                    listIndex: resultDelegate.index
+                                    listCount: appResults.count
+                                    listCurrentIndex: appResults.currentIndex
                                 }
                             }
                         }
 
-                        Keys.onPressed: event => {
-                            if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
-                                searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
-                                searchItem.actionSelectedIndex = 0;
-                                if (searchItem.actionPanelOpen) {
-                                    searchItem.forceActiveFocus();
-                                } else {
-                                    root.focusSearchInput();
+                        Component {
+                            id: normalSearchItem
+
+                            SearchItem {
+                                id: searchItem
+                                width: resultDelegate.width
+                                listIndex: resultDelegate.index
+                                listCurrentIndex: appResults.currentIndex
+                                // modelData is {key, modelRef} from ListModel — pass the actual result object
+                                entry: resultDelegate.modelData.modelRef
+                                query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.emojis, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
+
+                                Connections {
+                                    target: root
+                                    function onRequestToggleActions() {
+                                        if (searchItem.listIndex === appResults.currentIndex) {
+                                            searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
+                                            searchItem.actionSelectedIndex = 0;
+                                            if (searchItem.actionPanelOpen) {
+                                                searchItem.forceActiveFocus();
+                                            } else {
+                                                root.focusSearchInput();
+                                            }
+                                        }
+                                    }
                                 }
-                                event.accepted = true;
-                            } else if (event.key === Qt.Key_Tab) {
-                                if (searchItem.actionPanelOpen)
-                                    return;
-                                if (LauncherSearch.results.length === 0)
-                                    return;
-                                const tabbedText = searchItem.modelData.name;
-                                LauncherSearch.query = tabbedText;
-                                searchBar.searchInput.text = tabbedText;
-                                event.accepted = true;
-                                root.focusSearchInput();
+
+                                Keys.onPressed: event => {
+                                    if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
+                                        searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
+                                        searchItem.actionSelectedIndex = 0;
+                                        if (searchItem.actionPanelOpen) {
+                                            searchItem.forceActiveFocus();
+                                        } else {
+                                            root.focusSearchInput();
+                                        }
+                                        event.accepted = true;
+                                    } else if (event.key === Qt.Key_Tab) {
+                                        if (searchItem.actionPanelOpen)
+                                            return;
+                                        if (LauncherSearch.results.length === 0)
+                                            return;
+                                        const tabbedText = resultDelegate.modelData.name;
+                                        LauncherSearch.query = tabbedText;
+                                        searchBar.searchInput.text = tabbedText;
+                                        event.accepted = true;
+                                        root.focusSearchInput();
+                                    }
+                                }
                             }
                         }
                     }
@@ -1170,6 +1711,76 @@ Item {
                     property: "searchQuery"
                     value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.materialSymbols])
                     when: materialSymbolsPanelLoader.status === Loader.Ready
+                }
+            }
+
+            Loader {
+                id: aiPanelLoader
+                active: root.isAiMode || opacity > 0.01
+                visible: opacity > 0.01
+                Layout.fillWidth: true
+                Layout.leftMargin: 8
+                Layout.rightMargin: 8
+                Layout.topMargin: 8
+                Layout.bottomMargin: 8
+                Layout.preferredHeight: (root.isAiMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
+                height: Layout.preferredHeight
+                source: "AiChatPanel.qml"
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
+
+                opacity: root.isAiMode ? 1.0 : 0.0
+                transform: Translate {
+                    y: (1.0 - aiPanelLoader.opacity) * 16
+                }
+                layer.enabled: opacity > 0.001 && opacity < 0.999
+                layer.effect: MultiEffect {
+                    blurEnabled: (1.0 - parent.opacity) > 0.001
+                    blurMax: 32.0
+                    blur: (1.0 - parent.opacity) * 0.5
+                }
+                Behavior on opacity {
+                    enabled: !root.inNotchMode
+                    NumberAnimation {
+                        duration: 220
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+
+                Connections {
+                    target: aiPanelLoader.item
+                    ignoreUnknownSignals: true
+                    function onRequestBackToSearch() {
+                        root.exitAiMode();
+                    }
+                    function onRequestFocusComposer() {
+                        if (aiPanelLoader.item && typeof aiPanelLoader.item.focusComposer === "function")
+                            aiPanelLoader.item.focusComposer();
+                    }
+                    function onRequestSendMessage(text) {
+                        root.sendAiMessage(text);
+                    }
+                    function onRequestContinueInSidebar() {
+                        root.continueInSidebar();
+                    }
+                }
+
+                Binding {
+                    target: aiPanelLoader.item
+                    property: "activeSurface"
+                    value: root.isAiMode
+                    when: aiPanelLoader.status === Loader.Ready
+                }
+
+                // The panel remains reusable on its own, but when hosted by
+                // Search it can leave through this direct, synchronous route.
+                // This avoids a Loader signal being the only path back to the
+                // normal search surface.
+                Binding {
+                    target: aiPanelLoader.item
+                    property: "searchHost"
+                    value: root
+                    when: aiPanelLoader.status === Loader.Ready
                 }
             }
 

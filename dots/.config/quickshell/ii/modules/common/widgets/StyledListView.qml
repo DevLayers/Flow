@@ -14,13 +14,38 @@ ListView {
     property real dragDistance: 0
     property bool popin: true
     property bool animateAppearance: true
+    /**
+     * The first fill of the list, separate from `animateAppearance` so a view
+     * that already animates its own entrance can keep the per-row animation
+     * for later additions without playing it over its own arrival.
+     */
     property bool animatePopulate: true
+    /**
+     * Milliseconds between one row entering and the next, on the first fill
+     * only. Zero — the default everywhere that has not asked for it — leaves
+     * `populate` exactly as it was: every row entering at once.
+     *
+     * Only `populate` staggers. Delaying `add` would hold a row that arrived
+     * on its own behind rows it has nothing to do with, which on a chat
+     * transcript means an answer landing late for no reason.
+     */
+    property int staggerStep: 0
+    /** Caps the wait for the last row of a long list. */
+    property int staggerMaximum: 320
     property bool animateMovement: false
     property bool dismissToLeft: false
     property bool useSlideInAnimation: false
 
     // Accumulated scroll destination so wheel deltas stack while animating
     property real scrollTargetY: 0
+
+    /**
+     * The reader turned the wheel, and where that puts them. A list that moves
+     * itself as well needs to tell the two apart, and this is the half nothing
+     * else reports: a wheel scroll writes contentY directly, so it raises no
+     * drag or flick of its own.
+     */
+    signal userScrolled(real targetY, real maxY)
 
     property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
     property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
@@ -76,13 +101,19 @@ ListView {
             // while that of a mouse wheel is typically in multiples of ±120.
             var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= root.mouseScrollDeltaThreshold ? root.mouseScrollFactor : root.touchpadScrollFactor;
 
-            const maxY = Math.max(0, root.contentHeight - root.height);
+            // Margins are part of the scrollable range: a list with a top
+            // margin starts at -topMargin, not at 0. Clamping to 0 left the
+            // first item permanently tucked under whatever the margin was
+            // making room for.
+            const minY = root.originY - root.topMargin;
+            const maxY = Math.max(minY, root.originY + root.contentHeight - root.height + root.bottomMargin);
             const base = scrollAnim.running ? root.scrollTargetY : root.contentY;
-            var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
+            var targetY = Math.max(minY, Math.min(base - delta * scrollFactor, maxY));
 
             root.scrollTargetY = targetY;
             root._wheelScrolling = true;
             root.contentY = targetY;
+            root.userScrolled(targetY, maxY);
             wheelEvent.accepted = true;
         }
     }
@@ -131,25 +162,48 @@ ListView {
     }
 
     populate: Transition {
-        enabled: root.animatePopulate
-        ParallelAnimation {
-            // Slide Animation
-            NumberAnimation {
-                property: "x"
-                from: root.dismissToLeft ? -((root.width < 100 ? Appearance.sizes.notificationPopupWidth : root.width) + root.removeOvershoot) : ((root.width < 100 ? Appearance.sizes.notificationPopupWidth : root.width) + root.removeOvershoot)
-                to: 0
-                duration: root.useSlideInAnimation ? Appearance.animation.elementMoveEnter.duration : 0
-                easing.type: Appearance.animation.elementMoveEnter.type
-                easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        id: populateTransition
+        enabled: root.animateAppearance && root.animatePopulate
+
+        SequentialAnimation {
+            // Each row waits its turn, so a page fills top-down instead of
+            // appearing all at once. `ViewTransition.index` is the row's place
+            // in the fill, which is the only thing a Transition knows about it.
+            PauseAnimation {
+                duration: root.staggerStep <= 0 ? 0
+                    : Math.min(root.staggerMaximum, populateTransition.ViewTransition.index * root.staggerStep)
             }
-            // Fade Animation
-            NumberAnimation {
-                properties: root.popin ? "opacity,scale" : "opacity"
-                from: !root.useSlideInAnimation ? 0 : 1
-                to: 1
-                duration: !root.useSlideInAnimation ? Appearance.animation.elementMoveEnter.duration : 0
-                easing.type: Appearance.animation.elementMoveEnter.type
-                easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+
+            ParallelAnimation {
+                // Slide Animation
+                NumberAnimation {
+                    property: "x"
+                    from: root.dismissToLeft ? -((root.width < 100 ? Appearance.sizes.notificationPopupWidth : root.width) + root.removeOvershoot) : ((root.width < 100 ? Appearance.sizes.notificationPopupWidth : root.width) + root.removeOvershoot)
+                    to: 0
+                    duration: root.useSlideInAnimation ? Appearance.animation.elementMoveEnter.duration : 0
+                    easing.type: Appearance.animation.elementMoveEnter.type
+                    easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+                }
+                // A row that waits also rises into place: a pure fade at the
+                // end of a delay reads as a dropped frame rather than as entry.
+                NumberAnimation {
+                    property: "y"
+                    from: populateTransition.ViewTransition.destination.y
+                        + (root.staggerStep > 0 ? Appearance.rounding.normal : 0)
+                    to: populateTransition.ViewTransition.destination.y
+                    duration: root.staggerStep > 0 ? Appearance.animation.elementMoveEnter.duration : 0
+                    easing.type: Appearance.animation.elementMoveEnter.type
+                    easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+                }
+                // Fade Animation
+                NumberAnimation {
+                    properties: root.popin ? "opacity,scale" : "opacity"
+                    from: !root.useSlideInAnimation ? 0 : 1
+                    to: 1
+                    duration: !root.useSlideInAnimation ? Appearance.animation.elementMoveEnter.duration : 0
+                    easing.type: Appearance.animation.elementMoveEnter.type
+                    easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+                }
             }
         }
     }

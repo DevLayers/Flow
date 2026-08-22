@@ -1,5 +1,6 @@
 pragma Singleton
 
+import qs
 import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.functions
@@ -15,6 +16,25 @@ Singleton {
 
     property string query: ""
     property int mprisTrigger: 0
+    // Published by the visible Overview delegate. It is metadata only and is
+    // never sent unless the user explicitly attaches it from an AI composer.
+    property var selectedResult: null
+    // The generated Settings index is shared with AI but does not depend on a
+    // model or network. Watching readiness makes a query recompute once a
+    // missing/stale index finishes rebuilding in the background.
+    readonly property bool settingsIndexReady: Ai.settingsIntegration.ready
+
+    onSettingsIndexReadyChanged: root._scheduleResultsUpdate()
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (!GlobalStates.overviewOpen) {
+                root.query = "";
+                root.selectedResult = null;
+            }
+        }
+    }
 
     Component.onCompleted: Qt.callLater(_scheduleResultsUpdate)
 
@@ -39,6 +59,46 @@ Singleton {
         const hasDigitsAndOp = /^\d/.test(expr) && /[+\-\*\/^()%]/.test(expr);
         const hasFunc = /^(sqrt|sin|cos|tan|log|ln)\b/i.test(expr);
         return hasPrefix || hasDigitsAndOp || hasFunc;
+    }
+
+    function isSettingsSearchQuery(queryText: string): bool {
+        const query = String(queryText ?? "").trim();
+        if (query.length < 2)
+            return false;
+        const prefixes = Config.options.search.prefix;
+        const reserved = [
+            prefixes.action, prefixes.app, prefixes.bluetooth, prefixes.clipboard,
+            prefixes.emojis, prefixes.fileBrowser, prefixes.fileSearch, prefixes.math,
+            prefixes.mediaDownloader, prefixes.materialSymbols, prefixes.shellCommand,
+            prefixes.translator, prefixes.webSearch, prefixes.windowSearch, prefixes.ai
+        ].filter(prefix => String(prefix ?? "").length > 0);
+        return !reserved.some(prefix => query.startsWith(prefix));
+    }
+
+    function createSettingsResultObject(setting: var): var {
+        const label = String(setting?.labelLocalized ?? setting?.label ?? setting?.key ?? "");
+        const path = [
+            setting?.pageNameLocalized ?? setting?.pageName ?? "",
+            setting?.sectionTitleLocalized ?? setting?.sectionTitle ?? ""
+        ].filter(part => String(part).length > 0).join(" › ");
+        return resultComp.createObject(null, {
+            key: "setting:" + String(setting?.key ?? label),
+            name: label,
+            type: Translation.tr("Setting"),
+            verb: Translation.tr("Open"),
+            iconName: String(setting?.icon ?? "tune"),
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: path,
+            category: "setting",
+            settingRef: setting,
+            keepOverviewOpen: true,
+            execute: () => {
+                GlobalStates.openSettingsPage(
+                            String(setting?.pageId ?? ""),
+                            String(setting?.subPage ?? ""),
+                            String(setting?.sectionTitleLocalized ?? setting?.sectionTitle ?? ""));
+            }
+        });
     }
 
     // Instantly evaluate simple arithmetic using JS — no qalc needed
@@ -242,6 +302,7 @@ Singleton {
     }
 
     onQueryChanged: {
+        root.selectedResult = null;
         fileProc.running = false;
         fileBrowserProc.running = false;
         mathProc.running = false; // Stop active math calculation instantly to resolve race conditions and QML coalescing
@@ -731,6 +792,11 @@ Singleton {
         // MPRIS handled above (empty query case)
 
         const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).slice(0, 60).map(entry => root.createAppResultObject(entry));
+        const settingsResultObjects = (root.isSettingsSearchQuery(root.query) && (Config.options.search.showSettings ?? true))
+            ? (root.settingsIndexReady
+                ? root.settingsIntegrationSearch(root.query).map(setting => root.createSettingsResultObject(setting))
+                : (Ai.settingsIntegration.ensureIndex(), []))
+            : [];
         const commandResultObject = resultComp.createObject(null, {
             key: "cmd:shell",
             name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
@@ -762,6 +828,26 @@ Singleton {
                     url += ` -site:${site}`;
                 }
                 Qt.openUrlExternally(url);
+            }
+        });
+        const aiAskResultObject = resultComp.createObject(null, {
+            key: "ai:ask",
+            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.ai),
+            verb: Translation.tr("Ask"),
+            type: Translation.tr("AI chat"),
+            iconName: 'auto_awesome',
+            iconType: LauncherSearchResult.IconType.Material,
+            keepOverviewOpen: true,
+            execute: () => {
+                const query = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.ai);
+                // Defer: mutating the query synchronously rebuilds the result
+                // list and destroys this delegate while its click event is
+                // still being processed, which can re-dispatch the click onto
+                // whatever row lands under the cursor and immediately undo
+                // the mode switch.
+                Qt.callLater(() => {
+                    root.query = Config.options.search.prefix.ai + query;
+                });
             }
         });
         const launcherActionObjects = root.allActions.map(action => {
@@ -1011,6 +1097,12 @@ Singleton {
         //////////////// Apps //////////////////
         result = result.concat(appResultObjects);
 
+        ////////////// Settings //////////////////
+        // App rows remain the primary launcher results. Settings matches are
+        // useful controls in the same list, but belong after the programs
+        // rather than displacing them at the top of every broad query.
+        result = result.concat(settingsResultObjects);
+
         ////////// Launcher actions ////////////
         result = result.concat(launcherActionObjects);
 
@@ -1119,6 +1211,10 @@ Singleton {
                 result.push(commandResultObject);
             if (!isMath && mathResultObject)
                 result.push(mathResultObject);
+            if ((Config.options.search.ai?.trigger ?? "prefix") === "suggest"
+                && Ai.enabled
+                && !root.query.startsWith(Config.options.search.prefix.ai))
+                result.push(aiAskResultObject);
             if (!startsWithWebSearchPrefix)
                 result.push(webSearchResultObject);
         }
@@ -1195,8 +1291,17 @@ Singleton {
             keywords: properties.keywords || [],
             isMath: !!properties.isMath,
             isBuiltin: !!properties.isBuiltin,
-            category: properties.category || properties.type || ""
+            keepOverviewOpen: !!properties.keepOverviewOpen,
+            category: properties.category || properties.type || "",
+            settingRef: properties.settingRef ?? null
         };
+    }
+
+    function settingsIntegrationSearch(query: string): var {
+        // Three at most: the launcher list is shared with apps, commands and
+        // everything else, and a settings match is a suggestion rather than
+        // the answer to the whole query.
+        return Ai.settingsIntegration.search(query, 3);
     }
 
     readonly property var resultComp: {

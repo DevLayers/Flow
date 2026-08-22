@@ -2,7 +2,6 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import Qt.labs.synchronizer
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Controls
@@ -57,7 +56,6 @@ Scope {
 
                         readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
                         readonly property string animStyle: (GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? "zoom" : (Config.options.overview.animationStyle ?? "bounce")
-                        property string searchingText: ""
 
                         WlrLayershell.namespace: "quickshell:overview"
                         WlrLayershell.layer: WlrLayer.Overlay
@@ -69,6 +67,7 @@ Scope {
                         property list<real> animCurveEnter: Appearance.animationCurves.expressiveFastSpatial
                         property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
                         readonly property bool overviewShouldShow: LauncherSearch.query === ""
+                            && !(searchWidget?.isAiMode ?? false)
                             && !GlobalStates.searchOnlyMode
                             && !GlobalStates.searchCenterMode
                             && !Config.options.search.suggestions.enable
@@ -183,7 +182,9 @@ Scope {
                                     searchWidget.disableExpandAnimation();
                                     overviewScope.dontAutoCancelSearch = false;
                                 } else {
-                                    if (!overviewScope.dontAutoCancelSearch) {
+                                    const hasIncomingQuery = GlobalStates.activeSearchQuery.length > 0;
+                                    if (!hasIncomingQuery) {
+                                        overviewScope.dontAutoCancelSearch = false;
                                         searchWidget.cancelSearch();
                                     }
                                     root.consumePendingSearchQuery();
@@ -199,10 +200,14 @@ Scope {
                             active: false
                         }
 
-                        Keys.onPressed: event => {
-                            if (event.key === Qt.Key_Escape) {
-                                GlobalStates.overviewOpen = false;
-                            }
+                        // PanelWindow is a Wayland interface, not a QtQuick
+                        // Item, so a Keys attached property here is ignored.
+                        // Resolve Escape with a real window shortcut instead;
+                        // it remains active even when the composer lost focus.
+                        Shortcut {
+                            enabled: root.monitorIsFocused && GlobalStates.overviewOpen && searchWidget.isAiMode
+                            sequence: "Escape"
+                            onActivated: searchWidget.handleEscape()
                         }
 
                         Timer {
@@ -380,6 +385,11 @@ Scope {
 
                                 Keys.onPressed: event => {
                                     if (event.key === Qt.Key_Escape) {
+                                        if (searchWidget.isAiMode) {
+                                            searchWidget.exitAiMode();
+                                            event.accepted = true;
+                                            return;
+                                        }
                                         GlobalStates.overviewOpen = false;
                                     }
                                 }
@@ -393,10 +403,8 @@ Scope {
                                 SearchWidget {
                                     id: searchWidget
                                     shadowOpacity: searchWidgetWrapper.slideOpacity
+                                    surfaceMonitorName: root.screen?.name ?? ""
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    Synchronizer on searchingText {
-                                        property alias source: root.searchingText
-                                    }
                                 }
                             }
 
@@ -405,7 +413,7 @@ Scope {
                                 anchors.bottom: root.isBottomBar ? searchWidgetWrapper.top : undefined
                                 anchors.top: root.isBottomBar ? undefined : searchWidgetWrapper.bottom
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout
+                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout && !(searchWidget?.isAiMode ?? false)
                                 opacity: root.overviewShouldShow ? searchWidgetWrapper.slideOpacity * root.overviewFadeProgress : 0.0
 
                                 layer.enabled: overviewLoader.opacity < 0.999
@@ -512,6 +520,12 @@ Scope {
         togglePrefixedSearch(Config.options.search.prefix.materialSymbols);
     }
 
+    function toggleAi() {
+        if (!Ai.enabled)
+            return;
+        togglePrefixedSearch(Config.options.search.prefix.ai);
+    }
+
     IpcHandler {
         target: "search"
 
@@ -544,6 +558,10 @@ Scope {
         function materialSymbolsToggle() {
             GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleMaterialSymbols();
+        }
+        function aiToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
+            overviewScope.toggleAi();
         }
         function searchOnlyToggle() {
             GlobalStates.superReleaseMightTrigger = false;
@@ -656,6 +674,16 @@ Scope {
         onPressed: {
             GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleMaterialSymbols();
+        }
+    }
+
+    GlobalShortcut {
+        name: "overviewAiToggle"
+        description: "Toggle AI chat on overview widget"
+
+        onPressed: {
+            GlobalStates.superReleaseMightTrigger = false;
+            overviewScope.toggleAi();
         }
     }
 }

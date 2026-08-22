@@ -9,11 +9,15 @@ Item {
 
     property bool shown: true
     property alias icon: shapeWidget.text
+    property alias iconSize: shapeWidget.iconSize
+    property alias iconPadding: shapeWidget.padding
     property alias title: widgetNameText.text
     property alias description: widgetDescriptionText.text
     property alias shape: shapeWidget.shape
     property alias descriptionHorizontalAlignment: widgetDescriptionText.horizontalAlignment
     property bool animateIconOnShow: false
+    property real titlePixelSize: Appearance.font.pixelSize.larger
+    property real descriptionPixelSize: Appearance.font.pixelSize.small
 
     opacity: shown ? 1 : 0
     visible: opacity > 0
@@ -266,7 +270,7 @@ Item {
                 anchors.fill: parent
                 font {
                     family: Appearance.font.family.title
-                    pixelSize: Appearance.font.pixelSize.larger
+                    pixelSize: root.titlePixelSize
                     variableAxes: Appearance.font.variableAxes.title
                 }
                 color: Appearance.m3colors.m3outline
@@ -284,7 +288,7 @@ Item {
             visible: description !== ""
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
-            font.pixelSize: Appearance.font.pixelSize.small
+            font.pixelSize: root.descriptionPixelSize
             color: Appearance.m3colors.m3outline
             horizontalAlignment: root.descriptionHorizontalAlignment ?? Text.AlignHCenter
             wrapMode: Text.Wrap
@@ -309,4 +313,3 @@ Item {
         }
     }
 }
-

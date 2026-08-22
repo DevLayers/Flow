@@ -131,6 +131,10 @@ Singleton {
     // Ripple signal: emitted by LockSurface on click, received by Background.qml
     // (WlSessionLock and WlrLayershell panels can't directly share children)
     signal lockScreenRipple(x: real, y: real)
+    // Asked for by the AI composer's screenshot button, answered by the region
+    // selector. The composer has no way of reaching it otherwise: it is a
+    // Scope in the shell tree, not a singleton.
+    signal snipForAiRequested
     property bool sessionOpen: false
     property bool superDown: false
     property bool usageOpen: false
@@ -159,6 +163,10 @@ Singleton {
     property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""
     property string settingsPendingPageName: ""
+    // Section to land on inside the page. Held here rather than passed along,
+    // because the settings window may not exist yet when the deep link is
+    // made — the same reason the page and sub-page wait here.
+    property string settingsPendingSection: ""
     // Welcome is an in-process window. Keep its lifecycle in the shared state
     // graph so first-run, keybinds and Settings deep links all use one owner.
     property bool welcomeOpen: false
@@ -361,11 +369,22 @@ Singleton {
         root.settingsOpen = true;
     }
 
+    /**
+     * Opens the settings window at a page, and optionally at a sub-page and a
+     * section within it.
+     *
+     * `sectionId` is the section's title, which is what the window already
+     * highlights by when a link inside settings points at one. It used to be
+     * accepted here and dropped on the floor, so every caller outside the
+     * settings window could only reach the top of a page.
+     */
     function openSettingsPage(pageId, subPageId, sectionId) {
         const targetSubPage = subPageId || "";
+        const targetSection = sectionId || "";
         if (!pageId || pageId === "") {
             root.settingsPendingPageName = "";
             root.settingsPendingSubPage = targetSubPage;
+            root.settingsPendingSection = targetSection;
             root.settingsOpen = true;
             return;
         }
@@ -375,6 +394,7 @@ Singleton {
 
         root.settingsPendingPageName = pageId;
         root.settingsPendingSubPage = targetSubPage;
+        root.settingsPendingSection = targetSection;
         root.settingsNavigationRequest += 1;
         root.settingsOpen = true;
     }
@@ -427,12 +447,15 @@ Singleton {
             root.openSettingsPage(pageId);
         }
 
+        function openSection(pageId: string, sectionTitle: string): void {
+            root.openSettingsPage(pageId, "", sectionTitle);
+        }
+
         function openSubPage(pageId: string, subPage: string): void {
             root.openSettingsPage(pageId, subPage || "");
         }
 
     }
-
     IpcHandler {
         target: "welcome"
 
@@ -729,6 +752,15 @@ Singleton {
 
     property bool dashboardPanelOpen: false // formerly sidebarRightOpen
     property bool policiesPanelOpen: false  // formerly sidebarLeftOpen
+
+    /**
+     * Held above zero while something the left sidebar itself started — a file
+     * dialog, the region snip — is holding focus. Losing focus normally closes
+     * the sidebar, which meant its own buttons dismissed it and the work came
+     * back to nothing. Raise it before opening such a thing, lower it when
+     * that thing is gone.
+     */
+    property int policiesHoldOpen: 0
 
     property bool requestVolumeDialog: false
 

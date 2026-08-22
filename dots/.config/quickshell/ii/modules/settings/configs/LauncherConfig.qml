@@ -327,6 +327,53 @@ Item {
                         text: Translation.tr("Shows a floating media player bubble in the search launcher when music or video is playing")
                     }
                 }
+
+                // 5. Interactive Settings Results
+                RippleButton {
+                    id: btnSettingsResults
+                    Layout.fillWidth: true
+                    Layout.columnSpan: 2
+                    implicitHeight: 48
+                    buttonRadius: Appearance.rounding.normal
+                    property bool active: Config.options.search.showSettings
+                    colBackground: active ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                    colBackgroundHover: active ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                    colRipple: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
+                    onClicked: Config.options.search.showSettings = !active
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: "tune"
+                            iconSize: 20
+                            fill: btnSettingsResults.active ? 1 : 0
+                            color: btnSettingsResults.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Show settings in search results")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: btnSettingsResults.active
+                            color: btnSettingsResults.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: btnSettingsResults.active ? "check_circle" : "radio_button_unchecked"
+                            iconSize: 18
+                            fill: btnSettingsResults.active ? 1 : 0
+                            color: btnSettingsResults.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Displays matching Settings options as interactive results while searching")
+                    }
+                }
             }
 
             ConfigSpinBox {

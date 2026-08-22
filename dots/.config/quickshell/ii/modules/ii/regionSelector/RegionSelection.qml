@@ -770,25 +770,39 @@ PanelWindow {
         if (snipAction === RegionSelection.SnipAction.Copy || snipAction === RegionSelection.SnipAction.Edit) {
             snipAction = root.mouseButton === Qt.RightButton ? RegionSelection.SnipAction.Edit : RegionSelection.SnipAction.Copy;
         }
-        if (snipAction === RegionSelection.SnipAction.Search || snipAction === RegionSelection.SnipAction.AskAI) {
-            snipAction = root.mouseButton === Qt.RightButton ? RegionSelection.SnipAction.AskAI : RegionSelection.SnipAction.Search;
+        // Right-dragging a search turns it into a question for the assistant.
+        // It does not work the other way round: a selection started from the
+        // chat was asked for by name, and turning it into an image search sent
+        // the shot somewhere the composer never sees.
+        if (snipAction === RegionSelection.SnipAction.Search && root.mouseButton === Qt.RightButton) {
+            snipAction = RegionSelection.SnipAction.AskAI;
         }
 
         const screenshotDir = Config.options.screenSnip.savePath !== "" ? //
         Config.options.screenSnip.savePath : "";
         var screenshotAction = root.actionToScreenshotAction(snipAction);
+        // The assistant is handed a file of its own rather than the clipboard:
+        // see ScreenshotAction.getCommand.
+        const askingAi = snipAction === RegionSelection.SnipAction.AskAI;
+        const aiPath = askingAi ? `${Directories.cliphistDecode}/ai-snip-${Date.now()}.png` : "";
         const command = ScreenshotAction.getCommand(rx * root.monitorScale //
         , ry * root.monitorScale //
         , rw * root.monitorScale//
         , rh * root.monitorScale //
         , root.screenshotPath //
         , screenshotAction //
-        , screenshotDir);
+        , screenshotDir //
+        , aiPath);
         Quickshell.execDetached(command);
         ScreenshotAction.playShutterSound(screenshotAction);
-        if (snipAction === RegionSelection.SnipAction.AskAI) {
-            Ai.handleClipboardAndAttach();
-            GlobalStates.policiesPanelOpen = true;
+        if (askingAi) {
+            Ai.attachSnip(aiPath);
+            Ai.surfaceRouter.open({
+                "surface": "sidebar",
+                "monitorName": root.screen?.name ?? "",
+                "focusIntent": "composer",
+                "attachmentPath": aiPath
+            });
         }
         // Trigger screenshot overlay
         if (Config.options.regionSelector.enableOverlay ?? true) {
