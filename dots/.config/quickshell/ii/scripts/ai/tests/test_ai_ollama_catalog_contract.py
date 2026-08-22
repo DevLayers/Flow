@@ -27,11 +27,24 @@ class OllamaPullServiceTests(unittest.TestCase):
         self.assertIn("if (!/^[A-Za-z0-9]", SERVICE)
         self.assertIn('segment === "." || segment === ".."', SERVICE)
 
+    def test_community_gguf_catalogue_is_bounded_and_paged(self):
+        for token in (
+            'communityEndpoint: "https://huggingface.co/api/models"',
+            "communityPageSize: 12",
+            '"?filter=gguf"',
+            "function loadCommunityModels(searchTerm = \"\")",
+            "function loadMoreCommunityModels()",
+            'getResponseHeader("Link")',
+            '"hf.co/" + repositoryId',
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, SERVICE)
+
     def test_pull_is_one_local_streamed_operation_with_no_shell_interpolation(self):
         self.assertIn('endpoint: "http://127.0.0.1:11434/api/pull"', SERVICE)
         self.assertIn('"curl", "--no-buffer", "--silent", "--show-error"', SERVICE)
         self.assertIn('"--data-binary", "@-"', SERVICE)
-        self.assertIn('pullProc.write(JSON.stringify({ name: normalized, stream: true })', SERVICE)
+        self.assertIn('pullProc.write(JSON.stringify({ model: normalized, stream: true })', SERVICE)
         self.assertIn("stdinEnabled = false;", SERVICE)
         self.assertIn("stdout: SplitParser", SERVICE)
         self.assertNotIn("bash", SERVICE)
@@ -47,6 +60,20 @@ class OllamaPullServiceTests(unittest.TestCase):
         ):
             with self.subTest(token=token):
                 self.assertIn(token, SERVICE)
+
+    def test_pull_replaces_one_system_notification_as_progress_changes(self):
+        for token in (
+            "function queueDownloadNotification",
+            "function dispatchDownloadNotification",
+            '"notify-send"',
+            '"--print-id"',
+            '"--replace-id=" + String(root.downloadNotificationId)',
+            '"--hint=int:value:" + String(percent)',
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, SERVICE)
+
+        self.assertIn("function findTrackedNotification", (ROOT / "services/Notifications.qml").read_text(encoding="utf-8"))
 
     def test_success_refreshes_models_used_by_the_chat_and_rag_picker(self):
         self.assertIn("function refreshOllamaModels()", AI)
@@ -66,11 +93,32 @@ class OllamaSidebarCatalogueTests(unittest.TestCase):
         self.assertIn("models.length === 0 && !hasCatalogueEntry", PICKER)
 
     def test_page_makes_download_explicit_and_shows_live_state(self):
-        self.assertIn("Nothing is downloaded until you press Pull.", PAGE)
+        self.assertIn("Pulling downloads through your local Ollama daemon.", PAGE)
         self.assertIn("OllamaCatalog.pull(modelName)", PAGE)
         self.assertIn("OllamaCatalog.cancelPull()", PAGE)
         self.assertIn("OllamaCatalog.pullProgress", PAGE)
         self.assertIn("Ai.refreshOllamaModels();", PAGE)
+
+    def test_search_has_one_download_action_per_model_and_compact_cards(self):
+        self.assertNotIn("id: customPullButton", PAGE)
+        self.assertIn("Keys.onReturnPressed: root.pull(text)", PAGE)
+        self.assertIn("anchors.rightMargin: Appearance.rounding.large", PAGE)
+
+        model_delegate = PAGE.split("id: modelRow", 1)[1].split("id: modelPullButton", 1)[0]
+        self.assertIn("Layout.preferredHeight: root.actionExtent", model_delegate)
+        self.assertIn("Layout.maximumHeight: root.actionExtent", model_delegate)
+        self.assertIn("elide: Text.ElideRight", model_delegate)
+        self.assertNotIn("wrapMode: Text.Wrap", model_delegate)
+
+    def test_page_searches_and_loads_only_one_community_page_at_a_time(self):
+        for token in (
+            "OllamaCatalog.loadCommunityModels(root.query)",
+            "OllamaCatalog.loadMoreCommunityModels()",
+            "OllamaCatalog.communityLoading",
+            "OllamaCatalog.communityNextUrl",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, PAGE)
 
     def test_canvas_header_navigates_both_catalogue_pages(self):
         self.assertIn("readonly property bool modelCatalogueOpen", CONTROL_BAR)

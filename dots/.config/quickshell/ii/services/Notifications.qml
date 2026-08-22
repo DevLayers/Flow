@@ -322,6 +322,34 @@ Singleton {
     signal discardAll();
     signal timeout(id: var);
 
+    // A replacement notification keeps the freedesktop notification id. Keep
+    // the same wrapper too, otherwise a long-running task such as an Ollama
+    // pull would fill the center with one entry per percentage update.
+    function findTrackedNotification(notificationId: int): var {
+        const listed = root.list.find(notif => notif && notif.notificationId === notificationId);
+        if (listed)
+            return listed;
+        return root._pendingNotifications.find(notif => notif && notif.notificationId === notificationId) ?? null;
+    }
+
+    function armNotificationTimeout(notifObject, notification) {
+        if (root.popupInhibited || notification.expireTimeout === 0)
+            return;
+        const interval = notification.expireTimeout < 0
+            ? (Config?.options.notifications.timeout ?? 7000)
+            : notification.expireTimeout;
+        notifObject.popup = true;
+        if (notifObject.timer) {
+            notifObject.timer.interval = interval;
+            notifObject.timer.restart();
+        } else {
+            notifObject.timer = notifTimerComponent.createObject(root, {
+                "notificationId": notifObject.notificationId,
+                "interval": interval,
+            });
+        }
+    }
+
 	NotificationServer {
         id: notifServer
         // actionIconsSupported: true
@@ -347,13 +375,26 @@ Singleton {
             }
 
             notification.tracked = true
+            const notificationId = notification.id + root.idOffset;
+            const existingNotifObject = root.findTrackedNotification(notificationId);
+            if (existingNotifObject) {
+                existingNotifObject.notification = notification;
+                existingNotifObject.time = Date.now();
+                root._handleShellNotification(existingNotifObject);
+                root.armNotificationTimeout(existingNotifObject, notification);
+                root.notify(existingNotifObject);
+                root.triggerListChange();
+                root.scheduleDiskWrite();
+                return;
+            }
+
             try {
                 root.playNotificationSound(notification);
             } catch (e) {
                 console.log("[Notifications] Sound playback error: " + e);
             }
             const newNotifObject = notifComponent.createObject(root, {
-                "notificationId": notification.id + root.idOffset,
+                "notificationId": notificationId,
                 "notification": notification,
                 "time": Date.now(),
             });
@@ -366,13 +407,7 @@ Singleton {
 
             // Popup
             if (!root.popupInhibited) {
-                newNotifObject.popup = true;
-                if (notification.expireTimeout != 0) {
-                    newNotifObject.timer = notifTimerComponent.createObject(root, {
-                        "notificationId": newNotifObject.notificationId,
-                        "interval": notification.expireTimeout < 0 ? (Config?.options.notifications.timeout ?? 7000) : notification.expireTimeout,
-                    });
-                }
+                root.armNotificationTimeout(newNotifObject, notification);
                 root.unread++;
             }
             root.notify(newNotifObject);

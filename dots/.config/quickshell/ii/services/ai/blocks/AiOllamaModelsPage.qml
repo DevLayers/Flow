@@ -9,10 +9,11 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
- * A local-first model catalogue for the sidebar picker.
+ * A compact Ollama picker with a local baseline and a bounded community page.
  *
- * Suggestions are available without querying a remote catalogue. Pulling is
- * always explicit and happens through the user's loopback Ollama daemon.
+ * Pulling is always explicit and happens through the user's loopback Ollama
+ * daemon. Community GGUF metadata is fetched a page at a time only when the
+ * user's AI policy permits online catalogues.
  */
 Item {
     id: root
@@ -43,7 +44,8 @@ Item {
 
     readonly property var visibleModels: {
         const needle = root.query.trim().toLowerCase();
-        return OllamaCatalog.models.filter(model => root.modelMatches(model, needle));
+        const source = [...OllamaCatalog.models, ...OllamaCatalog.communityModels];
+        return source.filter(model => root.modelMatches(model, needle));
     }
 
     function isInstalled(modelName: string): bool {
@@ -67,8 +69,22 @@ Item {
     }
 
     onActiveChanged: {
-        if (root.active)
+        if (root.active) {
+            OllamaCatalog.loadCommunityModels(root.query);
             Qt.callLater(customModelInput.forceActiveFocus);
+        }
+    }
+
+    onQueryChanged: {
+        if (root.active)
+            communitySearchTimer.restart();
+    }
+
+    Timer {
+        id: communitySearchTimer
+        interval: OllamaCatalog.notificationUpdateIntervalMs
+        repeat: false
+        onTriggered: OllamaCatalog.loadCommunityModels(root.query)
     }
 
     ColumnLayout {
@@ -125,7 +141,7 @@ Item {
         NoticeBox {
             Layout.fillWidth: true
             materialIcon: "download"
-            text: Translation.tr("Pulling downloads the chosen model from the Ollama library through your local daemon. Nothing is downloaded until you press Pull.")
+            text: Translation.tr("Pulling downloads through your local Ollama daemon. Select a model's download button, or enter another library tag and press Enter.")
         }
 
         Rectangle {
@@ -144,7 +160,7 @@ Item {
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: Appearance.rounding.large
-                anchors.rightMargin: Appearance.rounding.verysmall
+                anchors.rightMargin: Appearance.rounding.large
                 spacing: root.rowGap
 
                 MaterialSymbol {
@@ -179,27 +195,6 @@ Item {
                     }
                 }
 
-                RippleButton {
-                    id: customPullButton
-                    readonly property string candidate: OllamaCatalog.normalizeModelName(customModelInput.text)
-
-                    implicitWidth: root.actionExtent
-                    implicitHeight: root.actionExtent
-                    buttonRadius: Appearance.rounding.full
-                    enabled: !OllamaCatalog.pulling && candidate.length > 0 && !root.isInstalled(candidate)
-                    colBackground: enabled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
-                    colBackgroundHover: enabled ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer3
-                    colRipple: enabled ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer3Active
-                    onClicked: root.pull(candidate)
-
-                    Accessible.name: Translation.tr("Pull this Ollama model")
-                    contentItem: MaterialSymbol {
-                        text: "download"
-                        fill: 1
-                        iconSize: Appearance.font.pixelSize.normal
-                        color: customPullButton.enabled ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
-                    }
-                }
             }
         }
 
@@ -272,6 +267,28 @@ Item {
             }
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            visible: OllamaCatalog.communityLoading || OllamaCatalog.communityError.length > 0
+            spacing: root.rowGap
+
+            MaterialSymbol {
+                text: OllamaCatalog.communityLoading ? "progress_activity" : "error"
+                fill: 1
+                iconSize: Appearance.font.pixelSize.normal
+                color: OllamaCatalog.communityLoading ? Appearance.colors.colPrimary : Appearance.colors.colError
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: OllamaCatalog.communityLoading
+                    ? Translation.tr("Searching community GGUF models…")
+                    : OllamaCatalog.communityError
+                color: OllamaCatalog.communityLoading ? Appearance.colors.colSubtext : Appearance.colors.colError
+                elide: Text.ElideRight
+            }
+        }
+
         StyledListView {
             id: modelList
             Layout.fillWidth: true
@@ -290,6 +307,7 @@ Item {
                 required property var modelData
 
                 width: modelList.width
+                implicitHeight: root.actionExtent
                 readonly property bool installed: root.isInstalled(modelData.name)
                 readonly property bool pullingThis: OllamaCatalog.pullingModel === modelData.name
 
@@ -297,7 +315,10 @@ Item {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    implicitHeight: details.implicitHeight + root.rowGap * 2
+                    Layout.minimumHeight: root.actionExtent
+                    Layout.preferredHeight: root.actionExtent
+                    Layout.maximumHeight: root.actionExtent
+                    implicitHeight: root.actionExtent
                     radius: Appearance.rounding.large
                     color: Appearance.colors.colLayer2
 
@@ -308,13 +329,14 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.leftMargin: Appearance.rounding.large
                         anchors.rightMargin: Appearance.rounding.large
-                        spacing: 1
+                        spacing: root.rowGap / 2
 
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: root.rowGap
 
                             StyledText {
+                                Layout.maximumWidth: parent.width * 0.42
                                 Layout.fillWidth: true
                                 text: modelRow.modelData.title
                                 font.pixelSize: Appearance.font.pixelSize.normal
@@ -324,6 +346,7 @@ Item {
                             }
 
                             StyledText {
+                                Layout.maximumWidth: parent.width * 0.35
                                 text: modelRow.modelData.category
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 color: Appearance.colors.colSubtext
@@ -331,20 +354,25 @@ Item {
                             }
                         }
 
-                        StyledText {
+                        RowLayout {
                             Layout.fillWidth: true
-                            text: modelRow.modelData.name
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colPrimary
-                            elide: Text.ElideRight
-                        }
+                            spacing: root.rowGap / 2
 
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: modelRow.modelData.description
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colSubtext
-                            wrapMode: Text.Wrap
+                            StyledText {
+                                Layout.maximumWidth: parent.width * 0.45
+                                text: modelRow.modelData.name
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colPrimary
+                                elide: Text.ElideRight
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: modelRow.modelData.description
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colSubtext
+                                elide: Text.ElideRight
+                            }
                         }
                     }
                 }
@@ -353,6 +381,7 @@ Item {
                     id: modelPullButton
                     implicitWidth: root.actionExtent
                     implicitHeight: root.actionExtent
+                    Layout.alignment: Qt.AlignVCenter
                     buttonRadius: Appearance.rounding.full
                     enabled: !modelRow.installed && !OllamaCatalog.pulling
                     colBackground: enabled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
@@ -373,14 +402,41 @@ Item {
             }
         }
 
+        RippleButton {
+            Layout.alignment: Qt.AlignHCenter
+            visible: !OllamaCatalog.communityLoading && OllamaCatalog.communityNextUrl.length > 0
+            implicitHeight: root.actionExtent
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colLayer2
+            colBackgroundHover: Appearance.colors.colLayer2Hover
+            colRipple: Appearance.colors.colLayer2Active
+            onClicked: OllamaCatalog.loadMoreCommunityModels()
+
+            Accessible.name: Translation.tr("Load more community models")
+            contentItem: RowLayout {
+                spacing: root.rowGap
+
+                MaterialSymbol {
+                    text: "expand_more"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnLayer2
+                }
+
+                StyledText {
+                    text: Translation.tr("Load more community models")
+                    color: Appearance.colors.colOnLayer2
+                }
+            }
+        }
+
         StyledText {
             Layout.fillWidth: true
             Layout.preferredHeight: 96
-            visible: root.visibleModels.length === 0
+            visible: root.visibleModels.length === 0 && !OllamaCatalog.communityLoading
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             wrapMode: Text.Wrap
-            text: Translation.tr("No suggested Ollama model matches this search. Enter a library tag above to pull it.")
+            text: Translation.tr("No Ollama or community GGUF model matches this search. Enter a library tag above and press Enter to pull it.")
             color: Appearance.colors.colSubtext
         }
     }
