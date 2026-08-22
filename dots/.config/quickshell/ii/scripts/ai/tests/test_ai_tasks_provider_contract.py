@@ -10,6 +10,9 @@ INTEGRATION = (ROOT / "services" / "ai" / "integrations" / "AiTasksIntegration.q
 TODO = (ROOT / "services" / "Todo.qml").read_text(encoding="utf-8")
 TICKTICK = (ROOT / "services" / "TickTickService.qml").read_text(encoding="utf-8")
 API = (ROOT / "scripts" / "ticktick" / "api.py").read_text(encoding="utf-8")
+REGISTRY = (ROOT / "services" / "ai" / "AiToolRegistry.qml").read_text(encoding="utf-8")
+AI = (ROOT / "services" / "Ai.qml").read_text(encoding="utf-8")
+MESSAGE = (ROOT / "modules" / "ii" / "sidebarPolicies" / "aiChat" / "AiMessage.qml").read_text(encoding="utf-8")
 
 
 class ProviderContractTests(unittest.TestCase):
@@ -46,6 +49,19 @@ class ProviderContractTests(unittest.TestCase):
         code = API.split('"""', 2)[2]
         for forbidden in ("bash -c", "subprocess", "shell=True", "os.system"):
             self.assertNotIn(forbidden, code)
+
+    def test_creation_is_registered_as_external_write_and_requires_approval(self):
+        for tool_id in ("tasks_list", "tasks_search", "tasks_create"):
+            self.assertIn(f'id: "{tool_id}"', REGISTRY)
+        create = REGISTRY.split('id: "tasks_create"', 1)[1].split('id: "sports_search_games"', 1)[0]
+        self.assertIn('kind: "externalWrite"', create)
+        self.assertIn('defaultApproval: "ask"', create)
+
+    def test_creation_is_wired_to_journal_and_native_cards(self):
+        for token in ("tasksIntegration", '"tasks_create": call => root.toolTasksCreate(call)', '"tasks_create": pending => root.startTaskCreate(pending)', "approveTask", "rejectTask"):
+            self.assertIn(token, AI)
+        for token in ('case "taskPreview":', 'case "taskResults":', "id: taskPreviewCard", "id: taskResultsCard"):
+            self.assertIn(token, MESSAGE)
 
 
 if __name__ == "__main__":

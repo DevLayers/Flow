@@ -441,6 +441,98 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "tasks_list",
+            version: 1,
+            domain: "tasks",
+            title: Translation.tr("List tasks"),
+            summary: Translation.tr("Reads tasks from the chosen provider and list."),
+            icon: "checklist",
+            kind: "externalRead",
+            network: "optional",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["tasks"],
+            defaultApproval: "allow",
+            timeoutMs: 15000,
+            maxResultTokens: 500,
+            idempotent: true,
+            description: "List tasks from the explicit provider and list. Omit provider to use the connected default; do not infer a list from text. Returns bounded TaskRef data.",
+            parameters: {
+                type: "object",
+                properties: {
+                    provider: { type: "string", description: "Optional provider id: local or ticktick" },
+                    listId: { type: "string", description: "Optional exact list/project id" },
+                    limit: { type: "integer", description: "Maximum tasks, from 1 to 50" },
+                    includeCompleted: { type: "boolean", description: "Whether completed tasks should be included" }
+                },
+                required: []
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "tasks_search",
+            version: 1,
+            domain: "tasks",
+            title: Translation.tr("Search tasks"),
+            summary: Translation.tr("Searches task titles and notes without changing them."),
+            icon: "manage_search",
+            kind: "externalRead",
+            network: "optional",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["tasks"],
+            defaultApproval: "allow",
+            timeoutMs: 15000,
+            maxResultTokens: 500,
+            idempotent: true,
+            description: "Search task titles and notes in an explicit provider/list. Use a short query, never turn a sentence into a guessed list, and return bounded TaskRef data.",
+            parameters: {
+                type: "object",
+                properties: {
+                    provider: { type: "string", description: "Optional provider id: local or ticktick" },
+                    listId: { type: "string", description: "Optional exact list/project id" },
+                    query: { type: "string", description: "Short words to find in task title or notes" },
+                    limit: { type: "integer", description: "Maximum tasks, from 1 to 50" }
+                },
+                required: ["query"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "tasks_create",
+            version: 1,
+            domain: "tasks",
+            title: Translation.tr("Create task"),
+            summary: Translation.tr("Shows the provider, list, title, notes and absolute date before creating a task."),
+            icon: "add_task",
+            kind: "externalWrite",
+            network: "optional",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["tasks"],
+            defaultApproval: "ask",
+            timeoutMs: 20000,
+            maxResultTokens: 700,
+            idempotent: false,
+            description: "Prepare a reviewed task. The preview must show provider, account, exact list, title, notes and an absolute local due date. Use provider and listId when the user named a destination; never guess a list from the sentence. The task is not created until the user approves.",
+            parameters: {
+                type: "object",
+                properties: {
+                    provider: { type: "string", description: "Optional provider id: local or ticktick" },
+                    listId: { type: "string", description: "Optional exact list/project id" },
+                    title: { type: "string", description: "Task title" },
+                    notes: { type: "string", description: "Optional task notes" },
+                    dueDate: { type: "string", description: "Optional ISO date or date-time" },
+                    priority: { type: "integer", description: "Optional provider priority" }
+                },
+                required: ["title"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "sports_search_games",
             version: 1,
             domain: "sports",
@@ -1443,6 +1535,12 @@ Singleton {
             return String(args.previewId ?? "");
         case "reminder_create":
             return String(args.label ?? "") + " · " + (args.whenAbsolute ?? `${args.whenRelative ?? ""} min`);
+        case "tasks_list":
+            return String(args.provider ?? "default") + " · " + String(args.listId ?? "default list");
+        case "tasks_search":
+            return String(args.query ?? "");
+        case "tasks_create":
+            return String(args.title ?? "") + " · " + String(args.listId ?? "default list");
         case "calendar_list_events":
             return [args.from ?? "", args.to ?? ""].filter(value => String(value).length > 0).join(" → ");
         case "keybinds_search":

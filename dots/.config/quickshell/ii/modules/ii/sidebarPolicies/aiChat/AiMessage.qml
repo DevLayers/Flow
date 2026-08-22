@@ -1001,6 +1001,10 @@ Item {
                         return gmailResultsCard;
                     case "sportsResults":
                         return sportsResultsCard;
+                    case "taskPreview":
+                        return taskPreviewCard;
+                    case "taskResults":
+                        return taskResultsCard;
                     }
                     // A kind this build does not know: a session written by a
                     // newer one still opens, showing what the card says about
@@ -1140,6 +1144,23 @@ Item {
                     id: sportsResultsCard
 
                     AiSportsGameCard {
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: taskPreviewCard
+
+                    AiTaskCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: taskResultsCard
+
+                    AiTaskResultCard {
                         card: cardHost.card
                     }
                 }

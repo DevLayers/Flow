@@ -53,7 +53,8 @@ Scope {
             ocr: Ai.ocrAvailable,
             sports: true,
             gmail: EmailService.authenticated,
-            notes: NotesService.ready
+            notes: NotesService.ready,
+            tasks: true
         })
 
     // ── Registry, passed through ──────────────────────────────────────────

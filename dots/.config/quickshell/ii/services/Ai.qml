@@ -1527,6 +1527,8 @@ Singleton {
     readonly property AiSportsIntegration sportsIntegration: AiSportsIntegration {}
     /** Read-only Gmail metadata/body bridge with correlated helper calls. */
     readonly property AiGmailIntegration gmailIntegration: AiGmailIntegration {}
+    /** Provider-neutral local/TickTick task contract. */
+    readonly property AiTasksIntegration tasksIntegration: AiTasksIntegration {}
     /** The one path to the filesystem the assistant may use by itself. */
     readonly property AiFilesIntegration filesIntegration: AiFilesIntegration {}
     /** Local notes previews and reviewed append/create operations. */
@@ -1561,6 +1563,34 @@ Singleton {
             const activeSession = String(root.currentRunSessionId || root.sessions.currentId || "");
             if (String(sessionId ?? "").length > 0 && String(sessionId) !== activeSession)
                 return;
+            if (root.broker.isPending(String(key)))
+                root.broker.settle(String(key), outcome);
+        }
+    }
+
+    Connections {
+        target: root.tasksIntegration
+        function onResultReady(key, operationId, outcome) {
+            const message = root.messageForToolKey(String(key));
+            const record = root.broker.recordFor(String(key));
+            if (message && record?.tool && ["tasks_list", "tasks_search"].indexOf(record.tool) >= 0
+                    && outcome.status === "success" && outcome.data?.tasks) {
+                root.addToolCard(message, {
+                    callId: String(key),
+                    tool: record.tool,
+                    kind: "taskResults",
+                    state: "done",
+                    summary: String(outcome.summary ?? ""),
+                    data: outcome.data
+                });
+            }
+            if (message) {
+                message.functionPending = false;
+                root.updateToolCard(message, String(key), {
+                    state: outcome.status === "success" ? "done" : String(outcome.status ?? "error"),
+                    summary: String(outcome.summary ?? "")
+                });
+            }
             if (root.broker.isPending(String(key)))
                 root.broker.settle(String(key), outcome);
         }
@@ -1648,6 +1678,9 @@ Singleton {
             "alarms_list": call => root.toolAlarmsList(call),
             "calendar_list_events": call => root.toolCalendarListEvents(call),
             "weather_get": call => root.toolWeatherGet(call),
+            "tasks_list": call => root.toolTasksList(call),
+            "tasks_search": call => root.toolTasksSearch(call),
+            "tasks_create": call => root.toolTasksCreate(call),
             "notes_preview_append": call => root.toolNotesPreviewAppend(call),
             "notes_append": call => root.toolNotesAppend(call),
             "notes_create_from_answer": call => root.toolNotesCreate(call),
@@ -1730,6 +1763,16 @@ Singleton {
         return Array.from(message?.toolCards ?? []).find(card => String(card.callId) === String(callId)) ?? null;
     }
 
+    function messageForToolKey(key: string): var {
+        const wanted = String(key ?? "");
+        for (const id in root.messageByID) {
+            const message = root.messageByID[id];
+            if (root.toolCardFor(message, wanted))
+                return message;
+        }
+        return null;
+    }
+
     /** Cards still waiting on the user, which is what the transcript draws. */
     function pendingToolCards(message): var {
         return Array.from(message?.toolCards ?? []).filter(card => card.state === "pending");
@@ -1744,7 +1787,7 @@ Singleton {
     // pending approval: these stay in the transcript once done, the same way
     // a search engine's results page does not disappear once you have read
     // it.
-    readonly property var resultCardKinds: ["settingsResults", "fileResults", "songIdentifyPreview"]
+    readonly property var resultCardKinds: ["settingsResults", "fileResults", "songIdentifyPreview", "taskResults"]
 
     function visibleToolCards(message): var {
         return Array.from(message?.toolCards ?? []).filter(card => card.state === "pending"
@@ -3811,6 +3854,7 @@ Singleton {
             "set_shell_config": pending => root.applyConfigChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
             "settings_apply_changes": pending => root.applySettingsChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
             "reminder_create": pending => root.createReminderNow(pending.message, pending.args, pending.sessionId),
+            "tasks_create": pending => root.startTaskCreate(pending),
             "notes_append": pending => root.appendNoteNow(pending.message, pending.args),
             "notes_create_from_answer": pending => root.createNoteNow(pending.message, pending.args),
             "audio_set": pending => root.applySystemControl(pending.message, pending.args),
@@ -4439,6 +4483,88 @@ Singleton {
             summary: Translation.tr("Weather read"),
             data: root.timeIntegration.weather()
         };
+    }
+
+    function taskReadOutcome(call, outcome): var {
+        if (outcome.status === "success" && outcome.data?.tasks) {
+            root.addToolCard(call.message, {
+                callId: call.key,
+                tool: call.tool,
+                kind: "taskResults",
+                state: "done",
+                summary: String(outcome.summary ?? ""),
+                data: outcome.data
+            });
+        }
+        return outcome;
+    }
+
+    function toolTasksList(call: var): var {
+        return root.taskReadOutcome(call, root.tasksIntegration.listTasks(call.args, call.key));
+    }
+
+    function toolTasksSearch(call: var): var {
+        return root.taskReadOutcome(call, root.tasksIntegration.searchTasks(call.args, call.key));
+    }
+
+    function toolTasksCreate(call: var): var {
+        const preview = root.tasksIntegration.normalizeCreate(call.args);
+        if (!preview.ok)
+            return { status: "error", summary: preview.error, data: preview, retryable: true };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "tasks_create",
+            kind: "taskPreview",
+            state: "pending",
+            summary: Translation.tr("Task needs approval"),
+            data: { operation: "create", preview: preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function approveTask(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const preview = card?.data?.preview;
+        if (!preview) {
+            root.rejectTask(message);
+            return;
+        }
+        root.beginToolExecution(message, "tasks_create", { args: preview });
+    }
+
+    function rejectTask(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("Task discarded") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Task discarded"),
+            data: Translation.tr("The user chose not to create that task."),
+            retryable: false
+        });
+    }
+
+    function finishTaskMutation(message: AiMessageData, outcome): void {
+        const key = root.toolKeyFor(message);
+        message.functionPending = false;
+        root.updateToolCard(message, key, {
+            state: outcome.status === "success" ? "done" : String(outcome.status ?? "error"),
+            summary: String(outcome.summary ?? "")
+        });
+        root.broker.settle(key, outcome);
+    }
+
+    function startTaskCreate(pending): void {
+        const outcome = root.tasksIntegration.createTask(pending.args, root.toolKeyFor(pending.message), pending.operationId);
+        if (outcome.status !== "pending")
+            root.finishTaskMutation(pending.message, outcome);
     }
 
     function notesProvenance(call): var {

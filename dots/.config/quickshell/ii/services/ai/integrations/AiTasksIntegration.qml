@@ -31,8 +31,9 @@ QtObject {
                 return;
             delete root.pendingOperations[id];
             if (!ok) {
+                const mutating = ["create", "update", "complete", "delete"].indexOf(String(operation)) >= 0;
                 root.resultReady(job.key, id, {
-                    status: "error",
+                    status: mutating ? "needsInspection" : "error",
                     summary: String(error ?? qsTr("The task provider failed.")),
                     data: { provider: job.provider, operation: operation, error: String(error ?? "providerError") },
                     operationId: id,
@@ -191,7 +192,7 @@ QtObject {
     function mutationOperation(input, key, operationId, operation, changes = null) {
         const id = String(operationId ?? "");
         const provider = input.provider;
-        root.pendingOperations[id] = { key: String(key ?? ""), provider: provider, input: input, changes: changes, operation: operation };
+        root.pendingOperations[id] = { key: String(key ?? ""), provider: provider, input: input, changes: changes, operation: operation, operationId: id };
         let sent = false;
         if (operation === "create")
             sent = TickTickService.aiCreateTask(id, input);
@@ -210,6 +211,22 @@ QtObject {
 
     function providerOutcome(job, operation, raw) {
         const base = job.input ?? ({});
+        if (operation === "list") {
+            const rawTasks = Array.from(raw?.tasks ?? []);
+            const query = String(job.filters?.query ?? "").trim().toLowerCase();
+            const tasks = rawTasks.map(task => root.mapTask(task, job.provider)).filter(task => {
+                if (query.length === 0)
+                    return true;
+                return task.title.toLowerCase().includes(query) || task.notes.toLowerCase().includes(query);
+            }).slice(0, Math.max(1, Math.min(50, Number(job.filters?.limit ?? 50))));
+            return {
+                status: "success",
+                summary: qsTr("%1 tasks").arg(tasks.length),
+                data: { provider: job.provider, tasks: tasks },
+                operationId: String(job.operationId ?? ""),
+                retryable: false
+            };
+        }
         const rawTask = raw?.task ?? raw;
         const task = operation === "delete"
             ? root.mapTask(base, job.provider)
