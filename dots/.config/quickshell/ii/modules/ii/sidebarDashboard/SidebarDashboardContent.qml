@@ -169,6 +169,7 @@ Item {
                 id: classicQuickPanelLoader
                 styleName: "classic"
                 sourceComponent: ClassicQuickPanel {
+                    editMode: root.editMode
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
                 }
@@ -702,14 +703,13 @@ Item {
             QuickToggleButton {
                 id: editButton
                 toggled: systemButtonRowRoot.editMode
-                visible: Config.options.sidebar.quickToggles.style === "android"
                 buttonIcon: "edit"
                 onClicked: {
                     systemButtonRowRoot.editMode = !systemButtonRowRoot.editMode;
                     systemButtonRowRoot.editModeToggled(systemButtonRowRoot.editMode);
                 }
                 StyledToolTip {
-                    text: Translation.tr("Edit quick toggles") + (systemButtonRowRoot.editMode ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : "")
+                    text: Translation.tr("Edit quick toggles") + (!systemButtonRowRoot.editMode ? "" : Config.options.sidebar.quickToggles.style === "android" ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : Translation.tr("\nLMB to show/hide a toggle"))
                 }
 
                 SequentialAnimation {

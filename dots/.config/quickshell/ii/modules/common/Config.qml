@@ -3151,6 +3151,10 @@ Singleton {
                 property JsonObject quickToggles: JsonObject {
                     property string style: "android" // Options: classic, android
                     property bool useThreeWaySliders: true
+                    property JsonObject classic: JsonObject {
+                        // Order matters: it is the order the toggles appear in.
+                        property list<var> toggles: ["network", "bluetooth", "vpn", "tailscale", "nightLight", "gameMode", "idleInhibitor", "modes", "easyEffects", "cloudflareWarp", "keyboardBacklight"]
+                    }
                     property JsonObject android: JsonObject {
                         property int columns: 4
                         property int layoutVersion: 2
