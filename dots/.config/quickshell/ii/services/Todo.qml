@@ -24,16 +24,55 @@ Singleton {
     property int missingFileGracePeriod: 2000
     property int missingFileRetryInterval: 1500
 
-    // Use TickTick if available
-    readonly property bool useTickTick: TickTickService.available
+    // Provider resolution
+    function resolveProvider() {
+        const configured = Config.options.todo ? Config.options.todo.provider : "local";
+        if (configured === "ticktick" || configured === "googleTasks" || configured === "local")
+            return configured;
+        return "local";
+    }
 
-    // Unified task list: either from TickTick or local file
-    property var list: root.useTickTick ? TickTickService.tasks : root.localList
+    readonly property string configuredProvider: Config.options.todo ? Config.options.todo.provider : "local"
+    readonly property string provider: root.resolveProvider()
+    readonly property bool remoteEnabled: provider === "ticktick" || provider === "googleTasks"
+
+    readonly property bool connected: {
+        if (provider === "ticktick")
+            return TickTickService.available;
+        if (provider === "googleTasks")
+            return GoogleTasksService.available;
+        return true;
+    }
+
+    readonly property bool syncing: {
+        if (provider === "ticktick")
+            return TickTickService.syncing;
+        if (provider === "googleTasks")
+            return GoogleTasksService.syncing;
+        return false;
+    }
+
+    readonly property string providerName: {
+        if (provider === "ticktick")
+            return "TickTick";
+        if (provider === "googleTasks")
+            return "Google Tasks";
+        return Translation.tr("Local");
+    }
+
+    // Unified task list: either from TickTick, Google Tasks or local file
+    property var list: {
+        if (root.provider === "ticktick")
+            return TickTickService.tasks;
+        if (root.provider === "googleTasks")
+            return GoogleTasksService.tasks;
+        return root.localList;
+    }
     property var localList: []
 
-    // Sync state (for UI indicator)
-    readonly property bool syncing: TickTickService.syncing
-
+    // AI's local provider remains deliberately independent from the user's
+    // display/sync provider. Remote AI mutations use their provider contracts
+    // directly; these operations only ever touch the local JSON list.
     readonly property string aiProviderId: "local"
     readonly property string aiListId: "local"
 
@@ -42,7 +81,6 @@ Singleton {
         todoFileView.setText(JSON.stringify(root.localList));
     }
 
-    /** Provider-facing local task contract. It never routes through TickTick. */
     function aiListTaskLists() {
         return [{
             id: root.aiListId,
@@ -136,22 +174,53 @@ Singleton {
         return { ok: true, task: removed };
     }
 
+    function addLocalItem(item) {
+        root.localList.push(item);
+        root.localList = root.localList.slice(0);
+        todoFileView.setText(JSON.stringify(root.localList));
+    }
+
+    function setLocalTaskDone(index, done) {
+        if (index >= 0 && index < root.localList.length) {
+            root.localList[index].done = done;
+            root.localList = root.localList.slice(0);
+            if (!done && CalendarService.khalAvailable) {
+                return;
+            }
+            todoFileView.setText(JSON.stringify(root.localList));
+        }
+    }
+
+    function deleteLocalItem(index) {
+        if (index >= 0 && index < root.localList.length) {
+            root.localList.splice(index, 1);
+            root.localList = root.localList.slice(0);
+            todoFileView.setText(JSON.stringify(root.localList));
+        }
+    }
+
     function addItem(item) {
-        if (root.useTickTick) {
+        if (!item)
+            return;
+        switch (root.provider) {
+        case "ticktick":
             TickTickService.createTask(item.content);
             return;
+        case "googleTasks":
+            GoogleTasksService.createTask(item.content);
+            return;
+        default:
+            root.addLocalItem(item);
+            return;
         }
-        localList.push(item)
-        root.localList = localList.slice(0)
-        todoFileView.setText(JSON.stringify(root.localList))
     }
 
     function addTask(desc) {
         const item = {
             "content": desc,
             "done": false,
-        }
-        addItem(item)
+        };
+        addItem(item);
     }
 
     function getTasksByDate(currentDate) {
@@ -176,63 +245,92 @@ Singleton {
     }
 
     function markDone(index) {
-        if (root.useTickTick) {
-            let task = root.list[index];
-            if (task && task.id) {
-                TickTickService.completeTask(task.id, task.projectId);
-            }
+        const task = root.list[index];
+        if (!task)
             return;
-        }
-        if (index >= 0 && index < localList.length) {
-            localList[index].done = true
-            root.localList = localList.slice(0)
-            todoFileView.setText(JSON.stringify(root.localList))
+
+        switch (root.provider) {
+        case "ticktick":
+            TickTickService.setTaskDone(task, true);
+            return;
+        case "googleTasks":
+            GoogleTasksService.setTaskDone(task, true);
+            return;
+        default:
+            root.setLocalTaskDone(index, true);
+            return;
         }
     }
 
     function markUnfinished(index) {
-        if (root.useTickTick) {
-            // TickTick API doesn't have a simple "uncomplete" — refresh instead
-            TickTickService.refresh();
+        const task = root.list[index];
+        if (!task)
             return;
-        }
-        if (index >= 0 && index < localList.length) {
-            localList[index].done = false
-            root.localList = localList.slice(0)
 
-            if(CalendarService.khalAvailable){
-              return
-            }
-            todoFileView.setText(JSON.stringify(root.localList))
+        switch (root.provider) {
+        case "ticktick":
+            TickTickService.setTaskDone(task, false);
+            return;
+        case "googleTasks":
+            GoogleTasksService.setTaskDone(task, false);
+            return;
+        default:
+            root.setLocalTaskDone(index, false);
+            return;
         }
     }
 
     function deleteItem(index) {
-        if (root.useTickTick) {
-            let task = root.list[index];
-            if (task && task.id) {
-                TickTickService.deleteTask(task.id, task.projectId);
-            }
+        const task = root.list[index];
+        if (!task)
             return;
-        }
-        if (index >= 0 && index < localList.length) {
-            let item = localList[index]
-            localList.splice(index, 1)
-            root.localList = localList.slice(0)
-            todoFileView.setText(JSON.stringify(root.localList))
+
+        switch (root.provider) {
+        case "ticktick":
+            TickTickService.deleteTask(task);
+            return;
+        case "googleTasks":
+            GoogleTasksService.deleteTask(task);
+            return;
+        default:
+            root.deleteLocalItem(index);
+            return;
         }
     }
 
     function refresh() {
-        if (root.useTickTick) {
+        switch (root.provider) {
+        case "ticktick":
             TickTickService.refresh();
             return;
+        case "googleTasks":
+            GoogleTasksService.refresh();
+            return;
+        default:
+            todoFileView.reload();
+            return;
         }
-        todoFileView.reload()
+    }
+
+    onProviderChanged: {
+        if (root.remoteEnabled && root.connected) {
+            providerRefreshTimer.restart();
+            root.refresh();
+        } else {
+            providerRefreshTimer.stop();
+        }
     }
 
     Component.onCompleted: {
-        refresh()
+        refresh();
+    }
+
+    Timer {
+        id: providerRefreshTimer
+        interval: Math.max(1, (Config.options.todo ? Config.options.todo.refreshIntervalMinutes : 5)) * 60 * 1000
+        repeat: true
+        running: root.remoteEnabled && root.connected
+        onTriggered: root.refresh()
     }
 
     FileView {
@@ -247,8 +345,6 @@ Singleton {
               let d = root.localList[i]['date'];
               root.localList[i]['date'] = d ? new Date(d) : new Date();
               root.localList[i]['hasDate'] = d !== undefined && d !== null;
-              if (!root.localList[i].id)
-                  root.localList[i].id = "local-legacy-" + i;
             }
 
             console.log("[To Do] File loaded")

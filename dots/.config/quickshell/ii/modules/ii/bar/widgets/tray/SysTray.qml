@@ -10,8 +10,8 @@ import qs.modules.common.widgets
 
 Item {
     id: sysTrayRoot
-    implicitWidth: gridLayout.implicitWidth
-    implicitHeight: gridLayout.implicitHeight
+    implicitWidth: hasItems ? gridLayout.implicitWidth : 0
+    implicitHeight: hasItems ? gridLayout.implicitHeight : 0
     property bool vertical: false
     property bool invertSide: false
     property bool trayOverflowOpen: false
@@ -134,6 +134,48 @@ Item {
                     columns: Math.ceil(Math.sqrt(sysTrayRoot.unpinnedItems.length))
                     columnSpacing: 10
                     rowSpacing: 10
+
+                    readonly property bool startAnim: overflowPopup.opened && overflowPopup.popupOpenProgress > 0.6
+
+                    onStartAnimChanged: {
+                        if (startAnim) {
+                            trayOverflowLayout.opacity = 0.0;
+                            trayOverflowLayout.scale = 0.85;
+                            trayOverflowTransform.y = 25;
+                            Qt.callLater(function() {
+                                trayOverflowAnim.start();
+                            });
+                        }
+                    }
+
+                    Connections {
+                        target: overflowPopup
+                        function onPopupOpenProgressChanged() {
+                            if (overflowPopup.popupOpenProgress === 0.0) {
+                                trayOverflowAnim.stop();
+                                trayOverflowLayout.opacity = 0.0;
+                                trayOverflowLayout.scale = 0.85;
+                                trayOverflowTransform.y = 25;
+                            }
+                        }
+                    }
+
+                    opacity: 0.0
+                    scale: 0.85
+                    transform: Translate {
+                        id: trayOverflowTransform
+                        y: 25
+                    }
+
+                    SequentialAnimation {
+                        id: trayOverflowAnim
+                        PauseAnimation { duration: 40 }
+                        ParallelAnimation {
+                            NumberAnimation { target: trayOverflowLayout; property: "opacity"; to: 1.0; duration: 300 }
+                            NumberAnimation { target: trayOverflowLayout; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                            NumberAnimation { target: trayOverflowTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                        }
+                    }
 
                     Repeater {
                         model: ScriptModel {

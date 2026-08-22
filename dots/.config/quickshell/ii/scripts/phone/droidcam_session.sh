@@ -62,12 +62,27 @@ session_signature() {
 # find_running <session> [port] → pid (empty if none). Matches live processes
 # of the session kind whose cmdline contains the port (when given).
 find_running() {
-    local session="$1" port="${2:-}" sig pid cl
+    local session="$1" port="${2:-}" sig pid cl comm argv0 want
     sig="$(session_signature "$session")"
     [ -n "$sig" ] || return 1
-    for pid in $(pgrep -f "$sig" 2>/dev/null); do
+    case "$session" in
+        scrcpy-mic) want="scrcpy" ;;
+        *)          want="droidcam-cli" ;;
+    esac
+    # `--` is required: the scrcpy signature starts with "--", which pgrep
+    # would otherwise parse as one of its own options and bail out, leaving
+    # this function permanently empty-handed.
+    for pid in $(pgrep -f -- "$sig" 2>/dev/null); do
         [ -r "/proc/$pid/cmdline" ] || continue
         cl="$(cmdline_of "$pid")"
+        # pgrep -f matches any process carrying these args, including the
+        # very shell that was invoked to launch one. Only the real binary
+        # counts, or launching a session would "adopt" its own launcher.
+        # argv[0] is the reliable discriminator; comm is only a fallback,
+        # since a program is free to rename its own main thread.
+        argv0="${cl%% *}"; argv0="${argv0##*/}"
+        comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
+        [ "$argv0" = "$want" ] || [ "$comm" = "$want" ] || continue
         case "$cl" in
             *"$sig"*)
                 if [ -z "$port" ]; then printf '%s' "$pid"; return 0; fi
@@ -139,12 +154,36 @@ cmd_launch() {
         exit 0
     fi
 
-    setsid nohup "$bin" "$@" > "$logfile" 2>&1 < /dev/null &
-    local pid=$!
+    # An idle wireless ADB transport drops the first command thrown at it.
+    # scrcpy then dies on startup with "Could not list ADB devices" or a
+    # failed "adb push", while `adb devices` looks perfectly healthy a second
+    # later. Waking the transport first noticeably improves launch odds.
+    # Bounded, because an unreachable phone must not hang the launch.
+    case "$session" in
+        scrcpy-mic)
+            timeout 3 adb devices  > /dev/null 2>&1 || true
+            timeout 3 adb shell true > /dev/null 2>&1 || true
+            ;;
+    esac
 
-    # setsid may fork once; give it a moment then resolve the real PID.
-    sleep 0.3
-    if ! is_alive "$pid"; then
+    # The detached process reports its own PID: `exec` replaces this inner
+    # shell, so what lands in the pidfile IS the binary. $! cannot be used
+    # (setsid's parent exits at once), and re-deriving the PID by scanning
+    # the process table made a perfectly healthy session look like a failed
+    # launch every time the scan came up empty.
+    local pidfile="$STATE_DIR/$session.pid"
+    rm -f "$pidfile"
+    setsid nohup bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$pidfile" "$bin" "$@" \
+        > "$logfile" 2>&1 < /dev/null &
+
+    local pid=""
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 0.1
+        if [ -s "$pidfile" ]; then pid="$(cat "$pidfile" 2>/dev/null || true)"; break; fi
+    done
+    is_alive "$pid" || pid=""
+    # Last resort for a session adopted from an earlier launch.
+    if [ -z "$pid" ]; then
         pid="$(find_running "$session" "$port" 2>/dev/null || true)"
     fi
     if [ -z "$pid" ]; then

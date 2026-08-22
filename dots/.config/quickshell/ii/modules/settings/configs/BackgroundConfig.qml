@@ -23,7 +23,8 @@ Item {
 
         readonly property bool videoWallpaper: {
             const background = Config.options && Config.options.background ? Config.options.background : null;
-            if (!background) return false;
+            if (!background)
+                return false;
             return background.useWallpaperEngine === true || Wallpapers.isVideoFile(background.wallpaperPath || "");
         }
 
@@ -49,6 +50,96 @@ Item {
                 }
                 StyledToolTip {
                     text: Translation.tr("Click button text to configure parallax movement directions, sidebars, and intensity.")
+                }
+            }
+
+            ConfigSlider {
+                buttonIcon: "loupe"
+                text: Translation.tr("Preferred wallpaper zoom (%)")
+                enabled: !page.videoWallpaper
+                usePercentTooltip: true
+                from: 100
+                to: 150
+                stepSize: 1
+                value: Math.round((Config.options.background.parallax.workspaceZoom ?? 1.07) * 100)
+                onValueChanged: {
+                    Config.options.background.parallax.workspaceZoom = value / 100;
+                }
+            }
+        }
+
+        ContentSection {
+            title: Translation.tr("Wallpaper Transitions")
+            icon: "animation"
+
+            ConfigSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Animate wallpaper changes")
+                enabled: !page.videoWallpaper
+                checked: Config.options.background.animateWallpaperChanges ?? true
+                onCheckedChanged: {
+                    Config.options.background.animateWallpaperChanges = checked;
+                }
+            }
+
+            ContentSubsection {
+                visible: (Config.options.background.animateWallpaperChanges ?? true) && !page.videoWallpaper
+                title: Translation.tr("Transition shader effect")
+                icon: "style"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.background.wallpaperAnimation ?? ""
+                    onSelected: newValue => {
+                        Config.options.background.wallpaperAnimation = newValue;
+                    }
+                    options: [
+                        {
+                            displayName: Translation.tr("Crossfade"),
+                            icon: "blur_on",
+                            value: ""
+                        },
+                        {
+                            displayName: Translation.tr("Random"),
+                            icon: "shuffle",
+                            value: "random"
+                        },
+                        {
+                            displayName: Translation.tr("Circle Pit"),
+                            icon: "circle",
+                            value: "circlePit"
+                        },
+                        {
+                            displayName: Translation.tr("Circle Select"),
+                            icon: "radio_button_checked",
+                            value: "circleSelect"
+                        },
+                        {
+                            displayName: Translation.tr("Magic"),
+                            icon: "auto_awesome",
+                            value: "magic"
+                        },
+                        {
+                            displayName: Translation.tr("Peel"),
+                            icon: "sticky_note_2",
+                            value: "Peel"
+                        },
+                        {
+                            displayName: Translation.tr("Transition"),
+                            icon: "swap_horiz",
+                            value: "transition"
+                        },
+                        {
+                            displayName: Translation.tr("Pixelate"),
+                            icon: "grid_on",
+                            value: "pixelate"
+                        },
+                        {
+                            displayName: Translation.tr("Stripes"),
+                            icon: "view_column",
+                            value: "stripes"
+                        }
+                    ]
                 }
             }
         }
@@ -85,7 +176,6 @@ Item {
                     Config.options.background.blurWhenWindowsOpenRadius = value;
                 }
             }
-
         }
 
         KeyboardShortcutBox {

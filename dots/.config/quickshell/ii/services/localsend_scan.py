@@ -6,14 +6,27 @@ import ssl
 import sys
 import hashlib
 import uuid
+from pathlib import Path
 
 PORT = 53317
 MULTICAST_GROUP = "224.0.0.167"
+# Client identity for the mTLS handshake used when probing devices. The
+# official localsend-cli (see services/localsend_bridge.py) persists this
+# device's certificate + private key as a single concatenated PEM; loading
+# it here presents the shell's real identity/fingerprint during discovery
+# instead of a throwaway one. Purely optional (servers don't require a
+# client cert), so a missing file just leaves the context unauthenticated.
+IDENTITY_FILE = Path.home() / ".config" / "localsend-cli" / "identity.pem"
 
-# Disable SSL verification for self-signed certificates used by LocalSend
+# Configure SSL context with mTLS client certificate for LocalSend v2
 ctx = ssl.create_default_context()
 ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
+if IDENTITY_FILE.exists():
+    try:
+        ctx.load_cert_chain(IDENTITY_FILE)
+    except Exception:
+        pass
 
 def get_local_ip():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -26,7 +39,22 @@ def get_local_ip():
 # Generate consistent fingerprint and device info
 def get_device_info():
     hostname = socket.gethostname()
-    fingerprint = hashlib.sha256(f"quickshell-{hostname}".encode()).hexdigest()
+    fingerprint = ""
+    if IDENTITY_FILE.exists():
+        try:
+            from cryptography.x509 import load_pem_x509_certificate
+            from cryptography.hazmat.primitives import hashes
+            # identity.pem concatenates the CERTIFICATE block followed by
+            # the PRIVATE KEY block; only the certificate is needed here.
+            pem_text = IDENTITY_FILE.read_text()
+            cert_pem = pem_text[:pem_text.index("-----END CERTIFICATE-----") + len("-----END CERTIFICATE-----")]
+            cert = load_pem_x509_certificate(cert_pem.encode())
+            fingerprint = cert.fingerprint(hashes.SHA256()).hex()
+        except Exception:
+            pass
+    if not fingerprint:
+        fingerprint = hashlib.sha256(f"quickshell-{hostname}".encode()).hexdigest()
+
     return {
         "alias": f"quickshell@{hostname}",
         "version": "2.0",

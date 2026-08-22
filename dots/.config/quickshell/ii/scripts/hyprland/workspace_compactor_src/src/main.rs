@@ -10,6 +10,9 @@ use std::env;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 
+/// Must match `lockWorkspaceMin` in `services/WorkspaceCompactor.qml`.
+const LOCK_WORKSPACE_MIN: i64 = 10000;
+
 /// Speaks the Hyprland IPC protocol directly — no `hyprctl` subprocess.
 fn hyprctl(command: &str) -> Option<String> {
     let xdg_runtime = env::var("XDG_RUNTIME_DIR").ok()?;
@@ -174,9 +177,24 @@ fn main() {
         .and_then(|v| v.as_i64())
         .unwrap_or(1);
 
+    // --auto marks a background invocation (Quickshell's Auto-Compact service): the user did
+    // not ask for this compaction, so the view must never be moved on their behalf.
+    let mut auto = false;
     // Only used when the bar's own workspace-map isolation (below) is off.
-    let group_size: i64 =
-        env::args().nth(1).and_then(|s| s.parse().ok()).filter(|&n| n > 0).unwrap_or(10);
+    let mut group_size: i64 = 10;
+    for arg in env::args().skip(1) {
+        if arg == "--auto" {
+            auto = true;
+        } else if let Some(n) = arg.parse::<i64>().ok().filter(|&n| n > 0) {
+            group_size = n;
+        }
+    }
+    // The shell's lock screen parks monitors on temporary workspaces with ids >= 10000 (see
+    // Lock.qml). Compacting relative to one would push every window up next to it, and the lock
+    // screen then sweeps them all onto a single workspace on unlock.
+    if active_ws >= LOCK_WORKSPACE_MIN {
+        return;
+    }
     let ws_map_cfg = read_workspace_map_config();
     let base = block_base(&ws_map_cfg, monitor_index(&monitors, mon_name), active_ws, group_size);
 
@@ -249,9 +267,14 @@ fn main() {
     }
     dispatch_batch(&geometry);
 
-    // Follow the active workspace to its new number. If it was empty it has no mapping, so
-    // fall back to the nearest occupied workspace below it; failing that, stay put.
+    // Follow the active workspace to its new number. If it was empty it has no mapping:
+    // manual runs fall back to the nearest occupied workspace below it (failing that, stay
+    // put), while --auto runs always stay put — a background compaction pulling the view off
+    // an intentionally empty workspace would be focus theft.
     let target_ws = mapping.get(&active_ws).copied().unwrap_or_else(|| {
+        if auto {
+            return active_ws;
+        }
         occupied
             .iter()
             .filter(|&&ws| ws < active_ws)

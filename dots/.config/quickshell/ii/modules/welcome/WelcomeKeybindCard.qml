@@ -4,34 +4,44 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 
-Rectangle {
+RippleButton {
     id: root
 
     required property string title
     property var keys: []
     property string materialIcon: "keyboard"
     property string unassignedText: Translation.tr("No shortcut")
+    property bool hero: false
+
+    signal activated()
 
     readonly property bool isCompactKeycaps: keys.length >= 3
 
-    implicitHeight: 66
-    radius: Appearance.rounding.normal
-    color: Appearance.colors.colLayer1
+    implicitHeight: root.hero
+        ? Appearance.rounding.verylarge * 3
+        : Appearance.rounding.verylarge * 2 + Appearance.rounding.small
+    buttonRadius: Appearance.rounding.large
+    buttonRadiusPressed: Appearance.rounding.normal
+    colBackground: Appearance.colors.colLayer1
+    colBackgroundHover: Appearance.colors.colLayer1Hover
+    colBackgroundActive: Appearance.colors.colLayer1Active
+    colRipple: Appearance.colors.colLayer1Active
+    Accessible.name: root.title
 
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 10
         anchors.rightMargin: 10
-        anchors.topMargin: 8
-        anchors.bottomMargin: 8
+        anchors.topMargin: root.hero ? 12 : 8
+        anchors.bottomMargin: root.hero ? 12 : 8
         spacing: 8
 
         MaterialShapeWrappedMaterialSymbol {
             Layout.alignment: Qt.AlignVCenter
             text: root.materialIcon
             shape: MaterialShape.Shape.Square
-            iconSize: Appearance.font.pixelSize.normal
-            padding: 7
+            iconSize: root.hero ? Appearance.font.pixelSize.large : Appearance.font.pixelSize.normal
+            padding: root.hero ? 9 : 7
             color: Appearance.colors.colSecondaryContainer
             colSymbol: Appearance.colors.colOnSecondaryContainer
         }
@@ -42,8 +52,8 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             text: root.title
             color: Appearance.colors.colOnLayer1
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.weight: Font.DemiBold
+            font.pixelSize: root.hero ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.small
+            font.weight: Font.Bold
             wrapMode: Text.WordWrap
             maximumLineCount: 2
             elide: Text.ElideRight
@@ -66,7 +76,9 @@ Rectangle {
                         horizontalPadding: root.isCompactKeycaps ? 4 : 6
                         pixelSize: root.isCompactKeycaps
                             ? Appearance.font.pixelSize.smaller - 1
-                            : Appearance.font.pixelSize.smaller
+                            : root.hero
+                                ? Appearance.font.pixelSize.normal
+                                : Appearance.font.pixelSize.smaller
                     }
                     StyledText {
                         visible: index < root.keys.length - 1
@@ -87,4 +99,6 @@ Rectangle {
             font.pixelSize: Appearance.font.pixelSize.smaller
         }
     }
+
+    onClicked: root.activated()
 }

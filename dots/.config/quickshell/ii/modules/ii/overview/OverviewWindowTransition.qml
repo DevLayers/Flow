@@ -7,19 +7,19 @@ pragma ComponentBehavior: Bound
 //
 // Architecture:
 //   • One PanelWindow per screen (WlrLayer.Top, no_anim via rules)
-//   • When overview opens: immediately shows full-scale window captures at real
-//     screen positions, then follows GlobalStates.overviewZoomScale/Origin to
-//     shrink in sync with the wallpaper.
+//   • When overview opens: shows window captures and follows the per-monitor
+//     OverviewBackgroundController progress/transform when the selected preset
+//     supports window transitions.
 //   • When workspace switches (while overview is open): slides captures out and
 //     brings in captures of the next workspace — matching the workspace slide
 //     animation direction.
-//   • On overview close: reverse-animates scale back to 1.0 then hides.
+//   • On overview close: restores the captured real windows and keeps this
+//     layer mapped through the asynchronous handoff, then hides.
 //
 // Flicker prevention:
 //   • ScreencopyView uses live:false for performance; captures are taken once on open.
 //   • captureSource is set BEFORE setting visible=true (QML binding order).
-//   • A 16ms delay ensures QML has painted the layer at scale=1.0 before
-//     we read GlobalStates.overviewZoomScale (which may already be < 1).
+//   • The controller's progress is the only transition clock.
 
 import qs
 import qs.services
@@ -38,8 +38,7 @@ Scope {
 
     readonly property bool featureEnabled:
         Config.options.background.zoomOutEnabled &&
-        Config.options.background.windowZoomOnOverview &&
-        Config.options.background.zoomOutStyle !== 2
+        Config.options.background.windowZoomOnOverview
 
     Variants {
         id: transitionVariants
@@ -74,6 +73,19 @@ Scope {
 
             readonly property real scaleOriginX: padLeft + (tRoot.screen.width - padLeft - padRight) / 2
             readonly property real scaleOriginY: padTop + (tRoot.screen.height - padTop - padBottom) / 2
+            readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(tRoot.screen ? tRoot.screen.name : "")
+            readonly property bool isGnomeLike: overviewController
+                ? overviewController.isGnomeLike
+                : (Config.options.background.overviewBackgroundStyle === "gnome"
+                    || (Config.options.background.overviewBackgroundStyle === ""
+                        && Config.options.background.zoomOutStyle === 0))
+            readonly property bool useWallpaperBackdrop:
+                tRoot.shouldBeActive &&
+                !tRoot.isGnomeLike &&
+                overviewController &&
+                overviewController.windowTransitionMode === "scale-with-background" &&
+                overviewController.wallpaperPath !== "" &&
+                !overviewController.wallpaperSafetyTriggered
 
             // ── Window freezing logic for anti-flicker reload ───────────────
             property list<var> frozenToplevels: []
@@ -115,30 +127,37 @@ Scope {
                 }
             }
 
-            Component.onCompleted: updateToplevels()
+            Component.onCompleted: {
+                updateToplevels();
+                if (tRoot.isGnomeLike && GlobalStates.overviewOpen && transitionScope.featureEnabled) {
+                    tRoot.isOverviewActive = true;
+                    openDelayTimer.restart();
+                }
+            }
 
             // ── Visibility / readiness ──────────────────────────────────────
-            // Must be visible while overview is open OR while exit animation runs.
+            // Gnome-like intentionally keeps the original transition state:
+            // the layer is mapped by the overview signal, not by the shared
+            // preset controller. This prevents a stale capture from staying
+            // mapped when the overview surface is already open.
             property bool exitAnimating: false
             property bool isOverviewActive: false
 
-            // Delay applying window opacity rule to let ScreencopyView render its first frame (prevents 1-frame wallpaper pop on open)
             Timer {
                 id: openDelayTimer
                 interval: 60
                 onTriggered: {
-                    if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
+                    if (tRoot.isGnomeLike && Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
                         Quickshell.execDetached(["hyprctl", "eval", "hl.window_rule({ match = { class = '.*' }, opacity = '0.0 0.0', no_anim = true })"]);
                     }
                 }
             }
 
-            // Restore real windows slightly before transition ends to allow Hyprland config to reload without visual pop-in
             Timer {
                 id: restoreWindowsTimer
                 interval: 300
                 onTriggered: {
-                    if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
+                    if (tRoot.isGnomeLike && Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
                         Quickshell.execDetached(["hyprctl", "eval", "hl.window_rule({ match = { class = '.*' }, opacity = '1.0 1.0' })"]);
                     }
                 }
@@ -146,7 +165,7 @@ Scope {
 
             Timer {
                 id: exitAnimTimer
-                // Keep transition layer visible for an extra 400ms after restore starts to cover the reload delay and fadeIn animation perfectly
+                // Keep the capture mapped through the Hyprland handoff.
                 interval: 700
                 onTriggered: {
                     tRoot.exitAnimating = false;
@@ -154,11 +173,26 @@ Scope {
                 }
             }
 
-            // We activate for all monitors so that each monitor displays the zoomed-out
-            // capture representation of its own active workspace windows.
+            // Gnome follows the legacy global state; modern presets use the
+            // semantic controller only when their preset explicitly supports a
+            // window transition.
             readonly property bool shouldBeActive:
                 transitionScope.featureEnabled &&
-                isOverviewActive
+                (tRoot.isGnomeLike
+                    ? tRoot.isOverviewActive
+                    : (overviewController && overviewController.windowTransitionMode !== "none"
+                        && (overviewController.active || overviewController.progress > 0.001)))
+
+            readonly property real captureScale: tRoot.isGnomeLike
+                ? GlobalStates.overviewZoomScale
+                : (overviewController && overviewController.windowTransitionMode === "scale-with-background"
+                    ? overviewController.scale
+                    : (overviewController ? 0.98 + 0.02 * overviewController.progress : 1.0))
+            readonly property real captureOriginX: tRoot.isGnomeLike ? GlobalStates.overviewZoomOriginX : (overviewController ? overviewController.scaleOriginX : tRoot.scaleOriginX)
+            readonly property real captureOriginY: tRoot.isGnomeLike ? GlobalStates.overviewZoomOriginY : (overviewController ? overviewController.scaleOriginY : tRoot.scaleOriginY)
+            readonly property real captureTranslateX: !tRoot.isGnomeLike && overviewController && overviewController.windowTransitionMode === "scale-with-background" ? overviewController.translateX : 0
+            readonly property real captureTranslateY: !tRoot.isGnomeLike && overviewController && overviewController.windowTransitionMode === "scale-with-background" ? overviewController.translateY : 0
+            readonly property real captureOpacity: tRoot.isGnomeLike ? 1.0 : (overviewController ? overviewController.progress : 0.0)
 
             visible: shouldBeActive
 
@@ -218,31 +252,32 @@ Scope {
             Connections {
                 target: GlobalStates
                 function onOverviewOpenChanged() {
-                    if (!transitionScope.featureEnabled) {
-                        return; // Do absolutely nothing if window zoom is toggled off!
-                    }
+                    if (!transitionScope.featureEnabled)
+                        return;
                     if (GlobalStates.overviewOpen) {
-                        // Start delay timer to hide windows (allows screencopy to load first)
-                        openDelayTimer.restart()
-
+                        if (tRoot.isGnomeLike) {
+                            // Start the legacy handoff only after the capture
+                            // layer has had a frame to render.
+                            openDelayTimer.restart();
+                            tRoot.exitAnimating = false;
+                            tRoot.isOverviewActive = true;
+                            exitAnimTimer.stop();
+                            restoreWindowsTimer.stop();
+                        }
                         // Reset slide to center on fresh open
                         tRoot.slideAnimEnabled = false
                         tRoot.transitionDirection = 1
                         tRoot.transitionProgress = 1.0
                         tRoot.outgoingToplevels = []
-                        tRoot.exitAnimating = false
-                        tRoot.isOverviewActive = true
-                        exitAnimTimer.stop()
-                        restoreWindowsTimer.stop()
                         tRoot.displayedWsId = tRoot.activeWsId
                     } else {
-                        // Overview closed: cancel any pending open hide
-                        openDelayTimer.stop()
-
-                        // Start exit animation and reload timing
-                        tRoot.exitAnimating = true
-                        restoreWindowsTimer.restart()
-                        exitAnimTimer.restart()
+                        if (tRoot.isGnomeLike) {
+                            openDelayTimer.stop();
+                            tRoot.exitAnimating = true;
+                            restoreWindowsTimer.restart();
+                            exitAnimTimer.restart();
+                        }
+                        tRoot.outgoingToplevels = []
                     }
                 }
             }
@@ -251,18 +286,21 @@ Scope {
                 target: transitionScope
                 function onFeatureEnabledChanged() {
                     if (!transitionScope.featureEnabled) {
-                        openDelayTimer.stop()
-                        if (GlobalStates.overviewOpen && (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0])) {
+                        openDelayTimer.stop();
+                        restoreWindowsTimer.stop();
+                        exitAnimTimer.stop();
+                        tRoot.exitAnimating = false;
+                        tRoot.isOverviewActive = false;
+                        if (tRoot.isGnomeLike && GlobalStates.overviewOpen && Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
                             Quickshell.execDetached(["hyprctl", "eval", "hl.window_rule({ match = { class = '.*' }, opacity = '1.0 1.0' })"]);
                         }
+                        tRoot.frozenToplevels = [];
+                        tRoot.outgoingToplevels = [];
                     }
                 }
             }
 
-            // ── Scale transform — synced to wallpaper zoom ──────────────────
-            // GlobalStates.overviewZoomScale is animated by Background.qml's
-            // wallpaperPlanes.scaleValue (375ms OutCubic, same curve).
-            // We read it directly so our transform is always frame-perfect.
+            // ── Scale transform — synced to the monitor controller ──────────
             Item {
                 id: scaleContainer
                 anchors.fill: parent
@@ -270,6 +308,39 @@ Scope {
                 // Performance: removed clip to avoid scissor overhead during scale
                 // Window captures are already positioned within screen bounds
                 // clip: true
+
+                // The Overview surface is transparent. Keep real windows from
+                // showing through for presets that use a backdrop. Gnome
+                // restores its original handoff by hiding real windows after
+                // the first capture frame.
+                Rectangle {
+                    id: backdropFallback
+                    anchors.fill: parent
+                    color: Appearance.colors.colLayer0
+                    visible: tRoot.shouldBeActive && !tRoot.isGnomeLike && tRoot.overviewController && tRoot.overviewController.windowTransitionMode === "scale-with-background"
+                }
+
+                TransitionImage {
+                    id: overviewBackdrop
+                    anchors.fill: parent
+                    imageSource: tRoot.useWallpaperBackdrop ? tRoot.overviewController.wallpaperPath : ""
+                    visible: tRoot.useWallpaperBackdrop && status === Image.Ready
+                    fillMode: Image.PreserveAspectCrop
+                    animated: false
+                    sourceSize: Config.options.background.scaleLargeWallpapers
+                        ? Qt.size(tRoot.screen.width, tRoot.screen.height)
+                        : Qt.size(-1, -1)
+                    mipmap: false
+                    antialiasing: false
+                }
+
+                Rectangle {
+                    id: overviewBackdropDim
+                    anchors.fill: parent
+                    color: Appearance.colors.colLayer0
+                    visible: tRoot.shouldBeActive && !tRoot.isGnomeLike && tRoot.overviewController && tRoot.overviewController.windowTransitionMode === "scale-with-background"
+                    opacity: tRoot.overviewController ? tRoot.overviewController.dimAmount : 0.0
+                }
 
                 // ── OUTGOING WORKSPACE CONTAINER ────────────────────────────
                 Item {
@@ -279,17 +350,23 @@ Scope {
                     
                     x: !tRoot.isVertical ? -tRoot.transitionDirection * tRoot.transitionProgress * (tRoot.width * 0.5) : 0
                     y: tRoot.isVertical ? -tRoot.transitionDirection * tRoot.transitionProgress * (tRoot.height * 0.5) : 0
-                    opacity: 1.0 - tRoot.transitionProgress
+                    opacity: (1.0 - tRoot.transitionProgress) * tRoot.captureOpacity
                     scale: 1.0 - (0.07 * tRoot.transitionProgress)
                     visible: opacity > 0.0
 
                     // Apply the same scale transform as the wallpaper
-                    transform: Scale {
-                        origin.x: tRoot.scaleOriginX
-                        origin.y: tRoot.scaleOriginY
-                        xScale: GlobalStates.overviewZoomScale
-                        yScale: GlobalStates.overviewZoomScale
-                    }
+                    transform: [
+                        Scale {
+                            origin.x: tRoot.captureOriginX
+                            origin.y: tRoot.captureOriginY
+                            xScale: tRoot.captureScale
+                            yScale: tRoot.captureScale
+                        },
+                        Translate {
+                            x: tRoot.captureTranslateX
+                            y: tRoot.captureTranslateY
+                        }
+                    ]
 
                     Repeater {
                         model: ScriptModel {
@@ -316,16 +393,22 @@ Scope {
 
                     x: !tRoot.isVertical ? tRoot.transitionDirection * (1.0 - tRoot.transitionProgress) * (tRoot.width * 0.5) : 0
                     y: tRoot.isVertical ? tRoot.transitionDirection * (1.0 - tRoot.transitionProgress) * (tRoot.height * 0.5) : 0
-                    opacity: tRoot.transitionProgress
+                    opacity: tRoot.transitionProgress * tRoot.captureOpacity
                     scale: 0.95 + (0.05 * tRoot.transitionProgress)
 
                     // Apply the same scale transform as the wallpaper
-                    transform: Scale {
-                        origin.x: tRoot.scaleOriginX
-                        origin.y: tRoot.scaleOriginY
-                        xScale: GlobalStates.overviewZoomScale
-                        yScale: GlobalStates.overviewZoomScale
-                    }
+                    transform: [
+                        Scale {
+                            origin.x: tRoot.captureOriginX
+                            origin.y: tRoot.captureOriginY
+                            xScale: tRoot.captureScale
+                            yScale: tRoot.captureScale
+                        },
+                        Translate {
+                            x: tRoot.captureTranslateX
+                            y: tRoot.captureTranslateY
+                        }
+                    ]
 
                     Repeater {
                         model: ScriptModel {
@@ -397,7 +480,8 @@ Scope {
         visible: width > 0 && height > 0
 
         // Rounded corners matching Hyprland's window rounding
-        layer.enabled: true
+        layer.enabled: tRoot.isGnomeLike
+            || (tRoot.overviewController && tRoot.overviewController.windowTransitionMode === "scale-with-background")
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: tile.width
@@ -410,7 +494,9 @@ Scope {
         StyledRectangularShadow {
             target: tile
             blur: 16
-            opacity: 0.3
+            opacity: tRoot.isGnomeLike
+                ? 0.3
+                : (tRoot.overviewController ? tRoot.overviewController.shadowAmount * 0.3 : 0.0)
             offset: Qt.vector2d(0, 4)
         }
 

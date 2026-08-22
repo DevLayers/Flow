@@ -14,15 +14,27 @@ Item {
         | (Config.options.bar.vertical ? 2 : 0)
     readonly property bool cornerStyleRestricted: Config.options.bar.barBackgroundStyle === 3
     readonly property bool compactWidth: width < 900
+    property string tryFeedback: ""
+
+    function showTryFeedback(kind) {
+        root.tryFeedback = kind;
+        tryFeedbackTimer.restart();
+    }
+
+    Timer {
+        id: tryFeedbackTimer
+        interval: Appearance.animation.elementMoveEnter.duration * 4
+        onTriggered: root.tryFeedback = ""
+    }
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: Appearance.rounding.normal
+        spacing: Appearance.rounding.small
 
         GridLayout {
             Layout.fillWidth: true
             columns: root.compactWidth ? 1 : 2
-            columnSpacing: Appearance.rounding.normal
+            columnSpacing: Appearance.rounding.small
             rowSpacing: Appearance.rounding.small
 
             WelcomeShellModeCard {
@@ -56,66 +68,116 @@ Item {
             }
         }
 
-        RowLayout {
+        Rectangle {
+            id: tryCard
             Layout.fillWidth: true
-            spacing: Appearance.rounding.small
+            implicitHeight: tryCardContent.implicitHeight + Appearance.rounding.small * 2
+            color: Appearance.colors.colTertiaryContainer
+            radius: Appearance.rounding.large
 
             ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 1
+                id: tryCardContent
+                anchors.fill: parent
+                anchors.margins: Appearance.rounding.small
+                spacing: Appearance.rounding.verysmall
 
-                StyledText {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: Translation.tr("Try the selected mode")
-                    color: Appearance.colors.colOnLayer1
-                    font.pixelSize: Appearance.font.pixelSize.large
-                    font.weight: Font.Bold
+                    spacing: Appearance.rounding.small
+
+                    MaterialShapeWrappedMaterialSymbol {
+                        Layout.alignment: Qt.AlignTop
+                        text: "play_arrow"
+                        shape: MaterialShape.Shape.Sunny
+                        iconSize: Appearance.font.pixelSize.normal
+                        padding: Appearance.rounding.small
+                        fill: 1
+                        color: Appearance.colors.colTertiary
+                        colSymbol: Appearance.colors.colOnTertiary
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 1
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Try it now")
+                            color: Appearance.colors.colOnTertiaryContainer
+                            font.family: Appearance.font.family.title
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.variableAxes: Appearance.font.variableAxes.titleRounded
+                            font.weight: Font.Bold
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Open a real panel and feel how the selected mode works.")
+                            color: Appearance.colors.colOnTertiaryContainer
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+                    }
                 }
 
-            }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Appearance.rounding.small
 
-            Item {
-                Layout.fillWidth: true
-            }
+                    RippleButtonWithIcon {
+                        Layout.fillWidth: true
+                        implicitHeight: Appearance.rounding.verylarge + Appearance.rounding.normal
+                        centerContent: true
+                        horizontalPadding: 0
+                        contentSpacing: Appearance.rounding.small
+                        materialIcon: root.tryFeedback === "sidebar" ? "check" : "side_navigation"
+                        mainText: root.tryFeedback === "sidebar"
+                            ? Translation.tr("Opened") : Translation.tr("Try Sidebar")
+                        textPixelSize: Appearance.font.pixelSize.small
+                        iconPixelSize: Appearance.font.pixelSize.large
+                        buttonRadius: Appearance.rounding.full
+                        colText: Appearance.colors.colOnTertiary
+                        colBackground: Appearance.colors.colTertiary
+                        colBackgroundHover: Appearance.colors.colTertiaryHover
+                        colBackgroundActive: Appearance.colors.colTertiaryActive
+                        colRipple: Appearance.colors.colTertiaryActive
+                        onClicked: {
+                            root.showTryFeedback("sidebar");
+                            root.trySidebar();
+                        }
+                    }
 
-            RippleButtonWithIcon {
-                implicitWidth: Appearance.rounding.verylarge * 4
-                implicitHeight: Appearance.rounding.verylarge
-                centerContent: true
-                materialIcon: "side_navigation"
-                mainText: Translation.tr("Sidebar")
-                textPixelSize: Appearance.font.pixelSize.smaller
-                iconPixelSize: Appearance.font.pixelSize.normal
-                buttonRadius: Appearance.rounding.full
-                colText: Appearance.colors.colOnSecondaryContainer
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                colBackgroundActive: Appearance.colors.colSecondaryContainerActive
-                colRipple: Appearance.colors.colSecondaryContainerActive
-                onClicked: root.trySidebar()
-            }
-
-            RippleButtonWithIcon {
-                implicitWidth: Appearance.rounding.verylarge * 4
-                implicitHeight: Appearance.rounding.verylarge
-                centerContent: true
-                materialIcon: "search"
-                mainText: Translation.tr("Search")
-                textPixelSize: Appearance.font.pixelSize.smaller
-                iconPixelSize: Appearance.font.pixelSize.normal
-                buttonRadius: Appearance.rounding.full
-                colText: Appearance.colors.colOnSecondaryContainer
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                colBackgroundActive: Appearance.colors.colSecondaryContainerActive
-                colRipple: Appearance.colors.colSecondaryContainerActive
-                onClicked: root.trySearch()
+                    RippleButtonWithIcon {
+                        Layout.fillWidth: true
+                        implicitHeight: Appearance.rounding.verylarge + Appearance.rounding.normal
+                        centerContent: true
+                        horizontalPadding: 0
+                        contentSpacing: Appearance.rounding.small
+                        materialIcon: root.tryFeedback === "search" ? "check" : "search"
+                        mainText: root.tryFeedback === "search"
+                            ? Translation.tr("Opened") : Translation.tr("Try Search")
+                        textPixelSize: Appearance.font.pixelSize.small
+                        iconPixelSize: Appearance.font.pixelSize.large
+                        buttonRadius: Appearance.rounding.full
+                        colText: Appearance.colors.colOnTertiary
+                        colBackground: Appearance.colors.colTertiary
+                        colBackgroundHover: Appearance.colors.colTertiaryHover
+                        colBackgroundActive: Appearance.colors.colTertiaryActive
+                        colRipple: Appearance.colors.colTertiaryActive
+                        onClicked: {
+                            root.showTryFeedback("search");
+                            root.trySearch();
+                        }
+                    }
+                }
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: Appearance.rounding.small
+            spacing: Appearance.rounding.verysmall
 
             RowLayout {
                 Layout.fillWidth: true
@@ -152,7 +214,7 @@ Item {
                 Layout.fillWidth: true
                 columns: root.compactWidth ? 1 : 2
                 columnSpacing: Appearance.rounding.normal
-                rowSpacing: Appearance.rounding.small
+                rowSpacing: Appearance.rounding.verysmall
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -238,8 +300,8 @@ Item {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     Layout.preferredWidth: 0
-                    Layout.minimumHeight: Appearance.rounding.verylarge + Appearance.rounding.small
-                    Layout.preferredHeight: Appearance.rounding.verylarge + Appearance.rounding.small
+                    Layout.minimumHeight: Appearance.rounding.verylarge + Appearance.rounding.normal
+                    Layout.preferredHeight: Appearance.rounding.verylarge + Appearance.rounding.normal
                     toggleIcon: "dock_to_bottom"
                     label: Translation.tr("Show dock")
                     checked: Config.options.dock.enable
@@ -250,8 +312,8 @@ Item {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     Layout.preferredWidth: 0
-                    Layout.minimumHeight: Appearance.rounding.verylarge + Appearance.rounding.small
-                    Layout.preferredHeight: Appearance.rounding.verylarge + Appearance.rounding.small
+                    Layout.minimumHeight: Appearance.rounding.verylarge + Appearance.rounding.normal
+                    Layout.preferredHeight: Appearance.rounding.verylarge + Appearance.rounding.normal
                     toggleIcon: "search"
                     label: Translation.tr("Search suggestions")
                     checked: Config.options.search.suggestions.enable

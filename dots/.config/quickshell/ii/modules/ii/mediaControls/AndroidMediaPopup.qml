@@ -154,10 +154,10 @@ Item {
     }
 
     Timer {
-        running: root.playing
-        interval: Config.options.resources.updateInterval
+        running: root.playing && root.visible
+        interval: 1000
         repeat: true
-        onTriggered: root.player.positionChanged()
+        onTriggered: if (root.player) root.player.positionChanged()
     }
 
     function getBarAmplitude(index) {
@@ -220,49 +220,20 @@ Item {
                 }
             }
 
-                Item {
-                    id: vignetteMask
+            Item {
+                id: vignetteMask
+                anchors.fill: parent
+
+                RadialGradient {
                     anchors.fill: parent
-                    visible: true
-
-                    Rectangle {
-                        id: hMask
-                        anchors.fill: parent
-                        color: "transparent"
-                        gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
-                            GradientStop { position: 0.08; color: Qt.rgba(0, 0, 0, 0) }
-                            GradientStop { position: 0.2; color: Qt.rgba(0, 0, 0, 0.3) }
-                            GradientStop { position: 0.35; color: Qt.rgba(0, 0, 0, 0.7) }
-                            GradientStop { position: 0.45; color: Qt.rgba(0, 0, 0, 1) }
-                            GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 1) }
-                            GradientStop { position: 0.65; color: Qt.rgba(0, 0, 0, 0.7) }
-                            GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.3) }
-                            GradientStop { position: 0.92; color: Qt.rgba(0, 0, 0, 0) }
-                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
-                        }
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 1) }
+                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
                     }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        color: "transparent"
-                        gradient: Gradient {
-                            orientation: Gradient.Vertical
-                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
-                            GradientStop { position: 0.15; color: Qt.rgba(0, 0, 0, 0.3) }
-                            GradientStop { position: 0.35; color: Qt.rgba(0, 0, 0, 0.7) }
-                            GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 1) }
-                            GradientStop { position: 0.65; color: Qt.rgba(0, 0, 0, 0.7) }
-                            GradientStop { position: 0.85; color: Qt.rgba(0, 0, 0, 0.3) }
-                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
-                        }
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: hMask
-                        }
-                    }
+                    horizontalRadius: width * 0.65
+                    verticalRadius: height * 0.65
                 }
+            }
 
             Item {
                 anchors.fill: parent
@@ -644,6 +615,7 @@ Item {
                         active: root.player ? (root.player.canSeek ?? false) : false
                         sourceComponent: StyledSlider {
                             configuration: StyledSlider.Configuration.Wavy
+                            animateWave: root.playing && root.visible
                             highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                             trackColor: Qt.rgba(1, 1, 1, 0.2)
                             handleColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
@@ -663,6 +635,7 @@ Item {
                         active: root.player ? !(root.player.canSeek ?? false) : false
                         sourceComponent: StyledProgressBar {
                             wavy: root.player ? root.playing : false
+                            animateWave: root.playing && root.visible
                             highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                             trackColor: Qt.rgba(1, 1, 1, 0.2)
                             value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0

@@ -15,6 +15,43 @@ Singleton {
     readonly property int activeDeviceCount: Bluetooth.defaultAdapter?.devices.values.filter(device => device.connected).length ?? 0
     readonly property bool connected: Bluetooth.devices.values.some(d => d.connected)
 
+    // === Power control ===
+    // Writing the adapter's Powered property over D-Bus fails silently while the
+    // radio is rfkill soft-blocked (BlueZ reports PowerState "off-blocked"), so
+    // clear the killswitch first and only then power the adapter on.
+    function setEnabled(on: bool): void {
+        if (!Bluetooth.defaultAdapter) return;
+        if (!on) {
+            Bluetooth.defaultAdapter.enabled = false;
+            return;
+        }
+        unblockProcess.running = true;
+    }
+
+    function toggle(): void {
+        root.setEnabled(!root.enabled);
+    }
+
+    Process {
+        id: unblockProcess
+        command: ["rfkill", "unblock", "bluetooth"]
+        onExited: (exitCode, exitStatus) => {
+            if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = true;
+            // The kernel may still be settling the rfkill state, so power on again
+            // shortly after in case the first write landed too early.
+            powerOnRetry.restart();
+        }
+    }
+
+    Timer {
+        id: powerOnRetry
+        interval: 400
+        onTriggered: {
+            if (Bluetooth.defaultAdapter && !Bluetooth.defaultAdapter.enabled)
+                Bluetooth.defaultAdapter.enabled = true;
+        }
+    }
+
     // === Connection tracking ===
     signal deviceConnected(BluetoothDevice device)
     signal deviceDisconnected(BluetoothDevice device)

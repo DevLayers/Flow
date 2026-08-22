@@ -46,8 +46,9 @@ Singleton {
         const rw = Math.round(width);
         const rh = Math.round(height);
         const cropBase = `magick ${StringUtils.shellSingleQuoteEscape(screenshotPath)} ` + `-crop ${rw}x${rh}+${rx}+${ry} +repage`;
-        const cropToStdout = `${cropBase} -`;
-        const cropInPlace = `${cropBase} '${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`;
+        // Force PNG so clipboard/tesseract stay PNG even when grim writes ppm.
+        const cropToStdout = `${cropBase} png:-`;
+        const cropInPlace = `${cropBase} 'png:${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`;
         const cleanup = (Config.options.regionSelector.enableOverlay ?? true) ? ":" : `rm '${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`;
         const slurpRegion = `${rx},${ry} ${rw}x${rh}`;
         const uploadAndGetUrl = filePath => {

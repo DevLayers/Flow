@@ -15,7 +15,6 @@ StyledPopup {
     id: root
     popupRadius: Appearance.rounding.large
     stickyHover: true
-    animateHeight: false
 
     readonly property int graphPointCount: 13
     property list<real> cpuGraphHistory: []

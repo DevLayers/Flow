@@ -15,18 +15,31 @@ Item {
     property alias contentY: page.contentY
     // ── Active sub-page URL ("" = none) ───────────────────────────────────
     property alias activeSubPage: subPageOverlay.activeSubPage
-    property int loadStage: 0
 
-    function advanceStage(nextStage) {
-        if (barConfigRoot.loadStage >= nextStage)
-            return;
-        Qt.callLater(() => {
-            if (barConfigRoot.loadStage < nextStage)
-                barConfigRoot.loadStage = nextStage;
-        });
+    property string autoSwitchNoticeMessage: ""
+
+    // A lazy section reserves estimatedHeight until it exists, so a wrong
+    // estimate shoves everything below it the moment it loads. The layout
+    // section grows with the number of configured widgets, so its reservation
+    // has to grow with them too: each row is entryHeight (48) + listSpacing (4),
+    // on top of the three headers, combo rows and margins.
+    readonly property int barWidgetCount: (Config.options.bar.layouts.left?.length ?? 0)
+        + (Config.options.bar.layouts.center?.length ?? 0)
+        + (Config.options.bar.layouts.right?.length ?? 0)
+
+    Timer {
+        id: autoSwitchNoticeTimer
+        interval: 6000
+        repeat: false
+        onTriggered: {
+            barConfigRoot.autoSwitchNoticeMessage = "";
+        }
     }
 
-    Component.onCompleted: Qt.callLater(() => barConfigRoot.loadStage = 1)
+    function triggerAutoSwitchNotice(msg: string) {
+        autoSwitchNoticeMessage = msg;
+        autoSwitchNoticeTimer.restart();
+    }
 
     function openWidgetPage(componentId) {
         page.openWidgetPage(componentId);
@@ -81,6 +94,9 @@ Item {
 
                     currentValue: Config.options.sidebar.sidebarStyle
                     onSelected: (newValue) => {
+                        if (newValue === "connect" && Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) {
+                            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island at top/bottom is incompatible with Connect mode. Bar corner style was automatically set to Hug."));
+                        }
                         ShellModePolicy.setMode(newValue);
                     }
                     options: {
@@ -100,6 +116,13 @@ Item {
                     }
                 }
 
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: barConfigRoot.autoSwitchNoticeMessage.length > 0
+                materialIcon: "info"
+                text: barConfigRoot.autoSwitchNoticeMessage
             }
 
             NoticeBox {
@@ -146,8 +169,11 @@ Item {
                 ConfigSelectionArray {
                     currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
                     onSelected: (newValue) => {
-                        Config.options.bar.bottom = (newValue & 1) !== 0;
-                        Config.options.bar.vertical = (newValue & 2) !== 0;
+                        const isVertical = (newValue & 2) !== 0;
+                        if (!isVertical && Config.options.bar.cornerStyle === 3 && Config.options.sidebar.sidebarStyle === "connect") {
+                            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island is only supported in vertical orientation in Connect mode. Shell mode was automatically switched to Default."));
+                        }
+                        ShellModePolicy.setBarPosition(newValue);
                     }
                     options: {
                         const locked = ShellModePolicy.barPositionLocked;
@@ -221,6 +247,10 @@ Item {
 
                     currentValue: Config.options.bar.cornerStyle
                     onSelected: (newValue) => {
+                        if (newValue === 3 && !Config.options.bar.vertical && Config.options.sidebar.sidebarStyle === "connect") {
+                            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island at top/bottom cannot be used in Connect mode. Shell mode was automatically switched to Default."));
+                            Config.options.sidebar.sidebarStyle = "default";
+                        }
                         Config.options.bar.cornerStyle = newValue;
                     }
                     options: {
@@ -247,6 +277,19 @@ Item {
                         }
                         return opts;
                     }
+                }
+            }
+
+            ConfigSwitch {
+                visible: Config.options.bar.cornerStyle === 1
+                buttonIcon: "shadow"
+                text: Translation.tr("Show shadow in Float style")
+                checked: Config.options.bar.floatStyleShadow ?? true
+                onCheckedChanged: {
+                    Config.options.bar.floatStyleShadow = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows a subtle drop shadow behind the bar when floating.")
                 }
             }
 
@@ -424,14 +467,23 @@ Item {
             ConfigSwitch {
                 buttonIcon: "filter_drama"
                 text: Translation.tr("Bar drop-shadow")
-                checked: Config.options.bar.dropShadow
+                enabled: !ShellModePolicy.barDropShadowBlocked
+                checked: Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
                 onCheckedChanged: {
-                    Config.options.bar.dropShadow = checked;
+                    if (!ShellModePolicy.barDropShadowBlocked)
+                        Config.options.bar.dropShadow = checked;
                 }
 
                 StyledToolTip {
                     text: Translation.tr("Shows a soft drop shadow underneath the status bar")
                 }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: ShellModePolicy.barDropShadowBlocked
+                materialIcon: "lock"
+                text: Translation.tr("Bar drop-shadow is disabled while Connect mode and transparency are both active to keep the bar color consistent with Sidebar Policies.")
             }
 
             ContentSubsection {
@@ -524,70 +576,206 @@ Item {
                 }
             }
 
-            ContentSubsectionLabel {
-                text: Translation.tr("Top Left Brand Icon")
-                Layout.topMargin: 4
-            }
+            ContentSubsection {
+                id: brandIconAccordion
+                title: Translation.tr("Top-left brand icon")
+                icon: "brand_family"
+                collapsible: true
+                expanded: false
+                Layout.fillWidth: true
 
-            ConfigSwitch {
-                buttonIcon: "text_fields"
-                text: Translation.tr("Use Material Symbol for top-left icon")
-                checked: Config.options.bar.useMaterialSymbolForTopLeftIcon
-                onCheckedChanged: {
-                    Config.options.bar.useMaterialSymbolForTopLeftIcon = checked;
-                }
-            }
+                headerExtra: Component {
+                    RowLayout {
+                        spacing: 6
 
-            ConfigTextField {
-                id: topLeftIconField
+                        CustomIcon {
+                            visible: !Config.options.bar.useMaterialSymbolForTopLeftIcon
+                            width: 18
+                            height: 18
+                            source: {
+                                const icon = Config.options.bar.topLeftIcon;
+                                if (icon === 'distro') return SystemInfo.distroIcon;
+                                if (icon === 'docker') return 'docker.svg';
+                                if (icon.endsWith('.svg') || icon.endsWith('.png')) return icon;
+                                return `${icon}-symbolic`;
+                            }
+                            colorize: true
+                            color: Appearance.colors.colOnLayer2
+                        }
 
-                text: Translation.tr("Top-left icon identifier")
-                icon: "image"
-                tooltip: Translation.tr("If not using Material Symbol, enter a preset SVG name (e.g. arch, fedora) or a Material Symbol name if the switch above is on.")
-                placeholderText: Translation.tr("Identifier...")
-                Component.onCompleted: {
-                    inputText = Config.options.bar.topLeftIcon;
-                }
-                textField.onTextChanged: {
-                    var val = textField.text.trim();
-                    if (val !== "" && textField.activeFocus)
-                        Config.options.bar.topLeftIcon = val;
-                }
-
-                Connections {
-                    function onTopLeftIconChanged() {
-                        topLeftIconField.textField.text = Config.options.bar.topLeftIcon;
+                        MaterialSymbol {
+                            visible: Config.options.bar.useMaterialSymbolForTopLeftIcon
+                            text: Config.options.bar.topLeftIcon
+                            iconSize: 18
+                            fill: 1
+                            color: Appearance.colors.colOnLayer2
+                        }
                     }
+                }
 
-                    target: Config.options.bar
+                Loader {
+                    id: brandIconContentLoader
+                    active: brandIconAccordion.expanded
+                    visible: active
+                    Layout.fillWidth: true
+
+                    sourceComponent: ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        ContentSubsection {
+                            title: Translation.tr("Preset icons")
+                            icon: "image"
+                            Layout.fillWidth: true
+
+                            ConfigSelectionArray {
+                                enabled: !Config.options.bar.useMaterialSymbolForTopLeftIcon
+                                opacity: enabled ? 1.0 : 0.4
+                                currentValue: Config.options.bar.useMaterialSymbolForTopLeftIcon ? "" : Config.options.bar.topLeftIcon
+                                onSelected: (newValue) => {
+                                    Config.options.bar.topLeftIcon = newValue;
+                                }
+                                options: [
+                                    { "displayName": Translation.tr("Distro"), "symbol": SystemInfo.distroIcon, "value": "distro" },
+                                    { "displayName": "Arch", "symbol": "arch-symbolic", "value": "arch" },
+                                    { "displayName": "CachyOS", "symbol": "cachyos-symbolic", "value": "cachyos" },
+                                    { "displayName": "EndeavourOS", "symbol": "endeavouros-symbolic", "value": "endeavouros" },
+                                    { "displayName": "Fedora", "symbol": "fedora-symbolic", "value": "fedora" },
+                                    { "displayName": "Red Hat", "symbol": "redhat-symbolic", "value": "redhat" },
+                                    { "displayName": "Debian", "symbol": "debian-symbolic", "value": "debian" },
+                                    { "displayName": "Ubuntu", "symbol": "ubuntu-symbolic", "value": "ubuntu" },
+                                    { "displayName": "Mint", "symbol": "mint-symbolic", "value": "mint" },
+                                    { "displayName": "Pop!_OS", "symbol": "popos-symbolic", "value": "popos" },
+                                    { "displayName": "Manjaro", "symbol": "manjaro-symbolic", "value": "manjaro" },
+                                    { "displayName": "NixOS", "symbol": "nixos-symbolic", "value": "nixos" },
+                                    { "displayName": "openSUSE", "symbol": "opensuse-symbolic", "value": "opensuse" },
+                                    { "displayName": "Gentoo", "symbol": "gentoo-symbolic", "value": "gentoo" },
+                                    { "displayName": "Void", "symbol": "void-symbolic", "value": "void" },
+                                    { "displayName": "Alpine", "symbol": "alpine-symbolic", "value": "alpine" },
+                                    { "displayName": "Kali", "symbol": "kali-symbolic", "value": "kali" },
+                                    { "displayName": "FreeBSD", "symbol": "freebsd-symbolic", "value": "freebsd" },
+                                    { "displayName": "SteamOS", "symbol": "steamos-symbolic", "value": "steamos" },
+                                    { "displayName": "Linux", "symbol": "linux-symbolic", "value": "linux" },
+                                    { "displayName": "Android", "symbol": "android-symbolic", "value": "android" },
+                                    { "displayName": "Apple", "symbol": "apple-symbolic", "value": "apple" },
+                                    { "displayName": "Windows", "symbol": "microsoft-symbolic", "value": "microsoft" },
+                                    { "displayName": "Spark", "symbol": "spark-symbolic", "value": "spark" },
+                                    { "displayName": "Nyarch", "symbol": "nyarch-symbolic", "value": "nyarch" },
+                                    { "displayName": "Docker", "symbol": "docker.svg", "value": "docker" },
+                                    { "displayName": "Flatpak", "symbol": "flatpak-symbolic", "value": "flatpak" },
+                                    { "displayName": "GitHub", "symbol": "github-symbolic", "value": "github" },
+                                    { "displayName": "Desktop", "symbol": "desktop-symbolic", "value": "desktop" },
+                                    { "displayName": "Crosshair", "symbol": "crosshair-symbolic", "value": "crosshair" },
+                                    { "displayName": "Cloudflare", "symbol": "cloudflare-dns-symbolic", "value": "cloudflare-dns" },
+                                    { "displayName": "Gemini", "symbol": "google-gemini-symbolic", "value": "google-gemini" },
+                                    { "displayName": "DeepSeek", "symbol": "deepseek-symbolic", "value": "deepseek" },
+                                    { "displayName": "OpenAI", "symbol": "openai-symbolic", "value": "openai" },
+                                    { "displayName": "Mistral", "symbol": "mistral-symbolic", "value": "mistral" },
+                                    { "displayName": "Ollama", "symbol": "ollama-symbolic", "value": "ollama" },
+                                    { "displayName": "OpenRouter", "symbol": "openrouter-symbolic", "value": "openrouter" }
+                                ]
+                            }
+                        }
+
+                        ConfigSwitch {
+                            buttonIcon: "text_fields"
+                            text: Translation.tr("Use Material Symbol for top-left icon")
+                            checked: Config.options.bar.useMaterialSymbolForTopLeftIcon
+                            onCheckedChanged: {
+                                Config.options.bar.useMaterialSymbolForTopLeftIcon = checked;
+                            }
+                        }
+
+                        NoticeBox {
+                            visible: Config.options.bar.useMaterialSymbolForTopLeftIcon
+                            Layout.fillWidth: true
+                            materialIcon: "info"
+                            text: Translation.tr("Browse thousands of Google Material Symbols to customize your top-left bar icon.")
+
+                            RippleButton {
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Appearance.colors.colTertiary
+                                colBackgroundHover: Appearance.colors.colTertiaryHover
+                                colRipple: Appearance.colors.colTertiaryActive
+                                implicitHeight: 32
+                                implicitWidth: linkRow.implicitWidth + 20
+                                onClicked: Quickshell.execDetached(["xdg-open", "https://fonts.google.com/icons"])
+
+                                RowLayout {
+                                    id: linkRow
+                                    anchors.centerIn: parent
+                                    spacing: 6
+
+                                    StyledText {
+                                        text: Translation.tr("Open Icons Page")
+                                        color: Appearance.colors.colOnTertiary
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        font.bold: true
+                                    }
+
+                                    MaterialSymbol {
+                                        text: "open_in_new"
+                                        iconSize: 14
+                                        color: Appearance.colors.colOnTertiary
+                                    }
+                                }
+                            }
+                        }
+
+                        ConfigTextField {
+                            id: topLeftIconField
+                            visible: Config.options.bar.useMaterialSymbolForTopLeftIcon
+                            text: Translation.tr("Material Symbol name")
+                            icon: "search"
+                            tooltip: Translation.tr("Type any Google Material Symbol identifier (e.g. spark, terminal, favorite, home).")
+                            placeholderText: Translation.tr("e.g. spark, terminal, favorite...")
+                            Component.onCompleted: {
+                                inputText = Config.options.bar.topLeftIcon;
+                            }
+                            textField.onTextChanged: {
+                                var val = textField.text.trim();
+                                if (val !== "" && textField.activeFocus)
+                                    Config.options.bar.topLeftIcon = val;
+                            }
+
+                            Connections {
+                                function onTopLeftIconChanged() {
+                                    topLeftIconField.textField.text = Config.options.bar.topLeftIcon;
+                                }
+
+                                target: Config.options.bar
+                            }
+                        }
+                    }
                 }
             }
         }
 
         ProgressiveSectionLoader {
+            id: layoutSectionLoader
             source: Qt.resolvedUrl("sections/BarLayoutSection.qml")
-            active: barConfigRoot.loadStage >= 1
-            estimatedHeight: 620
+            active: false
+            estimatedHeight: 437 + 52 * barConfigRoot.barWidgetCount
             sectionTitle: Translation.tr("Layout")
             prioritizeOnViewport: true
             prioritizeOnSearch: true
-            onLoaded: barConfigRoot.advanceStage(2)
         }
 
         ProgressiveSectionLoader {
+            id: behaviorSectionLoader
             source: Qt.resolvedUrl("sections/BarBehaviorSection.qml")
-            active: barConfigRoot.loadStage >= 2
-            estimatedHeight: 270
+            active: false
+            estimatedHeight: 284
             sectionTitle: Translation.tr("Behavior")
             prioritizeOnViewport: true
             prioritizeOnSearch: true
-            onLoaded: barConfigRoot.advanceStage(3)
         }
 
         ProgressiveSectionLoader {
+            id: monitorsSectionLoader
             source: Qt.resolvedUrl("sections/BarMonitorsSection.qml")
-            active: barConfigRoot.loadStage >= 3
-            estimatedHeight: 210
+            active: false
+            estimatedHeight: 122
             sectionTitle: Translation.tr("Monitors")
             prioritizeOnViewport: true
             prioritizeOnSearch: true

@@ -16,6 +16,7 @@ Singleton {
     id: root
     // You can read these
     property list<string> layoutCodes: []
+    property list<string> layoutVariants: []
     property var cachedLayoutCodes: ({})
     property string currentLayoutName: ""
     property string currentLayoutCode: ""
@@ -84,10 +85,24 @@ Singleton {
         stdout: StdioCollector {
             id: devicesCollector
             onStreamFinished: {
-                const parsedOutput = JSON.parse(devicesCollector.text);
-                const hyprlandKeyboard = parsedOutput["keyboards"].find(kb => kb.main === true);
-                root.layoutCodes = hyprlandKeyboard["layout"].split(",");
-                root.currentLayoutName = hyprlandKeyboard["active_keymap"];
+                let parsedOutput;
+                try {
+                    parsedOutput = JSON.parse(devicesCollector.text);
+                } catch (error) {
+                    console.warn("[HyprlandXkb] Could not parse Hyprland devices:", error);
+                    return;
+                }
+
+                const hyprlandKeyboard = (parsedOutput["keyboards"] ?? [])
+                    .find(kb => kb.main === true);
+                if (!hyprlandKeyboard)
+                    return;
+
+                const layoutValue = String(hyprlandKeyboard["layout"] ?? "");
+                const variantValue = String(hyprlandKeyboard["variant"] ?? "");
+                root.layoutCodes = layoutValue.length > 0 ? layoutValue.split(",") : [];
+                root.layoutVariants = variantValue.length > 0 ? variantValue.split(",") : [];
+                root.currentLayoutName = String(hyprlandKeyboard["active_keymap"] ?? "");
                 // console.log("[HyprlandXkb] Fetched | Layouts (multiple: " + (root.layoutCodes.length > 1) + "): "
                 //     + root.layoutCodes.join(", ") + " | Active: " + root.currentLayoutName);
             }

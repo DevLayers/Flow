@@ -13,6 +13,12 @@ Flickable {
     // Accumulated scroll destination so wheel deltas stack while animating
     property real scrollTargetY: 0
 
+    // The Behavior below must smooth wheel jumps only. Left unguarded it also
+    // intercepts the contentY that Flickable writes on every drag and flick
+    // frame, which fights its own physics and makes long pages feel like they
+    // stutter under the cursor.
+    property bool _wheelScrolling: false
+
     ScrollBar.vertical: StyledScrollBar {}
 
     MouseArea {
@@ -30,17 +36,27 @@ Flickable {
             var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
 
             root.scrollTargetY = targetY;
+            root._wheelScrolling = true;
             root.contentY = targetY;
             wheelEvent.accepted = true;
         }
     }
 
     Behavior on contentY {
+        enabled: root._wheelScrolling && !root.dragging && !root.flicking
         NumberAnimation {
             id: scrollAnim
             duration: Appearance.animation.scroll.duration
             easing.type: Appearance.animation.scroll.type
             easing.bezierCurve: Appearance.animation.scroll.bezierCurve
+            onStopped: root._wheelScrolling = false
+        }
+    }
+
+    onDraggingChanged: {
+        if (root.dragging) {
+            scrollAnim.stop();
+            root._wheelScrolling = false;
         }
     }
 

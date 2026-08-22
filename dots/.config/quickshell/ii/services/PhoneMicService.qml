@@ -276,7 +276,8 @@ Singleton {
         if (root.running && !alive) {
             micWatchdogTimer.stop()
             if (!root._userStopped) {
-                root._reportMicError("Microphone connection lost — the audio process exited. Check the phone (DroidCam/scrcpy) and reconnection.")
+                root._reportLaunchFailure("Microphone connection lost — the audio process exited. "
+                    + "Check the phone (DroidCam/scrcpy) and reconnection.")
             } else {
                 root.running = false
                 root.connecting = false
@@ -502,16 +503,12 @@ Singleton {
         interval: 10000
         repeat: false
         onTriggered: {
-            if (root.connecting && !root.running) {
-                root.connecting = false
-                root.lastError = "Could not connect within 10s — verify the phone is reachable and the DroidCam/scrcpy app is open"
-                root.errorOccurred(root.lastError)
-                root.stateChanged()
-                micEvidenceRetryTimer.stop()
-                micSessionStopProc.running = false
-                micSessionStopProc.running = true
-                teardownProc.running = true
-            }
+            if (!root.connecting || root.running) return
+            if (root._retryScrcpyMic()) return
+            micEvidenceRetryTimer.stop()
+            root._reportLaunchFailure(
+                "Could not connect within 10s — verify the phone is reachable "
+                + "and the DroidCam/scrcpy app is open")
         }
     }
 
@@ -571,6 +568,11 @@ Singleton {
         root.connecting = true
         root.lastError = ""
         root._userStopped = false
+        root._scrcpyAttempts = 0
+        root._audioHijacked = false
+        root._hijackSink = ""
+        root._lastScrcpyError = ""
+        root._pendingFailureFallback = ""
         root.stateChanged()
 
         const conf = Config.options.phone.microphone
@@ -721,35 +723,31 @@ Singleton {
                     "pactl set-default-sink DroidCam-Mic 2>/dev/null || true"])
                 // Now launch scrcpy (no PULSE_SINK env needed — the default
                 // sink swap handles the routing).
+                // The restore timer is armed inside the launch, not here:
+                // resolving the ADB target is asynchronous, and starting the
+                // 3s countdown before scrcpy is even spawned could restore
+                // the default sink out from under it.
                 root._launchScrcpyMicInner()
-                // Schedule restoration after 3s — enough time for scrcpy's
-                // SDL2 to create the sink-input on DroidCam-Mic.
-                restoreDefaultSinkTimer.restart()
             }
         }
     }
 
     /** Inner scrcpy launch — called by defaultSinkSwapProc after the swap. */
     function _launchScrcpyMicInner(): void {
+        // Resolve the ADB target on demand — the phone's wireless-debugging
+        // port changes on every toggle/reboot, and a stale one leaves scrcpy
+        // with no device and the mic silently dead.
+        KdeConnectService.withAdbTarget(targetArgs => root._launchScrcpyMicWithTarget(targetArgs))
+    }
+
+    function _launchScrcpyMicWithTarget(targetArgs): void {
         // --no-video      : don't capture video (audio only)
         // --no-window     : don't open an SDL window
         // --audio-source=mic : capture the phone's microphone
         // --audio-buffer=50  : low latency (50ms)
         const args = ["scrcpy", "--no-video", "--no-window",
                       "--audio-source=mic", "--audio-buffer=50"]
-
-        // Wireless ADB if configured in the scrcpy settings page.
-        const scrcpyConf = Config.options.phone ? Config.options.phone.scrcpy : null
-        const useWireless = scrcpyConf ? scrcpyConf.useWireless : false
-        const wirelessIp = scrcpyConf ? (scrcpyConf.wirelessIp || "") : ""
-        const wirelessPort = scrcpyConf ? (scrcpyConf.wirelessPort || "5555") : "5555"
-
-        if (useWireless && wirelessIp.length > 0) {
-            const host = wirelessIp + ":" + wirelessPort
-            Quickshell.execDetached(["bash", "-c",
-                "adb connect " + root._shellQuote(host) + " >/dev/null 2>&1"])
-            args.push("--serial=" + root._shellQuote(host))
-        }
+            .concat(targetArgs || [])
 
         root.activeIp = "(scrcpy)"
         root.activePort = 0
@@ -760,6 +758,9 @@ Singleton {
         micLaunchProc.command = ["bash", root._sessionScript, "launch", "scrcpy-mic"].concat(args)
         micLaunchProc.running = true
 
+        // Restore the user's default sink as soon as scrcpy's stream shows up.
+        root._armSinkRestore()
+
         // Backup: after 2s, also try to move any stray scrcpy sink-input
         // onto DroidCam-Mic (in case the default sink swap failed and the
         // sink-input landed on the speakers). This is the routeMicProc.
@@ -769,17 +770,50 @@ Singleton {
         failTimer.restart()
     }
 
+    /**
+     * Watches for scrcpy's audio stream and restores the user's default sink
+     * the moment it appears.
+     *
+     * The swap only has to outlive the stream's creation — every millisecond
+     * past that is dead air on the user's speakers. A blind 3 s wait made
+     * every launch, successful or not, mute the desktop for three seconds.
+     * The 3 s is now only a ceiling for when the stream never shows up.
+     */
     Timer {
         id: restoreDefaultSinkTimer
-        interval: 3000
-        repeat: false
+        property int elapsedMs: 0
+        interval: 250
+        repeat: true
         onTriggered: {
-            if (root._originalDefaultSink.length > 0) {
-                Quickshell.execDetached(["bash", "-c",
-                    "pactl set-default-sink " + root._originalDefaultSink +
-                    " 2>/dev/null || true"])
-                root._originalDefaultSink = ""
-                root._clearOriginalSink()
+            restoreDefaultSinkTimer.elapsedMs += restoreDefaultSinkTimer.interval
+            if (restoreDefaultSinkTimer.elapsedMs >= 3000) {
+                restoreDefaultSinkTimer.stop()
+                root._restoreDefaultSink()
+                return
+            }
+            sinkInputProbeProc.running = false
+            sinkInputProbeProc.running = true
+        }
+    }
+
+    function _armSinkRestore(): void {
+        restoreDefaultSinkTimer.elapsedMs = 0
+        restoreDefaultSinkTimer.restart()
+    }
+
+    /** Presence check only: once scrcpy has a stream, the swap has done its
+     *  job and the user's sink can go back. Where the stream landed is not
+     *  judged here — routeMicProc still has 2 s to move it. */
+    Process {
+        id: sinkInputProbeProc
+        running: false
+        command: ["bash", "-c",
+            "pactl list sink-inputs 2>/dev/null | grep -qi scrcpy && echo PRESENT || true"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (String(this.text).indexOf("PRESENT") < 0) return
+                restoreDefaultSinkTimer.stop()
+                root._restoreDefaultSink()
             }
         }
     }
@@ -788,6 +822,125 @@ Singleton {
     // Persisted so a shell reload mid-launch can recover the user's real
     // default sink instead of leaving DroidCam-Mic as default forever.
     property string _originalDefaultSink: Persistent.states.phoneMic.originalDefaultSink
+
+    // How many times scrcpy has been spawned for the current startMic().
+    property int _scrcpyAttempts: 0
+    // Set when scrcpy's stream was found on a sink that isn't DroidCam-Mic,
+    // which means another audio processor grabbed it before we could.
+    property bool _audioHijacked: false
+    property string _hijackSink: ""
+    // Last ERROR/WARN line scrcpy wrote, so failures name a cause.
+    property string _lastScrcpyError: ""
+    // Non-empty while a failure report is waiting on the log read.
+    property string _pendingFailureFallback: ""
+
+    /** Puts the user's default sink back, if we swapped it. */
+    function _restoreDefaultSink(): void {
+        if (root._originalDefaultSink.length === 0) return
+        Quickshell.execDetached(["bash", "-c",
+            "pactl set-default-sink " + root._originalDefaultSink + " 2>/dev/null || true"])
+        root._originalDefaultSink = ""
+        root._clearOriginalSink()
+    }
+
+    /** Turns a failure into something the user can act on. The generic
+     *  fallback is the last resort — it used to be the only message, which
+     *  pointed at DroidCam even when scrcpy was the backend. */
+    function _micFailureMessage(fallback: string): string {
+        if (root._audioHijacked) {
+            return "Phone mic audio was captured by another audio processor"
+                + (root._hijackSink.length > 0 ? " (" + root._hijackSink + ")" : "")
+                + " instead of the DroidCam-Mic sink.\n\n"
+                + "Exclude \"scrcpy\" in that app's settings (EasyEffects: Preferences → "
+                + "Excluded apps) and try again."
+        }
+        if (root._lastScrcpyError.length > 0)
+            return "Phone microphone failed — " + root._lastScrcpyError
+        return fallback
+    }
+
+    /** Reads scrcpy's log first so the error names a cause, then reports. */
+    function _reportLaunchFailure(fallback: string): void {
+        root._pendingFailureFallback = fallback
+        scrcpyLogProc.running = false
+        scrcpyLogProc.running = true
+    }
+
+    /**
+     * Relaunches scrcpy once with a freshly resolved ADB target.
+     *
+     * Android re-rolls the wireless-debugging port constantly (observed:
+     * five different ports in one session), so it can change in the window
+     * between resolving the target and scrcpy reaching the device — which
+     * kills the launch outright with "Could not find ADB device" or an
+     * `adb push` that dies mid-transfer. Returns true when a retry started.
+     */
+    function _retryScrcpyMic(): bool {
+        if (root._backend !== "scrcpy") return false
+        if (root._userStopped) return false
+        // Two retries, not one: a cold wireless ADB transport fails the
+        // first launch often enough that a single retry still leaves a
+        // visible failure rate.
+        if (root._scrcpyAttempts >= 2) return false
+        root._scrcpyAttempts++
+
+        // No stop here: the process being retried is already dead, the
+        // launcher overwrites its stale state file, and a concurrent stop
+        // scan would race the replacement and kill it.
+        failTimer.restart()
+
+        // A non-empty _originalDefaultSink means the swap is still in
+        // effect, so re-capturing it would record DroidCam-Mic as the
+        // user's "real" sink and strand them on a null-sink.
+        if (root._originalDefaultSink.length > 0) root._launchScrcpyMicInner()
+        else root._launchScrcpyMic()
+        return true
+    }
+
+    /**
+     * Gathers everything needed to explain a failure: the last error scrcpy
+     * logged, and which sink its stream ended up on. A stream sitting on a
+     * sink other than DroidCam-Mic this late means another audio processor
+     * claimed it and moved it back after routeMicProc tried — EasyEffects
+     * does exactly that to every new output stream unless scrcpy is in its
+     * excluded-apps list, and no default-sink juggling can beat it.
+     */
+    Process {
+        id: scrcpyLogProc
+        running: false
+        command: ["bash", "-c",
+            "L=\"${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/ii/phone/scrcpy-mic.log\"; " +
+            "[ -f \"$L\" ] && echo \"ERR:$(grep -aE '^(ERROR|WARN):' \"$L\" | tail -n1 | sed 's/^[A-Z]*: *//')\"; " +
+            "D=$(pactl list short sinks 2>/dev/null | awk '$2==\"DroidCam-Mic\"{print $1}'); " +
+            "S=$(pactl list sink-inputs 2>/dev/null | awk '" +
+            "  /^Sink Input #/ { if (m) { print s; exit } m=0; s=\"\" }" +
+            "  /^[ \\t]*Sink:/ { s=$2 }" +
+            "  /scrcpy/ { m=1 }" +
+            "  END { if (m) print s }'); " +
+            "if [ -n \"$S\" ] && [ \"$S\" != \"$D\" ]; then " +
+            "  echo \"HIJACK:$(pactl list short sinks 2>/dev/null | awk -v i=\"$S\" '$1==i{print $2}')\"; " +
+            "fi; true"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = String(this.text).split("\n")
+                root._lastScrcpyError = ""
+                root._audioHijacked = false
+                root._hijackSink = ""
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim()
+                    if (line.startsWith("ERR:")) root._lastScrcpyError = line.substring(4).trim()
+                    else if (line.startsWith("HIJACK:")) {
+                        root._audioHijacked = true
+                        root._hijackSink = line.substring(7).trim()
+                    }
+                }
+                if (root._pendingFailureFallback.length === 0) return
+                const fallback = root._pendingFailureFallback
+                root._pendingFailureFallback = ""
+                root._reportMicError(root._micFailureMessage(fallback))
+            }
+        }
+    }
 
     /** Helper — reports an error and cleans up mic state. */
     function _reportMicError(message): void {
@@ -806,14 +959,7 @@ Singleton {
         restoreDefaultSinkTimer.stop()
         micWatchdogTimer.stop()
         micEvidenceRetryTimer.stop()
-        // Restore the original default sink if swapped.
-        if (root._originalDefaultSink.length > 0) {
-            Quickshell.execDetached(["bash", "-c",
-                "pactl set-default-sink " + root._originalDefaultSink +
-                " 2>/dev/null || true"])
-            root._originalDefaultSink = ""
-            root._clearOriginalSink()
-        }
+        root._restoreDefaultSink()
         // Kill any detached session still alive.
         micSessionStopProc.running = false
         micSessionStopProc.running = true
@@ -833,7 +979,14 @@ Singleton {
     Process {
         id: routeMicProc
         running: false
+        // Re-running the (idempotent) setup first heals two failure modes:
+        // a teardown from the previous stop cycle racing this start and
+        // deleting the null-sink after setup reused it, and PipeWire's
+        // stream-restore pinning scrcpy's stream to a remembered sink —
+        // only an explicit move both overrides and re-learns the target,
+        // and the move silently no-ops when the sink is missing.
         command: ["bash", "-c",
+            "bash " + root._setupScriptPath + " >/dev/null 2>&1; " +
             // Parse `pactl list sink-inputs` to find sink-input IDs whose
             // properties contain "scrcpy" (application.name, media.name,
             // application.process.binary, etc). For each matching ID, move
@@ -847,9 +1000,16 @@ Singleton {
             "  /scrcpy/ { prev_matched = 1 }" +
             "  END { if (prev_matched) print prev_id }" +
             "' | while read id; do" +
-            "  pactl move-sink-input \"$id\" DroidCam-Mic 2>/dev/null" +
+            "  pactl move-sink-input \"$id\" DroidCam-Mic 2>/dev/null; " +
             "done"
         ]
+        onExited: (code, status) => {
+            // Check the evidence right after the repair, so a successful
+            // move is noticed immediately instead of on the next timer.
+            if (!root.connecting) return
+            micEvidenceProc.running = false
+            micEvidenceProc.running = true
+        }
     }
 
     Timer {
@@ -930,14 +1090,10 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: {
                 const pid = parseInt(String(this.text).trim()) || 0
-                if (pid <= 0 && root.connecting) {
-                    root.connecting = false
-                    failTimer.stop()
-                    root.lastError = "Failed to launch the phone microphone process — check the session log"
-                    root.errorOccurred(root.lastError)
-                    root.stateChanged()
-                    return
-                }
+                // No PID is not the same as no session: the launcher can lose
+                // track of a process that started perfectly well. Whether the
+                // mic works is settled by the stream evidence check, so record
+                // what came back and let that verdict stand on its own.
                 root.sessionPid = pid
                 root.sessionStartedAt = Date.now() / 1000 | 0
                 root.stateChanged()
@@ -972,14 +1128,11 @@ Singleton {
                     } else if (procAlive) {
                         // Process alive but no sink-input yet — retry once.
                         micEvidenceRetryTimer.restart()
-                    } else {
-                        root.connecting = false
+                    } else if (!root._retryScrcpyMic()) {
                         failTimer.stop()
-                        root.lastError = root.lastError || "Phone microphone process exited — check USB/Wi-Fi connection and the DroidCam app"
-                        root.errorOccurred(root.lastError)
-                        root.stateChanged()
-                        teardownProc.running = true
-                        root.pulseSource = ""
+                        root._reportLaunchFailure(
+                            "Phone microphone process exited — check the phone connection "
+                            + "and that Wireless debugging / DroidCam is still on")
                     }
                 }
             }
@@ -992,8 +1145,10 @@ Singleton {
         repeat: false
         onTriggered: {
             if (root.connecting) {
-                micEvidenceProc.running = false
-                micEvidenceProc.running = true
+                // Repair the routing before re-checking it, not just look
+                // again at a stream that nothing has moved in the meantime.
+                routeMicProc.running = false
+                routeMicProc.running = true
             }
         }
     }
@@ -1053,10 +1208,17 @@ Singleton {
         property string _target: "audio"
         command: ["bash", root._sessionScript, "stop", "audio"]
         onExited: (code, status) => {
-            // Also stop the scrcpy-mic session if it existed.
+            // Chain to the scrcpy-mic session exactly once, then reset for
+            // the next caller. Re-arming unconditionally here turns one stop
+            // into a permanent stop loop that kills every new scrcpy within
+            // milliseconds of launch.
+            if (micSessionStopProc._target === "scrcpy-mic") {
+                micSessionStopProc._target = "audio"
+                micSessionStopProc.command = ["bash", root._sessionScript, "stop", "audio"]
+                return
+            }
             micSessionStopProc._target = "scrcpy-mic"
             micSessionStopProc.command = ["bash", root._sessionScript, "stop", "scrcpy-mic"]
-            micSessionStopProc.running = false
             micSessionStopProc.running = true
         }
     }

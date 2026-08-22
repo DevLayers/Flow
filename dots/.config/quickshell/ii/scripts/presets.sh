@@ -5,6 +5,22 @@ CONFIG_FILE="$HOME/.config/illogical-impulse/config.json"
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$PRESETS_DIR"
 
+notify_export() {
+    local urgency="$1"
+    local title="$2"
+    local body="$3"
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -a "II Presets" -u "$urgency" "$title" "$body" >/dev/null 2>&1 &
+    fi
+}
+
+fail_export() {
+    local message="$1"
+    printf '[presets.sh] Export failed: %s\n' "$message" >&2
+    notify_export critical "Preset export failed" "$message"
+    exit 1
+}
+
 action=$1
 name=$2
 
@@ -44,9 +60,9 @@ case $action in
             
             # Read colorEngine from the newly expanded config.json to run the correct script
             color_engine=$(jq -r '.appearance.colorEngine // "vynx"' "$CONFIG_FILE" 2>/dev/null)
-            switch_script="switchwall_vynx.sh"
+            switch_script="switchwall.sh"
             if [[ "$color_engine" == "fork" ]]; then
-                switch_script="switchwall.sh"
+                switch_script="switchwall_vynx.sh"
             fi
             
             # Apply wallpaper and colors from the newly loaded config
@@ -67,8 +83,16 @@ case $action in
         python3 "$SCRIPTS_DIR/presets_helper.py" list "$PRESETS_DIR"
         ;;
     export)
-        if [[ -z "$name" ]]; then exit 1; fi
-        if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
+        if [[ -z "$name" ]]; then
+            fail_export "No preset name was provided."
+        fi
+        if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then
+            fail_export "Preset not found: $name"
+        fi
+
+        if ! command -v zip >/dev/null 2>&1; then
+            fail_export "The 'zip' utility is not installed."
+        fi
         
         if command -v zenity >/dev/null; then
             DEST_ZIP=$(zenity --file-selection --save --confirm-overwrite --filename="$HOME/${name}.zip" --file-filter="ZIP | *.zip" 2>/dev/null)
@@ -81,12 +105,28 @@ case $action in
             if [[ "$DEST_ZIP" != *.zip ]]; then
                 DEST_ZIP="${DEST_ZIP}.zip"
             fi
+
+            DEST_DIR=$(dirname -- "$DEST_ZIP")
+            if [[ ! -d "$DEST_DIR" ]]; then
+                fail_export "Destination directory does not exist: $DEST_DIR"
+            fi
+            if [[ ! -w "$DEST_DIR" ]]; then
+                fail_export "Destination directory is not writable: $DEST_DIR"
+            fi
             
-            TMP_DIR=$(mktemp -d /tmp/preset_export_XXXXXX)
+            if ! TMP_DIR=$(mktemp -d /tmp/preset_export_XXXXXX); then
+                fail_export "Could not create a temporary export directory."
+            fi
             
             # Copy and sanitize JSON config
-            cp "$PRESETS_DIR/$name.json" "$TMP_DIR/config.json"
-            python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$TMP_DIR/config.json" "$TMP_DIR/config.json"
+            if ! cp "$PRESETS_DIR/$name.json" "$TMP_DIR/config.json"; then
+                rm -rf "$TMP_DIR"
+                fail_export "Could not copy the preset configuration."
+            fi
+            if ! python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$TMP_DIR/config.json" "$TMP_DIR/config.json"; then
+                rm -rf "$TMP_DIR"
+                fail_export "Could not sanitize the preset configuration."
+            fi
             
             # Find and copy wallpaper if it exists
             # Look for MyPreset.* excluding .json and .zip
@@ -94,17 +134,33 @@ case $action in
                 if [[ -f "$file" ]]; then
                     ext="${file##*.}"
                     if [[ "$ext" != "json" && "$ext" != "zip" ]]; then
-                        cp "$file" "$TMP_DIR/wallpaper.$ext"
+                        if ! cp "$file" "$TMP_DIR/wallpaper.$ext"; then
+                            rm -rf "$TMP_DIR"
+                            fail_export "Could not copy the preset wallpaper."
+                        fi
                         break
                     fi
                 fi
             done
             
             # Zip everything
-            (cd "$TMP_DIR" && zip -r "$DEST_ZIP" .)
+            if ! (cd "$TMP_DIR" && zip -r "$DEST_ZIP" .); then
+                rm -rf "$TMP_DIR"
+                fail_export "Could not write the archive to: $DEST_ZIP"
+            fi
+
+            if [[ ! -s "$DEST_ZIP" ]]; then
+                rm -rf "$TMP_DIR"
+                fail_export "The archive was not created: $DEST_ZIP"
+            fi
             
             # Cleanup
             rm -rf "$TMP_DIR"
+            printf '[presets.sh] Exported preset to: %s\n' "$DEST_ZIP"
+            notify_export normal "Preset exported" "Saved to: $DEST_ZIP"
+        else
+            printf '[presets.sh] Export cancelled.\n' >&2
+            notify_export low "Preset export cancelled" "No destination was selected."
         fi
         ;;
     import)

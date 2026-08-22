@@ -62,8 +62,8 @@ MouseArea {
         return root.colText;
     }
 
-    implicitWidth: Appearance.sizes.baseVerticalBarWidth
-    implicitHeight: colLoader.item?.implicitHeight + (root.isMaterial ? 0 : 12)
+    implicitWidth: Battery.available ? Appearance.sizes.baseVerticalBarWidth : 0
+    implicitHeight: Battery.available ? ((colLoader.item ? colLoader.item.implicitHeight : 0) + (root.isMaterial ? 0 : 12)) : 0
 
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 

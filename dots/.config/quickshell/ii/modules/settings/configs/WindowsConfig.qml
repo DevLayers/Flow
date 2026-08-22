@@ -224,6 +224,70 @@ ContentPage {
 
 
     ContentSection {
+        title: Translation.tr("Window Animations")
+        icon: "animation"
+
+        ConfigSwitch {
+            buttonIcon: "open_in_new"
+            text: Translation.tr("App opening animation (Center zoom)")
+            checked: Config.options.appearance.appLaunchAnimation.enable ?? true
+            onCheckedChanged: {
+                Config.options.appearance.appLaunchAnimation.enable = checked;
+                HyprlandSettings.updateAppLaunchAnimation(
+                    checked,
+                    Config.options.appearance.appLaunchAnimation.startPercent,
+                    Config.options.appearance.appLaunchAnimation.speed,
+                    Config.options.appearance.appLaunchAnimation.curve
+                );
+            }
+        }
+
+        ConfigSlider {
+            buttonIcon: "aspect_ratio"
+            text: Translation.tr("Opening initial scale")
+            usePercentTooltip: true
+            enabled: Config.options.appearance.appLaunchAnimation.enable ?? true
+            from: 5
+            to: 50
+            stepSize: 5
+            snapMode: Slider.SnapAlways
+            stopIndicatorValues: [5, 10, 15, 20, 25, 30, 40, 50]
+            value: Config.options.appearance.appLaunchAnimation.startPercent ?? 20
+            onValueChanged: {
+                const val = Math.round(value);
+                Config.options.appearance.appLaunchAnimation.startPercent = val;
+                HyprlandSettings.updateAppLaunchAnimation(
+                    Config.options.appearance.appLaunchAnimation.enable ?? true,
+                    val,
+                    Config.options.appearance.appLaunchAnimation.speed,
+                    Config.options.appearance.appLaunchAnimation.curve
+                );
+            }
+        }
+
+        ConfigSlider {
+            buttonIcon: "speed"
+            text: Translation.tr("Opening animation speed")
+            usePercentTooltip: false
+            tooltipContent: `${value.toFixed(1)}x`
+            enabled: Config.options.appearance.appLaunchAnimation.enable ?? true
+            from: 1.0
+            to: 6.0
+            stepSize: 0.2
+            value: Config.options.appearance.appLaunchAnimation.speed ?? 3.2
+            onValueChanged: {
+                Config.options.appearance.appLaunchAnimation.speed = value;
+                HyprlandSettings.updateAppLaunchAnimation(
+                    Config.options.appearance.appLaunchAnimation.enable ?? true,
+                    Config.options.appearance.appLaunchAnimation.startPercent,
+                    value,
+                    Config.options.appearance.appLaunchAnimation.curve
+                );
+            }
+        }
+    }
+
+    ContentSection {
         icon: "link"
         title: Translation.tr("Related settings")
 

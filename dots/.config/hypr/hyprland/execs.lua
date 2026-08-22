@@ -1,5 +1,6 @@
 -- put former exec-once commands inside the func and former exec commands outside
 hl.on("hyprland.start", function()
+
     -- Bar, wallpaper
     hl.exec_cmd("$HOME/.config/hypr/hyprland/scripts/start_geoclue_agent.sh")
     hl.exec_cmd("qs -c $qsConfig")
@@ -9,7 +10,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
     hl.exec_cmd("hypridle")
     hl.exec_cmd("dbus-update-activation-environment --all")
-    hl.exec_cmd("sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP && systemctl --user start graphical-session.target 2>/dev/null || (/usr/libexec/xdg-desktop-portal-gtk & /usr/libexec/xdg-desktop-portal-hyprland & sleep 1 && /usr/libexec/xdg-desktop-portal --replace &)") -- Ensure portal communicates color-scheme to GTK4 Libadwaita apps (Nautilus)
+    hl.exec_cmd("sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE && systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE && systemctl --user start hyprland-session.target")
 
 
     -- Audio (wait for Quickshell's tray watcher so EasyEffects registers its tray icon successfully)
@@ -31,4 +32,8 @@ hl.on("hyprland.start", function()
 
     -- Cursor
     hl.exec_cmd("hyprctl setcursor Bibata-Modern-Classic 24")
+end)
+
+hl.on("hyprland.shutdown", function()
+    os.execute("systemctl --user stop hyprland-session.target && sleep 0.1")
 end)

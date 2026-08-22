@@ -131,11 +131,19 @@ Singleton {
             "aliases": ["System Overlays", "Media overlay", "Game overlay"]
         },
         {
+            "id": "modes",
+            "name": "Modes & Routines",
+            "icon": "tune",
+            "component": "modules/settings/configs/ModesConfig.qml",
+            "subPages": [],
+            "aliases": ["Modes", "Routines", "Automation", "Game detection", "Focus mode", "Do not disturb", "Gaming mode", "Activity log"]
+        },
+        {
             "id": "screenCapture",
             "name": "Screenshots & Recording",
             "icon": "screenshot_region",
             "component": "modules/settings/configs/ScreenCaptureConfig.qml",
-            "subPages": [],
+            "subPages": ["widgets/ScreenRecordingConfig.qml"],
             "aliases": ["Region Selector", "Screenshot", "Screen recording", "Google Lens", "wf-recorder", "OBS"]
         },
         {
@@ -151,7 +159,11 @@ Singleton {
             "name": "Launcher",
             "icon": "search",
             "component": "modules/settings/configs/LauncherConfig.qml",
-            "subPages": [],
+            "subPages": [
+                "widgets/LauncherSuggestionsConfig.qml",
+                "widgets/LauncherPrefixesConfig.qml",
+                "widgets/LauncherAliasesConfig.qml"
+            ],
             "aliases": ["App Search", "Search Prefixes", "App Aliases"]
         },
         {
@@ -195,6 +207,14 @@ Singleton {
             "aliases": ["Monitors", "hyprmon", "Resolution", "Refresh rate", "Scale", "OLED Saver", "Blackout"]
         },
         {
+            "id": "touchGestures",
+            "name": "Touch & Gestures",
+            "icon": "touch_app",
+            "component": "modules/settings/configs/TouchGesturesConfig.qml",
+            "subPages": [],
+            "aliases": ["Touchscreen", "Touch", "Swipe", "Gestures", "Edge gestures", "Tablet"]
+        },
+        {
             "id": "mediaMusic",
             "name": "Media & Music",
             "icon": "album",
@@ -232,8 +252,8 @@ Singleton {
             "name": "Accounts & Backup",
             "icon": "checklist",
             "component": "modules/settings/configs/TasksAccountsConfig.qml",
-            "subPages": ["widgets/GoogleDriveBackupConfig.qml", "widgets/AdvancedDriveConfig.qml"],
-            "aliases": ["Core Services", "Tasks & Accounts", "TickTick", "Tasks", "Accounts", "Google Drive", "Backup", "Cloud backup", "rclone"]
+            "subPages": ["widgets/GoogleDriveBackupConfig.qml", "widgets/AdvancedDriveConfig.qml", "widgets/CoreGoogleTasksConfig.qml", "widgets/CoreTickTickConfig.qml"],
+            "aliases": ["Core Services", "Tasks & Accounts", "TickTick", "Google Tasks", "Google Tasks API", "Tasks", "Accounts", "Google Drive", "Backup", "Cloud backup", "rclone"]
         },
         {
             "id": "soundAlerts",
@@ -331,7 +351,7 @@ Singleton {
         {
             "id": "tools",
             "name": "Tools",
-            "pageIds": ["launcher", "clipboard", "screenCapture", "notifications", "overlays", "cheatSheet"]
+            "pageIds": ["launcher", "clipboard", "screenCapture", "notifications", "overlays", "modes", "cheatSheet"]
         },
         {
             "id": "servicesIntegrations",
@@ -341,7 +361,7 @@ Singleton {
         {
             "id": "system",
             "name": "System",
-            "pageIds": ["displays", "soundAlerts", "power", "usageStats", "devicesPhone", "privacy", "about"]
+            "pageIds": ["displays", "touchGestures", "soundAlerts", "power", "usageStats", "devicesPhone", "privacy", "about"]
         }
     ]
 

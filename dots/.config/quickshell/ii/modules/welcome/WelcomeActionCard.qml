@@ -19,7 +19,7 @@ RippleButton {
     toggled: selected
     implicitHeight: 74
     buttonRadius: Appearance.rounding.large
-    buttonRadiusPressed: Appearance.rounding.full
+    buttonRadiusPressed: Appearance.rounding.normal
     colBackground: Appearance.colors.colLayer1
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colBackgroundActive: Appearance.colors.colLayer1Active
@@ -36,12 +36,19 @@ RippleButton {
             Layout.leftMargin: 12
             Layout.alignment: Qt.AlignVCenter
             text: root.materialIcon
-            shape: root.iconShape
+            shape: root.hovered
+                ? MaterialShape.Shape.SoftBurst
+                : root.iconShape
             iconSize: Appearance.font.pixelSize.large - 2
             padding: 9
             fill: root.selected ? 1 : 0
             color: root.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
             colSymbol: root.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+            rotation: root.hovered ? 8 : 0
+
+            Behavior on rotation {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
         }
 
         ColumnLayout {
@@ -79,13 +86,5 @@ RippleButton {
             }
         }
 
-        MaterialSymbol {
-            Layout.rightMargin: 14
-            Layout.alignment: Qt.AlignVCenter
-            visible: root.showChevron
-            text: "arrow_forward"
-            iconSize: Appearance.font.pixelSize.small
-            color: root.selected ? root.selectedForeground : Appearance.colors.colOnLayer2
-        }
     }
 }

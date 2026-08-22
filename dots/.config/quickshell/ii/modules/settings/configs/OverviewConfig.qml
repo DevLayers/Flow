@@ -17,6 +17,24 @@ ContentPage {
         return background.useWallpaperEngine === true || Wallpapers.isVideoFile(background.wallpaperPath || "");
     }
 
+    readonly property string overviewBackgroundStyle: {
+        const background = Config.options.background;
+        const style = background.overviewBackgroundStyle;
+        if (["gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"].indexOf(style) >= 0)
+            return style;
+        switch (background.zoomOutStyle) {
+        case 0:
+            return "gnome";
+        case 1:
+            return "soft-focus";
+        case 2:
+        default:
+            return "camera-push";
+        }
+    }
+
+    readonly property bool windowTransitionAvailable: overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "soft-focus"
+
     KeyboardShortcutBox {
         Layout.fillWidth: true
         Layout.bottomMargin: 8
@@ -71,10 +89,11 @@ ContentPage {
                     Config.options.overview.centerIcons = checked;
                 }
             }
-
         }
 
-        Item { Layout.preferredHeight: 16 }
+        Item {
+            Layout.preferredHeight: 16
+        }
 
         // Group 2: Behaviors
         ColumnLayout {
@@ -134,9 +153,21 @@ ContentPage {
                             Config.options.overview.animationStyle = newValue;
                         }
                         options: [
-                            { displayName: Translation.tr("Slide + Bounce"), icon: "animation", value: "bounce" },
-                            { displayName: Translation.tr("Smooth Slide"), icon: "swipe", value: "smooth" },
-                            { displayName: Translation.tr("Zoom In"), icon: "zoom_in", value: "zoom" }
+                            {
+                                displayName: Translation.tr("Slide + Bounce"),
+                                icon: "animation",
+                                value: "bounce"
+                            },
+                            {
+                                displayName: Translation.tr("Smooth Slide"),
+                                icon: "swipe",
+                                value: "smooth"
+                            },
+                            {
+                                displayName: Translation.tr("Zoom In"),
+                                icon: "zoom_in",
+                                value: "zoom"
+                            }
                         ]
                     }
 
@@ -157,7 +188,6 @@ ContentPage {
                     Config.options.overview.enableCascadeAnimation = checked;
                 }
             }
-
         }
     }
 
@@ -231,8 +261,16 @@ ContentPage {
                             Config.options.overview.orderRightLeft = newValue;
                         }
                         options: [
-                            { displayName: Translation.tr("Left to right"), icon: "arrow_forward", value: false },
-                            { displayName: Translation.tr("Right to left"), icon: "arrow_back", value: true }
+                            {
+                                displayName: Translation.tr("Left to right"),
+                                icon: "arrow_forward",
+                                value: false
+                            },
+                            {
+                                displayName: Translation.tr("Right to left"),
+                                icon: "arrow_back",
+                                value: true
+                            }
                         ]
                     }
                 }
@@ -255,8 +293,16 @@ ContentPage {
                             Config.options.overview.orderBottomUp = newValue;
                         }
                         options: [
-                            { displayName: Translation.tr("Top-down"), icon: "arrow_downward", value: false },
-                            { displayName: Translation.tr("Bottom-up"), icon: "arrow_upward", value: true }
+                            {
+                                displayName: Translation.tr("Top-down"),
+                                icon: "arrow_downward",
+                                value: false
+                            },
+                            {
+                                displayName: Translation.tr("Bottom-up"),
+                                icon: "arrow_upward",
+                                value: true
+                            }
                         ]
                     }
                 }
@@ -282,7 +328,7 @@ ContentPage {
             Layout.fillWidth: true
             visible: page.videoWallpaper
             materialIcon: "movie"
-            text: Translation.tr("Video wallpaper is active: only the default zoom style is available.")
+            text: Translation.tr("Video wallpaper is active: image-based effects use a safe fallback.")
         }
 
         ConfigSwitch {
@@ -308,27 +354,106 @@ ContentPage {
                 ConfigSelectionArray {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
-                    currentValue: Config.options.background.zoomOutStyle
-                    onSelected: newValue => Config.options.background.zoomOutStyle = newValue
+                    currentValue: page.overviewBackgroundStyle
+                    onSelected: newValue => {
+                        Config.options.background.overviewBackgroundStyle = newValue;
+                        Config.options.background.zoomOutStyle = newValue === "gnome" ? 0 : newValue === "soft-focus" ? 1 : 2;
+                    }
                     options: [
-                        { displayName: Translation.tr("Gnome Like"), icon: "blur_on", enabled: !page.videoWallpaper, value: 0 },
-                        { displayName: Translation.tr("Default"), icon: "grid_view", value: 1 },
-                        { displayName: Translation.tr("Zoom In"), icon: "zoom_in", enabled: !page.videoWallpaper, value: 2 }
+                        {
+                            displayName: Translation.tr("Gnome Like"),
+                            icon: "blur_on",
+                            tooltip: Translation.tr("Zooms the wallpaper out with rounded corners, shadow and a blurred backing."),
+                            enabled: !page.videoWallpaper,
+                            value: "gnome"
+                        },
+                        {
+                            displayName: Translation.tr("Soft Focus"),
+                            icon: "grid_view",
+                            tooltip: Translation.tr("Adds compositor blur, dimming and gentle desaturation without clipping."),
+                            value: "soft-focus"
+                        },
+                        {
+                            displayName: Translation.tr("Camera Push"),
+                            icon: "zoom_in",
+                            tooltip: Translation.tr("Pushes the camera in with brightness and saturation adjustment; no blur."),
+                            enabled: !page.videoWallpaper,
+                            value: "camera-push"
+                        },
+                        {
+                            displayName: Translation.tr("Depth"),
+                            icon: "layers",
+                            tooltip: Translation.tr("A subtle zoom-out with compositor blur and reduced saturation."),
+                            value: "depth"
+                        },
+                        {
+                            displayName: Translation.tr("Card Lift"),
+                            icon: "style",
+                            tooltip: Translation.tr("Lifts the wallpaper into a rounded card with a blurred/dimmed backing."),
+                            value: "card-lift"
+                        },
+                        {
+                            displayName: Translation.tr("Desaturate"),
+                            icon: "tonality",
+                            tooltip: Translation.tr("Low-cost preset using desaturation and reduced brightness without blur."),
+                            value: "desaturate"
+                        },
+                        {
+                            displayName: Translation.tr("Directional"),
+                            icon: "open_in_new",
+                            tooltip: Translation.tr("Adds a small movement away from the configured bar position."),
+                            value: "directional"
+                        },
+                        {
+                            displayName: Translation.tr("Material Shape"),
+                            icon: "shapes",
+                            tooltip: Translation.tr("Cuts the wallpaper with a random Material Shape focusing on center widgets with a solid primary container background."),
+                            enabled: !page.videoWallpaper,
+                            value: "material-shape"
+                        }
                     ]
                 }
 
                 OverviewPreviewButton {
                     Layout.alignment: Qt.AlignVCenter
-                    enabled: Config.options.background.zoomOutEnabled && (!page.videoWallpaper || Config.options.background.zoomOutStyle === 1)
-                    tooltipText: !Config.options.background.zoomOutEnabled
-                        ? Translation.tr("Enable Zoom animation to preview this style.")
-                        : Translation.tr("Open the Overview to preview the selected zoom style")
+                    enabled: Config.options.background.zoomOutEnabled
+                    tooltipText: !Config.options.background.zoomOutEnabled ? Translation.tr("Enable Zoom animation to preview this style.") : Translation.tr("Open the Overview to preview the selected zoom style")
                 }
             }
         }
 
         ConfigSwitch {
-            visible: (Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0) || page.videoWallpaper
+            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper
+            enabled: !page.videoWallpaper
+            buttonIcon: "wb_twilight"
+            text: Translation.tr("Material Shape drop-shadow")
+            checked: Config.options.background.materialShapeShadow === true
+            onCheckedChanged: Config.options.background.materialShapeShadow = checked
+            StyledToolTip {
+                text: Translation.tr("Renders a subtle outer drop shadow around the material shape mask.")
+            }
+        }
+
+        ConfigSlider {
+            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper
+            enabled: !page.videoWallpaper
+            buttonIcon: "aspect_ratio"
+            text: Translation.tr("Material Shape scale (%)")
+            usePercentTooltip: true
+            from: 30
+            to: 200
+            stepSize: 1
+            value: Math.round((Config.options.background.materialShapeScale ?? 1.0) * 100)
+            onValueChanged: {
+                Config.options.background.materialShapeScale = value / 100;
+            }
+            StyledToolTip {
+                text: Translation.tr("Adjust the scale/size of the material shape mask when overview is open.")
+            }
+        }
+
+        ConfigSwitch {
+            visible: (Config.options.background.zoomOutEnabled && page.windowTransitionAvailable) || page.videoWallpaper
             enabled: !page.videoWallpaper
             buttonIcon: "open_with"
             text: Translation.tr("Scale windows with wallpaper (Experimental)")
@@ -340,7 +465,7 @@ ContentPage {
         }
 
         ConfigSwitch {
-            visible: (Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0 && Config.options.background.windowZoomOnOverview) || page.videoWallpaper
+            visible: (Config.options.background.zoomOutEnabled && page.windowTransitionAvailable && Config.options.background.windowZoomOnOverview) || page.videoWallpaper
             enabled: !page.videoWallpaper
             buttonIcon: "videocam"
             text: Translation.tr("Keep screencopy live (no freeze)")

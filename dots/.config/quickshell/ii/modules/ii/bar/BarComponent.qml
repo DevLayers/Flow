@@ -43,14 +43,13 @@ Item {
     required property int index
     property var originalIndex: index
     property bool vertical: false
-    property bool widgetSelfVisible: true
+    property bool widgetSelfVisible: (modelData && modelData.hasOwnProperty("visible")) ? modelData.visible : true
     property bool highlighted: false
 
     // ── Smooth Slide and Move Animations ──────────────────────────────────────
     property real oldX: x
     property real oldY: y
     property bool isReady: false
-    property bool layoutReady: false
     resources: [
         Translate {
             id: entryTranslation
@@ -127,6 +126,8 @@ Item {
         rootItem.oldY = y;
     }
 
+    property bool layoutReady: false
+
     Timer {
         id: readyTimer
         interval: 100
@@ -137,6 +138,22 @@ Item {
             rootItem.oldY = rootItem.y;
             rootItem.isReady = true;
             rootItem.layoutReady = true;
+        }
+    }
+
+    // itemLoader.item.visible reads *effective* visibility, so a transient hide of any
+    // bar ancestor (e.g. Connect Mode hides the whole bar layer while a window is
+    // fullscreen) latches hasLayoutContent — and this widget — off permanently: once
+    // rootItem hides itself in response, the loaded item can never read visible again.
+    // When the ancestor chain becomes visible again, re-run the startup grace period so
+    // the widget gets a frame to report its real visibility.
+    Connections {
+        target: rootItem.parent
+        function onVisibleChanged() {
+            if (!rootItem.parent || !rootItem.parent.visible)
+                return;
+            rootItem.layoutReady = false;
+            readyTimer.restart();
         }
     }
 
@@ -205,9 +222,19 @@ Item {
         return false;
     }
 
-    implicitWidth: targetWidth
+    implicitWidth: rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth
     Behavior on implicitWidth {
-        enabled: !rootItem.isNotchActive || rootItem.isNotchExpanded
+        enabled: !rootItem.vertical && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
+        NumberAnimation {
+            duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : 250
+            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Easing.OutCubic
+            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : [0, 0, 1, 1]
+        }
+    }
+
+    implicitHeight: rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight
+    Behavior on implicitHeight {
+        enabled: rootItem.vertical && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
             duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : 250
             easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Easing.OutCubic
@@ -287,8 +314,6 @@ Item {
     ]
     // ─────────────────────────────────────────────────────────────────────────
 
-    implicitHeight: wrapper.implicitHeight
-
     // ── Registry ──────────────────────────────────────────────────────────────
     BarWidgetRegistry {
         id: registry
@@ -346,6 +371,8 @@ Item {
         if (modelData.id === "record_indicator")
             return true;
         if (modelData.id === "phone_scrcpy_indicator")
+            return true;
+        if (modelData.id === "mode_indicator")
             return true;
         return false;
     }
@@ -515,6 +542,8 @@ Item {
             return recordIndicatorComp;
         case "phone_scrcpy_indicator":
             return phoneScrcpyIndicatorComp;
+        case "mode_indicator":
+            return modeIndicatorComp;
         case "screen_share_indicator":
             return screenshareIndicatorComp;
         case "dock_to_panel":
@@ -526,8 +555,6 @@ Item {
 
     function toggleVisible(visibility) {
         rootItem.widgetSelfVisible = visibility;
-        if (visible !== visibility)
-            visible = visibility;
         let item = null;
         if (barSection == 0)
             item = Config.options.bar.layouts.left[originalIndex];
@@ -563,8 +590,6 @@ Item {
         activated: itemLoader.item?.activated ?? false
         activeTheme: rootItem.activeTheme
         widgetId: modelData.id
-        hasActiveLeftNeighbor: rootItem.hasActiveLeftNeighbor
-        hasActiveRightNeighbor: rootItem.hasActiveRightNeighbor
     }
 
     // ── Widget Components ─────────────────────────────────────────────────────
@@ -596,6 +621,12 @@ Item {
     Component {
         id: phoneScrcpyIndicatorComp
         PhoneScrcpyIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: modeIndicatorComp
+        ModeIndicator {
             vertical: rootItem.vertical
         }
     }

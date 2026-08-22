@@ -141,17 +141,14 @@ if command -v pactl >/dev/null 2>&1; then
         fi
     fi
 
-    # audio_has_sink_input: a RUNNING sink-input is attached to DroidCam-Mic.
-    sink_inputs="$(pactl list sink-inputs 2>/dev/null || true)"
-    if [ -n "$sink_inputs" ]; then
-        if echo "$sink_inputs" | awk '
-            /Sink Input #/ { in_block=1; is_running=0 }
-            in_block && /State: RUNNING/ { is_running=1 }
-            in_block && /DroidCam-Mic/ { if (is_running) found=1 }
-            END { exit found ? 0 : 1 }
-        '; then
-            audio_has_sink_input=true
-        fi
+    # audio_has_sink_input: something is actively feeding DroidCam-Mic.
+    # Sink-input blocks carry no "State:" line (only sinks do) and name
+    # their sink by index, so scanning them for a running DroidCam-Mic
+    # input can never match. The null-sink itself reports RUNNING exactly
+    # while an uncorked stream feeds it — that is the evidence we want.
+    if pactl list short sinks 2>/dev/null \
+        | awk '$2 == "DroidCam-Mic" && $NF == "RUNNING" { found=1 } END { exit found ? 0 : 1 }'; then
+        audio_has_sink_input=true
     fi
 fi
 

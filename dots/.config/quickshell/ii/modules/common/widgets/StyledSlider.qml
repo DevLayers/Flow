@@ -55,7 +55,7 @@ Slider {
     property bool usePercentTooltip: true
     property string tooltipContent: usePercentTooltip ? `${Math.round(((value - from) / (to - from)) * 100)}%` : `${Math.round(value)}`
     property bool wavy: configuration === StyledSlider.Configuration.Wavy // If true, the progress bar will have a wavy fill effect
-    property bool animateWave: true
+    property bool animateWave: false
     property real waveAmplitudeMultiplier: wavy ? 0.5 : 0
     property real waveFrequency: 6
     property real waveFps: 60
@@ -160,17 +160,7 @@ Slider {
                     amplitudeMultiplier: root.wavy ? 0.6 : 0
                     width: parent.width
                     height: root.trackWidth * 1.5
-                    Connections {
-                        target: root
-                        function onValueChanged() { wavyFill.requestPaint(); }
-                        function onHighlightColorChanged() { wavyFill.requestPaint(); }
-                    }
-                    FrameAnimation {
-                        running: root.animateWave
-                        onTriggered: {
-                            wavyFill.requestPaint()
-                        }
-                    }
+                    animateWave: root.animateWave
                 }
             }
         }

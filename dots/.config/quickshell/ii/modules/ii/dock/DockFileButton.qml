@@ -304,9 +304,16 @@ DockButton {
             }
 
             IconImage {
+                id: xdgIconImage
                 anchors.fill: parent
                 visible: !root.isImage && root.resolvedXdgIcon !== ""
                 source: root.resolvedXdgIcon
+
+                // Force reload when the icon theme regenerates
+                asynchronous: true
+                backer.cache: false
+                backer.sourceSize: Qt.size(xdgIconImage.actualSize + TaskbarApps.iconThemeRevision,
+                                           xdgIconImage.actualSize + TaskbarApps.iconThemeRevision)
             }
 
             MaterialSymbol {

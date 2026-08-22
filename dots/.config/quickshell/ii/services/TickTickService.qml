@@ -35,6 +35,9 @@ Singleton {
     property string clientSecret: ""
     property string accessToken: ""
 
+    property bool _envLoading: false
+    property bool _envLoaded: false
+
     readonly property string apiBase: "https://api.ticktick.com/open/v1"
     readonly property string envPath: Quickshell.shellPath(".env")
     readonly property string helperPath: FileUtils.trimFileProtocol(Quickshell.shellPath("scripts/ticktick/api.py"))
@@ -88,6 +91,18 @@ Singleton {
         }, extra ?? ({})));
     }
 
+    function setTaskDone(task, done) {
+        if (!task || !task.id)
+            return;
+
+        if (done) {
+            root.completeTask(task.id, task.containerId || task.projectId);
+            return;
+        }
+
+        root.refresh();
+    }
+
     function completeTask(taskId, projectId) {
         return root.send(completeTaskProcess, {
             op: "complete",
@@ -96,11 +111,17 @@ Singleton {
         });
     }
 
-    function deleteTask(taskId, projectId) {
+    function deleteTask(taskOrId, projectId) {
+        const taskId = typeof taskOrId === "object" ? taskOrId?.id : taskOrId;
+        const resolvedProjectId = (typeof taskOrId === "object"
+            ? (taskOrId?.containerId || taskOrId?.projectId)
+            : projectId) || root.inboxProjectId;
+        if (!taskId)
+            return false;
         return root.send(deleteTaskProcess, {
             op: "delete",
             taskId: String(taskId ?? ""),
-            projectId: projectId || root.inboxProjectId
+            projectId: resolvedProjectId
         });
     }
 
@@ -195,9 +216,13 @@ Singleton {
         if (KeyringStorage.loaded) {
             let kr = KeyringStorage.keyringData?.apiKeys;
             if (kr && kr.ticktick_access_token) {
+                const tokenChanged = root.accessToken !== (kr.ticktick_access_token || "");
                 root.clientId = kr.ticktick_client_id || "";
                 root.clientSecret = kr.ticktick_client_secret || "";
                 root.accessToken = kr.ticktick_access_token || "";
+                // Keyring emits both loadedChanged and dataChanged; only act on a real change
+                if (!tokenChanged)
+                    return;
                 console.log("[TickTick] Credentials loaded from Gnome Keyring.");
                 if (root.available) {
                     root.refresh();
@@ -210,10 +235,17 @@ Singleton {
     }
 
     function loadEnv() {
+        // The keyring signals re-enter loadCredentials after startup; the .env file
+        // only needs reading once per session.
+        if (root._envLoading || root._envLoaded)
+            return;
+        root._envLoading = true;
         loadEnvProcess.running = true;
     }
 
     function parseEnv(text) {
+        root._envLoading = false;
+        root._envLoaded = true;
         let lines = text.split("\n");
         let envClientId = "";
         let envClientSecret = "";
@@ -287,7 +319,9 @@ Singleton {
                 for (let i = 0; i < rawTasks.length; i++) {
                     const task = rawTasks[i];
                     parsed.push({
+                        "provider": "ticktick",
                         "id": task.id || "",
+                        "containerId": task.projectId || root.inboxProjectId,
                         "projectId": task.projectId || root.inboxProjectId,
                         "content": task.title || "",
                         "done": (task.status !== undefined) ? (task.status === 2) : false,
@@ -356,7 +390,6 @@ Singleton {
             }
         }
     }
-
     // One correlated request for the AI provider contract. The broker keeps
     // mutations serial, so one process is sufficient and late replies retain
     // their operation id instead of being guessed from the active UI task.

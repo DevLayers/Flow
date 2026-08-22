@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import qs.services
 import qs.modules.common.functions
+import "../ii/sidebarDashboard/quickToggles/androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 
 Singleton {
     id: root
@@ -539,6 +540,13 @@ Singleton {
         root.options.appearance.sharpMode = (root.options.appearance.roundingValue === 0);
     }
 
+    function syncAppLaunchAnimation() {
+        if (!root.options || !root.options.appearance || !root.options.appearance.appLaunchAnimation)
+            return;
+        let anim = root.options.appearance.appLaunchAnimation;
+        HyprlandSettings.updateAppLaunchAnimation(anim.enable, anim.startPercent, anim.speed, anim.curve);
+    }
+
     function migrateWidgetLockBehavior() {
         if (Persistent.states.background.lockBehaviorMigrated)
             return;
@@ -572,7 +580,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 7
+    readonly property int currentConfigVersion: 8
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -672,26 +680,58 @@ Singleton {
         }
 
         // v4 -> v5: Settings now has one performance switch instead of two
-        // independent rendering switches. Preserve the low-overhead experience
-        // for anyone who had either legacy switch disabled.
+        // independent rendering switches. Older presets predate the new
+        // switch, so default them to the safe, low-overhead path. Users can
+        // still opt back into scroll effects after the migration.
         if (from < 5 && raw.appearance !== undefined
                 && raw.appearance !== null
                 && typeof raw.appearance === "object"
                 && !Array.isArray(raw.appearance)
                 && raw.appearance.settingsPerformanceMode === undefined) {
-            raw.appearance.settingsPerformanceMode = raw.appearance.scrollAnimations === false
-                    || raw.appearance.scrollFadeMask === false;
+            raw.appearance.settingsPerformanceMode = true;
             console.log(`[Config] Migrated Settings performance mode to ${raw.appearance.settingsPerformanceMode}`);
         }
 
-        // v5 -> v6: the AI panel's settings were reorganised (Aug 2026). Three
-        // keys move at once, each of them one that had outgrown its shape:
-        // `ai.tool` was a bare mode string with no room for the per-tool
-        // permissions that now exist; `ai.models` and `ai.otherModels` were
-        // two lists doing the same job in two different shapes, one nested
-        // under a provider and one flat; and the sidebar switch that hid the
-        // provider and model buttons outlived the buttons themselves.
-        if (from < 6) {
+        // v5 -> v6: quick-toggle pages become canonical records with stable
+        // identity and explicit dimensions. The normalizer is shared with the
+        // sidebar so migration and runtime cannot disagree about defaults,
+        // duplicate handling, or allowed sizes.
+        // The v7 branch of this PR used the same version number for the AI
+        // schema, so a missing layoutVersion remains a reliable migration cue.
+        if (raw.sidebar?.quickToggles?.android !== undefined
+                && (from < 6 || raw.sidebar.quickToggles.android.layoutVersion !== 2)) {
+            const android = raw.sidebar.quickToggles.android;
+            android.pages = QuickToggleCatalog.normalizePages(android.pages, android.columns, {
+                warn: function(message) { console.warn(message); }
+            });
+            android.layoutVersion = 2;
+            console.log("[Config] Migrated sidebar.quickToggles.android to canonical layout records");
+        }
+
+        // Originally v6 -> v7: the bar gained the Modes & Routines indicator.
+        // It hides itself while no mode is active, so appending it to an
+        // existing layout changes nothing visible until a mode starts.
+        if (from < 8 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
+                && typeof raw.bar.layouts === "object") {
+            const layouts = raw.bar.layouts;
+            const sections = ["left", "center", "right"];
+            const present = sections.some(k => Array.isArray(layouts[k])
+                && layouts[k].some(e => e && e.id === "mode_indicator"));
+            if (!present) {
+                if (!Array.isArray(layouts.left))
+                    layouts.left = [];
+                const after = layouts.left.findIndex(e => e && e.id === "record_indicator");
+                const entry = { "centered": false, "id": "mode_indicator", "visible": false };
+                layouts.left.splice(after === -1 ? layouts.left.length : after + 1, 0, entry);
+                console.log("[Config] Migrated bar layout: added mode_indicator");
+            }
+        }
+
+        // v7 -> v8: reconcile settings that were introduced independently by
+        // the AI rebuild and the dev branch. The checks are intentionally
+        // shape-based so users already at either former v7 receive only the
+        // migration their file is still missing.
+        if (from < 8) {
             const ai = raw.ai;
             if (ai !== undefined && ai !== null && typeof ai === "object" && !Array.isArray(ai)) {
                 if (typeof ai.tool === "string" || typeof ai.localModelTools === "boolean") {
@@ -735,22 +775,15 @@ Singleton {
                 delete ai.models;
                 delete ai.otherModels;
             }
-            if (raw.sidebar?.ai !== undefined && raw.sidebar.ai !== null)
+            if (raw.sidebar?.ai !== undefined && raw.sidebar.ai !== null) {
                 delete raw.sidebar.ai.showProviderAndModelButtons;
-        }
-
-        // v6 -> v7: the sidebar AI switch was named as if it enabled the
-        // product, but it only controlled the proactive startup index. Keep
-        // that exact meaning under the AI namespace so all hosts can share a
-        // single policy while users retain their preference.
-        if (from < 7) {
-            if (raw.ai === undefined || raw.ai === null || typeof raw.ai !== "object" || Array.isArray(raw.ai))
-                raw.ai = {};
-            if (raw.ai.indexAtStartup === undefined && typeof raw.sidebar?.ai?.enable === "boolean")
-                raw.ai.indexAtStartup = raw.sidebar.ai.enable;
-            if (raw.sidebar?.ai !== undefined && raw.sidebar.ai !== null)
+                if (raw.ai === undefined || raw.ai === null || typeof raw.ai !== "object" || Array.isArray(raw.ai))
+                    raw.ai = {};
+                if (raw.ai.indexAtStartup === undefined && typeof raw.sidebar.ai.enable === "boolean")
+                    raw.ai.indexAtStartup = raw.sidebar.ai.enable;
                 delete raw.sidebar.ai.enable;
-            console.log("[Config] Migrated sidebar.ai.enable to ai.indexAtStartup");
+            }
+            console.log("[Config] Reconciled AI settings and sidebar startup policy");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -868,6 +901,7 @@ Singleton {
             "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
             "appearance.colorEngine": ["vynx", "fork"],
             "background.zoomOutStyle": [0, 1, 2],
+            "background.overviewBackgroundStyle": ["", "gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"],
             "background.mediaMode.visualizerMode": [0, 1, 2, 3],
             "background.mediaMode.syllable.textHighlightStyle": [0, 1],
             "bar.cornerStyle": [0, 1, 2, 3],
@@ -1145,6 +1179,10 @@ Singleton {
             if (root.repairConfigFile())
                 return;
             migrateRoundingConfig();
+            syncAppLaunchAnimation();
+            if (Persistent.ready) {
+                Persistent.tryMigrateAndSyncUserData();
+            }
         }
         onLoadFailed: error => {
             if (error != FileViewError.FileNotFound) {
@@ -1224,6 +1262,7 @@ Singleton {
                     property JsonObject appMode: JsonObject {
                         property bool enabled: true
                         property bool showAppIcons: true // Pull each app's launcher icon off the phone over adb
+                        property string iconShape: "oneui" // Launcher-style mask for those icons, keys in AndroidIconMask.shapes
                         property bool flexDisplay: true
                         property int displayWidth: 1280
                         property int displayHeight: 960
@@ -1294,6 +1333,16 @@ Singleton {
                 property real totalDriveUsageMb: 0.0
                 property real driveQuotaMb: 0.0
                 property real driveBackupUsageMb: 0.0
+            }
+
+            property JsonObject todo: JsonObject {
+                // Choices: "local", "ticktick", or "googleTasks".
+                property string provider: "local"
+                property int refreshIntervalMinutes: 5
+                property JsonObject googleTasks: JsonObject {
+                    property string taskListId: ""
+                    property string taskListTitle: ""
+                }
             }
 
             property JsonObject vpn: JsonObject {
@@ -1576,7 +1625,13 @@ Singleton {
                 property bool colorfulScrollbar: false
                 property bool scrollAnimations: false
                 property bool scrollFadeMask: false
-                property bool settingsPerformanceMode: false
+                property bool settingsPerformanceMode: true
+                property JsonObject appLaunchAnimation: JsonObject {
+                    property bool enable: true
+                    property int startPercent: 20 // 5 - 50%
+                    property real speed: 3.2
+                    property string curve: "iiAppOpen"
+                }
                 property JsonObject openrgb: JsonObject {
                     property bool enable: false
                     property bool applyOnStartup: true
@@ -1659,6 +1714,40 @@ Singleton {
                 // Apps under this many seconds for the chosen metric are left out of
                 // the list. Duration metrics only; energy is never thresholded.
                 property int minDurationSec: 0
+            }
+
+            // Modes & Routines (services/Modes.qml). Definitions are user data
+            // but live here on purpose so one file carries the whole setup.
+            property JsonObject modes: JsonObject {
+                property bool enable: true
+                property bool overlayEnabled: true
+                // Presets are added once; deleting one afterwards sticks.
+                property bool presetsSeeded: false
+                // "auto" shows the start/end banner in the island or, without
+                // a notch, as a top-centre popup; "off" shows nothing.
+                property string flash: "auto"
+                property bool lockPill: true
+                // What the overlay reopens on.
+                property string lastTab: "modes"
+                property string lastModeId: ""
+                property string lastRoutineId: ""
+                // Seconds an auto-started mode's triggers must stay false
+                // before it ends, so a workspace switch does not flap it.
+                property int graceSec: 20
+                // Mode definitions, in priority order (first wins among
+                // automatic starts). Shape: see services/modes/ModeSchema.js.
+                property list<var> modes: []
+                property list<var> routines: []
+                // Game detection (services/GameDetector.qml). Signals 1–3 are
+                // instant; the GPU heuristic needs `gpuThreshold` % for `holdSec`.
+                property JsonObject game: JsonObject {
+                    property bool useLauncherClasses: true
+                    property bool useDesktopCategory: true
+                    property bool useGpuHeuristic: true
+                    property int gpuThreshold: 45
+                    property int holdSec: 20
+                    property list<string> extraClasses: []
+                }
             }
 
             property list<var> bluetoothDeviceImages: []
@@ -2451,6 +2540,11 @@ Singleton {
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
                 property bool windowZoomOnOverview: true // fake window scale-out during overview (GNOME-like)
                 property bool windowZoomLiveCapture: true // keep screencopy live instead of freezing on overview open
+                // Semantic style name. Empty keeps the legacy numeric setting
+                // active until the user chooses a new preset in Settings.
+                property string overviewBackgroundStyle: ""
+                property bool materialShapeShadow: false
+                property real materialShapeScale: 1.0
                 property bool cheatsheetZoomOut: true
                 property bool overviewZoomOut: true
                 property bool workspaceBlur: false
@@ -2475,7 +2569,8 @@ Singleton {
                 property bool wpeDisableParallax: false
                 property bool wpeNoFullscreenPause: false
                 property bool wpePauseWhenWindowsOpen: false
-                property int zoomOutStyle: 2 // 0: Blurred Backing | 1: Mirrored Plane
+                // Deprecated compatibility mapping: 0 -> gnome, 1 -> soft-focus, 2 -> camera-push.
+                property int zoomOutStyle: 2
                 property bool blurWhenWindowsOpen: true
                 property int blurWhenWindowsOpenRadius: 41
                 property JsonObject gradientBlur: JsonObject {
@@ -2766,6 +2861,10 @@ Singleton {
                     property bool dockShowWindowDots: true
                     property bool dockHoverEffect: true
                     property bool dockShowAppIcons: true
+
+                    property bool autoCompact: false // Run the workspace compactor automatically when a gap appears
+                    property string autoCompactCurrentGap: "onswitch" // Gap on the current workspace: "onswitch" | "immediate" | "never"
+                    property int autoCompactDelay: 600 // ms of quiet before an automatic compaction fires
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false
@@ -2808,6 +2907,11 @@ Singleton {
                             {
                                 "centered": false,
                                 "id": "record_indicator",
+                                "visible": false
+                            },
+                            {
+                                "centered": false,
+                                "id": "mode_indicator",
                                 "visible": false
                             }
                     ]
@@ -3015,6 +3119,46 @@ Singleton {
                 property JsonObject deadPixelWorkaround: JsonObject { // Hyprland leaves out 1 pixel on the right for interactions
                     property bool enable: false
                 }
+                property JsonObject touchGestures: JsonObject {
+                    property bool enable: true
+
+                    // Visual
+                    property bool visualFeedback: true
+
+                    // Device/output
+                    property string deviceId: "auto"
+                    property string targetMonitor: "auto"
+                    property string transform: "auto"
+                    // A stylus is also a pointer, so pen gestures drag/resize windows at the
+                    // same time. Off unless the device is picked explicitly above.
+                    property bool includeStylus: false
+
+                    // Recognition geometry
+                    property int edgeWidth: 24
+                    property int cornerSize: 72
+
+                    // Recognition thresholds
+                    property int minDistance: 44
+                    property int commitDistance: 110
+                    property int velocityThreshold: 650
+                    property int directionTolerance: 35
+                    property int cooldownMs: 250
+
+                    // Safety / context
+                    property bool disableInFullscreen: false
+                    property bool disableInMediaMode: true
+
+                    property JsonObject bindings: JsonObject {
+                        property string leftEdge: "sidebarLeft"
+                        property string rightEdge: "sidebarRight"
+                        property string topEdge: "cheatsheet"
+                        property string bottomEdge: "overview"
+                        property string topLeftCorner: "none"
+                        property string topRightCorner: "none"
+                        property string bottomLeftCorner: "none"
+                        property string bottomRightCorner: "osk"
+                    }
+                }
             }
 
             property JsonObject language: JsonObject {
@@ -3158,6 +3302,13 @@ Singleton {
                 property int timeout: 3000
                 property bool showValues: true
                 property bool hideWhenFullscreen: true
+
+                property JsonObject material: JsonObject {
+                    property bool rotateShape: false
+                    property bool minimal: false
+                    property bool shapedValues: true
+                    property bool circledShapes: true
+                }
             }
 
             property JsonObject osk: JsonObject {
@@ -3508,54 +3659,59 @@ Singleton {
                 property JsonObject quickToggles: JsonObject {
                     property string style: "android" // Options: classic, android
                     property bool useThreeWaySliders: true
+                    property JsonObject classic: JsonObject {
+                        // Order matters: it is the order the toggles appear in.
+                        property list<var> toggles: ["network", "bluetooth", "vpn", "tailscale", "nightLight", "gameMode", "idleInhibitor", "modes", "easyEffects", "cloudflareWarp", "keyboardBacklight"]
+                    }
                     property JsonObject android: JsonObject {
                         property int columns: 4
+                        property int layoutVersion: 2
                         property list<var> pages: [
                                 [
                                     {
-                                        "size": 4,
+                                        "id": "brightnessSlider",
                                         "sizeH": 1,
                                         "sizeW": 4,
                                         "type": "brightnessSlider"
                                     },
                                     {
-                                        "size": 4,
+                                        "id": "volumeSlider",
                                         "sizeH": 1,
                                         "sizeW": 4,
                                         "type": "volumeSlider"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "network",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "network"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "bluetooth",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "bluetooth"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "mic",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "mic"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "audio",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "audio"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "nightLight",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "nightLight"
                                     },
                                     {
-                                        "size": 2,
+                                        "id": "darkMode",
                                         "sizeH": 1,
                                         "sizeW": 2,
                                         "type": "darkMode"

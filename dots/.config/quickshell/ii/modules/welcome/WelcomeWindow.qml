@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import qs
@@ -24,23 +25,45 @@ FloatingWindow {
     Rectangle {
         id: surface
         anchors.fill: parent
+        clip: false
         radius: Appearance.rounding.large
         color: Appearance.colors.colLayer0
+        scale: (root.opening ? 0.992 : 1)
+            * (root.welcomeDialogOpen && WelcomeMotion.level >= 2 ? 0.99 : 1)
         focus: root.visible
+
+        layer.enabled: root.welcomeDialogOpen && WelcomeMotion.blurAllowed
+        layer.effect: MultiEffect {
+            blurEnabled: root.welcomeDialogOpen && WelcomeMotion.blurAllowed
+            blurMax: WelcomeMotion.blurMax
+            blur: root.welcomeDialogOpen ? WelcomeMotion.blurProgress : 0
+        }
+
+        Behavior on scale {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(surface)
+        }
 
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 24
-            spacing: 14
+            spacing: Appearance.rounding.small
 
             WelcomeHeader {
                 id: header
+                // Page decorations may overhang their stage; chrome stays on top.
+                z: 2
                 Layout.fillWidth: true
-                pageId: flow.currentPageId
+                currentPageId: flow.currentPageId
+                outgoingPageId: flow.outgoingPageId
+                incomingPageId: flow.incomingPageId
+                transitionDirection: flow.transitionDirection
+                transitionRunning: flow.transitionRunning
+                transitionReady: flow.transitionReady
                 onCloseRequested: GlobalStates.closeWelcome()
             }
 
             WelcomeProgress {
+                z: 2
                 Layout.fillWidth: true
                 currentPageIndex: WelcomePageRegistry.pageIndexById(flow.currentPageId)
                 pageCount: WelcomePageRegistry.pages.length
@@ -48,13 +71,22 @@ FloatingWindow {
 
             Item {
                 id: pageStage
+                z: 1
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.topMargin: -Appearance.rounding.verysmall
+                clip: false
 
                 WelcomeFlow {
                     id: flow
                     anchors.fill: parent
-                    navigationSafeArea: navigation.implicitHeight + 24
+                    nextButtonHovered: navigation.nextButtonHovered
+                    transform: Translate {
+                        y: root.bodyEntranceY
+                    }
+                    navigationSafeArea: navigation.implicitHeight
+                        + Appearance.rounding.large
+                        + Appearance.rounding.normal
 
                     onOpenWifi: root.showWifiDialog = true
                     onOpenBluetooth: root.showBluetoothDialog = true
@@ -81,12 +113,18 @@ FloatingWindow {
             anchors.bottom: parent.bottom
             anchors.leftMargin: 32
             anchors.rightMargin: 32
-            anchors.bottomMargin: 20
+            anchors.bottomMargin: Appearance.rounding.normal
             z: 5
             pageIndex: WelcomePageRegistry.pageIndexById(flow.currentPageId)
             pageCount: WelcomePageRegistry.pages.length
+            transitionRunning: flow.transitionRunning
+            nextLabel: flow.currentNextLabel
+            nextIcon: flow.currentNextIcon
+            skipVisible: flow.currentPageId === "keyboard"
+            skipLabel: Translation.tr("Skip")
             onPreviousRequested: flow.goPrevious()
             onNextRequested: flow.goNext()
+            onSkipRequested: flow.skipCurrentPage()
             onFinishRequested: GlobalStates.closeWelcome()
         }
         Keys.priority: Keys.BeforeItem
@@ -115,6 +153,18 @@ FloatingWindow {
     property bool previewSearchWasOpen: false
     property bool previewSidebarOwned: false
     property bool previewSearchOwned: false
+    property bool opening: false
+    property real bodyEntranceY: 0
+
+    Behavior on bodyEntranceY {
+        animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(root)
+    }
+    readonly property bool welcomeDialogOpen: showWifiDialog
+        || showBluetoothDialog
+        || showAudioOutputDialog
+        || wifiDialogHost.closing
+        || bluetoothDialogHost.closing
+        || audioDialogHost.closing
 
     function openCheatsheetGuide(sectionId: string): void {
         const icons = [];
@@ -181,7 +231,12 @@ FloatingWindow {
         root.previewSearchOwned = false;
     }
 
+    function restoreFocus(): void {
+        surface.forceActiveFocus();
+    }
+
     DialogHostLoader {
+        id: wifiDialogHost
         owner: root
         shownPropertyString: "showWifiDialog"
         focusTarget: surface
@@ -194,6 +249,7 @@ FloatingWindow {
     }
 
     DialogHostLoader {
+        id: bluetoothDialogHost
         owner: root
         shownPropertyString: "showBluetoothDialog"
         focusTarget: surface
@@ -206,6 +262,7 @@ FloatingWindow {
     }
 
     DialogHostLoader {
+        id: audioDialogHost
         owner: root
         shownPropertyString: "showAudioOutputDialog"
         focusTarget: surface
@@ -222,7 +279,7 @@ FloatingWindow {
         target: GlobalStates
         function onSettingsOpenChanged() {
             if (!GlobalStates.settingsOpen && root.visible)
-                Qt.callLater(() => surface.forceActiveFocus());
+                Qt.callLater(() => root.restoreFocus());
         }
     }
 
@@ -230,7 +287,7 @@ FloatingWindow {
         target: GlobalStates
         function onCheatsheetOpenChanged() {
             if (!GlobalStates.cheatsheetOpen && root.visible)
-                Qt.callLater(() => surface.forceActiveFocus());
+                Qt.callLater(() => root.restoreFocus());
         }
     }
 
@@ -239,13 +296,23 @@ FloatingWindow {
         function onPageChanged(pageId) {
             if (pageId !== "experience")
                 root.cleanupPreviews();
+            if (root.visible)
+                Qt.callLater(() => root.restoreFocus());
         }
     }
 
     onVisibleChanged: {
         if (visible) {
-            surface.forceActiveFocus();
+            root.opening = WelcomeMotion.motionEnabled;
+            root.bodyEntranceY = root.opening
+                ? Appearance.rounding.small * 2
+                : 0;
+            if (root.opening)
+                Qt.callLater(() => root.opening = false);
+            Qt.callLater(() => root.restoreFocus());
         } else {
+            root.opening = false;
+            root.bodyEntranceY = 0;
             root.cleanupPreviews();
             root.showWifiDialog = false;
             root.showBluetoothDialog = false;

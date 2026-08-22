@@ -196,8 +196,8 @@ Singleton {
         property color colOnSurface: m3colors.m3onSurface
         property color colOnSurfaceVariant: m3colors.m3onSurfaceVariant
         // Misc
-        property color colTooltip: m3colors.m3inverseSurface
-        property color colOnTooltip: m3colors.m3inverseOnSurface
+        property color colTooltip: m3colors.m3surfaceContainerHigh
+        property color colOnTooltip: m3colors.m3onSurface
         property color colScrim: ColorUtils.transparentize(m3colors.m3scrim, 0.5)
         property color colShadow: ColorUtils.transparentize(m3colors.m3shadow, 0.7)
         property color colOutline: m3colors.m3outline
@@ -254,7 +254,8 @@ Singleton {
             let hex = colorStr.substring(1);
             rgb = hex.length === 8 ? hex.substring(2) : hex;
         }
-        if (rgb === "") return;
+        if (rgb === "")
+            return;
         let hyprColor = "rgba(" + rgb + "AA)";
         Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
     }
@@ -268,7 +269,8 @@ Singleton {
         interval: 100
         repeat: false
         onTriggered: {
-            if (!Config.ready) return;
+            if (!Config.ready)
+                return;
             root.pushBorderColor();
         }
     }
@@ -305,17 +307,14 @@ Singleton {
     // Dynamic Island variants use colLayer0, whose opacity follows the
     // configured background transparency. Keep the threshold below that
     // rendered opacity, otherwise the entire island is excluded from blur.
-    readonly property real barIgnoreAlpha: Math.min(
-        root.ignoreAlpha,
-        Math.max(0, 1 - root.backgroundTransparency - 0.01)
-    )
+    readonly property real barIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
     onIgnoreAlphaChanged: {
         if (Config.ready) {
             var a = root.ignoreAlpha;
             var barA = root.barIgnoreAlpha;
             var script = "";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|.*[pP]opup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|backgroundWidgets|popup|.*[pP]opup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
             script += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
@@ -351,14 +350,16 @@ Singleton {
         repeat: false
         onTriggered: {
             root._isApplyingBorder = false;
-            if (!root._borderReapplyPending) return;
+            if (!root._borderReapplyPending)
+                return;
             root._borderReapplyPending = false;
             root.applyHyprlandBorder();
         }
     }
 
     function applyHyprlandBorder() {
-        if (!Config.ready) return;
+        if (!Config.ready)
+            return;
         if (root._isApplyingBorder) {
             root._borderReapplyPending = true;
             return;
@@ -375,14 +376,16 @@ Singleton {
         repeat: false
         onTriggered: {
             root._isApplyingRules = false;
-            if (!root._rulesReapplyPending) return;
+            if (!root._rulesReapplyPending)
+                return;
             root._rulesReapplyPending = false;
             root.applyHyprlandRules();
         }
     }
 
     function applyHyprlandRules() {
-        if (!Config.ready || root._isApplyingRules) return;
+        if (!Config.ready || root._isApplyingRules)
+            return;
         root._isApplyingRules = true;
         hyprlandRuleCooldownTimer.restart();
 
@@ -391,7 +394,7 @@ Singleton {
         var a = root.ignoreAlpha;
         var barA = root.barIgnoreAlpha;
         var bs = "";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|.*[pP]opup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|backgroundWidgets|popup|.*[pP]opup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
         bs += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";

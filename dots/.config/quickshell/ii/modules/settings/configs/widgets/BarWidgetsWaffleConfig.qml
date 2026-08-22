@@ -322,6 +322,15 @@ ContentPage {
                 description: Translation.tr("Wireless debugging, phone screen mirroring, and scrcpy status")
                 onOpenCard: root.openComponentPage("phone_scrcpy_indicator")
             }
+
+            ServiceCard {
+                cardIcon: "tune"
+                cardShape: "Circle"
+                cardHue: 280
+                title: Translation.tr("Mode Indicator")
+                description: Translation.tr("The active mode's name and colour; hidden while no mode is on")
+                onOpenCard: root.openComponentPage("mode_indicator")
+            }
         }
     }
 

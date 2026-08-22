@@ -32,9 +32,12 @@ Scope {
     }
 
     // State bindings
-    // centerInBar: DI never handles search — overviewOpen is handled by the default floating search panel
-    readonly property bool searchActive: GlobalStates.overviewOpen && !Config.options.bar.floatingNotch.centerInBar && (win.screen ? win.screen.name === GlobalStates.activeSearchMonitor : false)
-    readonly property bool osdActive: GlobalStates.osdVolumeOpen && !(Config.ready && Config.options.osd.style === "minimalist")
+    // The floating island owns search whenever it is the active search
+    // surface. The PanelWindow already selects the configured target screen;
+    // tying this to activeSearchMonitor would leave a standalone SearchDrop
+    // visible when the query was opened from another monitor.
+    readonly property bool searchActive: GlobalStates.floatingNotchOwnsSearch
+    readonly property bool osdActive: GlobalStates.osdVolumeOpen && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
     readonly property bool notificationActive: Notifications.popupList.length > 0
     readonly property bool recordingActive: (Persistent.states.screenRecord && Persistent.states.screenRecord.active) || false
     readonly property bool pomodoroActive: TimerService.pomodoroRunning
@@ -68,7 +71,6 @@ Scope {
             activityRevealTimer.restart();
     }
 
-
     function revealForActivity(duration) {
         if (!autoHideActive)
             return;
@@ -101,8 +103,31 @@ Scope {
     }
 
     readonly property bool isOverviewVisible: root.searchActive && LauncherSearch.query === "" && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config && Config.options && Config.options.overview && Config.options.overview.enable !== undefined ? Config.options.overview.enable : true)
+    readonly property string overviewAnimStyle: Config.options.overview.animationStyle ?? "bounce"
+    readonly property int overviewAnimDurationEnter: Math.round(420 * Appearance.animMultiplier)
+    readonly property int overviewAnimDurationExit: Math.round(260 * Appearance.animMultiplier)
+    readonly property var overviewAnimCurveEnter: Appearance.animationCurves.expressiveFastSpatial
+    readonly property var overviewAnimCurveExit: Appearance.animationCurves.emphasizedAccel
+    readonly property bool overviewAnimationActive: root.searchActive || root.overviewRevealProgress > 0.001 || root.overviewFadeProgress > 0.001
+    property real overviewRevealProgress: root.isOverviewVisible ? 1.0 : 0.0
+    property real overviewFadeProgress: root.isOverviewVisible ? 1.0 : 0.0
+
+    Behavior on overviewRevealProgress {
+        NumberAnimation {
+            duration: root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: root.isOverviewVisible ? root.overviewAnimCurveEnter : root.overviewAnimCurveExit
+        }
+    }
+
+    Behavior on overviewFadeProgress {
+        NumberAnimation {
+            duration: root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit
+            easing.type: root.isOverviewVisible ? Easing.OutCubic : Easing.InCubic
+        }
+    }
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
-    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) && (!Config.options.bar.onlyShowOnSingleMonitor || hasBarOnThisMonitor)
+    readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && (!Config.options.bar.onlyShowOnSingleMonitor || hasBarOnThisMonitor)
     readonly property bool hasBarOnThisMonitor: GlobalStates.isScreenAllowedForBar(win.screen)
     readonly property bool hasTopBar: GlobalStates.barOpen && !Config.options.bar.vertical && !Config.options.bar.bottom && hasBarOnThisMonitor
 
@@ -425,6 +450,13 @@ Scope {
         onTriggered: root.keyboardNotifActive = false
     }
 
+    // Mode start/end banner: the engine holds the flag for its flash window.
+    readonly property bool modeNotifActive: GlobalStates.modeFlashActive && GlobalStates.modeFlashPayload !== null
+    onModeNotifActiveChanged: {
+        if (modeNotifActive)
+            root.revealForActivity(3000);
+    }
+
     // Workspaces transition notification status
     onActiveWsIdChanged: {
         if (prevWsId !== -1 && activeWsId !== -1 && prevWsId !== activeWsId && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableWorkspaces) {
@@ -511,6 +543,16 @@ Scope {
                 expandedH: 140,
                 contractedW: 44 + 16 + (70 * HyprlandXkb.layoutCodes.length) + (4 * (HyprlandXkb.layoutCodes.length - 1)) + 24,
                 expandedW: 44 + 16 + (70 * HyprlandXkb.layoutCodes.length) + (4 * (HyprlandXkb.layoutCodes.length - 1)) + 24
+            };
+        }
+        if (type === "mode") {
+            return {
+                type: "mode",
+                source: "widgets/FloatingNotchMode.qml",
+                contractedH: Config.options.bar.floatingNotch.heightKeyboard,
+                expandedH: 140,
+                contractedW: 300,
+                expandedW: 320
             };
         }
         if (type === "wifi") {
@@ -683,6 +725,8 @@ Scope {
             list.push(getWidgetDetails("workspaces"));
         if (keyboardNotifActive && !Config.options.bar.floatingNotch.disableKeyboard)
             list.push(getWidgetDetails("keyboard"));
+        if (modeNotifActive)
+            list.push(getWidgetDetails("mode"));
         if (wifiNotifActive && !Config.options.bar.floatingNotch.disableWifi)
             list.push(getWidgetDetails("wifi"));
         if (GlobalStates.floatingNotchBtNotifActive && !Config.options.bar.floatingNotch.disableBluetooth)
@@ -849,7 +893,7 @@ Scope {
 
     // Priority-sorted list of modes for accordion direction (Feature 13)
     readonly property bool isPrioritySwapUpward: {
-        const priorities = ["osd", "notification", "localsend", "progress", "clipboard", "workspaces", "keyboard", "wifi", "bluetooth", "stopwatch", "pomodoro", "recording", "media", "calendar", "checklist", "audio", "home"];
+        const priorities = ["osd", "notification", "localsend", "progress", "clipboard", "workspaces", "keyboard", "mode", "wifi", "bluetooth", "stopwatch", "pomodoro", "recording", "media", "calendar", "checklist", "audio", "home"];
         const oldIdx = priorities.indexOf(root.previousWidgetType);
         const newIdx = priorities.indexOf(root.currentWidgetType);
         return oldIdx !== -1 && newIdx !== -1 && newIdx < oldIdx;
@@ -1078,7 +1122,7 @@ Scope {
             right: true
         }
 
-        implicitHeight: (searchActive || isOverviewVisible) ? (win.screen ? win.screen.height : 1080) : 240
+        implicitHeight: (searchActive || overviewAnimationActive) ? (win.screen ? win.screen.height : 1080) : 240
 
         // Dynamic click/hover mask to prevent blocking the screen
         mask: Region {
@@ -1759,28 +1803,23 @@ Scope {
             anchors.top: container.bottom
             anchors.topMargin: 10
             anchors.horizontalCenter: parent.horizontalCenter
-            active: root.searchActive && !root.isScrollingLayout
+            active: root.overviewAnimationActive && !root.isScrollingLayout
             visible: opacity > 0.01
 
-            opacity: root.isOverviewVisible ? 1.0 : 0.0
-            transform: Translate {
-                y: root.isOverviewVisible ? 0 : 30
-                Behavior on y {
-                    NumberAnimation {
-                        duration: root.isOverviewVisible ? 450 : 280
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
+            opacity: root.overviewFadeProgress
+            transform: [
+                Translate {
+                    y: root.overviewAnimStyle === "zoom"
+                        ? ((1.0 - root.overviewFadeProgress) * -30)
+                        : ((1.0 - root.overviewRevealProgress) * 30)
+                },
+                Scale {
+                    origin.x: overviewLoader.implicitWidth / 2
+                    origin.y: overviewLoader.implicitHeight / 2
+                    xScale: root.overviewAnimStyle === "zoom" ? (0.92 + 0.08 * root.overviewFadeProgress) : 1.0
+                    yScale: root.overviewAnimStyle === "zoom" ? (0.92 + 0.08 * root.overviewFadeProgress) : 1.0
                 }
-            }
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.isOverviewVisible ? 450 : 60
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                }
-            }
+            ]
 
             sourceComponent: OverviewWidget {
                 panelWindow: win
@@ -1794,28 +1833,23 @@ Scope {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            active: root.searchActive && root.isScrollingLayout
+            active: root.overviewAnimationActive && root.isScrollingLayout
             visible: opacity > 0.01
 
-            opacity: root.isOverviewVisible ? 1.0 : 0.0
-            transform: Translate {
-                y: root.isOverviewVisible ? 0 : 30
-                Behavior on y {
-                    NumberAnimation {
-                        duration: root.isOverviewVisible ? 450 : 280
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
+            opacity: root.overviewFadeProgress
+            transform: [
+                Translate {
+                    y: root.overviewAnimStyle === "zoom"
+                        ? ((1.0 - root.overviewFadeProgress) * -30)
+                        : ((1.0 - root.overviewRevealProgress) * 30)
+                },
+                Scale {
+                    origin.x: scrollingOverviewLoader.width / 2
+                    origin.y: scrollingOverviewLoader.height / 2
+                    xScale: root.overviewAnimStyle === "zoom" ? (0.92 + 0.08 * root.overviewFadeProgress) : 1.0
+                    yScale: root.overviewAnimStyle === "zoom" ? (0.92 + 0.08 * root.overviewFadeProgress) : 1.0
                 }
-            }
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.isOverviewVisible ? 450 : 120
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                }
-            }
+            ]
 
             sourceComponent: ScrollingOverviewWidget {
                 anchors.fill: parent

@@ -91,6 +91,13 @@ Singleton {
     property bool adbReachable: false
     property string resolvedAdbSerial: ""
 
+    /** How many devices `adb devices` reports in the "device" state. When
+     *  there is exactly one, every consumer omits `-s` entirely: Android
+     *  re-rolls its wireless-debugging port often enough that a serial can
+     *  go stale between resolving it and the command reaching the phone,
+     *  and "the only device" cannot go stale. */
+    property int adbDeviceCount: 0
+
     /** Live wireless ADB target ("ip:port") the next scrcpy launch will use.
      *  In auto mode this tracks KDE Connect's reported reachable address so
      *  the user never has to type an IP that changes (VPN, DHCP, etc.).
@@ -1062,36 +1069,117 @@ Singleton {
             const fallback = useWl ? root._resolveWirelessHost(root.activeDeviceId) : ""
             const fb = fallback ? root._shellQuote(fallback) : "''"
             const resolveIp = useWl
-                ? "IP=$(" + root._mdnsDiscoverSnippet(wantIp) + "); [ -z \"$IP\" ] && IP=" + fb + "; "
+                ? "IP=$(" + root._mdnsDiscoverSnippet(wantIp) + "); "
+                    + "if [ -n \"$IP\" ]; then echo \"MDNS:$IP\"; else IP=" + fb + "; fi; "
                 : "IP=''; "
             return ["bash", "-c",
-                "if command -v adb >/dev/null 2>&1; then " +
+                "if ! command -v adb >/dev/null 2>&1; then exit 1; fi; " +
                 resolveIp +
-                "  if [ -n \"$IP\" ]; then adb connect \"$IP\" 2>/dev/null; fi; " +
-                "  SERIAL=$(adb devices | grep -w 'device' | grep -v '192.168' | head -n1 | awk '{print $1}'); " +
-                "  if [ -z \"$SERIAL\" ]; then SERIAL=$(adb devices | grep -w 'device' | head -n1 | awk '{print $1}'); fi; " +
-                "  if [ -n \"$SERIAL\" ]; then echo \"SERIAL:$SERIAL\"; exit 0; else exit 1; fi; " +
-                "else exit 1; fi"]
+                "if [ -n \"$IP\" ]; then " +
+                // Android re-rolls the wireless-debugging port on every toggle,
+                // leaving adb holding a dead `ip:oldport` entry that would keep
+                // answering `adb devices`. Drop same-IP/other-port entries first.
+                "  BASE=${IP%:*}; " +
+                "  for S in $(adb devices | awk 'NF>1 && $1!=\"List\" {print $1}' | grep \"^${BASE}:\"); do " +
+                "    [ \"$S\" = \"$IP\" ] || adb disconnect \"$S\" >/dev/null 2>&1; " +
+                "  done; " +
+                "  adb connect \"$IP\" >/dev/null 2>&1; " +
+                "fi; " +
+                // A USB serial never contains a colon; prefer it over any
+                // network target so a plugged-in phone always wins.
+                "SERIAL=$(adb devices | awk '$2==\"device\" {print $1}' | grep -v ':' | head -n1); " +
+                "if [ -z \"$SERIAL\" ]; then SERIAL=$(adb devices | awk '$2==\"device\" {print $1}' | head -n1); fi; " +
+                "echo \"COUNT:$(adb devices | awk '$2==\"device\"' | wc -l)\"; " +
+                "if [ -n \"$SERIAL\" ]; then echo \"SERIAL:$SERIAL\"; exit 0; fi; " +
+                "exit 1"]
         }
-        stdout: SplitParser {
-            onRead: data => {
-                if (data.startsWith("SERIAL:")) {
-                    root.resolvedAdbSerial = data.substring(7).trim()
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (root._adbProbeRestarting) return
+                const lines = this.text.split("\n")
+                let serial = ""
+                let mdns = ""
+                let count = 0
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim()
+                    if (line.startsWith("SERIAL:")) serial = line.substring(7).trim()
+                    else if (line.startsWith("MDNS:")) mdns = line.substring(5).trim()
+                    else if (line.startsWith("COUNT:")) count = parseInt(line.substring(6).trim()) || 0
                 }
+                root.adbDeviceCount = count
+                // Assign unconditionally: leaving the previous serial in place
+                // when the probe finds nothing is what made a changed port
+                // stick forever, since adbTargetArgs() prefers it over the
+                // freshly discovered mDNS host.
+                root.resolvedAdbSerial = serial
+                if (mdns.indexOf(":") > 0) root.mdnsWirelessHost = mdns
             }
         }
         onExited: (code, status) => {
+            if (root._adbProbeRestarting) return
             const now = (code === 0)
             if (now !== root.adbReachable) {
                 root.adbReachable = now
                 if (root.stateChanged) root.stateChanged()
             }
+            root._flushAdbTargetCallbacks()
         }
     }
 
+    /** True while _probeAdb() is tearing the previous run down. Toggling
+     *  `running` off on a live Process emits exited/streamFinished right
+     *  there, and acting on that would flush pending withAdbTarget callbacks
+     *  with the state we are about to refresh. */
+    property bool _adbProbeRestarting: false
+
     function _probeAdb() {
+        root._adbProbeRestarting = true
         adbProbeProc.running = false
+        root._adbProbeRestarting = false
         adbProbeProc.running = true
+    }
+
+    // ─── On-demand ADB target resolution ──────────────────────────
+    // The 30s adbProber keeps state warm, but a wireless-debugging port
+    // can change between two polls. Callers that are about to spawn an
+    // adb/scrcpy command go through withAdbTarget() so the port is
+    // rediscovered at use time instead of read from a stale cache.
+
+    property var _adbTargetCallbacks: []
+    property bool _adbTargetResolving: false
+
+    /** Re-resolves the live ADB target, then invokes `callback(targetArgs)`
+     *  with the same shape `adbTargetArgs()` returns. Concurrent calls are
+     *  coalesced into a single probe. */
+    function withAdbTarget(callback) {
+        if (typeof callback !== "function") return
+        root._adbTargetCallbacks = root._adbTargetCallbacks.concat([callback])
+        if (root._adbTargetResolving) return
+        root._adbTargetResolving = true
+        adbTargetWatchdog.restart()
+        root._probeAdb()
+    }
+
+    // adb and avahi-browse can both block; never leave a caller waiting on a
+    // probe that will not come back — fall through to the cached target.
+    Timer {
+        id: adbTargetWatchdog
+        interval: 6000
+        repeat: false
+        onTriggered: root._flushAdbTargetCallbacks()
+    }
+
+    function _flushAdbTargetCallbacks() {
+        adbTargetWatchdog.stop()
+        if (root._adbTargetCallbacks.length === 0) {
+            root._adbTargetResolving = false
+            return
+        }
+        const pending = root._adbTargetCallbacks
+        root._adbTargetCallbacks = []
+        root._adbTargetResolving = false
+        const args = root.adbTargetArgs()
+        for (let i = 0; i < pending.length; i++) pending[i](args)
     }
 
     // ─── mDNS discovery of the phone's wireless-debugging port ────
@@ -1475,6 +1563,11 @@ Singleton {
      * ip:port target. The short `-s` form is accepted by both adb and scrcpy.
      */
     function adbTargetArgs() {
+        // With a single attached device, naming it is pure downside: adb
+        // already targets it implicitly, and a wireless serial resolved a
+        // moment ago may point at a port the phone has since re-rolled.
+        if (root.adbDeviceCount === 1)
+            return []
         if (root.resolvedAdbSerial)
             return ["-s", root.resolvedAdbSerial]
         const scrcpyConfig = Config.options?.phone?.scrcpy

@@ -27,6 +27,10 @@ QtObject {
     readonly property bool edgeRoundingActive: Config.ready
         && Config.options.appearance.fakeScreenRounding === 4
 
+    readonly property bool dynamicIslandHorizontal: Config.ready
+        && Config.options.bar.cornerStyle === 3
+        && !Config.options.bar.vertical
+
     // Connect is intentionally available from Welcome even when the current
     // bar uses an incompatible presentation. setMode("connect") normalizes
     // only the two bar choices required by Connect before switching modes.
@@ -44,6 +48,11 @@ QtObject {
     readonly property bool osdStyleEditable: root.effectiveMode !== "connect"
     readonly property bool connectModeActive: root.effectiveMode === "connect"
 
+    // A transparent Connect bar cannot use its drop shadow without changing
+    // the apparent color of the shared colLayer0 surface.
+    readonly property bool barDropShadowBlocked:
+        root.connectModeActive && Config.options.appearance.transparency.enable
+
     readonly property string defaultBlockedReasonKey: root.floatingNotchActive
         && root.effectiveMode === "connect"
         ? "Disable Floating Dynamic Island first"
@@ -58,10 +67,11 @@ QtObject {
         if (mode === "default" && !root.canSelectDefault)
             return false;
         if (mode === "connect") {
-            // Connect requires a compact Hug bar with a visible surface. Do
-            // this as one explicit user action so new users can preview it
-            // without first understanding the full Bar settings matrix.
-            Config.options.bar.cornerStyle = 0;
+            // Dynamic Island on top/bottom cannot be used in Connect mode.
+            // Automatically switch cornerStyle to Hug (0).
+            if (Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) {
+                Config.options.bar.cornerStyle = 0;
+            }
             Config.options.bar.barBackgroundStyle = 1;
         }
         Config.options.sidebar.sidebarStyle = mode;
@@ -71,8 +81,14 @@ QtObject {
     function setBarPosition(value: int): bool {
         if (!Config.ready || root.barPositionLocked)
             return false;
+        const isVertical = (value & 2) !== 0;
+        // If moving Dynamic Island to top or bottom while in Connect mode,
+        // automatically switch Shell mode to Default.
+        if (!isVertical && Config.options.bar.cornerStyle === 3 && root.effectiveMode === "connect") {
+            Config.options.sidebar.sidebarStyle = "default";
+        }
         Config.options.bar.bottom = (value & 1) !== 0;
-        Config.options.bar.vertical = (value & 2) !== 0;
+        Config.options.bar.vertical = isVertical;
         return true;
     }
 }

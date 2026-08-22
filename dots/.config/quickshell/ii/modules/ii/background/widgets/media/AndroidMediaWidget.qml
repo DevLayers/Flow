@@ -6,6 +6,7 @@ import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
+import Quickshell.Hyprland
 import Quickshell.Services.Mpris
 import qs
 import qs.services
@@ -33,6 +34,15 @@ AbstractBackgroundWidget {
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string identity: player ? (player.identity ?? "") : ""
     readonly property bool hasTrack: (player?.trackTitle ?? "").length > 0
+
+    readonly property bool hasActiveWindows: {
+        var activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? (HyprlandData.activeWorkspace ? HyprlandData.activeWorkspace.id : 1);
+        if (activeWsId > 1000000)
+            activeWsId = 2147483647 - activeWsId;
+        if (!HyprlandData || !HyprlandData.windowList)
+            return false;
+        return HyprlandData.windowList.some(w => w.workspace && w.workspace.id === activeWsId);
+    }
 
     property bool isLocalArt: artUrl.startsWith("file://")
     property string artDownloadLocation: Directories.coverArt
@@ -171,8 +181,8 @@ AbstractBackgroundWidget {
     }
 
     Timer {
-        running: root.playing
-        interval: Config.options.resources.updateInterval
+        running: root.playing && root.visible
+        interval: 1000
         repeat: true
         onTriggered: if (root.player) root.player.positionChanged()
     }
@@ -687,6 +697,7 @@ AbstractBackgroundWidget {
                             active: root.player ? (root.player.canSeek ?? false) : false
                             sourceComponent: StyledSlider {
                                 configuration: StyledSlider.Configuration.Wavy
+                                animateWave: root.playing && root.visible && !root.hasActiveWindows
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 handleColor: root.accentColor
@@ -706,6 +717,7 @@ AbstractBackgroundWidget {
                             active: root.player ? !(root.player.canSeek ?? false) : false
                             sourceComponent: StyledProgressBar {
                                 wavy: root.player ? root.playing : false
+                                animateWave: root.playing && root.visible && !root.hasActiveWindows
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0

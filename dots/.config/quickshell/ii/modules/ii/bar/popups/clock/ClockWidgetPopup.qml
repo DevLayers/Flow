@@ -274,11 +274,9 @@ StyledPopup {
 
         Connections {
             target: root
-            function onOpenedChanged() {
-                if (!root.opened)
-                    columnLayout.resetContentEntrance();
-            }
-
+            // Do not reset on close start: the cards must stay visible so they
+            // shrink with the surface, like the other popups. The reset happens
+            // once the close animation reaches progress 0.
             function onPopupOpenProgressChanged() {
                 if (root.popupOpenProgress === 0.0) {
                     columnLayout.resetContentEntrance();

@@ -6,6 +6,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.modes
 import qs.modules.common.functions
 import qs.modules.common.panels.lock
 import qs.modules.ii.bar as Bar
@@ -461,7 +462,7 @@ MouseArea {
         }
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
-        visible: batteryButton.visible || capsLockPill.visible || nextAlarmButton.visible || weatherButton.visible || layoutSwitcherButton.visible || keepAwakeButton.visible
+        visible: batteryButton.visible || capsLockPill.visible || nextAlarmButton.visible || weatherButton.visible || layoutSwitcherButton.visible || keepAwakeButton.visible || modeButton.visible
 
         ToolbarButton {
             id: batteryButton
@@ -830,6 +831,49 @@ MouseArea {
                     font.weight: Font.Medium
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colOnSecondaryContainer
+                }
+            }
+        }
+
+        // The active mode, read-only: no switching from the lock screen.
+        ToolbarButton {
+            id: modeButton
+            readonly property bool shown: Modes.active && Config.options.modes.lockPill
+            readonly property string colorKey: Modes.activeMode?.color ?? ""
+            Layout.fillHeight: true
+            Layout.preferredWidth: shown ? (modeRow.implicitWidth + 24) : 0
+            visible: Layout.preferredWidth > 0
+            clip: true
+            pointingHandCursor: false
+
+            colBackground: ModeUi.container(colorKey)
+            colBackgroundHover: ModeUi.container(colorKey)
+            colRipple: ModeUi.container(colorKey)
+
+            Behavior on Layout.preferredWidth {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            contentItem: RowLayout {
+                id: modeRow
+                anchors.centerIn: parent
+                spacing: 6
+
+                MaterialSymbol {
+                    text: Modes.activeMode?.icon ?? "tune"
+                    iconSize: 18
+                    color: ModeUi.onContainer(modeButton.colorKey)
+                    fill: 1
+                }
+
+                StyledText {
+                    text: Modes.activeMode?.name ?? ""
+                    font.weight: Font.Medium
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: ModeUi.onContainer(modeButton.colorKey)
                 }
             }
         }

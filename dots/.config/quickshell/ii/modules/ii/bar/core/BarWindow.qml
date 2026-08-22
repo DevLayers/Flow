@@ -23,7 +23,6 @@ Scope {
     required property int monitorIndex
 
     readonly property bool lockUsesFade: Config.options.appearance.fakeScreenRounding === 3
-        && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical)
     readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
     readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
     readonly property real lockSlideDistance: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
@@ -42,7 +41,7 @@ Scope {
         exclusionMode: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) ? ExclusionMode.Ignore : ExclusionMode.Normal
 
         property real targetZone: Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
-        property real minZone: (Config.options.appearance.fakeScreenRounding === 3 && Config.options.bar.cornerStyle !== 3) ? Config.options.appearance.wrappedFrameThickness : 0
+        property real minZone: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : 0
 
         exclusiveZone: {
             if (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) {
@@ -148,7 +147,7 @@ Scope {
 
         // ── WrappedFrame visuals (fake screen rounding) ───────────────────────
         Loader {
-            active: Config.options.appearance.fakeScreenRounding == 3 && Config.options.bar.cornerStyle !== 3
+            active: Config.options.appearance.fakeScreenRounding == 3
             anchors.fill: parent
             opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
             sourceComponent: Component {

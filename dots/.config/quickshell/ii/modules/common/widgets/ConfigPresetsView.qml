@@ -301,7 +301,7 @@ ColumnLayout {
                                 }
 
                                 onClicked: {
-                                    Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh export "${model.name}"`]);
+                                    Quickshell.execDetached([Directories.scriptPath + "/presets.sh", "export", String(model.name)]);
                                 }
 
                                 StyledToolTip {

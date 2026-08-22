@@ -28,13 +28,31 @@ WindowDialog {
     function prepareForOpen() {
         if (!Bluetooth.defaultAdapter)
             return;
-        Bluetooth.defaultAdapter.enabled = true;
-        Bluetooth.defaultAdapter.startDiscovery();
+        if (BluetoothStatus.enabled) {
+            Bluetooth.defaultAdapter.startDiscovery();
+            return;
+        }
+        // Powering on is asynchronous, so defer the scan until the adapter is up.
+        root._scanWhenEnabled = true;
+        BluetoothStatus.setEnabled(true);
     }
 
     function cleanupAfterClose() {
+        root._scanWhenEnabled = false;
         if (Bluetooth.defaultAdapter?.discovering)
             Bluetooth.defaultAdapter.stopDiscovery();
+    }
+
+    property bool _scanWhenEnabled: false
+
+    Connections {
+        target: BluetoothStatus
+        function onEnabledChanged() {
+            if (!BluetoothStatus.enabled || !root._scanWhenEnabled)
+                return;
+            root._scanWhenEnabled = false;
+            Bluetooth.defaultAdapter?.startDiscovery();
+        }
     }
 
     onShowChanged: {
@@ -68,9 +86,7 @@ WindowDialog {
         StyledSwitch {
             checked: Bluetooth.defaultAdapter?.enabled ?? false
             onToggled: {
-                if (Bluetooth.defaultAdapter) {
-                    Bluetooth.defaultAdapter.enabled = checked;
-                }
+                BluetoothStatus.setEnabled(checked);
             }
         }
     }

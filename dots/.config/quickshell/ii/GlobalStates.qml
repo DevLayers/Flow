@@ -59,11 +59,56 @@ Singleton {
     property bool overviewOpen: false
     property bool searchOnlyMode: false
 
-    // scaleValue: animated 1.0 → ~0.85 during overview open (zoomOutStyle 0 only)
-    // originX/Y: scale transform center in screen coordinates
+    // Legacy Gnome-like window transition state.  These values intentionally
+    // remain global because the transition layer and the focused background
+    // share the same transform clock in the original implementation.
     property real overviewZoomScale: 1.0
     property real overviewZoomOriginX: 0.5
     property real overviewZoomOriginY: 0.5
+
+    // Shared trigger state for the per-monitor overview background controllers.
+    // Scratchpad is derived here so wallpaper, widgets, blur and transitions do
+    // not implement subtly different versions of the same predicate.
+    readonly property bool scratchpadOpen: {
+        const monitors = HyprlandData.monitors;
+        if (!monitors)
+            return false;
+        return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
+    }
+    readonly property bool overviewBackgroundActive: {
+        const background = Config.options && Config.options.background;
+        return Boolean(background && background.zoomOutEnabled && (root.overviewOpen || root.cheatsheetOpen || root.scratchpadOpen));
+    }
+
+    // BackgroundRoot owns one controller per monitor. Other background surfaces
+    // retrieve that same object instead of reimplementing its preset formulas.
+    property var overviewBackgroundControllers: ({})
+
+    function registerOverviewBackgroundController(screenName, controller) {
+        if (!screenName || !controller)
+            return;
+        const next = ({})
+        for (const key in root.overviewBackgroundControllers)
+            next[key] = root.overviewBackgroundControllers[key];
+        next[screenName] = controller;
+        root.overviewBackgroundControllers = next;
+    }
+
+    function unregisterOverviewBackgroundController(screenName, controller) {
+        if (!screenName || root.overviewBackgroundControllers[screenName] !== controller)
+            return;
+        const next = ({})
+        for (const key in root.overviewBackgroundControllers) {
+            if (key !== screenName)
+                next[key] = root.overviewBackgroundControllers[key];
+        }
+        root.overviewBackgroundControllers = next;
+    }
+
+    function overviewBackgroundControllerFor(screenName) {
+        return root.overviewBackgroundControllers[screenName] ?? null;
+    }
+
     property bool regionSelectorOpen: false
     property bool searchOpen: false
     property bool screenLocked: false
@@ -93,6 +138,11 @@ Singleton {
     property bool sessionOpen: false
     property bool superDown: false
     property bool usageOpen: false
+    property bool modesOpen: false
+    // Transient "Work mode on" banner: set by the Modes engine for ~3 s.
+    // Payload: { kind: "mode"|"routine", id, icon, color, title, subtitle }
+    property bool modeFlashActive: false
+    property var modeFlashPayload: null
     property bool superReleaseMightTrigger: true
     property bool wallpaperSelectorOpen: false
     property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
@@ -401,6 +451,10 @@ Singleton {
             root.openSettingsPage(pageId, "", sectionTitle);
         }
 
+        function openSubPage(pageId: string, subPage: string): void {
+            root.openSettingsPage(pageId, subPage || "");
+        }
+
     }
     IpcHandler {
         target: "welcome"
@@ -434,6 +488,33 @@ Singleton {
         }
     }
 
+    IpcHandler {
+        target: "osd"
+
+        function trigger(): void {
+            root.osdCurrentIndicator = "volume";
+            root.osdVolumeOpen = true;
+            root.osdInteraction();
+        }
+
+        function toggle(): void {
+            root.osdVolumeOpen = !root.osdVolumeOpen;
+            if (root.osdVolumeOpen) {
+                root.osdInteraction();
+            }
+        }
+
+        function hide(): void {
+            root.osdVolumeOpen = false;
+        }
+
+        function open(): void {
+            root.osdCurrentIndicator = "volume";
+            root.osdVolumeOpen = true;
+            root.osdInteraction();
+        }
+    }
+
     GlobalShortcut {
         name: "settingsToggle"
         description: "Toggles the settings window"
@@ -463,6 +544,20 @@ Singleton {
             return false;
 
         // All corner styles supported
+        return true;
+    }
+
+    // The floating Dynamic Island is the sole owner of the search surface
+    // while it is enabled. Its PanelWindow chooses the configured target
+    // monitor, so ownership must not depend on the monitor that opened it.
+    readonly property bool floatingNotchOwnsSearch: {
+        if (!Config.ready || !root.overviewOpen)
+            return false;
+
+        const notch = Config.options.bar.floatingNotch;
+        if (!notch || !notch.enable || notch.centerInBar)
+            return false;
+
         return true;
     }
 

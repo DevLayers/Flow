@@ -60,9 +60,9 @@ Item {
             }
         }
         
-        // 2. ALIASES: From config
+        // 2. ALIASES: From persistent user state / config
         if (Config.options.search.suggestions.showAliases) {
-            let aliasesConfig = Config.options.search.aliases || [];
+            let aliasesConfig = (Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || [];
             let mappedAliases = aliasesConfig.map(alias => ({
                 name: alias.alias || "",
                 comment: alias.command || "",

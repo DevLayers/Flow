@@ -27,6 +27,7 @@ import qs.modules.ii.sidebarDashboard.tailscale
 import qs.modules.ii.sidebarDashboard.dnsOverTls
 import qs.modules.ii.sidebarDashboard.idleInhibitor
 import qs.modules.ii.sidebarDashboard.screenShader
+import qs.modules.ii.sidebarDashboard.modes
 
 Item {
     id: root
@@ -44,7 +45,8 @@ Item {
     property bool showDnsOverTlsDialog: false
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog
+    property bool showModesDialog: false
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
     property bool editMode: false
 
     property int entranceTrigger: -1
@@ -83,6 +85,7 @@ Item {
                 root.showDnsOverTlsDialog = false;
                 root.showIdleInhibitorDialog = false;
                 root.showScreenShaderDialog = false;
+                root.showModesDialog = false;
             }
         }
     }
@@ -166,6 +169,7 @@ Item {
                 id: classicQuickPanelLoader
                 styleName: "classic"
                 sourceComponent: ClassicQuickPanel {
+                    editMode: root.editMode
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
                 }
@@ -296,6 +300,11 @@ Item {
         dialog: ScreenShaderDialog {}
     }
 
+    ToggleDialog {
+        shownPropertyString: "showModesDialog"
+        dialog: ModesDialog {}
+    }
+
     component ToggleDialog: Loader {
         id: toggleDialogLoader
         required property string shownPropertyString
@@ -362,6 +371,9 @@ Item {
             }
             function onOpenIdleInhibitorDialog() {
                 root.showIdleInhibitorDialog = true;
+            }
+            function onOpenModesDialog() {
+                root.showModesDialog = true;
             }
         }
     }
@@ -691,14 +703,13 @@ Item {
             QuickToggleButton {
                 id: editButton
                 toggled: systemButtonRowRoot.editMode
-                visible: Config.options.sidebar.quickToggles.style === "android"
                 buttonIcon: "edit"
                 onClicked: {
                     systemButtonRowRoot.editMode = !systemButtonRowRoot.editMode;
                     systemButtonRowRoot.editModeToggled(systemButtonRowRoot.editMode);
                 }
                 StyledToolTip {
-                    text: Translation.tr("Edit quick toggles") + (systemButtonRowRoot.editMode ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : "")
+                    text: Translation.tr("Edit quick toggles") + (!systemButtonRowRoot.editMode ? "" : Config.options.sidebar.quickToggles.style === "android" ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : Translation.tr("\nLMB to show/hide a toggle"))
                 }
 
                 SequentialAnimation {

@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 import qs.modules.welcome
+import qs.modules.welcome.tutorials
 
 Item {
     id: root
@@ -17,144 +18,211 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 14
+        spacing: Appearance.rounding.normal
 
-        RowLayout {
+        Rectangle {
+            id: tutorialHero
             Layout.fillWidth: true
-            spacing: 10
+            color: Appearance.colors.colLayer1
+            radius: Appearance.rounding.large
+            implicitHeight: heroContent.implicitHeight + Appearance.rounding.small * 2
 
-            RippleButton {
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: implicitHeight
-                implicitHeight: 44
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                colRipple: Appearance.colors.colSecondaryContainerActive
-                onClicked: root.backRequested()
+            RowLayout {
+                id: heroContent
+                anchors.fill: parent
+                anchors.margins: Appearance.rounding.small
+                spacing: Appearance.rounding.normal
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "arrow_back"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnSecondaryContainer
+                RippleButton {
+                    Layout.alignment: Qt.AlignTop
+                    implicitWidth: Appearance.rounding.verylarge
+                    implicitHeight: Appearance.rounding.verylarge
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+                    colRipple: Appearance.colors.colSecondaryContainerActive
+                    Accessible.name: Translation.tr("Back to tutorials")
+                    onClicked: root.backRequested()
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "arrow_back"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnSecondaryContainer
+                    }
+                }
+
+                MaterialShapeWrappedMaterialSymbol {
+                    id: heroShape
+                    Layout.alignment: Qt.AlignTop
+                    text: root.tutorial ? root.tutorial.icon : "school"
+                    shape: MaterialShape.Shape.SoftBurst
+                    iconSize: Appearance.font.pixelSize.hugeass
+                    padding: Appearance.rounding.normal
+                    fill: 1
+                    color: Appearance.colors.colTertiaryContainer
+                    colSymbol: Appearance.colors.colOnTertiaryContainer
+                }
+
+                ColumnLayout {
+                    id: heroCopy
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: Appearance.rounding.verysmall
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: root.tutorial
+                            ? Translation.tr(root.tutorial.titleKey)
+                            : Translation.tr("Tutorial")
+                        color: Appearance.colors.colOnLayer1
+                        font.family: Appearance.font.family.title
+                        font.pixelSize: Appearance.font.pixelSize.hugeass
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        font.weight: Font.Bold
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: root.tutorial
+                            ? Translation.tr(root.tutorial.descriptionKey)
+                            : Translation.tr("Choose a tutorial from the catalog.")
+                        color: Appearance.colors.colOnLayer2
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Appearance.rounding.small
+
+                        StyledText {
+                            text: root.tutorial
+                                ? WelcomeTutorialRegistry.statusTextFor(root.tutorial)
+                                : ""
+                            color: root.integrationState.error
+                                ? Appearance.colors.colOnErrorContainer
+                                : Appearance.colors.colPrimary
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            font.weight: Font.DemiBold
+                        }
+
+                        StyledText {
+                            text: root.tutorial
+                                ? WelcomeTutorialRegistry.estimatedTimeFor(root.tutorial)
+                                : ""
+                            color: Appearance.colors.colOnLayer2
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                        }
+
+                        Repeater {
+                            model: root.tutorial && root.tutorial.usedInChips
+                                ? root.tutorial.usedInChips
+                                : []
+
+                            delegate: Rectangle {
+                                required property string modelData
+                                radius: Appearance.rounding.full
+                                implicitHeight: Appearance.rounding.large
+                                implicitWidth: chipLabel.implicitWidth + Appearance.rounding.normal
+                                color: Appearance.colors.colTertiaryContainer
+
+                                StyledText {
+                                    id: chipLabel
+                                    anchors.centerIn: parent
+                                    text: Translation.tr(modelData)
+                                    color: Appearance.colors.colOnTertiaryContainer
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    font.weight: Font.DemiBold
+                                }
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+                    }
                 }
             }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            color: Appearance.colors.colLayer1
+            radius: Appearance.rounding.large
+            implicitHeight: introColumn.implicitHeight + Appearance.rounding.normal * 2
 
             ColumnLayout {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 2
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.tutorial ? Translation.tr(root.tutorial.titleKey) : Translation.tr("Tutorial")
-                    color: Appearance.colors.colOnLayer1
-                    font.pixelSize: Appearance.font.pixelSize.large
-                    font.weight: Font.DemiBold
-                }
+                id: introColumn
+                anchors.fill: parent
+                anchors.margins: Appearance.rounding.normal
+                spacing: 4
 
                 StyledText {
                     Layout.fillWidth: true
                     text: root.tutorial
-                        ? WelcomeTutorialRegistry.statusTextFor(root.tutorial)
+                        ? Translation.tr(root.content.intro)
                         : Translation.tr("Choose a tutorial from the catalog.")
-                    color: root.integrationState.error
-                        ? Appearance.colors.colOnErrorContainer
-                        : Appearance.colors.colOnLayer2
+                    color: Appearance.colors.colOnLayer1
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.DemiBold
+                    wrapMode: Text.WordWrap
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    visible: root.content.prerequisites && root.content.prerequisites.length > 0
+                    text: Translation.tr("What you need: ") + root.content.prerequisites.join(Translation.tr(" · "))
+                    color: Appearance.colors.colOnLayer2
                     font.pixelSize: Appearance.font.pixelSize.smaller
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 2
                     elide: Text.ElideRight
                 }
             }
         }
 
-        StyledText {
-            Layout.fillWidth: true
-            text: root.tutorial
-                ? Translation.tr(root.content.intro)
-                : Translation.tr("Choose a tutorial from the catalog.")
-            color: Appearance.colors.colOnLayer2
-            font.pixelSize: Appearance.font.pixelSize.small
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
-        }
-
-        StyledText {
-            Layout.fillWidth: true
-            visible: root.content.prerequisites && root.content.prerequisites.length > 0
-            text: Translation.tr("What you need: ") + root.content.prerequisites.join(Translation.tr(" · "))
-            color: Appearance.colors.colOnLayer2
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            wrapMode: Text.WordWrap
-            maximumLineCount: 1
-            elide: Text.ElideRight
-        }
-
-        ColumnLayout {
+        Flickable {
+            id: flickable
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 8
+            contentWidth: width
+            contentHeight: contentContainer.implicitHeight + Appearance.rounding.normal
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
 
-            Repeater {
-                model: root.content.steps || []
+            ColumnLayout {
+                id: contentContainer
+                width: flickable.width - Appearance.rounding.small
+                spacing: Appearance.rounding.small
 
-                delegate: RowLayout {
-                    required property var modelData
-                    required property int index
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignTop
-                    spacing: 10
+                Repeater {
+                    model: root.content.steps || []
 
-                    MaterialShapeWrappedMaterialSymbol {
-                        Layout.alignment: Qt.AlignTop
-                        text: (["looks_one", "looks_two", "looks_3", "looks_4"][index] || "looks_one")
-                        shape: MaterialShape.Shape.Cookie4Sided
-                        iconSize: Appearance.font.pixelSize.small
-                        padding: 7
-                        color: Appearance.colors.colSecondaryContainer
-                        colSymbol: Appearance.colors.colOnSecondaryContainer
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr(modelData.title)
-                            color: Appearance.colors.colOnLayer1
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.weight: Font.DemiBold
-                            wrapMode: Text.WordWrap
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr(modelData.body)
-                            color: Appearance.colors.colOnLayer2
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            wrapMode: Text.WordWrap
-                            maximumLineCount: 2
-                            elide: Text.ElideRight
-                        }
+                    delegate: WelcomeTutorialStep {
+                        required property var modelData
+                        required property int index
+                        title: Translation.tr(modelData.title)
+                        supportingText: Translation.tr(modelData.body)
+                        stepNumber: String(index + 1)
+                        stateKind: index === 0 ? "current" : "pending"
+                        isLast: index === (root.content.steps || []).length - 1
                     }
                 }
-            }
 
-            Item { Layout.fillHeight: true }
-
-            RippleButtonWithIcon {
-                Layout.alignment: Qt.AlignLeft
-                visible: root.content.actionPage && root.content.actionPage.length > 0
-                materialIcon: "open_in_new"
-                mainText: root.content.actionLabel
-                    ? Translation.tr(root.content.actionLabel)
-                    : Translation.tr("Open guide")
-                onClicked: root.openSettingsTarget(
-                    root.content.actionPage || "",
-                    root.content.actionSubPage || "",
-                    root.content.actionSection || "")
+                RippleButtonWithIcon {
+                    Layout.alignment: Qt.AlignLeft
+                    visible: root.content.actionPage && root.content.actionPage.length > 0
+                    materialIcon: "open_in_new"
+                    mainText: root.content.actionLabel
+                        ? Translation.tr(root.content.actionLabel)
+                        : Translation.tr("Open guide")
+                    onClicked: root.openSettingsTarget(
+                        root.content.actionPage || "",
+                        root.content.actionSubPage || "",
+                        root.content.actionSection || "")
+                }
             }
         }
     }

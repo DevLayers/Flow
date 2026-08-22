@@ -58,6 +58,11 @@ Singleton {
         }
     ]
 
+    // Directories holding the .ics files of every configured khal calendar.
+    // Read from khal's own config so deletion works wherever the user keeps their calendars.
+    property var calendarPaths: [root.homePath + "/.calendars"]
+    property string khalDbPath: root.homePath + "/.cache/khal/khal.db"
+
     // Process for checking khal configuration
     Process {
         id: khalCheckProcess
@@ -67,7 +72,29 @@ Singleton {
         onExited: exitCode => {
             root.khalAvailable = (exitCode === 0);
             if (root.khalAvailable) {
+                khalPathsProcess.running = true;
                 interval.running = true;
+            }
+        }
+    }
+
+    Process {
+        id: khalPathsProcess
+        running: false
+        // First line: sqlite cache path; following lines: one calendar directory (or glob) each
+        command: ["python3", "-c", "from khal.settings import get_config\nimport os\ncfg = get_config()\nprint(os.path.expanduser(cfg['sqlite']['path']))\nfor c in cfg['calendars'].values():\n    print(os.path.expanduser(c['path']))"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+                if (lines.length === 0)
+                    return;
+                root.khalDbPath = lines[0];
+                const paths = lines.slice(1);
+                if (paths.length === 0)
+                    return;
+                if (!paths.includes(root.homePath + "/.calendars"))
+                    paths.push(root.homePath + "/.calendars");
+                root.calendarPaths = paths;
             }
         }
     }
@@ -285,14 +312,7 @@ Singleton {
     }
 
     function removeItem(item) {
-        let taskToDelete = item['content'];
-        let dbPath = root.homePath + "/.local/share/khal/khal.db";
-
-        khalRemoveProcess.command = [ // currently only this hack is possible to delte without interactive shell issue:https://github.com/pimutils/khal/issues/603
-            "sqlite3", dbPath, "DELETE FROM events WHERE item LIKE '%SUMMARY:" + taskToDelete.replace(/'/g, "''") + "%';"];
-
-        khalRemoveProcess.running = true;
-        console.log(khalRemoveProcess.command);
+        root.removeEvent(item['content']);
     }
 
     // Remove a timed event by UID (unique identifier)
@@ -300,20 +320,35 @@ Singleton {
         if (!uid || uid.length === 0)
             return;
 
-        let dbPath = root.homePath + "/.local/share/khal/khal.db";
-        let calendarsPath = root.homePath + "/.calendars";
-        khalRemoveProcess.command = ["bash", "-c", "find '" + calendarsPath + "' -type f -name '*.ics' -exec grep -l 'UID:" + uid + "' {} + | xargs -r rm -f; sqlite3 '" + dbPath + "' \"DELETE FROM events WHERE item LIKE '%UID:" + uid + "%';\""];
+        khalRemoveProcess.command = root.buildRemoveCommand("UID:" + uid);
         console.log("[CalendarService] Removing event by UID:", uid);
         khalRemoveProcess.running = true;
+    }
+
+    // Deletes every .ics under the known calendar dirs whose content contains `needle`
+    // (fixed-string match), then purges the matching rows from khal's cache db so the event
+    // disappears immediately instead of waiting for khal's next re-sync.
+    // Calendar paths may be globs (khal "discover" collections), hence the unquoted `$g`.
+    readonly property string removeScript: [
+        'needle="$1"; shift',
+        'shopt -s nullglob',
+        'for g in "$@"; do for d in $g; do',
+        '  [ -d "$d" ] || continue',
+        '  find "$d" -type f -name "*.ics" -exec grep -lF -- "$needle" {} + | xargs -r rm -f',
+        'done; done',
+        "sql_needle=${needle//\\'/\\'\\'}",
+        'sqlite3 "$db" "DELETE FROM events WHERE item LIKE \'%${sql_needle}%\';"'
+    ].join("\n")
+
+    function buildRemoveCommand(needle) {
+        return ["env", "db=" + root.khalDbPath, "bash", "-c", root.removeScript, "khal-remove", needle].concat(root.calendarPaths);
     }
 
     function removeEvent(title) {
         if (!title || title.length === 0)
             return;
 
-        let dbPath = root.homePath + "/.local/share/khal/khal.db";
-        let calendarsPath = root.homePath + "/.calendars";
-        khalRemoveProcess.command = ["bash", "-c", "find '" + calendarsPath + "' -type f -name '*.ics' -exec grep -l 'SUMMARY:" + title.replace(/'/g, "'\\''") + "' {} + | xargs -r rm -f; sqlite3 '" + dbPath + "' \"DELETE FROM events WHERE item LIKE '%SUMMARY:" + title.replace(/'/g, "''") + "%';\""];
+        khalRemoveProcess.command = root.buildRemoveCommand("SUMMARY:" + title);
         console.log("[CalendarService] Removing event:", title);
         khalRemoveProcess.running = true;
     }

@@ -219,6 +219,8 @@ Button {
     property color colBackgroundToggledActive: Appearance?.colors.colPrimaryActive ?? colBackgroundToggledHover
     property color colRipple: Appearance?.colors.colLayer1Active ?? "#D6CEE2"
     property color colRippleToggled: Appearance?.colors.colPrimaryActive ?? "#D6CEE2"
+    property real borderWidth: 0
+    property color borderColor: Appearance?.colors.colOutline ?? "transparent"
 
     Behavior on buttonEffectiveRadius {
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -240,7 +242,10 @@ Button {
         }
     }
 
+    property bool rippleEverStarted: false
+
     function startRipple(x, y) {
+        root.rippleEverStarted = true;
         const stateY = buttonBackground.y;
         rippleAnim.x = x;
         rippleAnim.y = y - stateY;
@@ -373,10 +378,17 @@ Button {
         bottomRightRadius: root.bottomRightRadius
         implicitHeight: 30
         color: root.buttonColor
+        // The layer below no longer runs permanently, so the corners are drawn
+        // by the rectangle itself most of the time.
+        antialiasing: true
+        border.width: root.borderWidth
+        border.color: root.borderColor
         Behavior on color {
             animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
         }
-        layer.enabled: true
+        // The mask exists only to clip the ripple to the rounded corners, so
+        // the layer is worth its cost only while a ripple is actually painted.
+        layer.enabled: root.rippleEnabled && ripple.rippling
         layer.samples: 8
         layer.smooth: true
         layer.effect: OpacityMask {
@@ -395,26 +407,32 @@ Button {
             width: ripple.implicitWidth
             height: ripple.implicitHeight
             opacity: 0
-            visible: width > 0 && height > 0
+            visible: ripple.rippling
+            readonly property bool rippling: opacity > 0 && width > 0 && height > 0
             property real implicitWidth: 0
             property real implicitHeight: 0
             Behavior on opacity {
                 animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
             }
-            RadialGradient {
+            // Built on the first press instead of with the button: a settings
+            // page holds hundreds of these and most are never clicked.
+            Loader {
                 anchors.fill: parent
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0.0
-                        color: root.rippleColor
-                    }
-                    GradientStop {
-                        position: 0.3
-                        color: root.rippleColor
-                    }
-                    GradientStop {
-                        position: 0.5
-                        color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
+                active: root.rippleEverStarted
+                sourceComponent: RadialGradient {
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0.0
+                            color: root.rippleColor
+                        }
+                        GradientStop {
+                            position: 0.3
+                            color: root.rippleColor
+                        }
+                        GradientStop {
+                            position: 0.5
+                            color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
+                        }
                     }
                 }
             }

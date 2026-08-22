@@ -28,6 +28,36 @@ Item {
         : Translation.tr("Battery unavailable")
     readonly property string audioName: Audio.sink ? Audio.friendlyDeviceName(Audio.sink) : Translation.tr("No output detected")
     readonly property bool wifiConnected: Network.wifiStatus === "connected"
+    property bool wifiConnectionWasKnown: false
+
+    Component.onCompleted: root.wifiConnectionWasKnown = root.wifiConnected
+
+    onWifiConnectedChanged: {
+        if (root.wifiConnectionWasKnown && root.wifiConnected)
+            wifiConnectFeedback.restart();
+        root.wifiConnectionWasKnown = true;
+    }
+
+    SequentialAnimation {
+        id: wifiConnectFeedback
+
+        NumberAnimation {
+            target: wifiStatusChip
+            property: "scale"
+            to: 1.03
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+        NumberAnimation {
+            target: wifiStatusChip
+            property: "scale"
+            to: 1
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -117,9 +147,15 @@ Item {
                                 spacing: Appearance.rounding.verysmall
 
                                 MaterialSymbol {
+                                    id: wifiStatusIcon
                                     text: root.wifiConnected ? "check" : "error"
                                     iconSize: Appearance.font.pixelSize.small
                                     color: root.wifiConnected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
+                                    scale: root.wifiConnected ? 1 : 0.88
+
+                                    Behavior on scale {
+                                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                    }
                                 }
 
                                 StyledText {
@@ -240,6 +276,7 @@ Item {
                             }
 
                             StyledText {
+                                id: bluetoothNameLabel
                                 Layout.fillWidth: true
                                 text: root.bluetoothName
                                 color: Appearance.colors.colOnLayer2
@@ -248,16 +285,34 @@ Item {
                                 font.pixelSize: Appearance.font.pixelSize.larger
                                 font.weight: Font.Bold
                                 elide: Text.ElideRight
+
+                                transform: Translate {
+                                    y: root.bluetoothDevice ? 0 : Appearance.rounding.verysmall
+
+                                    Behavior on y {
+                                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                    }
+                                }
                             }
 
                             StyledText {
-                                visible: root.bluetoothBatteryAvailable
-                                text: root.bluetoothBattery
+                                id: bluetoothBatteryLabel
+                                text: root.bluetoothBatteryAvailable ? root.bluetoothBattery : ""
                                 color: Appearance.colors.colOnLayer2
                                 font.family: Appearance.font.family.title
                                 font.variableAxes: Appearance.font.variableAxes.titleRounded
                                 font.pixelSize: Appearance.font.pixelSize.larger
                                 font.weight: Font.Bold
+                                Layout.preferredWidth: root.bluetoothBatteryAvailable ? implicitWidth : 0
+                                Layout.minimumWidth: 0
+                                opacity: root.bluetoothBatteryAvailable ? 1 : 0
+
+                                Behavior on Layout.preferredWidth {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                }
+                                Behavior on opacity {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                }
                             }
                         }
 
@@ -312,6 +367,11 @@ Item {
                                 iconSize: Appearance.font.pixelSize.huge
                                 padding: Appearance.rounding.small
                                 rotation: audioButton.hovered ? 8 : 0
+                                scale: Audio.muted ? 0.92 : 1
+
+                                Behavior on scale {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                }
                             }
                             StyledText {
                                 Layout.fillWidth: true

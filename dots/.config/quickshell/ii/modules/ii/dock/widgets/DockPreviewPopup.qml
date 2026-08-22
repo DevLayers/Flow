@@ -172,12 +172,16 @@ PopupWindow {
         function onHeightChanged() { previewPopup.requestCompactAnchor() }
     }
 
+    // dockRoot is either a DockContent (no hoveredAppButton) or a DockGroupPopup,
+    // so one of these handlers is always unknown on the current target.
     Connections {
         target: previewPopup.dockRoot
+        ignoreUnknownSignals: true
         function onLastHoveredButtonChanged() { previewPopup.requestCompactAnchor() }
         function onHoveredAppButtonChanged() { previewPopup.requestCompactAnchor() }
     }
 
+    // Only non-null when dockRoot is a DockGroupPopup: follow the parent dock's hover state.
     Connections {
         target: previewPopup.dockRoot?.dockContent ?? null
         function onButtonHoveredChanged() { previewPopup.requestCompactAnchor() }

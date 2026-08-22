@@ -7,6 +7,8 @@ RippleButton {
     id: buttonWithIconRoot
     property string nerdIcon
     property string materialIcon
+    property string hoverMaterialIcon: ""
+    property bool hoverIconSuppressed: false
     property bool materialIconFill: true
     property bool iconOnRight: false
     property bool centerContent: false
@@ -17,6 +19,8 @@ RippleButton {
     property var mainTextVariableAxes: Appearance.font.variableAxes.main
     property real contentSpacing: Appearance.rounding.verysmall
     property string mainText: "Button text"
+    readonly property real contentImplicitWidth: contentItem ? contentItem.implicitWidth : 0
+    readonly property real contentImplicitHeight: contentItem ? contentItem.implicitHeight : 0
     property color colText: Appearance.colors.colOnSecondaryContainer
     property Component mainContentComponent: Component {
         StyledText {
@@ -34,76 +38,130 @@ RippleButton {
     buttonRadius: Appearance.rounding.small
     colBackground: Appearance.colors.colLayer2
 
-    contentItem: RowLayout {
-        width: buttonWithIconRoot.centerContent ? implicitWidth : parent.width
-        anchors.left: buttonWithIconRoot.centerContent ? undefined : parent.left
-        anchors.right: buttonWithIconRoot.centerContent ? undefined : parent.right
-        anchors.horizontalCenter: buttonWithIconRoot.centerContent ? parent.horizontalCenter : undefined
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: buttonWithIconRoot.mainText !== "" ? buttonWithIconRoot.contentSpacing : 0
-        Item {
-            visible: !buttonWithIconRoot.iconOnRight
-            Layout.fillWidth: !buttonWithIconRoot.iconOnRight && buttonWithIconRoot.mainText === ""
-            Layout.preferredWidth: visible ? implicitWidth : 0
-            Layout.alignment: Qt.AlignCenter
-            implicitWidth: Math.max(materialIconLoader.implicitWidth, nerdIconLoader.implicitWidth)
-            implicitHeight: Math.max(materialIconLoader.implicitHeight, nerdIconLoader.implicitHeight)
-            Loader {
-                id: materialIconLoader
-                anchors.centerIn: parent
-                active: !buttonWithIconRoot.nerdIcon
-                sourceComponent: MaterialSymbol {
-                    text: buttonWithIconRoot.materialIcon
-                    iconSize: buttonWithIconRoot.iconPixelSize
-                    color: buttonWithIconRoot.colText
-                    fill: buttonWithIconRoot.materialIconFill ? 1 : 0
+    contentItem: Item {
+        implicitWidth: contentRow.implicitWidth
+        implicitHeight: contentRow.implicitHeight
+
+        RowLayout {
+            id: contentRow
+            anchors.centerIn: buttonWithIconRoot.centerContent ? parent : undefined
+            anchors.left: buttonWithIconRoot.centerContent ? undefined : parent.left
+            anchors.right: buttonWithIconRoot.centerContent ? undefined : parent.right
+            anchors.verticalCenter: buttonWithIconRoot.centerContent ? undefined : parent.verticalCenter
+            spacing: buttonWithIconRoot.mainText !== "" ? 8 : 0
+            Item {
+                visible: !buttonWithIconRoot.iconOnRight
+                Layout.fillWidth: !buttonWithIconRoot.iconOnRight && buttonWithIconRoot.mainText === ""
+                Layout.preferredWidth: visible ? implicitWidth : 0
+                Layout.alignment: Qt.AlignCenter
+                implicitWidth: Math.max(materialIconLoader.implicitWidth, nerdIconLoader.implicitWidth)
+                implicitHeight: Math.max(materialIconLoader.implicitHeight, nerdIconLoader.implicitHeight)
+                Loader {
+                    id: materialIconLoader
+                    anchors.centerIn: parent
+                    active: !buttonWithIconRoot.nerdIcon
+                    sourceComponent: MaterialSymbol {
+                        text: buttonWithIconRoot.materialIcon
+                        iconSize: buttonWithIconRoot.iconPixelSize
+                        color: buttonWithIconRoot.colText
+                        fill: buttonWithIconRoot.materialIconFill ? 1 : 0
+                    }
+                }
+                Loader {
+                    id: nerdIconLoader
+                    anchors.centerIn: parent
+                    active: !!buttonWithIconRoot.nerdIcon
+                    sourceComponent: StyledText {
+                        text: buttonWithIconRoot.nerdIcon
+                        font.pixelSize: buttonWithIconRoot.iconPixelSize
+                        font.family: Appearance.font.family.iconNerd
+                        color: buttonWithIconRoot.colText
+                    }
                 }
             }
             Loader {
-                id: nerdIconLoader
-                anchors.centerIn: parent
-                active: !!buttonWithIconRoot.nerdIcon
-                sourceComponent: StyledText {
-                    text: buttonWithIconRoot.nerdIcon
-                    font.pixelSize: buttonWithIconRoot.iconPixelSize
-                    font.family: Appearance.font.family.iconNerd
-                    color: buttonWithIconRoot.colText
-                }
+                id: mainTextLoader
+                visible: buttonWithIconRoot.mainText !== ""
+                Layout.fillWidth: !buttonWithIconRoot.centerContent && buttonWithIconRoot.mainText !== ""
+                Layout.preferredWidth: item ? item.implicitWidth : 0
+                Layout.preferredHeight: item ? item.implicitHeight : 0
+                Layout.alignment: Qt.AlignVCenter
+                sourceComponent: buttonWithIconRoot.mainContentComponent
             }
-        }
-        Loader {
-            visible: buttonWithIconRoot.mainText !== ""
-            Layout.fillWidth: !buttonWithIconRoot.centerContent && buttonWithIconRoot.mainText !== ""
-            Layout.alignment: Qt.AlignVCenter
-            sourceComponent: buttonWithIconRoot.mainContentComponent
-        }
-        Item {
-            visible: buttonWithIconRoot.iconOnRight
-            Layout.fillWidth: buttonWithIconRoot.iconOnRight && buttonWithIconRoot.mainText === ""
-            Layout.preferredWidth: visible ? implicitWidth : 0
-            Layout.alignment: Qt.AlignCenter
-            implicitWidth: Math.max(trailingMaterialIconLoader.implicitWidth, trailingNerdIconLoader.implicitWidth)
-            implicitHeight: Math.max(trailingMaterialIconLoader.implicitHeight, trailingNerdIconLoader.implicitHeight)
-            Loader {
-                id: trailingMaterialIconLoader
-                anchors.centerIn: parent
-                active: !buttonWithIconRoot.nerdIcon
-                sourceComponent: MaterialSymbol {
-                    text: buttonWithIconRoot.materialIcon
-                    iconSize: buttonWithIconRoot.iconPixelSize
-                    color: buttonWithIconRoot.colText
-                    fill: buttonWithIconRoot.materialIconFill ? 1 : 0
+            Item {
+                visible: buttonWithIconRoot.iconOnRight
+                Layout.fillWidth: buttonWithIconRoot.iconOnRight && buttonWithIconRoot.mainText === ""
+                Layout.preferredWidth: visible ? implicitWidth : 0
+                Layout.alignment: Qt.AlignCenter
+                readonly property bool animatedIconEnabled: buttonWithIconRoot.hoverMaterialIcon !== ""
+                    && !buttonWithIconRoot.nerdIcon
+                readonly property bool hoverIconActive: animatedIconEnabled
+                    && !buttonWithIconRoot.hoverIconSuppressed
+                    && (buttonWithIconRoot.hovered || buttonWithIconRoot.down)
+                implicitWidth: Math.max(
+                    trailingMaterialIconLoader.implicitWidth,
+                    trailingNerdIconLoader.implicitWidth,
+                    trailingBaseAnimatedIcon.implicitWidth,
+                    trailingHoverAnimatedIcon.implicitWidth)
+                implicitHeight: Math.max(
+                    trailingMaterialIconLoader.implicitHeight,
+                    trailingNerdIconLoader.implicitHeight,
+                    trailingBaseAnimatedIcon.implicitHeight,
+                    trailingHoverAnimatedIcon.implicitHeight)
+                clip: animatedIconEnabled
+                Loader {
+                    id: trailingMaterialIconLoader
+                    anchors.centerIn: parent
+                    active: !buttonWithIconRoot.nerdIcon && !parent.animatedIconEnabled
+                    sourceComponent: MaterialSymbol {
+                        text: buttonWithIconRoot.materialIcon
+                        iconSize: buttonWithIconRoot.iconPixelSize
+                        color: buttonWithIconRoot.colText
+                        fill: buttonWithIconRoot.materialIconFill ? 1 : 0
+                    }
                 }
-            }
-            Loader {
-                id: trailingNerdIconLoader
-                anchors.centerIn: parent
-                active: !!buttonWithIconRoot.nerdIcon
-                sourceComponent: StyledText {
-                    text: buttonWithIconRoot.nerdIcon
-                    font.pixelSize: buttonWithIconRoot.iconPixelSize
-                    font.family: Appearance.font.family.iconNerd
-                    color: buttonWithIconRoot.colText
+                Loader {
+                    id: trailingBaseAnimatedIcon
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    active: parent.animatedIconEnabled
+                    y: parent.hoverIconActive ? -height : 0
+                    sourceComponent: MaterialSymbol {
+                        text: buttonWithIconRoot.materialIcon
+                        iconSize: buttonWithIconRoot.iconPixelSize
+                        color: buttonWithIconRoot.colText
+                        fill: buttonWithIconRoot.materialIconFill ? 1 : 0
+                    }
+
+                    Behavior on y {
+                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    }
+                }
+                Loader {
+                    id: trailingHoverAnimatedIcon
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    active: parent.animatedIconEnabled
+                    y: parent.hoverIconActive ? 0 : height
+                    sourceComponent: MaterialSymbol {
+                        text: buttonWithIconRoot.hoverMaterialIcon
+                        iconSize: buttonWithIconRoot.iconPixelSize
+                        color: buttonWithIconRoot.colText
+                        fill: buttonWithIconRoot.materialIconFill ? 1 : 0
+                    }
+
+                    Behavior on y {
+                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    }
+                }
+                Loader {
+                    id: trailingNerdIconLoader
+                    anchors.centerIn: parent
+                    active: !!buttonWithIconRoot.nerdIcon
+                    sourceComponent: StyledText {
+                        text: buttonWithIconRoot.nerdIcon
+                        font.pixelSize: buttonWithIconRoot.iconPixelSize
+                        font.family: Appearance.font.family.iconNerd
+                        color: buttonWithIconRoot.colText
+                    }
                 }
             }
         }

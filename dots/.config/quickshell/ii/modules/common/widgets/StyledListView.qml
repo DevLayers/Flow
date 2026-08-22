@@ -48,10 +48,20 @@ ListView {
     // When the ListView height changes, Qt auto-adjusts contentY to preserve scroll position.
     // If Behavior on contentY is active during resize, items appear to overlap/jump.
     property bool _suppressScrollAnim: false
+    // Same reasoning as StyledFlickable: the scroll Behavior is for wheel
+    // jumps, not for the contentY that dragging and flicking write per frame.
+    property bool _wheelScrolling: false
 
     onHeightChanged: {
         root._suppressScrollAnim = true;
         resizeDebounce.restart();
+    }
+
+    onDraggingChanged: {
+        if (root.dragging) {
+            scrollAnim.stop();
+            root._wheelScrolling = false;
+        }
     }
 
     Timer {
@@ -66,10 +76,14 @@ ListView {
     ScrollBar.vertical: StyledScrollBar {}
 
     MouseArea {
-        visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
+        visible: root.interactive && root.contentHeight > root.height
         anchors.fill: parent
         acceptedButtons: Qt.NoButton
         onWheel: function (wheelEvent) {
+            if (!root.interactive || root.contentHeight <= root.height) {
+                wheelEvent.accepted = false;
+                return;
+            }
             const delta = wheelEvent.angleDelta.y / root.mouseScrollDeltaThreshold;
             // The angleDelta.y of a touchpad is usually small and continuous,
             // while that of a mouse wheel is typically in multiples of ±120.
@@ -85,6 +99,7 @@ ListView {
             var targetY = Math.max(minY, Math.min(base - delta * scrollFactor, maxY));
 
             root.scrollTargetY = targetY;
+            root._wheelScrolling = true;
             root.contentY = targetY;
             root.userScrolled(targetY, maxY);
             wheelEvent.accepted = true;
@@ -92,10 +107,11 @@ ListView {
     }
 
     Behavior on contentY {
-        enabled: !root._suppressScrollAnim
+        enabled: !root._suppressScrollAnim && root._wheelScrolling && !root.dragging && !root.flicking
         NumberAnimation {
             id: scrollAnim
             alwaysRunToEnd: true
+            onStopped: root._wheelScrolling = false
             duration: Appearance.animation.scroll.duration
             easing.type: Appearance.animation.scroll.type
             easing.bezierCurve: Appearance.animation.scroll.bezierCurve

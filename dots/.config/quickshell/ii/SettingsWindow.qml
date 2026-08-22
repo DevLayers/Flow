@@ -93,16 +93,28 @@ FloatingWindow {
         }
     }
 
+    // Deep links (search results, IPC) carry registry-relative paths such as
+    // "ai/CustomModelsConfig.qml". Loader resolves a relative source against
+    // ConfigSubPageHost.qml's own directory, which silently misses the file —
+    // so anchor every relative entry to the settings configs folder here.
+    function resolveSubPageEntry(value) {
+        const raw = String(value ?? "");
+        if (raw === "" || raw.indexOf("://") !== -1 || raw.startsWith("file:"))
+            return raw;
+        return Qt.resolvedUrl("modules/settings/configs/" + raw).toString();
+    }
+
     function restoreSubPagePath(encodedPath) {
         const path = encodedPath ? root.subPagePathFromState({ subPage: encodedPath }) : [];
+        const resolved = path.map(entry => root.resolveSubPageEntry(entry));
         const host = root.findSubPageHost(pageLoader.item);
         if (host && host.restoreNavigationPath) {
-            host.restoreNavigationPath(path);
+            host.restoreNavigationPath(resolved);
             return true;
         }
 
         if (pageLoader.item && pageLoader.item.activeSubPage !== undefined)
-            pageLoader.item.activeSubPage = path.length > 0 ? path[0] : "";
+            pageLoader.item.activeSubPage = resolved.length > 0 ? resolved[0] : "";
         return false;
     }
 
@@ -579,8 +591,12 @@ FloatingWindow {
                         pageLoadArmed = false;
                         _skeletonGateActive = true;
                         _waitingForLoad = true;
-                        pageSkeleton.revealed = true;
-                        skeletonDelayTimer.stop();
+                        // The skeleton is a fallback for pages slow enough that
+                        // an empty pane would look broken. Revealing it on every
+                        // switch made the fast pages - which is most of them -
+                        // flash three grey cards for a couple of frames.
+                        pageSkeleton.revealed = false;
+                        skeletonDelayTimer.restart();
                         source = nextSource;
                         pageActivationTimer.restart();
                     }
@@ -643,7 +659,10 @@ FloatingWindow {
 
                     Timer {
                         id: pageActivationTimer
-                        interval: 48
+                        // Only needs to give the outgoing page its own frame to
+                        // be torn down in; it used to sit for a third of the
+                        // whole page-switch budget doing nothing.
+                        interval: 16
                         repeat: false
                         onTriggered: {
                             if (root.visible && Config.ready)
@@ -665,7 +684,10 @@ FloatingWindow {
 
                     Timer {
                         id: skeletonDelayTimer
-                        interval: 90
+                        // Covers pageActivationTimer plus the build time of a
+                        // typical page, so only the genuinely heavy ones ever
+                        // reach the skeleton.
+                        interval: 200
                         repeat: false
                         onTriggered: {
                             if (pageLoader.status === Loader.Loading || pageLoader._waitingForLoad)

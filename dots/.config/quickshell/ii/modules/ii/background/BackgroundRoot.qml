@@ -66,40 +66,67 @@ PanelWindow {
         }
     }
 
+    OverviewBackgroundController {
+        id: overviewController
+        active: GlobalStates.overviewBackgroundActive && bgRoot.isMonitorFocused
+        style: Config.options.background.overviewBackgroundStyle
+        legacyStyle: Config.options.background.zoomOutStyle
+        videoEffectsDisabled: bgRoot.videoEffectsDisabled
+        screenWidth: bgRoot.screen.width
+        screenHeight: bgRoot.screen.height
+        wallpaperWidth: bgRoot.wallpaperWidth
+        wallpaperHeight: bgRoot.wallpaperHeight
+        baseWallpaperScale: bgRoot.baseWallpaperScale
+        parallaxX: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxX
+        parallaxY: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxY
+        wallpaperPath: bgRoot.wallpaperPath
+        wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
+    }
+
+    // Gnome-like keeps the original single transform clock.  The shared
+    // controller remains the source for all other presets, but must not replace
+    // this legacy path or the transition layer can be mapped by two clocks.
     OverviewZoomController {
-        id: ovZoom
-        wallpaperZoomedOut: (wallpaperImage ? wallpaperImage.wallpaperZoomedOut : false)
+        id: gnomeOverviewController
+        wallpaperZoomedOut: overviewController.isGnomeLike
+            && GlobalStates.overviewBackgroundActive
+            && bgRoot.isMonitorFocused
         minSafeScale: bgRoot.minSafeScale
-        zoomOutCoverScale: (wallpaperImage && wallpaperImage.zoomOutCoverScale ? wallpaperImage.zoomOutCoverScale : 1.05)
+        zoomOutCoverScale: overviewController.overviewCoverScale
         screenWidth: bgRoot.screen.width
         screenHeight: bgRoot.screen.height
     }
 
-    // Publish zoom state so OverviewWindowTransition can sync its animation
+    readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike
+
+    // Publish the legacy Gnome clock only for the focused monitor.  Modern
+    // presets use the per-monitor controller directly and leave this state at
+    // the neutral transform so no stale Gnome capture can be reused.
     Binding {
         target: GlobalStates
         property: "overviewZoomScale"
-        value: ovZoom.scaleValue
-        when: (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (bgRoot.monitor ? bgRoot.monitor.name : "")
+        value: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleValue : 1.0
+        when: bgRoot.isMonitorFocused
     }
     Binding {
         target: GlobalStates
         property: "overviewZoomOriginX"
-        value: ovZoom.scaleOriginX
-        when: (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (bgRoot.monitor ? bgRoot.monitor.name : "")
+        value: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginX : 0.5
+        when: bgRoot.isMonitorFocused
     }
     Binding {
         target: GlobalStates
         property: "overviewZoomOriginY"
-        value: ovZoom.scaleOriginY
-        when: (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (bgRoot.monitor ? bgRoot.monitor.name : "")
+        value: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginY : 0.5
+        when: bgRoot.isMonitorFocused
     }
 
-    // Expose properties from controllers for backward compatibility / internal bindings
+    // Expose properties from controllers for internal bindings
     readonly property bool lockAnimationActive: lockAnim.lockAnimationActive
     readonly property bool parallaxFrozen: lockAnim.parallaxFrozen
     readonly property bool rippleActive: lockAnim.rippleActive
     readonly property real effectiveWallpaperScale: lockAnim.effectiveWallpaperScale
+    readonly property real overviewCoverScale: overviewController.overviewCoverScale
 
     // Hide when fullscreen
     property var workspacesForMonitor: Hyprland.workspaces.values.filter(function(workspace) { return workspace.monitor && workspace.monitor.name == monitor.name; })
@@ -302,16 +329,9 @@ PanelWindow {
         const height = bgRoot.wallpaperHeight;
         const screenW = bgRoot.screen.width;
         const screenH = bgRoot.screen.height;
-        if (width <= 0 || height <= 0) return;
+        if (width <= 0 || height <= 0 || screenW <= 0 || screenH <= 0) return;
         
-        let targetScale = 1.0;
-        if (Config.options.background.scaleLargeWallpapers) {
-            if (width <= screenW || height <= screenH) {
-                targetScale = Math.max(screenW / width, screenH / height);
-            } else {
-                targetScale = Math.min(bgRoot.preferredWallpaperScale, width / screenW, height / screenH);
-            }
-        }
+        let targetScale = bgRoot.preferredWallpaperScale;
         
         if (Config.options.background.blurWhenWindowsOpen || Config.options.lock.blur.enable) {
             targetScale *= 1.03;
@@ -374,8 +394,13 @@ PanelWindow {
     }
 
     Component.onCompleted: {
+        GlobalStates.registerOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
         // Do not re-run matugen / switchwall on quickshell reload/startup.
         // Theme colors and wallpaper are already persisted on disk.
+    }
+
+    Component.onDestruction: {
+        GlobalStates.unregisterOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
     }
 
     LockRippleEffect {
@@ -389,6 +414,8 @@ PanelWindow {
 
         WallpaperImage {
             id: wallpaperImage
+            overviewController: overviewController
+            legacyGnomeZoomedOut: gnomeOverviewController.wallpaperZoomedOut
             screen: bgRoot.screen
             wallpaperPath: bgRoot.wallpaperPath
             lockscreenWallpaperPath: bgRoot.lockscreenWallpaperPath
@@ -408,10 +435,10 @@ PanelWindow {
             parallaxY: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxY
             effectiveValueX: bgRoot.videoEffectsDisabled ? 0.5 : parallax.effectiveValueX
             effectiveValueY: bgRoot.videoEffectsDisabled ? 0.5 : parallax.effectiveValueY
-            scaleValue: ovZoom.scaleValue
-            scaleOriginX: ovZoom.scaleOriginX
-            scaleOriginY: ovZoom.scaleOriginY
-            scaleProgress: ovZoom.scaleProgress
+            scaleValue: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleValue : overviewController.scale
+            scaleOriginX: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginX : overviewController.scaleOriginX
+            scaleOriginY: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginY : overviewController.scaleOriginY
+            scaleProgress: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleProgress : overviewController.scaleProgress
             anyWidgetIsDragging: bgRoot.anyWidgetIsDragging
             mediaModeOpen: bgRoot.mediaModeOpen
             lockAnimationActive: bgRoot.lockAnimationActive

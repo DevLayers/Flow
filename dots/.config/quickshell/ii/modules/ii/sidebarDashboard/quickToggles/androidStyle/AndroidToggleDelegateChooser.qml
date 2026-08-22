@@ -3,7 +3,6 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
-import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
 
@@ -31,8 +30,9 @@ DelegateChooser {
     signal openDnsOverTlsDialog
     signal openIdleInhibitorDialog
     signal openScreenShaderDialog
+    signal openModesDialog
 
-    role: "type"
+    role: "toggleType"
 
     DelegateChoice {
         roleValue: "screenShader"
@@ -46,7 +46,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -70,7 +70,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -94,7 +94,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -118,7 +118,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -142,7 +142,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -163,7 +163,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -184,7 +184,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -205,7 +205,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -229,7 +229,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -250,12 +250,36 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "modes"
+        AndroidModesToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+            onOpenMenu: {
+                root.openModesDialog();
+            }
         }
     }
 
@@ -271,7 +295,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -295,7 +319,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -319,7 +343,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -340,7 +364,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -364,7 +388,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -388,7 +412,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -409,7 +433,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -430,7 +454,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -451,7 +475,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -472,7 +496,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -493,7 +517,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -514,7 +538,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -534,7 +558,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -555,7 +579,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -579,7 +603,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -599,7 +623,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -623,7 +647,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -647,7 +671,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -668,7 +692,28 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "keyboardBacklight"
+        AndroidKeyboardBacklightToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -689,7 +734,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -713,7 +758,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -737,7 +782,7 @@ DelegateChooser {
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: modelData.sizeW
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel

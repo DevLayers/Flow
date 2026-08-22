@@ -104,7 +104,14 @@ Singleton {
     }
 
 	property bool resourcePopupMonitoringEnabled: false
-	property bool gpuMonitoringEnabled: resourcePopupMonitoringEnabled
+	// Other consumers (GameDetector's fullscreen+GPU heuristic) hold a
+	// refcount so GPU sampling runs only while somebody needs it.
+	property int gpuMonitoringRequests: 0
+	readonly property bool gpuMonitoringEnabled: resourcePopupMonitoringEnabled || gpuMonitoringRequests > 0
+
+	function requestGpuMonitoring(on: bool): void {
+		gpuMonitoringRequests = Math.max(0, gpuMonitoringRequests + (on ? 1 : -1))
+	}
 
 	readonly property int popupSampleIntervalMs: 1000
 	readonly property int popupHistoryWindowMs: 12000
@@ -121,7 +128,7 @@ Singleton {
 	signal gpuSampled(real usage)
 
 	function requestGpuSample() {
-		if (!resourcePopupMonitoringEnabled) return
+		if (!gpuMonitoringEnabled) return
 		if (root.gpuVendor === "nvidia" || root.gpuVendor === "intel") {
 			if (!gpuMonitorProc.running) {
 				gpuMonitorProc.running = true
@@ -129,8 +136,8 @@ Singleton {
 		}
 	}
 
-	onResourcePopupMonitoringEnabledChanged: {
-		if (resourcePopupMonitoringEnabled) {
+	onGpuMonitoringEnabledChanged: {
+		if (gpuMonitoringEnabled) {
 			requestGpuSample()
 		} else {
 			gpuUsage = 0
@@ -226,7 +233,7 @@ Singleton {
 			root.cpuSampled(root.cpuUsage)
 
 			// AMD GPU stats via sysfs (zero-cost, no fork)
-			if (root.gpuVendor === "amd" && root.resourcePopupMonitoringEnabled) {
+			if (root.gpuVendor === "amd" && root.gpuMonitoringEnabled) {
 				if (root.amdUsagePath) {
 					amdUsageFileView.reload()
 					const usage = Number(amdUsageFileView.text().trim() || 0)
@@ -600,9 +607,9 @@ Singleton {
         id: gpuMonitorTimer
         interval: root.effectiveGpuInterval
         repeat: true
-        running: root.resourcePopupMonitoringEnabled && (root.gpuVendor === "nvidia" || root.gpuVendor === "intel")
+        running: root.gpuMonitoringEnabled && (root.gpuVendor === "nvidia" || root.gpuVendor === "intel")
         onTriggered: {
-            if (!root.resourcePopupMonitoringEnabled) return
+            if (!root.gpuMonitoringEnabled) return
             if (root.gpuVendor !== "nvidia" && root.gpuVendor !== "intel") return
             root.requestGpuSample()
         }

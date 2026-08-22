@@ -7,7 +7,6 @@ import Quickshell.Hyprland
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.common.functions
 import qs.services
 
 Scope {
@@ -116,67 +115,51 @@ Scope {
                 right: true
             }
 
-            Rectangle {
-                anchors.fill: parent
-                // Highly premium slightly transparent scrim overlay with a subtle blur effect
-                color: ColorUtils.transparentize(Appearance.m3colors.darkmode ? Appearance.m3colors.m3scrim : Appearance.m3colors.m3background, 0.25)
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Appearance.animation.elementMoveFast.type
+            ToolbarPairedFab {
+                anchors {
+                    top: parent.top
+                    right: parent.right
+                    topMargin: 24
+                    rightMargin: 24
+                    verticalCenter: undefined
+                }
+                iconText: "close"
+                onClicked: {
+                    var specName = root.specialWorkspaceName || "special";
+                    if (specName.startsWith("special:")) {
+                        specName = specName.substring(8);
                     }
+                    Hyprland.dispatch(`hl.dsp.workspace.toggle_special("${specName}")`);
+                }
+                StyledToolTip {
+                    text: Translation.tr("Close")
+                }
+            }
+
+            ColumnLayout {
+                anchors.centerIn: parent
+
+                MaterialShapeWrappedMaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "layers_clear"
+                    iconSize: 64
+                    padding: 28
+                    color: Appearance.colors.colPrimary
+                    colSymbol: Appearance.colors.colOnPrimary
+                    shape: MaterialShape.Shape.Sunny
                 }
 
-                // Close button at the top right - matching the screenTranslator ToolbarPairedFab design
-                ToolbarPairedFab {
-                    anchors {
-                        top: parent.top
-                        right: parent.right
-                        topMargin: 24
-                        rightMargin: 24
-                        verticalCenter: undefined
-                    }
-                    iconText: "close"
-                    onClicked: {
-                        var specName = root.specialWorkspaceName || "special";
-                        if (specName.startsWith("special:")) {
-                            specName = specName.substring(8);
-                        }
-                        Hyprland.dispatch(`hl.dsp.workspace.toggle_special("${specName}")`);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Close")
-                    }
-                }
-
-                // Centered message layout matching the ScreenTranslator no-API-key design
-                ColumnLayout {
-                    anchors.centerIn: parent
-                    spacing: 16
-
-                    MaterialShapeWrappedMaterialSymbol {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: "layers_clear"
-                        iconSize: 64
-                        padding: 28
-                        color: Appearance.colors.colPrimary
-                        colSymbol: Appearance.colors.colOnPrimary
-                        shape: MaterialShape.Shape.Sunny
-                    }
-
-                    StyledText {
-                        Layout.alignment: Qt.AlignHCenter
-                        width: Math.min(overlayWindow.screen.width / 2, 800)
-                        horizontalAlignment: Text.AlignHCenter
-                        textFormat: Text.MarkdownText
-                        wrapMode: Text.Wrap
-                        text: `**${Translation.tr("Scratchpad")}**\n\n${Translation.tr("The scratchpad workspace is currently empty.")}\n\n${Translation.tr("Send windows here using SUPER + ALT + S.")}`
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnLayer0
-                        palette.text: color
-                        palette.windowText: color
-                    }
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    width: Math.min(overlayWindow.screen.width / 2, 800)
+                    horizontalAlignment: Text.AlignHCenter
+                    textFormat: Text.MarkdownText
+                    wrapMode: Text.Wrap
+                    text: `**${Translation.tr("Scratchpad")}**\n\n${Translation.tr("The scratchpad workspace is currently empty.")}\n\n${Translation.tr("Send windows here using SUPER + ALT + S.")}`
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnLayer0
+                    palette.text: color
+                    palette.windowText: color
                 }
             }
         }

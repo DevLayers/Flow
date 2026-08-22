@@ -2,26 +2,44 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import qs.modules.common
 
 Item {
     id: root
 
-    property string currentPageId: "start"
+    property string currentPageId: "hello"
     property string previousPageId: ""
     property string incomingPageId: ""
     property string outgoingPageId: ""
     property int transitionDirection: 1
     property bool transitionRunning: false
+    property bool transitionReady: false
+    property bool nextButtonHovered: false
     property real navigationSafeArea: 84
 
-    readonly property real transitionOffset: Math.max(72, Math.min(144, width * 0.12))
+    readonly property string currentNextLabel: {
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        const page = pageLoader && pageLoader.item ? pageLoader.item : null;
+        return page && page.nextLabel !== undefined
+            ? page.nextLabel
+            : WelcomePageRegistry.nextLabelFor(root.currentPageId);
+    }
+    readonly property string currentNextIcon: {
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        const page = pageLoader && pageLoader.item ? pageLoader.item : null;
+        return page && page.nextIcon !== undefined
+            ? page.nextIcon
+            : WelcomePageRegistry.nextIconFor(root.currentPageId);
+    }
+
+    readonly property real transitionOffset: WelcomeMotion.offsetFor(root.width)
 
     readonly property bool nestedPageOpen: {
         if (root.currentPageId !== "learn")
             return false;
-        const learnLoader = root.loaderForPage("learn");
-        return (learnLoader && learnLoader.item && learnLoader.item.tutorialOpen) === true;
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        return (pageLoader && pageLoader.item && pageLoader.item.nestedPageOpen) === true;
     }
 
     signal pageChanged(string pageId)
@@ -33,7 +51,9 @@ Item {
     signal trySidebar()
     signal trySearch()
 
-    clip: true
+    // Page content may intentionally overhang its body stage. The top-level
+    // Welcome window remains the only clipping boundary for Pixel decorations.
+    clip: false
 
     function pageIndex(pageId) {
         return WelcomePageRegistry.pageIndexById(pageId);
@@ -52,17 +72,20 @@ Item {
             const active = pageLoader.pageId === root.currentPageId;
             pageLoader.visualX = 0;
             pageLoader.visualOpacity = active ? 1 : 0;
+            pageLoader.visualBlur = 0;
+            pageLoader.visualScale = 1;
             pageLoader.visualVisible = active;
             pageLoader.visualEnabled = active;
         }
         root.incomingPageId = "";
         root.outgoingPageId = "";
+        root.transitionReady = false;
         root.transitionRunning = false;
     }
 
     function reset() {
         transitionAnimation.stop();
-        root.currentPageId = "start";
+        root.currentPageId = "hello";
         root.previousPageId = "";
         Qt.callLater(root.normalizePages);
     }
@@ -72,17 +95,21 @@ Item {
             return;
         if (pageLoader.status !== Loader.Ready)
             return;
+        root.transitionReady = true;
+        if (!WelcomeMotion.motionEnabled) {
+            root.normalizePages();
+            root.pageChanged(root.currentPageId);
+            return;
+        }
+        pageLoader.visualOpacity = WelcomeMotion.pageOpacityIn;
+        pageLoader.visualBlur = WelcomeMotion.blurProgress;
+        pageLoader.visualScale = WelcomeMotion.pageScale;
         transitionAnimation.start();
     }
 
     function goToPage(pageId) {
-        if (!pageId || pageId === root.currentPageId || root.pageIndex(pageId) < 0)
+        if (!pageId || root.transitionRunning || pageId === root.currentPageId || root.pageIndex(pageId) < 0)
             return;
-
-        if (transitionAnimation.running) {
-            transitionAnimation.stop();
-            root.normalizePages();
-        }
 
         const fromIndex = root.pageIndex(root.currentPageId);
         const toIndex = root.pageIndex(pageId);
@@ -91,6 +118,7 @@ Item {
         root.outgoingPageId = root.currentPageId;
         root.incomingPageId = pageId;
         root.transitionRunning = true;
+        root.transitionReady = false;
 
         const outgoing = root.loaderForPage(root.outgoingPageId);
         const incoming = root.loaderForPage(root.incomingPageId);
@@ -103,11 +131,15 @@ Item {
 
         outgoing.visualX = 0;
         outgoing.visualOpacity = 1;
+        outgoing.visualBlur = 0;
+        outgoing.visualScale = 1;
         outgoing.visualVisible = true;
         outgoing.visualEnabled = false;
 
         incoming.visualX = root.transitionDirection > 0 ? root.transitionOffset : -root.transitionOffset;
-        incoming.visualOpacity = 0;
+        incoming.visualOpacity = WelcomeMotion.pageOpacityIn;
+        incoming.visualBlur = 0;
+        incoming.visualScale = 1;
         incoming.visualVisible = true;
         incoming.visualEnabled = false;
 
@@ -129,18 +161,34 @@ Item {
 
     function goNext() {
         const index = root.pageIndex(root.currentPageId);
-        if (index >= 0 && index < WelcomePageRegistry.pages.length - 1)
-            root.goToPage(WelcomePageRegistry.pages[index + 1].id);
+        if (index < 0 || index >= WelcomePageRegistry.pages.length - 1)
+            return;
+
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        const page = pageLoader && pageLoader.item ? pageLoader.item : null;
+        if (page && page.prepareNext && !page.prepareNext())
+            return;
+
+        root.goToPage(WelcomePageRegistry.pages[index + 1].id);
     }
 
     function closeNestedPage(): bool {
         if (root.currentPageId !== "learn")
             return false;
-        const learnLoader = root.loaderForPage("learn");
-        const learnPage = learnLoader && learnLoader.item ? learnLoader.item : null;
-        return learnPage && learnPage.closeNestedPage
-            ? learnPage.closeNestedPage()
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        const page = pageLoader && pageLoader.item ? pageLoader.item : null;
+        return page && page.closeNestedPage
+            ? page.closeNestedPage()
             : false;
+    }
+
+    function skipCurrentPage(): void {
+        if (root.currentPageId !== "keyboard")
+            return;
+        const index = root.pageIndex(root.currentPageId);
+        if (index < 0 || index >= WelcomePageRegistry.pages.length - 1)
+            return;
+        root.goToPage(WelcomePageRegistry.pages[index + 1].id);
     }
 
     function openTutorial(tutorialId: string): void {
@@ -161,33 +209,63 @@ Item {
         id: pageLoaders
         model: WelcomePageRegistry.pages
 
-        delegate: Loader {
-            id: pageLoader
+        delegate: Item {
+            id: pageLayer
             required property var modelData
             required property int index
 
             readonly property string pageId: modelData.id
+            readonly property var item: contentLoader.item
+            readonly property int status: contentLoader.status
             property real visualX: 0
             property real visualOpacity: 0
+            property real visualBlur: 0
+            property real visualScale: 1
             property bool visualVisible: false
             property bool visualEnabled: false
+            property bool active: root.currentPageId === pageId
+                || root.incomingPageId === pageId
+                || root.outgoingPageId === pageId
 
             width: root.width
             height: Math.max(0, root.height - (root.nestedPageOpen ? 0 : root.navigationSafeArea))
             x: visualX
             opacity: visualOpacity
+            scale: visualScale
             visible: visualVisible
             enabled: visualEnabled
-            active: root.currentPageId === pageId
-                || root.incomingPageId === pageId
-                || root.outgoingPageId === pageId
-            asynchronous: true
-            source: Qt.resolvedUrl(modelData.component)
+            z: pageId === root.incomingPageId
+                ? 2
+                : pageId === root.outgoingPageId
+                    ? 1
+                    : 0
+            Loader {
+                id: contentLoader
+                anchors.fill: parent
+                active: pageLayer.active
+                asynchronous: true
+                source: Qt.resolvedUrl(pageLayer.modelData.component)
 
-            onLoaded: root.maybeStartTransition(pageLoader)
+                onLoaded: root.maybeStartTransition(pageLayer)
+            }
+
+            Binding {
+                target: contentLoader.item
+                property: "nextButtonHovered"
+                value: root.nextButtonHovered
+                when: contentLoader.status === Loader.Ready
+                restoreMode: Binding.RestoreBinding
+            }
+
+            layer.enabled: visualBlur > 0.01 && WelcomeMotion.blurAllowed
+            layer.effect: MultiEffect {
+                blurEnabled: pageLayer.visualBlur > 0.01 && WelcomeMotion.blurAllowed
+                blurMax: WelcomeMotion.blurMax
+                blur: pageLayer.visualBlur
+            }
 
             Connections {
-                target: pageLoader.item
+                target: contentLoader.item
                 ignoreUnknownSignals: true
 
                 function onOpenSettingsPage(pageId) {
@@ -240,7 +318,7 @@ Item {
         NumberAnimation {
             target: root.loaderForPage(root.outgoingPageId)
             property: "visualOpacity"
-            to: 0
+            to: WelcomeMotion.pageOpacityOut
             duration: Appearance.animation.elementMoveEnter.duration
             easing.type: Appearance.animation.elementMoveEnter.type
             easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
@@ -258,6 +336,42 @@ Item {
         NumberAnimation {
             target: root.loaderForPage(root.incomingPageId)
             property: "visualOpacity"
+            to: 1
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+
+        NumberAnimation {
+            target: root.loaderForPage(root.outgoingPageId)
+            property: "visualBlur"
+            to: WelcomeMotion.blurProgress
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+
+        NumberAnimation {
+            target: root.loaderForPage(root.incomingPageId)
+            property: "visualBlur"
+            to: 0
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+
+        NumberAnimation {
+            target: root.loaderForPage(root.outgoingPageId)
+            property: "visualScale"
+            to: WelcomeMotion.pageScale
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+
+        NumberAnimation {
+            target: root.loaderForPage(root.incomingPageId)
+            property: "visualScale"
             to: 1
             duration: Appearance.animation.elementMoveEnter.duration
             easing.type: Appearance.animation.elementMoveEnter.type

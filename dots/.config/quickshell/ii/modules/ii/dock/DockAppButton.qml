@@ -247,7 +247,7 @@ DockButton {
 
     Connections {
         target: Notifications
-        function onNotification(notif) {
+        function onNotify(notif) {
             if (!notif)
                 return;
             var targetName = (root.desktopEntry?.name ?? root.appToplevel?.appId ?? "").toLowerCase();

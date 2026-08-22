@@ -12,14 +12,29 @@ Item {
     required property var sourceItem
     required property bool hasWindowsInActiveWorkspace
     required property bool overviewOpen
+    required property real overviewProgress
 
-    // overviewOpen also flips true for the plain search bar (searchOnlyMode, or when the
-    // window-thumbnail grid is disabled/replaced by config); only suppress the blur when
-    // the grid of window thumbnails is actually what's covering the background.
-    readonly property bool overviewGridVisible: overviewOpen && Config.options.overview.enable
-        && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
+    // Keep the window blur disabled for the whole Overview transition. The
+    // controller continues animating after overviewOpen becomes false, so
+    // recreating the blur before progress reaches zero captures a stale frame
+    // with the Overview's dim/saturation still applied.
+    readonly property bool overviewTransitionActive: overviewOpen || overviewProgress > 0.001
     readonly property bool shouldBlur: Config.options.background.blurWhenWindowsOpen
-        && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !overviewGridVisible
+        && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !overviewTransitionActive
+
+    // Keep the Loader binding intact while still allowing a fresh grab after
+    // Overview changes the wallpaper composition underneath the blur.
+    property bool reloadRequested: false
+    readonly property bool desiredBlurActive: shouldBlur && !reloadRequested
+
+    function refreshBlur() {
+        if (!desiredBlurActive)
+            return;
+        reloadRequested = true;
+        Qt.callLater(function() {
+            windowBlurRoot.reloadRequested = false;
+        });
+    }
 
     // The Loader below activates the instant shouldBlur flips true, which can be before
     // sourceItem's layout has settled (e.g. right as a window opens). MultiEffect's implicit
@@ -27,12 +42,14 @@ Item {
     // stretches that texture to fill the final geometry once layout catches up — producing a
     // squashed/stretched wallpaper. Force a rebuild shortly after activation so it re-grabs
     // once layout has settled, instead of only reacting to workspace switches.
-    onShouldBlurChanged: if (shouldBlur) blurRefreshTimer.restart();
+    onShouldBlurChanged: if (shouldBlur) refreshBlur();
+    onOverviewOpenChanged: if (!overviewOpen) refreshBlur();
+    onOverviewProgressChanged: if (!overviewOpen && overviewProgress <= 0.001) refreshBlur();
 
-    // GPU: fade-out animation on the Item level so the Loader stays active
-    // during the transition, then destroys the MultiEffect after fade completes.
-    visible: windowBlurRoot.shouldBlur || opacity > 0.01
-    opacity: windowBlurRoot.shouldBlur ? 1.0 : 0.0
+    // Unmap the effect immediately while Overview is open or closing. Waiting
+    // for the shared progress clock avoids exposing a stale blurred frame.
+    visible: windowBlurRoot.desiredBlurActive
+    opacity: windowBlurRoot.desiredBlurActive ? 1.0 : 0.0
     Behavior on opacity {
         NumberAnimation {
             duration: 400
@@ -46,7 +63,7 @@ Item {
     Loader {
         id: blurEffectLoader
         anchors.fill: parent
-        active: windowBlurRoot.shouldBlur || windowBlurRoot.opacity > 0.01
+        active: windowBlurRoot.desiredBlurActive
         sourceComponent: MultiEffect {
             anchors.fill: parent
             source: windowBlurRoot.sourceItem
@@ -77,10 +94,7 @@ Item {
         interval: 100
         repeat: false
         onTriggered: {
-            if (!blurEffectLoader.active)
-                return;
-            blurEffectLoader.active = false;
-            blurEffectLoader.active = true;
+            windowBlurRoot.refreshBlur();
         }
     }
 }

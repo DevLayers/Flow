@@ -1,0 +1,101 @@
+{
+  "columns": 4,
+  "scenarios": [
+    {
+      "name": "only-1x1",
+      "pages": [[
+        { "type": "network", "sizeW": 1, "sizeH": 1 },
+        { "type": "bluetooth", "sizeW": 1, "sizeH": 1 },
+        { "type": "vpn", "sizeW": 1, "sizeH": 1 },
+        { "type": "tailscale", "sizeW": 1, "sizeH": 1 },
+        { "type": "mic", "sizeW": 1, "sizeH": 1 }
+      ]],
+      "expected": "first-fit row-major packing fills row 0, then starts row 1"
+    },
+    {
+      "name": "one-by-one-and-two-by-one",
+      "pages": [[
+        { "type": "network", "sizeW": 1, "sizeH": 1 },
+        { "type": "bluetooth", "sizeW": 2, "sizeH": 1 },
+        { "type": "vpn", "sizeW": 1, "sizeH": 1 }
+      ]],
+      "expected": "the final 1x1 occupies the first free cell after the 2x1 item"
+    },
+    {
+      "name": "slider-after-three-single-cells",
+      "pages": [[
+        { "type": "network", "sizeW": 1, "sizeH": 1 },
+        { "type": "bluetooth", "sizeW": 1, "sizeH": 1 },
+        { "type": "vpn", "sizeW": 1, "sizeH": 1 },
+        { "type": "volumeSlider", "sizeW": 4, "sizeH": 1 },
+        { "type": "mic", "sizeW": 1, "sizeH": 1 }
+      ]],
+      "expected": "mic fills row 0 column 3; volumeSlider occupies row 1"
+    },
+    {
+      "name": "media-2x2",
+      "pages": [[
+        { "type": "mediaWidget", "sizeW": 2, "sizeH": 2 },
+        { "type": "network", "sizeW": 1, "sizeH": 1 },
+        { "type": "bluetooth", "sizeW": 1, "sizeH": 1 },
+        { "type": "vpn", "sizeW": 2, "sizeH": 1 }
+      ]],
+      "expected": "the two rows occupied by media remain blocked in columns 0-1"
+    },
+    {
+      "name": "multiple-pages",
+      "pages": [
+        [
+          { "type": "network", "sizeW": 2, "sizeH": 1 },
+          { "type": "bluetooth", "sizeW": 2, "sizeH": 1 }
+        ],
+        [
+          { "type": "vpn", "sizeW": 1, "sizeH": 1 },
+          { "type": "tailscale", "sizeW": 1, "sizeH": 1 }
+        ]
+      ],
+      "expected": "page order and item order are preserved independently"
+    },
+    {
+      "name": "partially-empty-page",
+      "pages": [[
+        { "type": "network", "sizeW": 2, "sizeH": 1 },
+        null,
+        { "type": "bluetooth", "sizeW": 1, "sizeH": 1 }
+      ], []],
+      "expected": "null entries are ignored and an empty page remains representable"
+    },
+    {
+      "name": "legacy-size-only",
+      "pages": [[
+        { "type": "network", "size": 2 },
+        { "type": "mediaWidget", "size": 2, "sizeH": 2 }
+      ]],
+      "expected": "size becomes sizeW, sizeH defaults from catalog, and size is not persisted"
+    },
+    {
+      "name": "live-config-baseline",
+      "pages": [
+        [
+          { "type": "brightnessSlider", "size": 4, "sizeW": 4, "sizeH": 1 },
+          { "type": "volumeSlider", "size": 4, "sizeW": 4, "sizeH": 1 },
+          { "type": "network", "size": 2, "sizeW": 2, "sizeH": 1 },
+          { "type": "bluetooth", "size": 2, "sizeW": 2, "sizeH": 2 },
+          { "type": "audio", "size": 2, "sizeW": 2, "sizeH": 1 },
+          { "type": "nightLight", "size": 2, "sizeW": 2, "sizeH": 1 },
+          { "type": "darkMode", "size": 2, "sizeW": 2, "sizeH": 1 }
+        ],
+        [
+          { "type": "onScreenKeyboard", "size": 1, "sizeW": 1, "sizeH": 1 },
+          { "type": "micSlider", "size": 2, "sizeW": 2, "sizeH": 1 },
+          { "type": "videoEditor", "size": 1, "sizeW": 1, "sizeH": 1 },
+          { "type": "mic", "size": 1, "sizeW": 1, "sizeH": 1 },
+          { "type": "gammaSlider", "size": 4, "sizeW": 4, "sizeH": 1 },
+          { "type": "dnsOverTls", "size": 1, "sizeW": 1, "sizeH": 1 },
+          { "type": "localSend", "size": 2, "sizeW": 2, "sizeH": 1 }
+        ]
+      ],
+      "expected": "preserve the current persisted order while normalizing the schema"
+    }
+  ]
+}

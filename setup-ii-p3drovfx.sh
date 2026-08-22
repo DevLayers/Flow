@@ -151,6 +151,7 @@ PROTECTED_PATTERNS=(
     "scripts/hyprland/workspace_profile_manager"
     "scripts/osk/osk_autoshow"
     "scripts/appStats/app_stats"
+    "scripts/touchGestures/touch_gestures"
 )
 
 # ── The fork's Hyprland config ───────────────────────────────────────────────
@@ -1489,6 +1490,30 @@ start_quickshell() {
     return 0
 }
 
+open_welcome_after_start() {
+    local attempt
+    local ipc_bin=""
+
+    if have qs; then
+        ipc_bin="qs"
+    elif have quickshell; then
+        ipc_bin="quickshell"
+    else
+        ui_warn "Welcome couldn't be opened via IPC, you can open it using SUPER + ALT + SHIFT + /."
+        return 0
+    fi
+
+    for attempt in {1..50}; do
+        if "$ipc_bin" -c ii ipc call welcome open >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 0.2
+    done
+
+    ui_warn "Welcome couldn't be opened via IPC, you can open it using SUPER + ALT + SHIFT + /."
+    return 0
+}
+
 restart_quickshell() {
     [[ "$OPT_RESTART" == true ]] || {
         ui_note "Restart skipped (--no-restart)."
@@ -1724,6 +1749,19 @@ install_hypr_config() {
 apply_config() {
     local url="$1" branch="$2" fork="$3" verb="$4"
     local head="" source_dir="" dirty=""
+    local target_managed=false
+    if [[ -e "$TARGET_DIR" || -L "$TARGET_DIR" ]]; then
+        # The directory may already exist because the base installer created
+        # it, or because the user copied a fork over it by hand.  Neither case
+        # proves that this setup script has deployed this tree before.  Only
+        # our deployment markers are reliable evidence of a managed target.
+        if [[ -f "$TARGET_DIR/.active-fork" ||
+            -f "$TARGET_DIR/.active-remote" ||
+            -f "$TARGET_DIR/.active-local" ||
+            -f "$TARGET_DIR/.active-commit" ]]; then
+            target_managed=true
+        fi
+    fi
 
     if [[ -n "$LOCAL_SRC" ]]; then
         # A local deploy has no remote to speak of, so everything the state
@@ -1850,30 +1888,17 @@ apply_config() {
 
     handle_base_config "$verb"
 
-    # Only launch the welcome window at the end of default installation.
-    # Prevent it from opening during update, fork switch, branch hop, or apply.
-    local first_run_file="${XDG_STATE_HOME:-$HOME/.local/state}/illogical-impulse/user/first_run.txt"
-    if [[ "$verb" == "install" ]]; then
-        rm -f "$first_run_file"
-    else
-        mkdir -p "$(dirname "$first_run_file")"
-        if [[ ! -f "$first_run_file" ]]; then
-            echo "This file is just here to confirm you've been greeted :>" > "$first_run_file"
-        fi
+    # A fresh install is opened explicitly through the running shell's IPC.
+    # Updates and fork switches keep the Welcome closed.
+    local fresh_deploy=false
+    if [[ "$verb" == "install" || ( "$verb" == "apply" && "$target_managed" != true ) ]]; then
+        fresh_deploy=true
     fi
 
     start_quickshell
 
-    if [[ "$verb" == "install" ]]; then
-        local bin=""
-        if have qs; then
-            bin="qs"
-        elif have quickshell; then
-            bin="quickshell"
-        fi
-        if [[ -n "$bin" ]]; then
-            nohup "$bin" -p "$TARGET_DIR/welcome.qml" >/dev/null 2>&1 &
-        fi
+    if [[ "$fresh_deploy" == true ]]; then
+        open_welcome_after_start
     fi
 
     local summary="$fork/$branch${head:+ @ ${head:0:8}}"

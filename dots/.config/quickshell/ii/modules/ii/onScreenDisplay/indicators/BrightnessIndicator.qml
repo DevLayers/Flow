@@ -4,21 +4,53 @@ import Quickshell
 import Quickshell.Hyprland
 import qs.modules.ii.onScreenDisplay
 import qs.modules.common.widgets
+import qs.modules.common
 
-OsdValueIndicator {
-    id: brightnessOsd
-    property var brightnessMonitor: Brightness.getTargetMonitor()
+Loader {
+    id: root
+    sourceComponent: Config.options.osd.style === "material" ? materialOsdComp : minimalOsdComp
 
-    icon: {
-        if (Hyprsunset.temperatureActive) return "routine";
-        const val = brightnessOsd.value;
-        if (val <= 0.33) return "brightness_low";
-        if (val <= 0.66) return "brightness_medium";
-        return "brightness_high";
+    property var focusedScreen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
+    property var brightnessMonitor: Brightness.getMonitorForScreen(focusedScreen)
+
+    Component {
+        id: minimalOsdComp
+        OsdValueIndicator {
+            id: brightnessOsd
+            icon: {
+                if (Hyprsunset.temperatureActive) return "routine";
+                const val = brightnessOsd.value;
+                if (val <= 0.33) return "brightness_low";
+                if (val <= 0.66) return "brightness_medium";
+                return "brightness_high";
+            }
+            rotateIcon: true
+            scaleIcon: true
+            name: Translation.tr("Brightness")
+            value: root.brightnessMonitor?.brightness ?? 0.5
+            shape: MaterialShape.Shape.Burst
+        }
     }
-    rotateIcon: true
-    scaleIcon: true
-    name: Translation.tr("Brightness")
-    value: brightnessOsd.brightnessMonitor?.brightness ?? 0.5
-    shape: MaterialShape.Shape.Burst
+
+    Component {
+        id: materialOsdComp
+        OsdMaterialValueIndicator {
+            id: osdValues
+            value: root.brightnessMonitor?.brightness ?? 0.5
+            icon: {
+                if (Hyprsunset.temperatureActive) return "routine";
+                const val = osdValues.value;
+                if (val <= 0.33) return "brightness_low";
+                if (val <= 0.66) return "brightness_medium";
+                return "brightness_high";
+            }
+            shape: MaterialShape.Shape.SoftBurst
+
+            onMoved: function(newValue) {
+                if (root.brightnessMonitor) {
+                    root.brightnessMonitor.setBrightness(newValue);
+                }
+            }
+        }
+    }
 }
