@@ -388,7 +388,7 @@ Item {
                                     visible: !modelCard.modelData.providerIconIsRemote
                                     anchors.fill: parent
                                     source: visible ? modelCard.modelData.providerIcon : ""
-                                    colorize: true
+                                    colorize: !modelCard.modelData.providerIconUsesNaturalColors
                                     color: Appearance.colors.colSubtext
                                 }
                             }

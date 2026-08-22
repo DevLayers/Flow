@@ -28,13 +28,32 @@ class OpenRouterCatalogueTests(unittest.TestCase):
         self.assertIn("sort=most-popular", SERVICE)
 
     def test_provider_icon_fallbacks_are_resolvable_and_remote_ready(self):
-        self.assertIn('google: "simple-icons_googlegemini.svg"', SERVICE)
+        provider_assets = {
+            "deepseek": "DeepSeek.png",
+            "google": "GoogleGemini.svg",
+            "minimax": "MiniMax.png",
+            "moonshotai": "MoonshotAI.png",
+            "nvidia": "Nvidia.jpg",
+            "openai": "OpenAI.svg",
+            "qwen": "Qwen.png",
+            "tencent": "Tencent.png",
+            "x-ai": "SpaceXAI.png",
+            "xiaomi": "Xioami.png",
+            "z-ai": "Zai.png",
+        }
+        for provider_id, icon_name in provider_assets.items():
+            provider_key = provider_id if "-" not in provider_id else f'"{provider_id}"'
+            self.assertIn(f'{provider_key}: "{icon_name}"', SERVICE)
+            self.assertTrue((ROOT / "assets" / "icons" / icon_name).is_file(), icon_name)
+        self.assertIn("function providerIdFor", SERVICE)
+        self.assertIn('replace(/^~/, "")', SERVICE)
+        self.assertIn("providerIconUsesNaturalColors", SERVICE)
         self.assertIn("import qs.modules.common.functions", PAGE)
         self.assertEqual(PAGE.count('source: visible ? modelCard.modelData.providerIcon : ""'), 2)
+        self.assertIn("colorize: !modelCard.modelData.providerIconUsesNaturalColors", PAGE)
         for icon_name in (
             "bootstrap_claude.svg",
             "deepseek-symbolic.svg",
-            "simple-icons_googlegemini.svg",
             "mistral-symbolic.svg",
             "ollama-symbolic.svg",
             "openai-symbolic.svg",

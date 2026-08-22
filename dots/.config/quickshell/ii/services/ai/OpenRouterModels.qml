@@ -25,6 +25,22 @@ Singleton {
     property string error: ""
     property double fetchedAt: 0
     property var activeRequest: null
+    // Local brand artwork for providers returned in the model ID prefix. The
+    // API does not currently ship logo URLs, and local images are faster and
+    // remain available when browsing from the cache.
+    readonly property var brandProviderIcons: ({
+        deepseek: "DeepSeek.png",
+        google: "GoogleGemini.svg",
+        minimax: "MiniMax.png",
+        moonshotai: "MoonshotAI.png",
+        nvidia: "Nvidia.jpg",
+        openai: "OpenAI.svg",
+        qwen: "Qwen.png",
+        tencent: "Tencent.png",
+        "x-ai": "SpaceXAI.png",
+        xiaomi: "Xioami.png",
+        "z-ai": "Zai.png"
+    })
 
     function refresh(force = false) {
         if (!Ai.onlineAllowed) {
@@ -102,6 +118,7 @@ Singleton {
             description: String(raw.description ?? ""),
             providerIcon: providerIcon,
             providerIconIsRemote: providerIcon.startsWith("http://") || providerIcon.startsWith("https://"),
+            providerIconUsesNaturalColors: root.providerIconUsesNaturalColors(providerIcon),
             contextWindow: Number(raw.context_length ?? 0),
             maxOutput: Number(raw.top_provider?.max_completion_tokens ?? 0),
             inputModalities: inputModalities,
@@ -121,15 +138,17 @@ Singleton {
     }
 
     function providerIconFor(raw, modelId: string): string {
-        // Some catalogue mirrors expose an icon URL or an asset name. Keep it
-        // first so the UI can use provider metadata whenever the API supplies it.
+        const providerId = root.providerIdFor(raw, modelId);
+        const brandIcon = String(root.brandProviderIcons[providerId] ?? "");
+        if (brandIcon.length > 0)
+            return brandIcon;
+
+        // Keep a future API-provided image available for providers without a
+        // saved local asset.
         const provided = root.firstIconValue(raw);
         if (provided.length > 0)
             return provided;
 
-        // The current /v1/models response has no icon field. These local assets
-        // keep the common providers recognizable without inventing a remote URL.
-        const providerId = String(raw?.author ?? raw?.provider ?? modelId.split("/")[0] ?? "").toLowerCase();
         const localIcons = {
             anthropic: "bootstrap_claude.svg",
             deepseek: "deepseek-symbolic.svg",
@@ -140,6 +159,24 @@ Singleton {
             openai: "openai-symbolic.svg"
         };
         return localIcons[providerId] ?? "";
+    }
+
+    function providerIdFor(raw, modelId: string): string {
+        return String(raw?.author ?? raw?.provider ?? modelId.split("/")[0] ?? "")
+            .trim()
+            .toLowerCase()
+            .replace(/^~/, "");
+    }
+
+    function providerIconUsesNaturalColors(iconSource: string): bool {
+        const source = String(iconSource ?? "");
+        if (source.startsWith("http://") || source.startsWith("https://"))
+            return true;
+        for (const providerId in root.brandProviderIcons) {
+            if (root.brandProviderIcons[providerId] === source)
+                return true;
+        }
+        return false;
     }
 
     function firstIconValue(raw): string {
