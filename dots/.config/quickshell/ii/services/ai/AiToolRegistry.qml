@@ -867,6 +867,46 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "wallpaper_search",
+            version: 1,
+            domain: "theme",
+            title: Translation.tr("Search wallpapers"),
+            summary: Translation.tr("Searches only the wallpaper folder configured in II."),
+            icon: "image_search",
+            kind: "externalRead",
+            network: "optional",
+            sensitivity: "none",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 3000,
+            maxResultTokens: 400,
+            idempotent: true,
+            description: "Search only the wallpaper source already configured in II. Results include an exact ref, thumbnail and whether network was used; do not invent a ref.",
+            parameters: { type: "object", properties: { query: { type: "string", description: "Part of a configured wallpaper filename" }, limit: { type: "integer", description: "Maximum results from 1 to 20" } }, required: [] },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "wallpaper_set",
+            version: 1,
+            domain: "theme",
+            title: Translation.tr("Set wallpaper"),
+            summary: Translation.tr("Shows a thumbnail preview before changing the wallpaper and regenerating the theme."),
+            icon: "wallpaper",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "ask",
+            timeoutMs: 15000,
+            maxResultTokens: 180,
+            idempotent: false,
+            description: "Use the exact ref returned by wallpaper_search. Always show the thumbnail preview and ask before changing the wallpaper; the existing wallpaper is captured for undo.",
+            parameters: { type: "object", properties: { ref: { type: "string", description: "Exact ref from wallpaper_search" } }, required: ["ref"] },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "files_search",
             version: 1,
             domain: "files",
@@ -1327,6 +1367,10 @@ Singleton {
             return [args.from ?? "", args.to ?? ""].filter(value => String(value).length > 0).join(" → ");
         case "keybinds_search":
             return String(args.query ?? "");
+        case "wallpaper_search":
+            return String(args.query ?? "");
+        case "wallpaper_set":
+            return String(args.ref ?? "");
         case "set_shell_config":
             return Array.from(args.changes ?? []).map(change => `${change.key} = ${change.value}`).join(", ");
         }

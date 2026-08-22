@@ -948,6 +948,8 @@ Item {
                         return systemControlPreviewCard;
                     case "windowMovePreview":
                         return windowMovePreviewCard;
+                    case "wallpaperPreview":
+                        return wallpaperPreviewCard;
                     }
                     // A kind this build does not know: a session written by a
                     // newer one still opens, showing what the card says about
@@ -1043,6 +1045,15 @@ Item {
                     id: windowMovePreviewCard
 
                     AiWindowMoveCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: wallpaperPreviewCard
+
+                    AiWallpaperCard {
                         messageData: root.messageData
                         card: cardHost.card
                     }

@@ -1527,6 +1527,8 @@ Singleton {
     readonly property AiSystemControlsIntegration systemControlsIntegration: AiSystemControlsIntegration {}
     /** Live Hyprland window/workspace references and reviewed movement. */
     readonly property AiWindowsIntegration windowsIntegration: AiWindowsIntegration {}
+    /** Configured-local wallpaper search and reviewed reversible theme changes. */
+    readonly property AiThemeIntegration themeIntegration: AiThemeIntegration {}
     /** Local speech-to-text: recording, detection and the review draft. */
     readonly property AiVoiceService voiceService: AiVoiceService {}
     /** Preview id → immutable proposed changes until the user decides. */
@@ -1627,6 +1629,8 @@ Singleton {
             "window_focus": call => root.toolWindowFocus(call),
             "window_move_to_workspace": call => root.toolWindowMove(call),
             "workspace_switch": call => root.toolWorkspaceSwitch(call),
+            "wallpaper_search": call => root.toolWallpaperSearch(call),
+            "wallpaper_set": call => root.toolWallpaperSet(call),
             "system_get_status": call => root.toolSystemGetStatus(call),
             "system_health": call => root.toolSystemHealth(call),
             "keybinds_search": call => root.toolKeybindsSearch(call),
@@ -3771,7 +3775,8 @@ Singleton {
             "dnd_set": pending => root.applySystemControl(pending.message, pending.args),
             "nightlight_set": pending => root.applySystemControl(pending.message, pending.args),
             "theme_set_mode": pending => root.applySystemControl(pending.message, pending.args),
-            "window_move_to_workspace": pending => root.applyWindowMove(pending.message, pending.args)
+            "window_move_to_workspace": pending => root.applyWindowMove(pending.message, pending.args),
+            "wallpaper_set": pending => root.applyWallpaperSet(pending.message, pending.args)
         })
 
     function handleToolJournalSaveFailed(operationId: string, sessionId: string, reason: string): bool {
@@ -4640,6 +4645,81 @@ Singleton {
             data: result,
             retryable: !result.ok
         };
+    }
+
+    function toolWallpaperSearch(call: var): var {
+        const result = root.themeIntegration.search(call.args.query ?? "", call.args.limit ?? 8);
+        return {
+            status: "success",
+            summary: result.results.length === 1 ? Translation.tr("1 wallpaper found") : Translation.tr("%1 wallpapers found").arg(result.results.length),
+            data: result,
+            networkUsed: result.networkUsed === true
+        };
+    }
+
+    function toolWallpaperSet(call: var): var {
+        const preview = root.themeIntegration.previewSet(call.args);
+        if (!preview.ok)
+            return { status: "error", summary: Translation.tr("That wallpaper is not from the configured source"), data: preview, retryable: true };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "wallpaper_set",
+            kind: "wallpaperPreview",
+            state: "pending",
+            summary: Translation.tr("Wallpaper change needs approval"),
+            data: { preview: preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function approveWallpaperSet(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const preview = card?.data?.preview;
+        if (!preview) {
+            root.rejectWallpaperSet(message);
+            return;
+        }
+        root.beginToolExecution(message, "wallpaper_set", {
+            args: {
+                ref: preview.ref,
+                thumbnail: preview.thumbnail,
+                previousRef: preview.previousRef,
+                undo: preview.undo
+            }
+        });
+    }
+
+    function rejectWallpaperSet(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("Wallpaper change discarded") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Wallpaper change discarded"),
+            data: Translation.tr("The user chose not to change the wallpaper.")
+        });
+    }
+
+    function applyWallpaperSet(message: AiMessageData, args: var): void {
+        const result = root.themeIntegration.apply(args);
+        const key = root.toolKeyFor(message);
+        message.functionPending = false;
+        const ok = result?.ok === true;
+        const summary = ok ? Translation.tr("Wallpaper changed") : Translation.tr("The wallpaper could not be changed");
+        root.updateToolCard(message, key, { state: ok ? "done" : "failed", summary: summary });
+        root.broker.settle(key, {
+            status: ok ? "success" : "error",
+            summary: summary,
+            data: result,
+            retryable: !ok
+        });
     }
 
     function toolSystemGetStatus(call: var): var {
