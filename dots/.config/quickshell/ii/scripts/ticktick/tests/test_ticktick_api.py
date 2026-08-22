@@ -88,6 +88,21 @@ class RequestBuildingTests(unittest.TestCase):
         self.assertEqual(body["dueDate"], "2026-08-22T09:00:00+0000")
         self.assertEqual(body["priority"], 3)
 
+    def test_update_uses_the_real_task_id_and_only_sends_changes(self):
+        request, result = self.captured_request({
+            "token": "t", "op": "update", "taskId": "task/with spaces",
+            "projectId": "project", "content": "notes", "dueDate": "2026-08-22T09:00:00+0000",
+        })
+        self.assertTrue(result["ok"])
+        self.assertIn("/task/task%2Fwith%20spaces", request.full_url)
+        body = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(body, {"projectId": "project", "content": "notes", "dueDate": "2026-08-22T09:00:00+0000"})
+
+    def test_update_without_changes_is_refused_before_the_network(self):
+        with mock.patch.object(API.urllib.request, "urlopen", mock.Mock(side_effect=AssertionError("should not be called"))):
+            result = API.run({"token": "t", "op": "update", "taskId": "task-1"})
+        self.assertFalse(result["ok"])
+
     def test_an_empty_title_is_refused_before_the_network(self):
         with mock.patch.object(API.urllib.request, "urlopen",
                                mock.Mock(side_effect=AssertionError("should not be called"))):

@@ -27,6 +27,8 @@ Singleton {
     /** Emitted with the id TickTick assigned, so a caller can point at it. */
     signal taskCreated(string taskId, string title)
     signal requestFailed(string operation, string reason)
+    /** Correlated provider contract used by the AI adapter. */
+    signal aiOperationFinished(string operationId, string operation, bool ok, var data, string error)
 
     // ── Credentials (loaded from .env) ────────────────────────────
     property string clientId: ""
@@ -100,6 +102,56 @@ Singleton {
             taskId: String(taskId ?? ""),
             projectId: projectId || root.inboxProjectId
         });
+    }
+
+    function aiListTasks(operationId, projectId) {
+        return root.aiRequest(operationId, "list", { projectId: projectId || root.inboxProjectId });
+    }
+
+    function aiCreateTask(operationId, input) {
+        return root.aiRequest(operationId, "create", {
+            projectId: input?.listId || root.inboxProjectId,
+            title: String(input?.title ?? ""),
+            content: String(input?.notes ?? ""),
+            dueDate: input?.dueDate ?? null,
+            priority: input?.priority
+        });
+    }
+
+    function aiUpdateTask(operationId, ref, changes) {
+        return root.aiRequest(operationId, "update", {
+            projectId: ref?.listId || root.inboxProjectId,
+            taskId: String(ref?.taskId ?? ref?.id ?? ""),
+            title: changes?.title ?? changes?.content,
+            content: changes?.notes ?? changes?.contentText,
+            dueDate: changes?.dueDate,
+            priority: changes?.priority
+        });
+    }
+
+    function aiCompleteTask(operationId, ref) {
+        return root.aiRequest(operationId, "complete", {
+            projectId: ref?.listId || root.inboxProjectId,
+            taskId: String(ref?.taskId ?? ref?.id ?? "")
+        });
+    }
+
+    function aiDeleteTask(operationId, ref) {
+        return root.aiRequest(operationId, "delete", {
+            projectId: ref?.listId || root.inboxProjectId,
+            taskId: String(ref?.taskId ?? ref?.id ?? "")
+        });
+    }
+
+    function aiRequest(operationId, operation, payload) {
+        if (!root.send(aiProcess, Object.assign({
+            op: operation,
+            callId: String(operationId ?? "")
+        }, payload ?? ({}))))
+            return false;
+        aiProcess.operationId = String(operationId ?? "");
+        aiProcess.operation = String(operation ?? "");
+        return true;
     }
 
     /** Turns one helper reply into either an error or its payload. */
@@ -301,6 +353,36 @@ Singleton {
                 }
                 console.log("[TickTick] Task deleted. Refreshing...");
                 root.refresh();
+            }
+        }
+    }
+
+    // One correlated request for the AI provider contract. The broker keeps
+    // mutations serial, so one process is sufficient and late replies retain
+    // their operation id instead of being guessed from the active UI task.
+    Process {
+        id: aiProcess
+        command: ["python3", root.helperPath]
+        stdinEnabled: true
+        property string operationId: ""
+        property string operation: ""
+        stdout: StdioCollector {
+            id: aiCollector
+            onStreamFinished: {
+                let reply = null;
+                try {
+                    reply = JSON.parse(String(aiCollector.text ?? ""));
+                } catch (error) {
+                    root.aiOperationFinished(aiProcess.operationId, aiProcess.operation, false, null, qsTr("TickTick sent an unreadable response."));
+                    return;
+                }
+                if (!reply.ok) {
+                    root.lastError = String(reply.error ?? qsTr("The TickTick request failed."));
+                    root.aiOperationFinished(aiProcess.operationId, aiProcess.operation, false, null, root.lastError);
+                    return;
+                }
+                root.lastError = "";
+                root.aiOperationFinished(aiProcess.operationId, aiProcess.operation, true, reply.data ?? ({}), "");
             }
         }
     }

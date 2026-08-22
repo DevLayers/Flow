@@ -19,6 +19,7 @@ string, nothing reaches a shell, and the token never appears in argv.
 Operations:
     list      {projectId}                      → the project's tasks
     create    {projectId, title, content?, dueDate?, priority?}
+    update    {projectId, taskId, title?, content?, dueDate?, priority?}
     complete  {projectId, taskId}
     delete    {projectId, taskId}
 """
@@ -108,6 +109,18 @@ def run(payload: dict) -> dict:
             if payload.get(field) not in (None, ""):
                 task[field] = payload[field]
         return request(token, "POST", "/task", task)
+
+    if op == "update":
+        task_id = str(payload.get("taskId") or "")
+        if not task_id:
+            return {"ok": False, "status": 0, "error": "No task id"}
+        task = {"projectId": project}
+        for field in ("title", "content", "desc", "dueDate", "startDate", "timeZone", "isAllDay", "priority"):
+            if field in payload and payload[field] not in (None, ""):
+                task[field] = payload[field]
+        if len(task) == 1:
+            return {"ok": False, "status": 0, "error": "No task changes"}
+        return request(token, "POST", f"/task/{path_part(task_id)}", task)
 
     if op in ("complete", "delete"):
         task_id = str(payload.get("taskId") or "")
