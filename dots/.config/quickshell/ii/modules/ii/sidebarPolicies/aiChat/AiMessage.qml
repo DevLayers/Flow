@@ -944,6 +944,8 @@ Item {
                         return fileAttachCard;
                     case "notesPreview":
                         return notesPreviewCard;
+                    case "systemControlPreview":
+                        return systemControlPreviewCard;
                     }
                     // A kind this build does not know: a session written by a
                     // newer one still opens, showing what the card says about
@@ -1021,6 +1023,15 @@ Item {
                     id: notesPreviewCard
 
                     AiNotesCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: systemControlPreviewCard
+
+                    AiSystemControlCard {
                         messageData: root.messageData
                         card: cardHost.card
                     }

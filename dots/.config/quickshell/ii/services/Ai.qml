@@ -1523,6 +1523,8 @@ Singleton {
     readonly property AiFilesIntegration filesIntegration: AiFilesIntegration {}
     /** Local notes previews and reviewed append/create operations. */
     readonly property AiNotesIntegration notesIntegration: AiNotesIntegration {}
+    /** Typed previews and reversible writes to existing local system services. */
+    readonly property AiSystemControlsIntegration systemControlsIntegration: AiSystemControlsIntegration {}
     /** Local speech-to-text: recording, detection and the review draft. */
     readonly property AiVoiceService voiceService: AiVoiceService {}
     /** Preview id → immutable proposed changes until the user decides. */
@@ -1614,6 +1616,11 @@ Singleton {
             "notes_preview_append": call => root.toolNotesPreviewAppend(call),
             "notes_append": call => root.toolNotesAppend(call),
             "notes_create_from_answer": call => root.toolNotesCreate(call),
+            "audio_set": call => root.toolSystemControl(call),
+            "brightness_set": call => root.toolSystemControl(call),
+            "dnd_set": call => root.toolSystemControl(call),
+            "nightlight_set": call => root.toolSystemControl(call),
+            "theme_set_mode": call => root.toolSystemControl(call),
             "system_get_status": call => root.toolSystemGetStatus(call),
             "system_health": call => root.toolSystemHealth(call),
             "keybinds_search": call => root.toolKeybindsSearch(call),
@@ -3752,7 +3759,12 @@ Singleton {
             "settings_apply_changes": pending => root.applySettingsChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
             "reminder_create": pending => root.createReminderNow(pending.message, pending.args, pending.sessionId),
             "notes_append": pending => root.appendNoteNow(pending.message, pending.args),
-            "notes_create_from_answer": pending => root.createNoteNow(pending.message, pending.args)
+            "notes_create_from_answer": pending => root.createNoteNow(pending.message, pending.args),
+            "audio_set": pending => root.applySystemControl(pending.message, pending.args),
+            "brightness_set": pending => root.applySystemControl(pending.message, pending.args),
+            "dnd_set": pending => root.applySystemControl(pending.message, pending.args),
+            "nightlight_set": pending => root.applySystemControl(pending.message, pending.args),
+            "theme_set_mode": pending => root.applySystemControl(pending.message, pending.args)
         })
 
     function handleToolJournalSaveFailed(operationId: string, sessionId: string, reason: string): bool {
@@ -4474,6 +4486,67 @@ Singleton {
             status: ok ? "success" : "error",
             summary: summary,
             data: ok ? { title: result.title, index: result.index, provenance: result.provenance } : result,
+            retryable: !ok
+        });
+    }
+
+    function toolSystemControl(call: var): var {
+        const toolId = String(call.tool ?? call.name ?? "");
+        const preview = root.systemControlsIntegration.preview(toolId, call.args);
+        if (!preview.ok)
+            return { status: "error", summary: Translation.tr("That system value is not valid"), data: preview, retryable: true };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: toolId,
+            kind: "systemControlPreview",
+            state: "pending",
+            summary: Translation.tr("System change needs approval"),
+            data: { preview: preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function approveSystemControl(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const preview = card?.data?.preview;
+        if (!preview) {
+            root.rejectSystemControl(message);
+            return;
+        }
+        root.beginToolExecution(message, String(preview.toolId), {
+            args: { toolId: preview.toolId, value: preview.value, undo: preview.undo }
+        });
+    }
+
+    function rejectSystemControl(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("System change discarded") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("System change discarded"),
+            data: Translation.tr("The user chose not to change the system.")
+        });
+    }
+
+    function applySystemControl(message: AiMessageData, args: var): void {
+        const result = root.systemControlsIntegration.apply(args);
+        const key = root.toolKeyFor(message);
+        message.functionPending = false;
+        const ok = result?.ok === true;
+        const summary = ok ? Translation.tr("System changed") : Translation.tr("The system change failed");
+        root.updateToolCard(message, key, { state: ok ? "done" : "failed", summary: summary });
+        root.broker.settle(key, {
+            status: ok ? "success" : "error",
+            summary: summary,
+            data: result,
             retryable: !ok
         });
     }
