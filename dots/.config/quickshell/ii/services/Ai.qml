@@ -8,6 +8,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
+import qs.services
 import qs.services.ai
 import qs.services.ai.integrations
 
@@ -2405,7 +2406,7 @@ Singleton {
 
     function notifyResponseFinished(message: AiMessageData) {
         const options = Config.options?.ai?.notify;
-        if (!(options?.whenDone ?? true))
+        if (!(options?.whenDone ?? true) || !AiAttentionService.notificationAllowed)
             return;
         if ((options?.onlyWhenAway ?? true) && root.chatOnScreen)
             return;
@@ -2422,9 +2423,13 @@ Singleton {
         const summary = failed
             ? Translation.tr("%1 could not answer").arg(modelName)
             : Translation.tr("%1 answered").arg(modelName);
+        const privacy = AiAttentionService.notificationPrivacy;
+        const canShowContent = privacy === "full" && !GlobalStates.screenLocked;
         const body = failed
-            ? String(message?.errorText ?? Translation.tr("The request failed."))
-            : (answer.length > 0 ? (answer.length > 160 ? `${answer.slice(0, 160)}…` : answer) : Translation.tr("Answer ready in %1").arg(chatName));
+            ? (canShowContent ? String(message?.errorText ?? Translation.tr("The request failed.")) : Translation.tr("The AI request failed. Open the chat for details."))
+            : (canShowContent
+                ? (answer.length > 0 ? (answer.length > 160 ? `${answer.slice(0, 160)}…` : answer) : Translation.tr("Answer ready in %1").arg(chatName))
+                : Translation.tr("The AI answer is ready. Open the chat to read it."));
 
         // The model's own logo when the theme has it, nothing when it does
         // not: an icon name the daemon cannot resolve renders as a broken
