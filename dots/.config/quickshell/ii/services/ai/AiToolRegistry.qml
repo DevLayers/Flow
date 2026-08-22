@@ -975,7 +975,7 @@ Singleton {
             icon: "music_search",
             kind: "localWrite",
             network: "never",
-            sensitivity: "audio",
+            sensitivity: "personal",
             requiredModelCapabilities: ["tools"],
             defaultApproval: "ask",
             timeoutMs: 35000,
