@@ -39,7 +39,11 @@ Rectangle {
             spacing: 0
 
             StyledText {
+                // Fills its cell so a row without a hint keeps the label on
+                // the left instead of centring it.
+                Layout.fillWidth: true
                 text: row.label
+                elide: Text.ElideRight
                 color: Appearance.colors.colOnLayer2
             }
 
@@ -54,7 +58,12 @@ Rectangle {
         }
 
         RowLayout {
+            // A layout inside a layout fills by default, which would share
+            // the slack with the label instead of sitting at the right edge.
             id: controlSlot
+
+            Layout.fillWidth: false
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             spacing: 8
         }
     }
