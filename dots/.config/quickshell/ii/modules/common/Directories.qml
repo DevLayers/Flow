@@ -108,5 +108,6 @@ Singleton {
         Quickshell.execDetached(["mkdir", "-p", `${userActions}`]);
         Quickshell.execDetached(["mkdir", "-p", `${userWidgetsPath}`]);
         Quickshell.execDetached(["rm", "-rf", `${tempImages}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${screenshotTemp}`]);
     }
 }
