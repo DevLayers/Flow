@@ -15,6 +15,10 @@ QtObject {
 
     readonly property int cacheTtlMs: 30000
     readonly property int maximumCacheEntries: 16
+    // site.api.espn.com is intermittently denied by Akamai in this
+    // environment. The web API host serves the same scoreboard payload and
+    // is kept as the first endpoint, with the legacy host as a fallback.
+    readonly property list<string> apiHosts: ["site.web.api.espn.com", "site.api.espn.com"]
     property var cache: ({})
     property var pendingRequests: ({})
 
@@ -88,6 +92,36 @@ QtObject {
         return raw.replace(/-/g, "");
     }
 
+    function localIsoDate(): string {
+        const now = new Date();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const day = String(now.getDate()).padStart(2, "0");
+        return `${now.getFullYear()}-${month}-${day}`;
+    }
+
+    function statusValues(value): var {
+        const rawValues = Array.isArray(value) ? value : String(value ?? "").split(/[\s,]+/);
+        const aliases = {
+            "scheduled": "pre",
+            "upcoming": "pre",
+            "live": "in",
+            "inprogress": "in",
+            "in-progress": "in",
+            "final": "post",
+            "completed": "post"
+        };
+        const values = [];
+        for (let i = 0; i < rawValues.length; i++) {
+            const raw = String(rawValues[i] ?? "").trim().toLowerCase();
+            if (raw.length === 0)
+                continue;
+            const normalized = aliases[raw] || raw;
+            if (["pre", "in", "post"].indexOf(normalized) >= 0 && values.indexOf(normalized) < 0)
+                values.push(normalized);
+        }
+        return values;
+    }
+
     function competitorDto(competitor, fallback): var {
         const item = competitor ?? ({});
         const team = item.team ?? ({});
@@ -149,14 +183,14 @@ QtObject {
         const responseLeague = responseLeagues.length > 0 ? (responseLeagues[0] ?? ({})) : ({});
         const responseLeagueName = root.boundedText(responseLeague.name || "", 100);
         const team = String(args?.team ?? "").trim().toLowerCase();
-        const status = String(args?.status ?? "").trim().toLowerCase();
+        const statuses = root.statusValues(args?.status);
         const games = [];
         for (let i = 0; i < events.length; i++) {
             const game = root.eventDto(events[i], route, responseLeagueName);
             const haystack = [game.name, game.home.name, game.home.abbreviation, game.away.name, game.away.abbreviation].join(" ").toLowerCase();
             if (team.length > 0 && haystack.indexOf(team) < 0)
                 continue;
-            if (status.length > 0 && game.state !== status && game.status.toLowerCase().indexOf(status) < 0)
+            if (statuses.length > 0 && statuses.indexOf(game.state) < 0)
                 continue;
             games.push(game);
         }
@@ -165,7 +199,7 @@ QtObject {
     }
 
     function cacheKey(route, args): string {
-        return [route.sport, route.league, String(args?.date ?? ""), String(args?.team ?? "").trim().toLowerCase(), String(args?.status ?? "").trim().toLowerCase(), String(args?.limit ?? 10)].join("|");
+        return [route.sport, route.league, String(args?.date ?? ""), String(args?.team ?? "").trim().toLowerCase(), root.statusValues(args?.status).join(","), String(args?.limit ?? 10)].join("|");
     }
 
     function freshCache(key): var {
@@ -199,9 +233,21 @@ QtObject {
     }
 
     function finish(key, httpStatus, responseText): void {
-        const request = root.removePending(key);
+        const request = root.pendingRequests[String(key)] ?? null;
         if (!request)
             return;
+
+        // Keep the subscriber and correlation entry alive while switching
+        // hosts. Releasing here would make the late fallback callback look
+        // like an unrelated request and could underflow SportsService's
+        // subscriber count.
+        if (httpStatus === 403 && request.hostIndex + 1 < root.apiHosts.length) {
+            request.hostIndex += 1;
+            root.startRequest(String(key), request);
+            return;
+        }
+
+        root.removePending(key);
         SportsService.releaseAiSubscriber();
 
         let outcome = null;
@@ -243,15 +289,40 @@ QtObject {
         root.resultReady(String(key), request.callId, request.sessionId, outcome);
     }
 
+    function startRequest(key, request): void {
+        const host = root.apiHosts[request.hostIndex] || root.apiHosts[0];
+        const date = root.dateParameter(request.args.date);
+        const url = `https://${host}/apis/site/v2/sports/${encodeURIComponent(request.route.sport)}/${encodeURIComponent(request.route.league)}/scoreboard` + (date.length > 0 ? `?dates=${date}` : "");
+        const xhr = new XMLHttpRequest();
+        request.xhr = xhr;
+        root.pendingRequests = Object.assign({}, root.pendingRequests, { [String(key)]: request });
+        xhr.timeout = 10000;
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE)
+                root.finish(String(key), xhr.status, xhr.responseText);
+        };
+        xhr.onerror = function() { root.finish(String(key), 0, ""); };
+        xhr.ontimeout = function() { root.finish(String(key), 0, ""); };
+        xhr.open("GET", url);
+        xhr.send();
+    }
+
     function query(key, callId, sessionId, args, force = false): var {
         const route = root.endpointFor(args?.league);
         if (!route)
             return { status: "error", summary: "Unsupported ESPN league", data: null, retryable: false };
-        const date = root.dateParameter(args?.date);
-        if (String(args?.date ?? "").trim().length > 0 && date.length === 0)
+        const requestedDate = String(args?.date ?? "").trim();
+        const isoDate = requestedDate.length > 0 ? requestedDate : root.localIsoDate();
+        const date = root.dateParameter(isoDate);
+        if (date.length === 0)
             return { status: "error", summary: "Date must use YYYY-MM-DD", data: null, retryable: false };
 
-        const normalizedArgs = Object.assign({}, args, { date: String(args?.date ?? "").trim() });
+        const requestedStatus = String(args?.status ?? "").trim();
+        const statuses = root.statusValues(args?.status);
+        if (requestedStatus.length > 0 && statuses.length === 0)
+            return { status: "error", summary: "Status must be pre, in or post", data: null, retryable: false };
+
+        const normalizedArgs = Object.assign({}, args, { date: isoDate, status: statuses.join(",") });
         const requestKey = String(key);
         const cacheKeyValue = root.cacheKey(route, normalizedArgs);
         if (!force) {
@@ -262,20 +333,10 @@ QtObject {
         if (root.pendingRequests[requestKey] !== undefined)
             return { status: "pending" };
 
-        const url = `https://site.api.espn.com/apis/site/v2/sports/${encodeURIComponent(route.sport)}/${encodeURIComponent(route.league)}/scoreboard` + (date.length > 0 ? `?dates=${date}` : "");
-        const xhr = new XMLHttpRequest();
-        const request = { xhr: xhr, callId: String(callId ?? ""), sessionId: String(sessionId ?? ""), route: route, args: normalizedArgs, cacheKey: cacheKeyValue };
+        const request = { xhr: null, hostIndex: 0, callId: String(callId ?? ""), sessionId: String(sessionId ?? ""), route: route, args: normalizedArgs, cacheKey: cacheKeyValue };
         root.pendingRequests = Object.assign({}, root.pendingRequests, { [requestKey]: request });
         SportsService.acquireAiSubscriber();
-        xhr.timeout = 10000;
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE)
-                root.finish(requestKey, xhr.status, xhr.responseText);
-        };
-        xhr.onerror = function() { root.finish(requestKey, 0, ""); };
-        xhr.ontimeout = function() { root.finish(requestKey, 0, ""); };
-        xhr.open("GET", url);
-        xhr.send();
+        root.startRequest(requestKey, request);
         return { status: "pending" };
     }
 
