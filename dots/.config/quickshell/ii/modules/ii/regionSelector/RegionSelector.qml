@@ -48,6 +48,7 @@ Scope {
                 running: false
                 screen: monitorScope.modelData
                 screenshotDir: Directories.screenshotTemp
+                format: "ppm"
                 screenshotPath: `${Directories.screenshotTemp}/image-${monitorScope.modelData.name}.ppm`
             }
 

@@ -9,13 +9,16 @@ Process {
     running: true
     property string screenshotDir: Directories.screenshotTemp
     required property ShellScreen screen
-    property string screenshotPath: `${screenshotDir}/image-${screen.name}.ppm`
+    property string screenshotPath: `${screenshotDir}/image-${screen.name}`
     property bool completed: false
     property int startedToken: 0
     property bool restarting: false
-    // ppm skips PNG compression, which is the slow part of grim. Magick/Qt/OpenCV
-    // all sniff the format, and ScreenshotAction forces png:- on clipboard output.
-    command: ["bash", "-c", `mkdir -p '${StringUtils.shellSingleQuoteEscape(screenshotDir)}' && exec grim -t ppm -o '${StringUtils.shellSingleQuoteEscape(screen.name)}' '${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`]
+    // grim output format. ppm skips PNG compression, which is the slow part of
+    // grim, but the file is then only safe for consumers that sniff the format
+    // (magick/Qt/OpenCV). Anything shipping the bytes as-is to an external API
+    // must stay on png, so this is opt-in rather than the default.
+    property string format: "png"
+    command: ["bash", "-c", `mkdir -p '${StringUtils.shellSingleQuoteEscape(screenshotDir)}' && exec grim -t ${StringUtils.shellSingleQuoteEscape(format)} -o '${StringUtils.shellSingleQuoteEscape(screen.name)}' '${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`]
 
     onRunningChanged: {
         if (running) {
