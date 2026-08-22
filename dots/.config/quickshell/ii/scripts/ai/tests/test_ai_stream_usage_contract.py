@@ -10,6 +10,9 @@ OPENAI_STRATEGY = (ROOT / "services" / "ai" / "OpenAiCompatStrategy.qml").read_t
 AI_SERVICE = (ROOT / "services" / "Ai.qml").read_text(encoding="utf-8")
 AI_MESSAGE = (ROOT / "services" / "ai" / "AiMessageData.qml").read_text(encoding="utf-8")
 AI_USAGE = (ROOT / "services" / "AiUsage.qml").read_text(encoding="utf-8")
+USAGE_DASHBOARD = (
+    ROOT / "modules" / "settings" / "configs" / "ai" / "AiUsageDashboard.qml"
+).read_text(encoding="utf-8")
 # Both surfaces draw the same turn now; the Search panel is that component in
 # its compact density.
 TRANSCRIPT_MESSAGE = (
@@ -19,6 +22,14 @@ SEARCH_PANEL = (ROOT / "modules" / "ii" / "overview" / "AiChatPanel.qml").read_t
 
 
 class AiStreamUsageContractTests(unittest.TestCase):
+    def test_reported_cost_is_persisted_in_the_usage_ledger(self):
+        self.assertIn("message.requestCost", AI_SERVICE)
+        self.assertIn("function costSince(daysBack: int): real", AI_USAGE)
+        self.assertIn("function costResponsesSince(daysBack: int): int", AI_USAGE)
+        self.assertIn("function formatCost(value): string", AI_USAGE)
+        self.assertIn("costResponses", AI_USAGE)
+        self.assertIn("Reported cost", USAGE_DASHBOARD)
+
     def test_native_ollama_uses_native_generation_and_terminal_counters(self):
         self.assertIn("num_predict: maxOutputTokens(model)", OPENAI_STRATEGY)
         self.assertIn("data?.prompt_eval_count", OPENAI_STRATEGY)

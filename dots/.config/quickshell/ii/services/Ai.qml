@@ -2516,7 +2516,8 @@ Singleton {
         AiUsage.recordResponse(message.model ?? root.currentModelId,
             message.inputTokens, message.outputTokens,
             message.thoughtTokens, message.totalTokens,
-            (message.errorKind ?? "").length === 0);
+            (message.errorKind ?? "").length === 0,
+            message.requestCost);
         // A message that just issued a tool call is not the end of the
         // exchange: `AiToolBroker.finish()` always asks for a follow-up
         // turn next, sync or async. Notifying here as well as for the

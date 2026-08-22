@@ -28,11 +28,12 @@ Singleton {
     id: root
 
     /**
-     * {days: {"2026-08-16": {input, output, thinking, total, requests, ok, err,
-     *                         hours: {"14": {total, requests, ok, err}},
-     *                         models: {"provider:model": {total, requests}}}},
-     *  models: {"provider:model": {total, requests}},
-     *  allTime: {input, output, thinking, total, requests, ok, err}}
+ * {days: {"2026-08-16": {input, output, thinking, total, cost, costResponses,
+ *                         requests, ok, err,
+ *                         hours: {"14": {total, cost, costResponses, requests, ok, err}},
+ *                         models: {"provider:model": {total, cost, costResponses, requests}}}},
+ *  models: {"provider:model": {total, cost, costResponses, requests}},
+ *  allTime: {input, output, thinking, total, cost, costResponses, requests, ok, err}}
      */
     property var data: ({})
     property bool ready: false
@@ -87,6 +88,32 @@ Singleton {
                 sum += Math.max(0, Number(entry.requests) || 0);
         }
         return sum;
+    }
+
+    /** Reported USD charges over the last `daysBack` days, today included. */
+    function costSince(daysBack: int): real {
+        let sum = 0;
+        for (let i = 0; i <= daysBack; ++i) {
+            const day = new Date();
+            day.setDate(day.getDate() - i);
+            const entry = root.dayEntry(day);
+            if (entry)
+                sum += Math.max(0, Number(entry.cost) || 0);
+        }
+        return sum;
+    }
+
+    /** Number of responses whose provider supplied an exact monetary charge. */
+    function costResponsesSince(daysBack: int): int {
+        let count = 0;
+        for (let i = 0; i <= daysBack; ++i) {
+            const day = new Date();
+            day.setDate(day.getDate() - i);
+            const entry = root.dayEntry(day);
+            if (entry)
+                count += Math.max(0, Number(entry.costResponses) || 0);
+        }
+        return count;
     }
 
     /** {input, output, thinking} over the last `daysBack` days, zeros included. */
@@ -232,14 +259,24 @@ Singleton {
         return String(tokens);
     }
 
-    function recordResponse(model: string, input: int, output: int, thinking: int, total: int, ok: bool) {
+    function formatCost(value): string {
+        const cost = Math.max(0, Number(value) || 0);
+        if (cost >= 1)
+            return "$" + cost.toFixed(2);
+        if (cost >= 0.01)
+            return "$" + cost.toFixed(3);
+        return "$" + cost.toFixed(4);
+    }
+
+    function recordResponse(model: string, input: int, output: int, thinking: int, total: int, ok: bool, cost: real = -1) {
         const record = {
             model: String(model ?? ""),
             input: Number(input),
             output: Number(output),
             thinking: Number(thinking),
             total: Number(total),
-            ok: ok === true
+            ok: ok === true,
+            cost: Number(cost)
         };
         if (!root.ready) {
             root.pendingResponses = [...root.pendingResponses, record];
@@ -263,14 +300,16 @@ Singleton {
             days: Object.assign({}, root.data.days ?? ({})),
             models: Object.assign({}, root.data.models ?? ({})),
             allTime: Object.assign({
-                input: 0, output: 0, thinking: 0, total: 0, requests: 0, ok: 0, err: 0
+                input: 0, output: 0, thinking: 0, total: 0, cost: 0, costResponses: 0,
+                requests: 0, ok: 0, err: 0
             }, root.allTime)
         };
 
         const now = new Date();
         const key = root.dayKey(now);
         const day = Object.assign({
-            input: 0, output: 0, thinking: 0, total: 0, requests: 0, ok: 0, err: 0
+            input: 0, output: 0, thinking: 0, total: 0, cost: 0, costResponses: 0,
+            requests: 0, ok: 0, err: 0
         }, next.days[key]);
         day.requests += 1;
         if (record.ok)
@@ -289,6 +328,14 @@ Singleton {
             next.allTime.thinking += clean(record.thinking);
             next.allTime.total += clean(record.total);
         }
+        const costKnown = isFinite(Number(record.cost)) && Number(record.cost) >= 0;
+        if (costKnown) {
+            const cost = Number(record.cost);
+            day.cost += cost;
+            day.costResponses += 1;
+            next.allTime.cost += cost;
+            next.allTime.costResponses += 1;
+        }
         next.allTime.requests += 1;
         if (record.ok)
             next.allTime.ok += 1;
@@ -298,7 +345,7 @@ Singleton {
         // Only today keeps the hourly breakdown the "Today" view charts.
         const hours = Object.assign({}, day.hours ?? ({}));
         const hourKey = String(now.getHours());
-        const hourBucket = Object.assign({total: 0, requests: 0, ok: 0, err: 0}, hours[hourKey]);
+        const hourBucket = Object.assign({total: 0, cost: 0, costResponses: 0, requests: 0, ok: 0, err: 0}, hours[hourKey]);
         hourBucket.requests += 1;
         if (record.ok)
             hourBucket.ok += 1;
@@ -306,25 +353,37 @@ Singleton {
             hourBucket.err += 1;
         if (usageKnown)
             hourBucket.total += clean(record.total);
+        if (costKnown) {
+            hourBucket.cost += Number(record.cost);
+            hourBucket.costResponses += 1;
+        }
         hours[hourKey] = hourBucket;
         day.hours = hours;
         next.days[key] = day;
 
         const modelId = record.model;
         if (modelId.length > 0) {
-            const modelEntry = Object.assign({total: 0, requests: 0}, next.models[modelId]);
+            const modelEntry = Object.assign({total: 0, cost: 0, costResponses: 0, requests: 0}, next.models[modelId]);
             modelEntry.requests += 1;
             if (usageKnown)
                 modelEntry.total += clean(record.total);
+            if (costKnown) {
+                modelEntry.cost += Number(record.cost);
+                modelEntry.costResponses += 1;
+            }
             next.models[modelId] = modelEntry;
 
             // The same totals inside the day bucket give "top models" a
             // period window; `day` is already the copy stored in next.days.
             const dayModels = Object.assign({}, day.models ?? ({}));
-            const dayModel = Object.assign({total: 0, requests: 0}, dayModels[modelId]);
+            const dayModel = Object.assign({total: 0, cost: 0, costResponses: 0, requests: 0}, dayModels[modelId]);
             dayModel.requests += 1;
             if (usageKnown)
                 dayModel.total += clean(record.total);
+            if (costKnown) {
+                dayModel.cost += Number(record.cost);
+                dayModel.costResponses += 1;
+            }
             dayModels[modelId] = dayModel;
             day.models = dayModels;
         }

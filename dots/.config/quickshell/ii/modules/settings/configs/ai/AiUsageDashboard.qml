@@ -74,6 +74,11 @@ GridLayout {
     readonly property var periodSeriesTooltips: grid.periodSeries.map(entry => entry.tooltip)
     readonly property int periodTokens: AiUsage.totalSince(grid.periodDaysBack)
     readonly property int periodRequests: AiUsage.requestsSince(grid.periodDaysBack)
+    readonly property real periodCost: AiUsage.costSince(grid.periodDaysBack)
+    readonly property int periodCostResponses: AiUsage.costResponsesSince(grid.periodDaysBack)
+    readonly property string periodCostLabel: grid.periodCostResponses > 0
+        ? AiUsage.formatCost(grid.periodCost)
+        : Translation.tr("Not reported")
     readonly property var periodSplit: AiUsage.splitSince(grid.periodDaysBack)
     readonly property var periodOutcome: AiUsage.outcomeSince(grid.periodDaysBack)
     readonly property int periodOk: grid.periodOutcome.ok
@@ -138,14 +143,16 @@ GridLayout {
                 { label: grid.peakEntry ? Translation.tr("Peak hour") + " · " + grid.peakTag() : Translation.tr("Peak hour"),
                   value: grid.peakEntry ? AiUsage.formatTokens(grid.peakEntry.value) : "—" },
                 { label: Translation.tr("Requests"), value: String(grid.periodRequests) },
-                { label: Translation.tr("Failed"), value: String(grid.periodErr) }
+                { label: Translation.tr("Failed"), value: String(grid.periodErr) },
+                { label: Translation.tr("Reported cost"), value: grid.periodCostLabel }
             ];
         return [
             { label: grid.peakEntry ? Translation.tr("Busiest day") + " · " + grid.peakTag() : Translation.tr("Busiest day"),
               value: grid.peakEntry ? AiUsage.formatTokens(grid.peakEntry.value) : "—" },
             { label: Translation.tr("Average / day"), value: AiUsage.formatTokens(grid.avgTokensPerDay) },
             { label: Translation.tr("vs previous"),
-              value: grid.tokensDeltaPct !== null ? (grid.tokensDeltaPct > 0 ? "+" : "") + String(grid.tokensDeltaPct) + "%" : "—" }
+              value: grid.tokensDeltaPct !== null ? (grid.tokensDeltaPct > 0 ? "+" : "") + String(grid.tokensDeltaPct) + "%" : "—" },
+            { label: Translation.tr("Reported cost"), value: grid.periodCostLabel }
         ];
     }
 
