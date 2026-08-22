@@ -1930,6 +1930,17 @@ Singleton {
         ollamaModelNames: root.ollamaModels
     }
     property var ollamaModels: []
+    property bool ollamaRefreshPending: false
+
+    /** Re-index after a user-initiated local pull, without duplicating jobs. */
+    function refreshOllamaModels() {
+        AiRagService.refreshInstalledModels();
+        if (aiIndexProc.running) {
+            root.ollamaRefreshPending = true;
+            return;
+        }
+        aiIndexProc.running = true;
+    }
 
     readonly property var providers: root.catalog.providers
     readonly property var providerIds: root.catalog.providerIds
@@ -2117,6 +2128,12 @@ Singleton {
                 if (Array.isArray(parsed.user_prompts))
                     root.userPrompts = parsed.user_prompts
             }
+        }
+        onExited: {
+            if (!root.ollamaRefreshPending)
+                return;
+            root.ollamaRefreshPending = false;
+            Qt.callLater(root.refreshOllamaModels);
         }
     }
 

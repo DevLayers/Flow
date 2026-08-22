@@ -23,9 +23,11 @@ Item {
 
     property string query: ""
     property bool openRouterModelsOpen: false
-    // Canvas hosts already provide the title, back action, and refresh button.
-    // Other hosts retain the catalogue's standalone header by default.
-    property bool hostOwnsOpenRouterHeader: false
+    property bool ollamaModelsOpen: false
+    // Canvas hosts already provide the title and back action. OpenRouter also
+    // receives the canvas refresh action; other hosts retain a standalone
+    // catalogue header by default.
+    property bool hostOwnsCatalogueHeader: false
     // Only canvas hosts have a deliberate full-height viewport for this page.
     // Small popovers still size naturally to their catalogue content.
     property bool fillOpenRouterAvailableHeight: false
@@ -36,6 +38,34 @@ Item {
 
     function refreshOpenRouterModels() {
         openRouterModelsPage.refresh();
+    }
+
+    function closeOllamaModels() {
+        root.ollamaModelsOpen = false;
+    }
+
+    function refreshOllamaModels() {
+        Ai.refreshOllamaModels();
+    }
+
+    readonly property bool modelCatalogueOpen: root.openRouterModelsOpen || root.ollamaModelsOpen
+    readonly property bool modelCatalogueCanRefresh: root.openRouterModelsOpen
+    readonly property string modelCatalogueTitle: root.openRouterModelsOpen
+        ? Translation.tr("OpenRouter models")
+        : Translation.tr("Ollama models")
+
+    function closeModelCatalogue() {
+        if (root.openRouterModelsOpen)
+            root.closeOpenRouterModels();
+        else if (root.ollamaModelsOpen)
+            root.closeOllamaModels();
+    }
+
+    function refreshModelCatalogue() {
+        if (root.openRouterModelsOpen)
+            root.refreshOpenRouterModels();
+        else if (root.ollamaModelsOpen)
+            root.refreshOllamaModels();
     }
 
     readonly property var badgeDefs: [
@@ -124,7 +154,10 @@ Item {
             if (!provider)
                 continue;
             const models = Array.from(provider.models).filter(model => root.matches(model, provider, needle));
-            if (models.length === 0)
+            const hasCatalogueEntry = providerIds[i] === "openrouter" || providerIds[i] === "ollama";
+            // A fresh Ollama install has no local models yet; keeping the
+            // provider visible is what makes its first pull discoverable.
+            if (models.length === 0 && !hasCatalogueEntry)
                 continue;
             const providerFolded = folded.includes(providerIds[i]);
             rows.push({
@@ -147,6 +180,11 @@ Item {
                     kind: "openrouter-catalog"
                 });
             }
+            if (providerIds[i] === "ollama" && !providerFolded) {
+                rows.push({
+                    kind: "ollama-catalog"
+                });
+            }
         }
         return rows;
     }
@@ -154,8 +192,8 @@ Item {
     // The list already anchors to the bottom of whatever it is given, so the
     // implicit height is only the fallback for a host that has none. The old
     // 340px cap was a panel's worth of room, not a view's.
-    implicitHeight: root.openRouterModelsOpen
-        ? openRouterModelsPage.implicitHeight
+    implicitHeight: root.modelCatalogueOpen
+        ? (root.openRouterModelsOpen ? openRouterModelsPage.implicitHeight : ollamaModelsPage.implicitHeight)
         : searchBox.implicitHeight + root.gap + Math.max(root.rowHeight, modelListView.contentHeight)
 
     readonly property real rowHeight: Math.round(Appearance.font.pixelSize.huge * 2.5)
@@ -169,13 +207,25 @@ Item {
         anchors.top: parent.top
         visible: root.openRouterModelsOpen
         active: root.openRouterModelsOpen
-        showHeader: !root.hostOwnsOpenRouterHeader
+        showHeader: !root.hostOwnsCatalogueHeader
         fillAvailableHeight: root.fillOpenRouterAvailableHeight
         onBackRequested: root.closeOpenRouterModels()
         onModelAdded: modelId => {
             // Keep the provider list live while the user adds several models.
             root.query = "";
         }
+    }
+
+    AiOllamaModelsPage {
+        id: ollamaModelsPage
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        visible: root.ollamaModelsOpen
+        active: root.ollamaModelsOpen
+        showHeader: !root.hostOwnsCatalogueHeader
+        fillAvailableHeight: root.fillOpenRouterAvailableHeight
+        onBackRequested: root.closeOllamaModels()
     }
 
     component CapabilityBadge: Item {
@@ -212,7 +262,7 @@ Item {
 
     Rectangle {
         id: searchBox
-        visible: !root.openRouterModelsOpen
+        visible: !root.modelCatalogueOpen
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -284,7 +334,7 @@ Item {
 
     StyledListView {
         id: modelListView
-        visible: !root.openRouterModelsOpen
+        visible: !root.modelCatalogueOpen
         // The canvas already slides this whole view in; animating
         // every row on top of that read as a second, different
         // entrance. Rows added later by the search still animate.
@@ -307,6 +357,7 @@ Item {
             width: modelListView.width
             implicitHeight: rowItem.modelData.kind === "header" ? headerLoader.implicitHeight
                 : rowItem.modelData.kind === "openrouter-catalog" ? catalogLoader.implicitHeight
+                : rowItem.modelData.kind === "ollama-catalog" ? ollamaCatalogLoader.implicitHeight
                 : modelLoader.implicitHeight
 
             Loader {
@@ -569,12 +620,57 @@ Item {
                     }
                 }
             }
+
+            Loader {
+                id: ollamaCatalogLoader
+                anchors.left: parent.left
+                anchors.right: parent.right
+                active: rowItem.modelData.kind === "ollama-catalog"
+                visible: active
+
+                sourceComponent: RippleButton {
+                    id: ollamaCatalogButton
+                    implicitHeight: root.rowHeight
+                    buttonRadius: Appearance.rounding.large
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colRipple: Appearance.colors.colLayer2Active
+                    onClicked: root.ollamaModelsOpen = true
+
+                    Accessible.name: Translation.tr("Browse Ollama models")
+
+                    contentItem: RowLayout {
+                        spacing: root.gap
+
+                        MaterialSymbol {
+                            text: "download"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.colors.colPrimary
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Browse and pull Ollama models")
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.bold: true
+                            color: Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: "chevron_right"
+                            iconSize: Appearance.font.pixelSize.large
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+                }
+            }
         }
     }
 
     StyledText {
         anchors.centerIn: modelListView
-        visible: root.rows.length === 0
+        visible: !root.modelCatalogueOpen && root.rows.length === 0
         text: Translation.tr("Nothing matches “%1”").arg(root.query)
         color: Appearance.colors.colSubtext
     }

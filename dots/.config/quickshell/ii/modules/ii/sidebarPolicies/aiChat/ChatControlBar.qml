@@ -1041,7 +1041,9 @@ Item {
         sourceComponent: Item {
             id: canvasView
 
-            readonly property bool openRouterCatalogueOpen: canvasContentLoader.item?.openRouterModelsOpen ?? false
+            readonly property bool modelCatalogueOpen: canvasContentLoader.item?.modelCatalogueOpen ?? false
+            readonly property bool modelCatalogueCanRefresh: canvasContentLoader.item?.modelCatalogueCanRefresh ?? false
+            readonly property string modelCatalogueTitle: canvasContentLoader.item?.modelCatalogueTitle ?? ""
 
             opacity: 0
             transform: Translate {
@@ -1099,13 +1101,13 @@ Item {
 
                     CanvasCircleButton {
                         symbol: "arrow_back"
-                        accessibleName: canvasView.openRouterCatalogueOpen
+                        accessibleName: canvasView.modelCatalogueOpen
                             ? Translation.tr("Back to model providers")
                             : Translation.tr("Close this view")
                         onTriggered: {
                             const picker = canvasContentLoader.item;
-                            if (canvasView.openRouterCatalogueOpen && picker) {
-                                picker.closeOpenRouterModels();
+                            if (canvasView.modelCatalogueOpen && picker) {
+                                picker.closeModelCatalogue();
                                 return;
                             }
                             root.goBack();
@@ -1114,8 +1116,8 @@ Item {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: canvasView.openRouterCatalogueOpen
-                            ? Translation.tr("OpenRouter models")
+                        text: canvasView.modelCatalogueOpen
+                            ? canvasView.modelCatalogueTitle
                             : root.controlTitles[root.activePopover]
                                 ?? (root.activePopover === "more" ? Translation.tr("More controls") : "")
                         font.pixelSize: Appearance.font.pixelSize.larger
@@ -1125,13 +1127,13 @@ Item {
                     }
 
                     CanvasCircleButton {
-                        visible: canvasView.openRouterCatalogueOpen
+                        visible: canvasView.modelCatalogueCanRefresh
                         symbol: "refresh"
-                        accessibleName: Translation.tr("Refresh OpenRouter models")
+                        accessibleName: Translation.tr("Refresh model list")
                         onTriggered: {
                             const picker = canvasContentLoader.item;
                             if (picker)
-                                picker.refreshOpenRouterModels();
+                                picker.refreshModelCatalogue();
                         }
                     }
                 }
@@ -1217,7 +1219,7 @@ Item {
     Component {
         id: modelPickerComponent
         AiModelPickerPopover {
-            hostOwnsOpenRouterHeader: true
+            hostOwnsCatalogueHeader: true
             fillOpenRouterAvailableHeight: true
             onPicked: modelId => {
                 Ai.setModel(modelId, false);
@@ -1254,7 +1256,7 @@ Item {
     Component {
         id: regenerateComponent
         AiModelPickerPopover {
-            hostOwnsOpenRouterHeader: true
+            hostOwnsCatalogueHeader: true
             fillOpenRouterAvailableHeight: true
             onPicked: modelId => {
                 Ai.regenerateWith(root.regenerateMessageId, modelId);

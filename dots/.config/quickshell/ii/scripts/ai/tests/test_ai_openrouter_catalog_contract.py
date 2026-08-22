@@ -82,18 +82,18 @@ class OpenRouterCatalogueTests(unittest.TestCase):
         self.assertNotIn("text: modelCard.modelData.description", PAGE)
 
     def test_catalogue_uses_the_host_header_and_vertical_card_metadata(self):
-        self.assertIn("property bool hostOwnsOpenRouterHeader", PICKER)
-        self.assertIn("showHeader: !root.hostOwnsOpenRouterHeader", PICKER)
+        self.assertIn("property bool hostOwnsCatalogueHeader", PICKER)
+        self.assertIn("showHeader: !root.hostOwnsCatalogueHeader", PICKER)
         self.assertIn("function closeOpenRouterModels()", PICKER)
         self.assertIn("function refreshOpenRouterModels()", PICKER)
         self.assertIn("property bool showHeader", PAGE)
         self.assertIn("id: modelDetailsColumn", PAGE)
         self.assertIn("id: modelMetadataColumn", PAGE)
         self.assertIn("id: addModelButton", PAGE)
-        self.assertIn("readonly property bool openRouterCatalogueOpen", CONTROL_BAR)
-        self.assertIn('Translation.tr("OpenRouter models")', CONTROL_BAR)
-        self.assertIn("picker.closeOpenRouterModels()", CONTROL_BAR)
-        self.assertIn("picker.refreshOpenRouterModels()", CONTROL_BAR)
+        self.assertIn("readonly property bool modelCatalogueOpen", CONTROL_BAR)
+        self.assertIn("modelCatalogueTitle", CONTROL_BAR)
+        self.assertIn("picker.closeModelCatalogue()", CONTROL_BAR)
+        self.assertIn("picker.refreshModelCatalogue()", CONTROL_BAR)
 
     def test_catalogue_fills_the_canvas_list_area_without_affecting_compact_hosts(self):
         self.assertIn("property bool fillAvailableHeight", PAGE)
