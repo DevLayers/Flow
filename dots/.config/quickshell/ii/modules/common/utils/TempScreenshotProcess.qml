@@ -20,12 +20,20 @@ Process {
     property string format: "png"
     command: ["bash", "-c", `mkdir -p '${StringUtils.shellSingleQuoteEscape(screenshotDir)}' && exec grim -t ${StringUtils.shellSingleQuoteEscape(format)} -o '${StringUtils.shellSingleQuoteEscape(screen.name)}' '${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`]
 
+    // runningChanged is emitted from Process::onFinished, never synchronously
+    // from `running = false` (that only sends SIGTERM), so the restart guard has
+    // to be cleared here — otherwise a terminated grim reports its truncated
+    // file as a finished capture.
     onRunningChanged: {
         if (running) {
             screenshotProc.completed = false;
             return;
         }
-        if (screenshotProc.restarting || screenshotProc.startedToken === 0)
+        if (screenshotProc.restarting) {
+            screenshotProc.restarting = false;
+            return;
+        }
+        if (screenshotProc.startedToken === 0)
             return;
         screenshotProc.completed = true;
     }
@@ -33,11 +41,10 @@ Process {
     function recapture(token) {
         screenshotProc.completed = false;
         screenshotProc.startedToken = token;
-        if (screenshotProc.running) {
+        if (screenshotProc.running)
             screenshotProc.restarting = true;
-            screenshotProc.running = false;
-            screenshotProc.restarting = false;
-        }
+        // Process restarts itself on finish when running is set back to true.
+        screenshotProc.running = false;
         screenshotProc.running = true;
     }
 }
