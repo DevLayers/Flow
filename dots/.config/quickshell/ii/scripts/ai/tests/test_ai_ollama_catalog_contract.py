@@ -23,6 +23,7 @@ class OllamaPullServiceTests(unittest.TestCase):
     def test_catalogue_is_curated_but_accepts_any_valid_library_tag(self):
         self.assertIn("readonly property var models", SERVICE)
         self.assertIn('name: "qwen3.5:9b"', SERVICE)
+        self.assertIn('provider: Translation.tr("Ollama")', SERVICE)
         self.assertIn("function normalizeModelName(modelName): string", SERVICE)
         self.assertIn("if (!/^[A-Za-z0-9]", SERVICE)
         self.assertIn('segment === "." || segment === ".."', SERVICE)
@@ -36,6 +37,7 @@ class OllamaPullServiceTests(unittest.TestCase):
             "function loadMoreCommunityModels()",
             'getResponseHeader("Link")',
             '"hf.co/" + repositoryId',
+            'provider: Translation.tr("Hugging Face")',
         ):
             with self.subTest(token=token):
                 self.assertIn(token, SERVICE)
@@ -105,10 +107,22 @@ class OllamaSidebarCatalogueTests(unittest.TestCase):
         self.assertIn("anchors.rightMargin: Appearance.rounding.large", PAGE)
 
         model_delegate = PAGE.split("id: modelRow", 1)[1].split("id: modelPullButton", 1)[0]
-        self.assertIn("Layout.preferredHeight: root.actionExtent", model_delegate)
-        self.assertIn("Layout.maximumHeight: root.actionExtent", model_delegate)
+        self.assertIn("implicitHeight: root.downloadActionExtent", model_delegate)
+        self.assertIn("Layout.preferredHeight: root.downloadActionExtent", model_delegate)
+        self.assertIn("Layout.maximumHeight: root.downloadActionExtent", model_delegate)
+        self.assertIn("font.pixelSize: Appearance.font.pixelSize.large", model_delegate)
+        self.assertIn("text: modelRow.modelData.provider", model_delegate)
         self.assertIn("elide: Text.ElideRight", model_delegate)
+        self.assertNotIn("Layout.maximumWidth: parent.width", model_delegate)
+        self.assertNotIn("modelRow.modelData.description", model_delegate)
         self.assertNotIn("wrapMode: Text.Wrap", model_delegate)
+
+        details = model_delegate.split("id: details", 1)[1]
+        self.assertNotIn("RowLayout {", details)
+
+        pull_button = PAGE.split("id: modelPullButton", 1)[1].split("Accessible.name", 1)[0]
+        self.assertIn("implicitWidth: root.downloadActionExtent", pull_button)
+        self.assertIn("implicitHeight: root.downloadActionExtent", pull_button)
 
     def test_page_searches_and_loads_only_one_community_page_at_a_time(self):
         for token in (

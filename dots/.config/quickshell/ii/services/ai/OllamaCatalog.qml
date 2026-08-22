@@ -35,67 +35,78 @@ Singleton {
             name: "qwen3.5:9b",
             title: "Qwen 3.5 · 9B",
             description: Translation.tr("Balanced local assistant for chat, reasoning and shell tools"),
-            category: Translation.tr("Assistant")
+            category: Translation.tr("Assistant"),
+            provider: Translation.tr("Ollama")
         },
         {
             name: "gemma3:4b",
             title: "Gemma 3 · 4B",
             description: Translation.tr("Compact general-purpose model for a lighter local setup"),
-            category: Translation.tr("Assistant")
+            category: Translation.tr("Assistant"),
+            provider: Translation.tr("Ollama")
         },
         {
             name: "llama3.2:3b",
             title: "Llama 3.2 · 3B",
             description: Translation.tr("Fast, small model for everyday local chat"),
-            category: Translation.tr("Lightweight")
+            category: Translation.tr("Lightweight"),
+            provider: Translation.tr("Ollama")
         },
         {
             name: "qwen2.5-coder:7b",
             title: "Qwen 2.5 Coder · 7B",
             description: Translation.tr("Local coding and terminal-oriented conversations"),
-            category: Translation.tr("Coding")
+            category: Translation.tr("Coding"),
+            provider: Translation.tr("Ollama")
         },
         {
             name: "nomic-embed-text",
             title: "Nomic Embed Text",
             description: Translation.tr("Embedding model for local retrieval, not chat"),
-            category: Translation.tr("Local retrieval")
+            category: Translation.tr("Local retrieval"),
+            provider: Translation.tr("Ollama")
         },
         {
             name: "qwen3.5:4b",
             title: "Qwen 3.5 · 4B",
             description: Translation.tr("Smaller Qwen option for a compact local assistant"),
-            category: Translation.tr("Lightweight")
+            category: Translation.tr("Lightweight"),
+            provider: Translation.tr("Ollama")
         },
         {
             name: "gemma3:12b",
             title: "Gemma 3 · 12B",
             description: Translation.tr("Higher-capacity general assistant for local chat"),
-            category: Translation.tr("Assistant")
+            category: Translation.tr("Assistant"),
+            provider: Translation.tr("Ollama")
         },
         {
             name: "llama3.2:1b",
             title: "Llama 3.2 · 1B",
             description: Translation.tr("Minimal local chat model for constrained hardware"),
-            category: Translation.tr("Lightweight")
+            category: Translation.tr("Lightweight"),
+            provider: Translation.tr("Ollama")
         },
         {
             name: "deepseek-r1:8b",
             title: "DeepSeek R1 · 8B",
             description: Translation.tr("Reasoning-focused local model"),
-            category: Translation.tr("Reasoning")
+            category: Translation.tr("Reasoning"),
+            provider: Translation.tr("Ollama")
         },
         {
             name: "mistral:7b",
             title: "Mistral · 7B",
             description: Translation.tr("Versatile local model for everyday work"),
-            category: Translation.tr("Assistant")
+            category: Translation.tr("Assistant"),
+            provider: Translation.tr("Ollama")
         },
         {
             name: "bge-m3",
             title: "BGE M3",
             description: Translation.tr("Multilingual embeddings for local retrieval"),
-            category: Translation.tr("Local retrieval")
+            category: Translation.tr("Local retrieval"),
+            provider: Translation.tr("Ollama")
         }
     ]
 
@@ -178,7 +189,8 @@ Singleton {
             name: name,
             title: repositoryId,
             description: Translation.tr("Community GGUF · %1 downloads").arg(root.formatDownloads(raw?.downloads)),
-            category: Translation.tr("Community")
+            category: Translation.tr("Community"),
+            provider: Translation.tr("Hugging Face")
         };
     }
 

@@ -29,6 +29,7 @@ Item {
     readonly property real rowGap: Appearance.rounding.unsharpenmore
     readonly property real maxListHeight: 520
     readonly property real actionExtent: Math.round(Appearance.font.pixelSize.huge * 2)
+    readonly property real downloadActionExtent: Math.round(root.actionExtent * 1.2)
 
     implicitHeight: pageColumn.implicitHeight
     height: root.fillAvailableHeight && parent ? parent.height : implicitHeight
@@ -307,7 +308,7 @@ Item {
                 required property var modelData
 
                 width: modelList.width
-                implicitHeight: root.actionExtent
+                implicitHeight: root.downloadActionExtent
                 readonly property bool installed: root.isInstalled(modelData.name)
                 readonly property bool pullingThis: OllamaCatalog.pullingModel === modelData.name
 
@@ -315,10 +316,10 @@ Item {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.minimumHeight: root.actionExtent
-                    Layout.preferredHeight: root.actionExtent
-                    Layout.maximumHeight: root.actionExtent
-                    implicitHeight: root.actionExtent
+                    Layout.minimumHeight: root.downloadActionExtent
+                    Layout.preferredHeight: root.downloadActionExtent
+                    Layout.maximumHeight: root.downloadActionExtent
+                    implicitHeight: root.downloadActionExtent
                     radius: Appearance.rounding.large
                     color: Appearance.colors.colLayer2
 
@@ -331,56 +332,29 @@ Item {
                         anchors.rightMargin: Appearance.rounding.large
                         spacing: root.rowGap / 2
 
-                        RowLayout {
+                        StyledText {
                             Layout.fillWidth: true
-                            spacing: root.rowGap
-
-                            StyledText {
-                                Layout.maximumWidth: parent.width * 0.42
-                                Layout.fillWidth: true
-                                text: modelRow.modelData.title
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                font.bold: true
-                                elide: Text.ElideRight
-                                color: Appearance.colors.colOnLayer1
-                            }
-
-                            StyledText {
-                                Layout.maximumWidth: parent.width * 0.35
-                                text: modelRow.modelData.category
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colSubtext
-                                elide: Text.ElideRight
-                            }
+                            text: modelRow.modelData.title
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.bold: true
+                            elide: Text.ElideRight
+                            color: Appearance.colors.colOnLayer1
                         }
 
-                        RowLayout {
+                        StyledText {
                             Layout.fillWidth: true
-                            spacing: root.rowGap / 2
-
-                            StyledText {
-                                Layout.maximumWidth: parent.width * 0.45
-                                text: modelRow.modelData.name
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colPrimary
-                                elide: Text.ElideRight
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: modelRow.modelData.description
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colSubtext
-                                elide: Text.ElideRight
-                            }
+                            text: modelRow.modelData.provider + " · " + modelRow.modelData.name
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colPrimary
+                            elide: Text.ElideRight
                         }
                     }
                 }
 
                 RippleButton {
                     id: modelPullButton
-                    implicitWidth: root.actionExtent
-                    implicitHeight: root.actionExtent
+                    implicitWidth: root.downloadActionExtent
+                    implicitHeight: root.downloadActionExtent
                     Layout.alignment: Qt.AlignVCenter
                     buttonRadius: Appearance.rounding.full
                     enabled: !modelRow.installed && !OllamaCatalog.pulling
@@ -395,7 +369,7 @@ Item {
                     contentItem: MaterialSymbol {
                         text: modelRow.installed ? "check" : modelRow.pullingThis ? "progress_activity" : "download"
                         fill: 1
-                        iconSize: Appearance.font.pixelSize.normal
+                        iconSize: Appearance.font.pixelSize.large
                         color: modelPullButton.enabled ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
                     }
                 }
