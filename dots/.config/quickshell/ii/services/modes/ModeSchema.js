@@ -450,6 +450,8 @@ function normalizeMode(raw) {
     m.color = typeof m.color === "string" ? m.color : "";
     m.preset = m.preset === true;
     m.auto = m.auto === true;
+    // Banner when it starts; the end half lives in m.end.notify.
+    m.notify = m.notify !== false;
     m.match = m.match === "all" ? "all" : "any";
     m.triggers = toArray(m.triggers).map(normalizeTrigger).filter(function (t) { return t.type.length > 0; });
     m.actions = toArray(m.actions).map(normalizeAction).filter(function (a) { return a.type.length > 0; });
@@ -494,7 +496,10 @@ function normalizeRoutine(raw) {
     var end = (r.end && typeof r.end === "object") ? r.end : {};
     r.end = {
         revert: r.kind === "while" && end.revert !== false,
-        strict: end.strict === true
+        strict: end.strict === true,
+        // Split out of the single banner switch: definitions written before
+        // the split take their end half from what they already had.
+        notify: end.notify === undefined ? r.notify : end.notify !== false
     };
     return r;
 }

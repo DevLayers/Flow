@@ -536,11 +536,33 @@ Item {
                         }
                     }
                 }
+            }
+
+            // -------------------------------------------------- banners
+            EditorSection {
+                title: Translation.tr("Banners")
+                icon: "campaign"
+                subtitle: Config.options.modes.flash === "off"
+                    ? Translation.tr("Banners are off for every mode in Settings")
+                    : Translation.tr("A brief pop-up when the mode switches on or off")
 
                 EditorRow {
-                    icon: "campaign"
+                    icon: "play_arrow"
+                    label: Translation.tr("Show a banner when it starts")
+                    enabled: Config.options.modes.flash !== "off"
+                    opacity: enabled ? 1 : 0.5
+
+                    StyledSwitch {
+                        checked: root.mode?.notify ?? true
+                        onClicked: root.patch({ notify: checked })
+                    }
+                }
+
+                EditorRow {
+                    icon: "stop_circle"
                     label: Translation.tr("Show a banner when it ends")
-                    hint: Translation.tr("The start banner always shows")
+                    enabled: Config.options.modes.flash !== "off"
+                    opacity: enabled ? 1 : 0.5
 
                     StyledSwitch {
                         checked: root.mode?.end.notify ?? true

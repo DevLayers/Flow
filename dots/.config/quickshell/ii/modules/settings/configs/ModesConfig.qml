@@ -276,10 +276,10 @@ ContentPage {
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colSubtext
                 text: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
-                    ? Translation.tr("Drawn by the dynamic island for three seconds. Routines use their own "
-                        + "\"Show a banner\" option.")
+                    ? Translation.tr("Drawn by the dynamic island for three seconds. Each mode and routine "
+                        + "chooses its own start and end banner.")
                     : Translation.tr("A small top-centre pill for three seconds; the dynamic island takes over "
-                        + "when it is enabled. Routines use their own \"Show a banner\" option.")
+                        + "when it is enabled. Each mode and routine chooses its own start and end banner.")
             }
         }
     }

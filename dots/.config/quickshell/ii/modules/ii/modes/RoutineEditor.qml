@@ -554,15 +554,42 @@ Item {
                         onClicked: root.patchEnd({ strict: checked })
                     }
                 }
+            }
+
+            // -------------------------------------------------- banners
+            EditorSection {
+                title: Translation.tr("Banners")
+                icon: "campaign"
+                subtitle: {
+                    if (Config.options.modes.flash === "off")
+                        return Translation.tr("Banners are off for every mode in Settings");
+                    return root.isOnce ? Translation.tr("A brief pop-up when the routine fires")
+                        : Translation.tr("A brief pop-up when the routine starts or ends");
+                }
 
                 EditorRow {
-                    icon: "campaign"
-                    label: Translation.tr("Show a banner")
-                    hint: root.isOnce ? Translation.tr("When it fires") : Translation.tr("When it starts and ends")
+                    icon: "play_arrow"
+                    label: root.isOnce ? Translation.tr("Show a banner when it fires")
+                        : Translation.tr("Show a banner when it starts")
+                    enabled: Config.options.modes.flash !== "off"
+                    opacity: enabled ? 1 : 0.5
 
                     StyledSwitch {
                         checked: root.routine?.notify ?? true
                         onClicked: root.patch({ notify: checked })
+                    }
+                }
+
+                EditorRow {
+                    visible: !root.isOnce
+                    icon: "stop_circle"
+                    label: Translation.tr("Show a banner when it ends")
+                    enabled: Config.options.modes.flash !== "off"
+                    opacity: enabled ? 1 : 0.5
+
+                    StyledSwitch {
+                        checked: root.routine?.end.notify ?? true
+                        onClicked: root.patchEnd({ notify: checked })
                     }
                 }
             }

@@ -531,7 +531,8 @@ Singleton {
         const ends = root.state.activeEndsAt > 0
             ? Translation.tr("Ends %1").arg(root.clockText(root.state.activeEndsAt, "hh:mm")) + " · "
             : "";
-        root.flash("mode", def, Translation.tr("%1 mode on").arg(def.name), ends + root.sourceText(source));
+        if (def.notify)
+            root.flash("mode", def, Translation.tr("%1 mode on").arg(def.name), ends + root.sourceText(source));
         root.modeStarted(id, source);
         return true;
     }
@@ -861,7 +862,7 @@ Singleton {
         root.setRoutineRun(id, null);
         root.appendHistory("routine", id, "end", reason);
         console.log(`[Modes] routine "${id}" ended (${reason})`);
-        if (def && def.notify)
+        if (def && def.end.notify)
             root.flash("routine", def, Translation.tr("%1 ended").arg(def.name), root.reasonText(reason));
         root.routineEnded(id, reason);
         return true;
