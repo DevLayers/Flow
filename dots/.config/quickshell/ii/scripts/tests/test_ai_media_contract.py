@@ -28,7 +28,7 @@ class AiMediaContractTests(unittest.TestCase):
         self.assertNotIn("Quickshell.exec", ADAPTER)
 
     def test_ai_has_reviewed_control_and_identification_flow(self):
-        for token in ("toolMediaStatus", "toolMediaControl", "approveMediaControl", "rejectMediaControl", "toolLyricsGet", "toolSongIdentify", "approveSongIdentify", "rejectSongIdentify"):
+        for token in ("toolMediaStatus", "toolMediaControl", "approveMediaControl", "rejectMediaControl", "toolLyricsGet", "toolSongIdentify", "approveSongIdentify", "rejectSongIdentify", "pendingSongIdentify", "finishSongIdentify"):
             self.assertIn(token, AI)
         self.assertIn('"media_control": pending', AI)
         self.assertIn('"song_identify": pending', AI)

@@ -693,6 +693,8 @@ Singleton {
     property string activeToolCallId: ""
     /** One irreversible tool effect may wait for a durable journal ACK. */
     property var pendingToolExecution: null
+    /** SongRec stays in flight until it identifies a track or stops. */
+    property var pendingSongIdentify: null
     property int toolExecutionSequence: 0
     // Session-owned metadata that survives a Search/sidebar handoff and a
     // restart. Message-level arrays remain the rich-rendering source.
@@ -1556,6 +1558,27 @@ Singleton {
                 return;
             if (root.broker.isPending(String(key)))
                 root.broker.settle(String(key), outcome);
+        }
+    }
+
+    Connections {
+        target: SongRec
+        function onRecognizedTrackChanged() {
+            const track = SongRec.recognizedTrack ?? ({});
+            if (root.pendingSongIdentify && String(track.title ?? "").trim().length > 0)
+                root.finishSongIdentify("success", Translation.tr("Song identified"), { track: track, temporaryAudioDeleted: true });
+        }
+        function onRunningChanged() {
+            if (!root.pendingSongIdentify || SongRec.running)
+                return;
+            Qt.callLater(function() {
+                if (!root.pendingSongIdentify || SongRec.running)
+                    return;
+                root.finishSongIdentify("error", Translation.tr("No song was identified"), {
+                    error: "songNotRecognized",
+                    temporaryAudioDeleted: true
+                });
+            });
         }
     }
 
@@ -4849,16 +4872,51 @@ Singleton {
     }
 
     function startSongIdentify(message: AiMessageData, args: var): void {
+        root.pendingSongIdentify = { message: message, key: root.toolKeyFor(message) };
         const result = root.mediaIntegration.identify(args);
-        const key = root.toolKeyFor(message);
         message.functionPending = false;
         const ok = result?.ok === true;
-        const summary = ok ? Translation.tr("Listening for a song") : Translation.tr("Song identification could not start");
-        root.updateToolCard(message, key, { state: ok ? "done" : "failed", summary: summary, data: { preview: result } });
-        root.broker.settle(key, { status: ok ? "success" : "error", summary: summary, data: result, retryable: !ok });
+        if (!ok) {
+            root.finishSongIdentify("error", Translation.tr("Song identification could not start"), result);
+            return;
+        }
+        root.updateToolCard(message, root.pendingSongIdentify.key, { state: "running", summary: Translation.tr("Listening for a song"), data: { preview: result } });
+    }
+
+    function finishSongIdentify(status: string, summary: string, data: var): void {
+        const pending = root.pendingSongIdentify;
+        if (!pending)
+            return;
+        root.pendingSongIdentify = null;
+        const message = pending.message;
+        const key = pending.key;
+        if (message)
+            message.functionPending = false;
+        const ok = status === "success";
+        root.updateToolCard(message, key, { state: ok ? "done" : "failed", summary: summary, data: { result: data } });
+        root.broker.settle(key, {
+            status: status,
+            summary: summary,
+            data: data,
+            retryable: !ok
+        });
     }
 
     function stopSongIdentify(message: AiMessageData): void {
+        const pending = root.pendingSongIdentify;
+        if (pending && pending.message === message) {
+            root.pendingSongIdentify = null;
+            root.mediaIntegration.stopIdentify();
+            message.functionPending = false;
+            root.updateToolCard(message, pending.key, { state: "done", summary: Translation.tr("Listening stopped") });
+            root.broker.settle(pending.key, {
+                status: "cancelled",
+                summary: Translation.tr("Listening stopped"),
+                data: { cancelled: true, temporaryAudioDeleted: true },
+                retryable: false
+            });
+            return;
+        }
         const result = root.mediaIntegration.stopIdentify();
         if (!message)
             return;

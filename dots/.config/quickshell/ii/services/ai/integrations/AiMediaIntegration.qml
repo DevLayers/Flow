@@ -105,6 +105,7 @@ QtObject {
     function identify(): var {
         if (SongRec.running)
             return { ok: false, error: "songRecognitionAlreadyRunning" };
+        SongRec.recognizedTrack = ({ title: "", subtitle: "", url: "" });
         SongRec.toggleRunning(true);
         return {
             ok: true,
