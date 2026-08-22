@@ -268,7 +268,7 @@ Singleton {
         return "$" + cost.toFixed(4);
     }
 
-    function recordResponse(model: string, input: int, output: int, thinking: int, total: int, ok: bool, cost: real = -1) {
+    function recordResponse(model: string, input: int, output: int, thinking: int, total: int, ok: bool, cost = -1) {
         const record = {
             model: String(model ?? ""),
             input: Number(input),
