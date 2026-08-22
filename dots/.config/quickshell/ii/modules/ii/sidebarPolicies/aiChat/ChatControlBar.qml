@@ -533,11 +533,13 @@ Item {
         id: circleButton
 
         property string symbol: ""
+        property string accessibleName: ""
         signal triggered
 
         Layout.preferredWidth: root.canvasRowHeight
         Layout.preferredHeight: root.canvasRowHeight
         radius: height / 2
+        Accessible.name: circleButton.accessibleName
         color: circleButtonMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
             : circleButtonMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
             : Appearance.colors.colSurfaceContainerHighest
@@ -1026,6 +1028,8 @@ Item {
         sourceComponent: Item {
             id: canvasView
 
+            readonly property bool openRouterCatalogueOpen: canvasContentLoader.item?.openRouterModelsOpen ?? false
+
             opacity: 0
             transform: Translate {
                 id: canvasViewTransform
@@ -1082,17 +1086,40 @@ Item {
 
                     CanvasCircleButton {
                         symbol: "arrow_back"
-                        onTriggered: root.goBack()
+                        accessibleName: canvasView.openRouterCatalogueOpen
+                            ? Translation.tr("Back to model providers")
+                            : Translation.tr("Close this view")
+                        onTriggered: {
+                            const picker = canvasContentLoader.item;
+                            if (canvasView.openRouterCatalogueOpen && picker) {
+                                picker.closeOpenRouterModels();
+                                return;
+                            }
+                            root.goBack();
+                        }
                     }
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: root.controlTitles[root.activePopover]
-                            ?? (root.activePopover === "more" ? Translation.tr("More controls") : "")
+                        text: canvasView.openRouterCatalogueOpen
+                            ? Translation.tr("OpenRouter models")
+                            : root.controlTitles[root.activePopover]
+                                ?? (root.activePopover === "more" ? Translation.tr("More controls") : "")
                         font.pixelSize: Appearance.font.pixelSize.larger
                         font.bold: true
                         color: Appearance.colors.colOnLayer1
                         elide: Text.ElideRight
+                    }
+
+                    CanvasCircleButton {
+                        visible: canvasView.openRouterCatalogueOpen
+                        symbol: "refresh"
+                        accessibleName: Translation.tr("Refresh OpenRouter models")
+                        onTriggered: {
+                            const picker = canvasContentLoader.item;
+                            if (picker)
+                                picker.refreshOpenRouterModels();
+                        }
                     }
                 }
 
@@ -1177,6 +1204,8 @@ Item {
     Component {
         id: modelPickerComponent
         AiModelPickerPopover {
+            hostOwnsOpenRouterHeader: true
+            fillOpenRouterAvailableHeight: true
             onPicked: modelId => {
                 Ai.setModel(modelId, false);
                 root.closePopover();
@@ -1212,6 +1241,8 @@ Item {
     Component {
         id: regenerateComponent
         AiModelPickerPopover {
+            hostOwnsOpenRouterHeader: true
+            fillOpenRouterAvailableHeight: true
             onPicked: modelId => {
                 Ai.regenerateWith(root.regenerateMessageId, modelId);
                 root.regenerateMessageId = "";

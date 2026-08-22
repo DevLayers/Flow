@@ -22,6 +22,21 @@ Item {
     signal picked(modelId: string)
 
     property string query: ""
+    property bool openRouterModelsOpen: false
+    // Canvas hosts already provide the title, back action, and refresh button.
+    // Other hosts retain the catalogue's standalone header by default.
+    property bool hostOwnsOpenRouterHeader: false
+    // Only canvas hosts have a deliberate full-height viewport for this page.
+    // Small popovers still size naturally to their catalogue content.
+    property bool fillOpenRouterAvailableHeight: false
+
+    function closeOpenRouterModels() {
+        root.openRouterModelsOpen = false;
+    }
+
+    function refreshOpenRouterModels() {
+        openRouterModelsPage.refresh();
+    }
 
     readonly property var badgeDefs: [
         {
@@ -127,6 +142,11 @@ Item {
                     model: models[j]
                 });
             }
+            if (providerIds[i] === "openrouter" && !providerFolded) {
+                rows.push({
+                    kind: "openrouter-catalog"
+                });
+            }
         }
         return rows;
     }
@@ -134,11 +154,29 @@ Item {
     // The list already anchors to the bottom of whatever it is given, so the
     // implicit height is only the fallback for a host that has none. The old
     // 340px cap was a panel's worth of room, not a view's.
-    implicitHeight: searchBox.implicitHeight + root.gap + Math.max(root.rowHeight, modelListView.contentHeight)
+    implicitHeight: root.openRouterModelsOpen
+        ? openRouterModelsPage.implicitHeight
+        : searchBox.implicitHeight + root.gap + Math.max(root.rowHeight, modelListView.contentHeight)
 
     readonly property real rowHeight: Math.round(Appearance.font.pixelSize.huge * 2.5)
     readonly property real gap: Appearance.rounding.unsharpenmore
     readonly property real inset: Appearance.rounding.large
+
+    AiOpenRouterModelsPage {
+        id: openRouterModelsPage
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        visible: root.openRouterModelsOpen
+        active: root.openRouterModelsOpen
+        showHeader: !root.hostOwnsOpenRouterHeader
+        fillAvailableHeight: root.fillOpenRouterAvailableHeight
+        onBackRequested: root.closeOpenRouterModels()
+        onModelAdded: modelId => {
+            // Keep the provider list live while the user adds several models.
+            root.query = "";
+        }
+    }
 
     component CapabilityBadge: Item {
         id: badge
@@ -174,6 +212,7 @@ Item {
 
     Rectangle {
         id: searchBox
+        visible: !root.openRouterModelsOpen
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -245,6 +284,7 @@ Item {
 
     StyledListView {
         id: modelListView
+        visible: !root.openRouterModelsOpen
         // The canvas already slides this whole view in; animating
         // every row on top of that read as a second, different
         // entrance. Rows added later by the search still animate.
@@ -265,7 +305,9 @@ Item {
             required property var modelData
 
             width: modelListView.width
-            implicitHeight: rowItem.modelData.kind === "header" ? headerLoader.implicitHeight : modelLoader.implicitHeight
+            implicitHeight: rowItem.modelData.kind === "header" ? headerLoader.implicitHeight
+                : rowItem.modelData.kind === "openrouter-catalog" ? catalogLoader.implicitHeight
+                : modelLoader.implicitHeight
 
             Loader {
                 id: headerLoader
@@ -478,6 +520,51 @@ Item {
                             fill: 1
                             iconSize: 24
                             color: Appearance.colors.colOnPrimaryContainer
+                        }
+                    }
+                }
+            }
+
+            Loader {
+                id: catalogLoader
+                anchors.left: parent.left
+                anchors.right: parent.right
+                active: rowItem.modelData.kind === "openrouter-catalog"
+                visible: active
+
+                sourceComponent: RippleButton {
+                    id: catalogButton
+                    implicitHeight: root.rowHeight
+                    buttonRadius: Appearance.rounding.large
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colRipple: Appearance.colors.colLayer2Active
+                    onClicked: root.openRouterModelsOpen = true
+
+                    Accessible.name: Translation.tr("Browse OpenRouter models")
+
+                    contentItem: RowLayout {
+                        spacing: root.gap
+
+                        MaterialSymbol {
+                            text: "add_circle"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.colors.colPrimary
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Browse and add OpenRouter models")
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.bold: true
+                            color: Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: "chevron_right"
+                            iconSize: Appearance.font.pixelSize.large
+                            color: Appearance.colors.colSubtext
                         }
                     }
                 }
