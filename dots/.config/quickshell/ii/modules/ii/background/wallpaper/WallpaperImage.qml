@@ -82,7 +82,15 @@ Item {
     // The cap is expressed as pre-scaled *file* dimensions rather than the plane box: sourceSize
     // fits the image inside the box preserving aspect, so with fillMode PreserveAspectCrop a box
     // of a different aspect ratio would decode too small and be upscaled to cover.
-    readonly property real devicePixelRatio: Math.max(1, screen && screen.devicePixelRatio ? screen.devicePixelRatio : 1, (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
+    // The window's DPR is the scale its buffer is actually rendered at. ShellScreen.devicePixelRatio
+    // reports the integer-rounded wl_output scale (2 on a 1.5x monitor), which over-decodes by 33%
+    // on every fractionally scaled setup. Only fall back to the screen before the window exists.
+    readonly property real devicePixelRatio: {
+        const w = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 0;
+        if (w > 0)
+            return Math.max(1, w);
+        return Math.max(1, screen && screen.devicePixelRatio ? screen.devicePixelRatio : 1);
+    }
 
     // Every transform that can scale the plane *up*, at its end value - the animated values
     // themselves must stay out of this, or the image would be re-decoded mid-animation.
