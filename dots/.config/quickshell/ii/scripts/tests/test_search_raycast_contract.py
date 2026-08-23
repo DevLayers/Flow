@@ -25,6 +25,52 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("activePanelUsesHost", widget)
         self.assertIn("Appearance.sizes.elevationMargin", widget)
 
+    def test_hosted_panels_share_insets_without_repeated_chrome(self):
+        scaffold = source("modules/ii/overview/SearchPanelScaffold.qml")
+        self.assertIn("property bool showHeader: false", scaffold)
+        self.assertIn("property bool showStatus: false", scaffold)
+        self.assertIn("anchors.margins: root.contentMargin", scaffold)
+
+        for panel in (
+            "CalendarPanel.qml", "TasksPanel.qml", "TimersPanel.qml",
+            "EmojiPanel.qml", "ScreenshotsPanel.qml",
+            "WindowManagementPanel.qml", "SettingsTogglesPanel.qml",
+            "KeybindsPanel.qml", "CommandsPanel.qml", "GmailPanel.qml",
+            "SportsPanel.qml",
+        ):
+            self.assertIn(
+                "SearchPanelScaffold",
+                source("modules/ii/overview/" + panel),
+            )
+
+    def test_window_and_screenshot_panels_keep_real_context(self):
+        states = source("GlobalStates.qml")
+        screenshots = source("modules/ii/overview/ScreenshotsPanel.qml")
+        self.assertIn("ToplevelManager.activeToplevel?.HyprlandToplevel?.address", states)
+        self.assertNotIn("HyprlandData.activeWindow?.address", states)
+        self.assertIn("function imageTitle(entry)", screenshots)
+        self.assertIn("function imageMetadata(entry)", screenshots)
+        self.assertIn("GlobalStates.overviewOpen = false", screenshots)
+
+    def test_emoji_index_and_launcher_pages_avoid_known_runtime_regressions(self):
+        emojis = source("services/Emojis.qml")
+        self.assertIn("if (root.loaded || root.loading)", emojis)
+        self.assertIn("entriesPrepared", emojis)
+        self.assertIn("preparationTimer", emojis)
+
+        launcher_files = (
+            "modules/settings/configs/LauncherConfig.qml",
+            "modules/settings/configs/widgets/LauncherModulesConfig.qml",
+            "modules/settings/configs/widgets/LauncherQuicklinksConfig.qml",
+            "modules/settings/configs/widgets/LauncherSnippetsConfig.qml",
+            "modules/settings/configs/widgets/LauncherShortcutsConfig.qml",
+            "modules/settings/configs/widgets/LauncherAppearanceConfig.qml",
+        )
+        for path in launcher_files:
+            content = source(path)
+            self.assertIn("import qs.services", content)
+            self.assertNotIn("Appearance.sizes.normalIcon", content)
+
     def test_launcher_producers_are_local_and_guarded(self):
         launcher = source("services/LauncherSearch.qml")
         for function in ("favoriteResults", "snippetMatches", "processMatches", "generatorEntries", "modeMatches", "bluetoothMatches", "fallbackResults"):
