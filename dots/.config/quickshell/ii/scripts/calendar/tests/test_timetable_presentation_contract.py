@@ -149,6 +149,27 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("delta * root.visibleDayCount", week)
         self.assertIn("onViewModeChanged: {", week)
 
+    def test_both_views_expose_keyboard_calendar_navigation(self) -> None:
+        host = (ROOT / "modules" / "ii" / "cheatsheet" / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")
+        month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
+        cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
+
+        self.assertIn("Keys.priority: Keys.AfterItem", host)
+        self.assertIn("root.activeViewItem.handleNavigationKey(event)", host)
+        for source in (week, month):
+            self.assertIn("function handleNavigationKey(event)", source)
+            self.assertIn("Qt.Key_Left", source)
+            self.assertIn("Qt.Key_PageUp", source)
+            self.assertIn("Qt.Key_Home", source)
+            self.assertIn("Qt.Key_Return", source)
+        self.assertIn("function scrollKeyboardHours(delta)", week)
+        self.assertIn("keyboardNavigationActive: root.keyboardNavigationActive", week)
+        self.assertIn("toggled: headerRow.keyboardNavigationActive", header)
+        self.assertIn("keyboardSelected: root.keyboardNavigationActive", month)
+        self.assertIn("property bool keyboardSelected: false", cell)
+
     def test_week_and_month_share_semantic_event_colors(self) -> None:
         helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")

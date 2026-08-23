@@ -26,6 +26,7 @@ Item {
     property int entranceKey: 0
     property string densityMode: "compact"
     property real recurrenceLaneOffset: 0
+    property bool keyboardSelected: false
 
     signal createRequested(var date)
     signal dayActivated(var date)
@@ -125,6 +126,8 @@ Item {
             const base = root.isWeekend ? Appearance.colors.colLayer2 : Appearance.colors.colLayer1;
             if (root.dropTarget)
                 return ColorUtils.mix(Appearance.colors.colPrimaryContainer, base, 0.75);
+            if (root.keyboardSelected)
+                return ColorUtils.mix(Appearance.colors.colPrimaryContainer, base, 0.58);
             if (!root.inMonth)
                 return ColorUtils.applyAlpha(base, 0.32);
             if (root.isToday)

@@ -16,6 +16,8 @@ import "timetable"
 Item {
     id: root
 
+    focus: true
+
     property real maxContentWidth: 1600
     property real maxHeight: 700
 
@@ -31,6 +33,13 @@ Item {
     property bool sportsReady: false
     readonly property var activeViewItem: root.activeMode === "month" ? monthViewLoader.item : weekViewLoader.item
     readonly property bool activeViewReady: root.activeViewItem?.initialLoadComplete ?? false
+
+    Keys.priority: Keys.AfterItem
+    Keys.onPressed: event => {
+        if (!root.activeViewItem || typeof root.activeViewItem.handleNavigationKey !== "function")
+            return;
+        event.accepted = root.activeViewItem.handleNavigationKey(event);
+    }
 
     function openRequestedDate() {
         if (GlobalStates.timetableNavigationRequest <= 0)

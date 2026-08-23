@@ -54,6 +54,8 @@ Item {
     property real weekShiftX: 0
     property real zoomWheelAccumulator: 0
     property bool componentReady: false
+    property date keyboardDate: DateTime.clock.date
+    property bool keyboardNavigationActive: false
     readonly property int dayCount: root.days?.length ?? 0
     readonly property bool initialLoadComplete: root.dayCount > 0 && root.loadedDayCount >= root.dayCount
     readonly property date currentWeekStart: root.rangeStartFor(DateTime.clock.date)
@@ -364,6 +366,48 @@ Item {
     function goToday() {
         root.followingCurrentWeek = true;
         root.goToWeek(DateTime.clock.date, 0);
+    }
+
+    function focusKeyboardDate(date) {
+        const target = H.startOfDay(date);
+        const beforeRange = target.getTime() < H.startOfDay(root.viewWeekStart).getTime();
+        const afterRange = target.getTime() > H.startOfDay(root.viewWeekEnd).getTime();
+        root.keyboardDate = target;
+        root.keyboardNavigationActive = true;
+        if (beforeRange || afterRange)
+            root.goToWeek(target, afterRange ? 1 : -1);
+    }
+
+    function scrollKeyboardHours(delta) {
+        const target = styledFlickable.contentY + delta * root.slotHeight;
+        styledFlickable.contentY = Math.max(0, Math.min(target, styledFlickable.contentHeight - styledFlickable.height));
+    }
+
+    function handleNavigationKey(event) {
+        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+            root.focusKeyboardDate(H.addDays(root.keyboardNavigationActive ? root.keyboardDate : (root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart), event.key === Qt.Key_Left ? -1 : 1));
+            return true;
+        }
+        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            root.keyboardNavigationActive = true;
+            root.scrollKeyboardHours(event.key === Qt.Key_Up ? -1 : 1);
+            return true;
+        }
+        if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
+            const delta = event.key === Qt.Key_PageUp ? -root.visibleDayCount : root.visibleDayCount;
+            root.focusKeyboardDate(H.addDays(root.keyboardNavigationActive ? root.keyboardDate : root.viewWeekStart, delta));
+            return true;
+        }
+        if (event.key === Qt.Key_Home) {
+            root.goToday();
+            root.focusKeyboardDate(DateTime.clock.date);
+            return true;
+        }
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            root.toggleDay(root.keyboardNavigationActive ? root.keyboardDate : (root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart));
+            return true;
+        }
+        return false;
     }
 
     function toggleDayRail() {
@@ -861,6 +905,8 @@ Item {
                     dayColumnWidth: root.dayColumnWidth
                     days: (root.days ?? []).slice(0, Math.max(0, root.loadedDayCount))
                     currentDayIndex: root.currentDayIndex
+                    keyboardDate: root.keyboardDate
+                    keyboardNavigationActive: root.keyboardNavigationActive
                     allDayChipHeight: root.allDayChipHeight
                     allDayChipSpacing: root.allDayChipSpacing
                     visibleAllDayRows: root.visibleAllDayRows

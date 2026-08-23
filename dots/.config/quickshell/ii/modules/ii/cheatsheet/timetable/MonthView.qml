@@ -26,6 +26,8 @@ Item {
     property bool sportsEnabled: false
     property int loadedCellCount: 0
     property string requestedSportsRange: ""
+    property date keyboardDate: DateTime.clock.date
+    property bool keyboardNavigationActive: false
 
     readonly property int firstDayOfWeek: Config.options.time.firstDayOfWeek
     readonly property real gridGap: 6
@@ -205,6 +207,43 @@ Item {
             return;
         }
         root.goToMonth(now.getFullYear(), now.getMonth(), targetIndex > currentIndex ? 1 : -1);
+    }
+
+    function focusKeyboardDate(date) {
+        const target = H.startOfDay(date);
+        const currentIndex = root.viewYear * 12 + root.viewMonth;
+        const targetIndex = target.getFullYear() * 12 + target.getMonth();
+        root.keyboardDate = target;
+        root.keyboardNavigationActive = true;
+        if (targetIndex !== currentIndex)
+            root.goToMonth(target.getFullYear(), target.getMonth(), targetIndex > currentIndex ? 1 : -1);
+    }
+
+    function handleNavigationKey(event) {
+        const origin = root.keyboardNavigationActive ? root.keyboardDate : (root.viewingCurrentMonth ? DateTime.clock.date : root.viewAnchorDate);
+        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+            root.focusKeyboardDate(H.addDays(origin, event.key === Qt.Key_Left ? -1 : 1));
+            return true;
+        }
+        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            root.focusKeyboardDate(H.addDays(origin, event.key === Qt.Key_Up ? -7 : 7));
+            return true;
+        }
+        if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
+            root.focusKeyboardDate(H.addMonths(origin, event.key === Qt.Key_PageUp ? -1 : 1));
+            return true;
+        }
+        if (event.key === Qt.Key_Home) {
+            root.goToday();
+            root.focusKeyboardDate(DateTime.clock.date);
+            return true;
+        }
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            root.keyboardNavigationActive = true;
+            root.requestDay(origin);
+            return true;
+        }
+        return false;
     }
 
     function focusRequestedDate() {
@@ -785,6 +824,7 @@ Item {
                             coordinateRoot: root
                             draggedEvent: root.dragEvent
                             entranceKey: root.entranceKey
+                            keyboardSelected: root.keyboardNavigationActive && H.sameDate(root.keyboardDate, cellLoader.modelData.date)
 
                             onCreateRequested: date => root.requestCreate(date)
                             onDayActivated: date => root.requestDay(date)

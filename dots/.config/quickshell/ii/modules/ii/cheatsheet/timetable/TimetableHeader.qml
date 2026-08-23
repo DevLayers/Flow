@@ -16,6 +16,8 @@ Row {
     property real dayColumnWidth
     property var days
     property int currentDayIndex
+    property date keyboardDate
+    property bool keyboardNavigationActive: false
     property int allDayChipHeight
     property int allDayChipSpacing
     property int visibleAllDayRows
@@ -100,8 +102,11 @@ Row {
                 anchors.rightMargin: 2
                 height: 56
                 buttonRadius: Appearance.rounding.normal
+                toggled: headerRow.keyboardNavigationActive && H.sameDate(headerRow.keyboardDate, dayDelegate.sportsDate)
                 colBackgroundHover: Appearance.colors.colSurfaceContainerHigh
                 colBackgroundActive: Appearance.colors.colSurfaceContainerHighest
+                colBackgroundToggled: Appearance.colors.colSecondaryContainer
+                colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
                 onClicked: headerRow.dayActivated(dayDelegate.sportsDate)
 
                 contentItem: Item {
