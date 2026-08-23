@@ -88,7 +88,7 @@ Singleton {
         const command = [
             "notify-send",
             "-a", "Timetable",
-            "-i", "event",
+            "-i", "x-office-calendar",
         ];
         if (!(root.options.sound ?? false))
             command.push("--hint=boolean:suppress-sound:true");
@@ -151,6 +151,7 @@ Singleton {
         const command = [
             "notify-send",
             "-a", "Timetable",
+            "-i", "x-office-calendar",
             "--replace-id", "74321",
         ];
         if (!(root.options.sound ?? false))

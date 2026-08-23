@@ -65,6 +65,18 @@ class TimetablePresentationContractTests(unittest.TestCase):
             self.assertNotIn(f'placeholderText: Translation.tr("{placeholder}")', sidebar)
         self.assertNotIn("placeholderTextColor", sidebar)
 
+    def test_calendar_notifications_use_an_installed_calendar_icon(self) -> None:
+        notifier = (ROOT / "services" / "CalendarNotifier.qml").read_text(encoding="utf-8")
+
+        self.assertEqual(notifier.count('"-i", "x-office-calendar"'), 2)
+        self.assertNotIn('"-i", "event"', notifier)
+
+    def test_lineups_use_a_valid_material_apparel_symbol(self) -> None:
+        details = (TIMETABLE / "SportsEventDetails.qml").read_text(encoding="utf-8")
+
+        self.assertIn('modelData.group === "starters" ? "apparel"', details)
+        self.assertNotIn('"sports_jersey"', details)
+
 
 if __name__ == "__main__":
     unittest.main()

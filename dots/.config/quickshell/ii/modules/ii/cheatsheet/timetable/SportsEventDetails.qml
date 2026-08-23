@@ -510,7 +510,7 @@ Item {
             delegate: DetailRow {
                 required property var modelData
                 Layout.fillWidth: true
-                symbol: modelData.group === "starters" ? "sports_jersey" : "person_add"
+                symbol: modelData.group === "starters" ? "apparel" : "person_add"
                 caption: (modelData.team || Translation.tr("Team")) + " · " + (modelData.group === "starters" ? Translation.tr("Starters") : Translation.tr("Substitutes"))
                 value: modelData.value
                 multiline: true
