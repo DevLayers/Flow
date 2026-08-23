@@ -49,6 +49,7 @@ Item {
     signal dragPositionChanged(int dayIndex, real currentY)
     signal dragReleased(int dayIndex, real startY, real currentY)
     signal editRequested(var event, int dayIndex)
+    signal deleteRequested(var event, int dayIndex)
 
     width: dayColumnWidth
     height: contentHeight
@@ -200,6 +201,7 @@ Item {
             startHour: dayColumn.startHour
             startMinute: dayColumn.startMinute
             onEditRequested: (evt, dIdx) => dayColumn.editRequested(evt, dIdx)
+            onDeleteRequested: (evt, dIdx) => dayColumn.deleteRequested(evt, dIdx)
         }
     }
 }

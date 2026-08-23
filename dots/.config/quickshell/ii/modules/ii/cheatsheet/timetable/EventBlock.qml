@@ -23,6 +23,7 @@ Rectangle {
     property int startMinute
 
     signal editRequested(var event, int dayIndex)
+    signal deleteRequested(var event, int dayIndex)
 
     readonly property bool isNextEvent: nextEventData && nextEventData.dayIndex === dayIdx && nextEventData.startMinutes === eventStartMinutes
     readonly property bool sportEvent: eventData?.sportEvent === true
@@ -114,9 +115,9 @@ Rectangle {
         }
 
         onClicked: {
-            const sourceEvent = eventData.sourceEvent;
+            const sourceEvent = eventData.sourceEvent ?? eventData;
             if (sourceEvent?.uid)
-                CalendarService.removeEventByUid(sourceEvent.uid);
+                eventBlock.deleteRequested(sourceEvent, eventBlock.dayIdx);
         }
 
         contentItem: MaterialSymbol {

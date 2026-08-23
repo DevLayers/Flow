@@ -14,7 +14,7 @@ Item {
 
     property real spacing: 8
 
-    readonly property bool eventPopupVisible: eventPopup.visible || eventSidebar.open
+    readonly property bool eventPopupVisible: eventPopup.visible || eventSidebar.open || recurrenceDeleteDialog.visible
 
     property int startHour: 0
     property int startMinute: 0
@@ -102,6 +102,7 @@ Item {
     property int ghostDayIndex: -1
     property real ghostTopY: 0
     property real ghostHeight: 0
+    property var pendingWeekDeleteEvent: null
 
     // ─── Helpers ───
     function updateCurrentTimeLine() {
@@ -216,6 +217,24 @@ Item {
             return;
         }
         eventSidebar.showSportsDay(date);
+    }
+
+    function requestWeekDelete(event) {
+        if (!event?.uid || event.readOnly === true)
+            return;
+        if (String(event.repeatSymbol ?? "").length === 0) {
+            CalendarService.deleteEventWithScope(event, "all");
+            return;
+        }
+        root.pendingWeekDeleteEvent = event;
+        recurrenceDeleteDialog.open();
+    }
+
+    function deleteWeekEventWithScope(scope) {
+        if (root.pendingWeekDeleteEvent?.uid)
+            CalendarService.deleteEventWithScope(root.pendingWeekDeleteEvent, scope);
+        recurrenceDeleteDialog.close();
+        root.pendingWeekDeleteEvent = null;
     }
 
     // ─── Actions ───
@@ -470,6 +489,7 @@ Item {
                                     Qt.callLater(root.openPopupForGhost);
                                 }
                                 onEditRequested: (evt, dIdx) => root.openPopupForEdit(evt, dIdx)
+                                onDeleteRequested: (evt, dIdx) => root.requestWeekDelete(evt)
                             }
                         }
                     }
@@ -553,5 +573,79 @@ Item {
             root.ghostVisible = false;
         }
         onCancelled: root.ghostVisible = false
+    }
+
+    Popup {
+        id: recurrenceDeleteDialog
+        parent: root
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        anchors.centerIn: parent
+        width: Math.min(340, root.width - 32)
+        padding: 0
+        background: Rectangle {
+            color: Appearance.m3colors.m3surfaceContainerHigh
+            radius: Appearance.rounding.large
+        }
+
+        contentItem: ColumnLayout {
+            width: recurrenceDeleteDialog.width - 40
+            spacing: 10
+
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Delete recurring event")
+                font.pixelSize: Appearance.font.pixelSize.large
+                font.weight: Font.Bold
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colOnSurface
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Choose how much of this series changes.")
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colOnSurfaceVariant
+            }
+
+            RippleButtonWithIcon {
+                Layout.fillWidth: true
+                implicitHeight: 44
+                buttonRadius: Appearance.rounding.full
+                centerContent: true
+                materialIcon: "event"
+                mainText: Translation.tr("Only this event")
+                colText: Appearance.colors.colOnSurface
+                colBackground: Appearance.colors.colSurfaceContainerHighest
+                onClicked: root.deleteWeekEventWithScope("this")
+            }
+
+            RippleButtonWithIcon {
+                Layout.fillWidth: true
+                implicitHeight: 44
+                buttonRadius: Appearance.rounding.full
+                centerContent: true
+                materialIcon: "event_repeat"
+                mainText: Translation.tr("This and future")
+                colText: Appearance.colors.colOnSurface
+                colBackground: Appearance.colors.colSurfaceContainerHighest
+                onClicked: root.deleteWeekEventWithScope("future")
+            }
+
+            RippleButtonWithIcon {
+                Layout.fillWidth: true
+                implicitHeight: 44
+                buttonRadius: Appearance.rounding.full
+                centerContent: true
+                materialIcon: "all_inclusive"
+                mainText: Translation.tr("Entire series")
+                colText: Appearance.colors.colOnPrimary
+                colBackground: Appearance.colors.colError
+                onClicked: root.deleteWeekEventWithScope("all")
+            }
+        }
+
+        onClosed: root.pendingWeekDeleteEvent = null
     }
 }
