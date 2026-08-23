@@ -25,6 +25,12 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertNotIn("getEventColorRadial", helper + week + block)
         self.assertNotIn("maxLogicalDistance", week + block)
 
+    def test_week_surfaces_do_not_use_rectangle_borders(self) -> None:
+        for name in ("EventBlock.qml", "TimetableDayColumn.qml", "TimetableHeader.qml", "TimetableNextEventFAB.qml"):
+            source = (TIMETABLE / name).read_text(encoding="utf-8")
+            self.assertNotIn("border.width", source, name)
+            self.assertNotIn("border.color", source, name)
+
     def test_color_picker_uses_semantic_hover_tokens(self) -> None:
         helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
         picker = (TIMETABLE / "ColorPickerRow.qml").read_text(encoding="utf-8")

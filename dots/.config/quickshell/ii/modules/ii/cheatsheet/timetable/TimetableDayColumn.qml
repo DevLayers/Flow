@@ -41,7 +41,6 @@ Item {
 
     // Colors
     property color todayHighlightFill
-    property color todayHighlightBorder
     property color dayBackgroundFill
     property color dayBackgroundFillVariant
 
@@ -70,8 +69,6 @@ Item {
         anchors.fill: parent
         radius: Appearance.rounding.windowRounding
         color: isToday ? todayHighlightFill : dayIdx % 2 == 0 ? dayBackgroundFill : dayBackgroundFillVariant
-        border.width: isToday ? 1 : 0
-        border.color: isToday ? todayHighlightBorder : "transparent"
     }
 
     // ─── Drag-to-create MouseArea ─────────────
@@ -123,8 +120,6 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         radius: Appearance.rounding.normal
         color: H.withOpacity(Appearance.colors.colPrimary, 0.25)
-        border.width: 2
-        border.color: H.withOpacity(Appearance.colors.colPrimary, 0.6)
         z: 5
 
         y: {
@@ -161,9 +156,7 @@ Item {
         width: parent.width - 10
         anchors.horizontalCenter: parent.horizontalCenter
         radius: Appearance.rounding.normal
-        color: H.withOpacity(Appearance.colors.colPrimary, 0.35)
-        border.width: 2
-        border.color: Appearance.colors.colPrimary
+        color: Appearance.colors.colPrimary
         z: 8
         y: ghostTopY
         height: ghostHeight

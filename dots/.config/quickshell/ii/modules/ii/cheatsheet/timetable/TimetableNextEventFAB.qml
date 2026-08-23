@@ -4,7 +4,7 @@ import QtQuick
 import "."
 import "TimetableHelpers.js" as H
 
-Rectangle {
+RippleButton {
     id: nextEventIndicator
     
     property var nextEventData
@@ -29,10 +29,11 @@ Rectangle {
     
     width: 40
     height: 40
-    radius: Appearance.rounding.full
-    color: Appearance.colors.colPrimary
-    border.width: 1
-    border.color: H.withOpacity(Appearance.colors.colOnPrimary, 0.3)
+    buttonRadius: Appearance.rounding.full
+    colBackground: Appearance.colors.colPrimary
+    colBackgroundHover: Appearance.colors.colPrimaryHover
+    colBackgroundActive: Appearance.colors.colPrimaryActive
+    colRipple: Appearance.colors.colOnPrimary
     z: 100
     antialiasing: true
     
@@ -43,23 +44,19 @@ Rectangle {
     
     y: isAbove ? headerHeight + 20 : parent.height - height - 20
     
-    MaterialSymbol {
+    contentItem: MaterialSymbol {
         anchors.centerIn: parent
-        text: parent.isAbove ? "arrow_upward" : "arrow_downward"
+        text: nextEventIndicator.isAbove ? "arrow_upward" : "arrow_downward"
         font.pixelSize: Appearance.font.pixelSize.larger
         color: Appearance.colors.colOnPrimary
         antialiasing: true
     }
 
-    MouseArea {
-        anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            if (nextEventData) {
-                let targetY = nextEventIndicator.nextEventY - flickableHeight / 3;
-                targetY = Math.max(0, targetY);
-                scrollRequested(targetY);
-            }
+    onClicked: {
+        if (nextEventData) {
+            let targetY = nextEventIndicator.nextEventY - flickableHeight / 3;
+            targetY = Math.max(0, targetY);
+            scrollRequested(targetY);
         }
     }
 }

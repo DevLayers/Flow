@@ -37,6 +37,9 @@ Rectangle {
     readonly property bool isNextEvent: nextEventData && nextEventData.dayIndex === dayIdx && nextEventData.startMinutes === eventStartMinutes
     readonly property bool sportEvent: eventData?.sportEvent === true
     readonly property bool readOnly: eventData?.readOnly === true
+    readonly property color semanticColor: eventBlock.sportEvent
+        ? Appearance.colors.colTertiaryContainer
+        : H.chipColor(eventData?.sourceEvent ?? eventData, Appearance.colors)
 
     readonly property int eventStartMinutes: {
         let parts = eventData.start.split(":");
@@ -57,11 +60,9 @@ Rectangle {
     radius: Appearance.rounding.normal
     clip: true
     z: isNextEvent ? 4 : 3
-    color: eventBlock.sportEvent
-        ? Appearance.colors.colTertiaryContainer
-        : H.chipColor(eventData?.sourceEvent ?? eventData, Appearance.colors)
-    border.width: isNextEvent ? 2 : 0
-    border.color: isNextEvent ? H.withOpacity(Appearance.colors.colOnPrimary, 0.8) : "transparent"
+    color: isNextEvent
+        ? ColorUtils.mix(eventBlock.semanticColor, ColorUtils.getContrastingTextColor(eventBlock.semanticColor), 0.88)
+        : eventBlock.semanticColor
     y: H.minutesToY(eventStartMinutes, startHour, startMinute, pixelsPerMinute)
     height: Math.max((eventEndMinutes - eventStartMinutes) * pixelsPerMinute - 4, 48)
     opacity: eventBlock.manipulating ? 0.24 : 1

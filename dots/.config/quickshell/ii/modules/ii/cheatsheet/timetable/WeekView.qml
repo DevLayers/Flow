@@ -90,7 +90,6 @@ Item {
 
     // ─── Theme Colors ───
     readonly property color todayHighlightFill: H.withOpacity(Appearance.colors.colPrimary, 0.12)
-    readonly property color todayHighlightBorder: H.withOpacity(Appearance.colors.colPrimary, 0.28)
     readonly property color dayBackgroundFill: H.withOpacity(Appearance.colors.colSecondary, 0.04)
     readonly property color dayBackgroundFillVariant: H.withOpacity(Appearance.colors.colSecondary, 0.08)
 
@@ -574,7 +573,6 @@ Item {
                                 ghostHeight: root.ghostHeight
                                 nextEventData: root.nextEventData
                                 todayHighlightFill: root.todayHighlightFill
-                                todayHighlightBorder: root.todayHighlightBorder
                                 dayBackgroundFill: root.dayBackgroundFill
                                 dayBackgroundFillVariant: root.dayBackgroundFillVariant
 

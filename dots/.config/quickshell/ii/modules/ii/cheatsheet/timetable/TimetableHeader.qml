@@ -154,8 +154,6 @@ Row {
                         height: allDayChipHeight
                         color: H.chipColor(modelData?.sourceEvent ?? modelData, Appearance.colors)
                         radius: Appearance.rounding.verysmall
-                        border.width: 1
-                        border.color: H.withOpacity(Appearance.colors.colOnSecondaryContainer, 0.1)
 
                         StyledText {
                             anchors.fill: parent
