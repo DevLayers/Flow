@@ -46,7 +46,7 @@ Item {
 
     function filteredEmojiEntries() {
         const query = root.searchQuery.trim();
-        const allEntries = Emojis.entries ?? [];
+        const allEntries = Array.from(Emojis.entries ?? []);
         if (query.length > 0) {
             const matchingRawEntries = new Set(Emojis.fuzzyQuery(query));
             return root.filterByCategory(allEntries.filter(entry => matchingRawEntries.has(entry.raw)))

@@ -22,15 +22,18 @@ Singleton {
     property var preparedEntries: []
     property bool loaded: false
     property bool loading: false
+    property bool entriesPrepared: false
+    property bool entriesPreparing: false
+    property int preparationIndex: 0
+    property var preparationBuffer: []
     
     onListChanged: {
-        const newList = list;
-        const startTime = Date.now();
-        root.preparedEntries = newList.map(a => ({
-            name: Fuzzy.prepare(`${a}`),
-            entry: a
-        }));
-        console.log(`[Emojis] Prepared ${root.preparedEntries.length} entries in ${Date.now() - startTime}ms`)
+        root.entriesPrepared = false;
+        root.entriesPreparing = list.length > 0;
+        root.preparationIndex = 0;
+        root.preparationBuffer = [];
+        if (root.entriesPreparing)
+            preparationTimer.restart();
     }
     
     function fuzzyQuery(search: string): var {
@@ -46,6 +49,15 @@ Singleton {
                 .sort((a, b) => b.score - a.score)
             return results
                 .map(item => item.entry)
+        }
+
+        // The panel remains immediately usable while the fuzzy index is built
+        // in short event-loop batches. This fallback is deliberately bounded
+        // and is replaced by the ranked matcher as soon as it is ready.
+        if (!root.entriesPrepared) {
+            const normalized = search.toLocaleLowerCase();
+            return root.list.filter(entry => String(entry).toLocaleLowerCase().includes(normalized))
+                .slice(0, 100);
         }
 
         return Fuzzy.go(search, preparedEntries, {
@@ -103,6 +115,37 @@ Singleton {
         onLoaded: {
             const fileContent = emojiFileView.text()
             root.updateEmojis(fileContent)
+        }
+    }
+
+    Timer {
+        id: preparationTimer
+        interval: 1
+        repeat: false
+        onTriggered: {
+            if (!root.entriesPreparing)
+                return;
+
+            const batchSize = 96;
+            const end = Math.min(root.list.length, root.preparationIndex + batchSize);
+            for (let index = root.preparationIndex; index < end; index++) {
+                const entry = root.list[index];
+                root.preparationBuffer.push({
+                    name: Fuzzy.prepare(`${entry}`),
+                    entry: entry
+                });
+            }
+            root.preparationIndex = end;
+
+            if (root.preparationIndex >= root.list.length) {
+                root.preparedEntries = root.preparationBuffer;
+                root.preparationBuffer = [];
+                root.entriesPreparing = false;
+                root.entriesPrepared = true;
+                console.log(`[Emojis] Prepared ${root.preparedEntries.length} entries incrementally`);
+                return;
+            }
+            preparationTimer.restart();
         }
     }
 }
