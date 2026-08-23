@@ -23,12 +23,10 @@ Item {
 
     readonly property date todayDate: DateTime.clock.date
 
-    readonly property var todayEvents: {
-        const key = H.dayKeyOf(root.todayDate);
-        return CalendarService.eventsByDay[key] ?? [];
-    }
-    readonly property var overdueTasks: Todo.getOverdueTasks(root.todayDate)
-    readonly property var todayTasks: Todo.getTasksByDate(root.todayDate).filter(task => !root.overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")))
+    // The hero is intentionally a Today *tasks* list. Calendar events remain
+    // in Upcoming below; overdue work must not be presented as due today.
+    readonly property var todayTasks: Todo.getTasksByDate(root.todayDate)
+        .filter(task => task?.hasDate === true)
 
     readonly property var rows: {
         const out = [];
@@ -184,26 +182,17 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: root.todayEvents.length + root.todayTasks.length === 0
-                        ? Translation.tr("Nothing scheduled today")
-                        : Translation.tr("%1 item(s) today").arg(String(root.todayEvents.length + root.todayTasks.length))
+                    text: root.todayTasks.length === 0
+                        ? Translation.tr("No tasks due today")
+                        : Translation.tr("%1 task(s) today").arg(String(root.todayTasks.length))
                     font.pixelSize: Appearance.font.pixelSize.smallie
                     font.weight: Font.Medium
                     color: ColorUtils.applyAlpha(Appearance.colors.colOnPrimaryContainer, 0.8)
                     elide: Text.ElideRight
                 }
 
-                StyledText {
-                    Layout.fillWidth: true
-                    visible: root.overdueTasks.length > 0
-                    text: Translation.tr("Overdue")
-                    font.pixelSize: Appearance.font.pixelSize.smallest
-                    font.weight: Font.Bold
-                    color: ColorUtils.applyAlpha(Appearance.colors.colOnPrimaryContainer, 0.75)
-                }
-
                 Repeater {
-                    model: root.overdueTasks
+                    model: root.todayTasks
 
                     delegate: TaskChip {
                         Layout.fillWidth: true
