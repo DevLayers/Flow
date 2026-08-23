@@ -10,6 +10,10 @@ import QtQuick.Controls
  */
 Button {
     id: root
+    // The inner MouseArea owns pointer input and follows this flag. Controls
+    // default it to false, which otherwise suppresses both the hand cursor
+    // and the hover state used by tooltips for every ordinary button.
+    hoverEnabled: true
     property bool toggled
     property string buttonText
     property bool pointingHandCursor: true

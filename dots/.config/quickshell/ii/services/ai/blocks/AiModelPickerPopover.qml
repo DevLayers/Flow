@@ -116,6 +116,20 @@ Item {
         return "";
     }
 
+    function isPinned(modelId: string): bool {
+        return Array.from(Config.options.sidebar.ai.pinnedModels ?? []).indexOf(modelId) >= 0;
+    }
+
+    function togglePinned(modelId: string) {
+        const id = String(modelId ?? "");
+        if (id.length === 0)
+            return;
+        const pinned = Array.from(Config.options.sidebar.ai.pinnedModels ?? []);
+        Config.options.sidebar.ai.pinnedModels = pinned.indexOf(id) >= 0
+            ? pinned.filter(candidate => candidate !== id)
+            : pinned.concat([id]);
+    }
+
     function pinnedModelShortcut(modelId: string): string {
         const index = Array.from(Config.options.sidebar.ai.pinnedModels ?? []).indexOf(modelId);
         return index >= 0 && index < 9 ? "Ctrl+" + String(index + 1) : "";
@@ -127,6 +141,14 @@ Item {
         if (shortcut.length > 0)
             return Translation.tr("Select %1\nShortcut: %2").arg(title).arg(shortcut);
         return Translation.tr("Select %1").arg(title);
+    }
+
+    function modelPinTooltip(model): string {
+        const title = String(model?.title ?? "");
+        const shortcut = root.pinnedModelShortcut(String(model?.id ?? ""));
+        if (shortcut.length > 0)
+            return Translation.tr("Unpin %1\nShortcut: %2").arg(title).arg(shortcut);
+        return Translation.tr("Pin %1 for Ctrl+1 … Ctrl+9").arg(title);
     }
 
     /**
@@ -474,6 +496,7 @@ Item {
                     readonly property var entry: rowItem.modelData.model
                     readonly property bool keyed: root.hasKey(modelRow.entry)
                     readonly property bool selected: modelRow.entry.id === Ai.currentModelId
+                    readonly property bool pinned: root.isPinned(modelRow.entry.id)
 
                     spacing: root.gap
 
@@ -568,19 +591,50 @@ Item {
                     }
 
                     Rectangle {
+                        id: modelActionCircle
                         Layout.preferredWidth: root.rowHeight
                         Layout.preferredHeight: root.rowHeight
                         Layout.alignment: Qt.AlignVCenter
                         radius: height / 2
                         visible: modelRow.selected
-                        color: Appearance.colors.colPrimaryContainer
+                        color: modelActionMouse.containsPress
+                            ? Appearance.colors.colPrimaryContainerActive
+                            : modelActionMouse.containsMouse
+                                ? Appearance.colors.colPrimaryContainerHover
+                                : Appearance.colors.colPrimaryContainer
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
+
+                        MouseArea {
+                            id: modelActionMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.togglePinned(modelRow.entry.id)
+                        }
+
+                        Accessible.name: root.modelPinTooltip(modelRow.entry)
 
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            text: "check"
+                            text: modelActionMouse.containsMouse
+                                ? (modelRow.pinned ? "keep_off" : "keep")
+                                : "check"
                             fill: 1
                             iconSize: 24
                             color: Appearance.colors.colOnPrimaryContainer
+                        }
+
+                        StyledToolTip {
+                            extraVisibleCondition: false
+                            alternativeVisibleCondition: modelActionMouse.containsMouse
+                            text: root.modelPinTooltip(modelRow.entry)
                         }
                     }
                 }

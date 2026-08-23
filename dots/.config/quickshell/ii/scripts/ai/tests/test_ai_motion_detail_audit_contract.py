@@ -11,6 +11,7 @@ CHAT = (ROOT / "modules/ii/sidebarPolicies/AiChat.qml").read_text(encoding="utf-
 MESSAGE = (ROOT / "modules/ii/sidebarPolicies/aiChat/AiMessage.qml").read_text(encoding="utf-8")
 CONTROL_BAR = (ROOT / "modules/ii/sidebarPolicies/aiChat/ChatControlBar.qml").read_text(encoding="utf-8")
 PICKER = (ROOT / "services/ai/blocks/AiModelPickerPopover.qml").read_text(encoding="utf-8")
+RIPPLE_BUTTON = (ROOT / "modules/common/widgets/RippleButton.qml").read_text(encoding="utf-8")
 SEARCH_SURFACE = (ROOT / "services/ai/AiSearchSurface.qml").read_text(encoding="utf-8")
 SEARCH_NAVIGATOR = (ROOT / "services/ai/AiSearchNavigator.qml").read_text(encoding="utf-8")
 AI_SERVICE = (ROOT / "services/Ai.qml").read_text(encoding="utf-8")
@@ -75,9 +76,17 @@ class DetailTests(unittest.TestCase):
         self.assertIn("function modelSelectionTooltip", PICKER)
         self.assertIn("id: modelSelectButton", PICKER)
         self.assertIn("root.modelSelectionTooltip", PICKER)
-        self.assertNotIn("togglePinned", PICKER)
-        self.assertNotIn('text: modelRow.pinned ? "keep" : "keep_off"', PICKER)
+        self.assertIn("function togglePinned", PICKER)
+        self.assertIn("id: modelActionCircle", PICKER)
+        self.assertIn("id: modelActionMouse", PICKER)
+        self.assertIn('modelRow.pinned ? "keep_off" : "keep"', PICKER)
+        self.assertIn("function modelPinTooltip", PICKER)
+        self.assertIn("onClicked: root.togglePinned(modelRow.entry.id)", PICKER)
         self.assertIn("modelChipTooltip", CONTROL_BAR)
+
+    def test_shared_buttons_enable_hover_for_cursor_and_tooltips(self):
+        self.assertIn("    hoverEnabled: true\n", RIPPLE_BUTTON)
+        self.assertIn("hoverEnabled: root.hoverEnabled", RIPPLE_BUTTON)
 
 
 if __name__ == "__main__":
