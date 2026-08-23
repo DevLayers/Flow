@@ -25,6 +25,7 @@ Item {
     property bool dropTarget: false
     property int entranceKey: 0
     property string densityMode: "compact"
+    property real recurrenceLaneOffset: 0
 
     signal createRequested(var date)
     signal dayActivated(var date)
@@ -74,7 +75,7 @@ Item {
     readonly property real cellPadding: 7
     readonly property bool compactChips: root.densityMode !== "comfortable"
     readonly property real chipHeight: root.densityMode === "comfortable" ? 24 : 16
-    readonly property real chipAreaHeight: Math.max(0, root.height - root.headerHeight - root.headerEventSpacing - root.cellPadding)
+    readonly property real chipAreaHeight: Math.max(0, root.height - root.headerHeight - root.headerEventSpacing - root.recurrenceLaneOffset - root.cellPadding)
     readonly property int chipCapacity: Math.max(0, Math.floor((root.chipAreaHeight + root.chipSpacing) / (root.chipHeight + root.chipSpacing)))
     // Keep events and tasks in one capacity calculation. Otherwise a busy day
     // could silently overflow below the cell after task integration.
@@ -333,7 +334,7 @@ Item {
             top: header.bottom
             left: parent.left
             right: parent.right
-            topMargin: root.headerEventSpacing
+            topMargin: root.headerEventSpacing + root.recurrenceLaneOffset
             leftMargin: root.cellPadding - 2
             rightMargin: root.cellPadding - 2
         }
@@ -421,7 +422,7 @@ Item {
             top: header.bottom
             left: parent.left
             right: parent.right
-            topMargin: 5
+            topMargin: 5 + root.recurrenceLaneOffset
             leftMargin: root.cellPadding
             rightMargin: root.cellPadding
         }

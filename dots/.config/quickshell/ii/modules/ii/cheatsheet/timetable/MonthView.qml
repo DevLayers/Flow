@@ -59,6 +59,7 @@ Item {
     readonly property real sidebarWidth: Math.max(260, Math.min(330, root.width * 0.23))
     readonly property bool compactNav: root.usableWidth < 830
     readonly property bool viewingCurrentMonth: root.viewYear === DateTime.clock.date.getFullYear() && root.viewMonth === DateTime.clock.date.getMonth()
+    readonly property bool collapseRecurring: Persistent.states.cheatsheet.timetableCollapseRecurring
 
     readonly property date viewAnchorDate: new Date(root.viewYear, root.viewMonth, 1)
 
@@ -68,6 +69,103 @@ Item {
         if (!root.categoryFilter)
             return events ?? [];
         return (events ?? []).filter(event => (event.categories ?? []).includes(root.categoryFilter));
+    }
+
+    function recurrenceSeriesKey(event) {
+        const uid = String(event?.uid ?? "");
+        if (!uid || String(event?.repeatSymbol ?? "").length === 0 || !event?.startDate)
+            return "";
+        const startTime = Qt.formatTime(event.startDate, "hh:mm");
+        const duration = event.endDate ? Math.max(0, event.endDate.getTime() - event.startDate.getTime()) : 0;
+        // UID identifies the series. Presentation fields deliberately remain
+        // in the signature so an overridden occurrence stays individually
+        // visible instead of being swallowed by its parent routine.
+        return [
+            String(event.calendar ?? ""), uid, String(event.content ?? ""),
+            startTime, String(duration), String(event.status ?? ""),
+            String(event.colorToken ?? "")
+        ].join("|");
+    }
+
+    function recurringOccurrenceKey(event) {
+        const series = root.recurrenceSeriesKey(event);
+        return series ? series + "|" + H.dayKeyOf(event.startDate) : "";
+    }
+
+    function buildRecurringProjection() {
+        const empty = { hiddenOccurrences: ({}), segments: [], rowLaneCounts: ({}) };
+        if (!root.collapseRecurring)
+            return empty;
+
+        const bySeries = {};
+        for (let cellIndex = 0; cellIndex < root.cells.length; cellIndex++) {
+            const cell = root.cells[cellIndex];
+            const events = root.filteredEvents(CalendarService.eventsByDay[cell.key] ?? []);
+            for (const event of events) {
+                const seriesKey = root.recurrenceSeriesKey(event);
+                if (!seriesKey)
+                    continue;
+                if (!bySeries[seriesKey])
+                    bySeries[seriesKey] = [];
+                bySeries[seriesKey].push({ cellIndex: cellIndex, event: event });
+            }
+        }
+
+        const hiddenOccurrences = {};
+        const pendingSegments = [];
+        for (const seriesKey in bySeries) {
+            const occurrences = bySeries[seriesKey].sort((left, right) => left.cellIndex - right.cellIndex);
+            if (occurrences.length < 2)
+                continue;
+            for (const occurrence of occurrences)
+                hiddenOccurrences[root.recurringOccurrenceKey(occurrence.event)] = true;
+
+            let runStart = 0;
+            for (let i = 1; i <= occurrences.length; i++) {
+                const previous = occurrences[i - 1];
+                const current = i < occurrences.length ? occurrences[i] : null;
+                const continues = current
+                    && current.cellIndex === previous.cellIndex + 1
+                    && Math.floor(current.cellIndex / 7) === Math.floor(previous.cellIndex / 7);
+                if (continues)
+                    continue;
+                const first = occurrences[runStart];
+                pendingSegments.push({
+                    seriesKey: seriesKey,
+                    event: first.event,
+                    row: Math.floor(first.cellIndex / 7),
+                    startColumn: first.cellIndex % 7,
+                    span: previous.cellIndex - first.cellIndex + 1,
+                    occurrenceCount: occurrences.length
+                });
+                runStart = i;
+            }
+        }
+
+        pendingSegments.sort((left, right) => left.row - right.row || left.startColumn - right.startColumn || right.span - left.span);
+        const rowLaneEnds = {};
+        const rowLaneCounts = {};
+        for (const segment of pendingSegments) {
+            const ends = rowLaneEnds[segment.row] ?? [];
+            let lane = 0;
+            while (lane < ends.length && segment.startColumn <= ends[lane])
+                lane++;
+            ends[lane] = segment.startColumn + segment.span - 1;
+            rowLaneEnds[segment.row] = ends;
+            rowLaneCounts[segment.row] = Math.max(rowLaneCounts[segment.row] ?? 0, lane + 1);
+            segment.lane = lane;
+        }
+
+        return { hiddenOccurrences: hiddenOccurrences, segments: pendingSegments, rowLaneCounts: rowLaneCounts };
+    }
+
+    readonly property var recurringProjection: root.buildRecurringProjection()
+
+    function cellEvents(cell) {
+        const events = root.filteredEvents(CalendarService.eventsByDay[cell.key] ?? []);
+        if (!root.collapseRecurring)
+            return events;
+        return events.filter(event => !root.recurringProjection.hiddenOccurrences[root.recurringOccurrenceKey(event)]);
     }
 
     function tasksForDay(date) {
@@ -454,6 +552,31 @@ Item {
                     }
                 }
 
+                RippleButton {
+                    id: recurrenceToggle
+                    implicitWidth: 42
+                    implicitHeight: 42
+                    buttonRadius: Appearance.rounding.full
+                    toggled: root.collapseRecurring
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundToggled: Appearance.colors.colSecondaryContainer
+                    colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+                    onClicked: Persistent.states.cheatsheet.timetableCollapseRecurring = !root.collapseRecurring
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "repeat"
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: root.collapseRecurring ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: recurrenceToggle.hovered
+                        text: root.collapseRecurring ? Translation.tr("Show recurring occurrences") : Translation.tr("Group recurring events")
+                    }
+                }
+
                 RippleButtonWithIcon {
                     id: todayButton
                     implicitWidth: root.compactNav ? 42 : todayButton.contentImplicitWidth + 32
@@ -652,7 +775,8 @@ Item {
                         sourceComponent: MonthDayCell {
                             cellData: cellLoader.modelData
                             densityMode: root.densityMode
-                            events: root.filteredEvents(CalendarService.eventsByDay[cellLoader.modelData.key])
+                            recurrenceLaneOffset: (root.recurringProjection.rowLaneCounts[Math.floor(cellLoader.index / 7)] ?? 0) * 18
+                            events: root.cellEvents(cellLoader.modelData)
                             tasks: root.tasksForDay(cellLoader.modelData.date)
                             birthdays: BirthdaysService.birthdaysForDate(cellLoader.modelData.date)
                             holidays: root.holidayMap[cellLoader.modelData.key] ?? []
@@ -670,6 +794,58 @@ Item {
                             onEventDragMoved: (x, y) => root.moveEventDrag(x, y)
                             onEventDragEnded: root.endEventDrag()
                             onEventDragCanceled: root.cancelEventDrag()
+                        }
+                    }
+                }
+
+                Repeater {
+                    model: root.recurringProjection.segments
+
+                    delegate: RippleButton {
+                        id: recurringBand
+                        required property var modelData
+
+                        readonly property color accent: H.chipColor(recurringBand.modelData.event, Appearance.colors)
+                        x: recurringBand.modelData.startColumn * (gridArea.cellWidth + root.gridGap) + 5
+                        y: recurringBand.modelData.row * (gridArea.cellHeight + root.gridGap)
+                            + 24 + recurringBand.modelData.lane * 18
+                        width: recurringBand.modelData.span * gridArea.cellWidth
+                            + Math.max(0, recurringBand.modelData.span - 1) * root.gridGap - 10
+                        implicitHeight: 16
+                        z: 4
+                        buttonRadius: Appearance.rounding.verysmall
+                        colBackground: recurringBand.accent
+                        colBackgroundHover: ColorUtils.mix(recurringBand.accent, Appearance.colors.colOnSurface, 0.88)
+                        onClicked: root.requestOpen(recurringBand.modelData.event)
+
+                        contentItem: RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 7
+                            anchors.rightMargin: 7
+                            spacing: 4
+
+                            MaterialSymbol {
+                                text: "repeat"
+                                iconSize: Appearance.font.pixelSize.smallest
+                                color: ColorUtils.getContrastingTextColor(recurringBand.accent)
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: (recurringBand.modelData.event?.content ?? Translation.tr("Event"))
+                                    + " · ×" + String(recurringBand.modelData.occurrenceCount)
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Bold
+                                color: ColorUtils.getContrastingTextColor(recurringBand.accent)
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
+                            }
+                        }
+
+                        StyledToolTip {
+                            extraVisibleCondition: recurringBand.hovered
+                            text: Translation.tr("%1 recurring occurrences")
+                                .arg(String(recurringBand.modelData.occurrenceCount))
                         }
                     }
                 }

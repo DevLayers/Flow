@@ -78,6 +78,23 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("id: densityDots", cell)
         self.assertEqual(cell.count("root.isToday || root.isTomorrow || cellPointer.containsMouse"), 2)
 
+    def test_month_recurring_series_collapse_into_stable_bands(self) -> None:
+        persistent = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
+        month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
+        cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property bool timetableCollapseRecurring: true", persistent)
+        self.assertIn("function recurrenceSeriesKey(event)", month)
+        self.assertIn("String(event?.uid ?? \"\")", month)
+        self.assertIn("String(event.calendar ?? \"\")", month)
+        self.assertIn("function buildRecurringProjection()", month)
+        self.assertIn("root.recurringProjection.hiddenOccurrences", month)
+        self.assertIn("id: recurringBand", month)
+        self.assertIn("recurrenceLaneOffset:", month)
+        self.assertIn("property real recurrenceLaneOffset: 0", cell)
+        self.assertIn("root.recurrenceLaneOffset", cell)
+        self.assertIn("Persistent.states.cheatsheet.timetableCollapseRecurring =", month)
+
     def test_week_navigation_uses_a_real_anchor_and_shared_picker(self) -> None:
         helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
@@ -172,7 +189,7 @@ class TimetablePresentationContractTests(unittest.TestCase):
 
         self.assertIn("readonly property real headerEventSpacing: 2", day_cell)
         self.assertIn("topMargin: root.headerEventSpacing", day_cell)
-        self.assertIn("root.headerHeight - root.headerEventSpacing - root.cellPadding", day_cell)
+        self.assertIn("root.headerHeight - root.headerEventSpacing - root.recurrenceLaneOffset - root.cellPadding", day_cell)
 
     def test_event_metadata_inputs_have_helpful_placeholders(self) -> None:
         sidebar = (TIMETABLE / "EventSidebar.qml").read_text(encoding="utf-8")
