@@ -90,7 +90,11 @@ Item {
             icon: "alarm",
             prompts: [
                 Translation.tr("Remind me to drink water in 20 minutes"),
+                Translation.tr("Set a recurring alarm for weekdays at 7:00"),
+                Translation.tr("Start a Pomodoro timer"),
+                Translation.tr("What's the status of my stopwatch?"),
                 Translation.tr("What's on my calendar today?"),
+                Translation.tr("What's my next calendar event?"),
                 Translation.tr("What's the weather like right now?")
             ]
         },

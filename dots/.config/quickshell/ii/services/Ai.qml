@@ -1844,8 +1844,12 @@ Singleton {
             "settings_propose_changes": call => root.toolSettingsProposeChanges(call),
             "settings_apply_changes": call => root.toolSettingsApplyChanges(call),
             "reminder_create": call => root.toolReminderCreate(call),
+            "alarm_create": call => root.toolAlarmCreate(call),
             "alarms_list": call => root.toolAlarmsList(call),
+            "timer_start": call => root.toolTimerStart(call),
+            "timer_status": call => root.toolTimerStatus(call),
             "calendar_list_events": call => root.toolCalendarListEvents(call),
+            "calendar_next_event": call => root.toolCalendarNextEvent(call),
             "weather_get": call => root.toolWeatherGet(call),
             "tasks_list": call => root.toolTasksList(call),
             "tasks_search": call => root.toolTasksSearch(call),
@@ -4403,6 +4407,8 @@ Singleton {
             "set_shell_config": pending => root.applyConfigChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
             "settings_apply_changes": pending => root.applySettingsChangesNow(pending.message, Array.from(pending.args?.changes ?? []), pending.sessionId),
             "reminder_create": pending => root.createReminderNow(pending.message, pending.args, pending.sessionId),
+            "alarm_create": pending => root.createAlarmNow(pending.message, pending.args, pending.sessionId),
+            "timer_start": pending => root.startTimerNow(pending.message, pending.args, pending.sessionId),
             "tasks_create": pending => root.startTaskCreate(pending),
             "tasks_update": pending => root.startTaskMutation(pending, "update"),
             "tasks_complete": pending => root.startTaskMutation(pending, "complete"),
@@ -4718,6 +4724,121 @@ Singleton {
         });
     }
 
+    function approveAlarm(message: AiMessageData) {
+        if (!message?.functionPending)
+            return;
+        const card = root.toolCardFor(message, root.toolKeyFor(message));
+        const alarm = card?.data?.alarm;
+        if (!alarm) {
+            root.rejectAlarm(message);
+            return;
+        }
+        root.beginToolExecution(message, "alarm_create", {
+            args: {
+                time: alarm.time,
+                label: alarm.label,
+                days: Array.from(alarm.days ?? []).map((enabled, index) => enabled ? ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][index] : "").filter(day => day.length > 0)
+            }
+        });
+    }
+
+    function createAlarmNow(message: AiMessageData, args: var, sessionId = "") {
+        const key = root.toolKeyFor(message);
+        const result = root.timeIntegration.createAlarm(args);
+        message.functionPending = false;
+        if (!result.ok) {
+            const summary = Translation.tr("The recurring alarm could not be created");
+            root.updateToolCard(message, key, { state: "failed", summary: summary });
+            root.broker.settle(key, {
+                status: "error",
+                summary: summary,
+                data: { error: result.reason ?? "alarmCreateFailed" },
+                retryable: false
+            });
+            return;
+        }
+        root.updateToolCard(message, key, {
+            state: "done",
+            summary: Translation.tr("Recurring alarm created")
+        });
+        root.broker.settle(key, {
+            status: "success",
+            summary: Translation.tr("Recurring alarm created"),
+            data: { alarm: result.alarm },
+            retryable: false
+        });
+    }
+
+    function rejectAlarm(message: AiMessageData) {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, {
+            state: "denied",
+            summary: Translation.tr("Recurring alarm discarded")
+        });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Recurring alarm discarded"),
+            data: Translation.tr("The user chose not to create that recurring alarm.")
+        });
+    }
+
+    function approveTimer(message: AiMessageData) {
+        if (!message?.functionPending)
+            return;
+        const card = root.toolCardFor(message, root.toolKeyFor(message));
+        const timer = card?.data?.timer;
+        if (!timer?.kind) {
+            root.rejectTimer(message);
+            return;
+        }
+        root.beginToolExecution(message, "timer_start", { args: { kind: timer.kind } });
+    }
+
+    function startTimerNow(message: AiMessageData, args: var, sessionId = "") {
+        const key = root.toolKeyFor(message);
+        const result = root.timeIntegration.startTimer(args);
+        message.functionPending = false;
+        if (!result.ok) {
+            const summary = Translation.tr("The timer could not be started");
+            root.updateToolCard(message, key, { state: "failed", summary: summary });
+            root.broker.settle(key, {
+                status: "error",
+                summary: summary,
+                data: { error: result.reason ?? "timerStartFailed" },
+                retryable: false
+            });
+            return;
+        }
+        const summary = result.alreadyRunning === true
+            ? Translation.tr("Timer was already running") : Translation.tr("Timer started");
+        root.updateToolCard(message, key, { state: "done", summary: summary });
+        root.broker.settle(key, {
+            status: "success",
+            summary: summary,
+            data: { timer: result.timer, alreadyRunning: result.alreadyRunning === true },
+            retryable: false
+        });
+    }
+
+    function rejectTimer(message: AiMessageData) {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, {
+            state: "denied",
+            summary: Translation.tr("Timer start discarded")
+        });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Timer start discarded"),
+            data: Translation.tr("The user chose not to start that timer.")
+        });
+    }
+
     function handleFunctionCalls(calls: var, message: AiMessageData) {
         const list = Array.from(calls ?? []).filter(call => call?.name);
         if (list.length === 0)
@@ -4997,12 +5118,64 @@ Singleton {
         return { status: "approval" };
     }
 
+    function toolAlarmCreate(call: var): var {
+        const normalized = root.timeIntegration.normalizeAlarm(call.args);
+        if (!normalized.ok)
+            return {
+                status: "error",
+                summary: Translation.tr("That recurring alarm is not valid"),
+                data: { error: normalized.reason ?? "invalidAlarm" },
+                retryable: true
+            };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "alarm_create",
+            kind: "alarmPreview",
+            state: "pending",
+            summary: Translation.tr("Recurring alarm needs approval"),
+            data: { alarm: normalized.alarm }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
     function toolAlarmsList(call: var): var {
         const alarms = root.timeIntegration.alarms();
         return {
             status: "success",
             summary: alarms.length === 1 ? Translation.tr("1 active alarm") : Translation.tr("%1 active alarms").arg(alarms.length),
             data: { alarms: alarms }
+        };
+    }
+
+    function toolTimerStart(call: var): var {
+        const normalized = root.timeIntegration.normalizeTimer(call.args);
+        if (!normalized.ok)
+            return {
+                status: "error",
+                summary: Translation.tr("That timer is not available"),
+                data: { error: normalized.reason ?? "invalidTimer" },
+                retryable: true
+            };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "timer_start",
+            kind: "timerPreview",
+            state: "pending",
+            summary: normalized.timer.summary,
+            data: { timer: normalized.timer }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function toolTimerStatus(call: var): var {
+        return {
+            status: "success",
+            summary: Translation.tr("Timer status read"),
+            data: root.timeIntegration.timerStatus()
         };
     }
 
@@ -5026,6 +5199,24 @@ Singleton {
             status: "success",
             summary: result.events.length === 1 ? Translation.tr("1 calendar event") : Translation.tr("%1 calendar events").arg(result.events.length),
             data: { events: result.events }
+        };
+    }
+
+    function toolCalendarNextEvent(call: var): var {
+        const result = root.timeIntegration.nextCalendarEvent();
+        if (!result.available)
+            return {
+                status: "unavailable",
+                summary: Translation.tr("The khal calendar is not available"),
+                data: { event: null },
+                retryable: false
+            };
+        return {
+            status: "success",
+            summary: result.event
+                ? (result.event.state === "inProgress" ? Translation.tr("Calendar event in progress") : Translation.tr("Next calendar event"))
+                : Translation.tr("No upcoming calendar event"),
+            data: { event: result.event }
         };
     }
 

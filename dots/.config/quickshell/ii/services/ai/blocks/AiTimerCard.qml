@@ -5,14 +5,13 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 
-/** A local reminder or recurring alarm is shown before it is persisted. */
+/** A Pomodoro or stopwatch starts only after this local preview is approved. */
 Rectangle {
     id: root
 
     property var messageData: null
     property var card: null
-    readonly property bool recurring: root.card?.kind === "alarmPreview"
-    readonly property var reminder: root.card?.data?.reminder ?? root.card?.data?.alarm ?? ({})
+    readonly property var timer: root.card?.data?.timer ?? ({})
 
     implicitHeight: content.implicitHeight + Appearance.rounding.normal
     radius: Appearance.rounding.normal
@@ -30,7 +29,7 @@ Rectangle {
 
             MaterialSymbol {
                 Layout.alignment: Qt.AlignTop
-                text: "alarm_add"
+                text: "timer"
                 iconSize: Appearance.font.pixelSize.larger
                 color: Appearance.m3colors.m3onSecondaryContainer
             }
@@ -41,7 +40,7 @@ Rectangle {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: root.recurring ? Translation.tr("Create this recurring alarm?") : Translation.tr("Create this reminder?")
+                    text: root.timer.alreadyRunning === true ? Translation.tr("This timer is already running") : Translation.tr("Start this timer?")
                     wrapMode: Text.Wrap
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.DemiBold
@@ -50,15 +49,7 @@ Rectangle {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: String(root.reminder.label ?? "")
-                    wrapMode: Text.Wrap
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.m3colors.m3onSecondaryContainer
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: String(root.reminder.displayTime ?? "")
+                    text: String(root.timer.title ?? "")
                     wrapMode: Text.Wrap
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.m3colors.m3onSecondaryContainer
@@ -81,7 +72,7 @@ Rectangle {
                 colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 1)
                 colBackgroundHover: Appearance.colors.colLayer2Hover
                 colRipple: Appearance.colors.colLayer2Active
-                onClicked: root.recurring ? Ai.rejectAlarm(root.messageData) : Ai.rejectReminder(root.messageData)
+                onClicked: Ai.rejectTimer(root.messageData)
 
                 contentItem: StyledText {
                     text: Translation.tr("Discard")
@@ -99,10 +90,10 @@ Rectangle {
                 colBackground: Appearance.colors.colPrimary
                 colBackgroundHover: Appearance.colors.colPrimaryHover
                 colRipple: Appearance.colors.colPrimaryActive
-                onClicked: root.recurring ? Ai.approveAlarm(root.messageData) : Ai.approveReminder(root.messageData)
+                onClicked: Ai.approveTimer(root.messageData)
 
                 contentItem: StyledText {
-                    text: root.recurring ? Translation.tr("Create alarm") : Translation.tr("Create reminder")
+                    text: root.timer.alreadyRunning === true ? Translation.tr("Keep running") : Translation.tr("Start timer")
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colOnPrimary
                 }

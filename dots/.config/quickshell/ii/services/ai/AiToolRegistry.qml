@@ -286,6 +286,34 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "alarm_create",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("Create a recurring alarm"),
+            summary: Translation.tr("Shows a recurring local alarm before saving it."),
+            icon: "alarm_add",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "ask",
+            timeoutMs: 8000,
+            maxResultTokens: 120,
+            idempotent: false,
+            description: "Create a recurring local alarm after the user approves its preview. Use this only for a repeating schedule such as every weekday or every Monday. `time` must be local 24-hour HH:mm. `days` must contain one or more exact weekday names: sunday, monday, tuesday, wednesday, thursday, friday, saturday. Use reminder_create for one specific date or a relative duration.",
+            parameters: {
+                type: "object",
+                properties: {
+                    time: { type: "string", description: "Local 24-hour alarm time in HH:mm" },
+                    label: { type: "string", description: "Short alarm label" },
+                    days: { type: "array", description: "One or more recurring weekdays", items: { type: "string" } }
+                },
+                required: ["time", "label", "days"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "alarms_list",
             version: 1,
             domain: "time",
@@ -301,6 +329,52 @@ Singleton {
             maxResultTokens: 220,
             idempotent: true,
             description: "List at most twenty active local alarms and reminders with their label, local time, optional date, and whether they repeat. Nothing is changed.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "timer_start",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("Start a timer"),
+            summary: Translation.tr("Shows the selected Pomodoro or stopwatch before starting it."),
+            icon: "timer",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "none",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "ask",
+            timeoutMs: 8000,
+            maxResultTokens: 120,
+            idempotent: false,
+            description: "Start or resume one built-in timer after approval. `pomodoro` follows the existing configured focus and break durations; `stopwatch` counts upward. Do not use this for an arbitrary countdown or to pause, reset, or edit a timer.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "Exactly `pomodoro` or `stopwatch`" }
+                },
+                required: ["kind"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "timer_status",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("Read timer status"),
+            summary: Translation.tr("Reads the existing Pomodoro and stopwatch state. Nothing is changed."),
+            icon: "timer",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "none",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 180,
+            idempotent: true,
+            description: "Read the state of the shell's existing Pomodoro and stopwatch: whether each is idle, paused or running, plus its remaining or elapsed time. Nothing is changed.",
             parameters: null,
             formats: ["gemini", "openai", "anthropic"],
             needsSearch: false
@@ -330,6 +404,26 @@ Singleton {
                 },
                 required: []
             },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "calendar_next_event",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("Read next calendar event"),
+            summary: Translation.tr("Reads the current or next event from the local khal calendar. Nothing is changed."),
+            icon: "event_upcoming",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 180,
+            idempotent: true,
+            description: "Read the event currently in progress or the next upcoming event from the local khal calendar. This is read-only; do not offer to create or modify calendar events.",
+            parameters: null,
             formats: ["gemini", "openai", "anthropic"],
             needsSearch: false
         },
@@ -1654,6 +1748,10 @@ Singleton {
             return String(args.previewId ?? "");
         case "reminder_create":
             return String(args.label ?? "") + " · " + (args.whenAbsolute ?? `${args.whenRelative ?? ""} min`);
+        case "alarm_create":
+            return String(args.label ?? "") + " · " + String(args.time ?? "");
+        case "timer_start":
+            return String(args.kind ?? "");
         case "tasks_list":
             return String(args.provider ?? "default") + " · " + String(args.listId ?? "default list");
         case "tasks_search":

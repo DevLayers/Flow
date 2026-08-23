@@ -1341,7 +1341,10 @@ Item {
                     case "settingsResults":
                         return settingsResultsCard;
                     case "reminderPreview":
+                    case "alarmPreview":
                         return reminderPreviewCard;
+                    case "timerPreview":
+                        return timerPreviewCard;
                     case "memoryFact":
                         return memoryFactCard;
                     case "fileResults":
@@ -1527,6 +1530,15 @@ Item {
                     id: reminderPreviewCard
 
                     AiReminderCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: timerPreviewCard
+
+                    AiTimerCard {
                         messageData: root.messageData
                         card: cardHost.card
                     }
