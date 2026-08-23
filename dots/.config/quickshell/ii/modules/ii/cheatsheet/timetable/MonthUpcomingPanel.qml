@@ -98,6 +98,35 @@ Item {
     }
 
     readonly property int upcomingCount: root.rows.filter(row => row.rowType === "event" || row.rowType === "birthday" || row.rowType === "task").length
+    // The rail has one visual focal point: an event already in progress wins;
+    // otherwise it is the earliest future event. The key is computed from the
+    // rows so recurring occurrences remain distinct from one another.
+    readonly property string featuredEventRowKey: {
+        const now = DateTime.clock.date;
+        const nowMs = now.getTime();
+        let current = null;
+        let next = null;
+
+        for (const row of root.rows) {
+            if (row?.rowType !== "event" || !row.event?.startDate)
+                continue;
+            const event = row.event;
+            const startMs = event.startDate.getTime();
+            const endMs = (event.endDate ?? event.startDate).getTime();
+            const allDayToday = CalendarService.isAllDayEvent(event) && H.sameDate(row.date, now);
+            const inProgress = allDayToday || (startMs <= nowMs && endMs >= nowMs);
+
+            if (inProgress) {
+                if (!current || endMs < (current.event.endDate ?? current.event.startDate).getTime())
+                    current = row;
+                continue;
+            }
+            if (startMs > nowMs && (!next || startMs < next.event.startDate.getTime()))
+                next = row;
+        }
+
+        return current?.rowKey ?? next?.rowKey ?? "";
+    }
 
     onEntranceKeyChanged: heroAnim.restart()
 
@@ -360,12 +389,19 @@ Item {
                         sourceComponent: RippleButton {
                             id: eventButton
                             buttonRadius: Appearance.rounding.small
-                            colBackground: Appearance.colors.colLayer1
-                            colBackgroundHover: Appearance.colors.colLayer1Hover
                             onClicked: root.eventActivated(rowItem.modelData.event)
 
                             readonly property color accent: H.chipColor(rowItem.modelData.event, Appearance.colors)
                             readonly property bool allDay: CalendarService.isAllDayEvent(rowItem.modelData.event)
+                            readonly property bool featured: rowItem.modelData.rowKey === root.featuredEventRowKey
+                            readonly property color foreground: featured
+                                ? ColorUtils.getContrastingTextColor(accent)
+                                : Appearance.colors.colOnSurface
+
+                            colBackground: featured ? accent : Appearance.colors.colLayer1
+                            colBackgroundHover: featured
+                                ? ColorUtils.mix(accent, foreground, 0.88)
+                                : Appearance.colors.colLayer1Hover
 
                             contentItem: RowLayout {
                                 anchors.fill: parent
@@ -379,7 +415,9 @@ Item {
                                     Layout.topMargin: 7
                                     Layout.bottomMargin: 7
                                     radius: 2
-                                    color: eventButton.accent
+                                    color: eventButton.featured
+                                        ? ColorUtils.applyAlpha(eventButton.foreground, 0.72)
+                                        : eventButton.accent
                                 }
 
                                 ColumnLayout {
@@ -390,8 +428,8 @@ Item {
                                         Layout.fillWidth: true
                                         text: rowItem.modelData.event.content
                                         font.pixelSize: Appearance.font.pixelSize.smallie
-                                        font.weight: Font.DemiBold
-                                        color: Appearance.colors.colOnSurface
+                                        font.weight: eventButton.featured ? Font.Bold : Font.DemiBold
+                                        color: eventButton.foreground
                                         elide: Text.ElideRight
                                         maximumLineCount: 1
                                     }
@@ -401,7 +439,9 @@ Item {
                                         text: eventButton.allDay ? Translation.tr("All day") : H.eventRangeText(rowItem.modelData.event, Config.options?.time.format)
                                         font.pixelSize: Appearance.font.pixelSize.smallest
                                         font.weight: Font.Medium
-                                        color: Appearance.colors.colOnSurfaceVariant
+                                        color: eventButton.featured
+                                            ? ColorUtils.applyAlpha(eventButton.foreground, 0.78)
+                                            : Appearance.colors.colOnSurfaceVariant
                                         elide: Text.ElideRight
                                         maximumLineCount: 1
                                     }

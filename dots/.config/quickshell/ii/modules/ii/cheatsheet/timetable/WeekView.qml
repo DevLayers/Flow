@@ -210,12 +210,24 @@ Item {
     }
 
     function maybeApplyInitialScroll() {
-        if (root.initialScrollApplied || !styledFlickable || styledFlickable.height <= 0 || !root.days || root.days.length === 0) {
-            Qt.callLater(root.maybeApplyInitialScroll);
+        if (root.initialScrollApplied)
+            return;
+        if (!styledFlickable || styledFlickable.height <= 0 || !root.days || root.days.length === 0) {
+            initialScrollRetryTimer.restart();
             return;
         }
         root.scrollToCurrentTime();
         root.initialScrollApplied = true;
+    }
+
+    // A Timer belongs to the week view and is destroyed with it. Keeping the
+    // layout retry here avoids a self-perpetuating Qt.callLater callback after
+    // the asynchronously-loaded view has been released.
+    Timer {
+        id: initialScrollRetryTimer
+        interval: Appearance.animation.elementMoveFast.duration
+        repeat: false
+        onTriggered: root.maybeApplyInitialScroll()
     }
 
     function toggleSportsDay(date) {
@@ -412,7 +424,7 @@ Item {
         target: CalendarService
         function onEventsInWeekChanged() {
             root.updateNextEvent();
-            Qt.callLater(root.maybeApplyInitialScroll);
+            root.maybeApplyInitialScroll();
         }
     }
     Connections {
@@ -468,7 +480,7 @@ Item {
         root.restartDayLoading();
         root.updateCurrentTimeLine();
         root.updateNextEvent();
-        Qt.callLater(root.maybeApplyInitialScroll);
+        root.maybeApplyInitialScroll();
     }
 
     // The surface is owned by CheatsheetTimetable so both views sit on the

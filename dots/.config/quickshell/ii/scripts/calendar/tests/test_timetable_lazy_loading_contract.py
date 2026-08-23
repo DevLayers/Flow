@@ -62,6 +62,15 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertIn("asynchronous: true", week)
         self.assertIn("onLoaded: root.advanceDayLoading(index)", week)
 
+    def test_week_initial_scroll_stops_retrying_after_it_is_applied(self) -> None:
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        initial_scroll = week.split("function maybeApplyInitialScroll()", 1)[1].split("function toggleSportsDay", 1)[0]
+
+        self.assertIn("if (root.initialScrollApplied)\n            return;", initial_scroll)
+        self.assertIn("initialScrollRetryTimer.restart()", initial_scroll)
+        self.assertNotIn("Qt.callLater(root.maybeApplyInitialScroll);", initial_scroll)
+        self.assertIn("id: initialScrollRetryTimer", week)
+
     def test_espn_projection_has_a_per_frame_time_budget(self) -> None:
         sports = (ROOT / "services" / "SportsService.qml").read_text(encoding="utf-8")
 

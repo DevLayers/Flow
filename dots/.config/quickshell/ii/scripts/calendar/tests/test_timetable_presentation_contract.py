@@ -87,6 +87,15 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("Notifications.publishInternalNotification", notifier)
         self.assertNotIn("notify-send", notifier)
 
+    def test_upcoming_rail_highlights_the_current_or_next_event(self) -> None:
+        panel = (TIMETABLE / "MonthUpcomingPanel.qml").read_text(encoding="utf-8")
+
+        self.assertIn("readonly property string featuredEventRowKey", panel)
+        self.assertIn("const inProgress = allDayToday ||", panel)
+        self.assertIn("return current?.rowKey ?? next?.rowKey ?? \"\"", panel)
+        self.assertIn("colBackground: featured ? accent : Appearance.colors.colLayer1", panel)
+        self.assertIn("ColorUtils.getContrastingTextColor(accent)", panel)
+
     def test_lineups_use_a_valid_material_apparel_symbol(self) -> None:
         details = (TIMETABLE / "SportsEventDetails.qml").read_text(encoding="utf-8")
 
