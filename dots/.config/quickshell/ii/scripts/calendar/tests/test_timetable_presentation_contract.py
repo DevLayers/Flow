@@ -51,6 +51,17 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("interactive: headerRow.expanded && contentHeight > height", header)
         self.assertIn("Translation.tr(\"%1 more\").arg(String(dayDelegate.hiddenChipCount))", header)
 
+    def test_week_day_columns_shade_pre_dawn_and_evening(self) -> None:
+        day_column = (TIMETABLE / "TimetableDayColumn.qml").read_text(encoding="utf-8")
+
+        self.assertIn("readonly property int sunriseMinutes", day_column)
+        self.assertIn("H.parseTimeToMinutes(Weather.data?.sunrise", day_column)
+        self.assertIn("readonly property int sunsetMinutes", day_column)
+        self.assertIn("readonly property bool hasSolarTimes", day_column)
+        self.assertIn("id: preDawnShade", day_column)
+        self.assertIn("id: eveningShade", day_column)
+        self.assertEqual(day_column.count("color: H.withOpacity(Appearance.colors.colLayer0, 0.22)"), 2)
+
     def test_month_density_modes_are_persistent_and_reduce_cell_chrome(self) -> None:
         persistent = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
         month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")

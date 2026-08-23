@@ -64,11 +64,36 @@ Item {
     clip: true
 
     readonly property var timedEvents: H.getTimedEvents(dayData.events)
+    readonly property int sunriseMinutes: H.parseTimeToMinutes(Weather.data?.sunrise ?? "") ?? -1
+    readonly property int sunsetMinutes: H.parseTimeToMinutes(Weather.data?.sunset ?? "") ?? -1
+    readonly property bool hasSolarTimes: dayColumn.sunriseMinutes > 0 && dayColumn.sunsetMinutes > dayColumn.sunriseMinutes
+    readonly property int gridStartMinutes: dayColumn.startHour * 60 + dayColumn.startMinute
 
     Rectangle {
         anchors.fill: parent
         radius: Appearance.rounding.windowRounding
         color: isToday ? todayHighlightFill : dayIdx % 2 == 0 ? dayBackgroundFill : dayBackgroundFillVariant
+    }
+
+    Rectangle {
+        id: preDawnShade
+        visible: dayColumn.hasSolarTimes && height > 0
+        x: 0
+        y: 0
+        width: parent.width
+        height: Math.max(0, Math.min(parent.height, (dayColumn.sunriseMinutes - dayColumn.gridStartMinutes) * dayColumn.pixelsPerMinute))
+        color: H.withOpacity(Appearance.colors.colLayer0, 0.22)
+    }
+
+    Rectangle {
+        id: eveningShade
+        readonly property real sunsetY: (dayColumn.sunsetMinutes - dayColumn.gridStartMinutes) * dayColumn.pixelsPerMinute
+        visible: dayColumn.hasSolarTimes && height > 0
+        x: 0
+        y: Math.max(0, Math.min(parent.height, sunsetY))
+        width: parent.width
+        height: Math.max(0, parent.height - y)
+        color: H.withOpacity(Appearance.colors.colLayer0, 0.22)
     }
 
     // ─── Drag-to-create MouseArea ─────────────
