@@ -335,6 +335,7 @@ Item {
                 validGames.push({
                     id: event.id,
                     name: event.name,
+                    date: event.date,
                     league: event.leagueName,
                     status: (comp.status && comp.status.type && comp.status.type.state === "pre")
                         ? formatMatchTime(event.date)

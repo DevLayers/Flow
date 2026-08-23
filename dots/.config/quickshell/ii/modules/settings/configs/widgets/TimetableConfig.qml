@@ -2,12 +2,14 @@ import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 ContentPage {
     id: root
 
     forceWidth: false
     property bool showBackButton: false
+    property string subscriptionDraft: ""
     signal goBack()
 
     function toggleOffset(offset, checked) {
@@ -171,6 +173,129 @@ ContentPage {
                         { displayName: Translation.tr("Cyan"), value: "light cyan" },
                         { displayName: Translation.tr("Yellow"), value: "yellow" }
                     ]
+                }
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "calendar_add_on"
+        title: Translation.tr("Subscribed calendars")
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("Add a public ICS URL for a read-only calendar. II manages only its own vdirsyncer and khal sections; your existing configuration stays intact.")
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnLayer1
+            wrapMode: Text.Wrap
+        }
+
+        ConfigTextField {
+            id: subscriptionInput
+            Layout.fillWidth: true
+            icon: "link"
+            text: Translation.tr("Calendar ICS URL")
+            placeholderText: "https://…/calendar.ics"
+            inputText: root.subscriptionDraft
+            textField.onTextChanged: root.subscriptionDraft = textField.text
+            textField.onAccepted: addSubscriptionButton.addDraft()
+        }
+
+        WarningBox {
+            Layout.fillWidth: true
+            visible: CalendarSubscriptions.lastError.length > 0
+            text: CalendarSubscriptions.lastError
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+
+            StyledText {
+                Layout.fillWidth: true
+                text: CalendarSubscriptions.applying
+                    ? Translation.tr("Updating calendar configuration…")
+                    : (CalendarSubscriptions.syncInProgress
+                        ? Translation.tr("Synchronizing subscribed calendars…")
+                        : Translation.tr("Subscribed calendars are always read-only."))
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnLayer1
+                wrapMode: Text.Wrap
+            }
+
+            RippleButtonWithIcon {
+                id: addSubscriptionButton
+                implicitHeight: 40
+                mainText: Translation.tr("Add URL")
+                materialIcon: "add"
+                colText: Appearance.colors.colOnPrimaryContainer
+                colBackground: Appearance.colors.colPrimaryContainer
+                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                colRipple: Appearance.colors.colPrimaryContainerActive
+                enabled: !CalendarSubscriptions.applying && root.subscriptionDraft.trim().length > 0
+
+                function addDraft() {
+                    if (CalendarSubscriptions.addSubscription(root.subscriptionDraft)) {
+                        root.subscriptionDraft = "";
+                        subscriptionInput.textField.clear();
+                    }
+                }
+
+                onClicked: addDraft()
+            }
+        }
+
+        Repeater {
+            model: Config.options.calendar.timetable.subscriptions
+
+            delegate: Rectangle {
+                required property string modelData
+                Layout.fillWidth: true
+                implicitHeight: 48
+                radius: Appearance.rounding.small
+                color: Appearance.colors.colLayer2
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 6
+                    spacing: 8
+
+                    MaterialSymbol {
+                        text: "cloud_download"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colPrimary
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: modelData
+                        elide: Text.ElideMiddle
+                        maximumLineCount: 1
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnLayer2
+                    }
+
+                    RippleButton {
+                        id: removeSubscriptionButton
+                        implicitWidth: 36
+                        implicitHeight: 36
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: "transparent"
+                        colBackgroundHover: Appearance.colors.colErrorContainer
+                        onClicked: CalendarSubscriptions.removeSubscription(modelData)
+
+                        contentItem: MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "close"
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: removeSubscriptionButton.hovered ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledToolTip {
+                            extraVisibleCondition: removeSubscriptionButton.hovered
+                            text: Translation.tr("Remove subscribed calendar")
+                        }
+                    }
                 }
             }
         }

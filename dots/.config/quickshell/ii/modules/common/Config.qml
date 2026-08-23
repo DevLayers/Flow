@@ -3032,6 +3032,7 @@ Singleton {
                     property bool showInMonthView: true
                 }
                 property JsonObject timetable: JsonObject {
+                    property list<string> subscriptions: []
                     property JsonObject notifications: JsonObject {
                         property bool enable: true
                         property list<string> offsets: ["-15m"]

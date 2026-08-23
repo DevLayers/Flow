@@ -361,6 +361,7 @@ Singleton {
                             "color": eventColor,
                             "description": event['description'] ?? "",
                             "calendar": event['calendar'] || '',
+                            "readOnly": root.isCalendarReadOnly(event['calendar']),
                             "uid": event['uid'] || '',
                             "url": event['url'] ?? "",
                             "location": event['location'] ?? "",
@@ -445,7 +446,12 @@ Singleton {
             root.calendars = reply.calendars ?? [];
             const writable = root.calendars.find(calendar => !calendar.readOnly);
             root.defaultCalendar = writable?.name ?? "";
+            root.loadEvents();
         });
+    }
+
+    function isCalendarReadOnly(name) {
+        return root.calendars.some(calendar => calendar.name === String(name ?? "") && calendar.readOnly === true);
     }
 
     Process {

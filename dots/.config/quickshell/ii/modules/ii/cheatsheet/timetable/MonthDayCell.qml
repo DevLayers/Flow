@@ -41,6 +41,45 @@ Item {
     readonly property bool isWeekend: root.cellData?.isWeekend ?? false
     readonly property bool isHoliday: (root.holidays?.length ?? 0) > 0
     readonly property string holidayLabel: root.isHoliday ? (root.holidays[0].localName || root.holidays[0].name || "") : ""
+    readonly property var forecast: {
+        const key = H.dayKeyOf(root.cellData?.date);
+        return (Weather.forecastData ?? []).find(day => String(day?.date ?? "") === key) ?? null;
+    }
+    readonly property var sportEvents: {
+        const result = [];
+        for (const game of (SportsService.allGames ?? [])) {
+            const start = new Date(game?.date);
+            if (isNaN(start.getTime()) || !H.sameDate(start, root.cellData?.date))
+                continue;
+            result.push({
+                content: String(game?.name ?? Translation.tr("Sport")),
+                description: String(game?.league ?? ""),
+                startDate: start,
+                endDate: new Date(start.getTime() + 2 * 60 * 60 * 1000),
+                calendar: Translation.tr("Sports"),
+                colorToken: "tertiary",
+                readOnly: true,
+                sportEvent: true,
+                allDay: false
+            });
+        }
+        return result;
+    }
+
+    function weatherSymbol(code) {
+        const value = Number(code);
+        if (value === 113)
+            return "wb_sunny";
+        if (value === 116)
+            return "partly_cloudy_day";
+        if ([119, 122, 143, 248].includes(value))
+            return "cloud";
+        if ([326, 332, 338, 368].includes(value))
+            return "weather_snowy";
+        if ([386, 389].includes(value))
+            return "thunderstorm";
+        return "rainy";
+    }
 
     readonly property real headerHeight: 30
     readonly property real chipSpacing: 3
@@ -55,6 +94,8 @@ Item {
         const result = [];
         for (const eventData of (root.events ?? []))
             result.push({ kind: "event", data: eventData });
+        for (const sportData of root.sportEvents)
+            result.push({ kind: "sport", data: sportData });
         for (const taskData of (root.tasks ?? []))
             result.push({ kind: "task", data: taskData });
         return result;
@@ -171,7 +212,7 @@ Item {
             visible: root.isHoliday && root.width > 96
             anchors {
                 left: dayBadge.right
-                right: addButton.left
+                right: weatherIcon.left
                 leftMargin: 6
                 rightMargin: 4
                 verticalCenter: parent.verticalCenter
@@ -183,6 +224,33 @@ Item {
             font.weight: Font.Bold
             color: Appearance.colors.colOnTertiaryContainer
             opacity: root.inMonth ? 1 : 0.55
+        }
+
+        MaterialSymbol {
+            id: weatherIcon
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: addButton.left
+            anchors.rightMargin: 4
+            visible: root.inMonth && root.forecast !== null && root.width > 92
+            text: root.weatherSymbol(root.forecast?.code)
+            iconSize: Appearance.font.pixelSize.normal
+            color: Appearance.colors.colOnSurfaceVariant
+
+            HoverHandler {
+                id: weatherHover
+            }
+
+            StyledToolTip {
+                extraVisibleCondition: weatherHover.hovered
+                text: {
+                    const forecast = root.forecast;
+                    if (!forecast)
+                        return "";
+                    return Translation.tr("Forecast · %1° / %2°")
+                        .arg(String(forecast.minC ?? ""))
+                        .arg(String(forecast.maxC ?? ""));
+                }
+            }
         }
 
         RippleButton {
@@ -241,17 +309,21 @@ Item {
 
                 MonthEventChip {
                     anchors.fill: parent
-                    visible: parent.modelData.kind === "event"
+                    visible: parent.modelData.kind === "event" || parent.modelData.kind === "sport"
                     eventData: parent.modelData.data
                     allDay: CalendarService.isAllDayEvent(parent.modelData.data)
                     compact: root.compactChips
+                    dragEnabled: parent.modelData.data?.readOnly !== true
                     coordinateRoot: root.coordinateRoot
                     dragging: root.draggedEvent === parent.modelData.data
                     entranceKey: root.entranceKey
                     entranceIndex: parent.index
                     opacity: root.inMonth ? 1 : 0.6
 
-                    onActivated: root.eventActivated(parent.modelData.data)
+                    onActivated: {
+                        if (parent.modelData.data?.readOnly !== true)
+                            root.eventActivated(parent.modelData.data);
+                    }
                     onDragBegan: (evt, x, y, w, h) => root.eventDragBegan(evt, x, y, w, h)
                     onDragMoved: (x, y) => root.eventDragMoved(x, y)
                     onDragEnded: root.eventDragEnded()

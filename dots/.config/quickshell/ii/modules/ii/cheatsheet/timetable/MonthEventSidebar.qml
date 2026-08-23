@@ -319,6 +319,7 @@ Item {
     readonly property bool isDayToday: H.sameDate(root.day, DateTime.clock.date)
 
     readonly property bool eventAllDay: root.event ? CalendarService.isAllDayEvent(root.event) : false
+    readonly property bool eventReadOnly: root.event?.readOnly === true
     readonly property int eventStartMinutes: root.event ? root.event.startDate.getHours() * 60 + root.event.startDate.getMinutes() : 0
     readonly property int eventEndMinutes: root.event ? root.event.endDate.getHours() * 60 + root.event.endDate.getMinutes() : 0
 
@@ -713,6 +714,12 @@ Item {
                                 spacing: 6
 
                                 InfoChip {
+                                    visible: root.eventReadOnly
+                                    symbol: "lock"
+                                    label: Translation.tr("Read-only")
+                                }
+
+                                InfoChip {
                                     symbol: "calendar_month"
                                     label: Qt.formatDate(root.event?.startDate ?? root.day, "ddd, d MMM yyyy")
                                 }
@@ -769,6 +776,7 @@ Item {
 
                     ColumnLayout {
                         id: detailsActions
+                        visible: !root.eventReadOnly
                         anchors {
                             left: parent.left
                             right: parent.right

@@ -47,6 +47,7 @@ ShellRoot {
         VideoColorSampler.active; // Touch singleton to initialize
         WaterReminderService.enabled; // Touch singleton: drives water reminder notifications
         CalendarNotifier.enabled; // Touch singleton: evaluates calendar VALARMs every minute
+        CalendarSubscriptions.enabled; // Touch singleton: keeps managed read-only ICS subscriptions reconciled
         GoogleDriveService.configured; // Touch singleton: keeps scheduled backups independent of Settings
         AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
         Modes.ready; // Touch singleton: the modes engine must watch triggers whether or not its overlay is open
