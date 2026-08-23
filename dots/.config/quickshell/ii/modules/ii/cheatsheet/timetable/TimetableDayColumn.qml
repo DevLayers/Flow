@@ -63,7 +63,6 @@ Item {
     height: contentHeight
     clip: true
 
-    readonly property var timedEvents: H.getTimedEvents(dayData.events)
     readonly property int sunriseMinutes: H.parseTimeToMinutes(Weather.data?.sunrise ?? "") ?? -1
     readonly property int sunsetMinutes: H.parseTimeToMinutes(Weather.data?.sunset ?? "") ?? -1
     readonly property bool hasSolarTimes: dayColumn.sunriseMinutes > 0 && dayColumn.sunsetMinutes > dayColumn.sunriseMinutes
@@ -246,7 +245,7 @@ Item {
 
     // ─── Existing event blocks ────────────────
     Repeater {
-        model: H.computeEventLayout(dayData.events, H.parseTimeToMinutes)
+        model: H.computeEventLayout(dayData.events, event => CalendarService.isAllDayEvent(event))
         delegate: EventBlock {
             eventData: modelData.event
             colIndex: modelData.colIndex
@@ -257,7 +256,7 @@ Item {
             startHour: dayColumn.startHour
             startMinute: dayColumn.startMinute
             coordinateRoot: dayColumn.coordinateRoot
-            manipulating: dayColumn.draggedEvent === (modelData.event.sourceEvent ?? modelData.event)
+            manipulating: dayColumn.draggedEvent === modelData.event
             onEditRequested: (evt, dIdx) => dayColumn.editRequested(evt, dIdx)
             onDeleteRequested: (evt, dIdx) => dayColumn.deleteRequested(evt, dIdx)
             onMoveDragStarted: (evt, x, y, offsetY) => dayColumn.eventMoveStarted(evt, x, y, offsetY)

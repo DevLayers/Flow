@@ -55,41 +55,32 @@ function withOpacity(colorValue, alpha) {
     return Qt.rgba(color.r, color.g, color.b, alpha);
 }
 
-function isAllDayEvent(event) {
-    if (!event) return false;
-    let start = event.start || "";
-    let end = event.end || "";
-    // Common patterns for all-day events
-    return (start === "00:00" && end === "23:59") ||
-        (start === "00:00" && end === "00:00") ||
-        (start === "00:00" && end === "24:00") ||
-        (!event.start && !event.end);
+function eventStartMinutes(event) {
+    if (!event?.startDate)
+        return null;
+    return event.startDate.getHours() * 60 + event.startDate.getMinutes();
 }
 
-function getAllDayEvents(events) {
-    if (!events || !events.length) return [];
-    return events.filter(evt => isAllDayEvent(evt));
+function eventEndMinutes(event) {
+    if (!event?.endDate)
+        return null;
+    const start = eventStartMinutes(event);
+    let end = event.endDate.getHours() * 60 + event.endDate.getMinutes();
+    if (end <= start && start > 0)
+        end = 24 * 60;
+    return end;
 }
 
-function getTimedEvents(events) {
-    if (!events || !events.length) return [];
-    return events.filter(evt => !isAllDayEvent(evt));
-}
-
-function computeEventLayout(events, parseFn) {
+function computeEventLayout(events, isAllDayFn) {
     if (!events || events.length === 0) return [];
 
-    // Use internal parse function if not provided
-    let parse = parseFn || parseTimeToMinutes;
+    const isAllDay = isAllDayFn || (event => event?.allDay === true);
 
     // 1. Prepare and sort timed events
-    let timedEvents = events.filter(e => !isAllDayEvent(e)).map(e => {
-        let start = parse(e.start);
-        let end = parse(e.end);
+    let timedEvents = events.filter(e => !isAllDay(e)).map(e => {
+        let start = eventStartMinutes(e);
+        let end = eventEndMinutes(e);
         if (start === null || end === null) return null;
-
-        // Handle midnight wrap
-        if (end === 0 && start > 0) end = 24 * 60;
 
         return {
             event: e,
@@ -274,12 +265,6 @@ function eventRangeText(event, format) {
     if (!event || !event.startDate || !event.endDate)
         return "";
     return Qt.formatTime(event.startDate, format || "hh:mm") + " – " + Qt.formatTime(event.endDate, format || "hh:mm");
-}
-
-function khalTimeOf(date) {
-    if (!date)
-        return "00:00";
-    return pad2(date.getHours()) + ":" + pad2(date.getMinutes());
 }
 
 // Resolve persisted color identifiers into the current Material You palette.

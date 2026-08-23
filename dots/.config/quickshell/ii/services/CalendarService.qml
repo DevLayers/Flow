@@ -18,45 +18,6 @@ Singleton {
     readonly property string homePath: String(StandardPaths.standardLocations(StandardPaths.HomeLocation)[0]).replace("file://", "")
     property bool khalAvailable: false
     property var events: []
-    property var weekdays: [Translation.tr("Sunday"), Translation.tr("Monday"), Translation.tr("Tuesday"), Translation.tr("Wednesday"), Translation.tr("Thursday"), Translation.tr("Friday"), Translation.tr("Saturday"),]
-    property var sortedWeekdays: root.weekdays.map((_, i) => weekdays[(i + Config.options.time.firstDayOfWeek + 1) % 7])
-    property var eventsInWeek: [
-        {
-            name: sortedWeekdays[0],
-            events: [
-                {
-                    title: "Example: You need to install khal to view events",
-                    start: "7:30",
-                    end: "9:20",
-                    color: Appearance.m3colors.m3error
-                },
-            ]
-        },
-        {
-            name: sortedWeekdays[1],
-            events: []
-        },
-        {
-            name: sortedWeekdays[2],
-            events: []
-        },
-        {
-            name: sortedWeekdays[3],
-            events: []
-        },
-        {
-            name: sortedWeekdays[4],
-            events: []
-        },
-        {
-            name: sortedWeekdays[5],
-            events: []
-        },
-        {
-            name: sortedWeekdays[6],
-            events: []
-        }
-    ]
 
     // Directories holding the .ics files of every configured khal calendar.
     // Read from khal's own config so deletion works wherever the user keeps their calendars.
@@ -124,45 +85,6 @@ Singleton {
         }
 
         return res;
-    }
-
-    function getEventsInWeek() {
-        let result = [];
-        const now = new Date();
-        const currentConfiguredDayIndex = (now.getDay() - Config.options.time.firstDayOfWeek + 6) % 7;
-
-        for (let i = 0; i < root.weekdays.length; i++) {
-            const d = new Date(now);
-            if (Config.options.cheatsheet.timetableTodayFirst) {
-                d.setDate(d.getDate() + i);
-            } else {
-                d.setDate(d.getDate() - currentConfiguredDayIndex + i);
-            }
-            const events = this.getTasksByDate(d);
-            const name_weekday = root.weekdays[d.getDay()];
-            let obj = {
-                "name": name_weekday,
-                "events": []
-            };
-            events.forEach((evt, i) => {
-                let start_time = Qt.formatDateTime(evt["startDate"], "hh:mm");
-                let end_time = Qt.formatDateTime(evt["endDate"], "hh:mm");
-                let title = evt["content"];
-                obj["events"].push({
-                    "start": start_time,
-                    "end": end_time,
-                    "title": title,
-                    "color": evt['color'],
-                    "description": evt['description'],
-                    "uid": evt['uid'],
-                    "calendar": evt['calendar'],
-                    "sourceEvent": evt
-                });
-            });
-            result.push(obj);
-        }
-
-        return result;
     }
 
     // Simple color list for events
@@ -377,7 +299,6 @@ Singleton {
                     }
                 }
                 root.events = events;
-                root.eventsInWeek = root.getEventsInWeek();
             }
         }
         onExited: {
@@ -648,17 +569,4 @@ Singleton {
         icsImportProcess.running = true;
     }
 
-    Connections {
-        target: Config.options.cheatsheet
-        function onTimetableTodayFirstChanged() {
-            root.eventsInWeek = root.getEventsInWeek();
-        }
-    }
-
-    Connections {
-        target: Config.options.time
-        function onFirstDayOfWeekChanged() {
-            root.eventsInWeek = root.getEventsInWeek();
-        }
-    }
 }

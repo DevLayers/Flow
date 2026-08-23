@@ -188,11 +188,28 @@ class TimetablePresentationContractTests(unittest.TestCase):
         header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")
 
         self.assertIn("function chipColor(event, palette)", helper)
-        self.assertIn("H.chipColor(eventData?.sourceEvent ?? eventData, Appearance.colors)", block)
-        self.assertIn("H.chipColor(modelData?.sourceEvent ?? modelData, Appearance.colors)", header)
+        self.assertIn("H.chipColor(eventData, Appearance.colors)", block)
+        self.assertIn("H.chipColor(modelData, Appearance.colors)", header)
         self.assertIn("H.chipColor(root.timedMutationEvent, Appearance.colors)", week)
         self.assertNotIn("getEventColorRadial", helper + week + block)
         self.assertNotIn("maxLogicalDistance", week + block)
+
+    def test_week_and_month_consume_the_same_calendar_event_dto(self) -> None:
+        calendar = (ROOT / "services" / "CalendarService.qml").read_text(encoding="utf-8")
+        helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        block = (TIMETABLE / "EventBlock.qml").read_text(encoding="utf-8")
+        header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")
+        column = (TIMETABLE / "TimetableDayColumn.qml").read_text(encoding="utf-8")
+
+        self.assertIn("events: calendarEvents?.[H.dayKeyOf(date)] ?? []", week)
+        self.assertIn("function eventStartMinutes(event)", helper)
+        self.assertIn("function eventEndMinutes(event)", helper)
+        self.assertIn("H.eventStartMinutes(eventData)", block)
+        self.assertIn("CalendarService.isAllDayEvent(event)", week + header + column)
+        self.assertNotIn("sourceEvent", week + block + header + column)
+        self.assertNotIn("property var eventsInWeek", calendar)
+        self.assertNotIn("function getEventsInWeek()", calendar)
 
     def test_week_surfaces_do_not_use_rectangle_borders(self) -> None:
         for name in ("EventBlock.qml", "TimetableDayColumn.qml", "TimetableHeader.qml", "TimetableNextEventFAB.qml"):

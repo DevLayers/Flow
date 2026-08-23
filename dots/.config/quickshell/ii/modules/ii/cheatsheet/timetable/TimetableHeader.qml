@@ -79,7 +79,7 @@ Row {
             width: dayColumnWidth
             height: headerHeight
 
-            readonly property var allDayEvents: H.getAllDayEvents(modelData.events)
+            readonly property var allDayEvents: (modelData.events ?? []).filter(event => CalendarService.isAllDayEvent(event))
             readonly property int sportsCount: Number(modelData.sportsCount ?? 0)
             readonly property date sportsDate: modelData.sportsDate ?? new Date()
             readonly property var forecast: {
@@ -256,7 +256,7 @@ Row {
                         delegate: Rectangle {
                             width: allDayChipColumn.width
                             height: allDayChipHeight
-                            color: H.chipColor(modelData?.sourceEvent ?? modelData, Appearance.colors)
+                            color: H.chipColor(modelData, Appearance.colors)
                             radius: Appearance.rounding.verysmall
 
                             StyledText {
@@ -265,7 +265,7 @@ Row {
                                 anchors.rightMargin: 8
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignHCenter
-                                text: modelData.title
+                                text: modelData.content ?? Translation.tr("Event")
                                 font.pixelSize: Appearance.font.pixelSize.smallest
                                 font.weight: Font.Medium
                                 color: ColorUtils.getContrastingTextColor(parent.color)
@@ -274,7 +274,7 @@ Row {
 
                             StyledToolTip {
                                 extraVisibleCondition: allDayChipHover.hovered
-                                text: Translation.tr("All day event:") + "\n" + modelData.title
+                                text: Translation.tr("All day event:") + "\n" + (modelData.content ?? Translation.tr("Event"))
                             }
 
                             HoverHandler {

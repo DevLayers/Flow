@@ -79,8 +79,8 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertNotIn("root.restartDayLoading();", preferences)
         self.assertEqual(week.count("root.restartDayLoading();"), 2)
         self.assertGreaterEqual(week.count("root.refreshVisibleRange();"), 2)
-        self.assertIn("function onFirstDayOfWeekChanged()", calendar)
-        self.assertIn("root.eventsInWeek = root.getEventsInWeek();", calendar)
+        self.assertNotIn("property var eventsInWeek", calendar)
+        self.assertNotIn("function getEventsInWeek()", calendar)
 
     def test_week_view_excludes_task_projection(self) -> None:
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")

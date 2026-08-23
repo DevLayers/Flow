@@ -97,20 +97,10 @@ Item {
         const result = [];
         for (let i = 0; i < root.visibleDayCount; i++) {
             const date = H.addDays(root.viewWeekStart, i);
-            const sourceEvents = calendarEvents?.[H.dayKeyOf(date)] ?? [];
-            const events = sourceEvents.map(event => {
-                const allDay = CalendarService.isAllDayEvent(event);
-                return Object.assign({}, event, {
-                    start: allDay ? "00:00" : H.khalTimeOf(event.startDate),
-                    end: allDay ? "23:59" : H.khalTimeOf(event.endDate),
-                    title: event.content ?? Translation.tr("Event"),
-                    sourceEvent: event
-                });
-            });
             const games = root.sportsEnabled && Array.isArray(sportsGames) ? SportsService.gamesForDate(date) : [];
             result.push({
                 name: Qt.formatDate(date, "dddd"),
-                events: events,
+                events: calendarEvents?.[H.dayKeyOf(date)] ?? [],
                 sportsDate: date,
                 sportsCount: games.length
             });
@@ -125,7 +115,7 @@ Item {
         let maxCount = 0;
         for (let i = 0; i < root.days.length; i++) {
             const sportsCount = Number(root.days[i]?.sportsCount ?? 0) > 0 ? 1 : 0;
-            const count = H.getAllDayEvents(root.days[i]?.events).length + sportsCount;
+            const count = (root.days[i]?.events ?? []).filter(event => CalendarService.isAllDayEvent(event)).length + sportsCount;
             if (count > maxCount)
                 maxCount = count;
         }
@@ -173,13 +163,13 @@ Item {
         let nextEvt = null;
 
         for (let i = 0; i < root.days.length; i++) {
-            let events = H.getTimedEvents(root.days[i]?.events);
+            let events = (root.days[i]?.events ?? []).filter(event => !CalendarService.isAllDayEvent(event));
             for (let evt of events) {
-                let startMins = H.parseTimeToMinutes(evt.start);
-                let endMins = H.parseTimeToMinutes(evt.end);
+                let startMins = H.eventStartMinutes(evt);
+                let endMins = H.eventEndMinutes(evt);
                 if (startMins === null)
                     continue;
-                if (endMins === null || (endMins === 0 && startMins > 0))
+                if (endMins === null)
                     endMins = 24 * 60;
 
                 let evtStartTotal = i * 24 * 60 + startMins;
@@ -202,8 +192,8 @@ Item {
         if (!nextEvt) {
             let earliestTotal = Infinity;
             for (let i = 0; i < root.days.length; i++) {
-                for (let evt of H.getTimedEvents(root.days[i]?.events)) {
-                    let startMins = H.parseTimeToMinutes(evt.start);
+                for (let evt of (root.days[i]?.events ?? []).filter(event => !CalendarService.isAllDayEvent(event))) {
+                    let startMins = H.eventStartMinutes(evt);
                     if (startMins === null)
                         continue;
                     let evtStartTotal = i * 24 * 60 + startMins;
@@ -212,7 +202,7 @@ Item {
                         nextEvt = {
                             dayIndex: i,
                             startMinutes: startMins,
-                            endMinutes: H.parseTimeToMinutes(evt.end)
+                            endMinutes: H.eventEndMinutes(evt)
                         };
                     }
                 }
@@ -432,14 +422,6 @@ Item {
         return date.getHours() * 60 + date.getMinutes();
     }
 
-    function eventEndMinutes(event) {
-        const start = root.eventMinutes(event.startDate);
-        let end = root.eventMinutes(event.endDate);
-        if (end <= start)
-            end = 24 * 60;
-        return end;
-    }
-
     function dayIndexForDate(date) {
         for (let index = 0; index < root.days.length; index++) {
             if (H.sameDate(root.days[index]?.sportsDate, date))
@@ -473,7 +455,7 @@ Item {
         root.timedMutationKind = "move";
         root.timedMutationPointerOffsetY = pointerOffsetY;
         root.timedMutationStartMinutes = root.eventMinutes(event.startDate);
-        root.timedMutationEndMinutes = root.eventEndMinutes(event);
+        root.timedMutationEndMinutes = H.eventEndMinutes(event) ?? root.timedMutationStartMinutes;
         root.timedMutationDayIndex = dayIndex;
         root.updateEventMove(x, y);
     }
@@ -500,7 +482,7 @@ Item {
         root.timedMutationEvent = event;
         root.timedMutationKind = "resize";
         root.timedMutationStartMinutes = root.eventMinutes(event.startDate);
-        root.timedMutationEndMinutes = root.eventEndMinutes(event);
+        root.timedMutationEndMinutes = H.eventEndMinutes(event) ?? root.timedMutationStartMinutes;
         root.timedMutationDayIndex = dayIndex;
         root.updateEventResize(x, y);
     }
@@ -567,7 +549,7 @@ Item {
             eventSidebar.showEvent(event);
             return;
         }
-        eventSidebar.startEdit(event.sourceEvent ?? event);
+        eventSidebar.startEdit(event);
     }
 
     function applySidebarPayload(payload) {

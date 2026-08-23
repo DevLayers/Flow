@@ -38,27 +38,17 @@ Rectangle {
     readonly property bool sportEvent: eventData?.sportEvent === true
     readonly property bool readOnly: eventData?.readOnly === true
     readonly property string meetingUrl: {
-        const sourceEvent = eventData?.sourceEvent ?? eventData;
-        const url = String(sourceEvent?.url ?? "").trim();
+        const url = String(eventData?.url ?? "").trim();
         if (url.length === 0)
             return "";
         return String(EmailDetections.detectAll(url).meetings[0]?.url ?? "");
     }
     readonly property color semanticColor: eventBlock.sportEvent
         ? Appearance.colors.colTertiaryContainer
-        : H.chipColor(eventData?.sourceEvent ?? eventData, Appearance.colors)
+        : H.chipColor(eventData, Appearance.colors)
 
-    readonly property int eventStartMinutes: {
-        let parts = eventData.start.split(":");
-        return parseInt(parts[0]) * 60 + parseInt(parts[1]);
-    }
-    readonly property int eventEndMinutes: {
-        let parts = eventData.end.split(":");
-        let endTotal = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-        if (endTotal === 0 && eventStartMinutes > 0)
-            endTotal = 24 * 60;
-        return endTotal;
-    }
+    readonly property int eventStartMinutes: H.eventStartMinutes(eventData) ?? 0
+    readonly property int eventEndMinutes: H.eventEndMinutes(eventData) ?? eventStartMinutes
 
     // Overlap layout
     width: (parent.width - 10) / totalCols - 2
@@ -95,10 +85,10 @@ Rectangle {
     StyledToolTip {
         extraVisibleCondition: eventHover.hovered
         text: {
-            let title = eventData.title || qsTr("Event");
+            let title = eventData.content || qsTr("Event");
             let description = eventData.description || "";
-            let startStr = H.minutesToTimeStr(eventStartMinutes, Config.options?.time.format) || eventData.start || "";
-            let endStr = H.minutesToTimeStr(eventEndMinutes, Config.options?.time.format) || eventData.end || "";
+            let startStr = H.minutesToTimeStr(eventStartMinutes, Config.options?.time.format);
+            let endStr = H.minutesToTimeStr(eventEndMinutes, Config.options?.time.format);
             let range = startStr && endStr ? startStr + " - " + endStr : startStr || endStr;
             return range ? description ? "•  " + title + "\n•  " + range + "\n•  " + description : "•  " + title + "\n•  " + range : "•  " + title;
         }
@@ -139,7 +129,7 @@ Rectangle {
                 if (Math.abs(mouse.x - eventPointer.pressX) + Math.abs(mouse.y - eventPointer.pressY) < eventPointer.dragThreshold)
                     return;
                 eventPointer.started = true;
-                eventBlock.moveDragStarted(eventBlock.eventData.sourceEvent ?? eventBlock.eventData, point.x, point.y, eventPointer.pressY);
+                eventBlock.moveDragStarted(eventBlock.eventData, point.x, point.y, eventPointer.pressY);
             }
             eventBlock.moveDragMoved(point.x, point.y);
         }
@@ -213,7 +203,7 @@ Rectangle {
                 if (Math.abs(mouse.y - resizeHandle.pressY) < resizeHandle.dragThreshold)
                     return;
                 resizeHandle.started = true;
-                eventBlock.resizeDragStarted(eventBlock.eventData.sourceEvent ?? eventBlock.eventData, point.x, point.y);
+                eventBlock.resizeDragStarted(eventBlock.eventData, point.x, point.y);
             }
             eventBlock.resizeDragMoved(point.x, point.y);
         }
@@ -255,9 +245,8 @@ Rectangle {
         }
 
         onClicked: {
-            const sourceEvent = eventData.sourceEvent ?? eventData;
-            if (sourceEvent?.uid)
-                eventBlock.deleteRequested(sourceEvent, eventBlock.dayIdx);
+            if (eventData?.uid)
+                eventBlock.deleteRequested(eventData, eventBlock.dayIdx);
         }
 
         contentItem: MaterialSymbol {
@@ -307,7 +296,7 @@ Rectangle {
         z: 1
 
         StyledText {
-            text: eventData.title
+            text: eventData.content ?? Translation.tr("Event")
             font.weight: Font.DemiBold
             elide: Text.ElideRight
             width: parent.width - 28
