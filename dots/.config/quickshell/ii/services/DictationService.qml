@@ -55,6 +55,7 @@ Singleton {
     readonly property bool soundFeedback: Config.options?.dictation?.soundFeedback ?? false
     readonly property int maxDurationSecs: Config.options?.dictation?.maxDurationSecs ?? 60
     readonly property int typeDelayMs: Config.options?.dictation?.typeDelayMs ?? 5
+    readonly property bool notifyOnTranscription: Config.options?.dictation?.notifyOnTranscription ?? true
     /** 0 asks for a sensible default; anything else is passed through as-is. */
     readonly property int threads: Config.options?.dictation?.threads ?? 0
     /** Overrides the built-in per-language punctuation sample when set. */
@@ -300,6 +301,12 @@ Singleton {
             // Off by default in voxtype, which means dictating quietly destroys
             // whatever the user had copied.
             "output.restore_clipboard=true",
+            `output.notification.on_transcription=${root.notifyOnTranscription ? "true" : "false"}`,
+            // Start and stop already have the bar pill and the notch; a
+            // notification for each as well would be three announcements of the
+            // same thing.
+            "output.notification.on_recording_start=false",
+            "output.notification.on_recording_stop=false",
             `audio.max_duration_secs=${root.maxDurationSecs}`,
             `audio.pause_media=${root.pauseMedia ? "true" : "false"}`,
             `audio.feedback.enabled=${root.soundFeedback ? "true" : "false"}`];
@@ -654,6 +661,7 @@ Singleton {
         function onMaxDurationSecsChanged() { root.scheduleApply(); }
         function onThreadsChanged() { root.scheduleApply(); }
         function onTypeDelayMsChanged() { root.scheduleApply(); }
+        function onNotifyOnTranscriptionChanged() { root.scheduleApply(); }
         function onPunctuationHintChanged() { root.scheduleApply(); }
         function onEnabledChanged() {
             if (Config.options.dictation.enabled)

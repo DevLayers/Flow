@@ -644,6 +644,18 @@ ContentPage {
         title: Translation.tr("Showing it")
 
         ConfigSwitch {
+            buttonIcon: "notifications"
+            text: Translation.tr("Show the transcribed text in a notification")
+            checked: Config.options.dictation.notifyOnTranscription
+            onCheckedChanged: {
+                Config.options.dictation.notifyOnTranscription = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("The text goes into another window, so this is the one place it can be read back — useful when it lands somewhere unexpected, or when the window scrolled away.")
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "space_bar"
             text: Translation.tr("Microphone in the bar while dictating")
             checked: Config.options.dictation.showIndicator

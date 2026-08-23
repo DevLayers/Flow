@@ -3083,6 +3083,11 @@ Singleton {
                 // with no gap by default, which silently loses characters in
                 // plenty of apps — the words arrive one letter short.
                 property int typeDelayMs: 5
+                // Voxtype's own notification carrying the finished text. Worth
+                // keeping on: with the text pasted into another window, this is
+                // the only place it can be read back if it landed somewhere
+                // unexpected.
+                property bool notifyOnTranscription: true
                 property bool showIndicator: true
                 // Keeps the microphone in the bar while idle, as a click target
                 // for anyone who would rather not reach for the keybind.
