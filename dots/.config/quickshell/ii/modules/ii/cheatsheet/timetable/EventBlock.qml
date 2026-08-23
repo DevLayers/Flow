@@ -37,6 +37,13 @@ Rectangle {
     readonly property bool isNextEvent: nextEventData && nextEventData.dayIndex === dayIdx && nextEventData.startMinutes === eventStartMinutes
     readonly property bool sportEvent: eventData?.sportEvent === true
     readonly property bool readOnly: eventData?.readOnly === true
+    readonly property string meetingUrl: {
+        const sourceEvent = eventData?.sourceEvent ?? eventData;
+        const url = String(sourceEvent?.url ?? "").trim();
+        if (url.length === 0)
+            return "";
+        return String(EmailDetections.detectAll(url).meetings[0]?.url ?? "");
+    }
     readonly property color semanticColor: eventBlock.sportEvent
         ? Appearance.colors.colTertiaryContainer
         : H.chipColor(eventData?.sourceEvent ?? eventData, Appearance.colors)
@@ -259,6 +266,36 @@ Rectangle {
             font.pixelSize: Appearance.font.pixelSize.smallie
             text: "close"
             color: ColorUtils.getContrastingTextColor(eventBlock.color)
+        }
+    }
+
+    // Frequent meeting action: keep it directly on blocks tall enough to
+    // accommodate a secondary affordance without covering their title.
+    RippleButton {
+        id: joinButton
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 4
+        implicitWidth: 28
+        implicitHeight: 28
+        buttonRadius: Appearance.rounding.full
+        buttonColor: H.withOpacity(Appearance.colors.colOnSurface, 0.15)
+        visible: eventBlock.height > 60 && eventBlock.meetingUrl.length > 0 && !eventBlock.manipulating
+        z: 15
+
+        onClicked: Qt.openUrlExternally(eventBlock.meetingUrl)
+
+        contentItem: MaterialSymbol {
+            anchors.centerIn: parent
+            horizontalAlignment: Text.AlignHCenter
+            font.pixelSize: Appearance.font.pixelSize.small
+            text: "videocam"
+            color: ColorUtils.getContrastingTextColor(eventBlock.color)
+        }
+
+        StyledToolTip {
+            extraVisibleCondition: joinButton.hovered
+            text: Translation.tr("Join meeting")
         }
     }
 

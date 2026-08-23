@@ -146,6 +146,15 @@ class TimetablePresentationContractTests(unittest.TestCase):
             self.assertNotIn("border.width", source, name)
             self.assertNotIn("border.color", source, name)
 
+    def test_tall_meeting_blocks_expose_a_direct_join_action(self) -> None:
+        block = (TIMETABLE / "EventBlock.qml").read_text(encoding="utf-8")
+
+        self.assertIn("readonly property string meetingUrl", block)
+        self.assertIn("EmailDetections.detectAll(url).meetings[0]?.url", block)
+        self.assertIn("eventBlock.height > 60 && eventBlock.meetingUrl.length > 0", block)
+        self.assertIn('text: "videocam"', block)
+        self.assertIn("Qt.openUrlExternally(eventBlock.meetingUrl)", block)
+
     def test_color_picker_uses_semantic_hover_tokens(self) -> None:
         helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
         picker = (TIMETABLE / "ColorPickerRow.qml").read_text(encoding="utf-8")
