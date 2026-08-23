@@ -246,16 +246,11 @@ ContentPage {
                             Layout.preferredWidth: 120
                         }
 
-                        TextField {
+                        ToolbarTextField {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 36
                             text: Config.options.search.prefix[modelData.prop]
-                            color: Appearance.colors.colOnSurface
-                            background: Rectangle {
-                                color: Appearance.colors.colSurfaceContainerHighest
-                                radius: Appearance.rounding.full
-                            }
-                            font.pixelSize: Appearance.font.pixelSize.small
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
                             onTextChanged: Config.options.search.prefix[modelData.prop] = text
                         }
                     }
@@ -347,6 +342,23 @@ ContentPage {
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                                 font.pixelSize: Appearance.font.pixelSize.small
+
+                                StyledTextContextMenu {
+                                    id: aliasEditContextMenu
+                                    targetField: aliasEditInput
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.IBeamCursor
+                                    acceptedButtons: Qt.RightButton
+                                    onPressed: mouse => {
+                                        if (mouse.button === Qt.RightButton) {
+                                            aliasEditInput.forceActiveFocus();
+                                            aliasEditContextMenu.popup(mouse.x, mouse.y);
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -519,6 +531,23 @@ ContentPage {
                             color: Appearance.colors.colOnSecondaryContainer
                             background: null
                             font.pixelSize: Appearance.font.pixelSize.small
+
+                            StyledTextContextMenu {
+                                id: newAliasContextMenu
+                                targetField: newAliasInput
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.IBeamCursor
+                                acceptedButtons: Qt.RightButton
+                                onPressed: mouse => {
+                                    if (mouse.button === Qt.RightButton) {
+                                        newAliasInput.forceActiveFocus();
+                                        newAliasContextMenu.popup(mouse.x, mouse.y);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -543,6 +572,23 @@ ContentPage {
                             color: Appearance.colors.colOnSecondaryContainer
                             background: null
                             font.pixelSize: Appearance.font.pixelSize.small
+
+                            StyledTextContextMenu {
+                                id: newTargetContextMenu
+                                targetField: newTargetInput
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.IBeamCursor
+                                acceptedButtons: Qt.RightButton
+                                onPressed: mouse => {
+                                    if (mouse.button === Qt.RightButton) {
+                                        newTargetInput.forceActiveFocus();
+                                        newTargetContextMenu.popup(mouse.x, mouse.y);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -637,6 +683,23 @@ ContentPage {
                                     background: null
                                     clip: true
                                     onTextChanged: addAliasArea.appFilter = text
+
+                                    StyledTextContextMenu {
+                                        id: appFilterContextMenu
+                                        targetField: appFilterInput
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.IBeamCursor
+                                        acceptedButtons: Qt.RightButton
+                                        onPressed: mouse => {
+                                            if (mouse.button === Qt.RightButton) {
+                                                appFilterInput.forceActiveFocus();
+                                                appFilterContextMenu.popup(mouse.x, mouse.y);
+                                            }
+                                        }
+                                    }
                                 }
 
                                 IconToolbarButton {

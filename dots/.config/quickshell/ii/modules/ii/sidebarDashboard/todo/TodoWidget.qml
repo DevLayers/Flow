@@ -331,6 +331,23 @@ Item {
                         color: todoInput.activeFocus ? Appearance.colors.colPrimary : "transparent"
                         radius: 1
                     }
+
+                    StyledTextContextMenu {
+                        id: todoContextMenu
+                        targetField: todoInput
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.IBeamCursor
+                        acceptedButtons: Qt.RightButton
+                        onPressed: mouse => {
+                            if (mouse.button === Qt.RightButton) {
+                                todoInput.forceActiveFocus();
+                                todoContextMenu.popup(mouse.x, mouse.y);
+                            }
+                        }
+                    }
                 }
 
                 RowLayout {

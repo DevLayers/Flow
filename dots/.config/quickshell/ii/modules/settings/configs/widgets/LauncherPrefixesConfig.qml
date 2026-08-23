@@ -207,18 +207,12 @@ Item {
                                 Layout.preferredWidth: 120
                             }
 
-                            TextField {
+                            ToolbarTextField {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 36
                                 text: Config.options.search.prefix[modelData.prop] || ""
-                                color: Appearance.colors.colOnSurface
-                                font.pixelSize: Appearance.font.pixelSize.small
                                 onTextChanged: Config.options.search.prefix[modelData.prop] = text
-
-                                background: Rectangle {
-                                    color: Appearance.colors.colSurfaceContainerHighest
-                                    radius: Appearance.rounding.full
-                                }
+                                colBackground: Appearance.colors.colSurfaceContainerHighest
                             }
                         }
                     }

@@ -101,6 +101,10 @@ Item {
         }
     }
 
+    property int menuMargins: 6
+    readonly property int outerRadius: Appearance.rounding.windowRounding
+    readonly property int innerRadius: Math.max(0, outerRadius - menuMargins)
+
     // Shadow
     Loader {
         active: root.visible
@@ -114,13 +118,13 @@ Item {
     Rectangle {
         id: menuBackground
         anchors.fill: parent
-        radius: Appearance.rounding.large
+        radius: root.outerRadius
         color: Appearance.m3colors.m3surfaceContainer
         border.width: 1
         border.color: Appearance.colors.colLayer0Border
 
         implicitWidth: 200
-        implicitHeight: menuLayout.implicitHeight + 12
+        implicitHeight: menuLayout.implicitHeight + (root.menuMargins * 2)
 
         // Block click-through to lock surface
         MouseArea {
@@ -134,7 +138,7 @@ Item {
             id: menuLayout
             anchors {
                 fill: parent
-                margins: 6
+                margins: root.menuMargins
             }
             spacing: 2
 
@@ -250,7 +254,7 @@ Item {
 
         Layout.fillWidth: true
         implicitHeight: 34
-        buttonRadius: Appearance.rounding.small
+        buttonRadius: root.innerRadius
 
         colBackground: "transparent"
         colBackgroundHover: Appearance.colors.colLayer1Hover

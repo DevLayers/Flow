@@ -30,4 +30,22 @@ TextField {
         color: Appearance.colors.colLayer1
         radius: Appearance.rounding.full
     }
+
+    StyledTextContextMenu {
+        id: contextMenu
+        targetField: filterField
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        hoverEnabled: true
+        cursorShape: Qt.IBeamCursor
+        onPressed: mouse => {
+            if (mouse.button === Qt.RightButton) {
+                filterField.forceActiveFocus();
+                contextMenu.popup(mouse.x, mouse.y);
+            }
+        }
+    }
 }
