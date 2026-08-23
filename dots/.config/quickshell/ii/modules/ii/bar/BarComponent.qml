@@ -157,6 +157,33 @@ Item {
         }
     }
 
+    // The same latch also bites a widget that fills in *after* the grace period: the
+    // tray only receives its items about a second after startup, long after readyTimer
+    // hides this rootItem, and from then on the loaded item can never report visible
+    // again. Implicit size keeps changing while hidden, so use it to re-run the grace
+    // period once the widget actually has something to show.
+    Connections {
+        target: itemLoader.item
+        function onImplicitWidthChanged() {
+            rootItem.unlatchLayout();
+        }
+        function onImplicitHeightChanged() {
+            rootItem.unlatchLayout();
+        }
+    }
+
+    function unlatchLayout() {
+        if (!rootItem.layoutReady || rootItem.hasLayoutContent)
+            return;
+        // Only when content appeared. Re-running for a widget that just went empty
+        // would flip it visible for a frame and bounce off readyTimer forever.
+        const loadedItem = itemLoader.item;
+        if (!loadedItem || (loadedItem.implicitWidth <= 0 && loadedItem.implicitHeight <= 0))
+            return;
+        rootItem.layoutReady = false;
+        readyTimer.restart();
+    }
+
     // ── Notch Mode Integration ───────────────────────────────────────────────
     property var modeState: null
 
