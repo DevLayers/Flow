@@ -62,6 +62,11 @@ Singleton {
     // Read from khal's own config so deletion works wherever the user keeps their calendars.
     property var calendarPaths: [root.homePath + "/.calendars"]
     property string khalDbPath: root.homePath + "/.cache/khal/khal.db"
+    readonly property string icsHelperPath: Directories.scriptPath + "/calendar/ics.py"
+    property list<var> calendars: []
+    property string defaultCalendar: ""
+    property list<var> calendarRequestQueue: []
+    property var calendarCurrentRequest: null
 
     // Process for checking khal configuration
     Process {
@@ -74,6 +79,7 @@ Singleton {
             if (root.khalAvailable) {
                 khalPathsProcess.running = true;
                 interval.running = true;
+                root.loadCalendarList();
             }
         }
     }
@@ -148,7 +154,8 @@ Singleton {
                     "color": evt['color'],
                     "description": evt['description'],
                     "uid": evt['uid'],
-                    "calendar": evt['calendar']
+                    "calendar": evt['calendar'],
+                    "sourceEvent": evt
                 });
             });
             result.push(obj);
@@ -201,7 +208,7 @@ Singleton {
             root.eventsReloadQueued = true;
             return;
         }
-        getEventsProcess.command = ["khal", "list", "--json", "title", "--json", "start-date", "--json", "start-time", "--json", "end-time", "--json", "description", "--json", "calendar", "--json", "uid", Qt.formatDate(root.rangeStart, "dd/MM/yyyy"), Qt.formatDate(root.rangeEnd, "dd/MM/yyyy")];
+        getEventsProcess.command = ["khal", "list", "--json", "title", "--json", "start-date", "--json", "start-time", "--json", "end-time", "--json", "description", "--json", "calendar", "--json", "uid", "--json", "url", "--json", "location", "--json", "categories", "--json", "repeat-symbol", "--json", "status", "--json", "organizer", "--json", "all-day", "--json", "calendar-color", Qt.formatDate(root.rangeStart, "dd/MM/yyyy"), Qt.formatDate(root.rangeEnd, "dd/MM/yyyy")];
         getEventsProcess.running = true;
     }
 
@@ -247,6 +254,8 @@ Singleton {
     function isAllDayEvent(event) {
         if (!event || !event.startDate || !event.endDate)
             return false;
+        if (event.allDay === true)
+            return true;
         if (event.startDate.getHours() !== 0 || event.startDate.getMinutes() !== 0)
             return false;
         const endHours = event.endDate.getHours();
@@ -303,8 +312,16 @@ Singleton {
                     line = line.trim();
                     if (!line || line === "[]")
                         continue;
-                    let dayEvents = JSON.parse(line);
+                    let dayEvents;
+                    try {
+                        dayEvents = JSON.parse(line);
+                    } catch (error) {
+                        console.warn("[CalendarService] Ignoring invalid khal JSON:", error.message);
+                        continue;
+                    }
                     for (let event of dayEvents) {
+                        if (!event['start-date'])
+                            continue;
                         let startDateParts = event['start-date'].split('/');
                         let startTimeParts = event['start-time'] ? event['start-time'].split(':').map(Number) : [0, 0];
 
@@ -314,7 +331,27 @@ Singleton {
 
                         let endDate = new Date(parseInt(startDateParts[2]), parseInt(startDateParts[1]) - 1, parseInt(startDateParts[0]), parseInt(endTimeParts[0]), parseInt(endTimeParts[1]));
 
-                        // Simple rotating color assignment
+                        const rawCategories = event['categories'];
+                        const categoryValues = Array.isArray(rawCategories)
+                            ? rawCategories
+                            : (rawCategories ? String(rawCategories).split(',') : []);
+                        const categories = [];
+                        let colorToken = "";
+                        for (let value of categoryValues) {
+                            const category = String(value).trim();
+                            if (!category)
+                                continue;
+                            if (category.startsWith("ii/color=")) {
+                                colorToken = category.substring("ii/color=".length);
+                                continue;
+                            }
+                            if (!categories.includes(category))
+                                categories.push(category);
+                        }
+
+                        // The existing chip renderer still consumes a QColor.
+                        // Phase 2 switches this fallback to the token palette;
+                        // retain it here while keeping the token lossless.
                         let eventColor = root.getNextEventColor();
 
                         events.push({
@@ -324,7 +361,16 @@ Singleton {
                             "color": eventColor,
                             "description": event['description'] ?? "",
                             "calendar": event['calendar'] || '',
-                            "uid": event['uid'] || ''
+                            "uid": event['uid'] || '',
+                            "url": event['url'] ?? "",
+                            "location": event['location'] ?? "",
+                            "categories": categories,
+                            "colorToken": colorToken,
+                            "repeatSymbol": event['repeat-symbol'] ?? "",
+                            "status": event['status'] ?? "CONFIRMED",
+                            "organizer": event['organizer'] ?? "",
+                            "allDay": event['all-day'] === true || String(event['all-day']).toLowerCase() === "true",
+                            "calendarColor": event['calendar-color'] ?? ""
                         });
                     }
                 }
@@ -357,236 +403,189 @@ Singleton {
         running: false
     }
 
+    // A single helper process is serialized because khal owns one SQLite
+    // index. Every event field stays JSON data on stdin, never a shell string.
+    function enqueueCalendarRequest(payload, callback = null) {
+        const queue = root.calendarRequestQueue.slice();
+        queue.push({ payload: payload, callback: callback });
+        root.calendarRequestQueue = queue;
+        root.startNextCalendarRequest();
+    }
+
+    function startNextCalendarRequest() {
+        if (calendarHelperProcess.running || root.calendarCurrentRequest || root.calendarRequestQueue.length === 0)
+            return;
+        root.calendarCurrentRequest = root.calendarRequestQueue[0];
+        root.calendarRequestQueue = root.calendarRequestQueue.slice(1);
+        calendarHelperProcess.replyReceived = false;
+        calendarHelperProcess.stdinEnabled = true;
+        calendarHelperProcess.running = true;
+    }
+
+    function finishCalendarRequest(reply) {
+        const current = root.calendarCurrentRequest;
+        root.calendarCurrentRequest = null;
+        if (!reply || !reply.ok) {
+            console.warn("[CalendarService] Calendar request failed:", String(reply?.error ?? "No response from calendar helper."));
+        } else if (current?.payload?.op === "save" || current?.payload?.op === "deleteSeries" || current?.payload?.op === "deleteOccurrence" || current?.payload?.op === "overrideOccurrence") {
+            vdirsyncerProcess.running = true;
+            root.loadEvents();
+        }
+        if (typeof current?.callback === "function")
+            current.callback(reply);
+        Qt.callLater(root.startNextCalendarRequest);
+    }
+
+    function loadCalendarList() {
+        root.enqueueCalendarRequest({ op: "calendars" }, reply => {
+            if (!reply?.ok)
+                return;
+            root.calendars = reply.calendars ?? [];
+            const writable = root.calendars.find(calendar => !calendar.readOnly);
+            root.defaultCalendar = writable?.name ?? "";
+        });
+    }
+
     Process {
-        id: khalAddTaskProcess
-        running: false
-        onExited: exitCode => {
-            if (exitCode === 0) {
-                console.log("[CalendarService] Event added successfully");
-                vdirsyncerProcess.running = true;
-                root.loadEvents();
-            } else {
-                console.log("[CalendarService] Failed to add event, exit code: " + exitCode);
+        id: calendarHelperProcess
+        command: ["python3", root.icsHelperPath]
+        stdinEnabled: true
+        property bool replyReceived: false
+        onRunningChanged: {
+            if (running && root.calendarCurrentRequest) {
+                write(JSON.stringify(root.calendarCurrentRequest.payload) + "\n");
+                stdinEnabled = false;
             }
         }
-    }
-
-    function addItem(item) {
-        let title = item['content'];
-        let formattedDate = Qt.formatDate(item['date'], "dd/MM/yyyy");
-        khalAddTaskProcess.command = ["khal", "new", formattedDate, title];
-        khalAddTaskProcess.running = true;
-    }
-
-    // Create a timed event with start/end times
-    // date: JS Date object for the day
-    // startTime: string "HH:MM"
-    // endTime: string "HH:MM"
-    // title: string
-    // description: string (optional)
-    function addEvent(date, startTime, endTime, title, description) {
-        if (!root.khalAvailable) {
-            console.log("[CalendarService] khal not available, cannot create event");
-            return;
-        }
-
-        let formattedDate = Qt.formatDate(date, "dd/MM/yyyy");
-        let summary = title;
-        if (description && description.length > 0) {
-            summary = title + " :: " + description;
-        }
-
-        khalAddTaskProcess.command = ["khal", "new", formattedDate, startTime, endTime, summary];
-        console.log("[CalendarService] Creating event:", khalAddTaskProcess.command.join(" "));
-        khalAddTaskProcess.running = true;
-    }
-
-    // Create an all-day event (no start/end time — khal treats a date-only
-    // `new` as all-day).
-    function addAllDayEvent(date, title, description) {
-        if (!root.khalAvailable) {
-            console.log("[CalendarService] khal not available, cannot create event");
-            return;
-        }
-        if (!title || title.length === 0)
-            return;
-
-        let formattedDate = Qt.formatDate(date, "dd/MM/yyyy");
-        let summary = title;
-        if (description && description.length > 0) {
-            summary = title + " :: " + description;
-        }
-
-        khalAddTaskProcess.command = ["khal", "new", formattedDate, summary];
-        console.log("[CalendarService] Creating all-day event:", khalAddTaskProcess.command.join(" "));
-        khalAddTaskProcess.running = true;
-    }
-
-    Process {
-        id: khalRemoveProcess
-        running: false
         stdout: StdioCollector {
             onStreamFinished: {
-                if (this.text.trim()) {
-                    console.log("[CalendarService] remove stdout:", this.text.trim());
+                let reply;
+                try {
+                    reply = JSON.parse(this.text.trim());
+                } catch (error) {
+                    reply = { ok: false, error: "Calendar helper returned invalid JSON: " + error.message };
                 }
+                calendarHelperProcess.replyReceived = true;
+                root.finishCalendarRequest(reply);
             }
         }
         stderr: StdioCollector {
             onStreamFinished: {
-                if (this.text.trim()) {
-                    console.error("[CalendarService] remove stderr:", this.text.trim());
-                }
+                if (this.text.trim())
+                    console.warn("[CalendarService] calendar helper:", this.text.trim());
             }
         }
         onExited: exitCode => {
-            if (exitCode === 0) {
-                console.log("[CalendarService] Event removed successfully");
-                vdirsyncerProcess.running = true;
-                // khalRemoveProcess and khalAddTaskProcess are separate processes
-                // fighting over the same khal db, so a move/update defers its
-                // creation until the removal has actually exited.
-                const pending = root.pendingCreate;
-                root.pendingCreate = null;
-                if (pending) {
-                    root.applyPendingCreate(pending);
-                } else {
-                    root.loadEvents();
-                }
-            } else {
-                console.log("[CalendarService] Failed to remove event, exit code: " + exitCode);
-                root.pendingCreate = null;
-                root.loadEvents();
-            }
+            if (!calendarHelperProcess.replyReceived && root.calendarCurrentRequest)
+                root.finishCalendarRequest({ ok: false, error: "Calendar helper exited with code " + exitCode + "." });
         }
+    }
+
+    function localIso(date, time = "00:00") {
+        if (!date)
+            return "";
+        const normalizedTime = String(time || "00:00").length === 5 ? String(time) + ":00" : String(time);
+        return Qt.formatDate(date, "yyyy-MM-dd") + "T" + normalizedTime;
+    }
+
+    function addItem(item) {
+        if (!item?.content || !item?.date)
+            return;
+        root.addAllDayEvent(item.date, item.content, item.description ?? "");
+    }
+
+    function addEvent(date, startTime, endTime, title, description) {
+        if (!root.khalAvailable || !date || !title)
+            return;
+        root.enqueueCalendarRequest({
+            op: "save",
+            calendar: root.defaultCalendar,
+            event: {
+                summary: String(title),
+                description: String(description ?? ""),
+                allDay: false,
+                start: root.localIso(date, startTime || "09:00"),
+                end: root.localIso(date, endTime || "10:00")
+            }
+        });
+    }
+
+    function addAllDayEvent(date, title, description) {
+        if (!root.khalAvailable || !date || !title)
+            return;
+        const nextDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+        root.enqueueCalendarRequest({
+            op: "save",
+            calendar: root.defaultCalendar,
+            event: {
+                summary: String(title),
+                description: String(description ?? ""),
+                allDay: true,
+                start: Qt.formatDate(date, "yyyy-MM-dd"),
+                end: Qt.formatDate(nextDay, "yyyy-MM-dd")
+            }
+        });
     }
 
     function removeItem(item) {
-        root.removeEvent(item['content']);
+        root.removeEventByUid(item?.uid ?? "");
     }
 
-    // Remove a timed event by UID (unique identifier)
     function removeEventByUid(uid) {
-        if (!uid || uid.length === 0)
+        if (!uid)
             return;
-
-        khalRemoveProcess.command = root.buildRemoveCommand("UID:" + uid);
-        console.log("[CalendarService] Removing event by UID:", uid);
-        khalRemoveProcess.running = true;
+        root.enqueueCalendarRequest({ op: "deleteSeries", uid: String(uid) });
     }
 
-    // Deletes every .ics under the known calendar dirs whose content contains `needle`
-    // (fixed-string match), then purges the matching rows from khal's cache db so the event
-    // disappears immediately instead of waiting for khal's next re-sync.
-    // Calendar paths may be globs (khal "discover" collections), hence the unquoted `$g`.
-    readonly property string removeScript: [
-        'needle="$1"; shift',
-        'shopt -s nullglob',
-        'for g in "$@"; do for d in $g; do',
-        '  [ -d "$d" ] || continue',
-        '  find "$d" -type f -name "*.ics" -exec grep -lF -- "$needle" {} + | xargs -r rm -f',
-        'done; done',
-        "sql_needle=${needle//\\'/\\'\\'}",
-        'sqlite3 "$db" "DELETE FROM events WHERE item LIKE \'%${sql_needle}%\';"'
-    ].join("\n")
-
-    function buildRemoveCommand(needle) {
-        return ["env", "db=" + root.khalDbPath, "bash", "-c", root.removeScript, "khal-remove", needle].concat(root.calendarPaths);
-    }
-
+    // A summary is not an identifier. Callers that only have a title must
+    // refresh and pick an event object first rather than risking a sibling.
     function removeEvent(title) {
-        if (!title || title.length === 0)
-            return;
-
-        khalRemoveProcess.command = root.buildRemoveCommand("SUMMARY:" + title);
-        console.log("[CalendarService] Removing event:", title);
-        khalRemoveProcess.running = true;
+        console.warn("[CalendarService] Refusing to delete an event by summary:", String(title ?? ""));
     }
 
-    // ------------------------------------------------------------------
-    // Mutations that need remove -> add serialization
-    // ------------------------------------------------------------------
-
-    // Creation deferred until khalRemoveProcess exits. Shape:
-    // { date: Date, title: string, description: string, allDay: bool,
-    //   startTime: "HH:MM", endTime: "HH:MM" }
-    property var pendingCreate: null
-
-    function applyPendingCreate(op) {
-        if (!op)
-            return;
-        if (op.allDay)
-            root.addAllDayEvent(op.date, op.title, op.description);
-        else
-            root.addEvent(op.date, op.startTime, op.endTime, op.title, op.description);
-    }
-
-    // Removes `event` (by uid when available, else by title) and queues `op`
-    // to run once the removal process has exited.
-    function removeThenCreate(event, op) {
-        const uid = event.uid ?? "";
-        const title = event.content ?? "";
-        if (uid.length === 0 && title.length === 0) {
-            // Nothing identifies the old event; just create the new one.
-            root.applyPendingCreate(op);
-            return;
-        }
-        root.pendingCreate = op;
-        if (uid.length > 0)
-            root.removeEventByUid(uid);
-        else
-            root.removeEvent(title);
-    }
-
-    // Moves an event to another day, keeping its time of day. An all-day event
-    // stays all-day.
     function moveEvent(event, newDate) {
-        if (!root.khalAvailable) {
-            console.log("[CalendarService] khal not available, cannot move event");
+        if (!root.khalAvailable || !event?.uid || !newDate)
             return;
-        }
-        if (!event || !newDate)
-            return;
-
         const allDay = root.isAllDayEvent(event);
-        let op = {
-            "date": new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate()),
-            "title": event.content ?? "",
-            "description": event.description ?? "",
-            "allDay": allDay,
-            "startTime": allDay ? "" : Qt.formatDateTime(event.startDate, "hh:mm"),
-            "endTime": allDay ? "" : Qt.formatDateTime(event.endDate, "hh:mm")
-        };
-        root.removeThenCreate(event, op);
+        const oldStart = event.startDate;
+        const oldEnd = event.endDate;
+        const movedStart = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate(), oldStart.getHours(), oldStart.getMinutes());
+        const movedEnd = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate(), oldEnd.getHours(), oldEnd.getMinutes());
+        if (!allDay && movedEnd <= movedStart)
+            movedEnd.setDate(movedEnd.getDate() + 1);
+        const nextDay = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate() + 1);
+        root.enqueueCalendarRequest({
+            op: "save",
+            calendar: event.calendar ?? "",
+            event: {
+                uid: String(event.uid),
+                allDay: allDay,
+                start: allDay ? Qt.formatDate(newDate, "yyyy-MM-dd") : root.localIso(movedStart, Qt.formatTime(movedStart, "hh:mm")),
+                end: allDay ? Qt.formatDate(nextDay, "yyyy-MM-dd") : root.localIso(movedEnd, Qt.formatTime(movedEnd, "hh:mm"))
+            }
+        });
     }
 
-    // Full edit: date, times, title, description and all-day flag. Any of
-    // newDate/startTimeHHMM/endTimeHHMM/title may be left empty to keep the
-    // current value; `allDay` falls back to the event's current kind when
-    // undefined.
     function updateEvent(event, newDate, startTimeHHMM, endTimeHHMM, title, description, allDay) {
-        if (!root.khalAvailable) {
-            console.log("[CalendarService] khal not available, cannot update event");
+        if (!root.khalAvailable || !event?.uid)
             return;
-        }
-        if (!event)
-            return;
-
         const base = newDate ?? event.startDate;
-        const isAllDay = (allDay === undefined || allDay === null) ? root.isAllDayEvent(event) : !!allDay;
-        let op = {
-            "date": new Date(base.getFullYear(), base.getMonth(), base.getDate()),
-            "title": (title && title.length > 0) ? title : (event.content ?? ""),
-            "description": description ?? (event.description ?? ""),
-            "allDay": isAllDay,
-            "startTime": "",
-            "endTime": ""
-        };
-        if (!isAllDay) {
-            op.startTime = (startTimeHHMM && startTimeHHMM.length > 0) ? startTimeHHMM : Qt.formatDateTime(event.startDate, "hh:mm");
-            op.endTime = (endTimeHHMM && endTimeHHMM.length > 0) ? endTimeHHMM : Qt.formatDateTime(event.endDate, "hh:mm");
-        }
-        root.removeThenCreate(event, op);
+        const isAllDay = allDay === undefined || allDay === null ? root.isAllDayEvent(event) : !!allDay;
+        const start = startTimeHHMM || Qt.formatTime(event.startDate, "hh:mm");
+        const end = endTimeHHMM || Qt.formatTime(event.endDate, "hh:mm");
+        const nextDay = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 1);
+        root.enqueueCalendarRequest({
+            op: "save",
+            calendar: event.calendar ?? "",
+            event: {
+                uid: String(event.uid),
+                summary: title?.length ? String(title) : String(event.content ?? ""),
+                description: description ?? String(event.description ?? ""),
+                allDay: isAllDay,
+                start: isAllDay ? Qt.formatDate(base, "yyyy-MM-dd") : root.localIso(base, start),
+                end: isAllDay ? Qt.formatDate(nextDay, "yyyy-MM-dd") : root.localIso(base, end)
+            }
+        });
     }
 
     Process {

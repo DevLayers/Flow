@@ -389,23 +389,19 @@ Item {
         }
         onEventUpdated: (oldTitle, title, description) => {
             let evt = eventPopup.editEventData;
-            if (!evt)
+            const sourceEvent = evt?.sourceEvent;
+            if (!sourceEvent?.uid)
                 return;
             let startMin = H.parseTimeToMinutes(evt.start);
             let endMin = H.parseTimeToMinutes(evt.end);
             if (endMin === 0 && startMin > 0)
                 endMin = 24 * 60;
-            if (evt.uid)
-                CalendarService.removeEventByUid(evt.uid);
-            else
-                CalendarService.removeEvent(oldTitle);
-            CalendarService.addEvent(H.getDateForDayIndex(eventPopup.dayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst), H.minutesToKhalTimeStr(startMin), H.minutesToKhalTimeStr(endMin), title, description);
+            CalendarService.updateEvent(sourceEvent, H.getDateForDayIndex(eventPopup.dayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst), H.minutesToKhalTimeStr(startMin), H.minutesToKhalTimeStr(endMin), title, description, false);
         }
         onEventDeleted: title => {
-            if (eventPopup.editEventData?.uid)
-                CalendarService.removeEventByUid(eventPopup.editEventData.uid);
-            else
-                CalendarService.removeEvent(title);
+            const sourceEvent = eventPopup.editEventData?.sourceEvent;
+            if (sourceEvent?.uid)
+                CalendarService.removeEventByUid(sourceEvent.uid);
             root.ghostVisible = false;
         }
         onCancelled: root.ghostVisible = false

@@ -110,11 +110,9 @@ Rectangle {
         }
 
         onClicked: {
-            if (eventData.uid) {
-                CalendarService.removeEventByUid(eventData.uid);
-            } else {
-                CalendarService.removeEvent(eventData.title);
-            }
+            const sourceEvent = eventData.sourceEvent;
+            if (sourceEvent?.uid)
+                CalendarService.removeEventByUid(sourceEvent.uid);
         }
 
         contentItem: MaterialSymbol {

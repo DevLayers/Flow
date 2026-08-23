@@ -215,8 +215,6 @@ Item {
             return;
         if (eventData.uid)
             CalendarService.removeEventByUid(eventData.uid);
-        else
-            CalendarService.removeEvent(eventData.content);
     }
 
     // ─── Layout ───
