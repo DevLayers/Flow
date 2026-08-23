@@ -87,15 +87,13 @@ ListView {
     boundsBehavior: Flickable.DragOverBounds
     ScrollBar.vertical: StyledScrollBar {}
 
-    MouseArea {
-        visible: root.interactive && root.contentHeight > root.height
-        anchors.fill: parent
-        acceptedButtons: Qt.NoButton
-        onWheel: function (wheelEvent) {
-            if (!root.interactive || root.contentHeight <= root.height) {
-                wheelEvent.accepted = false;
-                return;
-            }
+    // This must stay a pointer handler rather than an anchored MouseArea.
+    // An item layered over the ListView wins cursor resolution from every
+    // delegate below it, even with NoButton accepted.
+    WheelHandler {
+        enabled: root.interactive && root.contentHeight > root.height
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        onWheel: wheelEvent => {
             const delta = wheelEvent.angleDelta.y / root.mouseScrollDeltaThreshold;
             // The angleDelta.y of a touchpad is usually small and continuous,
             // while that of a mouse wheel is typically in multiples of ±120.

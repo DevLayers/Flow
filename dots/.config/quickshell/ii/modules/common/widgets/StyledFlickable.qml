@@ -21,11 +21,12 @@ Flickable {
 
     ScrollBar.vertical: StyledScrollBar {}
 
-    MouseArea {
-        visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
-        anchors.fill: parent
-        acceptedButtons: Qt.NoButton
-        onWheel: function(wheelEvent) {
+    // Do not overlay the content with a MouseArea: that would replace every
+    // delegate's pointer cursor with the default arrow while scrolling is on.
+    WheelHandler {
+        enabled: Config?.options.interactions.scrolling.fasterTouchpadScroll
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        onWheel: wheelEvent => {
             const delta = wheelEvent.angleDelta.y / root.mouseScrollDeltaThreshold;
             // The angleDelta.y of a touchpad is usually small and continuous,
             // while that of a mouse wheel is typically in multiples of ±120.

@@ -162,9 +162,38 @@ Item {
         const needle = root.query.trim().toLowerCase();
         const folded = needle.length > 0 ? [] : Ai.collapsedModelGroups;
         const rows = [];
+        const pinnedIds = Array.from(Config.options.sidebar.ai.pinnedModels ?? [])
+            .filter(id => Ai.catalog.models[id]);
+        const pinnedModels = [];
+
+        for (let i = 0; i < pinnedIds.length; i++) {
+            const model = Ai.catalog.models[pinnedIds[i]];
+            const provider = Ai.providers[model.providerId];
+            if (provider && root.matches(model, provider, needle))
+                pinnedModels.push(model);
+        }
+
+        if (pinnedModels.length > 0) {
+            const pinnedFolded = folded.includes("pinned");
+            rows.push({
+                kind: "header",
+                groupId: "pinned",
+                label: Translation.tr("Pinned"),
+                symbol: "keep",
+                collapsed: pinnedFolded,
+                count: pinnedModels.length
+            });
+            for (let i = 0; !pinnedFolded && i < pinnedModels.length; i++) {
+                rows.push({
+                    kind: "model",
+                    model: pinnedModels[i]
+                });
+            }
+        }
 
         if (needle.length === 0) {
-            const recent = Ai.recentModelIds;
+            const recent = Ai.recentModelIds.filter(id =>
+                !pinnedIds.includes(id) && !!Ai.catalog.models[id]);
             if (recent.length > 0) {
                 const recentFolded = folded.includes("recent");
                 rows.push({
@@ -188,7 +217,8 @@ Item {
             const provider = Ai.providers[providerIds[i]];
             if (!provider)
                 continue;
-            const models = Array.from(provider.models).filter(model => root.matches(model, provider, needle));
+            const models = Array.from(provider.models).filter(model =>
+                !pinnedIds.includes(model.id) && root.matches(model, provider, needle));
             const hasCatalogueEntry = providerIds[i] === "openrouter" || providerIds[i] === "ollama";
             // A fresh Ollama install has no local models yet; keeping the
             // provider visible is what makes its first pull discoverable.
@@ -621,14 +651,64 @@ Item {
 
                         Accessible.name: root.modelPinTooltip(modelRow.entry)
 
-                        MaterialSymbol {
+                        Item {
                             anchors.centerIn: parent
-                            text: modelActionMouse.containsMouse
-                                ? (modelRow.pinned ? "keep_off" : "keep")
-                                : "check"
-                            fill: 1
-                            iconSize: 24
-                            color: Appearance.colors.colOnPrimaryContainer
+                            width: 24
+                            height: 24
+
+                            MaterialSymbol {
+                                id: modelCheckIcon
+                                anchors.centerIn: parent
+                                text: "check"
+                                fill: 1
+                                iconSize: 24
+                                color: Appearance.colors.colOnPrimaryContainer
+                                opacity: modelActionMouse.containsMouse ? 0 : 1
+                                scale: modelActionMouse.containsMouse ? 0.5 : 1
+
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: Appearance.animation.elementMoveFast.duration
+                                        easing.type: Appearance.animation.elementMoveFast.type
+                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                    }
+                                }
+
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: Appearance.animation.elementMoveFast.duration
+                                        easing.type: Appearance.animation.elementMoveFast.type
+                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                    }
+                                }
+                            }
+
+                            MaterialSymbol {
+                                id: modelPinIcon
+                                anchors.centerIn: parent
+                                text: modelRow.pinned ? "keep_off" : "keep"
+                                fill: 1
+                                iconSize: 24
+                                color: Appearance.colors.colOnPrimaryContainer
+                                opacity: modelActionMouse.containsMouse ? 1 : 0
+                                scale: modelActionMouse.containsMouse ? 1 : 0.5
+
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: Appearance.animation.elementMoveFast.duration
+                                        easing.type: Appearance.animation.elementMoveFast.type
+                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                    }
+                                }
+
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: Appearance.animation.elementMoveFast.duration
+                                        easing.type: Appearance.animation.elementMoveFast.type
+                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                    }
+                                }
+                            }
                         }
 
                         StyledToolTip {

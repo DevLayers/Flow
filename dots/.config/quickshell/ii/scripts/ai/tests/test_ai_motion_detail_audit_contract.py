@@ -12,6 +12,8 @@ MESSAGE = (ROOT / "modules/ii/sidebarPolicies/aiChat/AiMessage.qml").read_text(e
 CONTROL_BAR = (ROOT / "modules/ii/sidebarPolicies/aiChat/ChatControlBar.qml").read_text(encoding="utf-8")
 PICKER = (ROOT / "services/ai/blocks/AiModelPickerPopover.qml").read_text(encoding="utf-8")
 RIPPLE_BUTTON = (ROOT / "modules/common/widgets/RippleButton.qml").read_text(encoding="utf-8")
+STYLED_LIST_VIEW = (ROOT / "modules/common/widgets/StyledListView.qml").read_text(encoding="utf-8")
+STYLED_FLICKABLE = (ROOT / "modules/common/widgets/StyledFlickable.qml").read_text(encoding="utf-8")
 SEARCH_SURFACE = (ROOT / "services/ai/AiSearchSurface.qml").read_text(encoding="utf-8")
 SEARCH_NAVIGATOR = (ROOT / "services/ai/AiSearchNavigator.qml").read_text(encoding="utf-8")
 AI_SERVICE = (ROOT / "services/Ai.qml").read_text(encoding="utf-8")
@@ -82,11 +84,22 @@ class DetailTests(unittest.TestCase):
         self.assertIn('modelRow.pinned ? "keep_off" : "keep"', PICKER)
         self.assertIn("function modelPinTooltip", PICKER)
         self.assertIn("onClicked: root.togglePinned(modelRow.entry.id)", PICKER)
+        self.assertIn('groupId: "pinned"', PICKER)
+        self.assertIn("const pinnedIds", PICKER)
+        self.assertIn("!pinnedIds.includes(model.id)", PICKER)
+        self.assertIn("id: modelCheckIcon", PICKER)
+        self.assertIn("id: modelPinIcon", PICKER)
         self.assertIn("modelChipTooltip", CONTROL_BAR)
 
     def test_shared_buttons_enable_hover_for_cursor_and_tooltips(self):
         self.assertIn("    hoverEnabled: true\n", RIPPLE_BUTTON)
         self.assertIn("hoverEnabled: root.hoverEnabled", RIPPLE_BUTTON)
+
+    def test_scroll_acceleration_does_not_cover_delegate_cursors(self):
+        self.assertIn("WheelHandler", STYLED_LIST_VIEW)
+        self.assertIn("WheelHandler", STYLED_FLICKABLE)
+        self.assertNotIn("MouseArea {", STYLED_LIST_VIEW)
+        self.assertNotIn("MouseArea {", STYLED_FLICKABLE)
 
 
 if __name__ == "__main__":
