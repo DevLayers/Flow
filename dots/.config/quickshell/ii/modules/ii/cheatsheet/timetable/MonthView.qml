@@ -114,6 +114,23 @@ Item {
         root.goToMonth(now.getFullYear(), now.getMonth(), targetIndex > currentIndex ? 1 : -1);
     }
 
+    function focusRequestedDate() {
+        const text = String(GlobalStates.timetableRequestedDate ?? "");
+        const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match)
+            return;
+        const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        if (Qt.formatDate(date, "yyyy-MM-dd") !== text)
+            return;
+        const currentIndex = root.viewYear * 12 + root.viewMonth;
+        const targetIndex = date.getFullYear() * 12 + date.getMonth();
+        root.goToMonth(date.getFullYear(), date.getMonth(), targetIndex === currentIndex ? 0 : (targetIndex > currentIndex ? 1 : -1));
+        root.requestDay(date);
+        // A navigation request is single-use: opening the cheatsheet later
+        // should retain the user's current month instead of replaying it.
+        GlobalStates.timetableRequestedDate = "";
+    }
+
     // Explicit reset then start: a Behavior would not fire on a repeat in the
     // same direction, because the values it would animate are already final.
     function playMonthTransition(direction) {
@@ -205,6 +222,14 @@ Item {
         root.ensureDataForView();
         root.restartCellLoading();
         root.playMonthTransition(0);
+        Qt.callLater(root.focusRequestedDate);
+    }
+
+    Connections {
+        target: GlobalStates
+        function onTimetableNavigationRequestChanged() {
+            Qt.callLater(root.focusRequestedDate);
+        }
     }
 
     onHolidaysVisibleChanged: {

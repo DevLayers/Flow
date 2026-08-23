@@ -29,6 +29,25 @@ Item {
     readonly property var activeViewItem: root.activeMode === "month" ? monthViewLoader.item : weekViewLoader.item
     readonly property bool activeViewReady: root.activeViewItem?.initialLoadComplete ?? false
 
+    function openRequestedDate() {
+        if (GlobalStates.timetableNavigationRequest <= 0)
+            return;
+        // Opening a concrete date uses the month grid, where the selected day
+        // and its event rail are visible together. This is an explicit action,
+        // so persisting the mode also keeps the header selector truthful.
+        if (Persistent.states.cheatsheet.timetableView !== "month")
+            Persistent.states.cheatsheet.timetableView = "month";
+    }
+
+    Component.onCompleted: root.openRequestedDate()
+
+    Connections {
+        target: GlobalStates
+        function onTimetableNavigationRequestChanged() {
+            root.openRequestedDate();
+        }
+    }
+
     onSportsReadyChanged: console.info("[TimetableSports][Host] sportsReady=" + root.sportsReady + " subscribers=" + SportsService.timetableSubscribers)
 
     onActiveViewReadyChanged: {

@@ -21,10 +21,10 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertNotIn("CalendarService.updateEvent", SPORTS_SERVICE)
         self.assertNotIn("CalendarService.removeEvent", SPORTS_SERVICE)
 
-        sidebar = (TIMETABLE / "MonthEventSidebar.qml").read_text(encoding="utf-8")
+        sidebar = (TIMETABLE / "EventSidebar.qml").read_text(encoding="utf-8")
         self.assertIn("if (eventData.sportEvent === true)", sidebar)
         self.assertIn("SportsService.focusGame(eventData)", sidebar)
-        self.assertIn("} else {\n            CalendarService.readEvent", sidebar)
+        self.assertIn("} else if (eventData.birthdayEvent !== true) {\n            CalendarService.readEvent", sidebar)
 
     def test_schedule_and_full_details_use_persistent_cache(self) -> None:
         directories = (ROOT / "modules" / "common" / "Directories.qml").read_text(encoding="utf-8")
@@ -75,7 +75,7 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertIn("visible: !root.allDay && !root.sportEvent", chip)
 
     def test_day_sidebar_separates_calendar_events_from_sports(self) -> None:
-        sidebar = (TIMETABLE / "MonthEventSidebar.qml").read_text(encoding="utf-8")
+        sidebar = (TIMETABLE / "EventSidebar.qml").read_text(encoding="utf-8")
         row = (TIMETABLE / "MonthDayEventRow.qml").read_text(encoding="utf-8")
 
         self.assertIn("property bool sportsListOnly: false", sidebar)
@@ -90,7 +90,7 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertIn('text: "sports_score"', row)
 
     def test_read_only_details_use_the_full_sidebar_height(self) -> None:
-        sidebar = (TIMETABLE / "MonthEventSidebar.qml").read_text(encoding="utf-8")
+        sidebar = (TIMETABLE / "EventSidebar.qml").read_text(encoding="utf-8")
 
         self.assertIn("bottom: root.eventReadOnly ? parent.bottom : detailsActions.top", sidebar)
         self.assertIn("bottomMargin: root.eventReadOnly ? 0 : 12", sidebar)

@@ -31,10 +31,10 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertNotIn("extraVisibleCondition: parent.hovered", picker)
 
     def test_task_tooltip_reads_the_hover_handler_state(self) -> None:
-        day_cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
+        task_chip = (TIMETABLE / "TaskChip.qml").read_text(encoding="utf-8")
 
-        self.assertIn("extraVisibleCondition: taskPointer.hovered", day_cell)
-        self.assertNotIn("taskPointer.containsMouse", day_cell)
+        self.assertIn("extraVisibleCondition: taskPointer.hovered", task_chip)
+        self.assertNotIn("taskPointer.containsMouse", task_chip)
 
     def test_time_fields_are_centered_over_the_dial(self) -> None:
         picker = (TIMETABLE / "TimePickerPopup.qml").read_text(encoding="utf-8")
@@ -58,7 +58,7 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("root.headerHeight - root.headerEventSpacing - root.cellPadding", day_cell)
 
     def test_event_metadata_inputs_have_helpful_placeholders(self) -> None:
-        sidebar = (TIMETABLE / "MonthEventSidebar.qml").read_text(encoding="utf-8")
+        sidebar = (TIMETABLE / "EventSidebar.qml").read_text(encoding="utf-8")
 
         for placeholder in ("Add a label", "Add meeting link", "Add location"):
             self.assertIn(f'Translation.tr("{placeholder}")', sidebar)
@@ -67,7 +67,7 @@ class TimetablePresentationContractTests(unittest.TestCase):
 
     def test_dashed_borders_render_as_geometry_without_a_canvas_texture(self) -> None:
         dashed_border = (ROOT / "modules" / "common" / "widgets" / "DashedBorder.qml").read_text(encoding="utf-8")
-        sidebar = (TIMETABLE / "MonthEventSidebar.qml").read_text(encoding="utf-8")
+        sidebar = (TIMETABLE / "EventSidebar.qml").read_text(encoding="utf-8")
         secondary_action = sidebar.split("component SecondaryAction:", 1)[1].split("component DurationChip:", 1)[0]
 
         self.assertIn("import QtQuick.Shapes", dashed_border)
@@ -83,8 +83,9 @@ class TimetablePresentationContractTests(unittest.TestCase):
     def test_calendar_notifications_use_an_installed_calendar_icon(self) -> None:
         notifier = (ROOT / "services" / "CalendarNotifier.qml").read_text(encoding="utf-8")
 
-        self.assertEqual(notifier.count('"-i", "x-office-calendar"'), 2)
-        self.assertNotIn('"-i", "event"', notifier)
+        self.assertIn('appIcon: "x-office-calendar"', notifier)
+        self.assertIn("Notifications.publishInternalNotification", notifier)
+        self.assertNotIn("notify-send", notifier)
 
     def test_lineups_use_a_valid_material_apparel_symbol(self) -> None:
         details = (TIMETABLE / "SportsEventDetails.qml").read_text(encoding="utf-8")

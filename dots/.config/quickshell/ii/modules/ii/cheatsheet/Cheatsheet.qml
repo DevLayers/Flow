@@ -20,6 +20,7 @@ Scope {
         let list = [];
         if (Config.options.cheatsheet.enableTimetable) {
             list.push({
+                "id": "timetable",
                 "icon": "calendar_month",
                 "name": Translation.tr("Timetable")
             });
@@ -70,6 +71,10 @@ Scope {
                 root.requestClose();
             }
         }
+
+        function onTimetableNavigationRequestChanged() {
+            root.openTimetableNavigation();
+        }
     }
 
     property bool activeState: false
@@ -104,6 +109,15 @@ Scope {
         } else {
             requestOpen();
         }
+    }
+
+    function openTimetableNavigation() {
+        const timetableIndex = root.tabButtonList.findIndex(tab => tab.id === "timetable");
+        if (timetableIndex < 0)
+            return;
+        if (Persistent.states.cheatsheet.tabIndex !== timetableIndex)
+            Persistent.states.cheatsheet.tabIndex = timetableIndex;
+        root.requestOpen();
     }
 
     Loader {

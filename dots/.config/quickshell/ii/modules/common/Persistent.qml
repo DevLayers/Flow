@@ -306,6 +306,9 @@ Singleton {
                 // `occurrence-ms|uid|offset` and daily-summary keys. Pruned by
                 // CalendarNotifier so notifications do not repeat after reload.
                 property list<string> timetableNotified: []
+                // Pending calendar reminder snoozes. Each DTO is reconstructed
+                // by CalendarNotifier; no CalendarService object crosses disk.
+                property list<var> timetableSnoozes: []
             }
 
             property JsonObject clipboard: JsonObject {
