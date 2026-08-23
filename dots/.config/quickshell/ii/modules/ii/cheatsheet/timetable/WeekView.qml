@@ -14,7 +14,7 @@ Item {
 
     property real spacing: 8
 
-    readonly property bool eventPopupVisible: eventPopup.visible || eventSidebar.open || recurrenceDeleteDialog.visible
+    readonly property bool eventPopupVisible: eventSidebar.open
 
     property int startHour: 0
     property int startMinute: 0
@@ -102,7 +102,6 @@ Item {
     property int ghostDayIndex: -1
     property real ghostTopY: 0
     property real ghostHeight: 0
-    property var pendingWeekDeleteEvent: null
 
     // ─── Helpers ───
     function updateCurrentTimeLine() {
@@ -226,15 +225,8 @@ Item {
             CalendarService.deleteEventWithScope(event, "all");
             return;
         }
-        root.pendingWeekDeleteEvent = event;
-        recurrenceDeleteDialog.open();
-    }
-
-    function deleteWeekEventWithScope(scope) {
-        if (root.pendingWeekDeleteEvent?.uid)
-            CalendarService.deleteEventWithScope(root.pendingWeekDeleteEvent, scope);
-        recurrenceDeleteDialog.close();
-        root.pendingWeekDeleteEvent = null;
+        eventSidebar.showEvent(event);
+        eventSidebar.requestDelete();
     }
 
     // ─── Actions ───
@@ -242,9 +234,8 @@ Item {
         let topMin = H.snapToGrid(H.yToMinutes(root.ghostTopY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
         let botMin = H.snapToGrid(H.yToMinutes(root.ghostTopY + root.ghostHeight, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
         let eventDate = H.getDateForDayIndex(root.ghostDayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
-        let colX = root.timeColumnWidth + (root.ghostDayIndex * (root.dayColumnWidth + root.spacing)) + root.dayColumnWidth;
-        let colY = root.ghostTopY + root.headerHeight - styledFlickable.contentY + 20;
-        eventPopup.open(H.minutesToTimeStr(topMin, Config.options?.time.format), H.minutesToTimeStr(botMin, Config.options?.time.format), eventDate, root.ghostDayIndex, colX, colY);
+        eventSidebar.startCreateAt(eventDate, topMin, botMin);
+        root.ghostVisible = false;
     }
 
     function openPopupForEdit(event, dayIndex) {
@@ -252,12 +243,25 @@ Item {
             eventSidebar.showEvent(event);
             return;
         }
-        let startMin = H.parseTimeToMinutes(event.start);
-        let endMin = H.parseTimeToMinutes(event.end);
-        let eventDate = H.getDateForDayIndex(dayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
-        let colX = root.timeColumnWidth + (dayIndex * (root.dayColumnWidth + root.spacing)) + root.dayColumnWidth;
-        let colY = H.minutesToY(startMin, root.startHour, root.startMinute, root.pixelsPerMinute) + root.headerHeight - styledFlickable.contentY + 20;
-        eventPopup.openForEdit(H.minutesToTimeStr(startMin, Config.options?.time.format), H.minutesToTimeStr(endMin, Config.options?.time.format), eventDate, dayIndex, colX, colY, event);
+        eventSidebar.startEdit(event.sourceEvent ?? event);
+    }
+
+    function applySidebarPayload(payload) {
+        if (!payload)
+            return;
+        const nextDay = new Date(payload.date.getFullYear(), payload.date.getMonth(), payload.date.getDate() + 1);
+        const fields = {
+            summary: payload.title, description: payload.description, location: payload.location,
+            url: payload.url, status: payload.status, recurrence: payload.recurrence,
+            alarms: payload.alarms, color: payload.color, categories: payload.categories, allDay: payload.allDay,
+            start: payload.allDay ? Qt.formatDate(payload.date, "yyyy-MM-dd") : CalendarService.localIso(payload.date, payload.start),
+            end: payload.allDay ? Qt.formatDate(nextDay, "yyyy-MM-dd") : CalendarService.localIso(payload.date, payload.end)
+        };
+        if (payload.editMode) {
+            CalendarService.saveEventFields(payload.event, fields, payload.scope ?? "all");
+            return;
+        }
+        CalendarService.createEventFields(payload.calendar, fields);
     }
 
     Connections {
@@ -538,114 +542,37 @@ Item {
             }
         }
 
-        MonthEventSidebar {
+        EventSidebar {
             id: eventSidebar
             anchors.fill: parent
             sportsListOnly: true
+            onSaveRequested: payload => root.applySidebarPayload(payload)
+            onTaskCreateRequested: task => Todo.addItem(task)
+            onDeleteRequested: (eventData, scope) => CalendarService.deleteEventWithScope(eventData, scope)
+            onTimePickerRequested: (which, startHour, startMinute) => {
+                timePicker.target = which;
+                timePicker.open(startHour, startMinute, which === "start" ? Translation.tr("Starts at") : Translation.tr("Ends at"));
+            }
+            onDatePickerRequested: (purpose, date) => {
+                datePicker.purpose = purpose;
+                datePicker.open(date, purpose === "reschedule" ? Translation.tr("Move event to") : Translation.tr("Event date"));
+            }
         }
     }
 
-    EventCreationPopup {
-        id: eventPopup
+    TimePickerPopup {
+        id: timePicker
         anchors.fill: parent
         z: 50
-        onEventCreated: (title, description) => {
-            let topMin = H.snapToGrid(H.yToMinutes(root.ghostTopY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-            let botMin = H.snapToGrid(H.yToMinutes(root.ghostTopY + root.ghostHeight, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-            CalendarService.addEvent(H.getDateForDayIndex(root.ghostDayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst), H.minutesToKhalTimeStr(topMin), H.minutesToKhalTimeStr(botMin), title, description);
-            root.ghostVisible = false;
-        }
-        onEventUpdated: (oldTitle, title, description) => {
-            let evt = eventPopup.editEventData;
-            const sourceEvent = evt?.sourceEvent;
-            if (!sourceEvent?.uid)
-                return;
-            let startMin = H.parseTimeToMinutes(evt.start);
-            let endMin = H.parseTimeToMinutes(evt.end);
-            if (endMin === 0 && startMin > 0)
-                endMin = 24 * 60;
-            CalendarService.updateEvent(sourceEvent, H.getDateForDayIndex(eventPopup.dayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst), H.minutesToKhalTimeStr(startMin), H.minutesToKhalTimeStr(endMin), title, description, false);
-        }
-        onEventDeleted: title => {
-            const sourceEvent = eventPopup.editEventData?.sourceEvent;
-            if (sourceEvent?.uid)
-                CalendarService.removeEventByUid(sourceEvent.uid);
-            root.ghostVisible = false;
-        }
-        onCancelled: root.ghostVisible = false
+        property string target: "start"
+        onAccepted: (pickedHour, pickedMinute) => eventSidebar.applyPickedTime(timePicker.target, pickedHour, pickedMinute)
     }
 
-    Popup {
-        id: recurrenceDeleteDialog
-        parent: root
-        modal: true
-        focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        anchors.centerIn: parent
-        width: Math.min(340, root.width - 32)
-        padding: 0
-        background: Rectangle {
-            color: Appearance.m3colors.m3surfaceContainerHigh
-            radius: Appearance.rounding.large
-        }
-
-        contentItem: ColumnLayout {
-            width: recurrenceDeleteDialog.width - 40
-            spacing: 10
-
-            StyledText {
-                Layout.fillWidth: true
-                text: Translation.tr("Delete recurring event")
-                font.pixelSize: Appearance.font.pixelSize.large
-                font.weight: Font.Bold
-                wrapMode: Text.Wrap
-                color: Appearance.colors.colOnSurface
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                text: Translation.tr("Choose how much of this series changes.")
-                wrapMode: Text.Wrap
-                color: Appearance.colors.colOnSurfaceVariant
-            }
-
-            RippleButtonWithIcon {
-                Layout.fillWidth: true
-                implicitHeight: 44
-                buttonRadius: Appearance.rounding.full
-                centerContent: true
-                materialIcon: "event"
-                mainText: Translation.tr("Only this event")
-                colText: Appearance.colors.colOnSurface
-                colBackground: Appearance.colors.colSurfaceContainerHighest
-                onClicked: root.deleteWeekEventWithScope("this")
-            }
-
-            RippleButtonWithIcon {
-                Layout.fillWidth: true
-                implicitHeight: 44
-                buttonRadius: Appearance.rounding.full
-                centerContent: true
-                materialIcon: "event_repeat"
-                mainText: Translation.tr("This and future")
-                colText: Appearance.colors.colOnSurface
-                colBackground: Appearance.colors.colSurfaceContainerHighest
-                onClicked: root.deleteWeekEventWithScope("future")
-            }
-
-            RippleButtonWithIcon {
-                Layout.fillWidth: true
-                implicitHeight: 44
-                buttonRadius: Appearance.rounding.full
-                centerContent: true
-                materialIcon: "all_inclusive"
-                mainText: Translation.tr("Entire series")
-                colText: Appearance.colors.colOnPrimary
-                colBackground: Appearance.colors.colError
-                onClicked: root.deleteWeekEventWithScope("all")
-            }
-        }
-
-        onClosed: root.pendingWeekDeleteEvent = null
+    DatePickerPopup {
+        id: datePicker
+        anchors.fill: parent
+        z: 50
+        property string purpose: "form"
+        onAccepted: pickedDate => eventSidebar.applyPickedDate(datePicker.purpose, pickedDate)
     }
 }

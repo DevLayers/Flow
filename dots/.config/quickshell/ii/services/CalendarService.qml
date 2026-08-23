@@ -504,45 +504,6 @@ Singleton {
         return root.localIso(event.startDate, Qt.formatTime(event.startDate, "hh:mm:ss"));
     }
 
-    function addItem(item) {
-        if (!item?.content || !item?.date)
-            return;
-        root.addAllDayEvent(item.date, item.content, item.description ?? "");
-    }
-
-    function addEvent(date, startTime, endTime, title, description) {
-        if (!root.khalAvailable || !date || !title)
-            return;
-        root.enqueueCalendarRequest({
-            op: "save",
-            calendar: root.defaultCalendar,
-            event: {
-                summary: String(title),
-                description: String(description ?? ""),
-                allDay: false,
-                start: root.localIso(date, startTime || "09:00"),
-                end: root.localIso(date, endTime || "10:00")
-            }
-        });
-    }
-
-    function addAllDayEvent(date, title, description) {
-        if (!root.khalAvailable || !date || !title)
-            return;
-        const nextDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-        root.enqueueCalendarRequest({
-            op: "save",
-            calendar: root.defaultCalendar,
-            event: {
-                summary: String(title),
-                description: String(description ?? ""),
-                allDay: true,
-                start: Qt.formatDate(date, "yyyy-MM-dd"),
-                end: Qt.formatDate(nextDay, "yyyy-MM-dd")
-            }
-        });
-    }
-
     function removeItem(item) {
         root.removeEventByUid(item?.uid ?? "");
     }
@@ -620,28 +581,6 @@ Singleton {
                 allDay: allDay,
                 start: allDay ? Qt.formatDate(newDate, "yyyy-MM-dd") : root.localIso(movedStart, Qt.formatTime(movedStart, "hh:mm")),
                 end: allDay ? Qt.formatDate(nextDay, "yyyy-MM-dd") : root.localIso(movedEnd, Qt.formatTime(movedEnd, "hh:mm"))
-            }
-        });
-    }
-
-    function updateEvent(event, newDate, startTimeHHMM, endTimeHHMM, title, description, allDay) {
-        if (!root.khalAvailable || !event?.uid)
-            return;
-        const base = newDate ?? event.startDate;
-        const isAllDay = allDay === undefined || allDay === null ? root.isAllDayEvent(event) : !!allDay;
-        const start = startTimeHHMM || Qt.formatTime(event.startDate, "hh:mm");
-        const end = endTimeHHMM || Qt.formatTime(event.endDate, "hh:mm");
-        const nextDay = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 1);
-        root.enqueueCalendarRequest({
-            op: "save",
-            calendar: event.calendar ?? "",
-            event: {
-                uid: String(event.uid),
-                summary: title?.length ? String(title) : String(event.content ?? ""),
-                description: description ?? String(event.description ?? ""),
-                allDay: isAllDay,
-                start: isAllDay ? Qt.formatDate(base, "yyyy-MM-dd") : root.localIso(base, start),
-                end: isAllDay ? Qt.formatDate(nextDay, "yyyy-MM-dd") : root.localIso(base, end)
             }
         });
     }

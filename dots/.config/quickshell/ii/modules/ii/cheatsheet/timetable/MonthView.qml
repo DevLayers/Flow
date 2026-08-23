@@ -634,7 +634,7 @@ Item {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(eventRailSlot)
             }
 
-            MonthEventSidebar {
+            EventSidebar {
                 id: eventSidebar
                 width: root.eventRailWidth
                 height: parent.height

@@ -8,7 +8,7 @@ import Quickshell
 import "TimetableHelpers.js" as H
 
 /**
- * Right rail: a day, an event, or the editor for one.
+ * Shared right rail: a day, an event, or the editor for one.
  *
  * Replaces the modal sheets the month view used to raise. A panel that takes
  * room from the grid instead of covering it keeps the date you are working on
@@ -101,6 +101,10 @@ Item {
     }
 
     function startCreate(date) {
+        root.startCreateAt(date, -1, -1);
+    }
+
+    function startCreateAt(date, startMinutes, endMinutes) {
         if (root.sportsEvent)
             SportsService.clearFocusedGame(root.event?.id);
         const now = DateTime.clock.date;
@@ -109,8 +113,10 @@ Item {
         root.formDate = H.startOfDay(date);
         root.formAllDay = false;
         root.createKind = "event";
-        root.formStartMinutes = startHour * 60;
-        root.formEndMinutes = Math.min(24 * 60, (startHour + 1) * 60);
+        root.formStartMinutes = startMinutes >= 0 ? startMinutes : startHour * 60;
+        root.formEndMinutes = endMinutes > root.formStartMinutes
+            ? endMinutes
+            : Math.min(24 * 60, root.formStartMinutes + 60);
         titleInput.text = "";
         notesInput.text = "";
         linkInput.text = "";
