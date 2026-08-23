@@ -246,6 +246,13 @@ Item {
         eventSidebar.showDay(date);
     }
 
+    function startCreate(date) {
+        if (!CalendarService.khalAvailable)
+            return;
+        eventSidebar.sportsListOnly = false;
+        eventSidebar.startCreate(date);
+    }
+
     function eventMinutes(date) {
         return date.getHours() * 60 + date.getMinutes();
     }
@@ -509,6 +516,8 @@ Item {
             currentDayIndex: root.currentDayIndex
             allDayChipHeight: root.allDayChipHeight
             allDayChipSpacing: root.allDayChipSpacing
+            createEnabled: CalendarService.khalAvailable
+            onCreateRequested: root.startCreate(DateTime.clock.date)
             onDayActivated: date => root.toggleDay(date)
             onSportsDayActivated: date => root.toggleSportsDay(date)
         }
