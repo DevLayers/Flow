@@ -21,6 +21,8 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("property int slotHeight: Persistent.states.cheatsheet.timetableSlotHeight", week)
         self.assertIn("function zoomSlotHeight(direction, viewportY)", week)
         self.assertIn("acceptedModifiers: Qt.ControlModifier", week)
+        self.assertIn("root.zoomSlotHeight(root.zoomWheelAccumulator > 0 ? 1 : -1, event.y)", week)
+        self.assertNotIn("event.position.y", week)
         self.assertIn("Persistent.states.cheatsheet.timetableSlotHeight = nextHeight", week)
         self.assertIn("const focalMinutes = (styledFlickable.contentY + focalY) / oldPixelsPerMinute", week)
 
@@ -216,6 +218,14 @@ class TimetablePresentationContractTests(unittest.TestCase):
             source = (TIMETABLE / name).read_text(encoding="utf-8")
             self.assertNotIn("border.width", source, name)
             self.assertNotIn("border.color", source, name)
+
+    def test_next_event_fab_does_not_override_button_final_spacing(self) -> None:
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        fab = (TIMETABLE / "TimetableNextEventFAB.qml").read_text(encoding="utf-8")
+
+        self.assertNotIn("property real spacing", fab)
+        self.assertIn("property real itemSpacing", fab)
+        self.assertIn("itemSpacing: root.spacing", week)
 
     def test_tall_meeting_blocks_expose_a_direct_join_action(self) -> None:
         block = (TIMETABLE / "EventBlock.qml").read_text(encoding="utf-8")

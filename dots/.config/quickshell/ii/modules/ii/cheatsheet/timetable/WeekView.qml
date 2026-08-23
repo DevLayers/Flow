@@ -934,7 +934,7 @@ Item {
                             const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x;
                             root.zoomWheelAccumulator += delta;
                             if (Math.abs(root.zoomWheelAccumulator) >= 60) {
-                                root.zoomSlotHeight(root.zoomWheelAccumulator > 0 ? 1 : -1, event.position.y);
+                                root.zoomSlotHeight(root.zoomWheelAccumulator > 0 ? 1 : -1, event.y);
                                 root.zoomWheelAccumulator = 0;
                             }
                             event.accepted = true;
@@ -1134,7 +1134,7 @@ Item {
         headerHeight: root.navBarHeight + root.headerHeight
         timeColumnWidth: root.timeColumnWidth
         dayColumnWidth: root.dayColumnWidth
-        spacing: root.spacing
+        itemSpacing: root.spacing
         contentY: styledFlickable.contentY
         flickableHeight: styledFlickable.height
         flickableContentHeight: styledFlickable.contentHeight

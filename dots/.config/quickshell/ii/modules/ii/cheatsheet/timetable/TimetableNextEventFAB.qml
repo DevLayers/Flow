@@ -11,7 +11,7 @@ RippleButton {
     property real headerHeight
     property int timeColumnWidth
     property real dayColumnWidth
-    property real spacing
+    property real itemSpacing
     property real contentY
     property real flickableHeight
     property real flickableContentHeight
@@ -39,7 +39,7 @@ RippleButton {
     
     x: {
         if (!nextEventData) return 0;
-        return timeColumnWidth + spacing + (nextEventData.dayIndex * (dayColumnWidth + spacing)) + (dayColumnWidth / 2) - (width / 2);
+        return timeColumnWidth + itemSpacing + (nextEventData.dayIndex * (dayColumnWidth + itemSpacing)) + (dayColumnWidth / 2) - (width / 2);
     }
     
     y: isAbove ? headerHeight + 20 : parent.height - height - 20
