@@ -202,7 +202,7 @@ Singleton {
         const terms = String(queryText ?? "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
         if (terms.length === 0)
             return [];
-        const panelIds = ["emojis", "screenshots", "windows", "tasks", "timers"];
+        const panelIds = ["calendar", "emojis", "screenshots", "windows", "tasks", "timers", "commands", "gmail", "sports"];
         return SearchPanelRegistry.enabledPanels.filter(panel => {
             if (!panelIds.includes(panel.id))
                 return false;
@@ -227,6 +227,36 @@ Singleton {
                 root.query = "";
                 GlobalStates.openSearchPanel(panel.id);
             }
+        });
+    }
+
+    function liveSportsResults(queryText: string): var {
+        if (!Config.options.search.modules.sports.enable)
+            return [];
+        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        const cutoff = Date.now() + 3 * 60 * 60 * 1000;
+        return Array.from(SportsService.allGames ?? []).filter(game => {
+            const date = new Date(game?.date);
+            const upcoming = game?.state === "in" || (!isNaN(date.getTime()) && date.getTime() <= cutoff && date.getTime() >= Date.now() - 3 * 60 * 60 * 1000);
+            if (!upcoming)
+                return false;
+            const haystack = [game?.name, game?.league, game?.home?.name, game?.away?.name].join(" ").toLocaleLowerCase();
+            return query.length === 0 || haystack.includes(query);
+        }).slice(0, 2);
+    }
+
+    function createLiveSportsResult(game: var): var {
+        return resultComp.createObject(null, {
+            key: "sports:" + String(game?.id ?? game?.name ?? ""),
+            name: String(game?.home?.name ?? "") + " " + String(game?.home?.score ?? "") + " × " + String(game?.away?.score ?? "") + " " + String(game?.away?.name ?? ""),
+            type: game?.state === "in" ? Translation.tr("Live") : Translation.tr("Upcoming game"),
+            verb: Translation.tr("Open"),
+            iconName: "sports_soccer",
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: String(game?.league ?? "") + " · " + String(game?.status ?? ""),
+            panelId: "sports",
+            keepOverviewOpen: true,
+            execute: () => GlobalStates.openSearchPanel("sports")
         });
     }
 
@@ -1336,6 +1366,9 @@ Singleton {
             for (const panel of root.searchPanelMatches(root.query))
                 result.push(root.createSearchPanelResult(panel));
         }
+
+        for (const game of root.liveSportsResults(root.query))
+            result.push(root.createLiveSportsResult(game));
 
         for (const quicklink of root.quicklinkMatches(root.query))
             result.push(root.createQuicklinkResult(quicklink));

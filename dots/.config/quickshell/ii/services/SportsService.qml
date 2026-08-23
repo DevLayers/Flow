@@ -12,11 +12,15 @@ Item {
     readonly property bool barEnabled: Config.options?.bar?.sports?.enable ?? false
     readonly property bool dockEnabled: Config.options?.dock?.enableSportsWidget ?? true
     readonly property bool lockEnabled: Config.options?.lock?.sports ?? true
-    property bool enabled: barEnabled || dockEnabled || lockEnabled
+    property bool enabled: barEnabled || dockEnabled || lockEnabled || searchSubscribers > 0
     // AI consumers are counted separately from the visual widgets. They may
     // query a league that is not monitored by the bar, but must never cause a
     // visual selection or a Config write as a side effect.
     property int aiSubscribers: 0
+    // Search is a visible consumer with a short lifetime. It gets an explicit
+    // counter rather than piggybacking on AI requests, which are one-shot and
+    // must not start the visual scoreboard polling loop.
+    property int searchSubscribers: 0
     // The timetable is loaded only while its cheatsheet tab exists. Its
     // subscriber keeps a weekly scoreboard warm without making the sports bar
     // a prerequisite for calendar-only users.
@@ -91,6 +95,14 @@ Item {
 
     function releaseAiSubscriber() {
         aiSubscribers = Math.max(0, aiSubscribers - 1);
+    }
+
+    function acquireSearchSubscriber() {
+        searchSubscribers += 1;
+    }
+
+    function releaseSearchSubscriber() {
+        searchSubscribers = Math.max(0, searchSubscribers - 1);
     }
 
     function acquireTimetableSubscriber() {
