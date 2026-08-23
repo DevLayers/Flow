@@ -27,6 +27,8 @@ Item {
         const key = H.dayKeyOf(root.todayDate);
         return CalendarService.eventsByDay[key] ?? [];
     }
+    readonly property var overdueTasks: Todo.getOverdueTasks(root.todayDate)
+    readonly property var todayTasks: Todo.getTasksByDate(root.todayDate).filter(task => !root.overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")))
 
     readonly property var rows: {
         const out = [];
@@ -39,12 +41,14 @@ Item {
             const key = H.dayKeyOf(date);
             const dayHolidays = holidayMap[key] ?? [];
             let dayEvents = CalendarService.eventsByDay[key] ?? [];
+            const overdueTasks = Todo.getOverdueTasks(today);
+            const dayTasks = Todo.getTasksByDate(date).filter(task => !overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")));
 
             // Today's list is about what is left of today, not what already ran.
             if (offset === 0)
                 dayEvents = dayEvents.filter(evt => CalendarService.isAllDayEvent(evt) || (evt.endDate && evt.endDate.getTime() >= now.getTime()));
 
-            if (dayEvents.length === 0 && dayHolidays.length === 0)
+            if (dayEvents.length === 0 && dayHolidays.length === 0 && dayTasks.length === 0)
                 continue;
 
             out.push({
@@ -52,7 +56,7 @@ Item {
                 rowKey: "day:" + key,
                 date: date,
                 offset: offset,
-                count: dayEvents.length
+                count: dayEvents.length + dayTasks.length
             });
 
             for (let i = 0; i < dayHolidays.length; i++) {
@@ -71,6 +75,14 @@ Item {
                     event: dayEvents[i]
                 });
             }
+            for (let i = 0; i < dayTasks.length; i++) {
+                out.push({
+                    rowType: "task",
+                    rowKey: "task:" + key + ":" + (dayTasks[i].id || dayTasks[i].content || i),
+                    date: date,
+                    task: dayTasks[i]
+                });
+            }
 
             if (out.length >= root.maxRows)
                 break;
@@ -78,7 +90,7 @@ Item {
         return out;
     }
 
-    readonly property int upcomingCount: root.rows.filter(row => row.rowType === "event").length
+    readonly property int upcomingCount: root.rows.filter(row => row.rowType === "event" || row.rowType === "task").length
 
     onEntranceKeyChanged: heroAnim.restart()
 
@@ -172,11 +184,34 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: root.todayEvents.length === 0 ? Translation.tr("Nothing scheduled today") : Translation.tr("%1 event(s) today").arg(String(root.todayEvents.length))
+                    text: root.todayEvents.length + root.todayTasks.length === 0
+                        ? Translation.tr("Nothing scheduled today")
+                        : Translation.tr("%1 item(s) today").arg(String(root.todayEvents.length + root.todayTasks.length))
                     font.pixelSize: Appearance.font.pixelSize.smallie
                     font.weight: Font.Medium
                     color: ColorUtils.applyAlpha(Appearance.colors.colOnPrimaryContainer, 0.8)
                     elide: Text.ElideRight
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    visible: root.overdueTasks.length > 0
+                    text: Translation.tr("Overdue")
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: ColorUtils.applyAlpha(Appearance.colors.colOnPrimaryContainer, 0.75)
+                }
+
+                Repeater {
+                    model: root.overdueTasks
+
+                    delegate: TaskChip {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        taskData: modelData
+                        compact: true
+                        onCompletionRequested: task => Todo.markDone(task)
+                    }
                 }
             }
         }
@@ -227,7 +262,7 @@ Item {
                 icon: "event_available"
                 shape: "Cookie9Sided"
                 title: Translation.tr("All clear")
-                description: Translation.tr("No events in the next %1 days").arg(String(root.horizonDays))
+                description: Translation.tr("No events or tasks in the next %1 days").arg(String(root.horizonDays))
                 titlePixelSize: Appearance.font.pixelSize.normal
                 descriptionPixelSize: Appearance.font.pixelSize.smallie
                 iconSize: 34
@@ -374,6 +409,16 @@ Item {
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    Loader {
+                        anchors.fill: parent
+                        active: rowItem.rowType === "task"
+                        sourceComponent: TaskChip {
+                            taskData: rowItem.modelData.task
+                            compact: false
+                            onCompletionRequested: task => Todo.markDone(task)
                         }
                     }
                 }
