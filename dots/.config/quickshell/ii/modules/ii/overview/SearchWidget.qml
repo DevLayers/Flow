@@ -26,6 +26,9 @@ Item {
     // the monitor that is actually rendering the Search surface.
     property string surfaceMonitorName: ""
     property string routedSessionRequestId: ""
+    // Explicit panel requests come from normal search rows and external
+    // deep-links. The text remains editable as that panel's local filter.
+    property string requestedPanelId: ""
 
     readonly property string xdgConfigHome: Directories.config
     readonly property int typingDebounceInterval: 200
@@ -80,7 +83,7 @@ Item {
         }
     }
     readonly property var resolvedPanel: SearchPanelRegistry.resolve(root.searchingText)
-    readonly property string activePanelId: root.isAiMode ? "ai" : (root.resolvedPanel?.id ?? "")
+    readonly property string activePanelId: root.isAiMode ? "ai" : (root.requestedPanelId || root.resolvedPanel?.id || "")
     readonly property var activePanel: SearchPanelRegistry.byId(root.activePanelId)
     readonly property bool isClipboardMode: root.activePanelId === "clipboard"
     readonly property bool isBluetoothMode: root.activePanelId === "bluetooth"
@@ -127,6 +130,8 @@ Item {
         case "mediaDownloader": return mediaDownloaderPanelLoader.item;
         case "materialSymbols": return materialSymbolsPanelLoader.item;
         case "ai": return aiPanelLoader.item;
+        case "settings": return registeredPanelHost.activeItem;
+        case "keybinds": return registeredPanelHost.activeItem;
         default: return null;
         }
     }
@@ -214,11 +219,34 @@ Item {
         target: GlobalStates
         function onOverviewOpenChanged() {
             if (!GlobalStates.overviewOpen) {
+                root.requestedPanelId = "";
                 if (root.isAiMode || root.aiAutoEngaged || root.aiModeLocked)
                     root.resetAiSearchState(false);
                 else
                     root.cancelSearch();
             }
+        }
+    }
+
+    function consumePanelIntent() {
+        if (!GlobalStates.overviewOpen)
+            return;
+        const requested = GlobalStates.consumePendingSearchPanel();
+        const panel = SearchPanelRegistry.byId(requested);
+        if (panel && panel.enabled()) {
+            root.requestedPanelId = requested;
+            Qt.callLater(root.focusSearchInput);
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSearchPanelNavigationRequestChanged() {
+            root.consumePanelIntent();
+        }
+        function onOverviewOpenChanged() {
+            if (GlobalStates.overviewOpen)
+                root.consumePanelIntent();
         }
     }
     readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !root.isAnySpecialMode && root.searchingText === ""
@@ -450,6 +478,7 @@ Item {
         // draft per session; the launcher query must not become a second draft
         // store that brings the last ordinary search back on the next open.
         root.searchingText = "";
+        root.requestedPanelId = "";
         LauncherSearch.query = "";
         searchBar.searchInput.text = "";
         searchBar.animateWidth = true;
@@ -812,6 +841,8 @@ Item {
                 }
 
                 clipboardMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
+                activePanelMode: root.activePanelItem !== null
+                supportsPanelSectionToggle: root.activePanelId === "settings"
                 clipboardWidth: 830
                 currentResultIndex: appResults.currentIndex
                 isTranslatorPanelFocused: root.isTranslatorMode && translatorPanelLoader.item && translatorPanelLoader.item.focusedControlIndex !== -1
@@ -841,6 +872,18 @@ Item {
                     if (appResults.visible) {
                         root.requestToggleActions();
                     }
+                }
+
+                onTogglePanelSection: {
+                    searchKeyRouter.dispatch("toggleSection");
+                }
+
+                onCopySelected: {
+                    searchKeyRouter.dispatch("copySelected");
+                }
+
+                onOpenSelectedInCheatsheet: {
+                    searchKeyRouter.dispatch("openSelectedInCheatsheet");
                 }
 
                 onEscapeToSearch: {
@@ -1644,6 +1687,21 @@ Item {
                     value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.materialSymbols])
                     when: materialSymbolsPanelLoader.status === Loader.Ready
                 }
+            }
+
+            SearchPanelHost {
+                id: registeredPanelHost
+                Layout.fillWidth: true
+                Layout.preferredHeight: activePanelId === "settings" || activePanelId === "keybinds"
+                    ? implicitHeight
+                    : 0
+                height: Layout.preferredHeight
+                activePanelId: root.activePanelId === "settings" || root.activePanelId === "keybinds"
+                    ? root.activePanelId
+                    : ""
+                searchQuery: root.searchingText
+                inNotchMode: root.inNotchMode
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
             }
 
             Loader {

@@ -111,6 +111,113 @@ Singleton {
         });
     }
 
+    function createSettingsPanelResultObject(matchCount: int): var {
+        const queryText = root.query.trim();
+        const comment = matchCount > 0
+            ? Translation.tr("%1 results for \"%2\"").arg(String(matchCount)).arg(queryText)
+            : Translation.tr("Search settings for \"%1\"").arg(queryText);
+        return resultComp.createObject(null, {
+            key: "panel:settings",
+            name: Translation.tr("Settings"),
+            type: Translation.tr("Settings"),
+            verb: Translation.tr("Open"),
+            iconName: "settings",
+            iconType: LauncherSearchResult.IconType.Material,
+            comment,
+            panelId: "settings",
+            keepOverviewOpen: true,
+            execute: () => GlobalStates.openSearchPanel("settings")
+        });
+    }
+
+    function keybindMatches(queryText: string, limit: int): var {
+        const terms = String(queryText ?? "").trim().toLocaleLowerCase().split(/\s+/).filter(term => term.length > 0);
+        if (terms.length === 0)
+            return [];
+        const output = [];
+
+        function collect(nodes, source, parentSection) {
+            for (const node of Array.from(nodes ?? [])) {
+                const section = String(node?.name ?? parentSection ?? "").trim() || Translation.tr("Keybinds");
+                for (const binding of Array.from(node?.keybinds ?? [])) {
+                    const keys = Array.from(binding?.mods ?? []).map(part => String(part))
+                        .concat([String(binding?.key ?? "")]).filter(part => part.length > 0);
+                    const name = String(binding?.comment ?? "").trim()
+                        || `${String(binding?.dispatcher ?? "").trim()} ${String(binding?.params ?? "").trim()}`.trim();
+                    const haystack = [section, name, keys.join(" "), binding?.dispatcher ?? "", binding?.params ?? ""]
+                        .join(" ").toLocaleLowerCase();
+                    if (keys.length > 0 && name.length > 0 && terms.every(term => haystack.includes(term))) {
+                        output.push({
+                            section,
+                            source,
+                            keys,
+                            name,
+                            dispatcher: String(binding?.dispatcher ?? "").trim(),
+                            params: String(binding?.params ?? "").trim()
+                        });
+                    }
+                }
+                collect(node?.children, source, section);
+            }
+        }
+
+        if (Config.options.search.modules.keybinds.includeDefaultBinds)
+            collect(HyprlandKeybinds.defaultKeybinds?.children, "default", "");
+        if (Config.options.search.modules.keybinds.includeUserBinds)
+            collect(HyprlandKeybinds.userKeybinds?.children, "user", "");
+        return output.slice(0, limit);
+    }
+
+    function createKeybindResultObject(binding: var): var {
+        return resultComp.createObject(null, {
+            key: "keybind:" + binding.keys.join("+") + ":" + binding.name,
+            name: binding.name,
+            type: Translation.tr("Keybind"),
+            verb: binding.dispatcher.length > 0 ? Translation.tr("Run") : Translation.tr("Copy"),
+            iconName: "keyboard",
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: binding.section,
+            keyHints: binding.keys,
+            keepOverviewOpen: binding.dispatcher.length === 0,
+            execute: () => {
+                if (binding.dispatcher.length > 0)
+                    Hyprland.dispatch(`${binding.dispatcher}${binding.params.length > 0 ? " " + binding.params : ""}`);
+                else
+                    Quickshell.clipboardText = binding.keys.join("+");
+            },
+            actions: [
+                resultComp.createObject(null, {
+                    name: Translation.tr("Copy shortcut"),
+                    iconName: "content_copy",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => Quickshell.clipboardText = binding.keys.join("+")
+                }),
+                resultComp.createObject(null, {
+                    name: Translation.tr("Open in Cheat Sheet"),
+                    iconName: "help",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => GlobalStates.openCheatsheet("keybinds")
+                })
+            ]
+        });
+    }
+
+    function cheatsheetTabMatches(queryText: string): var {
+        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        if (query.length < 2 || !Config.options.search.modules.cheatsheet.enable)
+            return [];
+        const tabs = [
+            { id: "keybinds", label: Translation.tr("Keybinds"), icon: "keyboard", keywords: ["keybinds", "atalhos", "shortcuts", "binds"], enabled: true },
+            { id: "email", label: Translation.tr("Email"), icon: "mail", keywords: ["gmail", "email", "inbox", "mail"], enabled: Config.options.cheatsheet.enableGmail },
+            { id: "commands", label: Translation.tr("Commands"), icon: "terminal", keywords: ["commands", "comandos", "cmd"], enabled: Config.options.cheatsheet.enableCommands },
+            { id: "timetable", label: Translation.tr("Timetable"), icon: "calendar_month", keywords: ["timetable", "horário", "aula", "agenda escolar"], enabled: Config.options.cheatsheet.enableTimetable },
+            { id: "elements", label: Translation.tr("Elements"), icon: "experiment", keywords: ["periodic", "elements", "tabela periódica"], enabled: Config.options.cheatsheet.enablePeriodicTable },
+            { id: "aminoAcids", label: Translation.tr("Amino acids"), icon: "biotech", keywords: ["amino", "aminoácidos", "protein"], enabled: Config.options.cheatsheet.enableAminoAcids },
+            { id: "workspaces", label: Translation.tr("Workspaces"), icon: "dashboard", keywords: ["workspaces", "layouts", "perfis"], enabled: Config.options.cheatsheet.enableWorkspaceProfiles }
+        ];
+        return tabs.filter(tab => tab.enabled && tab.keywords.some(keyword => keyword.includes(query)));
+    }
+
     // Instantly evaluate simple arithmetic using JS — no qalc needed
     // Only allows digits, basic operators, parens, dots, spaces — safe subset
     function jsEvalMath(expr) {
@@ -802,10 +909,20 @@ Singleton {
         // MPRIS handled above (empty query case)
 
         const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).slice(0, 60).map(entry => root.createAppResultObject(entry));
-        const settingsResultObjects = (root.isSettingsSearchQuery(root.query) && (Config.options.search.showSettings ?? true))
-            ? (root.settingsIndexReady
-                ? root.settingsIntegrationSearch(root.query).map(setting => root.createSettingsResultObject(setting))
-                : (Ai.settingsIntegration.ensureIndex(), []))
+        const settingsSearchActive = root.isSettingsSearchQuery(root.query)
+            && Config.options.search.modules.settingsToggles.enable;
+        const settingsMatches = settingsSearchActive && root.settingsIndexReady
+            ? Ai.settingsIntegration.search(root.query, 100)
+            : [];
+        if (settingsSearchActive && !root.settingsIndexReady)
+            Ai.settingsIntegration.ensureIndex();
+        const maxInlineSettings = Math.max(0, Config.options.search.modules.settingsToggles.maxInlineResults);
+        const settingsResultObjects = settingsSearchActive && maxInlineSettings > 0
+            ? settingsMatches.slice(0, maxInlineSettings).map(setting => root.createSettingsResultObject(setting))
+            : [];
+        const settingsPanelResultObjects = settingsSearchActive && maxInlineSettings === 0
+            && (!root.settingsIndexReady || settingsMatches.length > 0)
+            ? [root.createSettingsPanelResultObject(settingsMatches.length)]
             : [];
         const commandResultObject = resultComp.createObject(null, {
             key: "cmd:shell",
@@ -1112,6 +1229,51 @@ Singleton {
         // useful controls in the same list, but belong after the programs
         // rather than displacing them at the top of every broad query.
         result = result.concat(settingsResultObjects);
+        result = result.concat(settingsPanelResultObjects);
+
+        ////////// Cheat Sheet tabs //////////
+        for (const tab of root.cheatsheetTabMatches(root.query)) {
+            result.push(resultComp.createObject(null, {
+                key: "cheatsheet:" + tab.id,
+                name: tab.label,
+                type: Translation.tr("Cheat Sheet"),
+                verb: Translation.tr("Open"),
+                iconName: tab.icon,
+                iconType: LauncherSearchResult.IconType.Material,
+                comment: Translation.tr("Cheat Sheet"),
+                execute: () => GlobalStates.openCheatsheet(tab.id)
+            }));
+        }
+
+        ////////// Hyprland keybinds //////////
+        if (Config.options.search.modules.keybinds.enable && root.isSettingsSearchQuery(root.query)) {
+            for (const binding of root.keybindMatches(root.query, 3))
+                result.push(root.createKeybindResultObject(binding));
+        }
+
+        // Panels with no prefix stay discoverable through explicit, compact
+        // rows; their query is preserved as the panel's own filter.
+        const naturalQuery = root.query.trim().toLocaleLowerCase();
+        if (Config.options.search.modules.settingsToggles.enable
+                && settingsPanelResultObjects.length === 0
+                && ["settings", "config", "configurar", "dotfiles"].some(keyword => keyword.includes(naturalQuery))) {
+            result.push(root.createSettingsPanelResultObject(0));
+        }
+        if (Config.options.search.modules.keybinds.enable
+                && ["keybind", "keybinds", "atalho", "shortcuts", "bind"].some(keyword => keyword.includes(naturalQuery))) {
+            result.push(resultComp.createObject(null, {
+                key: "panel:keybinds",
+                name: Translation.tr("Keybinds"),
+                type: Translation.tr("Keybinds"),
+                verb: Translation.tr("Open"),
+                iconName: "keyboard",
+                iconType: LauncherSearchResult.IconType.Material,
+                comment: Translation.tr("Search all Hyprland shortcuts"),
+                panelId: "keybinds",
+                keepOverviewOpen: true,
+                execute: () => GlobalStates.openSearchPanel("keybinds")
+            }));
+        }
 
         ////////// Quick toggles //////////
         if (Config.options.search.modules.quickToggles.enable && root.query.trim().length >= 2) {
@@ -1215,13 +1377,6 @@ Singleton {
                 isBuiltin: true
             },
             {
-                names: ["settings", "configurar", "config", "dotfiles"],
-                prefix: "__openSettings",
-                label: Translation.tr("Dotfiles Settings"),
-                icon: "settings",
-                isBuiltin: true
-            },
-            {
                 names: ["bluetooth"],
                 prefix: Config.options.search.prefix.bluetooth,
                 label: Translation.tr("Bluetooth Manager"),
@@ -1247,13 +1402,11 @@ Singleton {
         const queryLower = root.query.toLowerCase();
         for (const mod of moduleShortcuts) {
             if (mod.names.some(n => n.startsWith(queryLower) && queryLower.length >= 2)) {
-                const execFn = mod.prefix === "__openSettings" ? () => {
-                    root.requestOpenSettings();
-                } : () => {
+                const execFn = () => {
                     root.query = mod.prefix;
                 };
                 result.push(resultComp.createObject(null, {
-                    key: mod.prefix === "__openSettings" ? "shortcut:openSettings" : ("shortcut:" + mod.label),
+                    key: "shortcut:" + mod.label,
                     name: mod.label,
                     type: Translation.tr("Built-in"),
                     verb: Translation.tr("Switch"),
@@ -1327,6 +1480,16 @@ Singleton {
         }
     }
 
+    Connections {
+        target: HyprlandKeybinds
+        function onDefaultKeybindsChanged() {
+            root._scheduleResultsUpdate();
+        }
+        function onUserKeybindsChanged() {
+            root._scheduleResultsUpdate();
+        }
+    }
+
     function createResult(properties) {
         return {
             key: properties.key || "",
@@ -1358,15 +1521,14 @@ Singleton {
             pinnable: properties.pinnable !== undefined ? properties.pinnable : true,
             matchTerms: properties.matchTerms || [],
             category: properties.category || properties.type || "",
-            settingRef: properties.settingRef ?? null
+            settingRef: properties.settingRef ?? null,
+            keyHints: properties.keyHints ?? []
         };
     }
 
     function settingsIntegrationSearch(query: string): var {
-        // Three at most: the launcher list is shared with apps, commands and
-        // everything else, and a settings match is a suggestion rather than
-        // the answer to the whole query.
-        return Ai.settingsIntegration.search(query, 3);
+        const maxInline = Math.max(0, Config.options.search.modules.settingsToggles.maxInlineResults);
+        return maxInline > 0 ? Ai.settingsIntegration.search(query, maxInline) : [];
     }
 
     readonly property var resultComp: {

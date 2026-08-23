@@ -766,6 +766,14 @@ RippleButton {
                         }
                     }
 
+                    KeyHint {
+                        visible: !root.actionPanelOpen && (root.entry?.keyHints?.length ?? 0) > 0
+                        Layout.alignment: Qt.AlignVCenter
+                        keys: root.entry?.keyHints ?? []
+                        surface: root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                        onSurface: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                    }
+
                     StyledSwitch {
                         visible: root.hasInlineSwitch && !root.actionPanelOpen
                         Layout.alignment: Qt.AlignVCenter

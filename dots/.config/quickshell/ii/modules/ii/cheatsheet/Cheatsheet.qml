@@ -26,35 +26,41 @@ Scope {
             });
         }
         list.push({
+            "id": "keybinds",
             "icon": "keyboard",
             "name": Translation.tr("Keybinds")
         });
         if (Config.options.cheatsheet.enablePeriodicTable) {
             list.push({
+                "id": "elements",
                 "icon": "experiment",
                 "name": Translation.tr("Elements")
             });
         }
         if (Config.options.cheatsheet.enableAminoAcids) {
             list.push({
+                "id": "aminoAcids",
                 "icon": "biotech",
                 "name": Translation.tr("Amino acids")
             });
         }
         if (Config.options.cheatsheet.enableCommands) {
             list.push({
+                "id": "commands",
                 "icon": "terminal",
                 "name": Translation.tr("Commands")
             });
         }
         if (Config.options.cheatsheet.enableWorkspaceProfiles) {
             list.push({
+                "id": "workspaces",
                 "icon": "dashboard",
                 "name": Translation.tr("Workspaces")
             });
         }
         if (Config.options.cheatsheet.enableGmail) {
             list.push({
+                "id": "email",
                 "icon": "mail",
                 "name": Translation.tr("Email")
             });
@@ -62,10 +68,25 @@ Scope {
         return list;
     }
 
+    function indexOfTab(tabId) {
+        return root.tabButtonList.findIndex(tab => tab.id === tabId);
+    }
+
+    function consumePendingTab() {
+        const pendingTab = GlobalStates.cheatsheetPendingTab;
+        if (pendingTab.length === 0)
+            return;
+        const index = root.indexOfTab(pendingTab);
+        GlobalStates.cheatsheetPendingTab = "";
+        if (index >= 0)
+            Persistent.states.cheatsheet.tabIndex = index;
+    }
+
     Connections {
         target: GlobalStates
         function onCheatsheetOpenChanged() {
             if (GlobalStates.cheatsheetOpen) {
+                root.consumePendingTab();
                 root.requestOpen();
             } else {
                 root.requestClose();

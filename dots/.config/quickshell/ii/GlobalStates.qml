@@ -45,6 +45,9 @@ Singleton {
     }
     property bool alarmRinging: false
     property bool cheatsheetOpen: false
+    // A stable tab id makes deep links independent from the user-configurable
+    // tab order. Cheatsheet consumes this intent as soon as it opens.
+    property string cheatsheetPendingTab: ""
     // Notification actions can ask the lazily-loaded timetable to land on a
     // concrete local date. A serial makes two clicks for the same day visible.
     property string timetableRequestedDate: ""
@@ -251,6 +254,11 @@ Singleton {
     property real activeSearchHeight: 0
     property real activeSearchWidth: 0
     property string activeSearchQuery: ""
+    // Search panels are lazy and may be hosted on any monitor. Keep a small
+    // transient intent here so callers do not need to know which SearchWidget
+    // instance will render it.
+    property string searchPendingPanel: ""
+    property int searchPanelNavigationRequest: 0
     property bool searchDropActive: false
     property real searchDropExclusionX: 0
     property real searchDropExclusionY: 0
@@ -438,7 +446,8 @@ Singleton {
         root.cheatsheetOpen = !root.cheatsheetOpen;
     }
 
-    function openCheatsheet() {
+    function openCheatsheet(tabId) {
+        root.cheatsheetPendingTab = String(tabId ?? "");
         if (root.cheatsheetOpen) {
             root.cheatsheetOpen = false;
         }
@@ -498,6 +507,10 @@ Singleton {
 
         function open(): void {
             root.openCheatsheet();
+        }
+
+        function openTab(tabId: string): void {
+            root.openCheatsheet(tabId);
         }
 
         function close(): void {
@@ -850,6 +863,21 @@ Singleton {
     function openSearch(monitorName) {
         root.activeSearchMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.overviewOpen = true;
+    }
+
+    function openSearchPanel(panelId, monitorName) {
+        const requested = String(panelId ?? "").trim();
+        if (requested.length === 0)
+            return;
+        root.searchPendingPanel = requested;
+        root.searchPanelNavigationRequest++;
+        root.openSearch(monitorName);
+    }
+
+    function consumePendingSearchPanel() {
+        const pending = root.searchPendingPanel;
+        root.searchPendingPanel = "";
+        return pending;
     }
 
     Timer {

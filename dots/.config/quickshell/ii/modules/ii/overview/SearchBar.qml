@@ -16,6 +16,8 @@ RowLayout {
     spacing: 6
     property bool animateWidth: false
     property bool clipboardMode: false
+    property bool activePanelMode: false
+    property bool supportsPanelSectionToggle: false
     property int clipboardWidth: 860
     property alias searchInput: searchInput
     property string searchingText
@@ -60,6 +62,9 @@ RowLayout {
     signal deleteSelected
     signal ctrlKPressed
     signal copySvgPressed
+    signal togglePanelSection
+    signal copySelected
+    signal openSelectedInCheatsheet
     // Fired when Esc is pressed while the text is empty in AI mode — asks the
     // host to leave AI chat and return to the plain search.
     signal escapeToSearch
@@ -338,6 +343,10 @@ RowLayout {
                 root.sendMessage();
                 return;
             }
+            if (root.activePanelMode) {
+                root.activate();
+                return;
+            }
             if (root.clipboardMode) {
                 root.activate();
                 return;
@@ -378,12 +387,38 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
+            if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                    && (event.modifiers & Qt.ControlModifier) && root.activePanelMode) {
+                root.openSelectedInCheatsheet();
+                event.accepted = true;
+                return;
+            }
+            if (event.key === Qt.Key_C && (event.modifiers & Qt.ControlModifier) && root.activePanelMode) {
+                root.copySelected();
+                event.accepted = true;
+                return;
+            }
+            if (event.key === Qt.Key_Tab && root.activePanelMode && root.supportsPanelSectionToggle) {
+                root.togglePanelSection();
+                event.accepted = true;
+                return;
+            }
             if (event.key === Qt.Key_Up) {
                 root.navigateUp();
                 event.accepted = true;
                 return;
             } else if (event.key === Qt.Key_Down) {
                 root.navigateDown();
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && event.key === Qt.Key_Left) {
+                root.navigateLeft();
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && event.key === Qt.Key_Right) {
+                root.navigateRight();
                 event.accepted = true;
                 return;
             }

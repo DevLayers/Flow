@@ -78,7 +78,8 @@ Item {
     }
 
     onActivePanelIdChanged: {
-        if (!activePanelId)
-            activeItem = null;
+        // Never route keys or geometry to the panel that just faded out while
+        // the next Loader is still incubating.
+        activeItem = null;
     }
 }
