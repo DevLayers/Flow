@@ -44,7 +44,7 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertIn("matchesConfiguredTeams", SPORTS_SERVICE)
         self.assertIn("monitoredLeagueEntries", SPORTS_SERVICE)
 
-    def test_both_views_request_and_render_espn_games(self) -> None:
+    def test_month_renders_games_and_week_routes_them_to_a_day_browser(self) -> None:
         month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
         day_cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
@@ -55,7 +55,61 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertIn("data?.sportEvent === true ||", day_cell)
         self.assertIn("SportsService.requestTimetableRange", week)
         self.assertIn("SportsService.gamesForDate(date)", week)
-        self.assertIn("eventSidebar.showEvent(event)", week)
+        self.assertIn("readonly property var sportsDays", week)
+        self.assertIn("eventSidebar.showSportsDay", week)
+        self.assertIn("sportsListOnly: true", week)
+        self.assertNotIn(".concat(SportsService.gamesForDate(date))", week)
+
+    def test_month_sports_chips_use_a_distinct_tertiary_fill(self) -> None:
+        chip = (TIMETABLE / "MonthEventChip.qml").read_text(encoding="utf-8")
+
+        self.assertIn("readonly property bool sportEvent", chip)
+        self.assertIn("Appearance.colors.colTertiaryContainer", chip)
+        self.assertIn("Appearance.colors.colTertiaryContainerHover", chip)
+        self.assertIn('text: "sports_score"', chip)
+        self.assertIn("visible: !root.allDay && !root.sportEvent", chip)
+
+    def test_day_sidebar_separates_calendar_events_from_sports(self) -> None:
+        sidebar = (TIMETABLE / "MonthEventSidebar.qml").read_text(encoding="utf-8")
+        row = (TIMETABLE / "MonthDayEventRow.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property bool sportsListOnly: false", sidebar)
+        self.assertIn("function showSportsDay(date)", sidebar)
+        self.assertIn("readonly property var dayCalendarEvents", sidebar)
+        self.assertIn("readonly property var daySports", sidebar)
+        self.assertIn('text: Translation.tr("Sports").toUpperCase()', sidebar)
+        self.assertIn("model: root.sportsListOnly ? [] : root.dayCalendarEvents", sidebar)
+        self.assertIn("model: root.daySports", sidebar)
+        self.assertIn("Appearance.colors.colTertiaryContainer", row)
+        self.assertIn("Appearance.colors.colTertiaryContainerHover", row)
+        self.assertIn('text: "sports_score"', row)
+
+    def test_read_only_details_use_the_full_sidebar_height(self) -> None:
+        sidebar = (TIMETABLE / "MonthEventSidebar.qml").read_text(encoding="utf-8")
+
+        self.assertIn("bottom: root.eventReadOnly ? parent.bottom : detailsActions.top", sidebar)
+        self.assertIn("bottomMargin: root.eventReadOnly ? 0 : 12", sidebar)
+
+    def test_empty_espn_collections_render_real_empty_states(self) -> None:
+        details = (TIMETABLE / "SportsEventDetails.qml").read_text(encoding="utf-8")
+
+        self.assertIn("readonly property var populatedRosters", details)
+        self.assertIn("readonly property var populatedBoxscoreTeams", details)
+        self.assertIn("readonly property var populatedLeaders", details)
+        self.assertIn("component EmptySection", details)
+        self.assertIn("root.populatedRosters.length === 0", details)
+        self.assertIn("root.populatedBoxscoreTeams.length === 0", details)
+        self.assertIn("root.populatedLeaders.length === 0", details)
+        self.assertIn('Translation.tr("Unavailable")', details)
+
+    def test_sports_detail_rows_receive_the_sidebar_width(self) -> None:
+        details = (TIMETABLE / "SportsEventDetails.qml").read_text(encoding="utf-8")
+        detail_component = details.split("component DetailRow: Rectangle", 1)[1]
+
+        self.assertIn("Layout.fillWidth: true", detail_component)
+        self.assertIn("text: detailRow.caption", detail_component)
+        self.assertIn("text: detailRow.value", detail_component)
+        self.assertNotIn("parent.parent.parent.caption", detail_component)
 
     def test_live_refresh_runs_only_for_an_active_timetable(self) -> None:
         host = (ROOT / "modules" / "ii" / "cheatsheet" / "CheatsheetTimetable.qml").read_text(encoding="utf-8")

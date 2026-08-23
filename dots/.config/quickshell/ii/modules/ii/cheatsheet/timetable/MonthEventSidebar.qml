@@ -28,6 +28,8 @@ Item {
     property var event: null
     property date day: new Date()
     property bool detailsOnly: false
+    /** Restricts the day browser to ESPN games (used by the compact week view). */
+    property bool sportsListOnly: false
 
     readonly property bool editing: root.mode === "edit" || root.mode === "create"
     readonly property bool open: root.mode !== ""
@@ -78,6 +80,10 @@ Item {
         root.day = H.startOfDay(date);
         root.event = null;
         root.setMode("day");
+    }
+
+    function showSportsDay(date) {
+        root.showDay(date);
     }
 
     function showEvent(eventData) {
@@ -329,7 +335,9 @@ Item {
     }
 
     // ─── Derived ───
-    readonly property var dayEvents: (CalendarService.eventsByDay[H.dayKeyOf(root.day)] ?? []).concat(SportsService.gamesForDate(root.day))
+    readonly property var dayCalendarEvents: CalendarService.eventsByDay[H.dayKeyOf(root.day)] ?? []
+    readonly property var daySports: SportsService.gamesForDate(root.day)
+    readonly property var dayEvents: root.sportsListOnly ? root.daySports : root.dayCalendarEvents.concat(root.daySports)
     readonly property var dayHolidays: (Config.options.calendar.holidays.enable && Config.options.calendar.holidays.showInMonthView) ? (Holidays.byDayKey[H.dayKeyOf(root.day)] ?? []) : []
     readonly property color accent: root.sportsEvent ? Appearance.colors.colTertiary : (root.event ? H.chipColor(root.event, Appearance.colors) : Appearance.colors.colPrimary)
     readonly property bool isDayToday: H.sameDate(root.day, DateTime.clock.date)
@@ -350,7 +358,7 @@ Item {
         case "scope":
             return root.pendingAction === "delete" ? Translation.tr("Delete recurring event") : Translation.tr("Edit recurring event");
         default:
-            return Qt.formatDate(root.day, "MMMM yyyy");
+            return root.sportsListOnly ? Translation.tr("Sports") : Qt.formatDate(root.day, "MMMM yyyy");
         }
     }
 
@@ -397,13 +405,13 @@ Item {
 
                 RippleButton {
                     id: backToDetails
-                    visible: !root.detailsOnly && root.mode === "details" && root.dayEvents.length > 1
+                    visible: !root.detailsOnly && root.mode === "details" && (root.sportsListOnly ? root.daySports.length > 0 : root.dayEvents.length > 1)
                     implicitWidth: 38
                     implicitHeight: 38
                     buttonRadius: Appearance.rounding.full
                     colBackground: "transparent"
                     colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                    onClicked: root.showDay(root.day)
+                    onClicked: root.sportsListOnly ? root.showSportsDay(root.day) : root.showDay(root.day)
 
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
@@ -414,7 +422,7 @@ Item {
 
                     StyledToolTip {
                         extraVisibleCondition: backToDetails.hovered
-                        text: Translation.tr("All events this day")
+                        text: root.sportsListOnly ? Translation.tr("Sports") : Translation.tr("All events this day")
                     }
                 }
 
@@ -517,7 +525,9 @@ Item {
 
                                 StyledText {
                                     Layout.fillWidth: true
-                                    text: root.dayEvents.length === 0 ? Translation.tr("Nothing scheduled") : Translation.tr("%1 event(s)").arg(String(root.dayEvents.length))
+                                    text: root.sportsListOnly
+                                        ? Translation.tr("Sports") + " · " + String(root.daySports.length)
+                                        : (root.dayEvents.length === 0 ? Translation.tr("Nothing scheduled") : Translation.tr("%1 event(s)").arg(String(root.dayEvents.length)))
                                     font.pixelSize: Appearance.font.pixelSize.normal
                                     font.weight: Font.Bold
                                     color: Appearance.colors.colOnSurface
@@ -536,7 +546,7 @@ Item {
                         }
 
                         Repeater {
-                            model: root.dayHolidays
+                            model: root.sportsListOnly ? [] : root.dayHolidays
 
                             delegate: Rectangle {
                                 required property var modelData
@@ -570,84 +580,64 @@ Item {
                             }
                         }
 
-                        StyledText {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 2
-                            visible: root.dayEvents.length > 0
-                            text: Translation.tr("Appointments").toUpperCase()
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            font.weight: Font.Bold
-                            color: Appearance.colors.colOnSurfaceVariant
-                        }
-
-                        StyledListView {
+                        StyledFlickable {
                             id: dayList
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             visible: root.dayEvents.length > 0
                             clip: true
-                            spacing: 6
-                            popin: false
-                            staggerStep: 26
-                            model: root.dayEvents
+                            contentWidth: width
+                            contentHeight: daySections.implicitHeight
 
-                            delegate: RippleButton {
-                                id: dayRow
-                                required property var modelData
-
+                            ColumnLayout {
+                                id: daySections
                                 width: dayList.width
-                                implicitHeight: 62
-                                buttonRadius: Appearance.rounding.small
-                                colBackground: Appearance.m3colors.m3surfaceContainerHighest
-                                colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                                onClicked: root.showEvent(dayRow.modelData)
+                                spacing: 6
 
-                                readonly property bool rowAllDay: CalendarService.isAllDayEvent(dayRow.modelData)
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    Layout.topMargin: 2
+                                    visible: !root.sportsListOnly && root.dayCalendarEvents.length > 0
+                                    text: Translation.tr("Appointments").toUpperCase()
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                }
 
-                                contentItem: RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 10
-                                    spacing: 10
+                                Repeater {
+                                    model: root.sportsListOnly ? [] : root.dayCalendarEvents
 
-                                    Rectangle {
-                                        Layout.preferredWidth: 4
-                                        Layout.fillHeight: true
-                                        Layout.topMargin: 10
-                                        Layout.bottomMargin: 10
-                                        radius: 2
-                                        color: H.chipColor(dayRow.modelData, Appearance.colors)
-                                    }
-
-                                    ColumnLayout {
+                                    delegate: MonthDayEventRow {
+                                        required property var modelData
                                         Layout.fillWidth: true
-                                        spacing: 1
-
-                                        StyledText {
-                                            Layout.fillWidth: true
-                                            text: dayRow.modelData.content
-                                            font.pixelSize: Appearance.font.pixelSize.smallie
-                                            font.weight: Font.Bold
-                                            color: Appearance.colors.colOnSurface
-                                            elide: Text.ElideRight
-                                            maximumLineCount: 1
-                                        }
-
-                                        StyledText {
-                                            Layout.fillWidth: true
-                                            text: dayRow.rowAllDay ? Translation.tr("All day") : H.eventRangeText(dayRow.modelData, Config.options?.time.format)
-                                            font.pixelSize: Appearance.font.pixelSize.smallest
-                                            font.weight: Font.Medium
-                                            color: Appearance.colors.colOnSurfaceVariant
-                                            elide: Text.ElideRight
-                                            maximumLineCount: 1
-                                        }
+                                        eventData: modelData
+                                        onActivated: root.showEvent(modelData)
                                     }
+                                }
 
-                                    MaterialSymbol {
-                                        text: "chevron_right"
-                                        iconSize: Appearance.font.pixelSize.large
-                                        color: Appearance.colors.colOnSurfaceVariant
+                                Item {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 12
+                                    visible: !root.sportsListOnly && root.dayCalendarEvents.length > 0 && root.daySports.length > 0
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    visible: root.daySports.length > 0
+                                    text: Translation.tr("Sports").toUpperCase()
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colTertiary
+                                }
+
+                                Repeater {
+                                    model: root.daySports
+
+                                    delegate: MonthDayEventRow {
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        eventData: modelData
+                                        onActivated: root.showEvent(modelData)
                                     }
                                 }
                             }
@@ -659,9 +649,9 @@ Item {
                             visible: root.dayEvents.length === 0
 
                             PagePlaceholder {
-                                icon: "event_available"
+                                icon: root.sportsListOnly ? "sports_score" : "event_available"
                                 shape: "Cookie9Sided"
-                                title: Translation.tr("Free day")
+                                title: root.sportsListOnly ? Translation.tr("Sports") : Translation.tr("Free day")
                                 description: Translation.tr("Nothing here yet")
                                 titlePixelSize: Appearance.font.pixelSize.normal
                                 descriptionPixelSize: Appearance.font.pixelSize.smallie
@@ -671,6 +661,7 @@ Item {
                         }
 
                         PrimaryAction {
+                            visible: !root.sportsListOnly
                             label: Translation.tr("New event")
                             symbol: "add"
                             onTriggered: root.startCreate(root.day)
@@ -688,8 +679,8 @@ Item {
                             top: parent.top
                             left: parent.left
                             right: parent.right
-                            bottom: detailsActions.top
-                            bottomMargin: 12
+                            bottom: root.eventReadOnly ? parent.bottom : detailsActions.top
+                            bottomMargin: root.eventReadOnly ? 0 : 12
                         }
                         clip: true
                         contentWidth: width

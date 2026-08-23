@@ -29,6 +29,7 @@ Item {
 
     property real maxHeight: 700
     property real headerHeight: 64 + (hasAllDayEvents ? maxAllDayEventCount * (allDayChipHeight + allDayChipSpacing) + 8 : 0)
+    readonly property real sportsToolbarHeight: root.sportsDays.length > 0 ? 48 : 0
     property real currentTimeY: -1
     property bool initialScrollApplied: false
     property string requestedSportsRange: ""
@@ -41,19 +42,36 @@ Item {
     readonly property int currentDayIndex: Config.options.cheatsheet.timetableTodayFirst ? 0 : ((DateTime.clock.date.getDay() - Config.options.time.firstDayOfWeek + 6) % 7)
 
     implicitWidth: maxContentWidth
-    implicitHeight: Math.min(headerHeight + contentHeight, maxHeight)
+    implicitHeight: Math.min(sportsToolbarHeight + headerHeight + contentHeight, maxHeight)
     readonly property var calendarDays: CalendarService.eventsInWeek
     readonly property var days: {
-        // Keep this explicit dependency: gamesForDate() reads a plain JS array,
-        // while the array replacement is what makes this projection reactive.
-        const sportsGames = SportsService.timetableGames;
         const result = [];
         for (let i = 0; i < 7; i++) {
             const date = H.getDateForDayIndex(i, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
             const calendarDay = root.calendarDays?.[i] ?? ({});
             result.push({
                 name: String(calendarDay.name || Qt.formatDate(date, "dddd")),
-                events: (calendarDay.events ?? []).concat(SportsService.gamesForDate(date))
+                events: calendarDay.events ?? []
+            });
+        }
+        return result;
+    }
+    readonly property var sportsDays: {
+        // Keep the array replacement as an explicit dependency because
+        // gamesForDate() projects from a plain JavaScript cache.
+        const sportsGames = SportsService.timetableGames;
+        const result = [];
+        if (!Array.isArray(sportsGames))
+            return result;
+        for (let i = 0; i < 7; i++) {
+            const date = H.getDateForDayIndex(i, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
+            const games = SportsService.gamesForDate(date);
+            if (games.length === 0)
+                continue;
+            result.push({
+                date: date,
+                count: games.length,
+                label: Qt.formatDate(date, "ddd d")
             });
         }
         return result;
@@ -195,13 +213,21 @@ Item {
         root.initialScrollApplied = true;
     }
 
+    function toggleSportsDay(date) {
+        if (eventSidebar.open && eventSidebar.mode === "day" && H.sameDate(eventSidebar.day, date)) {
+            eventSidebar.close();
+            return;
+        }
+        eventSidebar.showSportsDay(date);
+    }
+
     // ─── Actions ───
     function openPopupForGhost() {
         let topMin = H.snapToGrid(H.yToMinutes(root.ghostTopY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
         let botMin = H.snapToGrid(H.yToMinutes(root.ghostTopY + root.ghostHeight, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
         let eventDate = H.getDateForDayIndex(root.ghostDayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
         let colX = root.timeColumnWidth + (root.ghostDayIndex * (root.dayColumnWidth + root.spacing)) + root.dayColumnWidth;
-        let colY = root.ghostTopY + root.headerHeight - styledFlickable.contentY + 20;
+        let colY = root.ghostTopY + root.sportsToolbarHeight + root.headerHeight - styledFlickable.contentY + 20;
         eventPopup.open(H.minutesToTimeStr(topMin, Config.options?.time.format), H.minutesToTimeStr(botMin, Config.options?.time.format), eventDate, root.ghostDayIndex, colX, colY);
     }
 
@@ -214,7 +240,7 @@ Item {
         let endMin = H.parseTimeToMinutes(event.end);
         let eventDate = H.getDateForDayIndex(dayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
         let colX = root.timeColumnWidth + (dayIndex * (root.dayColumnWidth + root.spacing)) + root.dayColumnWidth;
-        let colY = H.minutesToY(startMin, root.startHour, root.startMinute, root.pixelsPerMinute) + root.headerHeight - styledFlickable.contentY + 20;
+        let colY = H.minutesToY(startMin, root.startHour, root.startMinute, root.pixelsPerMinute) + root.sportsToolbarHeight + root.headerHeight - styledFlickable.contentY + 20;
         eventPopup.openForEdit(H.minutesToTimeStr(startMin, Config.options?.time.format), H.minutesToTimeStr(endMin, Config.options?.time.format), eventDate, dayIndex, colX, colY, event);
     }
 
@@ -231,12 +257,6 @@ Item {
         function onEventsInWeekChanged() {
             root.updateNextEvent();
             Qt.callLater(root.maybeApplyInitialScroll);
-        }
-    }
-    Connections {
-        target: SportsService
-        function onTimetableGamesChanged() {
-            root.updateNextEvent();
         }
     }
     Connections {
@@ -284,6 +304,49 @@ Item {
                 duration: Appearance.animation.elementMoveFast.duration
                 easing.type: Appearance.animation.elementMoveFast.type
                 easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.sportsToolbarHeight
+            visible: root.sportsDays.length > 0
+
+            Row {
+                id: sportsPills
+                anchors.centerIn: parent
+                spacing: 6
+
+                Repeater {
+                    model: root.sportsDays
+
+                    delegate: RippleButtonWithIcon {
+                        id: sportsDayButton
+                        required property var modelData
+
+                        readonly property bool selected: eventSidebar.open && H.sameDate(eventSidebar.day, sportsDayButton.modelData.date)
+
+                        implicitWidth: contentImplicitWidth + 24
+                        implicitHeight: 36
+                        buttonRadius: Appearance.rounding.full
+                        centerContent: true
+                        materialIcon: "sports_score"
+                        materialIconFill: sportsDayButton.selected
+                        mainText: sportsDayButton.modelData.label + " · " + String(sportsDayButton.modelData.count)
+                        iconPixelSize: Appearance.font.pixelSize.normal
+                        textPixelSize: Appearance.font.pixelSize.smallie
+                        colText: sportsDayButton.selected ? Appearance.colors.colOnTertiary : Appearance.colors.colOnTertiaryContainer
+                        colBackground: sportsDayButton.selected ? Appearance.colors.colTertiary : Appearance.colors.colTertiaryContainer
+                        colBackgroundHover: sportsDayButton.selected ? Appearance.colors.colTertiaryHover : Appearance.colors.colTertiaryContainerHover
+                        colBackgroundActive: Appearance.colors.colTertiaryActive
+                        onClicked: root.toggleSportsDay(sportsDayButton.modelData.date)
+
+                        StyledToolTip {
+                            extraVisibleCondition: sportsDayButton.hovered
+                            text: Translation.tr("Sports") + " · " + Qt.formatDate(sportsDayButton.modelData.date, "dddd, d MMMM")
+                        }
+                    }
+                }
             }
         }
 
@@ -427,7 +490,7 @@ Item {
 
     TimetableNextEventFAB {
         nextEventData: root.nextEventData
-        headerHeight: root.headerHeight
+        headerHeight: root.sportsToolbarHeight + root.headerHeight
         timeColumnWidth: root.timeColumnWidth
         dayColumnWidth: root.dayColumnWidth
         spacing: root.spacing
@@ -461,7 +524,7 @@ Item {
         MonthEventSidebar {
             id: eventSidebar
             anchors.fill: parent
-            detailsOnly: true
+            sportsListOnly: true
         }
     }
 

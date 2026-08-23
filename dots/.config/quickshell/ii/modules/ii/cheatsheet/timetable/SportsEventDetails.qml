@@ -33,6 +33,9 @@ Item {
         ? root.details.keyEvents
         : (Array.isArray(root.headerCompetition?.details) ? root.headerCompetition.details : [])
     readonly property var leaders: Array.isArray(root.details?.leaders) ? root.details.leaders : []
+    readonly property var populatedRosters: root.rosters.filter(roster => root.rosterText(roster, true).length > 0 || root.rosterText(roster, false).length > 0)
+    readonly property var populatedBoxscoreTeams: root.boxscoreTeams.filter(team => root.statisticsText(team).length > 0)
+    readonly property var populatedLeaders: root.leaders.filter(group => root.leadersText(group).length > 0)
     readonly property var externalLinks: root.collectLinks()
 
     function text(value): string {
@@ -558,13 +561,19 @@ Item {
         }
 
         SectionTitle {
-            visible: root.rosters.length > 0
+            visible: root.details !== null
             symbol: "groups"
             label: Translation.tr("Line-ups")
         }
 
+        EmptySection {
+            Layout.fillWidth: true
+            visible: root.details !== null && root.populatedRosters.length === 0
+            symbol: "group_off"
+        }
+
         Repeater {
-            model: root.rosters
+            model: root.populatedRosters
 
             delegate: ColumnLayout {
                 required property var modelData
@@ -592,13 +601,19 @@ Item {
         }
 
         SectionTitle {
-            visible: root.boxscoreTeams.length > 0
+            visible: root.details !== null
             symbol: "query_stats"
             label: Translation.tr("Team statistics")
         }
 
+        EmptySection {
+            Layout.fillWidth: true
+            visible: root.details !== null && root.populatedBoxscoreTeams.length === 0
+            symbol: "monitoring"
+        }
+
         Repeater {
-            model: root.boxscoreTeams
+            model: root.populatedBoxscoreTeams
 
             delegate: DetailRow {
                 required property var modelData
@@ -612,13 +627,19 @@ Item {
         }
 
         SectionTitle {
-            visible: root.leaders.length > 0
+            visible: root.details !== null
             symbol: "military_tech"
             label: Translation.tr("Leaders")
         }
 
+        EmptySection {
+            Layout.fillWidth: true
+            visible: root.details !== null && root.populatedLeaders.length === 0
+            symbol: "leaderboard"
+        }
+
         Repeater {
-            model: root.leaders
+            model: root.populatedLeaders
 
             delegate: DetailRow {
                 required property var modelData
@@ -729,6 +750,7 @@ Item {
     }
 
     component TeamSummary: ColumnLayout {
+        id: teamSummary
         property var teamData: null
         spacing: 5
 
@@ -736,7 +758,7 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredWidth: 58
             Layout.preferredHeight: 58
-            source: String(parent.teamData?.logo ?? "")
+            source: String(teamSummary.teamData?.logo ?? "")
             sourceSize: Qt.size(58, 58)
             fillMode: Image.PreserveAspectFit
         }
@@ -744,7 +766,7 @@ Item {
         StyledText {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            text: root.text(parent.teamData?.name || Translation.tr("TBD"))
+            text: root.text(teamSummary.teamData?.name || Translation.tr("TBD"))
             font.pixelSize: Appearance.font.pixelSize.smallie
             font.weight: Font.Bold
             color: Appearance.colors.colOnTertiaryContainer
@@ -755,28 +777,30 @@ Item {
 
         StyledText {
             Layout.fillWidth: true
-            visible: root.text(parent.teamData?.record).length > 0
+            visible: root.text(teamSummary.teamData?.record).length > 0
             horizontalAlignment: Text.AlignHCenter
-            text: root.text(parent.teamData?.record)
+            text: root.text(teamSummary.teamData?.record)
             font.pixelSize: Appearance.font.pixelSize.smallest
             color: Appearance.colors.colOnTertiaryContainer
         }
     }
 
     component SectionTitle: RowLayout {
+        id: sectionTitle
         property string symbol: ""
         property string label: ""
+        Layout.fillWidth: true
         spacing: 8
 
         MaterialSymbol {
-            text: parent.symbol
+            text: sectionTitle.symbol
             iconSize: Appearance.font.pixelSize.large
             color: Appearance.colors.colPrimary
         }
 
         StyledText {
             Layout.fillWidth: true
-            text: parent.label
+            text: sectionTitle.label
             font.pixelSize: Appearance.font.pixelSize.normal
             font.weight: Font.Bold
             color: Appearance.colors.colOnSurface
@@ -784,6 +808,7 @@ Item {
     }
 
     component InfoChip: Rectangle {
+        id: infoChip
         property string symbol: ""
         property string label: ""
         implicitWidth: chipRow.implicitWidth + 22
@@ -798,13 +823,13 @@ Item {
 
             MaterialSymbol {
                 anchors.verticalCenter: parent.verticalCenter
-                text: parent.parent.symbol
+                text: infoChip.symbol
                 iconSize: Appearance.font.pixelSize.smallie
                 color: Appearance.colors.colPrimary
             }
             StyledText {
                 anchors.verticalCenter: parent.verticalCenter
-                text: parent.parent.label
+                text: infoChip.label
                 font.pixelSize: Appearance.font.pixelSize.smallest
                 font.weight: Font.Bold
                 color: Appearance.colors.colOnSurface
@@ -812,12 +837,44 @@ Item {
         }
     }
 
+    component EmptySection: Rectangle {
+        id: emptySection
+        property string symbol: "info"
+
+        implicitHeight: 46
+        radius: Appearance.rounding.small
+        color: Appearance.colors.colSurfaceContainerHighest
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            spacing: 9
+
+            MaterialSymbol {
+                text: emptySection.symbol
+                iconSize: Appearance.font.pixelSize.normal
+                color: Appearance.colors.colOnSurfaceVariant
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Unavailable")
+                font.pixelSize: Appearance.font.pixelSize.smallie
+                font.weight: Font.Medium
+                color: Appearance.colors.colOnSurfaceVariant
+            }
+        }
+    }
+
     component DetailRow: Rectangle {
+        id: detailRow
         property string symbol: ""
         property string caption: ""
         property string value: ""
         property bool multiline: false
 
+        Layout.fillWidth: true
         implicitHeight: detailLayout.implicitHeight + 20
         radius: Appearance.rounding.small
         color: Appearance.colors.colSurfaceContainerHighest
@@ -830,7 +887,7 @@ Item {
 
             MaterialShapeWrappedMaterialSymbol {
                 Layout.alignment: Qt.AlignTop
-                text: parent.parent.symbol
+                text: detailRow.symbol
                 iconSize: Appearance.font.pixelSize.normal
                 padding: 8
                 shape: MaterialShape.Shape.Cookie6Sided
@@ -844,7 +901,7 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: parent.parent.parent.caption
+                    text: detailRow.caption
                     font.pixelSize: Appearance.font.pixelSize.smallest
                     font.weight: Font.Bold
                     color: Appearance.colors.colOnSurfaceVariant
@@ -852,13 +909,13 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: parent.parent.parent.value
+                    text: detailRow.value
                     font.pixelSize: Appearance.font.pixelSize.smallie
                     font.weight: Font.Medium
                     color: Appearance.colors.colOnSurface
-                    wrapMode: parent.parent.parent.multiline ? Text.Wrap : Text.NoWrap
+                    wrapMode: detailRow.multiline ? Text.Wrap : Text.NoWrap
                     elide: Text.ElideRight
-                    maximumLineCount: parent.parent.parent.multiline ? 100 : 1
+                    maximumLineCount: detailRow.multiline ? 100 : 1
                 }
             }
         }

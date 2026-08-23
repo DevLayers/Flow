@@ -10,6 +10,8 @@ import "TimetableHelpers.js" as H
  *
  * All-day events are filled with the event colour so they read as a band across
  * the day; timed events use a dot plus time, which keeps a busy cell legible.
+ * Read-only sports projections use a tertiary filled pill and a sports icon so
+ * they cannot be mistaken for appointments that can be edited or dragged.
  * Dragging is reported to the month view in its coordinate space — the chip
  * never reparents itself, so cell clipping cannot swallow the drag proxy.
  */
@@ -35,6 +37,7 @@ Item {
     implicitHeight: compact ? 20 : 24
 
     readonly property color accent: H.chipColor(root.eventData, Appearance.colors)
+    readonly property bool sportEvent: root.eventData?.sportEvent === true
     readonly property string titleText: root.eventData?.content ?? Translation.tr("Event")
     readonly property string timeText: H.eventStartText(root.eventData, Config.options?.time.format)
 
@@ -80,6 +83,8 @@ Item {
         radius: root.allDay ? Appearance.rounding.verysmall : Math.min(height / 2, Appearance.rounding.small)
         opacity: root.revealProgress
         color: {
+            if (root.sportEvent)
+                return pointer.containsMouse ? Appearance.colors.colTertiaryContainerHover : Appearance.colors.colTertiaryContainer;
             if (root.allDay)
                 return pointer.containsMouse ? ColorUtils.mix(root.accent, Appearance.colors.colOnSurface, 0.88) : root.accent;
             if (pointer.containsMouse)
@@ -93,17 +98,25 @@ Item {
 
         Row {
             anchors.fill: parent
-            anchors.leftMargin: root.allDay ? 7 : 5
+            anchors.leftMargin: root.allDay || root.sportEvent ? 7 : 5
             anchors.rightMargin: 6
             spacing: 5
 
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: !root.allDay
+                visible: !root.allDay && !root.sportEvent
                 width: root.compact ? 6 : 7
                 height: width
                 radius: width / 2
                 color: root.accent
+            }
+
+            MaterialSymbol {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.sportEvent
+                text: "sports_score"
+                iconSize: Appearance.font.pixelSize.smallest
+                color: Appearance.colors.colOnTertiaryContainer
             }
 
             StyledText {
@@ -112,7 +125,7 @@ Item {
                 text: root.timeText
                 font.pixelSize: Appearance.font.pixelSize.smallest
                 font.weight: Font.Bold
-                color: Appearance.colors.colOnSurfaceVariant
+                color: root.sportEvent ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSurfaceVariant
             }
 
             MaterialSymbol {
@@ -120,7 +133,7 @@ Item {
                 visible: !root.compact && (root.eventData?.repeatSymbol ?? "").length > 0
                 text: "repeat"
                 iconSize: Appearance.font.pixelSize.smallest
-                color: root.allDay ? ColorUtils.getContrastingTextColor(root.accent) : Appearance.colors.colOnSurfaceVariant
+                color: root.sportEvent ? Appearance.colors.colOnTertiaryContainer : (root.allDay ? ColorUtils.getContrastingTextColor(root.accent) : Appearance.colors.colOnSurfaceVariant)
             }
 
             StyledText {
@@ -132,7 +145,7 @@ Item {
                 font.pixelSize: root.compact ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.smaller
                 font.weight: Font.DemiBold
                 font.strikeout: String(root.eventData?.status ?? "").toUpperCase() === "CANCELLED"
-                color: root.allDay ? ColorUtils.getContrastingTextColor(root.accent) : Appearance.colors.colOnSurface
+                color: root.sportEvent ? Appearance.colors.colOnTertiaryContainer : (root.allDay ? ColorUtils.getContrastingTextColor(root.accent) : Appearance.colors.colOnSurface)
             }
         }
     }
