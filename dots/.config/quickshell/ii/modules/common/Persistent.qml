@@ -314,7 +314,10 @@ Singleton {
                 property list<string> timetableCollapsedUpcomingGroups: []
                 // Pixels per hour in the timetable grid. WeekView constrains
                 // writes to its discrete zoom scale.
-                property int timetableSlotHeight: 96
+                property int timetableSlotHeight: 168
+                // One-shot migrations can change the comfortable default
+                // without overwriting a later zoom choice on every reopen.
+                property int timetableSlotHeightVersion: 0
                 // `occurrence-ms|uid|offset` and daily-summary keys. Pruned by
                 // CalendarNotifier so notifications do not repeat after reload.
                 property list<string> timetableNotified: []

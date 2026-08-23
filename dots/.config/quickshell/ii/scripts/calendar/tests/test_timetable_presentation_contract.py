@@ -18,11 +18,15 @@ class TimetablePresentationContractTests(unittest.TestCase):
         persistent = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
 
-        self.assertIn("property int timetableSlotHeight: 96", persistent)
-        self.assertIn("readonly property list<int> slotHeightSteps: [72, 96, 120]", week)
+        self.assertIn("property int timetableSlotHeight: 168", persistent)
+        self.assertIn("property int timetableSlotHeightVersion: 0", persistent)
+        self.assertIn("readonly property list<int> slotHeightSteps: [96, 120, 144, 168, 192]", week)
+        self.assertIn("readonly property int comfortableSlotHeight: 168", week)
+        self.assertIn("readonly property int slotHeightStateVersion: 1", week)
         self.assertIn("property int slotHeight: Persistent.states.cheatsheet.timetableSlotHeight", week)
         self.assertIn("function normalizeSlotHeight()", week)
-        self.assertIn("Persistent.states.cheatsheet.timetableSlotHeight = root.slotHeightSteps[1]", week)
+        self.assertIn("Persistent.states.cheatsheet.timetableSlotHeight = root.comfortableSlotHeight", week)
+        self.assertIn("Persistent.states.cheatsheet.timetableSlotHeightVersion = root.slotHeightStateVersion", week)
         self.assertIn("function zoomSlotHeight(direction, viewportY)", week)
         self.assertIn("acceptedModifiers: Qt.ControlModifier", week)
         self.assertIn("root.zoomSlotHeight(root.zoomWheelAccumulator > 0 ? 1 : -1, event.y)", week)
@@ -54,13 +58,18 @@ const source = fs.readFileSync({json.dumps(str(helper_path))}, "utf8")
 const context = {{}};
 vm.createContext(context);
 vm.runInContext(source, context);
-for (const slotHeight of [72, 96, 120]) {{
+for (const slotHeight of [96, 120, 144, 168, 192]) {{
     const pixelsPerMinute = slotHeight / 60;
     const timeSpan = 30 * pixelsPerMinute;
     const blockHeight = context.timedBlockHeight(0, 30, pixelsPerMinute, 4);
     if (blockHeight !== timeSpan - 4 || blockHeight >= timeSpan)
         throw new Error(JSON.stringify({{slotHeight, timeSpan, blockHeight}}));
 }}
+const comfortablePixelsPerMinute = 168 / 60;
+if (context.timedBlockHeight(0, 15, comfortablePixelsPerMinute, 4) < 38)
+    throw new Error("15-minute title does not fit at comfortable zoom");
+if (context.timedBlockHeight(0, 30, comfortablePixelsPerMinute, 4) <= 60)
+    throw new Error("30-minute metadata does not fit at comfortable zoom");
 """
         subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 

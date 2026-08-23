@@ -21,7 +21,9 @@ Item {
     property int startMinute: 0
     property int endHour: 24
     property int slotDuration: 60 // in minutes
-    readonly property list<int> slotHeightSteps: [72, 96, 120]
+    readonly property list<int> slotHeightSteps: [96, 120, 144, 168, 192]
+    readonly property int comfortableSlotHeight: 168
+    readonly property int slotHeightStateVersion: 1
     property int slotHeight: Persistent.states.cheatsheet.timetableSlotHeight
     property int timeColumnWidth: 56
     property real maxContentWidth: 1600
@@ -250,9 +252,14 @@ Item {
     }
 
     function normalizeSlotHeight() {
+        if (Persistent.states.cheatsheet.timetableSlotHeightVersion < root.slotHeightStateVersion) {
+            Persistent.states.cheatsheet.timetableSlotHeight = root.comfortableSlotHeight;
+            Persistent.states.cheatsheet.timetableSlotHeightVersion = root.slotHeightStateVersion;
+            return;
+        }
         if (root.slotHeightSteps.indexOf(root.slotHeight) >= 0)
             return;
-        Persistent.states.cheatsheet.timetableSlotHeight = root.slotHeightSteps[1];
+        Persistent.states.cheatsheet.timetableSlotHeight = root.comfortableSlotHeight;
     }
 
     function maybeApplyInitialScroll() {
