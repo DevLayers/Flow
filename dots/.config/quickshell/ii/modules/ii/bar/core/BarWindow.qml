@@ -135,9 +135,22 @@ Scope {
             item: barRoot.hasFullscreenWindowOnMonitor || root.lockTransitionActive ? null : hoverMaskRegion
         }
         color: "transparent"
+
+        // Only two things ever draw outside the bar strip: the wrapped-frame visuals
+        // (fakeScreenRounding 3, anchors.fill) and the dynamic island growing in notch mode. Every
+        // other setup gets a strip-sized surface instead of a fullscreen one; popups and tooltips
+        // are separate windows. The strip keeps room for the MultiEffect drop shadow (blurMax 32 +
+        // offset 4) and for the autohide hover region, which can extend past the hidden bar.
+        readonly property bool needsFullSurface: Config.options.appearance.fakeScreenRounding === 3 || (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable)
+        // Room for what is drawn outside the bar strip but still inside this window: the
+        // MultiEffect drop shadow (blurMax 32 + offset 4), the autohide hover region, and
+        // QtQuick.Controls tooltips, which unlike the tray's PopupToolTip render in the window
+        // rather than in a popup of their own and can run to a few lines.
+        readonly property real outsideStripPadding: 120
+        implicitHeight: hoverRegion.height + Math.max(outsideStripPadding, hoverMaskRegion.topMaskExtend, hoverMaskRegion.bottomMaskExtend)
         anchors {
-            top: true
-            bottom: true
+            top: barRoot.needsFullSurface || !Config.options.bar.bottom
+            bottom: barRoot.needsFullSurface || Config.options.bar.bottom
             left: true
             right: true
         }

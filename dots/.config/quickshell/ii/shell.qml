@@ -2,6 +2,10 @@
 //@ pragma Env QS_NO_RELOAD_POPUP=1
 //@ pragma Env QT_QUICK_CONTROLS_STYLE=Basic
 //@ pragma Env QT_QUICK_FLICKABLE_WHEEL_DECELERATION=10000
+// Qt allocates a depth-stencil renderbuffer per window (and per layer) for 2D opaque batching. The rendered
+// output is identical without it; it only trades a little GPU time on heavy overdraw for ~20 MB per
+// fullscreen window on HiDPI.
+//@ pragma Env QSG_NO_DEPTH_BUFFER=1
 
 // Remove two slashes below and adjust the value to change the UI scale
 ////@ pragma Env QT_SCALE_FACTOR=1
@@ -91,20 +95,31 @@ ShellRoot {
         id: openRgbApplyProc
     }
 
+    // Families are loaded by URL rather than as inline components: an inline `component: X {}`
+    // compiles X and its whole import closure (for Waffle: 144 files plus the FluentWinUI3/Fusion
+    // style and Kirigami plugins) at startup even when that family is never active. With a URL,
+    // nothing is compiled until the family is wanted.
+    //
+    // LazyLoader.setSource() compiles the component but never incubates it, and setActive(true)
+    // before a component exists is a silent no-op, so `active` must depend on `source` to avoid
+    // the family never loading when the two bindings settle in the wrong order.
     component PanelFamilyLoader: LazyLoader {
         required property string identifier
+        required property string familyUrl
         property bool extraCondition: true
-        active: Config.ready && Config.options.panelFamily === identifier && extraCondition
+        readonly property bool wanted: Config.ready && Config.options.panelFamily === identifier && extraCondition
+        source: wanted ? familyUrl : ""
+        active: wanted && source !== ""
     }
 
     PanelFamilyLoader {
         identifier: "ii"
-        component: IllogicalImpulseFamily {}
+        familyUrl: Qt.resolvedUrl("panelFamilies/IllogicalImpulseFamily.qml")
     }
 
     PanelFamilyLoader {
         identifier: "waffle"
-        component: WaffleFamily {}
+        familyUrl: Qt.resolvedUrl("panelFamilies/WaffleFamily.qml")
     }
 
     // Settings app loaded in-process once requested, then kept alive briefly
@@ -195,3 +210,4 @@ ShellRoot {
         onPressed: root.cyclePanelFamily()
     }
 }
+

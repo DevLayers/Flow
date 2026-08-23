@@ -72,6 +72,51 @@ Item {
     property alias wallpaperItem: wallpaper
     property alias clipRectItem: centralWallpaperClipRect
 
+    // ── Decode cap ────────────────────────────────────────────────────────────
+    // A wallpaper larger than the plane it is drawn on costs RAM twice (decoded QImage plus GPU
+    // texture) for detail no pixel can show. Cap the decode at the plane's device-pixel size with
+    // headroom for every transform that can magnify it: the overview zoom presets (1.15 worst
+    // case), the Gnome-like opening ratio (1.04) and the lock animation, which drives the plane
+    // back to scale 1.0 and so only magnifies if the base scale is below 1.
+    //
+    // The cap is expressed as pre-scaled *file* dimensions rather than the plane box: sourceSize
+    // fits the image inside the box preserving aspect, so with fillMode PreserveAspectCrop a box
+    // of a different aspect ratio would decode too small and be upscaled to cover.
+    readonly property real devicePixelRatio: Math.max(1, screen && screen.devicePixelRatio ? screen.devicePixelRatio : 1, (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
+
+    // Every transform that can scale the plane *up*, at its end value - the animated values
+    // themselves must stay out of this, or the image would be re-decoded mid-animation.
+    //   - the legacy zoom-out presets (fixed 1.15 for style 2, otherwise bounded by the coverage
+    //     scale the overview needs),
+    //   - the modern overview preset's end scale (camera-push is the largest at 1.09),
+    //   - the Gnome-like opening ratio on this item,
+    //   - the lock animation, which drives the plane to scale 1.0 and so only magnifies when the
+    //     base scale is under 1.
+    readonly property real magnificationHeadroom: {
+        let headroom = Math.max(1, minSafeScale);
+        if (Config.options.background.zoomOutStyle === 2)
+            headroom = Math.max(headroom, 1.15);
+        if (overviewController && overviewController.safeTargetScale)
+            headroom = Math.max(headroom, overviewController.safeTargetScale);
+        if (isGnomeLikeOverview)
+            headroom *= Math.max(defaultRatio, zoomedRatio);
+        if (baseWallpaperScale > 0)
+            headroom *= Math.max(1, 1 / baseWallpaperScale);
+        return headroom;
+    }
+
+    function decodeSizeFor(planeWidth, planeHeight) {
+        // Native decode until the probe reports real file dimensions.
+        if (wallpaperWidth <= 0 || wallpaperHeight <= 0 || planeWidth <= 0 || planeHeight <= 0)
+            return Qt.size(-1, -1);
+        const targetW = planeWidth * devicePixelRatio * magnificationHeadroom;
+        const targetH = planeHeight * devicePixelRatio * magnificationHeadroom;
+        const coverScale = Math.max(targetW / wallpaperWidth, targetH / wallpaperHeight);
+        if (coverScale >= 1)
+            return Qt.size(-1, -1);
+        return Qt.size(Math.ceil(wallpaperWidth * coverScale), Math.ceil(wallpaperHeight * coverScale));
+    }
+
     // Calculations
     readonly property bool overviewOpen: GlobalStates.overviewOpen
     readonly property bool overviewBackgroundActive: overviewController && overviewController.active
@@ -125,7 +170,7 @@ Item {
             ? Qt.size(screen.width > 0 ? Math.round(screen.width / 8) : 240, screen.height > 0 ? Math.round(screen.height / 8) : 135)
             : (Config.options.background.scaleLargeWallpapers
                 ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
-                : Qt.size(-1, -1))
+                : wallpaperImageRoot.decodeSizeFor(screen.width, screen.height))
         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
     }
 
@@ -369,7 +414,9 @@ Item {
                         visible: opacity > 0
                         opacity: (wallpaper.status === Image.Ready && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
                         // GPU: cap sourceSize to screen resolution with dynamic zoom headroom — loading > needed res wastes VRAM with no visual gain.
-                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
+                        sourceSize: Config.options.background.scaleLargeWallpapers
+                            ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
+                            : wallpaperImageRoot.decodeSizeFor(wallpaperPlanes.wallpaperW, wallpaperPlanes.wallpaperH)
 
                         imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
                         animated: Config.options.background.animateWallpaperChanges

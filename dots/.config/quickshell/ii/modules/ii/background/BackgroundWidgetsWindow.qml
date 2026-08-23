@@ -79,7 +79,44 @@ PanelWindow {
         return target === "" || (modelData && modelData.name === target);
     }
     readonly property bool hasWidgets: widgetStateManager && widgetStateManager.model ? widgetStateManager.model.count > 0 : false
-    visible: isTargetMonitor && hasWidgets && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen))
+
+    // A mapped fullscreen layer costs a swapchain plus a render thread even when every widget on it
+    // is hidden. Only keep it mapped while at least one widget is actually shown - the same rule
+    // WidgetDelegate's FadeLoader uses - and for the whole lock/unlock sequence so lock-only widgets
+    // fade in and out exactly as before. Setups with an always-visible widget never unmap.
+    readonly property bool anyWidgetShown: {
+        if (!hasWidgets)
+            return false;
+        void widgetStateManager.syncVersion; // re-evaluate when the model's roles are rewritten
+        if (GlobalStates.screenLocked || lockAnim.lockAnimationActive)
+            return true;
+        const model = widgetStateManager.model;
+        for (let i = 0; i < model.count; i++) {
+            if (model.get(i).lockBehavior !== "lockOnly")
+                return true;
+        }
+        return false;
+    }
+    property bool widgetsNeedSurface: false
+    Timer {
+        // Hold the surface until the last widget's fade-out has finished.
+        id: surfaceReleaseTimer
+        interval: Appearance.animation.elementMoveFast.duration + 50
+        repeat: false
+        onTriggered: bgWidgetsWindow.widgetsNeedSurface = false
+    }
+    function updateSurfaceNeed() {
+        if (anyWidgetShown) {
+            surfaceReleaseTimer.stop();
+            widgetsNeedSurface = true;
+        } else if (widgetsNeedSurface) {
+            surfaceReleaseTimer.restart();
+        }
+    }
+    onAnyWidgetShownChanged: updateSurfaceNeed()
+    Component.onCompleted: updateSurfaceNeed()
+
+    visible: isTargetMonitor && widgetsNeedSurface && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen))
 
     // Z-ordering fix: when BackgroundRoot transitions from WlrLayer.Overlay back to
     // WlrLayer.Bottom after media mode closes, the compositor re-stacks it at the top
@@ -97,7 +134,7 @@ PanelWindow {
                     bgWidgetsWindow.visible = false;
                     Qt.callLater(function() {
                         bgWidgetsWindow.visible = Qt.binding(function() {
-                            return isTargetMonitor && hasWidgets && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen));
+                            return isTargetMonitor && widgetsNeedSurface && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen));
                         });
                     });
                 }
