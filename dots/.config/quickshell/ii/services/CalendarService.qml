@@ -427,7 +427,7 @@ Singleton {
         root.calendarCurrentRequest = null;
         if (!reply || !reply.ok) {
             console.warn("[CalendarService] Calendar request failed:", String(reply?.error ?? "No response from calendar helper."));
-        } else if (current?.payload?.op === "save" || current?.payload?.op === "deleteSeries" || current?.payload?.op === "deleteOccurrence" || current?.payload?.op === "overrideOccurrence") {
+        } else if (current?.payload?.op === "save" || current?.payload?.op === "deleteSeries" || current?.payload?.op === "deleteOccurrence" || current?.payload?.op === "overrideOccurrence" || current?.payload?.op === "splitSeries" || current?.payload?.op === "truncateSeries") {
             vdirsyncerProcess.running = true;
             root.loadEvents();
         }
@@ -486,6 +486,14 @@ Singleton {
             return "";
         const normalizedTime = String(time || "00:00").length === 5 ? String(time) + ":00" : String(time);
         return Qt.formatDate(date, "yyyy-MM-dd") + "T" + normalizedTime;
+    }
+
+    function recurrenceIdForEvent(event) {
+        if (!event?.startDate)
+            return "";
+        if (root.isAllDayEvent(event))
+            return Qt.formatDate(event.startDate, "yyyy-MM-dd");
+        return root.localIso(event.startDate, Qt.formatTime(event.startDate, "hh:mm:ss"));
     }
 
     function addItem(item) {
@@ -554,10 +562,11 @@ Singleton {
         const payload = { uid: String(event.uid) };
         for (const key in fields)
             payload[key] = fields[key];
+        const recurrenceId = fields.recurrenceId || root.recurrenceIdForEvent(event);
         const request = scope === "this"
-            ? { op: "overrideOccurrence", uid: String(event.uid), recurrenceId: fields.recurrenceId, fields: payload }
+            ? { op: "overrideOccurrence", uid: String(event.uid), recurrenceId: recurrenceId, fields: payload }
             : scope === "future"
-                ? { op: "splitSeries", uid: String(event.uid), recurrenceId: fields.recurrenceId, fields: payload }
+                ? { op: "splitSeries", uid: String(event.uid), recurrenceId: recurrenceId, fields: payload }
                 : { op: "save", calendar: event.calendar ?? "", event: payload };
         root.enqueueCalendarRequest(request);
     }
@@ -569,9 +578,12 @@ Singleton {
     function deleteEventWithScope(event, scope = "all") {
         if (!event?.uid)
             return;
+        const recurrenceId = root.recurrenceIdForEvent(event);
         const request = scope === "this"
-            ? { op: "deleteOccurrence", uid: String(event.uid), recurrenceId: event.startDate.toISOString() }
-            : { op: "deleteSeries", uid: String(event.uid) };
+            ? { op: "deleteOccurrence", uid: String(event.uid), recurrenceId: recurrenceId }
+            : scope === "future"
+                ? { op: "truncateSeries", uid: String(event.uid), recurrenceId: recurrenceId }
+                : { op: "deleteSeries", uid: String(event.uid) };
         root.enqueueCalendarRequest(request);
     }
 

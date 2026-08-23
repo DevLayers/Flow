@@ -4,6 +4,7 @@ import qs.modules.common.functions
 import qs.services
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import "TimetableHelpers.js" as H
 
 /**
@@ -43,10 +44,12 @@ Item {
     property string formStatus: "CONFIRMED"
     property string formRepeat: ""
     property string formRepeatUntil: ""
+    property list<string> formRepeatByDay: []
     property list<string> formAlarms: []
     property var eventDetails: null
     property var pendingPayload: null
     property string pendingAction: ""
+    property bool showCalendarSelector: false
 
     readonly property bool rangeValid: root.formAllDay || root.formEndMinutes > root.formStartMinutes
     readonly property bool canSave: root.formTitle.trim().length > 0 && root.rangeValid
@@ -91,6 +94,7 @@ Item {
         root.formStatus = "CONFIRMED";
         root.formRepeat = "";
         root.formRepeatUntil = "";
+        root.formRepeatByDay = [];
         root.formAlarms = [];
         root.setMode("create");
         titleInput.forceActiveFocus();
@@ -114,12 +118,14 @@ Item {
         root.formStatus = eventData.status ?? "CONFIRMED";
         root.formRepeat = root.eventDetails?.recurrence?.freq ?? (eventData.repeatSymbol ? "WEEKLY" : "");
         root.formRepeatUntil = root.eventDetails?.recurrence?.until ?? "";
+        root.formRepeatByDay = root.eventDetails?.recurrence?.byDay ?? [];
         root.formAlarms = (root.eventDetails?.alarms ?? []).map(alarm => String(alarm.minutesBefore));
         CalendarService.readEvent(eventData.uid, reply => {
             if (!reply?.ok) return;
             root.eventDetails = reply.event;
             root.formRepeat = reply.event.recurrence?.freq ?? "";
             root.formRepeatUntil = reply.event.recurrence?.until ?? "";
+            root.formRepeatByDay = reply.event.recurrence?.byDay ?? [];
             root.formAlarms = (reply.event.alarms ?? []).map(alarm => String(alarm.minutesBefore));
         });
         root.setMode("edit");
@@ -185,7 +191,33 @@ Item {
             root.close();
             return;
         }
+        if (purpose === "repeatUntil") {
+            root.formRepeatUntil = Qt.formatDate(H.startOfDay(date), "yyyy-MM-dd");
+            return;
+        }
         root.formDate = H.startOfDay(date);
+    }
+
+    function defaultRepeatDay(date = root.formDate) {
+        return ["SU", "MO", "TU", "WE", "TH", "FR", "SA"][date.getDay()];
+    }
+
+    function selectRepeat(freq) {
+        root.formRepeat = freq;
+        if (freq === "WEEKLY" && root.formRepeatByDay.length === 0)
+            root.formRepeatByDay = [root.defaultRepeatDay()];
+        if (freq !== "WEEKLY")
+            root.formRepeatByDay = [];
+    }
+
+    function toggleRepeatDay(day) {
+        const next = root.formRepeatByDay.slice();
+        const index = next.indexOf(day);
+        if (index >= 0)
+            next.splice(index, 1);
+        else
+            next.push(day);
+        root.formRepeatByDay = next;
     }
 
     function setDuration(minutes) {
@@ -206,7 +238,13 @@ Item {
             start: H.minutesToKhalTimeStr(root.formStartMinutes),
             end: H.minutesToKhalTimeStr(root.formEndMinutes),
             url: root.formUrl.trim(), location: root.formLocation.trim(), calendar: root.formCalendar,
-            status: root.formStatus, recurrence: root.formRepeat ? { freq: root.formRepeat, interval: 1, until: root.formRepeatUntil || null } : null,
+            status: root.formStatus,
+            recurrence: root.formRepeat ? {
+                freq: root.formRepeat,
+                interval: 1,
+                byDay: root.formRepeat === "WEEKLY" ? root.formRepeatByDay : [],
+                until: root.formRepeatUntil || null
+            } : null,
             alarms: root.formAlarms.map(minutes => ({ minutesBefore: Number(minutes), action: "DISPLAY" }))
         };
         if (payload.editMode && (root.eventDetails?.recurrence || root.event?.repeatSymbol)) {
@@ -254,6 +292,8 @@ Item {
             return Translation.tr("Edit event");
         case "details":
             return Translation.tr("Event details");
+        case "scope":
+            return root.pendingAction === "delete" ? Translation.tr("Delete recurring event") : Translation.tr("Edit recurring event");
         default:
             return Qt.formatDate(root.day, "MMMM yyyy");
         }
@@ -918,12 +958,7 @@ Item {
                                 symbol: "folder"
                                 caption: Translation.tr("Calendar")
                                 value: root.formCalendar || Translation.tr("Default calendar")
-                                onTriggered: {
-                                    const choices = CalendarService.calendars.filter(calendar => !calendar.readOnly);
-                                    if (choices.length === 0) return;
-                                    const current = choices.findIndex(calendar => calendar.name === root.formCalendar);
-                                    root.formCalendar = choices[(current + 1) % choices.length].name;
-                                }
+                                onTriggered: root.showCalendarSelector = true
                             }
 
                             Rectangle {
@@ -942,15 +977,43 @@ Item {
                                 RowLayout { anchors.fill: parent; anchors.margins: 10; spacing: 10
                                     MaterialShapeWrappedMaterialSymbol { text: "place"; iconSize: 18; padding: 9; shape: MaterialShape.Shape.Cookie7Sided; color: Appearance.colors.colPrimaryContainer; colSymbol: Appearance.colors.colOnPrimaryContainer }
                                     StyledTextInput { id: locationInput; Layout.fillWidth: true; text: root.formLocation; onTextChanged: root.formLocation = text; color: Appearance.colors.colOnSurface }
-                                    RippleButton { visible: root.formLocation.length > 0; implicitWidth: 34; implicitHeight: 34; buttonRadius: Appearance.rounding.full; colBackground: "transparent"; onClicked: Qt.openUrlExternally("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(root.formLocation)); contentItem: MaterialSymbol { anchors.centerIn: parent; text: "map"; color: Appearance.colors.colPrimary } }
+                                    RippleButton { visible: root.formLocation.length > 0; implicitWidth: 34; implicitHeight: 34; buttonRadius: Appearance.rounding.full; colBackground: "transparent"; onClicked: Quickshell.execDetached(["xdg-open", "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(root.formLocation)]); contentItem: MaterialSymbol { anchors.centerIn: parent; text: "map"; color: Appearance.colors.colPrimary } }
                                 }
                             }
 
                             StyledText { Layout.fillWidth: true; text: Translation.tr("Repeats"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
                             Flow { Layout.fillWidth: true; spacing: 6
                                 Repeater { model: [["", Translation.tr("Never")], ["DAILY", Translation.tr("Daily")], ["WEEKLY", Translation.tr("Weekly")], ["MONTHLY", Translation.tr("Monthly")], ["YEARLY", Translation.tr("Yearly")]]
-                                    delegate: DurationChip { required property var modelData; label: modelData[1]; selected: root.formRepeat === modelData[0]; onTriggered: root.formRepeat = modelData[0] }
+                                    delegate: DurationChip { required property var modelData; label: modelData[1]; selected: root.formRepeat === modelData[0]; onTriggered: root.selectRepeat(modelData[0]) }
                                 }
+                            }
+                            Flow {
+                                Layout.fillWidth: true
+                                visible: root.formRepeat === "WEEKLY"
+                                spacing: 6
+                                Repeater {
+                                    model: [["MO", Translation.tr("Mon")], ["TU", Translation.tr("Tue")], ["WE", Translation.tr("Wed")], ["TH", Translation.tr("Thu")], ["FR", Translation.tr("Fri")], ["SA", Translation.tr("Sat")], ["SU", Translation.tr("Sun")]]
+                                    delegate: DurationChip {
+                                        required property var modelData
+                                        label: modelData[1]
+                                        selected: root.formRepeatByDay.includes(modelData[0])
+                                        onTriggered: root.toggleRepeatDay(modelData[0])
+                                    }
+                                }
+                            }
+                            PickerRow {
+                                Layout.fillWidth: true
+                                visible: root.formRepeat !== ""
+                                symbol: "event_upcoming"
+                                caption: Translation.tr("Repeats until")
+                                value: root.formRepeatUntil ? Qt.formatDate(new Date(root.formRepeatUntil + "T00:00:00"), "dd MMM yyyy") : Translation.tr("No end date")
+                                onTriggered: root.datePickerRequested("repeatUntil", root.formRepeatUntil ? new Date(root.formRepeatUntil + "T00:00:00") : root.formDate)
+                            }
+                            DurationChip {
+                                visible: root.formRepeat !== "" && root.formRepeatUntil !== ""
+                                label: Translation.tr("No end date")
+                                selected: false
+                                onTriggered: root.formRepeatUntil = ""
                             }
                             StyledText { Layout.fillWidth: true; text: Translation.tr("Reminders"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
                             Flow { Layout.fillWidth: true; spacing: 6
@@ -1069,6 +1132,26 @@ Item {
                         PrimaryAction { Layout.fillWidth: true; label: Translation.tr("Entire series"); symbol: "all_inclusive"; onTriggered: root.chooseScope("all") }
                     }
                 }
+            }
+        }
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: root.showCalendarSelector
+        visible: root.showCalendarSelector
+        z: 20
+
+        sourceComponent: SelectionDialog {
+            titleText: Translation.tr("Choose calendar")
+            items: CalendarService.calendars.filter(calendar => !calendar.readOnly).map(calendar => calendar.name)
+            defaultChoice: root.formCalendar
+            enableSearch: true
+            onCanceled: root.showCalendarSelector = false
+            onSelected: result => {
+                root.showCalendarSelector = false;
+                if (result)
+                    root.formCalendar = String(result);
             }
         }
     }

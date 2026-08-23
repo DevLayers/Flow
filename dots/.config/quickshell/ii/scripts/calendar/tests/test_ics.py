@@ -166,9 +166,20 @@ class IcsHelperTests(unittest.TestCase):
 
         override_id = after_delete["occurrences"][1]["recurrenceId"]
         self.assertEqual(self.request({"op": "overrideOccurrence", "uid": uid, "recurrenceId": override_id, "fields": {"summary": "One-off review"}}), {"ok": True})
-        split = self.request({"op": "splitSeries", "uid": uid, "recurrenceId": after_delete["occurrences"][2]["recurrenceId"], "fields": {"summary": "Future reviews"}})
+        split_id = after_delete["occurrences"][2]["recurrenceId"]
+        split = self.request({"op": "splitSeries", "uid": uid, "recurrenceId": split_id, "fields": {"summary": "Future reviews"}})
         self.assertTrue(split["ok"])
         self.assertNotEqual(split["uid"], uid)
+        prior = self.request({"op": "expand", "uid": uid, "from": "2026-09-15T00:00:00", "to": "2027-02-01T00:00:00"})
+        self.assertTrue(all(item["recurrenceId"] < split_id for item in prior["occurrences"]))
+        follow_up = self.request({"op": "read", "uid": split["uid"]})
+        self.assertEqual(follow_up["event"]["summary"], "Future reviews")
+        future = self.request({"op": "expand", "uid": split["uid"], "from": "2026-09-15T00:00:00", "to": "2027-02-01T00:00:00"})
+        self.assertEqual(future["occurrences"][0]["recurrenceId"], split_id)
+        truncate_id = future["occurrences"][2]["recurrenceId"]
+        self.assertEqual(self.request({"op": "truncateSeries", "uid": split["uid"], "recurrenceId": truncate_id}), {"ok": True})
+        truncated = self.request({"op": "expand", "uid": split["uid"], "from": "2026-09-15T00:00:00", "to": "2027-02-01T00:00:00"})
+        self.assertTrue(all(item["recurrenceId"] < truncate_id for item in truncated["occurrences"]))
         self.assertEqual(self.request({"op": "save", "calendar": "readonly", "event": self.event(summary="Blocked")})["ok"], False)
 
 

@@ -498,6 +498,34 @@ def _override_occurrence(store: CalendarStore, request: dict[str, Any]) -> dict[
     return {"ok": True}
 
 
+def _end_series_before(component: Event, recurrence_id: date | datetime) -> None:
+    """Restrict a recurring master to the occurrences before ``recurrence_id``."""
+    old_rule = copy.deepcopy(component.get("RRULE"))
+    if old_rule is None:
+        raise CalendarError("This and future requires a recurring event.")
+    _remove(component, "RRULE")
+    # UNTIL gives the correct cutoff for weekly rules with multiple BYDAY values.
+    # COUNT cannot express that cutoff without expanding every prior occurrence.
+    old_rule.pop("COUNT", None)
+    old_rule["UNTIL"] = [recurrence_id - (timedelta(days=1) if isinstance(recurrence_id, date) and not isinstance(recurrence_id, datetime) else timedelta(seconds=1))]
+    component.add("RRULE", old_rule)
+    _touch(component, True)
+
+
+def _truncate_series(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
+    """Delete an occurrence and all following occurrences without touching the past."""
+    stored = store.find(str(request.get("uid") or ""))
+    if stored is None:
+        raise CalendarError("Event UID was not found.")
+    if stored.calendar.read_only:
+        raise CalendarError(f'Calendar "{stored.calendar.name}" is read-only.')
+    if not stored.component.get("RRULE"):
+        raise CalendarError("This and future requires a recurring event.")
+    _end_series_before(stored.component, _date_or_datetime(request.get("recurrenceId")))
+    _import(store, stored.calendar, stored.container)
+    return {"ok": True}
+
+
 def _split_series(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
     """End a master immediately before one occurrence and start a new UID."""
     stored = store.find(str(request.get("uid") or ""))
@@ -509,20 +537,16 @@ def _split_series(store: CalendarStore, request: dict[str, Any]) -> dict[str, An
     fields = request.get("fields")
     if not isinstance(fields, dict) or not stored.component.get("RRULE"):
         raise CalendarError("This and future requires a recurring event and fields.")
+    original_rule = copy.deepcopy(stored.component.get("RRULE"))
+    _end_series_before(stored.component, recurrence_id)
     old_rule = copy.deepcopy(stored.component.get("RRULE"))
-    _remove(stored.component, "RRULE")
-    old_rule.pop("COUNT", None)
-    old_rule["UNTIL"] = [recurrence_id - (timedelta(days=1) if isinstance(recurrence_id, date) and not isinstance(recurrence_id, datetime) else timedelta(seconds=1))]
-    stored.component.add("RRULE", old_rule)
-    _touch(stored.component, True)
 
     followup = copy.deepcopy(stored.component)
     _set(followup, "UID", str(uuid.uuid4()))
     _remove(followup, "RECURRENCE-ID")
     _remove(followup, "RRULE")
     _remove(followup, "EXDATE")
-    followup.add("RRULE", old_rule)
-    followup.get("RRULE").pop("UNTIL", None)
+    followup.add("RRULE", original_rule)
     duration = _as_datetime(_decoded(stored.component, "DTEND")) - _as_datetime(_decoded(stored.component, "DTSTART"))
     next_fields = dict(fields)
     next_fields.pop("uid", None)
@@ -584,6 +608,7 @@ def handle(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
         "deleteSeries": _delete_series,
         "deleteOccurrence": _delete_occurrence,
         "overrideOccurrence": _override_occurrence,
+        "truncateSeries": _truncate_series,
         "splitSeries": _split_series,
         "expand": _expand,
         "calendars": _calendar_list,
