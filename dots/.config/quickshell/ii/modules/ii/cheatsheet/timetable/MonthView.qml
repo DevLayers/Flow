@@ -22,6 +22,7 @@ Item {
     property int viewYear: DateTime.clock.date.getFullYear()
     property int viewMonth: DateTime.clock.date.getMonth()
     property bool showUpcoming: true
+    property string categoryFilter: ""
 
     readonly property int firstDayOfWeek: Config.options.time.firstDayOfWeek
     readonly property real gridGap: 6
@@ -31,6 +32,14 @@ Item {
 
     readonly property bool holidaysVisible: (Config.options.calendar.holidays.enable ?? false) && (Config.options.calendar.holidays.showInMonthView ?? false)
     readonly property var holidayMap: root.holidaysVisible ? Holidays.byDayKey : ({})
+    readonly property var availableCategories: {
+        const seen = new Set();
+        for (const event of CalendarService.events ?? []) {
+            for (const category of (event.categories ?? []))
+                seen.add(String(category));
+        }
+        return Array.from(seen).sort((left, right) => left.localeCompare(right));
+    }
 
     // The event rail takes room from the grid. When the view is not wide enough
     // for both rails, the upcoming list is the one that yields.
@@ -44,6 +53,12 @@ Item {
     readonly property date viewAnchorDate: new Date(root.viewYear, root.viewMonth, 1)
 
     signal weekViewRequested
+
+    function filteredEvents(events) {
+        if (!root.categoryFilter)
+            return events ?? [];
+        return (events ?? []).filter(event => (event.categories ?? []).includes(root.categoryFilter));
+    }
 
     // ─── Month navigation ───
     property int entranceKey: 0
@@ -203,7 +218,7 @@ Item {
         const fields = {
             summary: payload.title, description: payload.description, location: payload.location,
             url: payload.url, status: payload.status, recurrence: payload.recurrence,
-            alarms: payload.alarms, allDay: payload.allDay,
+            alarms: payload.alarms, color: payload.color, categories: payload.categories, allDay: payload.allDay,
             start: payload.allDay ? Qt.formatDate(payload.date, "yyyy-MM-dd") : CalendarService.localIso(payload.date, payload.start),
             end: payload.allDay ? Qt.formatDate(nextDay, "yyyy-MM-dd") : CalendarService.localIso(payload.date, payload.end)
         };
@@ -400,6 +415,38 @@ Item {
                 }
             }
 
+            Flow {
+                Layout.fillWidth: true
+                Layout.preferredHeight: implicitHeight
+                visible: root.availableCategories.length > 0
+                spacing: 6
+
+                Repeater {
+                    model: [""].concat(root.availableCategories)
+
+                    delegate: RippleButton {
+                        required property string modelData
+                        readonly property bool selected: root.categoryFilter === modelData
+
+                        implicitWidth: filterLabel.implicitWidth + 24
+                        implicitHeight: 30
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: selected ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
+                        colBackgroundHover: selected ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer2Hover
+                        onClicked: root.categoryFilter = modelData
+
+                        contentItem: StyledText {
+                            id: filterLabel
+                            anchors.centerIn: parent
+                            text: modelData ? modelData : Translation.tr("All labels")
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            font.weight: Font.Bold
+                            color: selected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
+                        }
+                    }
+                }
+            }
+
             // ─── Weekday header ───
             Item {
                 id: weekdayHeader
@@ -474,7 +521,7 @@ Item {
                         height: gridArea.cellHeight
 
                         cellData: modelData
-                        events: CalendarService.eventsByDay[modelData.key] ?? []
+                        events: root.filteredEvents(CalendarService.eventsByDay[modelData.key])
                         holidays: root.holidayMap[modelData.key] ?? []
                         dropTarget: root.dropIndex === index && root.dragEvent !== null
                         coordinateRoot: root

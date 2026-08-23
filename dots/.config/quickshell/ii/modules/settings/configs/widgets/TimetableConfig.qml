@@ -137,4 +137,42 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "palette"
+        title: Translation.tr("Calendar colors")
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("Calendar colors are stored as khal ANSI names and rendered with the matching Material You token.")
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnLayer1
+            wrapMode: Text.Wrap
+        }
+
+        Repeater {
+            model: CalendarService.calendars.filter(calendar => !calendar.readOnly)
+
+            delegate: ContentSubsection {
+                required property var modelData
+                Layout.fillWidth: true
+                title: modelData.name
+                icon: "calendar_month"
+
+                ConfigSelectionArray {
+                    currentValue: modelData.color ?? ""
+                    onSelected: color => CalendarService.setCalendarColor(modelData.name, color)
+                    options: [
+                        { displayName: Translation.tr("No calendar color"), value: "" },
+                        { displayName: Translation.tr("Primary"), value: "light blue" },
+                        { displayName: Translation.tr("Secondary"), value: "light green" },
+                        { displayName: Translation.tr("Tertiary"), value: "light magenta" },
+                        { displayName: Translation.tr("Error"), value: "light red" },
+                        { displayName: Translation.tr("Cyan"), value: "light cyan" },
+                        { displayName: Translation.tr("Yellow"), value: "yellow" }
+                    ]
+                }
+            }
+        }
+    }
 }

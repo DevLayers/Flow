@@ -427,9 +427,11 @@ Singleton {
         root.calendarCurrentRequest = null;
         if (!reply || !reply.ok) {
             console.warn("[CalendarService] Calendar request failed:", String(reply?.error ?? "No response from calendar helper."));
-        } else if (current?.payload?.op === "save" || current?.payload?.op === "deleteSeries" || current?.payload?.op === "deleteOccurrence" || current?.payload?.op === "overrideOccurrence" || current?.payload?.op === "splitSeries" || current?.payload?.op === "truncateSeries") {
+        } else if (current?.payload?.op === "save" || current?.payload?.op === "deleteSeries" || current?.payload?.op === "deleteOccurrence" || current?.payload?.op === "overrideOccurrence" || current?.payload?.op === "splitSeries" || current?.payload?.op === "truncateSeries" || current?.payload?.op === "setCalendarColor") {
             vdirsyncerProcess.running = true;
             root.loadEvents();
+            if (current?.payload?.op === "setCalendarColor")
+                root.loadCalendarList();
         }
         if (typeof current?.callback === "function")
             current.callback(reply);
@@ -573,6 +575,12 @@ Singleton {
 
     function createEventFields(calendar, fields) {
         root.enqueueCalendarRequest({ op: "save", calendar: calendar || root.defaultCalendar, event: fields });
+    }
+
+    function setCalendarColor(calendar, color) {
+        if (!calendar)
+            return;
+        root.enqueueCalendarRequest({ op: "setCalendarColor", calendar: String(calendar), color: String(color ?? "") });
     }
 
     function deleteEventWithScope(event, scope = "all") {

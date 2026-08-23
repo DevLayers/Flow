@@ -301,11 +301,51 @@ function khalTimeOf(date) {
     return pad2(date.getHours()) + ":" + pad2(date.getMinutes());
 }
 
-// Distinct hue per event so a month full of chips stays readable. The palette
-// is derived from the active theme, never hardcoded.
+// Resolve persisted color identifiers into the current Material You palette.
+// The ICS value stores a semantic token, never a wallpaper-dependent hex.
+function themeColorForToken(token, palette) {
+    switch (String(token || "").trim().toLowerCase()) {
+    case "primary": return palette.colPrimary;
+    case "secondary": return palette.colSecondary;
+    case "tertiary": return palette.colTertiary;
+    case "error": return palette.colError;
+    case "primarycontainer": return palette.colPrimaryContainer;
+    case "secondarycontainer": return palette.colSecondaryContainer;
+    case "tertiarycontainer": return palette.colTertiaryContainer;
+    default: return null;
+    }
+}
+
+// khal accepts ANSI names for calendar config. They are only an interchange
+// representation; rendering still happens through Material tokens.
+function themeTokenForCalendarColor(color) {
+    switch (String(color || "").trim().toLowerCase()) {
+    case "dark blue":
+    case "light blue": return "primary";
+    case "dark green":
+    case "light green":
+    case "light cyan": return "secondary";
+    case "dark magenta":
+    case "light magenta":
+    case "yellow": return "tertiary";
+    case "dark red":
+    case "light red": return "error";
+    default: return "";
+    }
+}
+
+// Distinct hue per event so a month full of chips stays readable. An explicit
+// event token wins, followed by the calendar token, then the existing themed
+// rotation for calendars that do not opt into a colour.
 function chipColor(event, palette) {
     if (!event)
         return palette.colSecondaryContainer;
+    const explicit = themeColorForToken(event.colorToken, palette);
+    if (explicit)
+        return explicit;
+    const calendar = themeColorForToken(themeTokenForCalendarColor(event.calendarColor), palette);
+    if (calendar)
+        return calendar;
     if (event.color)
         return event.color;
     return palette.colSecondaryContainer;

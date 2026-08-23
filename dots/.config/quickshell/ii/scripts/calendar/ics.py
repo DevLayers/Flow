@@ -22,11 +22,22 @@ from pathlib import Path
 from typing import Any
 
 from dateutil.rrule import rrulestr
+from configobj import ConfigObj
 from icalendar import Alarm, Calendar, Event
 from khal.settings import get_config
+from khal.settings.settings import find_configuration_file
 
 
 COLOR_PREFIX = "ii/color="
+CALENDAR_COLOR_VALUES = {
+    "",
+    "light blue",
+    "light green",
+    "light magenta",
+    "light red",
+    "light cyan",
+    "yellow",
+}
 
 
 class CalendarError(RuntimeError):
@@ -52,7 +63,7 @@ class StoredEvent:
 class CalendarStore:
     def __init__(self, config_path: str | None = None) -> None:
         config = get_config(config_path)
-        self.config_path = config_path
+        self.config_path = config_path or find_configuration_file()
         self.default_calendar = str(config.get("default_calendar") or "")
         self.calendars: dict[str, CalendarInfo] = {}
         for name, raw in config.get("calendars", {}).items():
@@ -601,6 +612,25 @@ def _calendar_list(store: CalendarStore, _: dict[str, Any]) -> dict[str, Any]:
     ]}
 
 
+def _set_calendar_color(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
+    """Persist a curated khal ANSI color without rewriting user config sections."""
+    calendar = store.calendar_for(request.get("calendar"))
+    if calendar.read_only:
+        raise CalendarError(f'Calendar "{calendar.name}" is read-only.')
+    color = str(request.get("color") or "").strip().lower()
+    if color not in CALENDAR_COLOR_VALUES:
+        raise CalendarError("Calendar color must be one of the timetable palette values.")
+    if not store.config_path:
+        raise CalendarError("khal configuration file could not be located.")
+    config = ConfigObj(store.config_path, encoding="utf-8")
+    calendars = config.get("calendars")
+    if not isinstance(calendars, dict) or calendar.name not in calendars:
+        raise CalendarError(f'Calendar "{calendar.name}" is not writable in khal config.')
+    calendars[calendar.name]["color"] = color
+    config.write()
+    return {"ok": True, "calendar": calendar.name, "color": color}
+
+
 def handle(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
     operations = {
         "read": _read,
@@ -612,6 +642,7 @@ def handle(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
         "splitSeries": _split_series,
         "expand": _expand,
         "calendars": _calendar_list,
+        "setCalendarColor": _set_calendar_color,
     }
     operation = str(request.get("op") or "")
     handler = operations.get(operation)

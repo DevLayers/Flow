@@ -42,6 +42,8 @@ Item {
     property string formLocation: ""
     property string formCalendar: ""
     property string formStatus: "CONFIRMED"
+    property string formColorToken: ""
+    property list<string> formCategories: []
     property string formRepeat: ""
     property string formRepeatUntil: ""
     property list<string> formRepeatByDay: []
@@ -92,6 +94,9 @@ Item {
         locationInput.text = "";
         root.formCalendar = CalendarService.defaultCalendar;
         root.formStatus = "CONFIRMED";
+        root.formColorToken = "";
+        root.formCategories = [];
+        categoryInput.text = "";
         root.formRepeat = "";
         root.formRepeatUntil = "";
         root.formRepeatByDay = [];
@@ -114,8 +119,11 @@ Item {
         notesInput.text = eventData.description ?? "";
         linkInput.text = eventData.url ?? "";
         locationInput.text = eventData.location ?? "";
+        categoryInput.text = "";
         root.formCalendar = eventData.calendar ?? CalendarService.defaultCalendar;
         root.formStatus = eventData.status ?? "CONFIRMED";
+        root.formColorToken = eventData.colorToken ?? "";
+        root.formCategories = eventData.categories ?? [];
         root.formRepeat = root.eventDetails?.recurrence?.freq ?? (eventData.repeatSymbol ? "WEEKLY" : "");
         root.formRepeatUntil = root.eventDetails?.recurrence?.until ?? "";
         root.formRepeatByDay = root.eventDetails?.recurrence?.byDay ?? [];
@@ -126,6 +134,8 @@ Item {
             root.formRepeat = reply.event.recurrence?.freq ?? "";
             root.formRepeatUntil = reply.event.recurrence?.until ?? "";
             root.formRepeatByDay = reply.event.recurrence?.byDay ?? [];
+            root.formColorToken = reply.event.color ?? "";
+            root.formCategories = reply.event.categories ?? [];
             root.formAlarms = (reply.event.alarms ?? []).map(alarm => String(alarm.minutesBefore));
         });
         root.setMode("edit");
@@ -220,6 +230,18 @@ Item {
         root.formRepeatByDay = next;
     }
 
+    function addCategory() {
+        const category = categoryInput.text.trim();
+        if (!category || category.startsWith("ii/color=") || root.formCategories.includes(category))
+            return;
+        root.formCategories = root.formCategories.concat([category]);
+        categoryInput.text = "";
+    }
+
+    function removeCategory(category) {
+        root.formCategories = root.formCategories.filter(item => item !== category);
+    }
+
     function setDuration(minutes) {
         root.formAllDay = false;
         root.formEndMinutes = Math.min(24 * 60, root.formStartMinutes + minutes);
@@ -239,6 +261,8 @@ Item {
             end: H.minutesToKhalTimeStr(root.formEndMinutes),
             url: root.formUrl.trim(), location: root.formLocation.trim(), calendar: root.formCalendar,
             status: root.formStatus,
+            color: root.formColorToken,
+            categories: root.formCategories,
             recurrence: root.formRepeat ? {
                 freq: root.formRepeat,
                 interval: 1,
@@ -702,6 +726,19 @@ Item {
                             InfoRow { Layout.fillWidth: true; visible: (root.event?.location ?? "").length > 0; symbol: "place"; caption: Translation.tr("Location"); value: root.event?.location ?? "" }
                             InfoRow { Layout.fillWidth: true; visible: (root.event?.url ?? "").length > 0; symbol: "link"; caption: Translation.tr("Link"); value: root.event?.url ?? ""; multiline: true }
                             InfoRow { Layout.fillWidth: true; visible: (root.event?.status ?? "").length > 0; symbol: "task_alt"; caption: Translation.tr("Status"); value: root.event?.status ?? "" }
+                            Flow {
+                                Layout.fillWidth: true
+                                visible: (root.event?.categories?.length ?? 0) > 0
+                                spacing: 6
+                                Repeater {
+                                    model: root.event?.categories ?? []
+                                    delegate: InfoChip {
+                                        required property string modelData
+                                        symbol: "label"
+                                        label: modelData
+                                    }
+                                }
+                            }
                             InfoRow { Layout.fillWidth: true; visible: (root.eventDetails?.organizer ?? "").length > 0; symbol: "person"; caption: Translation.tr("Organizer"); value: root.eventDetails?.organizer ?? "" }
                             InfoRow { Layout.fillWidth: true; visible: (root.eventDetails?.attendees?.length ?? 0) > 0; symbol: "group"; caption: Translation.tr("Guests"); value: (root.eventDetails?.attendees ?? []).join(", "); multiline: true }
 
@@ -959,6 +996,87 @@ Item {
                                 caption: Translation.tr("Calendar")
                                 value: root.formCalendar || Translation.tr("Default calendar")
                                 onTriggered: root.showCalendarSelector = true
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Color")
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
+
+                            ColorPickerRow {
+                                Layout.fillWidth: true
+                                currentToken: root.formColorToken
+                                onTokenSelected: token => root.formColorToken = token
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Labels")
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 46
+                                radius: Appearance.rounding.small
+                                color: Appearance.m3colors.m3surfaceContainerHighest
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    spacing: 8
+
+                                    MaterialSymbol {
+                                        text: "label"
+                                        iconSize: Appearance.font.pixelSize.normal
+                                        color: Appearance.colors.colOnSurfaceVariant
+                                    }
+
+                                    StyledTextInput {
+                                        id: categoryInput
+                                        Layout.fillWidth: true
+                                        color: Appearance.colors.colOnSurface
+                                        Keys.onReturnPressed: root.addCategory()
+                                    }
+
+                                    RippleButton {
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        buttonRadius: Appearance.rounding.full
+                                        colBackground: Appearance.colors.colPrimaryContainer
+                                        colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                                        enabled: categoryInput.text.trim().length > 0
+                                        onClicked: root.addCategory()
+
+                                        contentItem: MaterialSymbol {
+                                            anchors.centerIn: parent
+                                            text: "add"
+                                            iconSize: Appearance.font.pixelSize.normal
+                                            color: Appearance.colors.colOnPrimaryContainer
+                                        }
+                                    }
+                                }
+                            }
+
+                            Flow {
+                                Layout.fillWidth: true
+                                visible: root.formCategories.length > 0
+                                spacing: 6
+
+                                Repeater {
+                                    model: root.formCategories
+                                    delegate: DurationChip {
+                                        required property string modelData
+                                        label: modelData
+                                        selected: true
+                                        onTriggered: root.removeCategory(modelData)
+                                    }
+                                }
                             }
 
                             Rectangle {

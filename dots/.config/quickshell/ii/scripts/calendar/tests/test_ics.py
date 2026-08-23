@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from configobj import ConfigObj
 from icalendar import Calendar
 
 
@@ -31,6 +32,7 @@ class IcsHelperTests(unittest.TestCase):
                 "[[work]]",
                 f"path = {self.calendar_dir}",
                 "type = calendar",
+                "color = light blue",
                 "",
                 "[[readonly]]",
                 f"path = {self.root / 'readonly'}",
@@ -152,6 +154,17 @@ class IcsHelperTests(unittest.TestCase):
         self.assertTrue(self.request({"op": "read", "uid": second["uid"]})["ok"])
         self.assertNotIn(first["uid"], self.listed_uids())
         self.assertIn(second["uid"], self.listed_uids())
+
+    def test_calendar_color_uses_curated_khal_values(self) -> None:
+        calendars = self.request({"op": "calendars"})
+        work = next(calendar for calendar in calendars["calendars"] if calendar["name"] == "work")
+        self.assertEqual(work["color"], "light blue")
+
+        changed = self.request({"op": "setCalendarColor", "calendar": "work", "color": "light green"})
+        self.assertEqual(changed, {"ok": True, "calendar": "work", "color": "light green"})
+        self.assertEqual(ConfigObj(str(self.config), encoding="utf-8")["calendars"]["work"]["color"], "light green")
+        self.assertFalse(self.request({"op": "setCalendarColor", "calendar": "work", "color": "#123456"})["ok"])
+        self.assertFalse(self.request({"op": "setCalendarColor", "calendar": "readonly", "color": "light red"})["ok"])
 
     def test_occurrence_operations_and_read_only_guard(self) -> None:
         created = self.request({"op": "save", "calendar": "work", "event": self.event()})
