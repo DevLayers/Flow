@@ -59,15 +59,6 @@ StyledOverlayWidget {
                 interactive: !outputContent.isDragging && !inputContent.isDragging
                 clip: true
 
-                Connections {
-                    target: Persistent.states.overlay.volumeMixer
-                    function onTabIndexChanged() {
-                        if (swipeView.currentIndex !== Persistent.states.overlay.volumeMixer.tabIndex) {
-                            swipeView.currentIndex = Persistent.states.overlay.volumeMixer.tabIndex;
-                        }
-                    }
-                }
-
                 PaddedVolumeDialogContent {
                     id: outputContent
                     isSink: true 

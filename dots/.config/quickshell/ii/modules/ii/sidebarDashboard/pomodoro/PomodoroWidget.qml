@@ -110,11 +110,4 @@ Item {
         }
     }
 
-    Connections {
-        target: root
-        function onSelectedTabChanged() {
-            if (swipeView.currentIndex !== root.selectedTab)
-                swipeView.currentIndex = root.selectedTab;
-        }
-    }
 }

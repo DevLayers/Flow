@@ -116,13 +116,27 @@ Scope {
         sourceComponent: PanelWindow {
             id: cheatsheetRoot
             visible: root.activeState
+            property int selectedTab: Persistent.states.cheatsheet.tabIndex
+
+            onSelectedTabChanged: {
+                if (Persistent.states.cheatsheet.tabIndex !== selectedTab)
+                    Persistent.states.cheatsheet.tabIndex = selectedTab;
+            }
 
             Connections {
                 target: root
                 function onTabButtonListChanged() {
-                    if (swipeView.currentIndex >= root.tabButtonList.length) {
-                        swipeView.currentIndex = 0;
-                    }
+                    if (cheatsheetRoot.selectedTab >= root.tabButtonList.length)
+                        cheatsheetRoot.selectedTab = 0;
+                }
+            }
+
+            Connections {
+                target: Persistent.states.cheatsheet
+                function onTabIndexChanged() {
+                    const next = Persistent.states.cheatsheet.tabIndex;
+                    if (cheatsheetRoot.selectedTab !== next)
+                        cheatsheetRoot.selectedTab = next;
                 }
             }
 
@@ -402,11 +416,10 @@ Scope {
                         Layout.preferredWidth: Math.min(1800, Math.max(900, calculatedWidth))
                         Layout.preferredHeight: Math.min(850, Math.max(500, calculatedHeight))
                         spacing: 10
-                        currentIndex: Persistent.states.cheatsheet.tabIndex
+                        currentIndex: cheatsheetRoot.selectedTab
                         onCurrentIndexChanged: {
-                            if (Persistent.states.cheatsheet.tabIndex !== currentIndex) {
-                                Persistent.states.cheatsheet.tabIndex = currentIndex;
-                            }
+                            if (cheatsheetRoot.selectedTab !== currentIndex)
+                                cheatsheetRoot.selectedTab = currentIndex;
                             if (currentItem && currentItem.status === Loader.Ready && currentItem.item) {
                                 currentItem.item.forceActiveFocus();
                             }
