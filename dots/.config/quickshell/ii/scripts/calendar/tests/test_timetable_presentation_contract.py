@@ -12,6 +12,18 @@ TIMETABLE = ROOT / "modules" / "ii" / "cheatsheet" / "timetable"
 
 
 class TimetablePresentationContractTests(unittest.TestCase):
+    def test_week_zoom_uses_persistent_discrete_slot_heights(self) -> None:
+        persistent = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property int timetableSlotHeight: 56", persistent)
+        self.assertIn("readonly property list<int> slotHeightSteps: [40, 56, 72, 96, 120]", week)
+        self.assertIn("property int slotHeight: Persistent.states.cheatsheet.timetableSlotHeight", week)
+        self.assertIn("function zoomSlotHeight(direction, viewportY)", week)
+        self.assertIn("acceptedModifiers: Qt.ControlModifier", week)
+        self.assertIn("Persistent.states.cheatsheet.timetableSlotHeight = nextHeight", week)
+        self.assertIn("const focalMinutes = (styledFlickable.contentY + focalY) / oldPixelsPerMinute", week)
+
     def test_week_navigation_uses_a_real_anchor_and_shared_picker(self) -> None:
         helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")

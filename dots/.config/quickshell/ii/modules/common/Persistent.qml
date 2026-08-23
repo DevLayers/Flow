@@ -304,6 +304,9 @@ Singleton {
                 // "week" | "month" — which calendar shape the timetable tab shows.
                 property string timetableView: "month"
                 property bool timetableShowUpcoming: true
+                // Pixels per hour in the timetable grid. WeekView constrains
+                // writes to its discrete zoom scale.
+                property int timetableSlotHeight: 56
                 // `occurrence-ms|uid|offset` and daily-summary keys. Pruned by
                 // CalendarNotifier so notifications do not repeat after reload.
                 property list<string> timetableNotified: []

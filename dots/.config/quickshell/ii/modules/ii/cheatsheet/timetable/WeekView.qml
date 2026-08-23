@@ -20,7 +20,8 @@ Item {
     property int startMinute: 0
     property int endHour: 24
     property int slotDuration: 60 // in minutes
-    property int slotHeight: 120 // in pixels
+    readonly property list<int> slotHeightSteps: [40, 56, 72, 96, 120]
+    property int slotHeight: Persistent.states.cheatsheet.timetableSlotHeight
     property int timeColumnWidth: 100
     property real maxContentWidth: 1600
     property real navBarHeight: 56
@@ -41,6 +42,7 @@ Item {
     property int entranceKey: 0
     property real weekOpacity: 1
     property real weekShiftX: 0
+    property real zoomWheelAccumulator: 0
     readonly property int dayCount: root.days?.length ?? 0
     readonly property bool initialLoadComplete: root.dayCount > 0 && root.loadedDayCount >= root.dayCount
     readonly property date currentWeekStart: H.weekStartFor(DateTime.clock.date, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst)
@@ -207,6 +209,32 @@ Item {
         let diff = Math.max(0, (now.getHours() * 60 + now.getMinutes()) - (root.startHour * 60 + root.startMinute));
         let targetY = diff * root.pixelsPerMinute - (styledFlickable.height / 3);
         styledFlickable.contentY = Math.min(Math.max(0, targetY), Math.max(0, styledFlickable.contentHeight - styledFlickable.height));
+    }
+
+    function zoomSlotHeight(direction, viewportY) {
+        const currentHeight = root.slotHeight;
+        let currentIndex = root.slotHeightSteps.indexOf(currentHeight);
+        if (currentIndex < 0) {
+            currentIndex = 0;
+            for (let i = 1; i < root.slotHeightSteps.length; i++) {
+                if (Math.abs(root.slotHeightSteps[i] - currentHeight) < Math.abs(root.slotHeightSteps[currentIndex] - currentHeight))
+                    currentIndex = i;
+            }
+        }
+
+        const nextIndex = Math.max(0, Math.min(root.slotHeightSteps.length - 1, currentIndex + direction));
+        const nextHeight = root.slotHeightSteps[nextIndex];
+        if (nextHeight === currentHeight)
+            return;
+
+        const focalY = Math.max(0, Math.min(styledFlickable.height, viewportY));
+        const oldPixelsPerMinute = currentHeight / root.slotDuration;
+        const focalMinutes = (styledFlickable.contentY + focalY) / oldPixelsPerMinute;
+        Persistent.states.cheatsheet.timetableSlotHeight = nextHeight;
+        Qt.callLater(() => {
+            const targetY = focalMinutes * root.pixelsPerMinute - focalY;
+            styledFlickable.contentY = Math.max(0, Math.min(targetY, styledFlickable.contentHeight - styledFlickable.height));
+        });
     }
 
     function maybeApplyInitialScroll() {
@@ -813,6 +841,20 @@ Item {
                     contentHeight: root.contentHeight
                     topMargin: 20
                     bottomMargin: 20
+
+                    WheelHandler {
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                        acceptedModifiers: Qt.ControlModifier
+                        onWheel: event => {
+                            const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x;
+                            root.zoomWheelAccumulator += delta;
+                            if (Math.abs(root.zoomWheelAccumulator) >= 60) {
+                                root.zoomSlotHeight(root.zoomWheelAccumulator > 0 ? 1 : -1, event.position.y);
+                                root.zoomWheelAccumulator = 0;
+                            }
+                            event.accepted = true;
+                        }
+                    }
 
             Row {
                 id: contentRow
