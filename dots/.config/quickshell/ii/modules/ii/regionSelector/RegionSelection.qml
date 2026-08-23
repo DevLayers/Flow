@@ -398,6 +398,32 @@ PanelWindow {
 
     function finalizeScreenshot(saveToFile) {
         ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
+        // No annotations means the composited grab is pixel-identical to a
+        // plain crop of the raw capture, so skip the QQuickItem render +
+        // synchronous PNG encode (seconds on a full-monitor grab) and go
+        // through the same fast native crop the non-editor Copy path uses.
+        if (root.annotations.length === 0) {
+            const screenshotDir = saveToFile ? root.defaultSaveDir() : "";
+            const command = ScreenshotAction.getCommand(root.editorRegionX * root.monitorScale //
+            , root.editorRegionY * root.monitorScale //
+            , root.editorRegionW * root.monitorScale //
+            , root.editorRegionH * root.monitorScale //
+            , root.screenshotPath //
+            , ScreenshotAction.Action.Copy //
+            , screenshotDir);
+            Quickshell.execDetached(command);
+            if (Config.options.regionSelector.enableOverlay ?? true) {
+                GlobalStates.screenshotOverlayMonitor = root.screen?.name ?? ""
+                GlobalStates.screenshotOverlayImagePath = root.screenshotPath;
+                GlobalStates.screenshotOverlayRegionX = root.editorRegionX * root.monitorScale;
+                GlobalStates.screenshotOverlayRegionY = root.editorRegionY * root.monitorScale;
+                GlobalStates.screenshotOverlayRegionW = root.editorRegionW * root.monitorScale;
+                GlobalStates.screenshotOverlayRegionH = root.editorRegionH * root.monitorScale;
+                GlobalStates.screenshotOverlayOpen = true;
+            }
+            root.dismiss();
+            return;
+        }
         root.grabAnnotated(function (tempPath) {
             var esc = StringUtils.shellSingleQuoteEscape;
             var overlayEnabled = Config.options.regionSelector.enableOverlay ?? true;
