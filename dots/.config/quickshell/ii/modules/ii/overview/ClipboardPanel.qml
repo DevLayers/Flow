@@ -189,8 +189,11 @@ Item {
 
     readonly property string selectedMime: {
         if (selectedIsImage) {
-            const match = selectedEntry.match(/\[\[(.+?)\s/);
-            return match ? match[1] : "image/*";
+            // Preview format is "[[ binary data <size> <format> <W>x<H> ]]";
+            // the old regex grabbed the leading "binary" fragment instead of
+            // the actual format token before the dimensions.
+            const match = selectedEntry.match(/\s(\w+)\s\d+x\d+\s\]\]\s*$/);
+            return match ? `image/${match[1]}` : "image/*";
         }
         return "text/plain;charset=utf-8";
     }
