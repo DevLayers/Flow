@@ -1,4 +1,11 @@
 {
+  "Undo": "Desfazer",
+  "Redo": "Refazer",
+  "Cut": "Cortar",
+  "Copy": "Copiar",
+  "Paste": "Colar",
+  "Select all": "Selecionar tudo",
+  "Clear": "Limpar",
   "Style: Blurred": "Estilo: Borrado",
   "Unknown device": "Dispositivo desconhecido",
   "Change any time later with /dark, /light, /wallpaper in the launcher\nIf the shell's colors aren't changing:\n    1. Open the right sidebar with Super+N\n    2. Click \"Reload Hyprland & Quickshell\" in the top-right corner": "Mude a qualquer momento com /dark, /light, /wallpaper no launcher\nSe as cores do shell não mudarem:\n    1. Abra a barra lateral direita com Super+N\n    2. Clique em \"Recarregar Hyprland & Quickshell\" no canto superior direito",

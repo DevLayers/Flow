@@ -36,6 +36,7 @@ MouseArea {
     onPressed: mouse => {
         forceFieldFocus();
         layoutDialog.close();
+        lockContextMenu.close();
         if (Config.options.lock.rippleEffect ?? true) {
             // Emit via GlobalStates so Background.qml (WlrLayer.Top) renders the ripple
             // — the WlSessionLock surface renders under the background panel when locked.
@@ -71,6 +72,7 @@ MouseArea {
     property bool ctrlHeld: false
     Keys.onPressed: event => {
         root.context.resetClearTimer();
+        lockContextMenu.close();
         if (event.key === Qt.Key_Control) {
             root.ctrlHeld = true;
         }
@@ -387,6 +389,21 @@ MouseArea {
 
             Keys.onPressed: event => {
                 root.context.resetClearTimer();
+                lockContextMenu.close();
+            }
+
+            // Context menu on right-click
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                cursorShape: Qt.IBeamCursor
+                onPressed: mouse => {
+                    if (mouse.button === Qt.RightButton) {
+                        layoutDialog.close();
+                        const globalPos = passwordBox.mapToItem(root, mouse.x, mouse.y);
+                        lockContextMenu.openAt(globalPos.x, globalPos.y);
+                    }
+                }
             }
             
             layer.enabled: true
@@ -752,7 +769,7 @@ MouseArea {
             
             contentItem: Image {
                 anchors.centerIn: parent
-                source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+                source: WeatherIcons.getWeatherIcon((Weather.data && Weather.data.wCode !== undefined) ? Weather.data.wCode : 113, false)
                 sourceSize: Qt.size(22, 22)
             }
         }
@@ -845,7 +862,7 @@ MouseArea {
         ToolbarButton {
             id: modeButton
             readonly property bool shown: Modes.active && Config.options.modes.lockPill
-            readonly property string colorKey: Modes.activeMode?.color ?? ""
+            readonly property string colorKey: (Modes.activeMode && Modes.activeMode.color) ? Modes.activeMode.color : ""
             Layout.fillHeight: true
             Layout.preferredWidth: shown ? (modeRow.implicitWidth + 24) : 0
             visible: Layout.preferredWidth > 0
@@ -869,14 +886,14 @@ MouseArea {
                 spacing: 6
 
                 MaterialSymbol {
-                    text: Modes.activeMode?.icon ?? "tune"
+                    text: (Modes.activeMode && Modes.activeMode.icon) ? Modes.activeMode.icon : "tune"
                     iconSize: 18
                     color: ModeUi.onContainer(modeButton.colorKey)
                     fill: 1
                 }
 
                 StyledText {
-                    text: Modes.activeMode?.name ?? ""
+                    text: (Modes.activeMode && Modes.activeMode.name) ? Modes.activeMode.name : ""
                     font.weight: Font.Medium
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: ModeUi.onContainer(modeButton.colorKey)
@@ -1111,10 +1128,17 @@ MouseArea {
         }
     }
 
+    LockContextMenu {
+        id: lockContextMenu
+        targetField: passwordBox
+        lockContext: root.context
+    }
+
     Connections {
         target: GlobalStates
         function onScreenLockedChanged() {
             layoutDialog.close();
+            lockContextMenu.close();
         }
     }
 }
