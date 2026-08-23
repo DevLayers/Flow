@@ -887,6 +887,10 @@ PanelWindow {
             if (root.draggingX === root.dragStartX && root.draggingY === root.dragStartY) {
                 if (root.targetedRegionValid()) {
                     root.setRegionToTargeted();
+                } else {
+                    // No window/layer/image under the cursor (e.g. empty workspace) —
+                    // fall back to the whole monitor instead of silently no-op'ing.
+                    root.setRegion(0, 0, root.screen.width, root.screen.height);
                 }
             } else
             // Circle dragging?
