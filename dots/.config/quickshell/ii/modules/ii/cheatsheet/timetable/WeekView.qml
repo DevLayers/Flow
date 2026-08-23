@@ -31,7 +31,15 @@ Item {
     readonly property int contentHeight: totalSlots * slotHeight
 
     property real maxHeight: 700
-    property real headerHeight: 64 + (maxHeaderChipCount > 0 ? maxHeaderChipCount * (allDayChipHeight + allDayChipSpacing) + 8 : 0)
+    property bool allDayExpanded: false
+    readonly property int collapsedAllDayRows: 2
+    readonly property int expandedAllDayRows: 5
+    readonly property int visibleAllDayRows: Math.min(root.maxHeaderChipCount, root.allDayExpanded ? root.expandedAllDayRows : root.collapsedAllDayRows)
+    readonly property bool hasExpandableAllDayLane: root.maxHeaderChipCount > root.collapsedAllDayRows
+    readonly property int allDayExpanderHeight: 28
+    property real headerHeight: 64
+        + (root.visibleAllDayRows > 0 ? root.visibleAllDayRows * (allDayChipHeight + allDayChipSpacing) + 8 : 0)
+        + (root.hasExpandableAllDayLane ? root.allDayExpanderHeight + root.allDayChipSpacing : 0)
     property real currentTimeY: -1
     property bool initialScrollApplied: false
     property bool sportsEnabled: false
@@ -67,6 +75,14 @@ Item {
 
     implicitWidth: maxContentWidth
     implicitHeight: Math.min(navBarHeight + headerHeight + contentHeight, maxHeight)
+
+    Behavior on headerHeight {
+        NumberAnimation {
+            duration: Appearance.animation.elementMove.duration
+            easing.type: Appearance.animation.elementMove.type
+            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+        }
+    }
     readonly property var days: {
         const calendarEvents = CalendarService.eventsByDay;
         // gamesForDate() reads a plain array, so depend explicitly on the
@@ -320,6 +336,7 @@ Item {
         const currentMs = root.viewWeekStart.getTime();
         const targetMs = target.getTime();
         root.followingCurrentWeek = H.sameDate(target, root.currentWeekStart);
+        root.allDayExpanded = false;
         if (targetMs === currentMs) {
             root.playWeekTransition(0);
             return;
@@ -821,8 +838,13 @@ Item {
                     currentDayIndex: root.currentDayIndex
                     allDayChipHeight: root.allDayChipHeight
                     allDayChipSpacing: root.allDayChipSpacing
+                    visibleAllDayRows: root.visibleAllDayRows
+                    allDayExpanderHeight: root.allDayExpanderHeight
+                    expanded: root.allDayExpanded
+                    hasExpandableLane: root.hasExpandableAllDayLane
                     onDayActivated: date => root.toggleDay(date)
                     onSportsDayActivated: date => root.toggleSportsDay(date)
+                    onAllDayExpansionRequested: expanded => root.allDayExpanded = expanded
                 }
 
                 Rectangle {

@@ -36,6 +36,21 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("anchors.right: parent.right", time_column)
         self.assertIn("horizontalAlignment: Text.AlignRight", time_column)
 
+    def test_all_day_lane_caps_rows_and_expands_with_internal_scroll(self) -> None:
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property bool allDayExpanded: false", week)
+        self.assertIn("readonly property int collapsedAllDayRows: 2", week)
+        self.assertIn("readonly property int expandedAllDayRows: 5", week)
+        self.assertIn("readonly property int visibleAllDayRows", week)
+        self.assertIn("Behavior on headerHeight", week)
+        self.assertIn("visibleAllDayRows: root.visibleAllDayRows", week)
+        self.assertIn("onAllDayExpansionRequested: expanded => root.allDayExpanded = expanded", week)
+        self.assertIn("id: allDayArea", header)
+        self.assertIn("interactive: headerRow.expanded && contentHeight > height", header)
+        self.assertIn("Translation.tr(\"%1 more\").arg(String(dayDelegate.hiddenChipCount))", header)
+
     def test_month_density_modes_are_persistent_and_reduce_cell_chrome(self) -> None:
         persistent = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
         month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")

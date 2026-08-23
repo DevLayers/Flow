@@ -18,9 +18,14 @@ Row {
     property int currentDayIndex
     property int allDayChipHeight
     property int allDayChipSpacing
+    property int visibleAllDayRows
+    property int allDayExpanderHeight
+    property bool expanded: false
+    property bool hasExpandableLane: false
 
     signal dayActivated(var date)
     signal sportsDayActivated(var date)
+    signal allDayExpansionRequested(bool expanded)
 
     height: headerHeight
     spacing: itemSpacing
@@ -41,6 +46,8 @@ Row {
             readonly property int sportsCount: Number(modelData.sportsCount ?? 0)
             readonly property date sportsDate: modelData.sportsDate ?? new Date()
             readonly property bool hasHeaderChips: dayDelegate.allDayEvents.length > 0 || dayDelegate.sportsCount > 0
+            readonly property int headerChipCount: dayDelegate.allDayEvents.length + (dayDelegate.sportsCount > 0 ? 1 : 0)
+            readonly property int hiddenChipCount: Math.max(0, dayDelegate.headerChipCount - 2)
 
             RippleButton {
                 id: dayTitleButton
@@ -96,65 +103,120 @@ Row {
                 }
             }
 
-            Column {
+            StyledFlickable {
+                id: allDayArea
                 anchors.top: dayTitleButton.bottom
                 anchors.topMargin: allDayChipSpacing
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width - 4
-                spacing: allDayChipSpacing
+                height: headerRow.visibleAllDayRows > 0
+                    ? headerRow.visibleAllDayRows * (allDayChipHeight + allDayChipSpacing) - allDayChipSpacing
+                    : 0
+                contentWidth: width
+                contentHeight: allDayChipColumn.implicitHeight
+                clip: true
+                interactive: headerRow.expanded && contentHeight > height
 
-                RippleButtonWithIcon {
-                    id: sportsDayChip
-                    visible: dayDelegate.sportsCount > 0
-                    width: parent.width
-                    height: allDayChipHeight
-                    buttonRadius: Appearance.rounding.verysmall
-                    centerContent: true
-                    materialIcon: "sports_score"
-                    mainText: Translation.tr("Sports") + " · " + String(dayDelegate.sportsCount)
-                    iconPixelSize: Appearance.font.pixelSize.smallie
-                    textPixelSize: Appearance.font.pixelSize.smallest
-                    colText: Appearance.colors.colOnTertiaryContainer
-                    colBackground: Appearance.colors.colTertiaryContainer
-                    colBackgroundHover: Appearance.colors.colTertiaryContainerHover
-                    colBackgroundActive: Appearance.colors.colTertiaryActive
-                    onClicked: headerRow.sportsDayActivated(dayDelegate.sportsDate)
-
-                    StyledToolTip {
-                        extraVisibleCondition: sportsDayChip.hovered
-                        text: Translation.tr("Sports") + " · " + Qt.formatDate(dayDelegate.sportsDate, "dddd, d MMMM")
+                Connections {
+                    target: headerRow
+                    function onExpandedChanged() {
+                        if (!headerRow.expanded)
+                            allDayArea.contentY = 0;
                     }
                 }
 
-                Repeater {
-                    model: dayDelegate.allDayEvents
-                    delegate: Rectangle {
-                        width: parent.width
-                        height: allDayChipHeight
-                        color: H.chipColor(modelData?.sourceEvent ?? modelData, Appearance.colors)
-                        radius: Appearance.rounding.verysmall
+                Column {
+                    id: allDayChipColumn
+                    width: allDayArea.width
+                    spacing: allDayChipSpacing
 
-                        StyledText {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            verticalAlignment: Text.AlignVCenter
-                            horizontalAlignment: Text.AlignHCenter
-                            text: modelData.title
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            font.weight: Font.Medium
-                            color: ColorUtils.getContrastingTextColor(parent.color)
-                            elide: Text.ElideRight
-                        }
+                    RippleButtonWithIcon {
+                        id: sportsDayChip
+                        visible: dayDelegate.sportsCount > 0
+                        width: parent.width
+                        height: visible ? allDayChipHeight : 0
+                        buttonRadius: Appearance.rounding.verysmall
+                        centerContent: true
+                        materialIcon: "sports_score"
+                        mainText: Translation.tr("Sports") + " · " + String(dayDelegate.sportsCount)
+                        iconPixelSize: Appearance.font.pixelSize.smallie
+                        textPixelSize: Appearance.font.pixelSize.smallest
+                        colText: Appearance.colors.colOnTertiaryContainer
+                        colBackground: Appearance.colors.colTertiaryContainer
+                        colBackgroundHover: Appearance.colors.colTertiaryContainerHover
+                        colBackgroundActive: Appearance.colors.colTertiaryActive
+                        onClicked: headerRow.sportsDayActivated(dayDelegate.sportsDate)
 
                         StyledToolTip {
-                            extraVisibleCondition: allDayChipHover.hovered
-                            text: Translation.tr("All day event:") + "\n" + modelData.title
+                            extraVisibleCondition: sportsDayChip.hovered
+                            text: Translation.tr("Sports") + " · " + Qt.formatDate(dayDelegate.sportsDate, "dddd, d MMMM")
                         }
+                    }
 
-                        HoverHandler {
-                            id: allDayChipHover
+                    Repeater {
+                        model: dayDelegate.allDayEvents
+                        delegate: Rectangle {
+                            width: allDayChipColumn.width
+                            height: allDayChipHeight
+                            color: H.chipColor(modelData?.sourceEvent ?? modelData, Appearance.colors)
+                            radius: Appearance.rounding.verysmall
+
+                            StyledText {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                verticalAlignment: Text.AlignVCenter
+                                horizontalAlignment: Text.AlignHCenter
+                                text: modelData.title
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Medium
+                                color: ColorUtils.getContrastingTextColor(parent.color)
+                                elide: Text.ElideRight
+                            }
+
+                            StyledToolTip {
+                                extraVisibleCondition: allDayChipHover.hovered
+                                text: Translation.tr("All day event:") + "\n" + modelData.title
+                            }
+
+                            HoverHandler {
+                                id: allDayChipHover
+                            }
                         }
+                    }
+                }
+            }
+
+            RippleButton {
+                id: allDayExpander
+                visible: headerRow.hasExpandableLane && dayDelegate.headerChipCount > 2
+                anchors.top: allDayArea.bottom
+                anchors.topMargin: allDayChipSpacing
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width - 4
+                implicitHeight: headerRow.allDayExpanderHeight
+                buttonRadius: Appearance.rounding.full
+                colBackground: "transparent"
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                onClicked: headerRow.allDayExpansionRequested(!headerRow.expanded)
+
+                contentItem: RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 3
+
+                    StyledText {
+                        text: headerRow.expanded
+                            ? Translation.tr("Show less")
+                            : Translation.tr("%1 more").arg(String(dayDelegate.hiddenChipCount))
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        font.weight: Font.Bold
+                        color: Appearance.colors.colPrimary
+                    }
+
+                    MaterialSymbol {
+                        text: headerRow.expanded ? "expand_less" : "expand_more"
+                        iconSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colPrimary
                     }
                 }
             }
