@@ -942,13 +942,29 @@ Item {
             }
 
             Item {
+                id: searchResultsSurface
+
+                // A GridLayout cell may only have one direct child. The
+                // regular results and the registry-backed panels alternate
+                // inside this surface instead of competing for that cell.
+                readonly property bool registeredPanelActive: root.activePanelId === "settings"
+                    || root.activePanelId === "keybinds"
+                Layout.fillWidth: true
+                implicitHeight: registeredPanelActive
+                    ? (registeredPanelHostLoader.item?.implicitHeight ?? 0)
+                    : appResultsSurface.implicitHeight
+                height: implicitHeight
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
+
+                Item {
+                    id: appResultsSurface
+                    anchors.fill: parent
+
                 // Use opacity-driven visibility so results fade out before collapsing on close
                 readonly property bool resultsActive: root.showResults && !root.isAnySpecialMode
                 opacity: resultsActive ? 1.0 : 0.0
                 visible: opacity > 0.01
-                Layout.fillWidth: true
                 implicitHeight: root.showSkeletons ? searchSkeletons.implicitHeight + (GlobalStates.searchConnectActive ? 16 : 20) : Math.min(600, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin)
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -1490,6 +1506,23 @@ Item {
                         }
                     }
                 }
+                }
+
+                Loader {
+                    id: registeredPanelHostLoader
+
+                    active: searchResultsSurface.registeredPanelActive
+                    visible: active
+                    anchors.fill: parent
+
+                    sourceComponent: Component {
+                        SearchPanelHost {
+                            activePanelId: root.activePanelId
+                            searchQuery: root.searchingText
+                            inNotchMode: root.inNotchMode
+                        }
+                    }
+                }
             }
 
             Loader {
@@ -1686,28 +1719,6 @@ Item {
                     property: "searchQuery"
                     value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.materialSymbols])
                     when: materialSymbolsPanelLoader.status === Loader.Ready
-                }
-            }
-
-            Loader {
-                id: registeredPanelHostLoader
-
-                // GridLayout retains a cell for an item with zero height.
-                // Keeping this host unloaded outside its two panels prevents
-                // it from taking the results item's cell.
-                active: root.activePanelId === "settings" || root.activePanelId === "keybinds"
-                visible: active
-                Layout.fillWidth: true
-                Layout.preferredHeight: active && item ? item.implicitHeight : 0
-                height: Layout.preferredHeight
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
-
-                sourceComponent: Component {
-                    SearchPanelHost {
-                        activePanelId: root.activePanelId
-                        searchQuery: root.searchingText
-                        inNotchMode: root.inNotchMode
-                    }
                 }
             }
 

@@ -120,10 +120,7 @@ Item {
 
     function activateSelected(): bool {
         const binding = root.selectedBinding();
-        if (!binding || binding.dispatcher.length === 0)
-            return false;
-        Hyprland.dispatch(`${binding.dispatcher}${binding.params.length > 0 ? " " + binding.params : ""}`);
-        return true;
+        return binding ? HyprlandKeybinds.dispatchBinding(binding) : false;
     }
 
     function copySelected(): bool {

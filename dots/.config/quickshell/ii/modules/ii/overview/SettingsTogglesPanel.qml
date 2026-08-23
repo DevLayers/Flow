@@ -210,8 +210,11 @@ Item {
                         AiSettingResultCard {
                             width: rowLoader.width
                             setting: rowLoader.modelData
-                            compact: false
-                            launcherStyle: false
+                            // This panel is still a Search surface. Reuse the
+                            // compact launcher treatment so each control keeps
+                            // the same dense rhythm as the result list.
+                            compact: true
+                            launcherStyle: true
                             listIndex: rowLoader.index
                             listCount: panelList.count
                             listCurrentIndex: root.selectedIndex

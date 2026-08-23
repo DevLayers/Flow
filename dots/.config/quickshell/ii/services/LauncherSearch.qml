@@ -179,12 +179,8 @@ Singleton {
             comment: binding.section,
             keyHints: binding.keys,
             keepOverviewOpen: binding.dispatcher.length === 0,
-            execute: () => {
-                if (binding.dispatcher.length > 0)
-                    Hyprland.dispatch(`${binding.dispatcher}${binding.params.length > 0 ? " " + binding.params : ""}`);
-                else
-                    Quickshell.clipboardText = binding.keys.join("+");
-            },
+            execute: () => HyprlandKeybinds.dispatchBinding(binding)
+                || (Quickshell.clipboardText = binding.keys.join("+")),
             actions: [
                 resultComp.createObject(null, {
                     name: Translation.tr("Copy shortcut"),
