@@ -187,6 +187,10 @@ Singleton {
         property color colOnTertiaryContainer: m3colors.m3onTertiaryContainer
         // Surface
         property color colBackgroundSurfaceContainer: ColorUtils.transparentize(m3colors.m3surfaceContainer, root.backgroundTransparency)
+        property color colBackgroundSurfaceContainerAccent: ColorUtils.transparentize(
+            ColorUtils.mix(m3colors.m3surfaceContainer, m3colors.m3primaryContainer,
+                           1.0 - (Config.options.search.appearance.accentPanels ? Config.options.search.appearance.accentStrength : 0.0)),
+            root.backgroundTransparency)
         property color colSurfaceContainerLow: ColorUtils.solveOverlayColor(m3colors.m3background, m3colors.m3surfaceContainerLow, 1 - root.contentTransparency)
         property color colSurfaceContainer: ColorUtils.solveOverlayColor(m3colors.m3surfaceContainerLow, m3colors.m3surfaceContainer, 1 - root.contentTransparency)
         property color colSurfaceContainerHigh: ColorUtils.solveOverlayColor(m3colors.m3surfaceContainer, m3colors.m3surfaceContainerHigh, 1 - root.contentTransparency)

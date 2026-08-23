@@ -29,6 +29,14 @@ QtObject {
     property string genericName: ""
     property list<string> keywords: []
     property bool isMath: false
+    property bool isBuiltin: false
+    property bool keepOverviewOpen: false
+    property var settingRef: null
+    property string controlKind: ""
+    property var controlValue: null
+    property string panelId: ""
+    property bool pinnable: true
+    property list<string> matchTerms: []
 
     // Extra stuff to allow for more flexibility
     property string category: type

@@ -3646,6 +3646,107 @@ Singleton {
                     // "auto" — switches to the AI chat when the query matches nothing
                     property string trigger: "suggest"
                 }
+                // Search surfaces consume this module contract through
+                // SearchPanelRegistry. A panel cannot accidentally remain in
+                // aliases or prefix routing after its feature is disabled.
+                property JsonObject modules: JsonObject {
+                    property bool clipboard: true
+                    property bool bluetooth: true
+                    property bool translator: true
+                    property bool mediaDownloader: true
+                    property bool materialSymbols: true
+                    property bool emojis: true
+                    property bool windowSearch: true
+                    property bool fileBrowser: true
+                    property bool fileSearch: true
+                    property bool math: true
+                    property bool webSearch: true
+                    property bool shellCommand: true
+                    property bool systemControls: true
+                    property bool shellActions: true
+                    property JsonObject calendar: JsonObject {
+                        property bool enable: false
+                        property string source: "khal"
+                        property int lookaheadDays: 14
+                        property bool showDeclined: false
+                        property bool allowCreate: true
+                        property string defaultCalendarId: ""
+                        property int defaultDurationMin: 30
+                        property list<string> hiddenCalendars: []
+                    }
+                    property JsonObject tasks: JsonObject {
+                        property bool enable: true
+                        property bool showCompleted: false
+                        property bool allowCreate: true
+                        property string defaultList: ""
+                        property int lookaheadDays: 7
+                    }
+                    property JsonObject timers: JsonObject {
+                        property bool enable: true
+                        property bool showPomodoro: true
+                        property bool showStopwatch: true
+                        property bool showAlarms: true
+                        property list<int> quickPresets: [5, 10, 15, 25, 45, 60]
+                    }
+                    property JsonObject quicklinks: JsonObject {
+                        property bool enable: true
+                        property list<var> links: []
+                        property bool copyOnEnter: false
+                        property bool fetchFavicons: true
+                    }
+                    property JsonObject windowManagement: JsonObject {
+                        property bool enable: true
+                        property bool showTilingPresets: true
+                        property bool showWorkspaceMoves: true
+                        property bool showMonitorMoves: true
+                        property int columns: 3
+                    }
+                    property JsonObject screenshots: JsonObject {
+                        property bool enable: true
+                        property int maxItems: 60
+                        property bool blurPreviews: false
+                    }
+                    property JsonObject settingsToggles: JsonObject {
+                        property bool enable: true
+                        property bool showPages: true
+                        property int maxInlineResults: 0
+                    }
+                    property JsonObject quickToggles: JsonObject {
+                        property bool enable: true
+                        property list<string> hidden: []
+                    }
+                    property JsonObject keybinds: JsonObject {
+                        property bool enable: true
+                        property bool includeUserBinds: true
+                        property bool includeDefaultBinds: true
+                    }
+                    property JsonObject cheatsheet: JsonObject {
+                        property bool enable: true
+                        property bool commandsPanel: true
+                        property bool gmailPanel: true
+                    }
+                    property JsonObject sports: JsonObject {
+                        property bool enable: false
+                        property int lookaheadHours: 72
+                        property list<string> leagues: []
+                    }
+                    property JsonObject snippets: JsonObject { property bool enable: true; property list<var> items: [] }
+                    property JsonObject notes: JsonObject { property bool enable: true }
+                    property JsonObject processes: JsonObject { property bool enable: true }
+                    property JsonObject converter: JsonObject { property bool enable: true; property string baseCurrency: "BRL" }
+                    property JsonObject generators: JsonObject { property bool enable: true }
+                }
+                property JsonObject frecencyData: JsonObject {
+                    property bool trackApps: true
+                    property bool trackPanels: true
+                    property bool trackActions: true
+                }
+                property JsonObject appearance: JsonObject {
+                    property bool accentPanels: true
+                    property real accentStrength: 0.12
+                    property bool showKeyHints: true
+                    property bool showKeyHintBar: true
+                }
                 property JsonObject imageSearch: JsonObject {
                     property string imageSearchEngineBaseUrl: "https://lens.google.com/uploadbyurl?url=" //lens.google.com/uploadbyurl?url="
                     property bool useCircleSelection: true

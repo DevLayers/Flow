@@ -756,41 +756,11 @@ RippleButton {
                                 easing.type: Easing.OutBack
                             }
                         }
-                        Row {
+                        KeyHint {
                             anchors.centerIn: parent
-                            spacing: 2
-                            Rectangle {
-                                width: 26
-                                height: 16
-                                radius: 3
-                                color: Appearance.colors.colSurfaceContainerHighest
-                                border.width: 1
-                                border.color: Appearance.colors.colOutlineVariant
-                                StyledText {
-                                    anchors.centerIn: parent
-                                    text: "Ctrl"
-                                    font.pixelSize: 9
-                                    font.family: Appearance.font.family.main
-                                    font.weight: Font.Bold
-                                    color: Appearance.colors.colOnSurfaceContainer
-                                }
-                            }
-                            Rectangle {
-                                width: 14
-                                height: 16
-                                radius: 3
-                                color: Appearance.colors.colSurfaceContainerHighest
-                                border.width: 1
-                                border.color: Appearance.colors.colOutlineVariant
-                                StyledText {
-                                    anchors.centerIn: parent
-                                    text: "K"
-                                    font.pixelSize: 9
-                                    font.family: Appearance.font.family.main
-                                    font.weight: Font.Bold
-                                    color: Appearance.colors.colOnSurfaceContainer
-                                }
-                            }
+                            keys: ["Ctrl", "K"]
+                            surface: root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                            onSurface: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
                         }
                     }
                 }

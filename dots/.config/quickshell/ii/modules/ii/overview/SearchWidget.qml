@@ -79,11 +79,14 @@ Item {
                 root.searchingText = LauncherSearch.query;
         }
     }
-    readonly property bool isClipboardMode: root.searchingText.startsWith(Config.options.search.prefix.clipboard)
-    readonly property bool isBluetoothMode: root.searchingText.startsWith(Config.options.search.prefix.bluetooth)
-    readonly property bool isTranslatorMode: root.searchingText.startsWith(Config.options.search.prefix.translator)
-    readonly property bool isMediaDownloaderMode: Config.options.mediaDownloader.enabled && root.searchingText.startsWith(Config.options.search.prefix.mediaDownloader)
-    readonly property bool isMaterialSymbolsMode: root.searchingText.startsWith(Config.options.search.prefix.materialSymbols)
+    readonly property var resolvedPanel: SearchPanelRegistry.resolve(root.searchingText)
+    readonly property string activePanelId: root.isAiMode ? "ai" : (root.resolvedPanel?.id ?? "")
+    readonly property var activePanel: SearchPanelRegistry.byId(root.activePanelId)
+    readonly property bool isClipboardMode: root.activePanelId === "clipboard"
+    readonly property bool isBluetoothMode: root.activePanelId === "bluetooth"
+    readonly property bool isTranslatorMode: root.activePanelId === "translator"
+    readonly property bool isMediaDownloaderMode: root.activePanelId === "mediaDownloader"
+    readonly property bool isMaterialSymbolsMode: root.activePanelId === "materialSymbols"
     /**
      * Whether the AI surface owns the search.
      *
@@ -103,16 +106,37 @@ Item {
     // the launcher query is cleared or the draft is restored asynchronously.
     property bool aiDraftHydrated: false
     readonly property bool aiAutoTriggerEnabled: Ai.enabled && (Config.options.search.ai?.trigger ?? "prefix") === "auto"
-    readonly property var searchPrefixValues: {
-        const p = Config.options.search.prefix;
-        return [p.action, p.app, p.bluetooth, p.clipboard, p.fileSearch, p.emojis, p.math, p.shellCommand, p.webSearch, p.windowSearch, p.fileBrowser, p.translator, p.mediaDownloader, p.materialSymbols, p.ai]
-            .filter(v => v && v.length > 0 && (Ai.enabled || v !== p.ai));
-    }
+    readonly property var searchPrefixValues: SearchPanelRegistry.activePrefixes.concat([
+        Config.options.search.prefix.action, Config.options.search.prefix.app,
+        Config.options.search.prefix.fileSearch, Config.options.search.prefix.emojis,
+        Config.options.search.prefix.math, Config.options.search.prefix.shellCommand,
+        Config.options.search.prefix.webSearch, Config.options.search.prefix.windowSearch,
+        Config.options.search.prefix.fileBrowser
+    ]).filter((value, index, values) => value && values.indexOf(value) === index)
     readonly property bool queryHasAnyPrefix: root.searchPrefixValues.some(prefix => root.searchingText.startsWith(prefix))
     // Results that are actual matches — the always-there fallback rows
     // (shell command, math, web, ask-AI) never count.
     readonly property int realResultCount: LauncherSearch.results.filter(r => r && r.key !== "cmd:shell" && r.key !== "web:search" && r.key !== "ai:ask" && r.key !== "mpris:now-playing" && !r.key.startsWith("math:")).length
-    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode || root.isAiMode
+    readonly property bool isAnySpecialMode: root.activePanelId.length > 0
+
+    readonly property var activePanelItem: {
+        switch (root.activePanelId) {
+        case "clipboard": return clipboardPanelLoader.item;
+        case "bluetooth": return bluetoothPanelLoader.item;
+        case "translator": return translatorPanelLoader.item;
+        case "mediaDownloader": return mediaDownloaderPanelLoader.item;
+        case "materialSymbols": return materialSymbolsPanelLoader.item;
+        case "ai": return aiPanelLoader.item;
+        default: return null;
+        }
+    }
+
+    SearchKeyRouter {
+        id: searchKeyRouter
+        activePanelItem: root.activePanelItem
+        resultsList: appResults
+        searchWidget: root
+    }
 
     // Latch: however AI mode was entered (prefix typed, suggestion row or
     // auto detection), it stays on until back/Esc — deleting the text must
@@ -259,7 +283,7 @@ Item {
         function onRequestOpenSettings() {
             GlobalStates.overviewOpen = false;
             Qt.callLater(() => {
-                GlobalStates.policiesPanelOpen = true;
+                GlobalStates.openSettings();
             });
         }
     }
@@ -293,17 +317,10 @@ Item {
         if (root.showSuggestionsPanel) {
             if (suggestionsPanelLoader.item)
                 suggestionsPanelLoader.item.focusFirst();
-        } else if (root.isBluetoothMode) {} else if (root.isClipboardMode) {} else if (root.isTranslatorMode) {
-            if (translatorPanelLoader.item)
-                translatorPanelLoader.item.focusInput();
-        } else if (root.isMediaDownloaderMode) {
-            if (mediaDownloaderPanelLoader.item)
-                mediaDownloaderPanelLoader.item.focusInput();
-        } else if (root.isMaterialSymbolsMode) {
-            if (materialSymbolsPanelLoader.item)
-                materialSymbolsPanelLoader.item.focusInput();
         } else if (root.isAiMode) {
             root.focusSearchInput();
+        } else if (root.activePanelItem && typeof root.activePanelItem.focusInput === "function") {
+            root.activePanelItem.focusInput();
         } else {
             appResults.currentIndex = 0;
         }
@@ -697,20 +714,8 @@ Item {
         }
         implicitWidth: {
             let baseW = 0;
-            if (root.isBluetoothMode)
-                baseW = Config.options.search.clipboard.panelWidth ?? 860;
-            else if (root.isClipboardMode)
-                baseW = Config.options.search.clipboard.panelWidth ?? 860;
-            else if (root.isTranslatorMode)
-                baseW = Config.options.search.clipboard.panelWidth ?? 860;
-            else if (root.isMediaDownloaderMode)
-                baseW = Config.options.search.clipboard.panelWidth ?? 860;
-            else if (root.isMaterialSymbolsMode)
-                baseW = 380;
-            else if (root.isAiMode)
-                // Fixed width: the old `search.ai.panelWidth` key had no
-                // writer anywhere, so the value was always this literal.
-                baseW = 720;
+            if (root.activePanel)
+                baseW = root.activePanel.width();
             else
                 baseW = Math.max(Config.options.search.baseWidth, gridLayout.implicitWidth);
 
@@ -724,24 +729,22 @@ Item {
             let bottomMargin = GlobalStates.searchConnectActive ? 16 : 10;
             if (root.showSuggestionsPanel)
                 return (suggestionsPanelLoader.item ? suggestionsPanelLoader.item.implicitHeight : (Config.options.search.baseHeight ?? 500)) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            if (root.isBluetoothMode)
-                return (bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            if (root.isClipboardMode)
-                return (clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            if (root.isTranslatorMode)
-                return (translatorPanelLoader.item ? translatorPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            if (root.isMediaDownloaderMode)
-                return (mediaDownloaderPanelLoader.item ? mediaDownloaderPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            if (root.isMaterialSymbolsMode)
-                return (materialSymbolsPanelLoader.item ? materialSymbolsPanelLoader.item.implicitHeight : 520) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            if (root.isAiMode) {
-                const panelH = aiPanelLoader.item ? aiPanelLoader.item.implicitHeight : 520;
-                return panelH + 16;
-            }
+            if (root.activePanel)
+                return (root.activePanelItem?.implicitHeight ?? 520) + (root.isAiMode ? 16 : searchBar.height + searchBar.verticalPadding * 2 + bottomMargin);
             return gridLayout.implicitHeight;
         }
         radius: root.isAiMode ? Appearance.rounding.verylarge : Appearance.rounding.windowRounding
-        color: GlobalStates.searchConnectActive ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
+        color: GlobalStates.searchConnectActive ? "transparent"
+             : (root.activePanel?.accent ? Appearance.colors.colBackgroundSurfaceContainerAccent
+                                        : Appearance.colors.colBackgroundSurfaceContainer)
+
+        Behavior on color {
+            ColorAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
 
         Behavior on implicitWidth {
             id: searchWidthBehavior
@@ -851,118 +854,47 @@ Item {
                 }
 
                 onNavigateUp: {
-                    if (root.isAiMode) {
-                        if (aiPanelLoader.item && typeof aiPanelLoader.item.navigateUp === "function")
-                            aiPanelLoader.item.navigateUp();
-                    } else if (root.isBluetoothMode) {
-                        if (bluetoothPanelLoader.item)
-                            bluetoothPanelLoader.item.navigateUp();
-                    } else if (root.isClipboardMode) {
-                        if (clipboardPanelLoader.item)
-                            clipboardPanelLoader.item.navigateUp();
-                    } else if (root.isTranslatorMode) {
-                        if (translatorPanelLoader.item)
-                            translatorPanelLoader.item.navigateUp();
-                    } else if (root.isMediaDownloaderMode) {
-                        if (mediaDownloaderPanelLoader.item)
-                            mediaDownloaderPanelLoader.item.navigateUp();
-                    } else if (root.isMaterialSymbolsMode) {
-                        if (materialSymbolsPanelLoader.item)
-                            materialSymbolsPanelLoader.item.navigateUp();
-                    } else if (root.showSuggestionsPanel) {
+                    if (root.showSuggestionsPanel) {
                         if (suggestionsPanelLoader.item)
                             suggestionsPanelLoader.item.navigateUp();
                     } else {
-                        if (appResults.count > 0 && appResults.currentIndex > 0)
-                            appResults.currentIndex--;
+                        searchKeyRouter.dispatch("navigateUp");
                     }
                 }
 
                 onNavigateDown: {
-                    if (root.isAiMode) {
-                        if (aiPanelLoader.item && typeof aiPanelLoader.item.navigateDown === "function")
-                            aiPanelLoader.item.navigateDown();
-                    } else if (root.isBluetoothMode) {
-                        if (bluetoothPanelLoader.item)
-                            bluetoothPanelLoader.item.navigateDown();
-                    } else if (root.isClipboardMode) {
-                        if (clipboardPanelLoader.item)
-                            clipboardPanelLoader.item.navigateDown();
-                    } else if (root.isTranslatorMode) {
-                        if (translatorPanelLoader.item)
-                            translatorPanelLoader.item.navigateDown();
-                    } else if (root.isMediaDownloaderMode) {
-                        if (mediaDownloaderPanelLoader.item)
-                            mediaDownloaderPanelLoader.item.navigateDown();
-                    } else if (root.isMaterialSymbolsMode) {
-                        if (materialSymbolsPanelLoader.item)
-                            materialSymbolsPanelLoader.item.navigateDown();
-                    } else if (root.showSuggestionsPanel) {
+                    if (root.showSuggestionsPanel) {
                         if (suggestionsPanelLoader.item)
                             suggestionsPanelLoader.item.navigateDown();
                     } else {
-                        if (appResults.count > 0 && appResults.currentIndex < appResults.count - 1)
-                            appResults.currentIndex++;
+                        searchKeyRouter.dispatch("navigateDown");
                     }
                 }
 
                 onNavigateLeft: {
-                    if (root.isBluetoothMode && bluetoothPanelLoader.item)
-                        bluetoothPanelLoader.item.navigateLeft();
-                    else if (root.isClipboardMode && clipboardPanelLoader.item)
-                        clipboardPanelLoader.item.navigateLeft();
-                    else if (root.isTranslatorMode && translatorPanelLoader.item)
-                        translatorPanelLoader.item.navigateLeft();
-                    else if (root.isMediaDownloaderMode && mediaDownloaderPanelLoader.item)
-                        mediaDownloaderPanelLoader.item.navigateLeft();
-                    else if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item)
-                        materialSymbolsPanelLoader.item.navigateLeft();
+                    if (root.activePanelItem)
+                        searchKeyRouter.dispatch("navigateLeft");
                     else if (root.selectedResultHandlesHorizontalNavigation)
-                        root.navigateSelectedResult("left");
+                        searchKeyRouter.dispatch("navigateLeft");
                 }
 
                 onNavigateRight: {
-                    if (root.isBluetoothMode && bluetoothPanelLoader.item)
-                        bluetoothPanelLoader.item.navigateRight();
-                    else if (root.isClipboardMode && clipboardPanelLoader.item)
-                        clipboardPanelLoader.item.navigateRight();
-                    else if (root.isTranslatorMode && translatorPanelLoader.item)
-                        translatorPanelLoader.item.navigateRight();
-                    else if (root.isMediaDownloaderMode && mediaDownloaderPanelLoader.item)
-                        mediaDownloaderPanelLoader.item.navigateRight();
-                    else if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item)
-                        materialSymbolsPanelLoader.item.navigateRight();
+                    if (root.activePanelItem)
+                        searchKeyRouter.dispatch("navigateRight");
                     else if (root.selectedResultHandlesHorizontalNavigation)
-                        root.navigateSelectedResult("right");
+                        searchKeyRouter.dispatch("navigateRight");
                 }
 
                 onActivate: {
-                    if (root.isBluetoothMode && bluetoothPanelLoader.item)
-                        bluetoothPanelLoader.item.activateSelected();
-                    else if (root.isClipboardMode && clipboardPanelLoader.item)
-                        clipboardPanelLoader.item.activateSelected();
-                    else if (root.isTranslatorMode && translatorPanelLoader.item)
-                        translatorPanelLoader.item.activateSelected();
-                    else if (root.isMediaDownloaderMode && mediaDownloaderPanelLoader.item)
-                        mediaDownloaderPanelLoader.item.activateSelected();
-                    else if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item)
-                        materialSymbolsPanelLoader.item.activateSelected();
-                    else if (root.showSuggestionsPanel && suggestionsPanelLoader.item)
+                    if (root.showSuggestionsPanel && suggestionsPanelLoader.item)
                         suggestionsPanelLoader.item.activateSelected();
+                    else
+                        searchKeyRouter.dispatch("activateSelected");
                 }
 
                 onDeleteSelected: {
-                    if (root.isBluetoothMode && bluetoothPanelLoader.item) {
-                        bluetoothPanelLoader.item.activateSelected();
-                    } else if (root.isClipboardMode && clipboardPanelLoader.item) {
-                        clipboardPanelLoader.item.activateSelected();
-                    } else if (root.isTranslatorMode && translatorPanelLoader.item) {
-                        translatorPanelLoader.item.activateSelected();
-                    } else if (root.isMediaDownloaderMode && mediaDownloaderPanelLoader.item) {
-                        mediaDownloaderPanelLoader.item.activateSelected();
-                    } else if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item) {
-                        materialSymbolsPanelLoader.item.activateSelected();
-                    }
+                    if (root.activePanelItem && typeof root.activePanelItem.deleteSelected === "function")
+                        root.activePanelItem.deleteSelected();
                 }
             }
 

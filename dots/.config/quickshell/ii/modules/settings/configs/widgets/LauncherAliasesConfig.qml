@@ -590,38 +590,10 @@ Item {
                         }
 
                         Flow {
-                            property var builtins: [
-                                {
-                                    "id": "clipboard",
-                                    "name": Translation.tr("Clipboard"),
-                                    "icon": "content_paste"
-                                },
-                                {
-                                    "id": "emojis",
-                                    "name": Translation.tr("Emoji Picker"),
-                                    "icon": "mood"
-                                },
-                                {
-                                    "id": "math",
-                                    "name": Translation.tr("Calculator Mode"),
-                                    "icon": "calculate"
-                                },
-                                {
-                                    "id": "bluetooth",
-                                    "name": Translation.tr("Bluetooth Manager"),
-                                    "icon": "bluetooth"
-                                },
-                                {
-                                    "id": "translator",
-                                    "name": Translation.tr("Translator"),
-                                    "icon": "translate"
-                                },
-                                {
-                                    "id": "settings",
-                                    "name": Translation.tr("Settings"),
-                                    "icon": "settings"
-                                }
-                            ]
+                            property var builtins: SearchPanelRegistry.aliasTargets.concat([
+                                { "id": "emojis", "name": Translation.tr("Emoji Picker"), "icon": "mood" },
+                                { "id": "math", "name": Translation.tr("Calculator Mode"), "icon": "calculate" }
+                            ])
 
                             Layout.fillWidth: true
                             spacing: 8

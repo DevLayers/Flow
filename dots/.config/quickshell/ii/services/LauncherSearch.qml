@@ -39,7 +39,14 @@ Singleton {
     Component.onCompleted: Qt.callLater(_scheduleResultsUpdate)
 
     function ensurePrefix(prefix) {
-        if ([Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.emojis, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch, Config.options.search.prefix.windowSearch, Config.options.search.prefix.fileBrowser, Config.options.search.prefix.fileSearch, Config.options.search.prefix.materialSymbols].some(i => root.query.startsWith(i))) {
+        const knownPrefixes = SearchPanelRegistry.activePrefixes.concat([
+            Config.options.search.prefix.action, Config.options.search.prefix.app,
+            Config.options.search.prefix.emojis, Config.options.search.prefix.math,
+            Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch,
+            Config.options.search.prefix.windowSearch, Config.options.search.prefix.fileBrowser,
+            Config.options.search.prefix.fileSearch
+        ]).filter(value => String(value ?? "").length > 0);
+        if (knownPrefixes.some(existing => root.query.startsWith(existing))) {
             root.query = prefix + root.query.slice(1);
         } else {
             root.query = prefix + root.query;
@@ -66,12 +73,11 @@ Singleton {
         if (query.length < 2)
             return false;
         const prefixes = Config.options.search.prefix;
-        const reserved = [
-            prefixes.action, prefixes.app, prefixes.bluetooth, prefixes.clipboard,
-            prefixes.emojis, prefixes.fileBrowser, prefixes.fileSearch, prefixes.math,
-            prefixes.mediaDownloader, prefixes.materialSymbols, prefixes.shellCommand,
-            prefixes.translator, prefixes.webSearch, prefixes.windowSearch, prefixes.ai
-        ].filter(prefix => String(prefix ?? "").length > 0);
+        const reserved = SearchPanelRegistry.activePrefixes.concat([
+            prefixes.action, prefixes.app, prefixes.emojis, prefixes.fileBrowser,
+            prefixes.fileSearch, prefixes.math, prefixes.shellCommand, prefixes.webSearch,
+            prefixes.windowSearch
+        ]).filter(prefix => String(prefix ?? "").length > 0);
         return !reserved.some(prefix => query.startsWith(prefix));
     }
 
@@ -970,8 +976,8 @@ Singleton {
                         name = Translation.tr("Dotfiles Settings");
                         typeName = Translation.tr("Settings");
                         execFunc = () => {
-                            GlobalStates.policiesPanelOpen = true;
                             GlobalStates.overviewOpen = false;
+                            GlobalStates.openSettings();
                         };
                     } else if (entry.target === "bluetooth") {
                         icon = "bluetooth";
@@ -1292,6 +1298,11 @@ Singleton {
             isMath: !!properties.isMath,
             isBuiltin: !!properties.isBuiltin,
             keepOverviewOpen: !!properties.keepOverviewOpen,
+            controlKind: properties.controlKind || "",
+            controlValue: properties.controlValue ?? null,
+            panelId: properties.panelId || "",
+            pinnable: properties.pinnable !== undefined ? properties.pinnable : true,
+            matchTerms: properties.matchTerms || [],
             category: properties.category || properties.type || "",
             settingRef: properties.settingRef ?? null
         };
