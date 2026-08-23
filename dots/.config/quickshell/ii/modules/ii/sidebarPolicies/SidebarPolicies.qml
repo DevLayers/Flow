@@ -18,6 +18,12 @@ Scope { // Scope
     property Component contentComponent: SidebarPoliciesContent {}
     property Item sidebarContent
 
+    // Same deal as the right sidebar: the window controller stays cheap and always
+    // alive, while the expensive content tree obeys the user's keep-alive preference.
+    // Pinned counts as wanted so a pinned-but-closed sidebar never loses its content.
+    readonly property bool keepContentLoaded: Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
+    readonly property bool contentWanted: GlobalStates.sidebarLeftOpen || root.pin || root.keepContentLoaded
+
     BarThemes { id: barThemes }
     readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
@@ -104,11 +110,40 @@ Scope { // Scope
         window.contentParent.children = [root.sidebarContent];
     }
 
-    Component.onCompleted: {
+    // Builds the content tree once and hands it to whichever window is up. Idempotent,
+    // so every caller can just ask for it without checking first.
+    function ensureContent() {
+        if (root.sidebarContent) return;
         root.sidebarContent = contentComponent.createObject(null, {
             "scopeRoot": root,
         });
         root.attachContent();
+    }
+
+    // Drops the content tree. Detached from its window first so the window is never
+    // left holding a dangling child, and destroy() itself is deferred by QML to the
+    // end of the current event loop pass.
+    function releaseContent() {
+        if (root.contentWanted) return;
+        if (!root.sidebarContent) return;
+        const content = root.sidebarContent;
+        root.sidebarContent = null;
+        content.parent = null;
+        content.destroy();
+    }
+
+    onContentWantedChanged: {
+        if (root.contentWanted) {
+            root.ensureContent();
+            return;
+        }
+        // Closing is often triggered from inside the content itself (a button, a focus
+        // grab dismissal), so let the current event unwind before tearing it down.
+        Qt.callLater(root.releaseContent);
+    }
+
+    Component.onCompleted: {
+        if (root.contentWanted) root.ensureContent();
     }
 
     onDetachChanged: {

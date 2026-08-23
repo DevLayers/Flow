@@ -3584,6 +3584,7 @@ Singleton {
                 property string position: "default"
                 property string sidebarStyle: "default" // "default" | "connect"
                 property bool keepRightSidebarLoaded: true
+                property bool keepLeftSidebarLoaded: true
                 property bool volumeDialogMediaWidget: true
                 property JsonObject translator: JsonObject {
                     property bool enable: false

@@ -86,6 +86,8 @@
   "Copy code": "Copier le code",
   "Exceeded max allowed": "Dépassement du maximum autorisé",
   "Keep right sidebar loaded": "Garder le panneau latéral droit chargé",
+  "Keep left sidebar loaded": "Garder le panneau latéral gauche chargé",
+  "Sidebar Layout & Loading": "Disposition et chargement des panneaux",
   "Left": "Gauche",
   "High": "Élevé",
   "Rect": "Rect",

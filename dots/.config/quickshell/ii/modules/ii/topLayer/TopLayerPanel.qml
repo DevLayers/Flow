@@ -140,6 +140,8 @@ PanelWindow {
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor
     readonly property bool keepRightSidebarContentLoaded: Config.ready && Config.options.sidebar.keepRightSidebarLoaded
     readonly property bool rightSidebarContentWanted: GlobalStates.sidebarRightOpen || topPanel.keepRightSidebarContentLoaded
+    readonly property bool keepLeftSidebarContentLoaded: Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
+    readonly property bool leftSidebarContentWanted: GlobalStates.sidebarLeftOpen || topPanel.keepLeftSidebarContentLoaded
     readonly property bool leftSidebarActiveOnMonitor: (GlobalStates.animatedLeftSidebarWidth > 0 || GlobalStates.sidebarLeftOpen) && screen.name === GlobalStates.effectiveLeftMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
     readonly property bool rightSidebarActiveOnMonitor: (GlobalStates.animatedRightSidebarWidth > 0 || GlobalStates.sidebarRightOpen) && screen.name === GlobalStates.effectiveRightMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
 
@@ -695,7 +697,7 @@ PanelWindow {
 
         Loader {
             id: leftSidebarContentLoader
-            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarContentWanted && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
             anchors.fill: parent
             sourceComponent: {
                 const pos = Config.options.sidebar.position;

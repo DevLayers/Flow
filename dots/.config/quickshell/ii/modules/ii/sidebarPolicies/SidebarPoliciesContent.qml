@@ -16,6 +16,12 @@ Item {
     property int sidebarPadding: 12
     anchors.fill: parent
     property var visitedTabs: ({})
+
+    // "Keep left sidebar loaded" has to reach the tab contents, not just the window:
+    // the per-tab Loaders below are what actually hold the Phone/AI/etc. trees, so
+    // gating them on sidebarLeftOpen alone threw away every open subpage on close.
+    readonly property bool keepLoaded: Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
+    readonly property bool tabsWanted: GlobalStates.sidebarLeftOpen || root.keepLoaded
     property string routedSessionRequestId: ""
 
     // Policy controls must be handled at the content boundary as well as by
@@ -151,7 +157,7 @@ Item {
     Connections {
         target: GlobalStates
         function onSidebarLeftOpenChanged() {
-            if (!GlobalStates.sidebarLeftOpen) {
+            if (!GlobalStates.sidebarLeftOpen && !root.keepLoaded) {
                 root.visitedTabs = {};
             }
             if (GlobalStates.sidebarLeftOpen) {
@@ -398,7 +404,7 @@ Item {
                         required property var modelData
                         required property int index
 
-                        active: (GlobalStates.sidebarLeftOpen && (SwipeView.isCurrentItem || !!root.visitedTabs[index]))
+                        active: (root.tabsWanted && (SwipeView.isCurrentItem || !!root.visitedTabs[index]))
                                 || (modelData.icon === "smartphone" && (GlobalStates.phoneMicRunning || GlobalStates.phoneCameraRunning))
                         sourceComponent: modelData.component
 

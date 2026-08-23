@@ -171,7 +171,7 @@ Item {
         }
 
         ContentSection {
-            title: Translation.tr("Right Control Sidebar")
+            title: Translation.tr("Sidebar Layout & Loading")
             icon: "view_sidebar"
 
             ConfigSwitch {
@@ -181,6 +181,16 @@ Item {
                 onCheckedChanged: {
                     if (Config.ready && checked !== Config.options.sidebar.keepRightSidebarLoaded)
                         Config.options.sidebar.keepRightSidebarLoaded = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "keep"
+                text: Translation.tr("Keep left sidebar loaded")
+                checked: Config.options.sidebar.keepLeftSidebarLoaded
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.sidebar.keepLeftSidebarLoaded)
+                        Config.options.sidebar.keepLeftSidebarLoaded = checked;
                 }
             }
 
