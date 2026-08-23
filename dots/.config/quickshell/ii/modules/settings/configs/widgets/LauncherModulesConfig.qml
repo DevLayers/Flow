@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 Item {
     id: root
@@ -17,7 +18,7 @@ Item {
             visible: root.showBackButton
             spacing: Appearance.sizes.elevationMargin
             RippleButton {
-                implicitWidth: Appearance.sizes.normalIcon * 2
+                implicitWidth: Appearance.sizes.elevationMargin * 4
                 implicitHeight: implicitWidth
                 buttonRadius: Appearance.rounding.full
                 colBackground: Appearance.colors.colSecondaryContainer

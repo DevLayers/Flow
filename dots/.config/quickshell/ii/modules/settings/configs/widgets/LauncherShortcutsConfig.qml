@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 Item {
     id: root
@@ -55,7 +56,7 @@ Item {
         RowLayout {
             visible: root.showBackButton
             spacing: Appearance.sizes.elevationMargin
-            RippleButton { implicitWidth: Appearance.sizes.normalIcon * 2; implicitHeight: implicitWidth; buttonRadius: Appearance.rounding.full; colBackground: Appearance.colors.colSecondaryContainer; colBackgroundHover: Appearance.colors.colSecondaryContainerHover; colRipple: Appearance.colors.colSecondaryContainerActive; onClicked: root.goBack(); MaterialSymbol { anchors.centerIn: parent; text: "arrow_back"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnSecondaryContainer } }
+            RippleButton { implicitWidth: Appearance.sizes.elevationMargin * 4; implicitHeight: implicitWidth; buttonRadius: Appearance.rounding.full; colBackground: Appearance.colors.colSecondaryContainer; colBackgroundHover: Appearance.colors.colSecondaryContainerHover; colRipple: Appearance.colors.colSecondaryContainerActive; onClicked: root.goBack(); MaterialSymbol { anchors.centerIn: parent; text: "arrow_back"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnSecondaryContainer } }
             StyledText { text: Translation.tr("Search shortcuts"); font.pixelSize: Appearance.font.pixelSize.large; font.family: Appearance.font.family.title; color: Appearance.colors.colOnLayer0 }
         }
         ContentSection {
@@ -78,7 +79,7 @@ Item {
                 }
                 RippleButton {
                     implicitWidth: restoreText.implicitWidth + Appearance.sizes.elevationMargin * 2
-                    implicitHeight: Appearance.sizes.normalIcon * 2
+                    implicitHeight: Appearance.sizes.elevationMargin * 4
                     buttonRadius: Appearance.rounding.full
                     colBackground: Appearance.colors.colSecondaryContainer
                     colBackgroundHover: Appearance.colors.colSecondaryContainerHover

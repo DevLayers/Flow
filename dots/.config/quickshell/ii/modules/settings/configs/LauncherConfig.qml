@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.settings.configs.widgets
+import qs.services
 
 Item {
     id: launcherRoot
