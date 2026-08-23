@@ -38,6 +38,7 @@ RippleButton {
     property string cliphistRawString: entry?.rawValue ?? ""
     property string filePath: Images.isValidImageByName(entry?.name) ? entry?.name : ""
     property bool blurImage: entry?.blurImage ?? false
+    readonly property bool hasInlineSwitch: entry?.controlKind === "switch"
 
     readonly property string artUrl: MprisController.artUrl || ""
     readonly property bool isLocalArt: artUrl.startsWith("file://")
@@ -213,7 +214,8 @@ RippleButton {
 
     property int actionSelectedIndex: 0
 
-    property real normalHeight: 48
+    property real normalHeight: 52
+    readonly property real rowHeight: root.isNowPlaying ? 80 : 52
     property bool _animateWidthChange: false
     onActionPanelOpenChanged: {
         if (actionPanelOpen) {
@@ -243,7 +245,7 @@ RippleButton {
             return nowPlayingLoader.item ? nowPlayingLoader.item.implicitHeight + buttonVerticalPadding * 2 : 80;
         if (root.actionPanelOpen)
             return normalHeight;
-        return contentRow.implicitHeight + buttonVerticalPadding * 2;
+        return root.rowHeight;
     }
     implicitWidth: contentRow.implicitWidth + root.buttonHorizontalPadding * 2
 
@@ -736,7 +738,7 @@ RippleButton {
 
                     Item {
                         id: actionIndicator
-                        readonly property bool shouldShow: root.isSelected && !root.actionPanelOpen && root.allActionItems.length > 1
+                        readonly property bool shouldShow: root.isSelected && !root.actionPanelOpen && !root.hasInlineSwitch && root.allActionItems.length > 1
                         visible: (shouldShow || indicatorAnim.running) && !root.actionPanelOpen
                         Layout.alignment: Qt.AlignVCenter
                         implicitWidth: 44
@@ -761,6 +763,17 @@ RippleButton {
                             keys: ["Ctrl", "K"]
                             surface: root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
                             onSurface: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                        }
+                    }
+
+                    StyledSwitch {
+                        visible: root.hasInlineSwitch && !root.actionPanelOpen
+                        Layout.alignment: Qt.AlignVCenter
+                        sizeScale: 0.62
+                        checked: Boolean(root.entry?.controlValue)
+                        onToggled: {
+                            if (typeof root.itemExecute === "function")
+                                root.itemExecute();
                         }
                     }
                 }

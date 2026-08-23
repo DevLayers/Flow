@@ -16,6 +16,8 @@ Singleton {
 
     property string query: ""
     property int mprisTrigger: 0
+    readonly property int quickToggleRevision: QuickToggleRegistry.revision
+    readonly property bool barOpenForSearch: GlobalStates.barOpen
     // Published by the visible Overview delegate. It is metadata only and is
     // never sent unless the user explicitly attaches it from an AI composer.
     property var selectedResult: null
@@ -25,6 +27,8 @@ Singleton {
     readonly property bool settingsIndexReady: Ai.settingsIntegration.ready
 
     onSettingsIndexReadyChanged: root._scheduleResultsUpdate()
+    onQuickToggleRevisionChanged: root._scheduleResultsUpdate()
+    onBarOpenForSearchChanged: root._scheduleResultsUpdate()
 
     Connections {
         target: GlobalStates
@@ -1108,6 +1112,56 @@ Singleton {
         // useful controls in the same list, but belong after the programs
         // rather than displacing them at the top of every broad query.
         result = result.concat(settingsResultObjects);
+
+        ////////// Quick toggles //////////
+        if (Config.options.search.modules.quickToggles.enable && root.query.trim().length >= 2) {
+            const quickToggleQuery = root.query.trim().toLowerCase();
+            for (const entry of QuickToggleRegistry.entries) {
+                const model = entry.model;
+                const matchesKeyword = entry.keywords.some(keyword => String(keyword).toLowerCase().includes(quickToggleQuery));
+                const matchesName = String(model.name).toLowerCase().includes(quickToggleQuery);
+                if (!matchesKeyword && !matchesName)
+                    continue;
+                result.push(resultComp.createObject(null, {
+                    key: "qtoggle:" + entry.id,
+                    name: model.name,
+                    type: Translation.tr("Quick Toggle"),
+                    comment: model.statusText,
+                    iconName: model.icon,
+                    iconType: LauncherSearchResult.IconType.Material,
+                    verb: model.toggled ? Translation.tr("Disable") : Translation.tr("Enable"),
+                    keepOverviewOpen: true,
+                    controlKind: "switch",
+                    controlValue: model.toggled,
+                    execute: () => model.mainAction()
+                }));
+            }
+        }
+
+        ////////// Shell actions //////////
+        if (Config.options.search.modules.shellActions && root.query.trim().length >= 2) {
+            const shellActionQuery = root.query.trim().toLowerCase();
+            for (const action of ShellActionRegistry.actions) {
+                if (!action.searchable || !action.enabled())
+                    continue;
+                const matches = action.keywords.some(keyword => String(keyword).toLowerCase().includes(shellActionQuery));
+                if (!matches)
+                    continue;
+                result.push(resultComp.createObject(null, {
+                    key: "shell:" + action.id,
+                    name: Translation.tr(action.name),
+                    type: Translation.tr("Shell"),
+                    comment: Translation.tr(action.category),
+                    iconName: action.icon,
+                    iconType: LauncherSearchResult.IconType.Material,
+                    verb: Translation.tr("Open"),
+                    controlKind: action.id === "barToggle" ? "switch" : "",
+                    controlValue: action.id === "barToggle" ? GlobalStates.barOpen : null,
+                    keepOverviewOpen: action.id === "barToggle",
+                    execute: () => ShellActionRegistry.trigger(action.id)
+                }));
+            }
+        }
 
         ////////// Launcher actions ////////////
         result = result.concat(launcherActionObjects);
