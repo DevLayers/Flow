@@ -498,6 +498,46 @@ def _override_occurrence(store: CalendarStore, request: dict[str, Any]) -> dict[
     return {"ok": True}
 
 
+def _split_series(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
+    """End a master immediately before one occurrence and start a new UID."""
+    stored = store.find(str(request.get("uid") or ""))
+    if stored is None:
+        raise CalendarError("Event UID was not found.")
+    if stored.calendar.read_only:
+        raise CalendarError(f'Calendar "{stored.calendar.name}" is read-only.')
+    recurrence_id = _date_or_datetime(request.get("recurrenceId"))
+    fields = request.get("fields")
+    if not isinstance(fields, dict) or not stored.component.get("RRULE"):
+        raise CalendarError("This and future requires a recurring event and fields.")
+    old_rule = copy.deepcopy(stored.component.get("RRULE"))
+    _remove(stored.component, "RRULE")
+    old_rule.pop("COUNT", None)
+    old_rule["UNTIL"] = [recurrence_id - (timedelta(days=1) if isinstance(recurrence_id, date) and not isinstance(recurrence_id, datetime) else timedelta(seconds=1))]
+    stored.component.add("RRULE", old_rule)
+    _touch(stored.component, True)
+
+    followup = copy.deepcopy(stored.component)
+    _set(followup, "UID", str(uuid.uuid4()))
+    _remove(followup, "RECURRENCE-ID")
+    _remove(followup, "RRULE")
+    _remove(followup, "EXDATE")
+    followup.add("RRULE", old_rule)
+    followup.get("RRULE").pop("UNTIL", None)
+    duration = _as_datetime(_decoded(stored.component, "DTEND")) - _as_datetime(_decoded(stored.component, "DTSTART"))
+    next_fields = dict(fields)
+    next_fields.pop("uid", None)
+    next_fields.setdefault("start", _as_iso(recurrence_id))
+    next_fields.setdefault("end", _as_iso(_as_datetime(recurrence_id) + duration))
+    _apply_event(followup, next_fields, False)
+    new_container = Calendar()
+    new_container.add("VERSION", "2.0")
+    new_container.add("PRODID", "-//ii Quickshell//Timetable//EN")
+    new_container.add_component(followup)
+    _import(store, stored.calendar, stored.container)
+    _import(store, stored.calendar, new_container)
+    return {"ok": True, "uid": str(followup.get("UID"))}
+
+
 def _expand(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
     stored = store.find(str(request.get("uid") or ""))
     if stored is None:
@@ -544,6 +584,7 @@ def handle(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
         "deleteSeries": _delete_series,
         "deleteOccurrence": _delete_occurrence,
         "overrideOccurrence": _override_occurrence,
+        "splitSeries": _split_series,
         "expand": _expand,
         "calendars": _calendar_list,
     }

@@ -199,22 +199,26 @@ Item {
     function applySidebarPayload(payload) {
         if (!payload)
             return;
+        const nextDay = new Date(payload.date.getFullYear(), payload.date.getMonth(), payload.date.getDate() + 1);
+        const fields = {
+            summary: payload.title, description: payload.description, location: payload.location,
+            url: payload.url, status: payload.status, recurrence: payload.recurrence,
+            alarms: payload.alarms, allDay: payload.allDay,
+            start: payload.allDay ? Qt.formatDate(payload.date, "yyyy-MM-dd") : CalendarService.localIso(payload.date, payload.start),
+            end: payload.allDay ? Qt.formatDate(nextDay, "yyyy-MM-dd") : CalendarService.localIso(payload.date, payload.end)
+        };
         if (payload.editMode) {
-            CalendarService.updateEvent(payload.event, payload.date, payload.start, payload.end, payload.title, payload.description, payload.allDay);
+            CalendarService.saveEventFields(payload.event, fields, payload.scope ?? "all");
             return;
         }
-        if (payload.allDay) {
-            CalendarService.addAllDayEvent(payload.date, payload.title, payload.description);
-            return;
-        }
-        CalendarService.addEvent(payload.date, payload.start, payload.end, payload.title, payload.description);
+        CalendarService.createEventFields(payload.calendar, fields);
     }
 
-    function deleteEvent(eventData) {
+    function deleteEvent(eventData, scope = "all") {
         if (!eventData)
             return;
         if (eventData.uid)
-            CalendarService.removeEventByUid(eventData.uid);
+            CalendarService.deleteEventWithScope(eventData, scope);
     }
 
     // ─── Layout ───
@@ -508,7 +512,7 @@ Item {
                 anchors.right: parent.right
 
                 onSaveRequested: payload => root.applySidebarPayload(payload)
-                onDeleteRequested: eventData => root.deleteEvent(eventData)
+                onDeleteRequested: (eventData, scope) => root.deleteEvent(eventData, scope)
                 onMoveRequested: (eventData, newDate) => {
                     if (!eventData || !newDate)
                         return;

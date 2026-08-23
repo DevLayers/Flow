@@ -37,12 +37,22 @@ Item {
     property int formStartMinutes: 9 * 60
     property int formEndMinutes: 10 * 60
     property bool formAllDay: false
+    property string formUrl: ""
+    property string formLocation: ""
+    property string formCalendar: ""
+    property string formStatus: "CONFIRMED"
+    property string formRepeat: ""
+    property string formRepeatUntil: ""
+    property list<string> formAlarms: []
+    property var eventDetails: null
+    property var pendingPayload: null
+    property string pendingAction: ""
 
     readonly property bool rangeValid: root.formAllDay || root.formEndMinutes > root.formStartMinutes
     readonly property bool canSave: root.formTitle.trim().length > 0 && root.rangeValid
 
     signal saveRequested(var payload)
-    signal deleteRequested(var eventData)
+    signal deleteRequested(var eventData, string scope)
     signal moveRequested(var eventData, var newDate)
     signal closeRequested
     signal timePickerRequested(string which, int startHour, int startMinute)
@@ -60,6 +70,8 @@ Item {
             return;
         root.event = eventData;
         root.day = H.startOfDay(eventData.startDate);
+        root.eventDetails = null;
+        CalendarService.readEvent(eventData.uid, reply => { if (reply?.ok) root.eventDetails = reply.event; });
         root.setMode("details");
     }
 
@@ -73,6 +85,13 @@ Item {
         root.formEndMinutes = Math.min(24 * 60, (startHour + 1) * 60);
         titleInput.text = "";
         notesInput.text = "";
+        linkInput.text = "";
+        locationInput.text = "";
+        root.formCalendar = CalendarService.defaultCalendar;
+        root.formStatus = "CONFIRMED";
+        root.formRepeat = "";
+        root.formRepeatUntil = "";
+        root.formAlarms = [];
         root.setMode("create");
         titleInput.forceActiveFocus();
     }
@@ -89,6 +108,20 @@ Item {
             root.formEndMinutes = Math.min(24 * 60, root.formStartMinutes + 60);
         titleInput.text = eventData.content ?? "";
         notesInput.text = eventData.description ?? "";
+        linkInput.text = eventData.url ?? "";
+        locationInput.text = eventData.location ?? "";
+        root.formCalendar = eventData.calendar ?? CalendarService.defaultCalendar;
+        root.formStatus = eventData.status ?? "CONFIRMED";
+        root.formRepeat = root.eventDetails?.recurrence?.freq ?? (eventData.repeatSymbol ? "WEEKLY" : "");
+        root.formRepeatUntil = root.eventDetails?.recurrence?.until ?? "";
+        root.formAlarms = (root.eventDetails?.alarms ?? []).map(alarm => String(alarm.minutesBefore));
+        CalendarService.readEvent(eventData.uid, reply => {
+            if (!reply?.ok) return;
+            root.eventDetails = reply.event;
+            root.formRepeat = reply.event.recurrence?.freq ?? "";
+            root.formRepeatUntil = reply.event.recurrence?.until ?? "";
+            root.formAlarms = (reply.event.alarms ?? []).map(alarm => String(alarm.minutesBefore));
+        });
         root.setMode("edit");
     }
 
@@ -163,7 +196,7 @@ Item {
     function submit() {
         if (!root.canSave)
             return;
-        root.saveRequested({
+        const payload = {
             editMode: root.mode === "edit",
             event: root.event,
             date: root.formDate,
@@ -171,9 +204,36 @@ Item {
             description: root.formDescription.trim(),
             allDay: root.formAllDay,
             start: H.minutesToKhalTimeStr(root.formStartMinutes),
-            end: H.minutesToKhalTimeStr(root.formEndMinutes)
-        });
+            end: H.minutesToKhalTimeStr(root.formEndMinutes),
+            url: root.formUrl.trim(), location: root.formLocation.trim(), calendar: root.formCalendar,
+            status: root.formStatus, recurrence: root.formRepeat ? { freq: root.formRepeat, interval: 1, until: root.formRepeatUntil || null } : null,
+            alarms: root.formAlarms.map(minutes => ({ minutesBefore: Number(minutes), action: "DISPLAY" }))
+        };
+        if (payload.editMode && (root.eventDetails?.recurrence || root.event?.repeatSymbol)) {
+            root.pendingPayload = payload;
+            root.pendingAction = "save";
+            root.setMode("scope");
+            return;
+        }
+        root.saveRequested(payload);
         root.close();
+    }
+
+    function requestDelete() {
+        if (root.eventDetails?.recurrence || root.event?.repeatSymbol) {
+            root.pendingAction = "delete";
+            root.pendingPayload = null;
+            root.setMode("scope");
+            return;
+        }
+        root.deleteRequested(root.event, "all");
+        root.close();
+    }
+
+    function chooseScope(scope) {
+        if (root.pendingAction === "delete") root.deleteRequested(root.event, scope);
+        else if (root.pendingPayload) { root.pendingPayload.scope = scope; root.saveRequested(root.pendingPayload); }
+        root.pendingPayload = null; root.pendingAction = ""; root.close();
     }
 
     // ─── Derived ───
@@ -287,10 +347,7 @@ Item {
                     buttonRadius: Appearance.rounding.full
                     colBackground: "transparent"
                     colBackgroundHover: Appearance.colors.colErrorContainer
-                    onClicked: {
-                        root.deleteRequested(root.event);
-                        root.close();
-                    }
+                    onClicked: root.requestDelete()
 
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
@@ -602,6 +659,12 @@ Item {
                                 value: root.event?.calendar ?? ""
                             }
 
+                            InfoRow { Layout.fillWidth: true; visible: (root.event?.location ?? "").length > 0; symbol: "place"; caption: Translation.tr("Location"); value: root.event?.location ?? "" }
+                            InfoRow { Layout.fillWidth: true; visible: (root.event?.url ?? "").length > 0; symbol: "link"; caption: Translation.tr("Link"); value: root.event?.url ?? ""; multiline: true }
+                            InfoRow { Layout.fillWidth: true; visible: (root.event?.status ?? "").length > 0; symbol: "task_alt"; caption: Translation.tr("Status"); value: root.event?.status ?? "" }
+                            InfoRow { Layout.fillWidth: true; visible: (root.eventDetails?.organizer ?? "").length > 0; symbol: "person"; caption: Translation.tr("Organizer"); value: root.eventDetails?.organizer ?? "" }
+                            InfoRow { Layout.fillWidth: true; visible: (root.eventDetails?.attendees?.length ?? 0) > 0; symbol: "group"; caption: Translation.tr("Guests"); value: (root.eventDetails?.attendees ?? []).join(", "); multiline: true }
+
                             InfoRow {
                                 Layout.fillWidth: true
                                 visible: (root.event?.description ?? "").length > 0
@@ -848,6 +911,60 @@ Item {
                                 }
                             }
 
+                            // Native event metadata is kept inline with the editor so it
+                            // remains usable without covering the month grid.
+                            PickerRow {
+                                Layout.fillWidth: true
+                                symbol: "folder"
+                                caption: Translation.tr("Calendar")
+                                value: root.formCalendar || Translation.tr("Default calendar")
+                                onTriggered: {
+                                    const choices = CalendarService.calendars.filter(calendar => !calendar.readOnly);
+                                    if (choices.length === 0) return;
+                                    const current = choices.findIndex(calendar => calendar.name === root.formCalendar);
+                                    root.formCalendar = choices[(current + 1) % choices.length].name;
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; Layout.preferredHeight: 66
+                                radius: Appearance.rounding.small; color: Appearance.m3colors.m3surfaceContainerHighest
+                                RowLayout { anchors.fill: parent; anchors.margins: 10; spacing: 10
+                                    MaterialShapeWrappedMaterialSymbol { text: "link"; iconSize: 18; padding: 9; shape: MaterialShape.Shape.Cookie7Sided; color: Appearance.colors.colPrimaryContainer; colSymbol: Appearance.colors.colOnPrimaryContainer }
+                                    StyledTextInput { id: linkInput; Layout.fillWidth: true; placeholderText: Translation.tr("Link (optional)"); text: root.formUrl; onTextChanged: root.formUrl = text; color: Appearance.colors.colOnSurface }
+                                    RippleButton { visible: EmailDetections.detectAll(root.formUrl).meetings.length > 0; implicitWidth: 34; implicitHeight: 34; buttonRadius: Appearance.rounding.full; colBackground: Appearance.colors.colPrimaryContainer; onClicked: Qt.openUrlExternally(root.formUrl); contentItem: MaterialSymbol { anchors.centerIn: parent; text: "video_call"; color: Appearance.colors.colOnPrimaryContainer } }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; Layout.preferredHeight: 66
+                                radius: Appearance.rounding.small; color: Appearance.m3colors.m3surfaceContainerHighest
+                                RowLayout { anchors.fill: parent; anchors.margins: 10; spacing: 10
+                                    MaterialShapeWrappedMaterialSymbol { text: "place"; iconSize: 18; padding: 9; shape: MaterialShape.Shape.Cookie7Sided; color: Appearance.colors.colPrimaryContainer; colSymbol: Appearance.colors.colOnPrimaryContainer }
+                                    StyledTextInput { id: locationInput; Layout.fillWidth: true; placeholderText: Translation.tr("Location (optional)"); text: root.formLocation; onTextChanged: root.formLocation = text; color: Appearance.colors.colOnSurface }
+                                    RippleButton { visible: root.formLocation.length > 0; implicitWidth: 34; implicitHeight: 34; buttonRadius: Appearance.rounding.full; colBackground: "transparent"; onClicked: Qt.openUrlExternally("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(root.formLocation)); contentItem: MaterialSymbol { anchors.centerIn: parent; text: "map"; color: Appearance.colors.colPrimary } }
+                                }
+                            }
+
+                            StyledText { Layout.fillWidth: true; text: Translation.tr("Repeats"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
+                            Flow { Layout.fillWidth: true; spacing: 6
+                                Repeater { model: [["", Translation.tr("Never")], ["DAILY", Translation.tr("Daily")], ["WEEKLY", Translation.tr("Weekly")], ["MONTHLY", Translation.tr("Monthly")], ["YEARLY", Translation.tr("Yearly")]]
+                                    delegate: DurationChip { required property var modelData; label: modelData[1]; selected: root.formRepeat === modelData[0]; onTriggered: root.formRepeat = modelData[0] }
+                                }
+                            }
+                            StyledText { Layout.fillWidth: true; text: Translation.tr("Reminders"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
+                            Flow { Layout.fillWidth: true; spacing: 6
+                                Repeater { model: [["0", Translation.tr("At time")], ["5", "5m"], ["15", "15m"], ["60", "1h"], ["1440", "1d"]]
+                                    delegate: DurationChip { required property var modelData; label: modelData[1]; selected: root.formAlarms.includes(modelData[0]); onTriggered: { const next = root.formAlarms.slice(); const index = next.indexOf(modelData[0]); if (index >= 0) next.splice(index, 1); else next.push(modelData[0]); root.formAlarms = next; } }
+                                }
+                            }
+                            StyledText { Layout.fillWidth: true; text: Translation.tr("Status"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
+                            Flow { Layout.fillWidth: true; spacing: 6
+                                Repeater { model: [["CONFIRMED", Translation.tr("Confirmed")], ["TENTATIVE", Translation.tr("Tentative")], ["CANCELLED", Translation.tr("Cancelled")]]
+                                    delegate: DurationChip { required property var modelData; label: modelData[1]; selected: root.formStatus === modelData[0]; onTriggered: root.formStatus = modelData[0] }
+                                }
+                            }
+
                             // Notes
                             Rectangle {
                                 Layout.fillWidth: true
@@ -936,6 +1053,20 @@ Item {
                             enabled: root.canSave
                             onTriggered: root.submit()
                         }
+                    }
+                }
+
+                // ══ Recurrence scope ══
+                Item {
+                    anchors.fill: parent
+                    visible: root.mode === "scope"
+                    ColumnLayout {
+                        anchors.centerIn: parent; width: Math.min(parent.width, 300); spacing: 10
+                        StyledText { Layout.fillWidth: true; text: root.pendingAction === "delete" ? Translation.tr("Delete recurring event") : Translation.tr("Edit recurring event"); font.pixelSize: Appearance.font.pixelSize.large; font.weight: Font.Bold; wrapMode: Text.Wrap; color: Appearance.colors.colOnSurface }
+                        StyledText { Layout.fillWidth: true; text: Translation.tr("Choose how much of this series changes."); wrapMode: Text.Wrap; color: Appearance.colors.colOnSurfaceVariant }
+                        SecondaryAction { Layout.fillWidth: true; label: Translation.tr("Only this event"); symbol: "event"; onTriggered: root.chooseScope("this") }
+                        SecondaryAction { Layout.fillWidth: true; label: Translation.tr("This and future"); symbol: "event_repeat"; onTriggered: root.chooseScope("future") }
+                        PrimaryAction { Layout.fillWidth: true; label: Translation.tr("Entire series"); symbol: "all_inclusive"; onTriggered: root.chooseScope("all") }
                     }
                 }
             }

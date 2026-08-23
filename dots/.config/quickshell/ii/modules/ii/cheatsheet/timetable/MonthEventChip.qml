@@ -115,6 +115,14 @@ Item {
                 color: Appearance.colors.colOnSurfaceVariant
             }
 
+            MaterialSymbol {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !root.compact && (root.eventData?.repeatSymbol ?? "").length > 0
+                text: "repeat"
+                iconSize: Appearance.font.pixelSize.smallest
+                color: root.allDay ? ColorUtils.getContrastingTextColor(root.accent) : Appearance.colors.colOnSurfaceVariant
+            }
+
             StyledText {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Math.max(0, parent.width - x)
@@ -123,6 +131,7 @@ Item {
                 maximumLineCount: 1
                 font.pixelSize: root.compact ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.smaller
                 font.weight: Font.DemiBold
+                font.strikeout: String(root.eventData?.status ?? "").toUpperCase() === "CANCELLED"
                 color: root.allDay ? ColorUtils.getContrastingTextColor(root.accent) : Appearance.colors.colOnSurface
             }
         }

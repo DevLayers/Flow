@@ -543,6 +543,38 @@ Singleton {
         console.warn("[CalendarService] Refusing to delete an event by summary:", String(title ?? ""));
     }
 
+    function readEvent(uid, callback) {
+        if (uid)
+            root.enqueueCalendarRequest({ op: "read", uid: String(uid) }, callback);
+    }
+
+    function saveEventFields(event, fields, scope = "all") {
+        if (!event?.uid)
+            return;
+        const payload = { uid: String(event.uid) };
+        for (const key in fields)
+            payload[key] = fields[key];
+        const request = scope === "this"
+            ? { op: "overrideOccurrence", uid: String(event.uid), recurrenceId: fields.recurrenceId, fields: payload }
+            : scope === "future"
+                ? { op: "splitSeries", uid: String(event.uid), recurrenceId: fields.recurrenceId, fields: payload }
+                : { op: "save", calendar: event.calendar ?? "", event: payload };
+        root.enqueueCalendarRequest(request);
+    }
+
+    function createEventFields(calendar, fields) {
+        root.enqueueCalendarRequest({ op: "save", calendar: calendar || root.defaultCalendar, event: fields });
+    }
+
+    function deleteEventWithScope(event, scope = "all") {
+        if (!event?.uid)
+            return;
+        const request = scope === "this"
+            ? { op: "deleteOccurrence", uid: String(event.uid), recurrenceId: event.startDate.toISOString() }
+            : { op: "deleteSeries", uid: String(event.uid) };
+        root.enqueueCalendarRequest(request);
+    }
+
     function moveEvent(event, newDate) {
         if (!root.khalAvailable || !event?.uid || !newDate)
             return;

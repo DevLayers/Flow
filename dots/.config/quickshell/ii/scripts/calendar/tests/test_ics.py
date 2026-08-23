@@ -166,6 +166,9 @@ class IcsHelperTests(unittest.TestCase):
 
         override_id = after_delete["occurrences"][1]["recurrenceId"]
         self.assertEqual(self.request({"op": "overrideOccurrence", "uid": uid, "recurrenceId": override_id, "fields": {"summary": "One-off review"}}), {"ok": True})
+        split = self.request({"op": "splitSeries", "uid": uid, "recurrenceId": after_delete["occurrences"][2]["recurrenceId"], "fields": {"summary": "Future reviews"}})
+        self.assertTrue(split["ok"])
+        self.assertNotEqual(split["uid"], uid)
         self.assertEqual(self.request({"op": "save", "calendar": "readonly", "event": self.event(summary="Blocked")})["ok"], False)
 
 
