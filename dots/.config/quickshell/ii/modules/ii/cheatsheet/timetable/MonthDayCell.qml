@@ -20,6 +20,7 @@ Item {
     property var events: []
     property var tasks: []
     property var holidays: []
+    property bool sportsEnabled: false
     property bool dropTarget: false
     property bool selected: false
     property int entranceKey: 0
@@ -45,7 +46,7 @@ Item {
         const key = H.dayKeyOf(root.cellData?.date);
         return (Weather.forecastData ?? []).find(day => String(day?.date ?? "") === key) ?? null;
     }
-    readonly property var sportEvents: SportsService.gamesForDate(root.cellData?.date)
+    readonly property var sportEvents: root.sportsEnabled ? SportsService.gamesForDate(root.cellData?.date) : []
 
     readonly property real headerHeight: 30
     readonly property real headerEventSpacing: 4

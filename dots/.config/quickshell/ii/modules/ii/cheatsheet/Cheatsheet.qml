@@ -484,15 +484,19 @@ Scope {
                                 // tabs resident and made Loader.active unstable.
                                 active: swipeView.currentIndex === index
 
+                                // The timetable is substantially heavier than the
+                                // text-first tabs. Incubating it lets the overlay
+                                // paint its first frame before the calendar tree is
+                                // completed; its own repeaters then continue the
+                                // progressive materialization item by item.
+                                asynchronous: modelData.icon === "calendar_month"
+
                                 onStatusChanged: {
                                     if (status === Loader.Ready && swipeView.currentIndex === index && cheatsheetRoot.visible) {
                                         item.forceActiveFocus();
                                     }
                                 }
 
-                                // Synchronous on purpose: async incubation paces object
-                                // creation across frames, which on a downclocked CPU
-                                // costs far more waiting than the build itself.
                                 source: {
                                     switch (modelData.icon) {
                                     case "calendar_month":

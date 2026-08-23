@@ -56,6 +56,14 @@ Item {
     property bool timetableLoading: false
     property string timetableError: ""
     property string focusedGameId: ""
+    property var timetableProjectionSource: []
+    property var timetableProjectionCompactEvents: []
+    property var timetableProjectionGames: []
+    property int timetableProjectionIndex: 0
+    property int timetableProjectionEventIndex: 0
+    property var timetableProjectionSeen: ({})
+    property bool timetableProjecting: false
+    readonly property int timetableProjectionBudgetMs: 4
 
     // Persistent ESPN cache. Scoreboards retain the raw response events so a
     // team-filter change can be projected again without a network request.
@@ -90,8 +98,22 @@ Item {
 
     function releaseTimetableSubscriber() {
         timetableSubscribers = Math.max(0, timetableSubscribers - 1);
-        if (timetableSubscribers === 0)
+        if (timetableSubscribers === 0) {
+            timetableProjectionTimer.stop();
+            timetableProjectionSource = [];
+            timetableProjectionCompactEvents = [];
+            timetableProjectionGames = [];
+            timetableProjectionIndex = 0;
+            timetableProjectionEventIndex = 0;
+            timetableProjectionSeen = ({});
+            timetableProjecting = false;
+            timetableGames = [];
+            timetableRangeStart = "";
+            timetableRangeEnd = "";
+            pendingRangeRequest = false;
+            pendingRangeForce = false;
             focusedGameId = "";
+        }
     }
 
     function nextGame() {
@@ -540,6 +562,8 @@ Item {
     }
 
     function requestTimetableRange(fromValue, toValue, force = false) {
+        if (!root.timetableActive)
+            return;
         const fromKey = root.dayKey(fromValue);
         const toKey = root.dayKey(toValue);
         if (fromKey.length === 0 || toKey.length === 0)
@@ -571,54 +595,130 @@ Item {
         }
     }
 
-    function cachedRangeEvents() {
-        const events = [];
-        const seen = ({});
+    function cachedRangeSources() {
+        const sources = [];
         const leagues = root.monitoredLeagueEntries();
         for (let i = 0; i < leagues.length; i++) {
             const entry = leagues[i];
             const key = root.scheduleKey(entry, root.timetableRangeStart, root.timetableRangeEnd);
             const cached = root.scheduleCache[key];
             const values = Array.isArray(cached?.events) ? cached.events : [];
-            for (let j = 0; j < values.length; j++) {
-                const raw = values[j] ?? ({});
-                const id = String(raw.id ?? `${key}-${String(j)}`);
-                if (seen[id])
-                    continue;
-                seen[id] = true;
-                events.push(Object.assign({}, raw, {
-                    leagueName: String(cached?.name || entry.name),
-                    leagueId: entry.league,
-                    sportCategory: entry.sport,
-                    leagueLogo: String(cached?.leagueLogo ?? ""),
-                    fetchedAt: cached?.fetchedAt ? new Date(Number(cached.fetchedAt)).toISOString() : ""
-                }));
-            }
+            if (values.length === 0)
+                continue;
+            sources.push({
+                key: key,
+                entry: entry,
+                cached: cached,
+                events: values
+            });
         }
-        return events;
+        return sources;
+    }
+
+    function eventFitsCompactWindow(event) {
+        const eventDate = new Date(event?.date);
+        if (isNaN(eventDate.getTime()))
+            return false;
+        const state = String(event?.status?.type?.state ?? "");
+        const now = Date.now();
+        if (state === "pre")
+            return (eventDate.getTime() - now) / (1000 * 60 * 60) <= Config.options.bar.sports.showBeforeHours;
+        if (state === "post")
+            return (now - eventDate.getTime()) / (1000 * 60) <= Config.options.bar.sports.showAfterMinutes;
+        return true;
     }
 
     function rebuildTimetableGames() {
+        if (!root.timetableActive)
+            return;
         if (root.timetableRangeStart.length === 0 || root.timetableRangeEnd.length === 0)
             return;
-        const rawEvents = root.cachedRangeEvents();
-        const games = [];
-        for (let i = 0; i < rawEvents.length; i++) {
-            const game = root.normalizeTimetableGame(rawEvents[i]);
+        timetableProjectionTimer.stop();
+        root.timetableProjectionSource = root.cachedRangeSources();
+        root.timetableProjectionCompactEvents = [];
+        root.timetableProjectionGames = [];
+        root.timetableProjectionIndex = 0;
+        root.timetableProjectionEventIndex = 0;
+        root.timetableProjectionSeen = ({});
+        root.timetableProjecting = root.timetableProjectionSource.length > 0;
+        if (!root.timetableProjecting) {
+            root.finishTimetableProjection();
+            return;
+        }
+        timetableProjectionTimer.start();
+    }
+
+    function projectNextTimetableBatch() {
+        if (!root.timetableActive) {
+            timetableProjectionTimer.stop();
+            root.timetableProjecting = false;
+            return;
+        }
+
+        const startedAt = Date.now();
+        while (root.timetableProjectionIndex < root.timetableProjectionSource.length
+                && Date.now() - startedAt < root.timetableProjectionBudgetMs) {
+            const source = root.timetableProjectionSource[root.timetableProjectionIndex];
+            const values = source.events;
+            if (root.timetableProjectionEventIndex >= values.length) {
+                root.timetableProjectionIndex += 1;
+                root.timetableProjectionEventIndex = 0;
+                continue;
+            }
+
+            const sourceEventIndex = root.timetableProjectionEventIndex;
+            const sourceEvent = values[sourceEventIndex] ?? ({});
+            root.timetableProjectionEventIndex += 1;
+            const id = String(sourceEvent.id ?? `${source.key}-${String(sourceEventIndex)}`);
+            if (root.timetableProjectionSeen[id])
+                continue;
+            root.timetableProjectionSeen[id] = true;
+
+            const raw = Object.assign({}, sourceEvent, {
+                leagueName: String(source.cached?.name || source.entry.name),
+                leagueId: source.entry.league,
+                sportCategory: source.entry.sport,
+                leagueLogo: String(source.cached?.leagueLogo ?? ""),
+                fetchedAt: source.cached?.fetchedAt ? new Date(Number(source.cached.fetchedAt)).toISOString() : ""
+            });
+            if (root.eventFitsCompactWindow(raw))
+                root.timetableProjectionCompactEvents.push(raw);
+            const game = root.normalizeTimetableGame(raw);
             if (!game)
                 continue;
             const key = root.dayKey(game.startDate);
             if (key < root.timetableRangeStart || key > root.timetableRangeEnd)
                 continue;
-            games.push(game);
+            root.timetableProjectionGames.push(game);
         }
+
+        if (root.timetableProjectionIndex >= root.timetableProjectionSource.length) {
+            timetableProjectionTimer.stop();
+            root.finishTimetableProjection();
+        }
+    }
+
+    function finishTimetableProjection() {
+        const compactEvents = root.timetableProjectionCompactEvents;
+        const games = root.timetableProjectionGames;
         games.sort((left, right) => left.startDate.getTime() - right.startDate.getTime());
         root.timetableGames = games;
+        root.timetableProjectionSource = [];
+        root.timetableProjectionCompactEvents = [];
+        root.timetableProjectionGames = [];
+        root.timetableProjectionIndex = 0;
+        root.timetableProjectionEventIndex = 0;
+        root.timetableProjectionSeen = ({});
+        root.timetableProjecting = false;
         // Reuse the timetable response for bar/dock only when it actually
         // contains today. Navigating to another month must not blank or stale
         // the compact live score projection.
-        if (root.enabled && root.timetableRangeCoversToday)
-            root.processGames(rawEvents);
+        if (root.enabled && root.timetableRangeCoversToday) {
+            Qt.callLater(() => {
+                if (root.enabled)
+                    root.processGames(compactEvents);
+            });
+        }
     }
 
     function gamesForDate(date) {
@@ -1039,6 +1139,13 @@ Item {
     }
 
     Timer {
+        id: timetableProjectionTimer
+        interval: 0
+        repeat: true
+        onTriggered: root.projectNextTimetableBatch()
+    }
+
+    Timer {
         id: refreshTimer
         interval: updateInterval * 1000
         running: enabled && (!timetableActive || !root.timetableRangeCoversToday)
@@ -1123,9 +1230,7 @@ Item {
     }
 
     onTimetableActiveChanged: {
-        if (root.timetableActive && root.timetableRangeStart.length > 0) {
-            root.requestTimetableRange(root.timetableRangeStart, root.timetableRangeEnd, false);
-        } else if (!root.timetableActive && root.enabled) {
+        if (!root.timetableActive && root.enabled) {
             root.fetchGames();
         }
     }

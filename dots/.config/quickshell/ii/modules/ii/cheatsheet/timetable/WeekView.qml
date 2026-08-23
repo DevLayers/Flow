@@ -31,7 +31,10 @@ Item {
     property real headerHeight: 64 + (maxHeaderChipCount > 0 ? maxHeaderChipCount * (allDayChipHeight + allDayChipSpacing) + 8 : 0)
     property real currentTimeY: -1
     property bool initialScrollApplied: false
+    property bool sportsEnabled: false
+    property int loadedDayCount: 0
     property string requestedSportsRange: ""
+    readonly property bool initialLoadComplete: root.days.length > 0 && root.loadedDayCount >= root.days.length
     readonly property real eventRailWidth: Math.max(300, Math.min(390, root.width * 0.29))
     readonly property real usableWidth: root.width - (eventSidebar.open ? root.eventRailWidth + 14 : 0)
     readonly property real dayColumnWidth: {
@@ -39,6 +42,7 @@ Item {
         return Math.max(80, (availableWidth - timeColumnWidth - days.length * spacing) / Math.max(1, days.length));
     }
     readonly property int currentDayIndex: Config.options.cheatsheet.timetableTodayFirst ? 0 : ((DateTime.clock.date.getDay() - Config.options.time.firstDayOfWeek + 6) % 7)
+    readonly property string clockDayKey: Qt.formatDate(DateTime.clock.date, "yyyy-MM-dd")
 
     implicitWidth: maxContentWidth
     implicitHeight: Math.min(headerHeight + contentHeight, maxHeight)
@@ -46,12 +50,12 @@ Item {
     readonly property var days: {
         // gamesForDate() reads a plain array, so depend explicitly on the
         // replacement that SportsService publishes after each refresh.
-        const sportsGames = SportsService.timetableGames;
+        const sportsGames = root.sportsEnabled ? SportsService.timetableGames : [];
         const result = [];
         for (let i = 0; i < 7; i++) {
             const date = H.getDateForDayIndex(i, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
             const calendarDay = root.calendarDays?.[i] ?? ({});
-            const games = Array.isArray(sportsGames) ? SportsService.gamesForDate(date) : [];
+            const games = root.sportsEnabled && Array.isArray(sportsGames) ? SportsService.gamesForDate(date) : [];
             result.push({
                 name: String(calendarDay.name || Qt.formatDate(date, "dddd")),
                 events: calendarDay.events ?? [],
@@ -234,8 +238,12 @@ Item {
         function onDateChanged() {
             root.updateCurrentTimeLine();
             root.updateNextEvent();
-            root.requestSportsRange();
         }
+    }
+
+    onClockDayKeyChanged: {
+        root.requestedSportsRange = "";
+        root.requestSportsRange();
     }
     Connections {
         target: CalendarService
@@ -247,17 +255,19 @@ Item {
     Connections {
         target: Config.options.cheatsheet
         function onTimetableTodayFirstChanged() {
-            root.requestSportsRange();
+            root.restartDayLoading();
         }
     }
     Connections {
         target: Config.options.time
         function onFirstDayOfWeekChanged() {
-            root.requestSportsRange();
+            root.restartDayLoading();
         }
     }
 
     function requestSportsRange() {
+        if (!root.sportsEnabled || !root.initialLoadComplete)
+            return;
         const fromDate = H.getDateForDayIndex(0, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
         const toDate = H.getDateForDayIndex(6, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
         const range = Qt.formatDate(fromDate, "yyyy-MM-dd") + "|" + Qt.formatDate(toDate, "yyyy-MM-dd");
@@ -267,8 +277,40 @@ Item {
         SportsService.requestTimetableRange(fromDate, toDate);
     }
 
+    function restartDayLoading() {
+        dayLoadTimer.stop();
+        root.loadedDayCount = 0;
+        root.requestedSportsRange = "";
+        dayLoadTimer.start();
+    }
+
+    Timer {
+        id: dayLoadTimer
+        interval: 0
+        repeat: true
+        onTriggered: {
+            if (root.loadedDayCount >= root.days.length) {
+                stop();
+                return;
+            }
+            root.loadedDayCount += 1;
+            if (root.loadedDayCount >= root.days.length)
+                stop();
+        }
+    }
+
+    onInitialLoadCompleteChanged: {
+        if (root.initialLoadComplete)
+            root.requestSportsRange();
+    }
+
+    onSportsEnabledChanged: {
+        if (root.sportsEnabled)
+            root.requestSportsRange();
+    }
+
     Component.onCompleted: {
-        root.requestSportsRange();
+        root.restartDayLoading();
         root.updateCurrentTimeLine();
         root.updateNextEvent();
         Qt.callLater(root.maybeApplyInitialScroll);
@@ -299,7 +341,7 @@ Item {
             itemSpacing: root.spacing
             timeColumnWidth: root.timeColumnWidth
             dayColumnWidth: root.dayColumnWidth
-            days: root.days
+            days: root.days.slice(0, root.loadedDayCount)
             currentDayIndex: root.currentDayIndex
             allDayChipHeight: root.allDayChipHeight
             allDayChipSpacing: root.allDayChipSpacing
@@ -340,10 +382,10 @@ Item {
                     height: root.contentHeight
                     spacing: root.spacing
                     Repeater {
-                        model: root.days
+                        model: root.loadedDayCount
                         delegate: TimetableDayColumn {
                             dayIdx: index
-                            dayData: modelData
+                            dayData: root.days[index]
                             isToday: index === root.currentDayIndex
                             dayColumnWidth: root.dayColumnWidth
                             contentHeight: root.contentHeight

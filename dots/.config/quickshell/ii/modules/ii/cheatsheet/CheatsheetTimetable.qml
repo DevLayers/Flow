@@ -24,9 +24,34 @@ Item {
 
     readonly property string requestedMode: Persistent.states.cheatsheet.timetableView === "month" ? "month" : "week"
     property string activeMode: root.requestedMode
+    property bool sportsSubscriberAcquired: false
+    property bool sportsReady: false
+    readonly property var activeViewItem: root.activeMode === "month" ? monthViewLoader.item : weekViewLoader.item
+    readonly property bool activeViewReady: root.activeViewItem?.initialLoadComplete ?? false
 
-    Component.onCompleted: SportsService.acquireTimetableSubscriber()
-    Component.onDestruction: SportsService.releaseTimetableSubscriber()
+    onActiveViewReadyChanged: {
+        if (root.activeViewReady && !root.sportsSubscriberAcquired)
+            sportsActivationTimer.restart();
+    }
+
+    Timer {
+        id: sportsActivationTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            if (!root.activeViewReady || root.sportsSubscriberAcquired)
+                return;
+            SportsService.acquireTimetableSubscriber();
+            root.sportsSubscriberAcquired = true;
+            root.sportsReady = true;
+        }
+    }
+
+    Component.onDestruction: {
+        sportsActivationTimer.stop();
+        if (root.sportsSubscriberAcquired)
+            SportsService.releaseTimetableSubscriber();
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -85,19 +110,25 @@ Item {
         }
 
         Loader {
+            id: weekViewLoader
             anchors.fill: parent
             active: root.activeMode === "week"
+            asynchronous: true
             sourceComponent: WeekView {
                 maxHeight: root.maxHeight
                 maxContentWidth: root.maxContentWidth
+                sportsEnabled: root.sportsReady
             }
         }
 
         Loader {
+            id: monthViewLoader
             anchors.fill: parent
             active: root.activeMode === "month"
+            asynchronous: true
             sourceComponent: MonthView {
                 showUpcoming: Persistent.states.cheatsheet.timetableShowUpcoming
+                sportsEnabled: root.sportsReady
             }
         }
     }

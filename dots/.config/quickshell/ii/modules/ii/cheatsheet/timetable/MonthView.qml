@@ -23,12 +23,16 @@ Item {
     property int viewMonth: DateTime.clock.date.getMonth()
     property bool showUpcoming: true
     property string categoryFilter: ""
+    property bool sportsEnabled: false
+    property int loadedCellCount: 0
+    property string requestedSportsRange: ""
 
     readonly property int firstDayOfWeek: Config.options.time.firstDayOfWeek
     readonly property real gridGap: 6
 
     readonly property var cells: H.buildMonthCells(root.viewYear, root.viewMonth, root.firstDayOfWeek, DateTime.clock.date)
     readonly property int rowCount: Math.max(1, root.cells.length / 7)
+    readonly property bool initialLoadComplete: root.cells.length > 0 && root.loadedCellCount >= root.cells.length
 
     readonly property bool holidaysVisible: (Config.options.calendar.holidays.enable ?? false) && (Config.options.calendar.holidays.showInMonthView ?? false)
     readonly property var holidayMap: root.holidaysVisible ? Holidays.byDayKey : ({})
@@ -135,21 +139,74 @@ Item {
         }
     }
 
-    onViewAnchorDateChanged: root.ensureDataForView()
+    onViewAnchorDateChanged: {
+        root.requestedSportsRange = "";
+        root.ensureDataForView();
+        root.restartCellLoading();
+    }
+
+    onFirstDayOfWeekChanged: {
+        root.requestedSportsRange = "";
+        root.ensureDataForView();
+        root.restartCellLoading();
+    }
 
     function ensureDataForView() {
         CalendarService.ensureRangeCovers(new Date(root.viewYear, root.viewMonth, 1));
         CalendarService.ensureRangeCovers(new Date(root.viewYear, root.viewMonth + 1, 0));
-        if (root.cells.length > 0)
-            SportsService.requestTimetableRange(root.cells[0].date, root.cells[root.cells.length - 1].date);
         if (root.holidaysVisible) {
             Holidays.ensureYear(root.viewYear);
             Holidays.ensureYear(new Date(root.viewYear, root.viewMonth + 1, 0).getFullYear());
         }
     }
 
+    function requestSportsRange() {
+        if (!root.sportsEnabled || !root.initialLoadComplete || root.cells.length === 0)
+            return;
+        const fromDate = root.cells[0].date;
+        const toDate = root.cells[root.cells.length - 1].date;
+        const range = Qt.formatDate(fromDate, "yyyy-MM-dd") + "|" + Qt.formatDate(toDate, "yyyy-MM-dd");
+        if (range === root.requestedSportsRange)
+            return;
+        root.requestedSportsRange = range;
+        SportsService.requestTimetableRange(fromDate, toDate);
+    }
+
+    function restartCellLoading() {
+        cellLoadTimer.stop();
+        root.loadedCellCount = 0;
+        if (root.cells.length > 0)
+            cellLoadTimer.start();
+    }
+
+    Timer {
+        id: cellLoadTimer
+        interval: 0
+        repeat: true
+        onTriggered: {
+            if (root.loadedCellCount >= root.cells.length) {
+                stop();
+                return;
+            }
+            root.loadedCellCount += 1;
+            if (root.loadedCellCount >= root.cells.length)
+                stop();
+        }
+    }
+
+    onInitialLoadCompleteChanged: {
+        if (root.initialLoadComplete)
+            root.requestSportsRange();
+    }
+
+    onSportsEnabledChanged: {
+        if (root.sportsEnabled)
+            root.requestSportsRange();
+    }
+
     Component.onCompleted: {
         root.ensureDataForView();
+        root.restartCellLoading();
         root.playMonthTransition(0);
     }
 
@@ -526,10 +583,9 @@ Item {
                 }
 
                 Repeater {
-                    model: root.cells
+                    model: root.loadedCellCount
 
                     delegate: MonthDayCell {
-                        required property var modelData
                         required property int index
 
                         x: index % 7 * (gridArea.cellWidth + root.gridGap)
@@ -537,10 +593,11 @@ Item {
                         width: gridArea.cellWidth
                         height: gridArea.cellHeight
 
-                        cellData: modelData
-                        events: root.filteredEvents(CalendarService.eventsByDay[modelData.key])
-                        tasks: root.tasksForDay(modelData.date)
-                        holidays: root.holidayMap[modelData.key] ?? []
+                        cellData: root.cells[index]
+                        events: root.filteredEvents(CalendarService.eventsByDay[root.cells[index].key])
+                        tasks: root.tasksForDay(root.cells[index].date)
+                        holidays: root.holidayMap[root.cells[index].key] ?? []
+                        sportsEnabled: root.sportsEnabled
                         dropTarget: root.dropIndex === index && root.dragEvent !== null
                         coordinateRoot: root
                         draggedEvent: root.dragEvent
