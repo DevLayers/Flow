@@ -22,7 +22,7 @@ Item {
     property int slotDuration: 60 // in minutes
     readonly property list<int> slotHeightSteps: [40, 56, 72, 96, 120]
     property int slotHeight: Persistent.states.cheatsheet.timetableSlotHeight
-    property int timeColumnWidth: 100
+    property int timeColumnWidth: 56
     property real maxContentWidth: 1600
     property real navBarHeight: 56
 
@@ -868,120 +868,165 @@ Item {
                     timeColumnWidth: root.timeColumnWidth
                 }
 
-                Row {
+                Item {
                     id: eventsRow
+                    width: root.dayCount * root.dayColumnWidth + Math.max(0, root.dayCount - 1) * root.spacing
                     height: root.contentHeight
-                    spacing: root.spacing
-                    Repeater {
-                        model: root.days ?? []
 
-                        delegate: Loader {
-                            id: dayLoader
+                    Item {
+                        id: gridLineLayer
+                        anchors.fill: parent
+                        z: -1
 
-                            required property int index
-                            required property var modelData
+                        Repeater {
+                            model: root.totalSlots
 
-                            width: root.dayColumnWidth
-                            height: root.contentHeight
-                            active: index <= root.loadedDayCount
-                            asynchronous: true
+                            delegate: Item {
+                                required property int index
+                                x: 0
+                                y: index * root.slotHeight
+                                width: gridLineLayer.width
+                                height: root.slotHeight
 
-                            onLoaded: root.advanceDayLoading(index)
-
-                            sourceComponent: TimetableDayColumn {
-                                id: dayColDelegate
-
-                                property int revealKey: root.entranceKey
-
-                                dayIdx: dayLoader.index
-                                dayData: dayLoader.modelData
-                                isToday: dayLoader.index === root.currentDayIndex
-                                dayColumnWidth: root.dayColumnWidth
-                                contentHeight: root.contentHeight
-                                pixelsPerMinute: root.pixelsPerMinute
-                                startHour: root.startHour
-                                startMinute: root.startMinute
-                                snapInterval: 15
-                                coordinateRoot: root
-                                draggedEvent: root.timedMutationEvent
-                                ghostVisible: root.ghostVisible
-                                ghostDayIndex: root.ghostDayIndex
-                                ghostTopY: root.ghostTopY
-                                ghostHeight: root.ghostHeight
-                                nextEventData: root.nextEventData
-                                todayHighlightFill: root.todayHighlightFill
-                                dayBackgroundFill: root.dayBackgroundFill
-                                dayBackgroundFillVariant: root.dayBackgroundFillVariant
-
-                                opacity: 0
-                                transform: Translate { id: colTrans; y: 15 }
-
-                                function replayEntrance() {
-                                    colAnim.stop();
-                                    animTimer.stop();
-                                    dayColDelegate.opacity = 0;
-                                    colTrans.y = 15;
-                                    animTimer.start();
+                                Rectangle {
+                                    anchors.top: parent.top
+                                    width: parent.width
+                                    height: 1
+                                    color: H.withOpacity(Appearance.colors.colOutlineVariant, 0.30)
                                 }
 
-                                onRevealKeyChanged: dayColDelegate.replayEntrance()
-                                Component.onCompleted: dayColDelegate.replayEntrance()
-
-                                Timer {
-                                    id: animTimer
-                                    interval: dayLoader.index * 70
-                                    repeat: false
-                                    onTriggered: colAnim.start()
+                                Rectangle {
+                                    y: parent.height / 2
+                                    width: parent.width
+                                    height: 1
+                                    color: H.withOpacity(Appearance.colors.colOutlineVariant, 0.14)
                                 }
+                            }
+                        }
 
-                                ParallelAnimation {
-                                    id: colAnim
-                                    NumberAnimation {
-                                        target: colTrans
-                                        property: "y"
-                                        to: 0
-                                        duration: Appearance.animation.elementMoveEnter.duration
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                            height: 1
+                            color: H.withOpacity(Appearance.colors.colOutlineVariant, 0.30)
+                        }
+                    }
+
+                    Row {
+                        anchors.fill: parent
+                        spacing: root.spacing
+
+                        Repeater {
+                            model: root.days ?? []
+
+                            delegate: Loader {
+                                id: dayLoader
+
+                                required property int index
+                                required property var modelData
+
+                                width: root.dayColumnWidth
+                                height: root.contentHeight
+                                active: index <= root.loadedDayCount
+                                asynchronous: true
+
+                                onLoaded: root.advanceDayLoading(index)
+
+                                sourceComponent: TimetableDayColumn {
+                                    id: dayColDelegate
+
+                                    property int revealKey: root.entranceKey
+
+                                    dayIdx: dayLoader.index
+                                    dayData: dayLoader.modelData
+                                    isToday: dayLoader.index === root.currentDayIndex
+                                    dayColumnWidth: root.dayColumnWidth
+                                    contentHeight: root.contentHeight
+                                    pixelsPerMinute: root.pixelsPerMinute
+                                    startHour: root.startHour
+                                    startMinute: root.startMinute
+                                    snapInterval: 15
+                                    coordinateRoot: root
+                                    draggedEvent: root.timedMutationEvent
+                                    ghostVisible: root.ghostVisible
+                                    ghostDayIndex: root.ghostDayIndex
+                                    ghostTopY: root.ghostTopY
+                                    ghostHeight: root.ghostHeight
+                                    nextEventData: root.nextEventData
+                                    todayHighlightFill: root.todayHighlightFill
+                                    dayBackgroundFill: root.dayBackgroundFill
+                                    dayBackgroundFillVariant: root.dayBackgroundFillVariant
+
+                                    opacity: 0
+                                    transform: Translate { id: colTrans; y: 15 }
+
+                                    function replayEntrance() {
+                                        colAnim.stop();
+                                        animTimer.stop();
+                                        dayColDelegate.opacity = 0;
+                                        colTrans.y = 15;
+                                        animTimer.start();
                                     }
-                                    NumberAnimation {
-                                        target: dayColDelegate
-                                        property: "opacity"
-                                        to: 1
-                                        duration: Appearance.animation.elementMoveFast.duration
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
 
-                                onDragRequestInteractivity: i => styledFlickable.interactive = i
-                                onDragReleased: (dIdx, sY, cY) => {
-                                    let dist = Math.abs(cY - sY);
-                                    if (dist < 10) {
-                                        let clickMin = H.snapToGrid(H.yToMinutes(sY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                        root.ghostTopY = H.minutesToY(clickMin, root.startHour, root.startMinute, root.pixelsPerMinute);
-                                        root.ghostHeight = H.minutesToY(clickMin + 60, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
-                                    } else {
-                                        let topMin = H.snapToGrid(H.yToMinutes(Math.min(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                        let botMin = H.snapToGrid(H.yToMinutes(Math.max(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                        if (botMin - topMin < 15)
-                                            botMin = topMin + 15;
-                                        root.ghostTopY = H.minutesToY(topMin, root.startHour, root.startMinute, root.pixelsPerMinute);
-                                        root.ghostHeight = H.minutesToY(botMin, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
+                                    onRevealKeyChanged: dayColDelegate.replayEntrance()
+                                    Component.onCompleted: dayColDelegate.replayEntrance()
+
+                                    Timer {
+                                        id: animTimer
+                                        interval: dayLoader.index * 70
+                                        repeat: false
+                                        onTriggered: colAnim.start()
                                     }
-                                    root.ghostDayIndex = dIdx;
-                                    root.ghostVisible = true;
-                                    Qt.callLater(root.openPopupForGhost);
+
+                                    ParallelAnimation {
+                                        id: colAnim
+                                        NumberAnimation {
+                                            target: colTrans
+                                            property: "y"
+                                            to: 0
+                                            duration: Appearance.animation.elementMoveEnter.duration
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                        }
+                                        NumberAnimation {
+                                            target: dayColDelegate
+                                            property: "opacity"
+                                            to: 1
+                                            duration: Appearance.animation.elementMoveFast.duration
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
+
+                                    onDragRequestInteractivity: i => styledFlickable.interactive = i
+                                    onDragReleased: (dIdx, sY, cY) => {
+                                        let dist = Math.abs(cY - sY);
+                                        if (dist < 10) {
+                                            let clickMin = H.snapToGrid(H.yToMinutes(sY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
+                                            root.ghostTopY = H.minutesToY(clickMin, root.startHour, root.startMinute, root.pixelsPerMinute);
+                                            root.ghostHeight = H.minutesToY(clickMin + 60, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
+                                        } else {
+                                            let topMin = H.snapToGrid(H.yToMinutes(Math.min(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
+                                            let botMin = H.snapToGrid(H.yToMinutes(Math.max(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
+                                            if (botMin - topMin < 15)
+                                                botMin = topMin + 15;
+                                            root.ghostTopY = H.minutesToY(topMin, root.startHour, root.startMinute, root.pixelsPerMinute);
+                                            root.ghostHeight = H.minutesToY(botMin, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
+                                        }
+                                        root.ghostDayIndex = dIdx;
+                                        root.ghostVisible = true;
+                                        Qt.callLater(root.openPopupForGhost);
+                                    }
+                                    onEditRequested: (evt, dIdx) => root.openPopupForEdit(evt, dIdx)
+                                    onDeleteRequested: (evt, dIdx) => root.requestWeekDelete(evt)
+                                    onEventMoveStarted: (evt, x, y, offsetY) => root.beginEventMove(evt, x, y, offsetY)
+                                    onEventMoveMoved: (x, y) => root.updateEventMove(x, y)
+                                    onEventMoveEnded: root.commitTimedMutation()
+                                    onEventMoveCanceled: root.cancelTimedMutation()
+                                    onEventResizeStarted: (evt, x, y) => root.beginEventResize(evt, x, y)
+                                    onEventResizeMoved: (x, y) => root.updateEventResize(x, y)
+                                    onEventResizeEnded: root.commitTimedMutation()
+                                    onEventResizeCanceled: root.cancelTimedMutation()
                                 }
-                                onEditRequested: (evt, dIdx) => root.openPopupForEdit(evt, dIdx)
-                                onDeleteRequested: (evt, dIdx) => root.requestWeekDelete(evt)
-                                onEventMoveStarted: (evt, x, y, offsetY) => root.beginEventMove(evt, x, y, offsetY)
-                                onEventMoveMoved: (x, y) => root.updateEventMove(x, y)
-                                onEventMoveEnded: root.commitTimedMutation()
-                                onEventMoveCanceled: root.cancelTimedMutation()
-                                onEventResizeStarted: (evt, x, y) => root.beginEventResize(evt, x, y)
-                                onEventResizeMoved: (x, y) => root.updateEventResize(x, y)
-                                onEventResizeEnded: root.commitTimedMutation()
-                                onEventResizeCanceled: root.cancelTimedMutation()
                             }
                         }
                     }

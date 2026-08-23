@@ -24,6 +24,18 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("Persistent.states.cheatsheet.timetableSlotHeight = nextHeight", week)
         self.assertIn("const focalMinutes = (styledFlickable.contentY + focalY) / oldPixelsPerMinute", week)
 
+    def test_week_grid_draws_one_shared_hour_ruler(self) -> None:
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        time_column = (TIMETABLE / "TimetableTimeColumn.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property int timeColumnWidth: 56", week)
+        self.assertEqual(week.count("id: gridLineLayer"), 1)
+        self.assertIn("model: root.totalSlots", week)
+        self.assertIn("y: parent.height / 2", week)
+        self.assertIn("H.withOpacity(Appearance.colors.colOutlineVariant", week)
+        self.assertIn("anchors.right: parent.right", time_column)
+        self.assertIn("horizontalAlignment: Text.AlignRight", time_column)
+
     def test_week_navigation_uses_a_real_anchor_and_shared_picker(self) -> None:
         helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
