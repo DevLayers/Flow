@@ -177,6 +177,16 @@ class IcsHelperTests(unittest.TestCase):
         after_delete = self.request({"op": "expand", "uid": uid, "from": "2026-09-15T00:00:00", "to": "2026-12-01T00:00:00"})
         self.assertEqual(len(after_delete["occurrences"]), 9)
 
+        read_after_delete = self.request({"op": "read", "uid": uid})
+        self.assertEqual(read_after_delete["event"]["exdates"], [occurrence])
+        self.assertEqual(self.request({"op": "save", "calendar": "work", "event": {"uid": uid, "exdates": []}}), {"ok": True, "uid": uid})
+        restored = self.request({"op": "expand", "uid": uid, "from": "2026-09-15T00:00:00", "to": "2026-12-01T00:00:00"})
+        self.assertEqual(len(restored["occurrences"]), 10)
+        self.assertIn(occurrence, [item["recurrenceId"] for item in restored["occurrences"]])
+
+        self.assertEqual(self.request({"op": "deleteOccurrence", "uid": uid, "recurrenceId": occurrence}), {"ok": True})
+        after_delete = self.request({"op": "expand", "uid": uid, "from": "2026-09-15T00:00:00", "to": "2026-12-01T00:00:00"})
+
         override_id = after_delete["occurrences"][1]["recurrenceId"]
         self.assertEqual(self.request({"op": "overrideOccurrence", "uid": uid, "recurrenceId": override_id, "fields": {"summary": "One-off review"}}), {"ok": True})
         split_id = after_delete["occurrences"][2]["recurrenceId"]

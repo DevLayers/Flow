@@ -53,6 +53,8 @@ Item {
     property list<string> formRepeatByDay: []
     property list<string> formAlarms: []
     property var eventDetails: null
+    property var upcomingOccurrences: []
+    property bool showExceptions: false
     property var pendingPayload: null
     property string pendingAction: ""
     property bool showCalendarSelector: false
@@ -92,12 +94,62 @@ Item {
         root.event = eventData;
         root.day = H.startOfDay(eventData.startDate);
         root.eventDetails = null;
+        root.upcomingOccurrences = [];
+        root.showExceptions = false;
         if (eventData.sportEvent === true) {
             SportsService.focusGame(eventData);
         } else {
-            CalendarService.readEvent(eventData.uid, reply => { if (reply?.ok) root.eventDetails = reply.event; });
+            CalendarService.readEvent(eventData.uid, reply => {
+                if (!reply?.ok || root.event !== eventData)
+                    return;
+                root.eventDetails = reply.event;
+                root.loadUpcomingOccurrences(eventData);
+            });
         }
         root.setMode("details");
+    }
+
+    function loadUpcomingOccurrences(eventData) {
+        if (!eventData?.uid)
+            return;
+        const from = eventData.startDate ?? root.day;
+        const to = new Date(from.getFullYear() + 1, from.getMonth(), from.getDate() + 1);
+        CalendarService.expandEvent(eventData.uid, from, to, reply => {
+            if (!reply?.ok || root.event !== eventData)
+                return;
+            root.upcomingOccurrences = (reply.occurrences ?? []).slice(0, 5);
+        });
+    }
+
+    function localCalendarDate(value) {
+        const match = String(value ?? "").match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+        if (!match)
+            return new Date(value);
+        return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4] ?? 0), Number(match[5] ?? 0), Number(match[6] ?? 0));
+    }
+
+    function occurrenceLabel(occurrence) {
+        const date = root.localCalendarDate(occurrence?.start ?? occurrence?.recurrenceId ?? "");
+        if (isNaN(date.getTime()))
+            return String(occurrence?.recurrenceId ?? "");
+        return root.eventAllDay
+            ? Qt.formatDate(date, "ddd, d MMM yyyy")
+            : Qt.formatDateTime(date, "ddd, d MMM yyyy · hh:mm");
+    }
+
+    function restoreException(rawDate) {
+        if (!root.event?.uid)
+            return;
+        const restored = String(rawDate ?? "");
+        const exdates = (root.eventDetails?.exdates ?? []).filter(value => String(value) !== restored);
+        root.eventDetails = Object.assign({}, root.eventDetails, { exdates: exdates });
+        CalendarService.saveEventFields(root.event, { exdates: exdates });
+        root.loadUpcomingOccurrences(root.event);
+    }
+
+    function exceptionLabel(value) {
+        const date = root.localCalendarDate(value);
+        return isNaN(date.getTime()) ? String(value ?? "") : Qt.formatDate(date, "ddd, d MMM yyyy");
     }
 
     function startCreate(date) {
@@ -784,6 +836,66 @@ Item {
                                         required property string modelData
                                         symbol: "label"
                                         label: modelData
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: (root.eventDetails?.exdates?.length ?? 0) > 0
+                                spacing: 6
+
+                                RippleButtonWithIcon {
+                                    Layout.fillWidth: true
+                                    implicitHeight: 36
+                                    buttonRadius: Appearance.rounding.full
+                                    centerContent: true
+                                    materialIcon: root.showExceptions ? "expand_less" : "expand_more"
+                                    mainText: Translation.tr("%1 exceptions").arg(String(root.eventDetails?.exdates?.length ?? 0))
+                                    colText: Appearance.colors.colOnErrorContainer
+                                    colBackground: Appearance.colors.colErrorContainer
+                                    colBackgroundHover: Appearance.colors.colErrorContainerHover
+                                    onClicked: root.showExceptions = !root.showExceptions
+                                }
+
+                                Repeater {
+                                    model: root.showExceptions ? (root.eventDetails?.exdates ?? []) : []
+
+                                    delegate: RippleButtonWithIcon {
+                                        Layout.fillWidth: true
+                                        implicitHeight: 40
+                                        buttonRadius: Appearance.rounding.normal
+                                        centerContent: true
+                                        materialIcon: "event_available"
+                                        mainText: Translation.tr("Restore %1").arg(root.exceptionLabel(modelData))
+                                        colText: Appearance.colors.colOnSecondaryContainer
+                                        colBackground: Appearance.colors.colSecondaryContainer
+                                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                                        onClicked: root.restoreException(modelData)
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: (root.eventDetails?.recurrence || root.event?.repeatSymbol) && root.upcomingOccurrences.length > 0
+                                spacing: 6
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("Next occurrences")
+                                    font.pixelSize: Appearance.font.pixelSize.smallie
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colOnSurface
+                                }
+
+                                Repeater {
+                                    model: root.upcomingOccurrences
+
+                                    delegate: InfoChip {
+                                        required property var modelData
+                                        symbol: "event_repeat"
+                                        label: root.occurrenceLabel(modelData)
                                     }
                                 }
                             }

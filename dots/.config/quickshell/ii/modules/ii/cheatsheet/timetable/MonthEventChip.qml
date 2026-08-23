@@ -38,6 +38,7 @@ Item {
 
     readonly property color accent: H.chipColor(root.eventData, Appearance.colors)
     readonly property bool sportEvent: root.eventData?.sportEvent === true
+    readonly property bool hasExceptions: (root.eventData?.exdates?.length ?? CalendarService.eventDetailsForUid(root.eventData?.uid)?.exdates?.length ?? 0) > 0
     readonly property string titleText: root.eventData?.content ?? Translation.tr("Event")
     readonly property string timeText: H.eventStartText(root.eventData, Config.options?.time.format)
 
@@ -132,6 +133,14 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: !root.compact && (root.eventData?.repeatSymbol ?? "").length > 0
                 text: "repeat"
+                iconSize: Appearance.font.pixelSize.smallest
+                color: root.sportEvent ? Appearance.colors.colOnTertiaryContainer : (root.allDay ? ColorUtils.getContrastingTextColor(root.accent) : Appearance.colors.colOnSurfaceVariant)
+            }
+
+            MaterialSymbol {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !root.compact && root.hasExceptions
+                text: "event_busy"
                 iconSize: Appearance.font.pixelSize.smallest
                 color: root.sportEvent ? Appearance.colors.colOnTertiaryContainer : (root.allDay ? ColorUtils.getContrastingTextColor(root.accent) : Appearance.colors.colOnSurfaceVariant)
             }

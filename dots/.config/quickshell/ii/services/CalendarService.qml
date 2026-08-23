@@ -67,6 +67,7 @@ Singleton {
     property string defaultCalendar: ""
     property list<var> calendarRequestQueue: []
     property var calendarCurrentRequest: null
+    property var eventDetailsByUid: ({})
 
     // Process for checking khal configuration
     Process {
@@ -428,7 +429,12 @@ Singleton {
         root.calendarCurrentRequest = null;
         if (!reply || !reply.ok) {
             console.warn("[CalendarService] Calendar request failed:", String(reply?.error ?? "No response from calendar helper."));
+        } else if (current?.payload?.op === "read" && reply?.event?.uid) {
+            const nextDetails = Object.assign({}, root.eventDetailsByUid);
+            nextDetails[String(reply.event.uid)] = reply.event;
+            root.eventDetailsByUid = nextDetails;
         } else if (current?.payload?.op === "save" || current?.payload?.op === "deleteSeries" || current?.payload?.op === "deleteOccurrence" || current?.payload?.op === "overrideOccurrence" || current?.payload?.op === "splitSeries" || current?.payload?.op === "truncateSeries" || current?.payload?.op === "setCalendarColor") {
+            root.eventDetailsByUid = ({});
             vdirsyncerProcess.running = true;
             root.loadEvents();
             if (current?.payload?.op === "setCalendarColor")
@@ -523,6 +529,24 @@ Singleton {
     function readEvent(uid, callback) {
         if (uid)
             root.enqueueCalendarRequest({ op: "read", uid: String(uid) }, callback);
+    }
+
+    function eventDetailsForUid(uid) {
+        return root.eventDetailsByUid[String(uid ?? "")] ?? null;
+    }
+
+    function expandEvent(uid, from, to, callback) {
+        if (!uid || !from || !to)
+            return;
+        const format = date => date instanceof Date
+            ? Qt.formatDateTime(date, "yyyy-MM-ddTHH:mm:ss")
+            : String(date);
+        root.enqueueCalendarRequest({
+            op: "expand",
+            uid: String(uid),
+            from: format(from),
+            to: format(to)
+        }, callback);
     }
 
     function saveEventFields(event, fields, scope = "all") {
