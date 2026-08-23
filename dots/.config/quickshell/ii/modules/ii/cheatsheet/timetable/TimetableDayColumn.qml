@@ -68,6 +68,17 @@ Item {
     readonly property int sunsetMinutes: H.parseTimeToMinutes(Weather.data?.sunset ?? "") ?? -1
     readonly property bool hasSolarTimes: dayColumn.sunriseMinutes > 0 && dayColumn.sunsetMinutes > dayColumn.sunriseMinutes
     readonly property int gridStartMinutes: dayColumn.startHour * 60 + dayColumn.startMinute
+    readonly property string usageDateKey: H.dayKeyOf(dayColumn.dayData?.sportsDate)
+    readonly property var usageHours: {
+        AppStats.history;
+        if (!AppStats.enabled || !dayColumn.usageDateKey || dayColumn.usageDateKey > H.dayKeyOf(DateTime.clock.date))
+            return [];
+        return AppStats.deviceHours(dayColumn.usageDateKey, "fg");
+    }
+
+    function usageIntensity(hour) {
+        return Math.max(0, Math.min(1, Number(dayColumn.usageHours?.[hour] ?? 0) / 3600));
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -94,6 +105,25 @@ Item {
         width: parent.width
         height: Math.max(0, parent.height - y)
         color: H.withOpacity(Appearance.colors.colLayer0, 0.22)
+    }
+
+    // Read-only desktop context: the sampler stores at most 3600 seconds of
+    // device screen time per hour. A quiet semantic tint makes actual activity
+    // comparable with planned blocks without competing with their colors.
+    Repeater {
+        model: 24
+
+        delegate: Rectangle {
+            required property int index
+            readonly property real intensity: dayColumn.usageIntensity(index)
+            readonly property real hourStartY: H.minutesToY(index * 60, dayColumn.startHour, dayColumn.startMinute, dayColumn.pixelsPerMinute)
+            x: 0
+            y: Math.max(0, hourStartY)
+            width: dayColumn.width
+            height: Math.max(0, Math.min(dayColumn.height, hourStartY + 60 * dayColumn.pixelsPerMinute) - y)
+            visible: intensity > 0 && height > 0
+            color: H.withOpacity(Appearance.colors.colTertiary, 0.04 + intensity * 0.14)
+        }
     }
 
     // ─── Drag-to-create MouseArea ─────────────

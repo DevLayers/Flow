@@ -84,6 +84,17 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("id: eveningShade", day_column)
         self.assertEqual(day_column.count("color: H.withOpacity(Appearance.colors.colLayer0, 0.22)"), 2)
 
+    def test_week_columns_project_read_only_screen_time_history(self) -> None:
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        day_column = (TIMETABLE / "TimetableDayColumn.qml").read_text(encoding="utf-8")
+
+        self.assertIn("AppStats.ensureDates(usageDates)", week)
+        self.assertIn("AppStats.deviceHours(dayColumn.usageDateKey, \"fg\")", day_column)
+        self.assertIn("function usageIntensity(hour)", day_column)
+        self.assertIn("Number(dayColumn.usageHours?.[hour] ?? 0) / 3600", day_column)
+        self.assertIn("color: H.withOpacity(Appearance.colors.colTertiary, 0.04 + intensity * 0.14)", day_column)
+        self.assertNotIn("AppStats.refresh()", week + day_column)
+
     def test_month_density_modes_are_persistent_and_reduce_cell_chrome(self) -> None:
         persistent = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
         month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
