@@ -229,11 +229,21 @@ Item {
     }
 
     function toggleSportsDay(date) {
-        if (eventSidebar.open && eventSidebar.mode === "day" && H.sameDate(eventSidebar.day, date)) {
+        if (eventSidebar.open && eventSidebar.mode === "day" && eventSidebar.sportsListOnly && H.sameDate(eventSidebar.day, date)) {
             eventSidebar.close();
             return;
         }
+        eventSidebar.sportsListOnly = true;
         eventSidebar.showSportsDay(date);
+    }
+
+    function toggleDay(date) {
+        if (eventSidebar.open && eventSidebar.mode === "day" && !eventSidebar.sportsListOnly && H.sameDate(eventSidebar.day, date)) {
+            eventSidebar.close();
+            return;
+        }
+        eventSidebar.sportsListOnly = false;
+        eventSidebar.showDay(date);
     }
 
     function eventMinutes(date) {
@@ -499,6 +509,7 @@ Item {
             currentDayIndex: root.currentDayIndex
             allDayChipHeight: root.allDayChipHeight
             allDayChipSpacing: root.allDayChipSpacing
+            onDayActivated: date => root.toggleDay(date)
             onSportsDayActivated: date => root.toggleSportsDay(date)
         }
 
@@ -717,7 +728,7 @@ Item {
         EventSidebar {
             id: eventSidebar
             anchors.fill: parent
-            sportsListOnly: true
+            sportsListOnly: false
             onSaveRequested: payload => root.applySidebarPayload(payload)
             onTaskCreateRequested: task => Todo.addItem(task)
             onDeleteRequested: (eventData, scope) => CalendarService.deleteEventWithScope(eventData, scope)

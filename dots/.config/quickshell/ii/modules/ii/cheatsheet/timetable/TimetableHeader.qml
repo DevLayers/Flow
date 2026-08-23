@@ -18,6 +18,7 @@ Row {
     property int allDayChipHeight
     property int allDayChipSpacing
 
+    signal dayActivated(var date)
     signal sportsDayActivated(var date)
 
     height: headerHeight
@@ -58,34 +59,62 @@ Row {
             readonly property date sportsDate: modelData.sportsDate ?? new Date()
             readonly property bool hasHeaderChips: dayDelegate.allDayEvents.length > 0 || dayDelegate.sportsCount > 0
 
-            Rectangle {
-                id: dayTitleRect
-                property bool isToday: index === currentDayIndex
+            RippleButton {
+                id: dayTitleButton
+                readonly property bool isToday: H.sameDate(dayDelegate.sportsDate, DateTime.clock.date)
 
                 anchors.top: parent.top
-                anchors.topMargin: 12
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width - 4
-                height: 40
-                radius: Appearance.rounding.windowRounding
-                color: dayDelegate.hasHeaderChips ? Appearance.colors.colPrimaryContainer : isToday ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                anchors.topMargin: 4
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 2
+                anchors.rightMargin: 2
+                height: 56
+                buttonRadius: Appearance.rounding.normal
+                colBackgroundHover: Appearance.colors.colSurfaceContainerHigh
+                colBackgroundActive: Appearance.colors.colSurfaceContainerHighest
+                onClicked: headerRow.dayActivated(dayDelegate.sportsDate)
 
-                StyledText {
-                    id: dayTitle
+                contentItem: Column {
                     anchors.centerIn: parent
-                    font.weight: Font.Medium
-                    color: dayDelegate.hasHeaderChips ? Appearance.colors.colOnPrimaryContainer : parent.isToday ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-                    text: modelData.name
-                    elide: Text.ElideRight
+                    spacing: 0
+
+                    StyledText {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: Qt.formatDate(dayDelegate.sportsDate, "ddd").toUpperCase()
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        font.weight: Font.Bold
+                        color: Appearance.colors.colOnSurfaceVariant
+                        elide: Text.ElideRight
+                    }
+
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.max(Appearance.font.pixelSize.large + 8, dayNumber.implicitWidth + 12)
+                        height: Appearance.font.pixelSize.large + 8
+                        radius: Appearance.rounding.full
+                        color: dayTitleButton.isToday ? Appearance.colors.colPrimary : H.withOpacity(Appearance.colors.colSurface, 0)
+
+                        StyledText {
+                            id: dayNumber
+                            anchors.centerIn: parent
+                            text: String(dayDelegate.sportsDate.getDate())
+                            font.family: Appearance.font.family.numbers
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.weight: Font.Bold
+                            color: dayTitleButton.isToday ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                        }
+                    }
                 }
 
-                HoverHandler {
-                    id: allDayHover
+                StyledToolTip {
+                    extraVisibleCondition: dayTitleButton.hovered
+                    text: Qt.formatDate(dayDelegate.sportsDate, "dddd, d MMMM")
                 }
             }
 
             Column {
-                anchors.top: dayTitleRect.bottom
+                anchors.top: dayTitleButton.bottom
                 anchors.topMargin: allDayChipSpacing
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width - 4
@@ -138,8 +167,12 @@ Row {
                         }
 
                         StyledToolTip {
-                            extraVisibleCondition: allDayHover.hovered
+                            extraVisibleCondition: allDayChipHover.hovered
                             text: Translation.tr("All day event:") + "\n" + modelData.title
+                        }
+
+                        HoverHandler {
+                            id: allDayChipHover
                         }
                     }
                 }
