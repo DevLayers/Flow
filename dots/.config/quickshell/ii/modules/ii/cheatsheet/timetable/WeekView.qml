@@ -13,6 +13,7 @@ Item {
     id: root
 
     property real spacing: 8
+    property string viewMode: "week"
 
     readonly property bool eventPopupVisible: eventSidebar.open
 
@@ -45,17 +46,20 @@ Item {
     property bool sportsEnabled: false
     property int loadedDayCount: 0
     property string requestedSportsRange: ""
-    property date viewWeekStart: H.weekStartFor(DateTime.clock.date, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst)
+    readonly property int visibleDayCount: root.viewMode === "day" ? 1 : (root.viewMode === "threeDay" ? 3 : 7)
+    property date viewWeekStart: root.rangeStartFor(DateTime.clock.date)
     property bool followingCurrentWeek: true
     property int entranceKey: 0
     property real weekOpacity: 1
     property real weekShiftX: 0
     property real zoomWheelAccumulator: 0
+    property bool componentReady: false
     readonly property int dayCount: root.days?.length ?? 0
     readonly property bool initialLoadComplete: root.dayCount > 0 && root.loadedDayCount >= root.dayCount
-    readonly property date currentWeekStart: H.weekStartFor(DateTime.clock.date, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst)
-    readonly property date viewWeekEnd: H.addDays(root.viewWeekStart, 6)
-    readonly property bool viewingCurrentWeek: H.sameDate(root.viewWeekStart, root.currentWeekStart)
+    readonly property date currentWeekStart: root.rangeStartFor(DateTime.clock.date)
+    readonly property date viewWeekEnd: H.addDays(root.viewWeekStart, root.visibleDayCount - 1)
+    readonly property bool viewingCurrentWeek: H.startOfDay(DateTime.clock.date).getTime() >= H.startOfDay(root.viewWeekStart).getTime()
+        && H.startOfDay(DateTime.clock.date).getTime() <= H.startOfDay(root.viewWeekEnd).getTime()
 
     readonly property real eventRailWidth: Math.max(300, Math.min(390, root.width * 0.29))
     readonly property real usableWidth: root.width - (eventSidebar.open ? root.eventRailWidth + 14 : 0)
@@ -89,7 +93,7 @@ Item {
         // replacement that SportsService publishes after each refresh.
         const sportsGames = root.sportsEnabled ? SportsService.timetableGames : [];
         const result = [];
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < root.visibleDayCount; i++) {
             const date = H.addDays(root.viewWeekStart, i);
             const sourceEvents = calendarEvents?.[H.dayKeyOf(date)] ?? [];
             const events = sourceEvents.map(event => {
@@ -299,9 +303,17 @@ Item {
         eventSidebar.startCreate(date);
     }
 
+    function rangeStartFor(date) {
+        return root.viewMode === "week"
+            ? H.weekStartFor(date, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst)
+            : H.startOfDay(date);
+    }
+
     function weekRangeLabel(compact) {
         const start = root.viewWeekStart;
         const end = root.viewWeekEnd;
+        if (root.visibleDayCount === 1)
+            return Qt.formatDate(start, compact ? "d MMM yyyy" : "dddd, d MMMM yyyy");
         const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
         const sameYear = start.getFullYear() === end.getFullYear();
         if (compact) {
@@ -332,7 +344,7 @@ Item {
     }
 
     function goToWeek(date, direction = 0) {
-        const target = H.weekStartFor(date, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
+        const target = root.rangeStartFor(date);
         const currentMs = root.viewWeekStart.getTime();
         const targetMs = target.getTime();
         root.followingCurrentWeek = H.sameDate(target, root.currentWeekStart);
@@ -346,7 +358,7 @@ Item {
     }
 
     function shiftWeek(delta) {
-        root.goToWeek(H.addDays(root.viewWeekStart, delta * 7), delta >= 0 ? 1 : -1);
+        root.goToWeek(H.addDays(root.viewWeekStart, delta * root.visibleDayCount), delta >= 0 ? 1 : -1);
     }
 
     function goToday() {
@@ -547,7 +559,7 @@ Item {
         target: Config.options.cheatsheet
         function onTimetableTodayFirstChanged() {
             const focus = root.followingCurrentWeek ? DateTime.clock.date : root.viewWeekStart;
-            root.viewWeekStart = H.weekStartFor(focus, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
+            root.viewWeekStart = root.rangeStartFor(focus);
             root.refreshVisibleRange();
         }
     }
@@ -555,9 +567,19 @@ Item {
         target: Config.options.time
         function onFirstDayOfWeekChanged() {
             const focus = root.followingCurrentWeek ? DateTime.clock.date : root.viewWeekStart;
-            root.viewWeekStart = H.weekStartFor(focus, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
+            root.viewWeekStart = root.rangeStartFor(focus);
             root.refreshVisibleRange();
         }
+    }
+
+    onViewModeChanged: {
+        if (!root.componentReady)
+            return;
+        const focus = root.followingCurrentWeek ? DateTime.clock.date : root.viewWeekStart;
+        root.viewWeekStart = root.rangeStartFor(focus);
+        root.allDayExpanded = false;
+        root.restartDayLoading();
+        root.refreshVisibleRange();
     }
 
     function requestSportsRange() {
@@ -604,6 +626,7 @@ Item {
     }
 
     Component.onCompleted: {
+        root.componentReady = true;
         root.restartDayLoading();
         root.ensureDataForView();
         root.updateCurrentTimeLine();
@@ -665,7 +688,7 @@ Item {
                 colBackgroundActive: Appearance.colors.colLayer1Active
                 onClicked: {
                     datePicker.purpose = "navigate";
-                    datePicker.open(root.viewWeekStart, Translation.tr("Go to week"));
+                    datePicker.open(root.viewWeekStart, root.viewMode === "day" ? Translation.tr("Go to day") : Translation.tr("Go to range"));
                 }
 
                 contentItem: Column {
@@ -693,7 +716,9 @@ Item {
                     StyledText {
                         width: parent.width
                         text: root.viewingCurrentWeek
-                            ? Translation.tr("This week")
+                            ? (root.viewMode === "day"
+                                ? Translation.tr("Today")
+                                : (root.viewMode === "threeDay" ? Translation.tr("Next 3 days") : Translation.tr("This week")))
                             : (root.viewWeekStart.getFullYear() === root.viewWeekEnd.getFullYear()
                                 ? String(root.viewWeekStart.getFullYear())
                                 : String(root.viewWeekStart.getFullYear()) + " – " + String(root.viewWeekEnd.getFullYear()))
@@ -706,7 +731,7 @@ Item {
 
                 StyledToolTip {
                     extraVisibleCondition: weekTitleButton.hovered
-                    text: Translation.tr("Choose week")
+                    text: root.viewMode === "day" ? Translation.tr("Choose day") : Translation.tr("Choose range")
                 }
             }
 

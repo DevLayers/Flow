@@ -6,7 +6,7 @@ import QtQuick
 import "timetable"
 
 /**
- * Host for the two calendar shapes.
+ * Host for the timetable calendar shapes.
  *
  * Owns the plate both views sit on, and nothing else: the week grid and the
  * month grid are independent trees, and only the selected one exists. The
@@ -22,7 +22,10 @@ Item {
     implicitWidth: root.maxContentWidth
     implicitHeight: root.maxHeight
 
-    readonly property string requestedMode: Persistent.states.cheatsheet.timetableView === "month" ? "month" : "week"
+    readonly property var supportedModes: ["day", "threeDay", "week", "month"]
+    readonly property string requestedMode: root.supportedModes.includes(Persistent.states.cheatsheet.timetableView)
+        ? Persistent.states.cheatsheet.timetableView
+        : "week"
     property string activeMode: root.requestedMode
     property bool sportsSubscriberAcquired: false
     property bool sportsReady: false
@@ -131,12 +134,13 @@ Item {
         Loader {
             id: weekViewLoader
             anchors.fill: parent
-            active: root.activeMode === "week"
+            active: root.activeMode !== "month"
             asynchronous: true
             sourceComponent: WeekView {
                 maxHeight: root.maxHeight
                 maxContentWidth: root.maxContentWidth
                 sportsEnabled: root.sportsReady
+                viewMode: root.activeMode
             }
         }
 

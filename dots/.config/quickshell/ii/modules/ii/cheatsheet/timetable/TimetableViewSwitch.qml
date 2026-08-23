@@ -5,7 +5,7 @@ import qs.services
 import QtQuick
 
 /**
- * Week / month selector for the cheatsheet header.
+ * Day / three-day / week / month selector for the cheatsheet header.
  *
  * Lives outside the timetable so it reads as a header control next to the tab
  * bar, like the close button on the other side. `requestOnly` keeps the
@@ -31,13 +31,24 @@ Toolbar {
         }
     }
 
-    readonly property string mode: Persistent.states.cheatsheet.timetableView === "month" ? "month" : "week"
+    readonly property var modes: ["day", "threeDay", "week", "month"]
+    readonly property string mode: root.modes.includes(Persistent.states.cheatsheet.timetableView)
+        ? Persistent.states.cheatsheet.timetableView
+        : "week"
 
     ToolbarTabBar {
         id: tabBar
         requestOnly: true
-        currentIndex: root.mode === "month" ? 1 : 0
+        currentIndex: Math.max(0, root.modes.indexOf(root.mode))
         tabButtonList: [
+            {
+                "icon": "calendar_view_day",
+                "name": root.compact ? "" : Translation.tr("Day")
+            },
+            {
+                "icon": "view_column",
+                "name": root.compact ? "" : Translation.tr("3 days")
+            },
             {
                 "icon": "calendar_view_week",
                 "name": root.compact ? "" : Translation.tr("Week")
@@ -49,7 +60,7 @@ Toolbar {
         ]
 
         onIndexSelected: index => {
-            Persistent.states.cheatsheet.timetableView = index === 1 ? "month" : "week";
+            Persistent.states.cheatsheet.timetableView = root.modes[index];
         }
     }
 }

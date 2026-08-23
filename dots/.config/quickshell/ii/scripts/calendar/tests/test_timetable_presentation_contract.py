@@ -92,6 +92,24 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertNotIn("CalendarService.eventsInWeek", week)
         self.assertIn("onRevealKeyChanged: dayColDelegate.replayEntrance()", week)
 
+    def test_day_three_day_week_and_month_share_the_persisted_selector(self) -> None:
+        persistent = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
+        host = (ROOT / "modules" / "ii" / "cheatsheet" / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
+        selector = (TIMETABLE / "TimetableViewSwitch.qml").read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+
+        self.assertIn('// "day" | "threeDay" | "week" | "month"', persistent)
+        self.assertIn('readonly property var supportedModes: ["day", "threeDay", "week", "month"]', host)
+        self.assertIn('active: root.activeMode !== "month"', host)
+        self.assertIn("viewMode: root.activeMode", host)
+        self.assertIn('readonly property var modes: ["day", "threeDay", "week", "month"]', selector)
+        self.assertEqual(selector.count('"icon":'), 4)
+        self.assertIn("Persistent.states.cheatsheet.timetableView = root.modes[index]", selector)
+        self.assertIn('readonly property int visibleDayCount: root.viewMode === "day" ? 1 : (root.viewMode === "threeDay" ? 3 : 7)', week)
+        self.assertIn("for (let i = 0; i < root.visibleDayCount; i++)", week)
+        self.assertIn("delta * root.visibleDayCount", week)
+        self.assertIn("onViewModeChanged: {", week)
+
     def test_week_and_month_share_semantic_event_colors(self) -> None:
         helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")

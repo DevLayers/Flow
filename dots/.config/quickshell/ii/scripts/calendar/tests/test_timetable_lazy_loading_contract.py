@@ -75,7 +75,9 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
         calendar = (ROOT / "services" / "CalendarService.qml").read_text(encoding="utf-8")
 
-        self.assertEqual(week.count("root.restartDayLoading();"), 1)
+        preferences = week.split("target: Config.options.cheatsheet", 1)[1].split("onViewModeChanged:", 1)[0]
+        self.assertNotIn("root.restartDayLoading();", preferences)
+        self.assertEqual(week.count("root.restartDayLoading();"), 2)
         self.assertGreaterEqual(week.count("root.refreshVisibleRange();"), 2)
         self.assertIn("function onFirstDayOfWeekChanged()", calendar)
         self.assertIn("root.eventsInWeek = root.getEventsInWeek();", calendar)
