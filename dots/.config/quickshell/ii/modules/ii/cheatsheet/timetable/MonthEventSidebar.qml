@@ -27,6 +27,7 @@ Item {
     property string mode: ""
     property var event: null
     property date day: new Date()
+    property bool detailsOnly: false
 
     readonly property bool editing: root.mode === "edit" || root.mode === "create"
     readonly property bool open: root.mode !== ""
@@ -56,6 +57,11 @@ Item {
 
     readonly property bool rangeValid: root.formAllDay || root.formEndMinutes > root.formStartMinutes
     readonly property bool canSave: root.formTitle.trim().length > 0 && root.rangeValid
+    readonly property bool sportsEvent: root.event?.sportEvent === true
+    readonly property var sportsGame: root.sportsEvent ? (SportsService.gameById(root.event?.id) ?? root.event) : null
+    readonly property var sportsDetails: root.sportsEvent ? SportsService.detailsForGame(root.event?.id) : null
+    readonly property bool sportsDetailsLoading: root.sportsEvent && SportsService.detailsLoadingForGame(root.event?.id)
+    readonly property string sportsDetailsError: root.sportsEvent ? SportsService.detailsErrorForGame(root.event?.id) : ""
 
     signal saveRequested(var payload)
     signal taskCreateRequested(var task)
@@ -67,6 +73,8 @@ Item {
 
     // ─── Entry points ───
     function showDay(date) {
+        if (root.sportsEvent)
+            SportsService.clearFocusedGame(root.event?.id);
         root.day = H.startOfDay(date);
         root.event = null;
         root.setMode("day");
@@ -78,11 +86,17 @@ Item {
         root.event = eventData;
         root.day = H.startOfDay(eventData.startDate);
         root.eventDetails = null;
-        CalendarService.readEvent(eventData.uid, reply => { if (reply?.ok) root.eventDetails = reply.event; });
+        if (eventData.sportEvent === true) {
+            SportsService.focusGame(eventData);
+        } else {
+            CalendarService.readEvent(eventData.uid, reply => { if (reply?.ok) root.eventDetails = reply.event; });
+        }
         root.setMode("details");
     }
 
     function startCreate(date) {
+        if (root.sportsEvent)
+            SportsService.clearFocusedGame(root.event?.id);
         const now = DateTime.clock.date;
         const startHour = H.sameDate(date, now) ? Math.min(22, now.getHours() + 1) : 9;
         root.event = null;
@@ -145,6 +159,8 @@ Item {
     }
 
     function close() {
+        if (root.sportsEvent)
+            SportsService.clearFocusedGame(root.event?.id);
         root.setMode("");
         root.closeRequested();
     }
@@ -313,9 +329,9 @@ Item {
     }
 
     // ─── Derived ───
-    readonly property var dayEvents: CalendarService.eventsByDay[H.dayKeyOf(root.day)] ?? []
+    readonly property var dayEvents: (CalendarService.eventsByDay[H.dayKeyOf(root.day)] ?? []).concat(SportsService.gamesForDate(root.day))
     readonly property var dayHolidays: (Config.options.calendar.holidays.enable && Config.options.calendar.holidays.showInMonthView) ? (Holidays.byDayKey[H.dayKeyOf(root.day)] ?? []) : []
-    readonly property color accent: root.event ? H.chipColor(root.event, Appearance.colors) : Appearance.colors.colPrimary
+    readonly property color accent: root.sportsEvent ? Appearance.colors.colTertiary : (root.event ? H.chipColor(root.event, Appearance.colors) : Appearance.colors.colPrimary)
     readonly property bool isDayToday: H.sameDate(root.day, DateTime.clock.date)
 
     readonly property bool eventAllDay: root.event ? CalendarService.isAllDayEvent(root.event) : false
@@ -330,7 +346,7 @@ Item {
         case "edit":
             return Translation.tr("Edit event");
         case "details":
-            return Translation.tr("Event details");
+            return root.sportsEvent ? Translation.tr("Match details") : Translation.tr("Event details");
         case "scope":
             return root.pendingAction === "delete" ? Translation.tr("Delete recurring event") : Translation.tr("Edit recurring event");
         default:
@@ -381,7 +397,7 @@ Item {
 
                 RippleButton {
                     id: backToDetails
-                    visible: root.mode === "details" && root.dayEvents.length > 1
+                    visible: !root.detailsOnly && root.mode === "details" && root.dayEvents.length > 1
                     implicitWidth: 38
                     implicitHeight: 38
                     buttonRadius: Appearance.rounding.full
@@ -404,7 +420,7 @@ Item {
 
                 RippleButton {
                     id: deleteButton
-                    visible: root.mode === "details" || root.mode === "edit"
+                    visible: (root.mode === "details" || root.mode === "edit") && !root.eventReadOnly
                     implicitWidth: 38
                     implicitHeight: 38
                     buttonRadius: Appearance.rounding.full
@@ -684,6 +700,20 @@ Item {
                             width: parent.width
                             spacing: 12
 
+                            SportsEventDetails {
+                                Layout.fillWidth: true
+                                visible: root.sportsEvent
+                                game: root.sportsGame
+                                details: root.sportsDetails
+                                loading: root.sportsDetailsLoading
+                                error: root.sportsDetailsError
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: !root.sportsEvent
+                                spacing: 12
+
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 12
@@ -770,6 +800,7 @@ Item {
                                 caption: Translation.tr("Notes")
                                 value: root.event?.description ?? ""
                                 multiline: true
+                            }
                             }
                         }
                     }

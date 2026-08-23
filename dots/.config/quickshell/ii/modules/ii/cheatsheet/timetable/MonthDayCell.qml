@@ -45,26 +45,7 @@ Item {
         const key = H.dayKeyOf(root.cellData?.date);
         return (Weather.forecastData ?? []).find(day => String(day?.date ?? "") === key) ?? null;
     }
-    readonly property var sportEvents: {
-        const result = [];
-        for (const game of (SportsService.allGames ?? [])) {
-            const start = new Date(game?.date);
-            if (isNaN(start.getTime()) || !H.sameDate(start, root.cellData?.date))
-                continue;
-            result.push({
-                content: String(game?.name ?? Translation.tr("Sport")),
-                description: String(game?.league ?? ""),
-                startDate: start,
-                endDate: new Date(start.getTime() + 2 * 60 * 60 * 1000),
-                calendar: Translation.tr("Sports"),
-                colorToken: "tertiary",
-                readOnly: true,
-                sportEvent: true,
-                allDay: false
-            });
-        }
-        return result;
-    }
+    readonly property var sportEvents: SportsService.gamesForDate(root.cellData?.date)
 
     readonly property real headerHeight: 30
     readonly property real headerEventSpacing: 4
@@ -309,7 +290,7 @@ Item {
                     opacity: root.inMonth ? 1 : 0.6
 
                     onActivated: {
-                        if (parent.modelData.data?.readOnly !== true)
+                        if (parent.modelData.data?.sportEvent === true || parent.modelData.data?.readOnly !== true)
                             root.eventActivated(parent.modelData.data);
                     }
                     onDragBegan: (evt, x, y, w, h) => root.eventDragBegan(evt, x, y, w, h)

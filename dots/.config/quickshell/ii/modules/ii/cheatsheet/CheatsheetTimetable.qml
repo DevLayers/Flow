@@ -25,6 +25,9 @@ Item {
     readonly property string requestedMode: Persistent.states.cheatsheet.timetableView === "month" ? "month" : "week"
     property string activeMode: root.requestedMode
 
+    Component.onCompleted: SportsService.acquireTimetableSubscriber()
+    Component.onDestruction: SportsService.releaseTimetableSubscriber()
+
     Rectangle {
         anchors.fill: parent
         color: Appearance.colors.colSurfaceContainer

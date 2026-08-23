@@ -13,7 +13,7 @@ Item {
     id: root
     property real spacing: 8
 
-    readonly property bool eventPopupVisible: eventPopup.visible
+    readonly property bool eventPopupVisible: eventPopup.visible || eventSidebar.open
 
     property int startHour: 0
     property int startMinute: 0
@@ -31,15 +31,33 @@ Item {
     property real headerHeight: 64 + (hasAllDayEvents ? maxAllDayEventCount * (allDayChipHeight + allDayChipSpacing) + 8 : 0)
     property real currentTimeY: -1
     property bool initialScrollApplied: false
+    property string requestedSportsRange: ""
+    readonly property real eventRailWidth: Math.max(300, Math.min(390, root.width * 0.29))
+    readonly property real usableWidth: root.width - (eventSidebar.open ? root.eventRailWidth + 14 : 0)
     readonly property real dayColumnWidth: {
-        let availableWidth = root.width > 0 ? root.width : maxContentWidth;
+        let availableWidth = root.usableWidth > 0 ? root.usableWidth : maxContentWidth;
         return Math.max(80, (availableWidth - timeColumnWidth - days.length * spacing) / Math.max(1, days.length));
     }
     readonly property int currentDayIndex: Config.options.cheatsheet.timetableTodayFirst ? 0 : ((DateTime.clock.date.getDay() - Config.options.time.firstDayOfWeek + 6) % 7)
 
     implicitWidth: maxContentWidth
     implicitHeight: Math.min(headerHeight + contentHeight, maxHeight)
-    property var days: CalendarService.eventsInWeek
+    readonly property var calendarDays: CalendarService.eventsInWeek
+    readonly property var days: {
+        // Keep this explicit dependency: gamesForDate() reads a plain JS array,
+        // while the array replacement is what makes this projection reactive.
+        const sportsGames = SportsService.timetableGames;
+        const result = [];
+        for (let i = 0; i < 7; i++) {
+            const date = H.getDateForDayIndex(i, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
+            const calendarDay = root.calendarDays?.[i] ?? ({});
+            result.push({
+                name: String(calendarDay.name || Qt.formatDate(date, "dddd")),
+                events: (calendarDay.events ?? []).concat(SportsService.gamesForDate(date))
+            });
+        }
+        return result;
+    }
     readonly property int allDayChipHeight: 36
     readonly property int allDayChipSpacing: 6
     readonly property int maxAllDayEventCount: {
@@ -188,6 +206,10 @@ Item {
     }
 
     function openPopupForEdit(event, dayIndex) {
+        if (event?.sportEvent === true) {
+            eventSidebar.showEvent(event);
+            return;
+        }
         let startMin = H.parseTimeToMinutes(event.start);
         let endMin = H.parseTimeToMinutes(event.end);
         let eventDate = H.getDateForDayIndex(dayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
@@ -201,6 +223,7 @@ Item {
         function onDateChanged() {
             root.updateCurrentTimeLine();
             root.updateNextEvent();
+            root.requestSportsRange();
         }
     }
     Connections {
@@ -210,7 +233,37 @@ Item {
             Qt.callLater(root.maybeApplyInitialScroll);
         }
     }
+    Connections {
+        target: SportsService
+        function onTimetableGamesChanged() {
+            root.updateNextEvent();
+        }
+    }
+    Connections {
+        target: Config.options.cheatsheet
+        function onTimetableTodayFirstChanged() {
+            root.requestSportsRange();
+        }
+    }
+    Connections {
+        target: Config.options.time
+        function onFirstDayOfWeekChanged() {
+            root.requestSportsRange();
+        }
+    }
+
+    function requestSportsRange() {
+        const fromDate = H.getDateForDayIndex(0, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
+        const toDate = H.getDateForDayIndex(6, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
+        const range = Qt.formatDate(fromDate, "yyyy-MM-dd") + "|" + Qt.formatDate(toDate, "yyyy-MM-dd");
+        if (range === root.requestedSportsRange)
+            return;
+        root.requestedSportsRange = range;
+        SportsService.requestTimetableRange(fromDate, toDate);
+    }
+
     Component.onCompleted: {
+        root.requestSportsRange();
         root.updateCurrentTimeLine();
         root.updateNextEvent();
         Qt.callLater(root.maybeApplyInitialScroll);
@@ -221,8 +274,18 @@ Item {
     // background over the other.
 
     ColumnLayout {
+        id: timetablePane
         anchors.fill: parent
+        anchors.rightMargin: eventSidebar.open ? root.eventRailWidth + 14 : 0
         spacing: 0
+
+        Behavior on anchors.rightMargin {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
 
         TimetableHeader {
             id: headerRow
@@ -375,6 +438,31 @@ Item {
         startHour: root.startHour
         startMinute: root.startMinute
         onScrollRequested: y => styledFlickable.contentY = Math.min(y, Math.max(0, styledFlickable.contentHeight - styledFlickable.height))
+    }
+
+    Item {
+        anchors {
+            top: parent.top
+            right: parent.right
+            bottom: parent.bottom
+        }
+        width: eventSidebar.open ? root.eventRailWidth : 0
+        clip: true
+        z: 30
+
+        Behavior on width {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+
+        MonthEventSidebar {
+            id: eventSidebar
+            anchors.fill: parent
+            detailsOnly: true
+        }
     }
 
     EventCreationPopup {

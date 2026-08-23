@@ -63,6 +63,9 @@ Singleton {
     property string desktopColorsBackupPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/desktop_colors.json`)
     // Public holidays fetched from Nager.Date, one entry per "<COUNTRY>-<YEAR>".
     property string holidaysCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/holidays.json`)
+    // ESPN scoreboards and per-game summaries shared by the sports widgets
+    // and the timetable. Kept outside calendar storage by design.
+    property string sportsCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/sports.json`)
     property string generateLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/generate-lockscreen-colors.sh`)
     property string gammaControlScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/brightness/ii-gamma-control`)
     property string swapLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/swap-lockscreen-colors.sh`)

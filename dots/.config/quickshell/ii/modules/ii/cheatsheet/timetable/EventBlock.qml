@@ -25,6 +25,8 @@ Rectangle {
     signal editRequested(var event, int dayIndex)
 
     readonly property bool isNextEvent: nextEventData && nextEventData.dayIndex === dayIdx && nextEventData.startMinutes === eventStartMinutes
+    readonly property bool sportEvent: eventData?.sportEvent === true
+    readonly property bool readOnly: eventData?.readOnly === true
 
     readonly property int eventStartMinutes: {
         let parts = eventData.start.split(":");
@@ -45,7 +47,9 @@ Rectangle {
     radius: Appearance.rounding.normal
     clip: true
     z: isNextEvent ? 4 : 3
-    color: H.getEventColorRadial(dayIdx, eventStartMinutes, nextEventData, maxLogicalDistance, Appearance.colors)
+    color: eventBlock.sportEvent
+        ? Appearance.colors.colTertiaryContainer
+        : H.getEventColorRadial(dayIdx, eventStartMinutes, nextEventData, maxLogicalDistance, Appearance.colors)
     border.width: isNextEvent ? 2 : 0
     border.color: isNextEvent ? H.withOpacity(Appearance.colors.colOnPrimary, 0.8) : "transparent"
     y: H.minutesToY(eventStartMinutes, startHour, startMinute, pixelsPerMinute)
@@ -56,11 +60,11 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: -10
-        text: "event_upcoming"
+        text: eventBlock.sportEvent ? "sports_score" : "event_upcoming"
         font.pixelSize: Math.min(parent.height, parent.width) * 0.8
         color: ColorUtils.getContrastingTextColor(eventBlock.color)
         opacity: 0.15
-        visible: isNextEvent
+        visible: isNextEvent || eventBlock.sportEvent
         z: 0
         antialiasing: true
     }
@@ -98,7 +102,7 @@ Rectangle {
         buttonRadius: Appearance.rounding.full
         buttonColor: H.withOpacity(Appearance.colors.colOnSurface, 0.15)
         opacity: eventHover.hovered ? 1 : 0
-        visible: opacity > 0
+        visible: opacity > 0 && !eventBlock.readOnly
         z: 15
 
         Behavior on opacity {
@@ -137,6 +141,16 @@ Rectangle {
             elide: Text.ElideRight
             width: parent.width - 28
             color: ColorUtils.getContrastingTextColor(eventBlock.color)
+        }
+
+        StyledText {
+            width: parent.width
+            visible: eventBlock.sportEvent && eventBlock.height > 82
+            text: [eventData.status, eventData.lastPlay].filter(value => String(value ?? "").length > 0).join(" · ")
+            font.pixelSize: Appearance.font.pixelSize.smallest
+            font.weight: Font.Medium
+            color: ColorUtils.getContrastingTextColor(eventBlock.color)
+            elide: Text.ElideRight
         }
 
         Row {

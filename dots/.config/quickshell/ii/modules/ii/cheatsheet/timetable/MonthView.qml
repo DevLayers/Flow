@@ -140,6 +140,8 @@ Item {
     function ensureDataForView() {
         CalendarService.ensureRangeCovers(new Date(root.viewYear, root.viewMonth, 1));
         CalendarService.ensureRangeCovers(new Date(root.viewYear, root.viewMonth + 1, 0));
+        if (root.cells.length > 0)
+            SportsService.requestTimetableRange(root.cells[0].date, root.cells[root.cells.length - 1].date);
         if (root.holidaysVisible) {
             Holidays.ensureYear(root.viewYear);
             Holidays.ensureYear(new Date(root.viewYear, root.viewMonth + 1, 0).getFullYear());
