@@ -18,6 +18,8 @@ Row {
     property int allDayChipHeight
     property int allDayChipSpacing
 
+    signal sportsDayActivated(var date)
+
     height: headerHeight
     spacing: itemSpacing
 
@@ -47,10 +49,14 @@ Row {
     Repeater {
         model: days
         delegate: Item {
+            id: dayDelegate
             width: dayColumnWidth
             height: headerHeight
 
-            property var allDayEvents: H.getAllDayEvents(modelData.events)
+            readonly property var allDayEvents: H.getAllDayEvents(modelData.events)
+            readonly property int sportsCount: Number(modelData.sportsCount ?? 0)
+            readonly property date sportsDate: modelData.sportsDate ?? new Date()
+            readonly property bool hasHeaderChips: dayDelegate.allDayEvents.length > 0 || dayDelegate.sportsCount > 0
 
             Rectangle {
                 id: dayTitleRect
@@ -62,13 +68,13 @@ Row {
                 width: parent.width - 4
                 height: 40
                 radius: Appearance.rounding.windowRounding
-                color: allDayEvents.length > 0 ? Appearance.colors.colPrimaryContainer : isToday ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                color: dayDelegate.hasHeaderChips ? Appearance.colors.colPrimaryContainer : isToday ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
 
                 StyledText {
                     id: dayTitle
                     anchors.centerIn: parent
                     font.weight: Font.Medium
-                    color: allDayEvents.length > 0 ? Appearance.colors.colOnPrimaryContainer : parent.isToday ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
+                    color: dayDelegate.hasHeaderChips ? Appearance.colors.colOnPrimaryContainer : parent.isToday ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
                     text: modelData.name
                     elide: Text.ElideRight
                 }
@@ -85,8 +91,31 @@ Row {
                 width: parent.width - 4
                 spacing: allDayChipSpacing
 
+                RippleButtonWithIcon {
+                    id: sportsDayChip
+                    visible: dayDelegate.sportsCount > 0
+                    width: parent.width
+                    height: allDayChipHeight
+                    buttonRadius: Appearance.rounding.verysmall
+                    centerContent: true
+                    materialIcon: "sports_score"
+                    mainText: Translation.tr("Sports") + " · " + String(dayDelegate.sportsCount)
+                    iconPixelSize: Appearance.font.pixelSize.smallie
+                    textPixelSize: Appearance.font.pixelSize.smallest
+                    colText: Appearance.colors.colOnTertiaryContainer
+                    colBackground: Appearance.colors.colTertiaryContainer
+                    colBackgroundHover: Appearance.colors.colTertiaryContainerHover
+                    colBackgroundActive: Appearance.colors.colTertiaryActive
+                    onClicked: headerRow.sportsDayActivated(dayDelegate.sportsDate)
+
+                    StyledToolTip {
+                        extraVisibleCondition: sportsDayChip.hovered
+                        text: Translation.tr("Sports") + " · " + Qt.formatDate(dayDelegate.sportsDate, "dddd, d MMMM")
+                    }
+                }
+
                 Repeater {
-                    model: allDayEvents
+                    model: dayDelegate.allDayEvents
                     delegate: Rectangle {
                         width: parent.width
                         height: allDayChipHeight

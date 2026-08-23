@@ -48,6 +48,7 @@ class TimetableSportsContractTests(unittest.TestCase):
         month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
         day_cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")
 
         self.assertIn("SportsService.requestTimetableRange", month)
         self.assertIn("SportsService.gamesForDate", day_cell)
@@ -55,10 +56,14 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertIn("data?.sportEvent === true ||", day_cell)
         self.assertIn("SportsService.requestTimetableRange", week)
         self.assertIn("SportsService.gamesForDate(date)", week)
-        self.assertIn("readonly property var sportsDays", week)
-        self.assertIn("eventSidebar.showSportsDay", week)
+        self.assertIn("sportsCount: games.length", week)
+        self.assertIn("onSportsDayActivated", week)
         self.assertIn("sportsListOnly: true", week)
         self.assertNotIn(".concat(SportsService.gamesForDate(date))", week)
+        self.assertNotIn("id: sportsPills", week)
+        self.assertIn("signal sportsDayActivated(var date)", header)
+        self.assertIn("visible: dayDelegate.sportsCount > 0", header)
+        self.assertIn("headerRow.sportsDayActivated(dayDelegate.sportsDate)", header)
 
     def test_month_sports_chips_use_a_distinct_tertiary_fill(self) -> None:
         chip = (TIMETABLE / "MonthEventChip.qml").read_text(encoding="utf-8")
@@ -93,13 +98,13 @@ class TimetableSportsContractTests(unittest.TestCase):
     def test_empty_espn_collections_render_real_empty_states(self) -> None:
         details = (TIMETABLE / "SportsEventDetails.qml").read_text(encoding="utf-8")
 
-        self.assertIn("readonly property var populatedRosters", details)
-        self.assertIn("readonly property var populatedBoxscoreTeams", details)
-        self.assertIn("readonly property var populatedLeaders", details)
+        self.assertIn("readonly property var lineupRows", details)
+        self.assertIn("readonly property var statisticsRows", details)
+        self.assertIn("readonly property var leaderRows", details)
         self.assertIn("component EmptySection", details)
-        self.assertIn("root.populatedRosters.length === 0", details)
-        self.assertIn("root.populatedBoxscoreTeams.length === 0", details)
-        self.assertIn("root.populatedLeaders.length === 0", details)
+        self.assertIn("root.lineupRows.length === 0", details)
+        self.assertIn("root.statisticsRows.length === 0", details)
+        self.assertIn("root.leaderRows.length === 0", details)
         self.assertIn('Translation.tr("Unavailable")', details)
 
     def test_sports_detail_rows_receive_the_sidebar_width(self) -> None:

@@ -3,6 +3,7 @@ import qs.modules.common.widgets
 import qs.services
 import QtQuick
 import QtQuick.Layouts
+import "SportsDetailsHelpers.js" as SportsDetailsH
 
 /**
  * Read-only ESPN projection used by both timetable views.
@@ -27,15 +28,13 @@ Item {
         return Array.isArray(values) && values.length > 0 ? values[0] : null;
     }
     readonly property var gameInfo: root.details?.gameInfo ?? null
-    readonly property var rosters: Array.isArray(root.details?.rosters) ? root.details.rosters : []
-    readonly property var boxscoreTeams: Array.isArray(root.details?.boxscore?.teams) ? root.details.boxscore.teams : []
     readonly property var keyEvents: Array.isArray(root.details?.keyEvents)
         ? root.details.keyEvents
         : (Array.isArray(root.headerCompetition?.details) ? root.headerCompetition.details : [])
-    readonly property var leaders: Array.isArray(root.details?.leaders) ? root.details.leaders : []
-    readonly property var populatedRosters: root.rosters.filter(roster => root.rosterText(roster, true).length > 0 || root.rosterText(roster, false).length > 0)
-    readonly property var populatedBoxscoreTeams: root.boxscoreTeams.filter(team => root.statisticsText(team).length > 0)
-    readonly property var populatedLeaders: root.leaders.filter(group => root.leadersText(group).length > 0)
+    readonly property var lineupRows: SportsDetailsH.lineupRows(root.details?.rosters ?? [])
+    readonly property var statisticsRows: SportsDetailsH.statisticsRows(root.details?.boxscore?.teams ?? [])
+    readonly property var leaderRows: SportsDetailsH.leaderRows(root.details?.leaders ?? [])
+    readonly property var keyEventRows: SportsDetailsH.keyEventRows(root.keyEvents)
     readonly property var externalLinks: root.collectLinks()
 
     function text(value): string {
@@ -117,73 +116,6 @@ Item {
             const name = root.text(item?.displayName || item?.fullName);
             return role.length > 0 ? `${role}: ${name}` : name;
         }).filter(value => value.length > 0).join("\n");
-    }
-
-    function rosterTitle(roster): string {
-        return root.text(roster?.team?.displayName || roster?.team?.name || roster?.homeAway || Translation.tr("Team"));
-    }
-
-    function rosterText(roster, starters): string {
-        const values = Array.isArray(roster?.roster) ? roster.roster : [];
-        const lines = [];
-        for (let i = 0; i < values.length; i++) {
-            const item = values[i] ?? ({});
-            if ((item.starter === true) !== starters)
-                continue;
-            const athlete = item.athlete ?? ({});
-            const jersey = root.text(item.jersey || athlete.jersey);
-            const name = root.text(athlete.displayName || athlete.fullName || athlete.shortName);
-            const position = root.text(item.position?.abbreviation || item.position?.displayName);
-            const prefix = jersey.length > 0 ? `${jersey} · ` : "";
-            const suffix = position.length > 0 ? ` · ${position}` : "";
-            if (name.length > 0)
-                lines.push(prefix + name + suffix);
-        }
-        return lines.join("\n");
-    }
-
-    function statisticsText(team): string {
-        const values = Array.isArray(team?.statistics) ? team.statistics : [];
-        return values.map(item => {
-            const label = root.text(item?.label || item?.displayName || item?.name);
-            const value = root.text(item?.displayValue ?? item?.value);
-            return label.length > 0 && value.length > 0 ? `${label}: ${value}` : "";
-        }).filter(value => value.length > 0).join("\n");
-    }
-
-    function statisticsTitle(team): string {
-        return root.text(team?.team?.displayName || team?.team?.name || team?.homeAway || Translation.tr("Team statistics"));
-    }
-
-    function keyEventsText(): string {
-        const values = root.keyEvents;
-        return values.map(item => {
-            const clock = root.text(item?.clock?.displayValue);
-            const kind = root.text(item?.type?.text || item?.type?.description);
-            const description = root.text(item?.text || item?.shortText);
-            const participants = Array.isArray(item?.participants)
-                ? item.participants.map(participant => root.text(participant?.athlete?.displayName)).filter(value => value.length > 0).join(", ")
-                : "";
-            const body = description || [kind, participants].filter(value => value.length > 0).join(" · ");
-            return clock.length > 0 ? `${clock} · ${body}` : body;
-        }).filter(value => value.length > 0).join("\n");
-    }
-
-    function leadersText(group): string {
-        const categories = Array.isArray(group?.leaders) ? group.leaders : [];
-        const lines = [];
-        for (let i = 0; i < categories.length; i++) {
-            const category = categories[i] ?? ({});
-            const values = Array.isArray(category.leaders) ? category.leaders : [];
-            if (values.length === 0)
-                continue;
-            const leader = values[0] ?? ({});
-            const label = root.text(category.displayName || category.name);
-            const athlete = root.text(leader.athlete?.displayName || leader.athlete?.fullName);
-            const value = root.text(leader.displayValue || leader.mainStat?.value || leader.summary);
-            lines.push([label, athlete, value].filter(part => part.length > 0).join(" · "));
-        }
-        return lines.join("\n");
     }
 
     function oddsText(): string {
@@ -568,35 +500,20 @@ Item {
 
         EmptySection {
             Layout.fillWidth: true
-            visible: root.details !== null && root.populatedRosters.length === 0
+            visible: root.details !== null && root.lineupRows.length === 0
             symbol: "group_off"
         }
 
         Repeater {
-            model: root.populatedRosters
+            model: root.lineupRows
 
-            delegate: ColumnLayout {
+            delegate: DetailRow {
                 required property var modelData
                 Layout.fillWidth: true
-                spacing: 6
-
-                DetailRow {
-                    Layout.fillWidth: true
-                    visible: root.rosterText(parent.modelData, true).length > 0
-                    symbol: "sports_jersey"
-                    caption: root.rosterTitle(parent.modelData) + " · " + Translation.tr("Starters")
-                    value: root.rosterText(parent.modelData, true)
-                    multiline: true
-                }
-
-                DetailRow {
-                    Layout.fillWidth: true
-                    visible: root.rosterText(parent.modelData, false).length > 0
-                    symbol: "person_add"
-                    caption: root.rosterTitle(parent.modelData) + " · " + Translation.tr("Substitutes")
-                    value: root.rosterText(parent.modelData, false)
-                    multiline: true
-                }
+                symbol: modelData.group === "starters" ? "sports_jersey" : "person_add"
+                caption: (modelData.team || Translation.tr("Team")) + " · " + (modelData.group === "starters" ? Translation.tr("Starters") : Translation.tr("Substitutes"))
+                value: modelData.value
+                multiline: true
             }
         }
 
@@ -608,20 +525,19 @@ Item {
 
         EmptySection {
             Layout.fillWidth: true
-            visible: root.details !== null && root.populatedBoxscoreTeams.length === 0
+            visible: root.details !== null && root.statisticsRows.length === 0
             symbol: "monitoring"
         }
 
         Repeater {
-            model: root.populatedBoxscoreTeams
+            model: root.statisticsRows
 
             delegate: DetailRow {
                 required property var modelData
                 Layout.fillWidth: true
-                visible: root.statisticsText(modelData).length > 0
                 symbol: "analytics"
-                caption: root.statisticsTitle(modelData)
-                value: root.statisticsText(modelData)
+                caption: modelData.team || Translation.tr("Team statistics")
+                value: modelData.value
                 multiline: true
             }
         }
@@ -634,37 +550,99 @@ Item {
 
         EmptySection {
             Layout.fillWidth: true
-            visible: root.details !== null && root.populatedLeaders.length === 0
+            visible: root.details !== null && root.leaderRows.length === 0
             symbol: "leaderboard"
         }
 
         Repeater {
-            model: root.populatedLeaders
+            model: root.leaderRows
 
             delegate: DetailRow {
                 required property var modelData
                 Layout.fillWidth: true
-                visible: root.leadersText(modelData).length > 0
                 symbol: "star"
-                caption: root.text(modelData?.team?.displayName || Translation.tr("Leaders"))
-                value: root.leadersText(modelData)
+                caption: modelData.team || Translation.tr("Leaders")
+                value: modelData.value
                 multiline: true
             }
         }
 
         SectionTitle {
-            visible: root.keyEvents.length > 0
+            visible: root.keyEventRows.length > 0
             symbol: "timeline"
             label: Translation.tr("Key events")
         }
 
-        DetailRow {
+        ColumnLayout {
             Layout.fillWidth: true
-            visible: root.keyEvents.length > 0
-            symbol: "sports_score"
-            caption: Translation.tr("Match timeline")
-            value: root.keyEventsText()
-            multiline: true
+            visible: root.keyEventRows.length > 0
+            spacing: 10
+
+            Repeater {
+                model: root.keyEventRows
+
+                delegate: ColumnLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Rectangle {
+                            id: eventTimePill
+                            visible: modelData.time.length > 0
+                            Layout.alignment: Qt.AlignTop
+                            implicitWidth: eventTimeLabel.implicitWidth + 18
+                            implicitHeight: 28
+                            radius: Appearance.rounding.full
+                            color: Appearance.colors.colTertiaryContainer
+
+                            StyledText {
+                                id: eventTimeLabel
+                                anchors.centerIn: parent
+                                text: modelData.time
+                                font.family: Appearance.font.family.numbers
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colOnTertiaryContainer
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: modelData.kind.length > 0 && modelData.kind !== modelData.text
+                                text: modelData.kind
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colPrimary
+                                wrapMode: Text.Wrap
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: modelData.text
+                                font.pixelSize: Appearance.font.pixelSize.smallie
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colOnSurface
+                                wrapMode: Text.Wrap
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        visible: index < root.keyEventRows.length - 1
+                        color: Appearance.colors.colOutlineVariant
+                    }
+                }
+            }
         }
 
         DetailRow {
