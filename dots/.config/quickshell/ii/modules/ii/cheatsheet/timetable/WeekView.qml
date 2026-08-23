@@ -242,8 +242,10 @@ Item {
         const isToday = H.sameDate(date, DateTime.clock.date);
         const overdueTasks = Todo.getOverdueTasks(DateTime.clock.date);
         const dueTasks = Todo.getTasksByDate(date).filter(task => {
-            if (!task?.hasDate || task.done)
-                return true;
+            // Providers normalize undated tasks to the current timestamp for
+            // sorting. They must not become due-today chips in the week grid.
+            if (task?.hasDate !== true || task.done)
+                return false;
             return isToday || !overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? ""));
         });
         return isToday ? overdueTasks.concat(dueTasks) : dueTasks;

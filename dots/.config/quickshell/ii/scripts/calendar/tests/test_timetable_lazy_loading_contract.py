@@ -71,6 +71,14 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertNotIn("Qt.callLater(root.maybeApplyInitialScroll);", initial_scroll)
         self.assertIn("id: initialScrollRetryTimer", week)
 
+    def test_week_header_only_receives_open_dated_tasks(self) -> None:
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        task_projection = week.split("function tasksForDay(date)", 1)[1].split("function eventMinutes", 1)[0]
+
+        self.assertIn("if (task?.hasDate !== true || task.done)\n                return false;", task_projection)
+        self.assertNotIn("if (!task?.hasDate || task.done)\n                return true;", task_projection)
+        self.assertIn("return isToday ? overdueTasks.concat(dueTasks) : dueTasks;", task_projection)
+
     def test_espn_projection_has_a_per_frame_time_budget(self) -> None:
         sports = (ROOT / "services" / "SportsService.qml").read_text(encoding="utf-8")
 
