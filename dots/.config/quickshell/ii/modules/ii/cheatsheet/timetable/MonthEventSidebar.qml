@@ -370,22 +370,6 @@ Item {
                 Layout.fillWidth: true
                 spacing: 6
 
-                RippleButton {
-                    implicitWidth: 38
-                    implicitHeight: 38
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: "transparent"
-                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                    onClicked: root.close()
-
-                    contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "close"
-                        iconSize: Appearance.font.pixelSize.larger
-                        color: Appearance.colors.colOnSurfaceVariant
-                    }
-                }
-
                 StyledText {
                     Layout.fillWidth: true
                     text: root.headerTitle
@@ -438,6 +422,22 @@ Item {
                     StyledToolTip {
                         extraVisibleCondition: deleteButton.hovered
                         text: Translation.tr("Delete event")
+                    }
+                }
+
+                RippleButton {
+                    implicitWidth: 38
+                    implicitHeight: 38
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                    onClicked: root.close()
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "close"
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: Appearance.colors.colOnSurfaceVariant
                     }
                 }
             }
@@ -1089,8 +1089,15 @@ Item {
                                         id: categoryInput
                                         Layout.fillWidth: true
                                         color: Appearance.colors.colOnSurface
-                                        placeholderText: Translation.tr("Add a label")
                                         Keys.onReturnPressed: root.addCategory()
+
+                                        StyledText {
+                                            anchors.fill: parent
+                                            visible: categoryInput.text.length === 0
+                                            verticalAlignment: Text.AlignVCenter
+                                            text: Translation.tr("Add a label")
+                                            color: Appearance.colors.colOnLayer1Inactive
+                                        }
                                     }
 
                                     RippleButton {
@@ -1138,9 +1145,16 @@ Item {
                                         id: linkInput
                                         Layout.fillWidth: true
                                         text: root.formUrl
-                                        placeholderText: Translation.tr("Add meeting link")
                                         onTextChanged: root.formUrl = text
                                         color: Appearance.colors.colOnSurface
+
+                                        StyledText {
+                                            anchors.fill: parent
+                                            visible: linkInput.text.length === 0
+                                            verticalAlignment: Text.AlignVCenter
+                                            text: Translation.tr("Add meeting link")
+                                            color: Appearance.colors.colOnLayer1Inactive
+                                        }
                                     }
                                     RippleButton { visible: EmailDetections.detectAll(root.formUrl).meetings.length > 0; implicitWidth: 34; implicitHeight: 34; buttonRadius: Appearance.rounding.full; colBackground: Appearance.colors.colPrimaryContainer; onClicked: Qt.openUrlExternally(root.formUrl); contentItem: MaterialSymbol { anchors.centerIn: parent; text: "video_call"; color: Appearance.colors.colOnPrimaryContainer } }
                                 }
@@ -1156,9 +1170,16 @@ Item {
                                         id: locationInput
                                         Layout.fillWidth: true
                                         text: root.formLocation
-                                        placeholderText: Translation.tr("Add location")
                                         onTextChanged: root.formLocation = text
                                         color: Appearance.colors.colOnSurface
+
+                                        StyledText {
+                                            anchors.fill: parent
+                                            visible: locationInput.text.length === 0
+                                            verticalAlignment: Text.AlignVCenter
+                                            text: Translation.tr("Add location")
+                                            color: Appearance.colors.colOnLayer1Inactive
+                                        }
                                     }
                                     RippleButton { visible: root.formLocation.length > 0; implicitWidth: 34; implicitHeight: 34; buttonRadius: Appearance.rounding.full; colBackground: "transparent"; onClicked: Quickshell.execDetached(["xdg-open", "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(root.formLocation)]); contentItem: MaterialSymbol { anchors.centerIn: parent; text: "map"; color: Appearance.colors.colPrimary } }
                                 }

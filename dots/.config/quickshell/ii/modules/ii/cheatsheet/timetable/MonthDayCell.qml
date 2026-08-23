@@ -66,27 +66,13 @@ Item {
         return result;
     }
 
-    function weatherSymbol(code) {
-        const value = Number(code);
-        if (value === 113)
-            return "wb_sunny";
-        if (value === 116)
-            return "partly_cloudy_day";
-        if ([119, 122, 143, 248].includes(value))
-            return "cloud";
-        if ([326, 332, 338, 368].includes(value))
-            return "weather_snowy";
-        if ([386, 389].includes(value))
-            return "thunderstorm";
-        return "rainy";
-    }
-
     readonly property real headerHeight: 30
+    readonly property real headerEventSpacing: 4
     readonly property real chipSpacing: 3
     readonly property real cellPadding: 7
     readonly property bool compactChips: root.height < 96
     readonly property real chipHeight: root.compactChips ? 20 : 24
-    readonly property real chipAreaHeight: Math.max(0, root.height - root.headerHeight - root.cellPadding)
+    readonly property real chipAreaHeight: Math.max(0, root.height - root.headerHeight - root.headerEventSpacing - root.cellPadding)
     readonly property int chipCapacity: Math.max(0, Math.floor((root.chipAreaHeight + root.chipSpacing) / (root.chipHeight + root.chipSpacing)))
     // Keep events and tasks in one capacity calculation. Otherwise a busy day
     // could silently overflow below the cell after task integration.
@@ -226,15 +212,17 @@ Item {
             opacity: root.inMonth ? 1 : 0.55
         }
 
-        MaterialSymbol {
+        Image {
             id: weatherIcon
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: addButton.left
             anchors.rightMargin: 4
+            width: Appearance.font.pixelSize.normal
+            height: width
             visible: root.inMonth && root.forecast !== null && root.width > 92
-            text: root.weatherSymbol(root.forecast?.code)
-            iconSize: Appearance.font.pixelSize.normal
-            color: Appearance.colors.colOnSurfaceVariant
+            source: WeatherIcons.getWeatherIcon(root.forecast?.code ?? 113, false)
+            sourceSize: Qt.size(width, height)
+            fillMode: Image.PreserveAspectFit
 
             HoverHandler {
                 id: weatherHover
@@ -291,7 +279,7 @@ Item {
             top: header.bottom
             left: parent.left
             right: parent.right
-            topMargin: 1
+            topMargin: root.headerEventSpacing
             leftMargin: root.cellPadding - 2
             rightMargin: root.cellPadding - 2
         }

@@ -21,6 +21,7 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("function themeHoverColorForToken", helper)
         self.assertIn("H.themeHoverColorForToken(modelData.token, Appearance.colors)", picker)
         self.assertNotIn("ColorUtils.mix(tokenColor, Appearance.colors.colOnSurface", picker)
+        self.assertIn("import qs.modules.common.functions", picker)
 
     def test_color_tooltips_use_the_delegate_hover_state(self) -> None:
         picker = (TIMETABLE / "ColorPickerRow.qml").read_text(encoding="utf-8")
@@ -42,11 +43,26 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("anchors.horizontalCenter: parent.horizontalCenter", picker)
         self.assertIn("width: Math.max(root.dialSize, timeFields.implicitWidth)", picker)
 
+    def test_month_forecast_uses_google_weather_assets(self) -> None:
+        day_cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
+
+        self.assertIn("Image {\n            id: weatherIcon", day_cell)
+        self.assertIn("WeatherIcons.getWeatherIcon(root.forecast?.code ?? 113, false)", day_cell)
+        self.assertNotIn("function weatherSymbol", day_cell)
+
+    def test_month_events_leave_space_below_the_day_header(self) -> None:
+        day_cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
+
+        self.assertIn("readonly property real headerEventSpacing: 4", day_cell)
+        self.assertIn("topMargin: root.headerEventSpacing", day_cell)
+        self.assertIn("root.headerHeight - root.headerEventSpacing - root.cellPadding", day_cell)
+
     def test_event_metadata_inputs_have_helpful_placeholders(self) -> None:
         sidebar = (TIMETABLE / "MonthEventSidebar.qml").read_text(encoding="utf-8")
 
         for placeholder in ("Add a label", "Add meeting link", "Add location"):
             self.assertIn(f'Translation.tr("{placeholder}")', sidebar)
+            self.assertNotIn(f'placeholderText: Translation.tr("{placeholder}")', sidebar)
         self.assertNotIn("placeholderTextColor", sidebar)
 
 
