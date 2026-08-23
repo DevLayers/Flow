@@ -896,6 +896,7 @@ Item {
                 onEditSelected: searchKeyRouter.dispatch("editSelected")
                 onOcrSelected: searchKeyRouter.dispatch("ocrSelected")
                 onCopyDispatchSelected: searchKeyRouter.dispatch("copyDispatchSelected")
+                onCreateFromQuery: searchKeyRouter.dispatch("createFromQuery")
 
                 onEscapeToSearch: {
                     if (root.isAiMode)

@@ -514,6 +514,7 @@ Singleton {
                     property int start: 0
                     property list<var> laps: []
                 }
+                property list<var> countdowns: []
             }
             property list<var> alarms: []
             property JsonObject water: JsonObject {

@@ -202,7 +202,7 @@ Singleton {
         const terms = String(queryText ?? "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
         if (terms.length === 0)
             return [];
-        const panelIds = ["emojis", "screenshots", "windows"];
+        const panelIds = ["emojis", "screenshots", "windows", "tasks", "timers"];
         return SearchPanelRegistry.enabledPanels.filter(panel => {
             if (!panelIds.includes(panel.id))
                 return false;
@@ -223,7 +223,82 @@ Singleton {
             comment: Translation.tr("Search tools"),
             panelId: panel.id,
             keepOverviewOpen: true,
-            execute: () => GlobalStates.openSearchPanel(panel.id)
+            execute: () => {
+                root.query = "";
+                GlobalStates.openSearchPanel(panel.id);
+            }
+        });
+    }
+
+    function quicklinkMatches(queryText: string): var {
+        if (!Config.options.search.modules.quicklinks.enable)
+            return [];
+        const query = String(queryText ?? "").trim();
+        if (query.length === 0)
+            return [];
+        const [first, ...rest] = query.split(/\s+/);
+        const alias = first.toLocaleLowerCase();
+        return Array.from(Config.options.search.modules.quicklinks.links ?? [])
+            .map(link => {
+                const linkAlias = String(link?.alias ?? "").trim().toLocaleLowerCase();
+                const name = String(link?.name ?? "").toLocaleLowerCase();
+                const matches = linkAlias === alias || linkAlias.includes(alias) || name.includes(query.toLocaleLowerCase());
+                return matches ? { link, remainder: rest.join(" "), exact: linkAlias === alias } : null;
+            })
+            .filter(Boolean)
+            .sort((left, right) => Number(right.exact) - Number(left.exact));
+    }
+
+    function quicklinkUrl(match) {
+        const url = String(match?.link?.url ?? "").trim();
+        return url.split("{query}").join(encodeURIComponent(String(match?.remainder ?? "")));
+    }
+
+    function openQuicklink(match, forceCopy = false) {
+        const url = root.quicklinkUrl(match);
+        if (url.length === 0)
+            return false;
+        const openWith = String(match?.link?.openWith ?? "default");
+        if (forceCopy || Config.options.search.modules.quicklinks.copyOnEnter || openWith === "copy") {
+            Quickshell.clipboardText = url;
+            return true;
+        }
+        if (openWith.startsWith("app:"))
+            Quickshell.execDetached(["gtk-launch", openWith.slice(4)]);
+        else
+            Quickshell.execDetached(["xdg-open", url]);
+        return true;
+    }
+
+    function createQuicklinkResult(match: var): var {
+        const link = match.link;
+        const url = root.quicklinkUrl(match);
+        const icon = String(link?.icon ?? "").trim() || "link";
+        return resultComp.createObject(null, {
+            key: "quicklink:" + String(link.alias ?? url),
+            name: String(link.name ?? link.alias ?? url),
+            iconName: icon,
+            iconType: LauncherSearchResult.IconType.Material,
+            type: Translation.tr("Quicklink"),
+            verb: Config.options.search.modules.quicklinks.copyOnEnter ? Translation.tr("Copy") : Translation.tr("Open"),
+            comment: url,
+            execute: () => root.openQuicklink(match),
+            actions: [
+                resultComp.createObject(null, {
+                    name: Translation.tr("Copy link"),
+                    iconName: "content_copy",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => root.openQuicklink(match, true)
+                }),
+                resultComp.createObject(null, {
+                    name: Translation.tr("Open link"),
+                    iconName: "open_in_new",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => {
+                        Quickshell.execDetached(["xdg-open", url]);
+                    }
+                })
+            ]
         });
     }
 
@@ -1070,8 +1145,17 @@ Singleton {
                     let typeName = Translation.tr("Mode");
                     let name = entry.target;
                     let execFunc = () => {};
+                    const registeredPanel = SearchPanelRegistry.byId(entry.target);
 
-                    if (entry.target === "clipboard") {
+                    if (registeredPanel?.hosted === true) {
+                        icon = registeredPanel.icon;
+                        name = registeredPanel.label;
+                        typeName = Translation.tr("Search panel");
+                        execFunc = () => {
+                            root.query = "";
+                            GlobalStates.openSearchPanel(registeredPanel.id);
+                        };
+                    } else if (entry.target === "clipboard") {
                         icon = "content_paste";
                         name = Translation.tr("Clipboard");
                         execFunc = () => {
@@ -1252,6 +1336,9 @@ Singleton {
             for (const panel of root.searchPanelMatches(root.query))
                 result.push(root.createSearchPanelResult(panel));
         }
+
+        for (const quicklink of root.quicklinkMatches(root.query))
+            result.push(root.createQuicklinkResult(quicklink));
 
         // Panels with no prefix stay discoverable through explicit, compact
         // rows; their query is preserved as the panel's own filter.

@@ -30,6 +30,7 @@ Singleton {
     property int stopwatchTime: 0
     property int stopwatchStart: Persistent.states.timer.stopwatch.start
     property var stopwatchLaps: Persistent.states.timer.stopwatch.laps
+    readonly property var countdowns: Persistent.states.timer.countdowns
 
     // General
     Component.onCompleted: {
@@ -43,6 +44,52 @@ Singleton {
 
     function getCurrentTimeIn10ms() {  // Stopwatch uses 10ms
         return Math.floor(Date.now() / 10);
+    }
+
+    function countdownSecondsLeft(countdown) {
+        return Math.max(0, Math.ceil((Number(countdown?.endsAt ?? 0) - Date.now()) / 1000));
+    }
+
+    function addCountdown(minutes, label = "") {
+        const durationMinutes = Math.max(1, Number(minutes) || 1);
+        const next = Array.from(Persistent.states.timer.countdowns ?? []);
+        next.unshift({
+            id: "countdown-" + Date.now().toString(36),
+            label: String(label ?? "").trim() || Translation.tr("%1 minute timer").arg(String(durationMinutes)),
+            endsAt: Date.now() + durationMinutes * 60 * 1000,
+            notified: false
+        });
+        Persistent.states.timer.countdowns = next;
+    }
+
+    function removeCountdown(countdownId) {
+        const next = Array.from(Persistent.states.timer.countdowns ?? [])
+            .filter(countdown => String(countdown?.id ?? "") !== String(countdownId ?? ""));
+        Persistent.states.timer.countdowns = next;
+    }
+
+    function refreshCountdowns() {
+        const current = Array.from(Persistent.states.timer.countdowns ?? []);
+        let changed = false;
+        const next = current.map(countdown => {
+            if (root.countdownSecondsLeft(countdown) > 0 || countdown.notified)
+                return countdown;
+            changed = true;
+            Quickshell.execDetached(["notify-send", String(countdown.label ?? Translation.tr("Timer")), Translation.tr("Timer finished"), "-a", "Shell", "-i", "alarm", "--hint=boolean:suppress-sound:true"]);
+            SoundService.playEvent("pomodoro", "alarm-clock-elapsed");
+            return Object.assign({}, countdown, { notified: true });
+        });
+        if (changed) {
+            Persistent.states.timer.countdowns = next;
+        }
+    }
+
+    Timer {
+        id: countdownTimer
+        interval: 1000
+        repeat: true
+        running: root.countdowns.some(countdown => !countdown.notified)
+        onTriggered: root.refreshCountdowns()
     }
 
     // Pomodoro

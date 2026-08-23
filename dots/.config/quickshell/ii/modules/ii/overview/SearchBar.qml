@@ -69,6 +69,7 @@ RowLayout {
     signal editSelected
     signal ocrSelected
     signal copyDispatchSelected
+    signal createFromQuery
     // Fired when Esc is pressed while the text is empty in AI mode — asks the
     // host to leave AI chat and return to the plain search.
     signal escapeToSearch
@@ -415,6 +416,11 @@ RowLayout {
             }
             if (root.activePanelMode && event.key === Qt.Key_O && (event.modifiers & Qt.ControlModifier)) {
                 root.ocrSelected();
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && event.key === Qt.Key_N && (event.modifiers & Qt.ControlModifier)) {
+                root.createFromQuery();
                 event.accepted = true;
                 return;
             }
