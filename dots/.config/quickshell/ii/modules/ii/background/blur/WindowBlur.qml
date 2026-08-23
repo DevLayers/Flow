@@ -10,9 +10,17 @@ Item {
     id: windowBlurRoot
 
     required property var sourceItem
+    // False until the wallpaper plane has its final size and the image has decoded. The capture
+    // below is taken once and never retaken, so activating before then bakes in a texture that no
+    // longer matches the plane - the wallpaper then shows a hard-edged sharp band next to the
+    // blurred one for the rest of the effect's life.
+    required property bool sourceReady
     required property bool hasWindowsInActiveWorkspace
     required property bool overviewOpen
     required property real overviewProgress
+
+    readonly property real sourceWidth: sourceItem ? sourceItem.width : 0
+    readonly property real sourceHeight: sourceItem ? sourceItem.height : 0
 
     // Keep the window blur disabled for the whole Overview transition. The
     // controller continues animating after overviewOpen becomes false, so
@@ -21,6 +29,7 @@ Item {
     readonly property bool overviewTransitionActive: overviewOpen || overviewProgress > 0.001
     readonly property bool shouldBlur: Config.options.background.blurWhenWindowsOpen
         && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !overviewTransitionActive
+        && sourceReady && sourceWidth > 0 && sourceHeight > 0
 
     // Keep the Loader binding intact while still allowing a fresh grab after
     // Overview changes the wallpaper composition underneath the blur.
@@ -45,6 +54,12 @@ Item {
     onShouldBlurChanged: if (shouldBlur) refreshBlur();
     onOverviewOpenChanged: if (!overviewOpen) refreshBlur();
     onOverviewProgressChanged: if (!overviewOpen && overviewProgress <= 0.001) refreshBlur();
+
+    // The plane itself resizes whenever the wallpaper's real dimensions, the screen geometry or
+    // the zoom scale land - all of which happen after startup, and none of which reach the
+    // capture on their own. Debounced, so a burst of them costs one rebuild.
+    onSourceWidthChanged: blurRefreshTimer.restart();
+    onSourceHeightChanged: blurRefreshTimer.restart();
 
     // Unmap the effect immediately while Overview is open or closing. Waiting
     // for the shared progress clock avoids exposing a stale blurred frame.

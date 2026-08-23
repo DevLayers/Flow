@@ -28,6 +28,11 @@ PanelWindow {
     property real baseWallpaperScale: 1 // Calculated scale from wallpaper size
     property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
     property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
+    // Those init values are the screen's, not the wallpaper file's, so the wallpaper plane changes
+    // size the moment the probe answers. Effects that capture the plane into a texture must wait
+    // for it: the capture is taken once, when the effect is created, and is never retaken, so a
+    // plane that grows underneath one leaves a band the blurred texture no longer reaches.
+    property bool wallpaperSizeKnown: false
 
     // State controllers
     WallpaperSizeProbe {
@@ -37,7 +42,20 @@ PanelWindow {
             bgRoot.wallpaperWidth = w;
             bgRoot.wallpaperHeight = h;
             bgRoot.recalcWallpaperScale();
+            bgRoot.wallpaperSizeKnown = true;
         }
+        // A missing or failing `magick` must never keep the wallpaper effects switched off for the
+        // whole session - let them capture the screen-sized guess instead.
+        onExited: (exitCode, exitStatus) => {
+            bgRoot.wallpaperSizeKnown = true;
+        }
+    }
+
+    Timer {
+        id: wallpaperProbeTimeout
+        interval: 3000
+        repeat: false
+        onTriggered: bgRoot.wallpaperSizeKnown = true
     }
 
     LockAnimController {
@@ -344,6 +362,7 @@ PanelWindow {
     function updateZoomScale() {
         getWallpaperSizeProc.path = bgRoot.wallpaperPath;
         getWallpaperSizeProc.running = true;
+        wallpaperProbeTimeout.restart();
     }
 
     property bool mediaModeOpen: mediaModeLoader.active && MprisController.activePlayer
@@ -397,6 +416,10 @@ PanelWindow {
         GlobalStates.registerOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
         // Do not re-run matugen / switchwall on quickshell reload/startup.
         // Theme colors and wallpaper are already persisted on disk.
+        // The path-changed handler cannot carry the first probe on its own: when the config is
+        // already loaded by the time this is created the path never changes, and the plane would
+        // keep the screen-sized guess for the whole session.
+        bgRoot.updateZoomScale();
     }
 
     Component.onDestruction: {
@@ -427,6 +450,7 @@ PanelWindow {
             baseWallpaperScale: bgRoot.baseWallpaperScale
             wallpaperWidth: bgRoot.wallpaperWidth
             wallpaperHeight: bgRoot.wallpaperHeight
+            wallpaperSizeKnown: bgRoot.wallpaperSizeKnown
             wallpaperToScreenRatio: bgRoot.wallpaperToScreenRatio
             movableXSpace: bgRoot.movableXSpace
             movableYSpace: bgRoot.movableYSpace

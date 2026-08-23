@@ -29,6 +29,7 @@ Item {
     required property real baseWallpaperScale
     required property int wallpaperWidth
     required property int wallpaperHeight
+    required property bool wallpaperSizeKnown
     required property real wallpaperToScreenRatio
     required property real movableXSpace
     required property real movableYSpace
@@ -131,6 +132,12 @@ Item {
     readonly property bool overviewAnimationVisible: overviewController && (overviewController.active || overviewController.progress > 0.001)
     readonly property real overviewCoverScale: overviewController.overviewCoverScale
     readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike
+
+    // The blur effects below capture this subtree into a texture once, when their Loader
+    // activates, and keep that texture until the Loader is torn down again. Capturing before the
+    // plane has its final size and the image has decoded is what leaves the wallpaper split into a
+    // blurred and a sharp band until a workspace switch or an unlock rebuilds the effect.
+    readonly property bool wallpaperSourceReady: wallpaperSizeKnown && wallpaper.status === Image.Ready
 
     // Keep the legacy opening scale available for Gnome-like while the modern
     // presets remain driven exclusively by OverviewBackgroundController.
@@ -498,6 +505,7 @@ Item {
                     id: lockBlur
                     anchors.fill: parent
                     sourceItem: wallpaperVisualContainer
+                    sourceReady: wallpaperImageRoot.wallpaperSourceReady
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                     wallpaperIsVideo: wallpaperImageRoot.wallpaperIsVideo || Config.options.background.useWallpaperEngine
@@ -506,6 +514,7 @@ Item {
                 LockDesaturate {
                     anchors.fill: parent
                     sourceItem: Config.options.lock.blur.enable ? lockBlur : wallpaperVisualContainer
+                    sourceReady: wallpaperImageRoot.wallpaperSourceReady
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                 }
@@ -528,6 +537,7 @@ Item {
                     id: windowBlur
                     anchors.fill: parent
                     sourceItem: wallpaperVisualContainer
+                    sourceReady: wallpaperImageRoot.wallpaperSourceReady
                     hasWindowsInActiveWorkspace: wallpaperImageRoot.hasWindowsInActiveWorkspace
                     overviewOpen: wallpaperImageRoot.overviewOpen
                     overviewProgress: wallpaperImageRoot.isGnomeLikeOverview
