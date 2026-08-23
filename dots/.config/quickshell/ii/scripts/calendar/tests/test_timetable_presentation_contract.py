@@ -174,12 +174,28 @@ class TimetablePresentationContractTests(unittest.TestCase):
         panel = (TIMETABLE / "MonthUpcomingPanel.qml").read_text(encoding="utf-8")
 
         self.assertEqual(panel.count("Todo.getOverdueTasks("), 1)
-        self.assertIn('rowType: "overdue"', panel)
+        self.assertIn('rowKey: "task:overdue:"', panel)
+        self.assertIn("buckets.today.push({", panel)
         self.assertIn("property string categoryFilter", panel)
         self.assertIn("property var holidaysByDay", panel)
         self.assertNotIn("Config.options.calendar.holidays", panel)
         self.assertIn("categoryFilter: root.categoryFilter", month)
         self.assertIn("holidaysByDay: root.holidayMap", month)
+
+    def test_upcoming_rail_uses_fixed_hero_and_persistent_horizon_groups(self) -> None:
+        config = (ROOT / "modules" / "common" / "Config.qml").read_text(encoding="utf-8")
+        persistent = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
+        panel = (TIMETABLE / "MonthUpcomingPanel.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property int upcomingHorizonDays: 14", config)
+        self.assertIn("Config.options.calendar.timetable.upcomingHorizonDays ?? 14", panel)
+        self.assertIn("Layout.preferredHeight: 128", panel)
+        self.assertNotIn("model: root.todayTasks", panel)
+        self.assertIn('for (const key of ["today", "tomorrow", "thisWeek", "later"])', panel)
+        self.assertIn('rowType: "group"', panel)
+        self.assertIn("function toggleGroup(key)", panel)
+        self.assertIn("property list<string> timetableCollapsedUpcomingGroups: []", persistent)
+        self.assertIn("Persistent.states.cheatsheet.timetableCollapsedUpcomingGroups =", panel)
 
     def test_cancelled_events_are_struck_in_both_sidebars(self) -> None:
         upcoming = (TIMETABLE / "MonthUpcomingPanel.qml").read_text(encoding="utf-8")

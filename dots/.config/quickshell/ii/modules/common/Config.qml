@@ -3033,6 +3033,8 @@ Singleton {
                 }
                 property JsonObject timetable: JsonObject {
                     property list<string> subscriptions: []
+                    // Number of dates summarized by the month view's agenda rail.
+                    property int upcomingHorizonDays: 14
                     property JsonObject moonPhases: JsonObject {
                         // Moon phase badges in the month grid; computed locally,
                         // never fetched from the network.

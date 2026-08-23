@@ -306,6 +306,8 @@ Singleton {
                 property bool timetableShowUpcoming: true
                 // "comfortable" | "compact" | "dots" — month-cell density.
                 property string timetableMonthDensity: "compact"
+                // Horizon buckets hidden in the month view's upcoming rail.
+                property list<string> timetableCollapsedUpcomingGroups: []
                 // Pixels per hour in the timetable grid. WeekView constrains
                 // writes to its discrete zoom scale.
                 property int timetableSlotHeight: 56

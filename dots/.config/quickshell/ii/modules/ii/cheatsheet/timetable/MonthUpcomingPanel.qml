@@ -14,8 +14,7 @@ import "TimetableHelpers.js" as H
 Item {
     id: root
 
-    property int horizonDays: 60
-    property int maxRows: 90
+    property int horizonDays: Math.max(1, Math.min(60, Config.options.calendar.timetable.upcomingHorizonDays ?? 14))
     property int entranceKey: 0
     property string categoryFilter: ""
     property var holidaysByDay: ({})
@@ -25,37 +24,70 @@ Item {
 
     readonly property date todayDate: DateTime.clock.date
 
-    // The hero is intentionally a Today *tasks* list. Calendar events remain
-    // in Upcoming below; overdue work must not be presented as due today.
     readonly property var todayTasks: Todo.getTasksByDate(root.todayDate)
         .filter(task => task?.hasDate === true)
     readonly property var overdueTasks: Todo.getOverdueTasks(root.todayDate)
+    readonly property var todayEvents: {
+        let events = CalendarService.eventsByDay[H.dayKeyOf(root.todayDate)] ?? [];
+        if (root.categoryFilter)
+            events = events.filter(event => (event.categories ?? []).includes(root.categoryFilter));
+        return events;
+    }
 
-    readonly property var rows: {
-        const out = [];
+    function groupForOffset(offset, today) {
+        if (offset === 0)
+            return "today";
+        if (offset === 1)
+            return "tomorrow";
+        const weekEnd = H.addDays(H.weekStartFor(today, Config.options.time.firstDayOfWeek, false), 6);
+        return H.startOfDay(H.addDays(today, offset)).getTime() <= H.startOfDay(weekEnd).getTime() ? "thisWeek" : "later";
+    }
+
+    function groupLabel(key) {
+        switch (key) {
+        case "today": return Translation.tr("Today");
+        case "tomorrow": return Translation.tr("Tomorrow");
+        case "thisWeek": return Translation.tr("This week");
+        default: return Translation.tr("Later");
+        }
+    }
+
+    function isGroupCollapsed(key) {
+        return (Persistent.states.cheatsheet.timetableCollapsedUpcomingGroups ?? []).includes(key);
+    }
+
+    function toggleGroup(key) {
+        const collapsed = Array.from(Persistent.states.cheatsheet.timetableCollapsedUpcomingGroups ?? []);
+        Persistent.states.cheatsheet.timetableCollapsedUpcomingGroups = collapsed.includes(key)
+            ? collapsed.filter(item => item !== key)
+            : collapsed.concat([key]);
+    }
+
+    readonly property var groups: {
+        const buckets = {
+            today: [],
+            tomorrow: [],
+            thisWeek: [],
+            later: []
+        };
         const now = DateTime.clock.date;
         const today = H.startOfDay(now);
 
-        if (root.overdueTasks.length > 0) {
-            out.push({
-                rowType: "overdue",
-                rowKey: "overdue",
+        for (let i = 0; i < root.overdueTasks.length; i++) {
+            buckets.today.push({
+                rowType: "task",
+                rowKey: "task:overdue:" + (root.overdueTasks[i].id || root.overdueTasks[i].content || i),
+                groupKey: "today",
                 date: today,
-                count: root.overdueTasks.length
+                overdue: true,
+                task: root.overdueTasks[i]
             });
-            for (let i = 0; i < root.overdueTasks.length; i++) {
-                out.push({
-                    rowType: "task",
-                    rowKey: "task:overdue:" + (root.overdueTasks[i].id || root.overdueTasks[i].content || i),
-                    date: today,
-                    task: root.overdueTasks[i]
-                });
-            }
         }
 
         for (let offset = 0; offset < root.horizonDays; offset++) {
             const date = H.addDays(today, offset);
             const key = H.dayKeyOf(date);
+            const groupKey = root.groupForOffset(offset, today);
             const dayHolidays = root.holidaysByDay[key] ?? [];
             let dayEvents = CalendarService.eventsByDay[key] ?? [];
             if (root.categoryFilter)
@@ -70,54 +102,76 @@ Item {
             if (dayEvents.length === 0 && dayBirthdays.length === 0 && dayHolidays.length === 0 && dayTasks.length === 0)
                 continue;
 
-            out.push({
-                rowType: "day",
-                rowKey: "day:" + key,
-                date: date,
-                offset: offset,
-                count: dayEvents.length + dayBirthdays.length + dayTasks.length
-            });
-
             for (let i = 0; i < dayHolidays.length; i++) {
-                out.push({
+                buckets[groupKey].push({
                     rowType: "holiday",
                     rowKey: "hol:" + key + ":" + i,
+                    groupKey: groupKey,
                     date: date,
+                    offset: offset,
                     label: dayHolidays[i].localName || dayHolidays[i].name || ""
                 });
             }
             for (let i = 0; i < dayEvents.length; i++) {
-                out.push({
+                buckets[groupKey].push({
                     rowType: "event",
                     rowKey: "evt:" + key + ":" + (dayEvents[i].uid || dayEvents[i].content || i),
+                    groupKey: groupKey,
                     date: date,
+                    offset: offset,
                     event: dayEvents[i]
                 });
             }
             for (let i = 0; i < dayBirthdays.length; i++) {
-                out.push({
+                buckets[groupKey].push({
                     rowType: "birthday",
                     rowKey: "birthday:" + key + ":" + (dayBirthdays[i].contactId || dayBirthdays[i].id || i),
+                    groupKey: groupKey,
                     date: date,
+                    offset: offset,
                     birthday: dayBirthdays[i]
                 });
             }
             for (let i = 0; i < dayTasks.length; i++) {
-                out.push({
+                buckets[groupKey].push({
                     rowType: "task",
                     rowKey: "task:" + key + ":" + (dayTasks[i].id || dayTasks[i].content || i),
+                    groupKey: groupKey,
                     date: date,
+                    offset: offset,
                     task: dayTasks[i]
                 });
             }
+        }
 
-            if (out.length >= root.maxRows)
-                break;
+        const out = [];
+        for (const key of ["today", "tomorrow", "thisWeek", "later"]) {
+            if (buckets[key].length === 0)
+                continue;
+            out.push({ key: key, label: root.groupLabel(key), items: buckets[key] });
         }
         return out;
     }
 
-    readonly property int upcomingCount: root.rows.filter(row => row.rowType === "event" || row.rowType === "birthday" || row.rowType === "task").length
+    readonly property var rows: {
+        const out = [];
+        const collapsedGroups = Persistent.states.cheatsheet.timetableCollapsedUpcomingGroups ?? [];
+        for (const group of root.groups) {
+            out.push({
+                rowType: "group",
+                rowKey: "group:" + group.key,
+                groupKey: group.key,
+                label: group.label,
+                count: group.items.length,
+                collapsed: collapsedGroups.includes(group.key)
+            });
+            if (!collapsedGroups.includes(group.key))
+                out.push(...group.items);
+        }
+        return out;
+    }
+
+    readonly property int upcomingCount: root.groups.reduce((count, group) => count + group.items.filter(row => row.rowType === "event" || row.rowType === "birthday" || row.rowType === "task").length, 0)
     // The rail has one visual focal point: an event already in progress wins;
     // otherwise it is the earliest future event. The key is computed from the
     // rows so recurring occurrences remain distinct from one another.
@@ -127,9 +181,10 @@ Item {
         let current = null;
         let next = null;
 
-        for (const row of root.rows) {
-            if (row?.rowType !== "event" || !row.event?.startDate)
-                continue;
+        for (const group of root.groups) {
+            for (const row of group.items) {
+                if (row?.rowType !== "event" || !row.event?.startDate)
+                    continue;
             const event = row.event;
             const startMs = event.startDate.getTime();
             const endMs = (event.endDate ?? event.startDate).getTime();
@@ -143,6 +198,7 @@ Item {
             }
             if (startMs > nowMs && (!next || startMs < next.event.startDate.getTime()))
                 next = row;
+            }
         }
 
         return current?.rowKey ?? next?.rowKey ?? "";
@@ -158,7 +214,7 @@ Item {
         Rectangle {
             id: hero
             Layout.fillWidth: true
-            Layout.preferredHeight: heroContent.implicitHeight + 32
+            Layout.preferredHeight: 128
             radius: Appearance.rounding.large
             color: Appearance.colors.colPrimaryContainer
 
@@ -240,25 +296,13 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: root.todayTasks.length === 0
-                        ? Translation.tr("No tasks due today")
-                        : Translation.tr("%1 task(s) today").arg(String(root.todayTasks.length))
+                    text: Translation.tr("%1 events · %2 tasks")
+                        .arg(String(root.todayEvents.length))
+                        .arg(String(root.todayTasks.length + root.overdueTasks.length))
                     font.pixelSize: Appearance.font.pixelSize.smallie
                     font.weight: Font.Medium
                     color: ColorUtils.applyAlpha(Appearance.colors.colOnPrimaryContainer, 0.8)
                     elide: Text.ElideRight
-                }
-
-                Repeater {
-                    model: root.todayTasks
-
-                    delegate: TaskChip {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 30
-                        taskData: modelData
-                        compact: true
-                        onCompletionRequested: task => Todo.markDone(task)
-                    }
                 }
             }
         }
@@ -271,7 +315,7 @@ Item {
             spacing: 8
 
             StyledText {
-                text: Translation.tr("Upcoming")
+                text: Translation.tr("Next %1 days").arg(String(root.horizonDays))
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.weight: Font.Bold
                 color: Appearance.colors.colOnSurface
@@ -337,44 +381,40 @@ Item {
                     readonly property string rowType: rowItem.modelData?.rowType ?? "day"
 
                     width: list.width
-                    readonly property bool separatorRow: rowItem.rowType === "day" || rowItem.rowType === "overdue"
+                    readonly property bool separatorRow: rowItem.rowType === "group"
 
-                    implicitHeight: rowItem.separatorRow ? 30 : 40
+                    implicitHeight: rowItem.separatorRow ? 34 : 40
                     height: implicitHeight
 
-                    // ─── Day separator ───
-                    RowLayout {
+                    // ─── Horizon group ───
+                    RippleButton {
                         anchors.fill: parent
-                        anchors.leftMargin: 4
-                        anchors.rightMargin: 4
-                        anchors.topMargin: 8
                         visible: rowItem.separatorRow
-                        spacing: 8
+                        buttonRadius: Appearance.rounding.small
+                        colBackground: "transparent"
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        onClicked: root.toggleGroup(rowItem.modelData.groupKey)
 
-                        StyledText {
-                            text: {
-                                if (!rowItem.separatorRow)
-                                    return "";
-                                if (rowItem.rowType === "overdue")
-                                    return Translation.tr("Overdue") + " · " + String(rowItem.modelData.count);
-                                if (rowItem.modelData.offset === 0)
-                                    return Translation.tr("Today");
-                                if (rowItem.modelData.offset === 1)
-                                    return Translation.tr("Tomorrow");
-                                return Qt.formatDate(rowItem.modelData.date, "ddd, d MMM");
+                        contentItem: RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            spacing: 6
+
+                            MaterialSymbol {
+                                text: rowItem.modelData.collapsed ? "chevron_right" : "expand_more"
+                                iconSize: Appearance.font.pixelSize.normal
+                                color: rowItem.modelData.groupKey === "today" ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
                             }
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            font.weight: Font.Bold
-                            color: rowItem.rowType === "overdue"
-                                ? Appearance.colors.colError
-                                : (rowItem.modelData.offset === 0 ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
-                        }
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 2
-                            radius: 1
-                            color: ColorUtils.applyAlpha(Appearance.colors.colOutlineVariant, 0.6)
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: (rowItem.modelData?.label ?? "") + " · " + String(rowItem.modelData?.count ?? 0)
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.Bold
+                                color: rowItem.modelData.groupKey === "today" ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+                                elide: Text.ElideRight
+                            }
                         }
                     }
 
@@ -464,7 +504,12 @@ Item {
 
                                     StyledText {
                                         Layout.fillWidth: true
-                                        text: eventButton.allDay ? Translation.tr("All day") : H.eventRangeText(rowItem.modelData.event, Config.options?.time.format)
+                                        text: {
+                                            const time = eventButton.allDay ? Translation.tr("All day") : H.eventRangeText(rowItem.modelData.event, Config.options?.time.format);
+                                            if (rowItem.modelData.groupKey === "today" || rowItem.modelData.groupKey === "tomorrow")
+                                                return time;
+                                            return Qt.formatDate(rowItem.modelData.date, "ddd, d MMM") + " · " + time;
+                                        }
                                         font.pixelSize: Appearance.font.pixelSize.smallest
                                         font.weight: Font.Medium
                                         color: eventButton.featured
