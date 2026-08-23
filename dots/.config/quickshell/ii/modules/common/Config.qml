@@ -830,6 +830,29 @@ Singleton {
             console.log(`[Config] Migrated screen recording bitrate ${oldBitrate} Mbps -> quality "${raw.screenRecord.quality}"`);
         }
 
+        // v9 -> v10: Search v2 keeps its lightweight content lists in a
+        // stable schema. Existing users get the new objects without changing
+        // their enabled modules, aliases, or prefix choices.
+        if (from < 10) {
+            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object")
+                raw.search = {};
+            if (raw.search.favorites === undefined)
+                raw.search.favorites = { enable: true };
+            if (raw.search.fallbacks === undefined)
+                raw.search.fallbacks = { enable: true, actions: ["ai", "web", "tasks", "calendar"] };
+            if (raw.search.history === undefined)
+                raw.search.history = { enable: true, maxItems: 50 };
+            if (raw.search.keybindings === undefined)
+                raw.search.keybindings = [
+                    { actionId: "actions", shortcut: "Ctrl+K" },
+                    { actionId: "favorite", shortcut: "Ctrl+P" },
+                    { actionId: "historyPrevious", shortcut: "Up" },
+                    { actionId: "historyNext", shortcut: "Down" },
+                    { actionId: "secondary", shortcut: "Ctrl+Enter" }
+                ];
+            console.log("[Config] Added Search v2 content defaults");
+        }
+
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
         return true;
@@ -3749,6 +3772,26 @@ Singleton {
                     property bool trackPanels: true
                     property bool trackActions: true
                 }
+                property JsonObject favorites: JsonObject {
+                    property bool enable: true
+                }
+                property JsonObject fallbacks: JsonObject {
+                    property bool enable: true
+                    property list<string> actions: ["ai", "web", "tasks", "calendar"]
+                }
+                property JsonObject history: JsonObject {
+                    property bool enable: true
+                    property int maxItems: 50
+                }
+                // Search-only bindings. They remain local to the focused Search
+                // field and therefore cannot collide with Hyprland global binds.
+                property list<var> keybindings: [
+                    { actionId: "actions", shortcut: "Ctrl+K" },
+                    { actionId: "favorite", shortcut: "Ctrl+P" },
+                    { actionId: "historyPrevious", shortcut: "Up" },
+                    { actionId: "historyNext", shortcut: "Down" },
+                    { actionId: "secondary", shortcut: "Ctrl+Enter" }
+                ]
                 property JsonObject appearance: JsonObject {
                     property bool accentPanels: true
                     property real accentStrength: 0.12

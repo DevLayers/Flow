@@ -235,6 +235,9 @@ Singleton {
             property JsonObject search: JsonObject {
                 property list<var> aliases: []
                 property list<string> recentEmojis: []
+                property list<string> recentQueries: []
+                property list<string> pinnedEntries: []
+                property list<var> panelUsage: []
             }
 
             property JsonObject googleDrive: JsonObject {
@@ -301,7 +304,7 @@ Singleton {
             property JsonObject cheatsheet: JsonObject {
                 property int tabIndex: 0
                 property list<string> sectionOrder: []
-                // "week" | "month" — which calendar shape the timetable tab shows.
+                // "day" | "threeDay" | "week" | "month" — timetable range.
                 property string timetableView: "month"
                 property bool timetableShowUpcoming: true
                 // "comfortable" | "compact" | "dots" — month-cell density.

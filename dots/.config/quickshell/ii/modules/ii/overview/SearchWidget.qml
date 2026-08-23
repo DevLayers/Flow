@@ -110,6 +110,8 @@ Item {
     // the latch so the timer cannot fire twice for one query.
     property bool aiAutoEngaged: false
     property bool aiModeLocked: false
+    property int searchHistoryIndex: -1
+    property bool applyingSearchHistory: false
     // Prevents a query that entered AI mode from being copied repeatedly when
     // the launcher query is cleared or the draft is restored asynchronously.
     property bool aiDraftHydrated: false
@@ -183,6 +185,16 @@ Item {
         root.aiModeLocked = true;
     }
 
+    function selectSearchHistory(direction) {
+        const entries = Array.from(Persistent.states.search.recentQueries ?? []);
+        if (entries.length === 0)
+            return;
+        root.searchHistoryIndex = Math.max(-1, Math.min(entries.length - 1, root.searchHistoryIndex + direction));
+        root.applyingSearchHistory = true;
+        root.searchingText = root.searchHistoryIndex === -1 ? "" : String(entries[root.searchHistoryIndex]);
+        root.applyingSearchHistory = false;
+    }
+
     // Debounce so a query that is still matching things asynchronously does
     // not flip the whole widget into AI mode between keystrokes.
     Timer {
@@ -197,6 +209,8 @@ Item {
     }
 
     onSearchingTextChanged: {
+        if (!root.applyingSearchHistory)
+            root.searchHistoryIndex = -1;
         // Typing the prefix is one of the ways in, so it latches here rather
         // than as a reaction to the mode changing.
         if (Ai.enabled && root.searchingText.startsWith(Config.options.search.prefix.ai))
@@ -897,6 +911,12 @@ Item {
                 onOcrSelected: searchKeyRouter.dispatch("ocrSelected")
                 onCopyDispatchSelected: searchKeyRouter.dispatch("copyDispatchSelected")
                 onCreateFromQuery: searchKeyRouter.dispatch("createFromQuery")
+                onHistoryPrevious: root.selectSearchHistory(1)
+                onHistoryNext: root.selectSearchHistory(-1)
+                onToggleFavorite: {
+                    const result = LauncherSearch.results[appResults.currentIndex];
+                    LauncherSearch.toggleFavorite(result);
+                }
 
                 onEscapeToSearch: {
                     if (root.isAiMode)

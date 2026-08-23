@@ -16,6 +16,7 @@ Singleton {
 
     property string query: ""
     property int mprisTrigger: 0
+    property string processConfirmKey: ""
     readonly property int quickToggleRevision: QuickToggleRegistry.revision
     readonly property bool barOpenForSearch: GlobalStates.barOpen
     // Published by the visible Overview delegate. It is metadata only and is
@@ -34,6 +35,7 @@ Singleton {
         target: GlobalStates
         function onOverviewOpenChanged() {
             if (!GlobalStates.overviewOpen) {
+                root.rememberQuery(root.query);
                 root.query = "";
                 root.selectedResult = null;
             }
@@ -55,6 +57,16 @@ Singleton {
         } else {
             root.query = prefix + root.query;
         }
+    }
+
+    function queryUsesPrefix(value) {
+        const prefixes = SearchPanelRegistry.activePrefixes.concat([
+            Config.options.search.prefix.action, Config.options.search.prefix.app,
+            Config.options.search.prefix.fileBrowser, Config.options.search.prefix.fileSearch,
+            Config.options.search.prefix.math, Config.options.search.prefix.shellCommand,
+            Config.options.search.prefix.webSearch, Config.options.search.prefix.windowSearch
+        ]).filter(prefix => String(prefix ?? "").length > 0);
+        return prefixes.some(prefix => String(value ?? "").startsWith(prefix));
     }
 
     // Called from SearchItem to open settings - must be a QML function (not a JS closure)
@@ -225,6 +237,7 @@ Singleton {
             keepOverviewOpen: true,
             execute: () => {
                 root.query = "";
+                root.recordPanelUse(panel.id);
                 GlobalStates.openSearchPanel(panel.id);
             }
         });
@@ -330,6 +343,240 @@ Singleton {
                 })
             ]
         });
+    }
+
+    function rememberQuery(value) {
+        if (!Config.options.search.history.enable || !Persistent.ready)
+            return;
+        const query = String(value ?? "").trim();
+        if (query.length === 0)
+            return;
+        const prior = Array.from(Persistent.states.search.recentQueries ?? []).filter(item => item !== query);
+        Persistent.states.search.recentQueries = [query].concat(prior).slice(0, Math.max(1, Config.options.search.history.maxItems));
+    }
+
+    function recentQuery(offset) {
+        const entries = Array.from(Persistent.states.search.recentQueries ?? []);
+        return offset >= 0 && offset < entries.length ? String(entries[offset]) : "";
+    }
+
+    function recordPanelUse(panelId) {
+        if (!Config.options.search.frecencyData.trackPanels || !Persistent.ready)
+            return;
+        const rows = Array.from(Persistent.states.search.panelUsage ?? []);
+        const id = String(panelId ?? "");
+        const previous = rows.find(row => String(row?.id ?? "") === id) ?? ({ id: id, count: 0 });
+        const next = rows.filter(row => String(row?.id ?? "") !== id);
+        next.unshift({ id: id, count: Number(previous.count ?? 0) + 1, usedAt: Date.now() });
+        Persistent.states.search.panelUsage = next.slice(0, 64);
+    }
+
+    function toggleFavorite(result) {
+        if (!Config.options.search.favorites.enable || !result?.pinnable || !result?.key || !Persistent.ready)
+            return false;
+        const key = String(result.key);
+        if (!/^(app:|panel:|quicklink:)/.test(key))
+            return false;
+        const prior = Array.from(Persistent.states.search.pinnedEntries ?? []);
+        Persistent.states.search.pinnedEntries = prior.includes(key)
+            ? prior.filter(entry => entry !== key)
+            : [key].concat(prior).slice(0, 24);
+        return true;
+    }
+
+    function favoriteResults() {
+        if (!Config.options.search.favorites.enable)
+            return [];
+        const results = [];
+        for (const key of Array.from(Persistent.states.search.pinnedEntries ?? [])) {
+            if (key.startsWith("app:")) {
+                const app = DesktopEntries.byId(key.slice(4));
+                if (app)
+                    results.push(root.createAppResultObject(app));
+                continue;
+            }
+            if (key.startsWith("panel:")) {
+                const panel = SearchPanelRegistry.byId(key.slice(6));
+                if (panel?.enabled())
+                    results.push(root.createSearchPanelResult(panel));
+                continue;
+            }
+            if (key.startsWith("quicklink:")) {
+                const link = Array.from(Config.options.search.modules.quicklinks.links ?? [])
+                    .find(item => "quicklink:" + String(item?.alias ?? item?.url ?? "") === key);
+                if (link)
+                    results.push(root.createQuicklinkResult({ link: link, remainder: "" }));
+            }
+        }
+        return results.map(result => Object.assign({}, result, { pinned: true, type: Translation.tr("Favorite") }));
+    }
+
+    function snippetMatches(queryText: string): var {
+        if (!Config.options.search.modules.snippets.enable)
+            return [];
+        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        if (query.length === 0)
+            return [];
+        return Array.from(Config.options.search.modules.snippets.items ?? []).filter(item => {
+            const alias = String(item?.alias ?? "").toLocaleLowerCase();
+            const name = String(item?.name ?? "").toLocaleLowerCase();
+            return alias === query || alias.startsWith(query) || name.includes(query);
+        });
+    }
+
+    function expandSnippet(item) {
+        const date = Qt.formatDate(new Date(), "yyyy-MM-dd");
+        return String(item?.text ?? item?.content ?? "")
+            .split("{clipboard}").join(Quickshell.clipboardText ?? "")
+            .split("{date}").join(date)
+            .split("{cursor}").join("");
+    }
+
+    function createSnippetResult(item: var): var {
+        const text = root.expandSnippet(item);
+        return resultComp.createObject(null, {
+            key: "text-snippet:" + String(item?.alias ?? item?.name ?? ""),
+            name: String(item?.name ?? item?.alias ?? Translation.tr("Text snippet")),
+            type: Translation.tr("Text snippet"),
+            verb: Translation.tr("Copy"),
+            iconName: "content_copy",
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: text,
+            execute: () => Quickshell.clipboardText = text
+        });
+    }
+
+    function processMatches(queryText: string): var {
+        if (!Config.options.search.modules.processes.enable)
+            return [];
+        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        if (query.length < 2)
+            return [];
+        const terms = query.replace(/\b(kill|quit|process|processo|fechar)\b/g, "").trim().split(/\s+/).filter(Boolean);
+        return Array.from(ResourceUsage.topProcesses ?? []).filter(process => {
+            const name = String(process?.name ?? "").toLocaleLowerCase();
+            return terms.length > 0 ? terms.every(term => name.includes(term)) : /\b(kill|quit|process|processo|fechar)\b/.test(query);
+        });
+    }
+
+    function createProcessResult(process: var): var {
+        const key = "process:" + String(process?.pid ?? "");
+        const awaitingConfirmation = root.processConfirmKey === key;
+        return resultComp.createObject(null, {
+            key,
+            name: awaitingConfirmation
+                ? Translation.tr("%1 — press Enter again to quit").arg(String(process?.name ?? Translation.tr("Process")))
+                : String(process?.name ?? Translation.tr("Process")),
+            type: Translation.tr("Process"),
+            verb: awaitingConfirmation ? Translation.tr("Confirm") : Translation.tr("Quit"),
+            iconName: "cancel",
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: Translation.tr("PID %1 · CPU %2% · RAM %3%").arg(String(process?.pid ?? "")).arg(String(process?.cpuPercent ?? 0)).arg(String(process?.memoryPercent ?? 0)),
+            execute: () => {
+                if (root.processConfirmKey === key) {
+                    root.processConfirmKey = "";
+                    Quickshell.execDetached(["kill", "-TERM", String(process?.pid ?? "")]);
+                    return;
+                }
+                root.processConfirmKey = key;
+                root._scheduleResultsUpdate();
+            }
+        });
+    }
+
+    function generatorEntries(queryText: string): var {
+        if (!Config.options.search.modules.generators.enable)
+            return [];
+        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        if (query.length < 2)
+            return [];
+        return [
+            { id: "uuid", name: Translation.tr("Generate UUID"), keywords: ["uuid", "guid"], icon: "fingerprint" },
+            { id: "password", name: Translation.tr("Generate password"), keywords: ["password", "senha", "pass"], icon: "password" },
+            { id: "lorem", name: Translation.tr("Generate Lorem Ipsum"), keywords: ["lorem", "ipsum", "text"], icon: "notes" }
+        ].filter(entry => entry.keywords.some(keyword => keyword.includes(query)));
+    }
+
+    function generatorValue(id) {
+        if (id === "uuid") {
+            const hex = () => Math.floor(Math.random() * 16).toString(16);
+            return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, key => key === "x" ? hex() : (8 + Math.floor(Math.random() * 4)).toString(16));
+        }
+        if (id === "password") {
+            const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+            let value = "";
+            for (let index = 0; index < 20; index++)
+                value += alphabet[Math.floor(Math.random() * alphabet.length)];
+            return value;
+        }
+        return "Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
+    }
+
+    function createGeneratorResult(entry: var): var {
+        return resultComp.createObject(null, {
+            key: "generator:" + entry.id,
+            name: entry.name,
+            type: Translation.tr("Generator"),
+            verb: Translation.tr("Copy"),
+            iconName: entry.icon,
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: Translation.tr("Generated locally"),
+            execute: () => Quickshell.clipboardText = root.generatorValue(entry.id)
+        });
+    }
+
+    function modeMatches(queryText: string): var {
+        if (!Config.options.modes.enable)
+            return [];
+        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        if (query.length < 2)
+            return [];
+        return Array.from(Modes.modes ?? []).filter(mode => [mode?.name, mode?.id, mode?.description].join(" ").toLocaleLowerCase().includes(query));
+    }
+
+    function createModeResult(mode: var): var {
+        const active = Modes.activeModeId === String(mode?.id ?? "");
+        return resultComp.createObject(null, {
+            key: "mode:" + String(mode?.id ?? ""), name: String(mode?.name ?? ""), type: Translation.tr("Mode"),
+            verb: active ? Translation.tr("Turn off") : Translation.tr("Activate"), iconName: String(mode?.icon ?? "routine"),
+            iconType: LauncherSearchResult.IconType.Material, comment: String(mode?.description ?? ""), keepOverviewOpen: true,
+            execute: () => Modes.toggle(String(mode?.id ?? ""))
+        });
+    }
+
+    function bluetoothMatches(queryText: string): var {
+        if (!Config.options.search.modules.bluetooth)
+            return [];
+        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        if (query.length < 2)
+            return [];
+        return Array.from(BluetoothStatus.friendlyDeviceList ?? []).filter(device => [device?.name, device?.address].join(" ").toLocaleLowerCase().includes(query));
+    }
+
+    function createBluetoothResult(device: var): var {
+        return resultComp.createObject(null, {
+            key: "bluetooth-device:" + String(device?.address ?? ""), name: String(device?.name ?? device?.address ?? ""),
+            type: Translation.tr("Bluetooth device"), verb: device?.connected ? Translation.tr("Disconnect") : Translation.tr("Connect"),
+            iconName: "bluetooth", iconType: LauncherSearchResult.IconType.Material,
+            comment: String(device?.address ?? ""), keepOverviewOpen: true,
+            execute: () => { if (device?.connected) device.disconnect(); else device.connect(); }
+        });
+    }
+
+    function fallbackResults() {
+        if (!Config.options.search.fallbacks.enable)
+            return [];
+        const actions = Array.from(Config.options.search.fallbacks.actions ?? []);
+        const output = [];
+        if (actions.includes("ai") && Ai.enabled)
+            output.push(root.createResult({ key: "fallback:ai", name: Translation.tr("Ask AI"), type: Translation.tr("Fallback"), verb: Translation.tr("Open"), iconName: "auto_awesome", iconType: LauncherSearchResult.IconType.Material, keepOverviewOpen: true, execute: () => root.query = Config.options.search.prefix.ai + root.query }));
+        if (actions.includes("web"))
+            output.push(root.createResult({ key: "fallback:web", name: Translation.tr("Search the web"), type: Translation.tr("Fallback"), verb: Translation.tr("Search"), iconName: "travel_explore", iconType: LauncherSearchResult.IconType.Material, execute: () => Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(root.query)) }));
+        if (actions.includes("tasks") && SearchPanelRegistry.byId("tasks")?.enabled())
+            output.push(root.createSearchPanelResult(SearchPanelRegistry.byId("tasks")));
+        if (actions.includes("calendar") && SearchPanelRegistry.byId("calendar")?.enabled())
+            output.push(root.createSearchPanelResult(SearchPanelRegistry.byId("calendar")));
+        return output;
     }
 
     function cheatsheetTabMatches(queryText: string): var {
@@ -550,6 +797,7 @@ Singleton {
 
     onQueryChanged: {
         root.selectedResult = null;
+        root.processConfirmKey = "";
         fileProc.running = false;
         fileBrowserProc.running = false;
         mathProc.running = false; // Stop active math calculation instantly to resolve race conditions and QML coalescing
@@ -1121,6 +1369,9 @@ Singleton {
         //////// Prioritized by prefix /////////
         let result = [];
 
+        if (root.query.trim().length === 0)
+            result = result.concat(root.favoriteResults());
+
         // App/Folder/Command Aliases
         const aliases = Config.options?.search?.aliases ?? [];
         const aliasObjects = aliases.map(entry => {
@@ -1453,6 +1704,26 @@ Singleton {
         ////////// Shell snippets //////////////
         result = result.concat(shellSnippetObjects);
 
+        ////////// Text snippets ///////////////
+        for (const snippet of root.snippetMatches(root.query))
+            result.push(root.createSnippetResult(snippet));
+
+        ////////// Processes ///////////////////
+        for (const process of root.processMatches(root.query))
+            result.push(root.createProcessResult(process));
+
+        ////////// Modes & routines ////////////
+        for (const mode of root.modeMatches(root.query))
+            result.push(root.createModeResult(mode));
+
+        ////////// Bluetooth devices ///////////
+        for (const device of root.bluetoothMatches(root.query))
+            result.push(root.createBluetoothResult(device));
+
+        ////////// Local generators ////////////
+        for (const entry of root.generatorEntries(root.query))
+            result.push(root.createGeneratorResult(entry));
+
         ////////// Module shortcuts ////////////
         // Typing module names shows a shortcut to switch to that mode
         const moduleShortcuts = [
@@ -1539,6 +1810,12 @@ Singleton {
                 }));
             }
         }
+
+        // Fallbacks are opt-in and only appear when the regular producers
+        // found nothing. They replace the old unavoidable trio with a user
+        // ordered list, while prefix modes keep their exact behavior.
+        if (root.query.trim().length > 0 && result.length === 0 && !root.queryUsesPrefix(root.query))
+            result = result.concat(root.fallbackResults());
 
         /// Math result, command, web search ///
         if (Config.options.search.prefix.showDefaultActionsWithoutPrefix) {

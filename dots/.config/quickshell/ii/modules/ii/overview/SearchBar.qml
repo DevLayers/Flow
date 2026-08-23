@@ -70,11 +70,50 @@ RowLayout {
     signal ocrSelected
     signal copyDispatchSelected
     signal createFromQuery
+    signal historyPrevious
+    signal historyNext
+    signal toggleFavorite
     // Fired when Esc is pressed while the text is empty in AI mode — asks the
     // host to leave AI chat and return to the plain search.
     signal escapeToSearch
     // Fired when Enter is pressed in AI mode — sends the text as a message.
     signal sendMessage
+
+    function normalizedShortcut(value) {
+        return String(value ?? "").replace(/\s+/g, "").replace(/control/ig, "ctrl").toLocaleLowerCase();
+    }
+
+    function configuredShortcut(actionId, fallback) {
+        const entry = Array.from(Config.options.search.keybindings ?? [])
+            .find(binding => String(binding?.actionId ?? "") === actionId);
+        return root.normalizedShortcut(entry?.shortcut ?? fallback);
+    }
+
+    function eventShortcut(event) {
+        const parts = [];
+        if (event.modifiers & Qt.ControlModifier)
+            parts.push("ctrl");
+        if (event.modifiers & Qt.AltModifier)
+            parts.push("alt");
+        if (event.modifiers & Qt.ShiftModifier)
+            parts.push("shift");
+        if (event.modifiers & Qt.MetaModifier)
+            parts.push("meta");
+        let key = "";
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+            key = "enter";
+        else if (event.key === Qt.Key_Up)
+            key = "up";
+        else if (event.key === Qt.Key_Down)
+            key = "down";
+        else if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z)
+            key = String.fromCharCode(event.key).toLocaleLowerCase();
+        return parts.concat(key ? [key] : []).join("+");
+    }
+
+    function matchesShortcut(event, actionId, fallback) {
+        return root.eventShortcut(event) === root.configuredShortcut(actionId, fallback);
+    }
 
     function forceFocus() {
         searchInput.forceActiveFocus();
@@ -387,14 +426,17 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
-            if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)
-                    && !(event.modifiers & Qt.ShiftModifier)) {
+            if (root.matchesShortcut(event, "actions", "Ctrl+K")) {
                 root.ctrlKPressed();
                 event.accepted = true;
                 return;
             }
-            if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                    && (event.modifiers & Qt.ControlModifier) && root.activePanelMode) {
+            if (root.matchesShortcut(event, "favorite", "Ctrl+P") && !root.activePanelMode) {
+                root.toggleFavorite();
+                event.accepted = true;
+                return;
+            }
+            if (root.matchesShortcut(event, "secondary", "Ctrl+Enter") && root.activePanelMode) {
                 root.openSelectedInCheatsheet();
                 event.accepted = true;
                 return;
@@ -440,11 +482,21 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
-            if (event.key === Qt.Key_Up) {
+            if (root.matchesShortcut(event, "historyPrevious", "Up")) {
+                if (!root.activePanelMode && searchInput.text.length === 0) {
+                    root.historyPrevious();
+                    event.accepted = true;
+                    return;
+                }
                 root.navigateUp();
                 event.accepted = true;
                 return;
-            } else if (event.key === Qt.Key_Down) {
+            } else if (root.matchesShortcut(event, "historyNext", "Down")) {
+                if (!root.activePanelMode && searchInput.text.length === 0) {
+                    root.historyNext();
+                    event.accepted = true;
+                    return;
+                }
                 root.navigateDown();
                 event.accepted = true;
                 return;
