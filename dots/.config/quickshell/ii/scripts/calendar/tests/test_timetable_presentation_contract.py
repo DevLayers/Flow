@@ -65,6 +65,21 @@ class TimetablePresentationContractTests(unittest.TestCase):
             self.assertNotIn(f'placeholderText: Translation.tr("{placeholder}")', sidebar)
         self.assertNotIn("placeholderTextColor", sidebar)
 
+    def test_dashed_borders_render_as_geometry_without_a_canvas_texture(self) -> None:
+        dashed_border = (ROOT / "modules" / "common" / "widgets" / "DashedBorder.qml").read_text(encoding="utf-8")
+        sidebar = (TIMETABLE / "MonthEventSidebar.qml").read_text(encoding="utf-8")
+        secondary_action = sidebar.split("component SecondaryAction:", 1)[1].split("component DurationChip:", 1)[0]
+
+        self.assertIn("import QtQuick.Shapes", dashed_border)
+        self.assertIn("ShapePath {", dashed_border)
+        self.assertIn("PathRectangle {", dashed_border)
+        self.assertIn('fillColor: "transparent"', dashed_border)
+        self.assertIn("strokeStyle: root.gapLength > 0 ? ShapePath.DashLine : ShapePath.SolidLine", dashed_border)
+        self.assertIn("strokeAdjustment: dashedPath.strokeWidth", dashed_border)
+        self.assertNotIn("Canvas {", dashed_border)
+        self.assertNotIn('getContext("2d")', dashed_border)
+        self.assertIn("DashedBorder {", secondary_action)
+
     def test_calendar_notifications_use_an_installed_calendar_icon(self) -> None:
         notifier = (ROOT / "services" / "CalendarNotifier.qml").read_text(encoding="utf-8")
 

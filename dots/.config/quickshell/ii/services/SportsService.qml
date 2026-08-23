@@ -11,7 +11,8 @@ Item {
     // controls stay independent, but share this single data source.
     readonly property bool barEnabled: Config.options?.bar?.sports?.enable ?? false
     readonly property bool dockEnabled: Config.options?.dock?.enableSportsWidget ?? true
-    property bool enabled: barEnabled || dockEnabled
+    readonly property bool lockEnabled: Config.options?.lock?.sports ?? true
+    property bool enabled: barEnabled || dockEnabled || lockEnabled
     // AI consumers are counted separately from the visual widgets. They may
     // query a league that is not monitored by the bar, but must never cause a
     // visual selection or a Config write as a side effect.
@@ -1140,7 +1141,7 @@ Item {
 
     Timer {
         id: timetableProjectionTimer
-        interval: 0
+        interval: 16
         repeat: true
         onTriggered: root.projectNextTimetableBatch()
     }
