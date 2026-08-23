@@ -120,9 +120,11 @@ class TimetableSportsContractTests(unittest.TestCase):
         details = (TIMETABLE / "SportsEventDetails.qml").read_text(encoding="utf-8")
         scoreboard = details.split("Layout.preferredHeight: 176", 1)[1].split("        Flow {", 1)[0]
 
-        self.assertIn("Layout.preferredWidth: 82", scoreboard)
-        self.assertEqual(scoreboard.count("Layout.preferredWidth: 0"), 2)
-        self.assertEqual(scoreboard.count("Layout.minimumWidth: 0"), 2)
+        self.assertIn("id: scoreSection", scoreboard)
+        self.assertIn("anchors.centerIn: parent", scoreboard)
+        self.assertIn("width: 82", scoreboard)
+        self.assertIn("right: scoreSection.left", scoreboard)
+        self.assertIn("left: scoreSection.right", scoreboard)
 
     def test_live_refresh_runs_only_for_an_active_timetable(self) -> None:
         host = (ROOT / "modules" / "ii" / "cheatsheet" / "CheatsheetTimetable.qml").read_text(encoding="utf-8")

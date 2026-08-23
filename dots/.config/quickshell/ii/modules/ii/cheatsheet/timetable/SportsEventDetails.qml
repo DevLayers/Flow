@@ -305,25 +305,29 @@ Item {
             radius: Appearance.rounding.large
             color: Appearance.colors.colTertiaryContainer
 
-            RowLayout {
+            Item {
                 anchors.fill: parent
                 anchors.margins: 14
-                spacing: 10
 
                 TeamSummary {
-                    Layout.fillWidth: true
-                    // Both team columns must receive the same share of the
-                    // remaining row. Their implicit widths include the club
-                    // names, so leaving that as the preferred width shifts
-                    // the fixed score column toward the shorter name.
-                    Layout.preferredWidth: 0
-                    Layout.minimumWidth: 0
+                    id: homeSummary
+                    // The team columns are bounded by the fixed center
+                    // column, rather than participating in its size
+                    // negotiation. A long club name can therefore only wrap
+                    // inside its own side and never move the score or rival.
+                    anchors {
+                        left: parent.left
+                        right: scoreSection.left
+                        rightMargin: 10
+                        verticalCenter: parent.verticalCenter
+                    }
                     teamData: root.game?.home ?? null
                 }
 
                 ColumnLayout {
-                    Layout.preferredWidth: 82
-                    Layout.alignment: Qt.AlignVCenter
+                    id: scoreSection
+                    anchors.centerIn: parent
+                    width: 82
                     spacing: 4
 
                     StyledText {
@@ -352,9 +356,13 @@ Item {
                 }
 
                 TeamSummary {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 0
-                    Layout.minimumWidth: 0
+                    id: awaySummary
+                    anchors {
+                        left: scoreSection.right
+                        leftMargin: 10
+                        right: parent.right
+                        verticalCenter: parent.verticalCenter
+                    }
                     teamData: root.game?.away ?? null
                 }
             }
