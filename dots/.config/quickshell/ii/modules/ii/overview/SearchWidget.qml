@@ -85,6 +85,11 @@ Item {
     readonly property var resolvedPanel: SearchPanelRegistry.resolve(root.searchingText)
     readonly property string activePanelId: root.isAiMode ? "ai" : (root.requestedPanelId || root.resolvedPanel?.id || "")
     readonly property var activePanel: SearchPanelRegistry.byId(root.activePanelId)
+    // Registry-hosted panels have a content gutter independent from the
+    // SearchBar's own inset. Account for it in the outer width so their
+    // declared panel width remains the usable width, not the clipped width.
+    readonly property real hostedPanelSideMargin: Appearance.sizes.elevationMargin
+    readonly property bool activePanelUsesHost: root.activePanel?.hosted === true
     readonly property bool isClipboardMode: root.activePanelId === "clipboard"
     readonly property bool isBluetoothMode: root.activePanelId === "bluetooth"
     readonly property bool isTranslatorMode: root.activePanelId === "translator"
@@ -744,7 +749,7 @@ Item {
         implicitWidth: {
             let baseW = 0;
             if (root.activePanel)
-                baseW = root.activePanel.width();
+                baseW = root.activePanel.width() + (root.activePanelUsesHost ? root.hostedPanelSideMargin * 2 : 0);
             else
                 baseW = Math.max(Config.options.search.baseWidth, gridLayout.implicitWidth);
 
@@ -947,8 +952,7 @@ Item {
                 // A GridLayout cell may only have one direct child. The
                 // regular results and the registry-backed panels alternate
                 // inside this surface instead of competing for that cell.
-                readonly property bool registeredPanelActive: root.activePanelId === "settings"
-                    || root.activePanelId === "keybinds"
+                readonly property bool registeredPanelActive: root.activePanelUsesHost
                 Layout.fillWidth: true
                 implicitHeight: registeredPanelActive
                     ? (registeredPanelHostLoader.item?.implicitHeight ?? 0)
@@ -1513,7 +1517,12 @@ Item {
 
                     active: searchResultsSurface.registeredPanelActive
                     visible: active
-                    anchors.fill: parent
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: root.hostedPanelSideMargin
+                    anchors.rightMargin: root.hostedPanelSideMargin
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
 
                     sourceComponent: Component {
                         SearchPanelHost {
