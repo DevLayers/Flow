@@ -303,6 +303,9 @@ Singleton {
                 // "week" | "month" — which calendar shape the timetable tab shows.
                 property string timetableView: "month"
                 property bool timetableShowUpcoming: true
+                // `occurrence-ms|uid|offset` and daily-summary keys. Pruned by
+                // CalendarNotifier so notifications do not repeat after reload.
+                property list<string> timetableNotified: []
             }
 
             property JsonObject clipboard: JsonObject {

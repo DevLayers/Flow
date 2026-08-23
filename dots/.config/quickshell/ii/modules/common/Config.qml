@@ -3031,6 +3031,16 @@ Singleton {
                     property string countryCode: "auto"
                     property bool showInMonthView: true
                 }
+                property JsonObject timetable: JsonObject {
+                    property JsonObject notifications: JsonObject {
+                        property bool enable: true
+                        property list<string> offsets: ["-15m"]
+                        property bool dailySummary: false
+                        property string dailySummaryTime: "08:00"
+                        property bool notifyAllDay: true
+                        property bool sound: false
+                    }
+                }
             }
 
             property JsonObject cheatsheet: JsonObject {

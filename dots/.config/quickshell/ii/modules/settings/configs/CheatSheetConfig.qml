@@ -5,9 +5,23 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 
-ContentPage {
-    id: page
-    forceWidth: false
+Item {
+    id: root
+    anchors.fill: parent
+
+    property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
+
+    function openSubPage(url) {
+        subPageOverlay.open(Qt.resolvedUrl(url));
+    }
+
+    ContentPage {
+        id: page
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
+        visible: opacity > 0
 
     KeyboardShortcutBox {
         Layout.fillWidth: true
@@ -156,6 +170,18 @@ ContentPage {
                 }
             }
 
+            Item { Layout.preferredHeight: 4 }
+
+            ServiceCard {
+                enabled: Config.options.cheatsheet.enableTimetable
+                cardIcon: "notifications_active"
+                cardHue: 275
+                cardShape: "Cookie9Sided"
+                title: Translation.tr("Timetable notifications")
+                description: Translation.tr("Configure event reminders and daily calendar summaries")
+                onOpenCard: root.openSubPage("widgets/TimetableConfig.qml")
+            }
+
             ConfigSwitch {
                 buttonIcon: "experiment"
                 text: Translation.tr("Enable Elements")
@@ -235,5 +261,11 @@ ContentPage {
                 }
             }
         }
+    }
+
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }

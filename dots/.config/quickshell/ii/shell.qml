@@ -46,6 +46,7 @@ ShellRoot {
         SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled
         VideoColorSampler.active; // Touch singleton to initialize
         WaterReminderService.enabled; // Touch singleton: drives water reminder notifications
+        CalendarNotifier.enabled; // Touch singleton: evaluates calendar VALARMs every minute
         GoogleDriveService.configured; // Touch singleton: keeps scheduled backups independent of Settings
         AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
         Modes.ready; // Touch singleton: the modes engine must watch triggers whether or not its overlay is open
