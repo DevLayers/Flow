@@ -47,6 +47,7 @@ class TimetablePresentationContractTests(unittest.TestCase):
 
         for placeholder in ("Add a label", "Add meeting link", "Add location"):
             self.assertIn(f'Translation.tr("{placeholder}")', sidebar)
+        self.assertNotIn("placeholderTextColor", sidebar)
 
 
 if __name__ == "__main__":

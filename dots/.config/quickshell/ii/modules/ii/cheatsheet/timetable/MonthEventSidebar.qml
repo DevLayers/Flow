@@ -1090,7 +1090,6 @@ Item {
                                         Layout.fillWidth: true
                                         color: Appearance.colors.colOnSurface
                                         placeholderText: Translation.tr("Add a label")
-                                        placeholderTextColor: Appearance.m3colors.m3outline
                                         Keys.onReturnPressed: root.addCategory()
                                     }
 
@@ -1140,7 +1139,6 @@ Item {
                                         Layout.fillWidth: true
                                         text: root.formUrl
                                         placeholderText: Translation.tr("Add meeting link")
-                                        placeholderTextColor: Appearance.m3colors.m3outline
                                         onTextChanged: root.formUrl = text
                                         color: Appearance.colors.colOnSurface
                                     }
@@ -1159,7 +1157,6 @@ Item {
                                         Layout.fillWidth: true
                                         text: root.formLocation
                                         placeholderText: Translation.tr("Add location")
-                                        placeholderTextColor: Appearance.m3colors.m3outline
                                         onTextChanged: root.formLocation = text
                                         color: Appearance.colors.colOnSurface
                                     }
