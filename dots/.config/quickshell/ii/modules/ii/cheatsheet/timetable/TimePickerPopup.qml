@@ -195,7 +195,7 @@ Item {
     Rectangle {
         id: card
         anchors.centerIn: parent
-        width: cardColumn.implicitWidth + 44
+        width: cardColumn.width + 44
         height: Math.min(cardColumn.implicitHeight + 44, root.height - 24)
         radius: Appearance.rounding.large
         color: Appearance.m3colors.m3surfaceContainerHigh
@@ -218,6 +218,7 @@ Item {
         Column {
             id: cardColumn
             anchors.centerIn: parent
+            width: Math.max(root.dialSize, timeFields.implicitWidth)
             spacing: 14
 
             StyledText {
@@ -228,8 +229,14 @@ Item {
             }
 
             // ─── Typed value ───
-            Row {
-                spacing: 8
+            Item {
+                width: cardColumn.width
+                height: timeFields.implicitHeight
+
+                Row {
+                    id: timeFields
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 8
 
                 Rectangle {
                     id: hourBox
@@ -353,13 +360,19 @@ Item {
                         onPicked: root.setMeridiem(true)
                     }
                 }
+                }
             }
 
             // ─── Dial ───
             Item {
-                id: dial
-                width: root.dialSize
+                width: cardColumn.width
                 height: root.dialSize
+
+                Item {
+                    id: dial
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: root.dialSize
+                    height: root.dialSize
 
                 Rectangle {
                     anchors.fill: parent
@@ -457,11 +470,12 @@ Item {
                     }
                     onReleased: mouse => root.applyDialPoint(mouse.x, mouse.y, true)
                 }
+                }
             }
 
             // ─── Actions ───
             Item {
-                width: dial.width
+                width: cardColumn.width
                 height: 46
 
                 RippleButtonWithIcon {

@@ -1089,6 +1089,8 @@ Item {
                                         id: categoryInput
                                         Layout.fillWidth: true
                                         color: Appearance.colors.colOnSurface
+                                        placeholderText: Translation.tr("Add a label")
+                                        placeholderTextColor: Appearance.m3colors.m3outline
                                         Keys.onReturnPressed: root.addCategory()
                                     }
 
@@ -1133,7 +1135,15 @@ Item {
                                 radius: Appearance.rounding.small; color: Appearance.m3colors.m3surfaceContainerHighest
                                 RowLayout { anchors.fill: parent; anchors.margins: 10; spacing: 10
                                     MaterialShapeWrappedMaterialSymbol { text: "link"; iconSize: 18; padding: 9; shape: MaterialShape.Shape.Cookie7Sided; color: Appearance.colors.colPrimaryContainer; colSymbol: Appearance.colors.colOnPrimaryContainer }
-                                    StyledTextInput { id: linkInput; Layout.fillWidth: true; text: root.formUrl; onTextChanged: root.formUrl = text; color: Appearance.colors.colOnSurface }
+                                    StyledTextInput {
+                                        id: linkInput
+                                        Layout.fillWidth: true
+                                        text: root.formUrl
+                                        placeholderText: Translation.tr("Add meeting link")
+                                        placeholderTextColor: Appearance.m3colors.m3outline
+                                        onTextChanged: root.formUrl = text
+                                        color: Appearance.colors.colOnSurface
+                                    }
                                     RippleButton { visible: EmailDetections.detectAll(root.formUrl).meetings.length > 0; implicitWidth: 34; implicitHeight: 34; buttonRadius: Appearance.rounding.full; colBackground: Appearance.colors.colPrimaryContainer; onClicked: Qt.openUrlExternally(root.formUrl); contentItem: MaterialSymbol { anchors.centerIn: parent; text: "video_call"; color: Appearance.colors.colOnPrimaryContainer } }
                                 }
                             }
@@ -1144,7 +1154,15 @@ Item {
                                 radius: Appearance.rounding.small; color: Appearance.m3colors.m3surfaceContainerHighest
                                 RowLayout { anchors.fill: parent; anchors.margins: 10; spacing: 10
                                     MaterialShapeWrappedMaterialSymbol { text: "place"; iconSize: 18; padding: 9; shape: MaterialShape.Shape.Cookie7Sided; color: Appearance.colors.colPrimaryContainer; colSymbol: Appearance.colors.colOnPrimaryContainer }
-                                    StyledTextInput { id: locationInput; Layout.fillWidth: true; text: root.formLocation; onTextChanged: root.formLocation = text; color: Appearance.colors.colOnSurface }
+                                    StyledTextInput {
+                                        id: locationInput
+                                        Layout.fillWidth: true
+                                        text: root.formLocation
+                                        placeholderText: Translation.tr("Add location")
+                                        placeholderTextColor: Appearance.m3colors.m3outline
+                                        onTextChanged: root.formLocation = text
+                                        color: Appearance.colors.colOnSurface
+                                    }
                                     RippleButton { visible: root.formLocation.length > 0; implicitWidth: 34; implicitHeight: 34; buttonRadius: Appearance.rounding.full; colBackground: "transparent"; onClicked: Quickshell.execDetached(["xdg-open", "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(root.formLocation)]); contentItem: MaterialSymbol { anchors.centerIn: parent; text: "map"; color: Appearance.colors.colPrimary } }
                                 }
                             }

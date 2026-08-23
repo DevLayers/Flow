@@ -5,7 +5,7 @@ import QtQuick
 import QtQuick.Layouts
 import "TimetableHelpers.js" as H
 
-RowLayout {
+Flow {
     id: root
 
     property string currentToken: ""
@@ -17,7 +17,11 @@ RowLayout {
         { token: "primary", label: Translation.tr("Primary") },
         { token: "secondary", label: Translation.tr("Secondary") },
         { token: "tertiary", label: Translation.tr("Tertiary") },
-        { token: "error", label: Translation.tr("Error") }
+        { token: "error", label: Translation.tr("Error") },
+        { token: "primaryContainer", label: Translation.tr("Primary container") },
+        { token: "secondaryContainer", label: Translation.tr("Secondary container") },
+        { token: "tertiaryContainer", label: Translation.tr("Tertiary container") },
+        { token: "errorContainer", label: Translation.tr("Error container") }
     ]
 
     spacing: 6
@@ -26,6 +30,7 @@ RowLayout {
         model: root.includeCalendarDefault ? root.options : root.options.slice(1)
 
         delegate: RippleButton {
+            id: colorButton
             required property var modelData
 
             readonly property bool selected: root.currentToken === modelData.token
@@ -37,7 +42,7 @@ RowLayout {
             implicitHeight: 34
             buttonRadius: Appearance.rounding.full
             colBackground: tokenColor
-            colBackgroundHover: ColorUtils.mix(tokenColor, Appearance.colors.colOnSurface, 0.88)
+            colBackgroundHover: H.themeHoverColorForToken(modelData.token, Appearance.colors)
             onClicked: root.tokenSelected(modelData.token)
 
             contentItem: MaterialSymbol {
@@ -49,7 +54,7 @@ RowLayout {
             }
 
             StyledToolTip {
-                extraVisibleCondition: parent.hovered
+                extraVisibleCondition: colorButton.hovered
                 text: modelData.label
             }
         }

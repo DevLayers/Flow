@@ -450,7 +450,7 @@ Item {
         }
 
         StyledToolTip {
-            extraVisibleCondition: taskPointer.containsMouse
+            extraVisibleCondition: taskPointer.hovered
             text: taskChip.overdue
                 ? Translation.tr("Overdue · %1").arg(Qt.formatDate(taskChip.dueDate, Locale.ShortFormat))
                 : taskChip.titleText

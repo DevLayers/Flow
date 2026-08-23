@@ -264,6 +264,7 @@ Item {
                 Layout.fillWidth: true; spacing: 8
 
                 RippleButton {
+                    id: deleteEventButton
                     visible: popup.isEditMode
                     implicitWidth: 36; implicitHeight: 36
                     buttonRadius: Appearance.rounding.full
@@ -274,7 +275,7 @@ Item {
                         anchors.centerIn: parent
                         text: "delete"; font.pixelSize: 18; color: Appearance.m3colors.m3error
                     }
-                    StyledToolTip { extraVisibleCondition: parent.hovered; text: Translation.tr("Delete event") }
+                    StyledToolTip { extraVisibleCondition: deleteEventButton.hovered; text: Translation.tr("Delete event") }
                 }
 
                 Item { Layout.fillWidth: true }

@@ -312,7 +312,25 @@ function themeColorForToken(token, palette) {
     case "primarycontainer": return palette.colPrimaryContainer;
     case "secondarycontainer": return palette.colSecondaryContainer;
     case "tertiarycontainer": return palette.colTertiaryContainer;
+    case "errorcontainer": return palette.colErrorContainer;
     default: return null;
+    }
+}
+
+// Keep interaction feedback in the same Material semantic family as the
+// persisted event token. Mixing a saturated token with on-surface turns it
+// nearly black in dark schemes instead of yielding its intended hover color.
+function themeHoverColorForToken(token, palette) {
+    switch (String(token || "").trim().toLowerCase()) {
+    case "primary": return palette.colPrimaryHover;
+    case "secondary": return palette.colSecondaryHover;
+    case "tertiary": return palette.colTertiaryHover;
+    case "error": return palette.colErrorHover;
+    case "primarycontainer": return palette.colPrimaryContainerHover;
+    case "secondarycontainer": return palette.colSecondaryContainerHover;
+    case "tertiarycontainer": return palette.colTertiaryContainerHover;
+    case "errorcontainer": return palette.colErrorContainerHover;
+    default: return palette.colSurfaceContainerHighestHover;
     }
 }
 
