@@ -67,7 +67,6 @@ Item {
             result.push({
                 name: String(calendarDay.name || Qt.formatDate(date, "dddd")),
                 events: calendarDay.events ?? [],
-                tasks: root.tasksForDay(date),
                 sportsDate: date,
                 sportsCount: games.length
             });
@@ -82,8 +81,7 @@ Item {
         let maxCount = 0;
         for (let i = 0; i < root.days.length; i++) {
             const sportsCount = Number(root.days[i]?.sportsCount ?? 0) > 0 ? 1 : 0;
-            const taskCount = root.days[i]?.tasks?.length ?? 0;
-            const count = H.getAllDayEvents(root.days[i]?.events).length + sportsCount + taskCount;
+            const count = H.getAllDayEvents(root.days[i]?.events).length + sportsCount;
             if (count > maxCount)
                 maxCount = count;
         }
@@ -236,19 +234,6 @@ Item {
             return;
         }
         eventSidebar.showSportsDay(date);
-    }
-
-    function tasksForDay(date) {
-        const isToday = H.sameDate(date, DateTime.clock.date);
-        const overdueTasks = Todo.getOverdueTasks(DateTime.clock.date);
-        const dueTasks = Todo.getTasksByDate(date).filter(task => {
-            // Providers normalize undated tasks to the current timestamp for
-            // sorting. They must not become due-today chips in the week grid.
-            if (task?.hasDate !== true || task.done)
-                return false;
-            return isToday || !overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? ""));
-        });
-        return isToday ? overdueTasks.concat(dueTasks) : dueTasks;
     }
 
     function eventMinutes(date) {
@@ -515,7 +500,6 @@ Item {
             allDayChipHeight: root.allDayChipHeight
             allDayChipSpacing: root.allDayChipSpacing
             onSportsDayActivated: date => root.toggleSportsDay(date)
-            onTaskCompletionRequested: task => Todo.markDone(task)
         }
 
         Rectangle {

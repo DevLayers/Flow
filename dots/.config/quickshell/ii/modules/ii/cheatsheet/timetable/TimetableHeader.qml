@@ -19,7 +19,6 @@ Row {
     property int allDayChipSpacing
 
     signal sportsDayActivated(var date)
-    signal taskCompletionRequested(var task)
 
     height: headerHeight
     spacing: itemSpacing
@@ -55,10 +54,9 @@ Row {
             height: headerHeight
 
             readonly property var allDayEvents: H.getAllDayEvents(modelData.events)
-            readonly property var tasks: modelData.tasks ?? []
             readonly property int sportsCount: Number(modelData.sportsCount ?? 0)
             readonly property date sportsDate: modelData.sportsDate ?? new Date()
-            readonly property bool hasHeaderChips: dayDelegate.allDayEvents.length > 0 || dayDelegate.tasks.length > 0 || dayDelegate.sportsCount > 0
+            readonly property bool hasHeaderChips: dayDelegate.allDayEvents.length > 0 || dayDelegate.sportsCount > 0
 
             Rectangle {
                 id: dayTitleRect
@@ -113,18 +111,6 @@ Row {
                     StyledToolTip {
                         extraVisibleCondition: sportsDayChip.hovered
                         text: Translation.tr("Sports") + " · " + Qt.formatDate(dayDelegate.sportsDate, "dddd, d MMMM")
-                    }
-                }
-
-                Repeater {
-                    model: dayDelegate.tasks
-
-                    delegate: TaskChip {
-                        width: parent.width
-                        height: allDayChipHeight
-                        taskData: modelData
-                        compact: true
-                        onCompletionRequested: task => headerRow.taskCompletionRequested(task)
                     }
                 }
 
