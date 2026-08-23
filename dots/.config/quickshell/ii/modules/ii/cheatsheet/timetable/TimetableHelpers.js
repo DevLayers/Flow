@@ -12,6 +12,10 @@ function minutesToY(totalMinutes, startHour, startMinute, pixelsPerMinute) {
     return (totalMinutes - (startHour * 60 + startMinute)) * pixelsPerMinute;
 }
 
+function timedBlockHeight(startMinutes, endMinutes, pixelsPerMinute, gap) {
+    return Math.max(1, (endMinutes - startMinutes) * pixelsPerMinute - gap);
+}
+
 function minutesToTimeStr(totalMinutes, format) {
     let clamped = Math.max(0, Math.min(totalMinutes, 24 * 60));
     let hour = Math.floor(clamped / 60);

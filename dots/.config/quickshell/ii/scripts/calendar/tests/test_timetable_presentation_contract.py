@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -16,15 +18,51 @@ class TimetablePresentationContractTests(unittest.TestCase):
         persistent = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
 
-        self.assertIn("property int timetableSlotHeight: 56", persistent)
-        self.assertIn("readonly property list<int> slotHeightSteps: [40, 56, 72, 96, 120]", week)
+        self.assertIn("property int timetableSlotHeight: 96", persistent)
+        self.assertIn("readonly property list<int> slotHeightSteps: [72, 96, 120]", week)
         self.assertIn("property int slotHeight: Persistent.states.cheatsheet.timetableSlotHeight", week)
+        self.assertIn("function normalizeSlotHeight()", week)
+        self.assertIn("Persistent.states.cheatsheet.timetableSlotHeight = root.slotHeightSteps[1]", week)
         self.assertIn("function zoomSlotHeight(direction, viewportY)", week)
         self.assertIn("acceptedModifiers: Qt.ControlModifier", week)
         self.assertIn("root.zoomSlotHeight(root.zoomWheelAccumulator > 0 ? 1 : -1, event.y)", week)
         self.assertNotIn("event.position.y", week)
         self.assertIn("Persistent.states.cheatsheet.timetableSlotHeight = nextHeight", week)
         self.assertIn("const focalMinutes = (styledFlickable.contentY + focalY) / oldPixelsPerMinute", week)
+
+    def test_timed_blocks_never_outgrow_their_time_span(self) -> None:
+        helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
+        block = (TIMETABLE / "EventBlock.qml").read_text(encoding="utf-8")
+        column = (TIMETABLE / "TimetableDayColumn.qml").read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+
+        self.assertIn("function timedBlockHeight(startMinutes, endMinutes, pixelsPerMinute, gap)", helper)
+        self.assertIn("return Math.max(1, (endMinutes - startMinutes) * pixelsPerMinute - gap);", helper)
+        self.assertIn("height: H.timedBlockHeight(eventStartMinutes, eventEndMinutes, pixelsPerMinute, eventSpacing)", block)
+        self.assertIn("eventSpacing: dayColumn.eventSpacing", column)
+        self.assertIn("eventSpacing: root.spacing / 2", week)
+        self.assertIn("height: H.timedBlockHeight(root.timedMutationStartMinutes, root.timedMutationEndMinutes, root.pixelsPerMinute, root.spacing / 2)", week)
+        self.assertNotIn("Math.max((eventEndMinutes - eventStartMinutes) * pixelsPerMinute - 4, 48)", block)
+
+    def test_dense_timed_block_geometry_stays_disjoint(self) -> None:
+        helper_path = TIMETABLE / "TimetableHelpers.js"
+        script = f"""
+const fs = require("fs");
+const vm = require("vm");
+const source = fs.readFileSync({json.dumps(str(helper_path))}, "utf8")
+    .replace(/^\\.pragma library\\s*/, "");
+const context = {{}};
+vm.createContext(context);
+vm.runInContext(source, context);
+for (const slotHeight of [72, 96, 120]) {{
+    const pixelsPerMinute = slotHeight / 60;
+    const timeSpan = 30 * pixelsPerMinute;
+    const blockHeight = context.timedBlockHeight(0, 30, pixelsPerMinute, 4);
+    if (blockHeight !== timeSpan - 4 || blockHeight >= timeSpan)
+        throw new Error(JSON.stringify({{slotHeight, timeSpan, blockHeight}}));
+}}
+"""
+        subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
     def test_week_grid_draws_one_shared_hour_ruler(self) -> None:
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")

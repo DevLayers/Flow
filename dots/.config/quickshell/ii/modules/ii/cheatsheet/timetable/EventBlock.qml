@@ -18,6 +18,7 @@ Rectangle {
     property int dayIdx
     property var nextEventData
     property real pixelsPerMinute
+    property real eventSpacing
     property int startHour
     property int startMinute
     property Item coordinateRoot: null
@@ -61,7 +62,7 @@ Rectangle {
         ? ColorUtils.mix(eventBlock.semanticColor, ColorUtils.getContrastingTextColor(eventBlock.semanticColor), 0.88)
         : eventBlock.semanticColor
     y: H.minutesToY(eventStartMinutes, startHour, startMinute, pixelsPerMinute)
-    height: Math.max((eventEndMinutes - eventStartMinutes) * pixelsPerMinute - 4, 48)
+    height: H.timedBlockHeight(eventStartMinutes, eventEndMinutes, pixelsPerMinute, eventSpacing)
     opacity: eventBlock.manipulating ? 0.24 : 1
 
     // Decorative watermark icon for the next event

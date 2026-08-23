@@ -21,7 +21,7 @@ Item {
     property int startMinute: 0
     property int endHour: 24
     property int slotDuration: 60 // in minutes
-    readonly property list<int> slotHeightSteps: [40, 56, 72, 96, 120]
+    readonly property list<int> slotHeightSteps: [72, 96, 120]
     property int slotHeight: Persistent.states.cheatsheet.timetableSlotHeight
     property int timeColumnWidth: 56
     property real maxContentWidth: 1600
@@ -247,6 +247,12 @@ Item {
             const targetY = focalMinutes * root.pixelsPerMinute - focalY;
             styledFlickable.contentY = Math.max(0, Math.min(targetY, styledFlickable.contentHeight - styledFlickable.height));
         });
+    }
+
+    function normalizeSlotHeight() {
+        if (root.slotHeightSteps.indexOf(root.slotHeight) >= 0)
+            return;
+        Persistent.states.cheatsheet.timetableSlotHeight = root.slotHeightSteps[1];
     }
 
     function maybeApplyInitialScroll() {
@@ -662,6 +668,7 @@ Item {
     }
 
     Component.onCompleted: {
+        root.normalizeSlotHeight();
         root.componentReady = true;
         root.restartDayLoading();
         root.ensureDataForView();
@@ -1028,6 +1035,7 @@ Item {
                                     dayColumnWidth: root.dayColumnWidth
                                     contentHeight: root.contentHeight
                                     pixelsPerMinute: root.pixelsPerMinute
+                                    eventSpacing: root.spacing / 2
                                     startHour: root.startHour
                                     startMinute: root.startMinute
                                     snapInterval: 15
@@ -1149,7 +1157,7 @@ Item {
         visible: root.timedMutationEvent !== null && root.timedMutationDayIndex >= 0
         z: 24
         width: Math.max(32, root.dayColumnWidth - 10)
-        height: Math.max((root.timedMutationEndMinutes - root.timedMutationStartMinutes) * root.pixelsPerMinute - 4, 48)
+        height: H.timedBlockHeight(root.timedMutationStartMinutes, root.timedMutationEndMinutes, root.pixelsPerMinute, root.spacing / 2)
         radius: Appearance.rounding.normal
         color: H.chipColor(root.timedMutationEvent, Appearance.colors)
         opacity: 0.96

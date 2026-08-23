@@ -18,6 +18,7 @@ Item {
     property real dayColumnWidth
     property real contentHeight
     property real pixelsPerMinute
+    property real eventSpacing
     property int startHour
     property int startMinute
     property int snapInterval
@@ -253,6 +254,7 @@ Item {
             dayIdx: dayColumn.dayIdx
             nextEventData: dayColumn.nextEventData
             pixelsPerMinute: dayColumn.pixelsPerMinute
+            eventSpacing: dayColumn.eventSpacing
             startHour: dayColumn.startHour
             startMinute: dayColumn.startMinute
             coordinateRoot: dayColumn.coordinateRoot
