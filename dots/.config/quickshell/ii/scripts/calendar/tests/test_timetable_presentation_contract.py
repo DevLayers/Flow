@@ -48,6 +48,16 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("text: DateTime.time", current_time)
         self.assertIn("anchors.verticalCenter: parent.verticalCenter", current_time)
 
+    def test_week_header_reuses_daily_weather_forecast(self) -> None:
+        header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")
+
+        self.assertIn("readonly property var forecast:", header)
+        self.assertIn("(Weather.forecastData ?? []).find", header)
+        self.assertIn("WeatherIcons.getWeatherIcon(dayDelegate.forecast?.code ?? 113, false)", header)
+        self.assertIn("Weather.useUSCS ? dayDelegate.forecast?.maxF", header)
+        self.assertIn("Weather.useUSCS ? dayDelegate.forecast?.minF", header)
+        self.assertIn("dayDelegate.width > 104", header)
+
     def test_all_day_lane_caps_rows_and_expands_with_internal_scroll(self) -> None:
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
         header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")

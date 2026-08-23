@@ -80,6 +80,10 @@ Row {
             readonly property var allDayEvents: H.getAllDayEvents(modelData.events)
             readonly property int sportsCount: Number(modelData.sportsCount ?? 0)
             readonly property date sportsDate: modelData.sportsDate ?? new Date()
+            readonly property var forecast: {
+                const key = H.dayKeyOf(dayDelegate.sportsDate);
+                return (Weather.forecastData ?? []).find(day => String(day?.date ?? "") === key) ?? null;
+            }
             readonly property bool hasHeaderChips: dayDelegate.allDayEvents.length > 0 || dayDelegate.sportsCount > 0
             readonly property int headerChipCount: dayDelegate.allDayEvents.length + (dayDelegate.sportsCount > 0 ? 1 : 0)
             readonly property int hiddenChipCount: Math.max(0, dayDelegate.headerChipCount - 2)
@@ -100,34 +104,88 @@ Row {
                 colBackgroundActive: Appearance.colors.colSurfaceContainerHighest
                 onClicked: headerRow.dayActivated(dayDelegate.sportsDate)
 
-                contentItem: Column {
-                    anchors.centerIn: parent
-                    spacing: 0
-
-                    StyledText {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: Qt.formatDate(dayDelegate.sportsDate, "ddd").toUpperCase()
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        font.weight: Font.Bold
-                        color: Appearance.colors.colOnSurfaceVariant
-                        elide: Text.ElideRight
-                    }
-
-                    Rectangle {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: Math.max(Appearance.font.pixelSize.large + 8, dayNumber.implicitWidth + 12)
-                        height: Appearance.font.pixelSize.large + 8
-                        radius: Appearance.rounding.full
-                        color: dayTitleButton.isToday ? Appearance.colors.colPrimary : H.withOpacity(Appearance.colors.colSurface, 0)
+                contentItem: Item {
+                    Column {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 0
 
                         StyledText {
-                            id: dayNumber
-                            anchors.centerIn: parent
-                            text: String(dayDelegate.sportsDate.getDate())
-                            font.family: Appearance.font.family.numbers
-                            font.pixelSize: Appearance.font.pixelSize.large
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: Qt.formatDate(dayDelegate.sportsDate, "ddd").toUpperCase()
+                            font.pixelSize: Appearance.font.pixelSize.smallest
                             font.weight: Font.Bold
-                            color: dayTitleButton.isToday ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            color: Appearance.colors.colOnSurfaceVariant
+                            elide: Text.ElideRight
+                        }
+
+                        Rectangle {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: Math.max(Appearance.font.pixelSize.large + 8, dayNumber.implicitWidth + 12)
+                            height: Appearance.font.pixelSize.large + 8
+                            radius: Appearance.rounding.full
+                            color: dayTitleButton.isToday ? Appearance.colors.colPrimary : H.withOpacity(Appearance.colors.colSurface, 0)
+
+                            StyledText {
+                                id: dayNumber
+                                anchors.centerIn: parent
+                                text: String(dayDelegate.sportsDate.getDate())
+                                font.family: Appearance.font.family.numbers
+                                font.pixelSize: Appearance.font.pixelSize.large
+                                font.weight: Font.Bold
+                                color: dayTitleButton.isToday ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            }
+                        }
+                    }
+
+                    Row {
+                        id: forecastRow
+                        visible: dayDelegate.forecast !== null && dayDelegate.width > 104
+                        anchors.right: parent.right
+                        anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 3
+
+                        Image {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Appearance.font.pixelSize.large
+                            height: width
+                            source: WeatherIcons.getWeatherIcon(dayDelegate.forecast?.code ?? 113, false)
+                            sourceSize: Qt.size(width, height)
+                            fillMode: Image.PreserveAspectFit
+                        }
+
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: -2
+
+                            StyledText {
+                                text: String(Weather.useUSCS ? dayDelegate.forecast?.maxF ?? "" : dayDelegate.forecast?.maxC ?? "") + "°"
+                                font.family: Appearance.font.family.numbers
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colOnSurface
+                            }
+
+                            StyledText {
+                                text: String(Weather.useUSCS ? dayDelegate.forecast?.minF ?? "" : dayDelegate.forecast?.minC ?? "") + "°"
+                                font.family: Appearance.font.family.numbers
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
+                        }
+
+                        HoverHandler {
+                            id: forecastHover
+                        }
+
+                        StyledToolTip {
+                            extraVisibleCondition: forecastHover.hovered
+                            text: Translation.tr("Forecast · %1° / %2°")
+                                .arg(String(Weather.useUSCS ? dayDelegate.forecast?.minF ?? "" : dayDelegate.forecast?.minC ?? ""))
+                                .arg(String(Weather.useUSCS ? dayDelegate.forecast?.maxF ?? "" : dayDelegate.forecast?.maxC ?? ""))
                         }
                     }
                 }
