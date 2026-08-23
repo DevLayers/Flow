@@ -144,6 +144,12 @@ Singleton {
             configPage: "IndicatorsConfig.qml"
         },
         {
+            id: "dictation_indicator",
+            icon: "mic",
+            title: "Dictation indicator",
+            pageId: "dictation"
+        },
+        {
             id: "screen_share_indicator",
             icon: "screen_share",
             title: "Screen share indicator",

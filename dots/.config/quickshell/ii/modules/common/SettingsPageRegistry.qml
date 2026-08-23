@@ -167,6 +167,14 @@ Singleton {
             "aliases": ["App Search", "Search Prefixes", "App Aliases"]
         },
         {
+            "id": "dictation",
+            "name": "Dictation",
+            "icon": "mic",
+            "component": "modules/settings/configs/DictationConfig.qml",
+            "subPages": [],
+            "aliases": ["Speech to text", "Voice typing", "Voxtype", "Whisper", "Transcription", "Dictate"]
+        },
+        {
             "id": "clipboard",
             "name": "Clipboard",
             "icon": "content_paste",
@@ -351,7 +359,7 @@ Singleton {
         {
             "id": "tools",
             "name": "Tools",
-            "pageIds": ["launcher", "clipboard", "screenCapture", "notifications", "overlays", "modes", "cheatSheet"]
+            "pageIds": ["launcher", "clipboard", "dictation", "screenCapture", "notifications", "overlays", "modes", "cheatSheet"]
         },
         {
             "id": "servicesIntegrations",

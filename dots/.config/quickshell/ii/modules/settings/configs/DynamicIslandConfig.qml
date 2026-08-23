@@ -389,6 +389,22 @@ ContentPage {
         }
 
         NotchCard {
+            buttonIcon: "mic"
+            text: Translation.tr("Dictation Notch")
+            tooltip: Translation.tr("Toggle the dictation waveform notch")
+            masterEnabled: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+            notchEnabled: !Config.options.bar.floatingNotch.disableDictation
+            onNotchToggled: (enabled) => {
+                Config.options.bar.floatingNotch.disableDictation = !enabled;
+            }
+            heightLabel: Translation.tr("Dictation contracted height")
+            contractedHeight: Config.options.bar.floatingNotch.heightDictation
+            onContractedHeightEdited: (value) => {
+                Config.options.bar.floatingNotch.heightDictation = value;
+            }
+        }
+
+        NotchCard {
             buttonIcon: "auto_awesome"
             text: Translation.tr("AI Status Notch")
             tooltip: Translation.tr("Toggle the AI agent status indicator notch")

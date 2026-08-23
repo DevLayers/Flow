@@ -52,6 +52,7 @@ ShellRoot {
         TouchGestureService.enabled; // Touch singleton: starts passive touch input helper daemon
         WorkspaceCompactor.enabled; // Touch singleton: auto-compacts workspace gaps, does nothing while disabled
         IconThemes.availableThemes; // Touch singleton: arms the DynamicTheme watcher for live icon refresh
+        DictationService.installed; // Touch singleton: registers the dictation keybind, whose surfaces are all optional
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
             PhoneContactsService.available;

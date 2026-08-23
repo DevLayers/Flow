@@ -397,6 +397,8 @@ Item {
             return true;
         if (modelData.id === "record_indicator")
             return true;
+        if (modelData.id === "dictation_indicator")
+            return true;
         if (modelData.id === "phone_scrcpy_indicator")
             return true;
         if (modelData.id === "mode_indicator")
@@ -567,6 +569,8 @@ Item {
             return isVert ? timerCompVert : timerComp;
         case "record_indicator":
             return recordIndicatorComp;
+        case "dictation_indicator":
+            return dictationIndicatorComp;
         case "phone_scrcpy_indicator":
             return phoneScrcpyIndicatorComp;
         case "mode_indicator":
@@ -642,6 +646,12 @@ Item {
     Component {
         id: recordIndicatorComp
         RecordIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: dictationIndicatorComp
+        DictationIndicator {
             vertical: rootItem.vertical
         }
     }

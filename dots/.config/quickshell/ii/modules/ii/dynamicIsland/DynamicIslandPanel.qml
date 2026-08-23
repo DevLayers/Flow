@@ -40,10 +40,11 @@ Scope {
     readonly property bool osdActive: GlobalStates.osdVolumeOpen && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
     readonly property bool notificationActive: Notifications.popupList.length > 0
     readonly property bool recordingActive: (Persistent.states.screenRecord && Persistent.states.screenRecord.active) || false
+    readonly property bool dictationActive: DictationService.busy && (Config.options?.dictation?.showInIsland ?? true)
     readonly property bool pomodoroActive: TimerService.pomodoroRunning
     readonly property bool stopwatchActive: TimerService.stopwatchRunning
     readonly property bool aiStatusActive: AiStatusService.hasActiveAgents && !(Config.ready && Config.options.bar.floatingNotch.disableAiStatus)
-    readonly property bool continuousActivityActive: recordingActive || pomodoroActive || stopwatchActive || aiStatusActive || ProgressService.hasActiveJobs || LocalSend.currentTransfer !== null || LocalSend.droppedFiles.length > 0 || LocalSend.sending || root._lsServiceChoice !== 0
+    readonly property bool continuousActivityActive: recordingActive || dictationActive || pomodoroActive || stopwatchActive || aiStatusActive || ProgressService.hasActiveJobs || LocalSend.currentTransfer !== null || LocalSend.droppedFiles.length > 0 || LocalSend.sending || root._lsServiceChoice !== 0
     readonly property bool autoHideActive: Config.options.bar.floatingNotch.autoHide
     property bool activityRevealActive: false
     property int notificationCount: Notifications.popupList.length
@@ -595,6 +596,16 @@ Scope {
                 expandedW: 240
             };
         }
+        if (type === "dictation") {
+            return {
+                type: "dictation",
+                source: "widgets/FloatingNotchDictation.qml",
+                contractedH: Config.options.bar.floatingNotch.heightDictation ?? 44,
+                expandedH: 150,
+                contractedW: 290,
+                expandedW: 360
+            };
+        }
         if (type === "ai") {
             let count = (typeof AiStatusService !== "undefined" && AiStatusService.agentCount > 0) ? AiStatusService.agentCount : 1;
             return {
@@ -689,6 +700,8 @@ Scope {
             list.push(getWidgetDetails("bluetooth"));
         if (recordingActive && !Config.options.bar.floatingNotch.disableRecording)
             list.push(getWidgetDetails("recording"));
+        if (dictationActive && !Config.options.bar.floatingNotch.disableDictation)
+            list.push(getWidgetDetails("dictation"));
         if ((pomodoroActive || stopwatchActive) && !Config.options.bar.floatingNotch.disableTimer)
             list.push(getWidgetDetails(pomodoroActive ? "pomodoro" : "stopwatch"));
         return list;
@@ -734,6 +747,8 @@ Scope {
         if ((pomodoroActive || stopwatchActive) && !Config.options.bar.floatingNotch.disableTimer) {
             list.push(getWidgetDetails(pomodoroActive ? "pomodoro" : "stopwatch"));
         }
+        if (dictationActive && !Config.options.bar.floatingNotch.disableDictation)
+            list.push(getWidgetDetails("dictation"));
         if (recordingActive && !Config.options.bar.floatingNotch.disableRecording)
             list.push(getWidgetDetails("recording"));
         if (aiStatusActive && !Config.options.bar.floatingNotch.disableAiStatus)
