@@ -22,6 +22,7 @@ Row {
     property int allDayExpanderHeight
     property bool expanded: false
     property bool hasExpandableLane: false
+    readonly property date referenceDate: days?.length > 0 ? days[0].sportsDate : DateTime.clock.date
 
     signal dayActivated(var date)
     signal sportsDayActivated(var date)
@@ -33,6 +34,40 @@ Row {
     Item {
         width: timeColumnWidth
         height: headerHeight
+
+        Column {
+            anchors.top: parent.top
+            anchors.topMargin: 7
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 4
+
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: H.timezoneLabel(headerRow.referenceDate)
+                font.family: Appearance.font.family.numbers
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                font.weight: Font.Medium
+                color: Appearance.colors.colOnSurfaceVariant
+            }
+
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: weekNumberText.implicitWidth + 12
+                height: weekNumberText.implicitHeight + 5
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colLayer2
+
+                StyledText {
+                    id: weekNumberText
+                    anchors.centerIn: parent
+                    text: "W" + String(H.isoWeekNumber(headerRow.referenceDate))
+                    font.family: Appearance.font.family.numbers
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnLayer2
+                }
+            }
+        }
     }
 
     Repeater {

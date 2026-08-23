@@ -36,6 +36,18 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("anchors.right: parent.right", time_column)
         self.assertIn("horizontalAlignment: Text.AlignRight", time_column)
 
+    def test_week_gutter_identifies_timezone_and_iso_week(self) -> None:
+        helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
+        header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")
+        current_time = (TIMETABLE / "TimetableCurrentTime.qml").read_text(encoding="utf-8")
+
+        self.assertIn("function timezoneLabel(date)", helper)
+        self.assertIn("function isoWeekNumber(date)", helper)
+        self.assertIn("H.timezoneLabel(headerRow.referenceDate)", header)
+        self.assertIn('text: "W" + String(H.isoWeekNumber(headerRow.referenceDate))', header)
+        self.assertIn("text: DateTime.time", current_time)
+        self.assertIn("anchors.verticalCenter: parent.verticalCenter", current_time)
+
     def test_all_day_lane_caps_rows_and_expands_with_internal_scroll(self) -> None:
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
         header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")

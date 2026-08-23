@@ -158,6 +158,23 @@ function pad2(value) {
     return (value < 10 ? "0" : "") + value;
 }
 
+function timezoneLabel(date) {
+    const offsetMinutes = -date.getTimezoneOffset();
+    const sign = offsetMinutes >= 0 ? "+" : "-";
+    const absolute = Math.abs(offsetMinutes);
+    const hours = pad2(Math.floor(absolute / 60));
+    const minutes = absolute % 60;
+    return "GMT" + sign + hours + (minutes > 0 ? ":" + pad2(minutes) : "");
+}
+
+function isoWeekNumber(date) {
+    const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const isoDay = target.getUTCDay() || 7;
+    target.setUTCDate(target.getUTCDate() + 4 - isoDay);
+    const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+    return Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
 function dayKeyOf(date) {
     if (!date)
         return "";
