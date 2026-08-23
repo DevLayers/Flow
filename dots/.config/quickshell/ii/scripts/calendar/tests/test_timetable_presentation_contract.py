@@ -12,6 +12,19 @@ TIMETABLE = ROOT / "modules" / "ii" / "cheatsheet" / "timetable"
 
 
 class TimetablePresentationContractTests(unittest.TestCase):
+    def test_week_and_month_share_semantic_event_colors(self) -> None:
+        helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        block = (TIMETABLE / "EventBlock.qml").read_text(encoding="utf-8")
+        header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")
+
+        self.assertIn("function chipColor(event, palette)", helper)
+        self.assertIn("H.chipColor(eventData?.sourceEvent ?? eventData, Appearance.colors)", block)
+        self.assertIn("H.chipColor(modelData?.sourceEvent ?? modelData, Appearance.colors)", header)
+        self.assertIn("H.chipColor(root.timedMutationEvent, Appearance.colors)", week)
+        self.assertNotIn("getEventColorRadial", helper + week + block)
+        self.assertNotIn("maxLogicalDistance", week + block)
+
     def test_color_picker_uses_semantic_hover_tokens(self) -> None:
         helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
         picker = (TIMETABLE / "ColorPickerRow.qml").read_text(encoding="utf-8")

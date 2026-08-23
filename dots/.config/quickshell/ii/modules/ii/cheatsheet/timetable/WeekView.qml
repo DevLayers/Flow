@@ -96,7 +96,6 @@ Item {
 
     // ─── State ───
     property var nextEventData: null
-    property real maxLogicalDistance: 1.0
 
     property bool ghostVisible: false
     property int ghostDayIndex: -1
@@ -120,7 +119,6 @@ Item {
     function updateNextEvent() {
         if (!root.days || root.days.length === 0) {
             root.nextEventData = null;
-            root.maxLogicalDistance = 1.0;
             return;
         }
 
@@ -179,21 +177,6 @@ Item {
         }
 
         root.nextEventData = nextEvt;
-
-        let maxDist = 0;
-        if (nextEvt) {
-            for (let i = 0; i < root.days.length; i++) {
-                for (let evt of H.getTimedEvents(root.days[i]?.events)) {
-                    let startMins = H.parseTimeToMinutes(evt.start);
-                    if (startMins === null)
-                        continue;
-                    let dist = Math.sqrt(Math.pow(i - nextEvt.dayIndex, 2) + Math.pow((startMins - nextEvt.startMinutes) / 60.0, 2));
-                    if (dist > maxDist)
-                        maxDist = dist;
-                }
-            }
-        }
-        root.maxLogicalDistance = Math.max(1.0, maxDist);
     }
 
     function scrollToCurrentTime() {
@@ -590,7 +573,6 @@ Item {
                                 ghostTopY: root.ghostTopY
                                 ghostHeight: root.ghostHeight
                                 nextEventData: root.nextEventData
-                                maxLogicalDistance: root.maxLogicalDistance
                                 todayHighlightFill: root.todayHighlightFill
                                 todayHighlightBorder: root.todayHighlightBorder
                                 dayBackgroundFill: root.dayBackgroundFill
@@ -692,7 +674,7 @@ Item {
         width: Math.max(32, root.dayColumnWidth - 10)
         height: Math.max((root.timedMutationEndMinutes - root.timedMutationStartMinutes) * root.pixelsPerMinute - 4, 48)
         radius: Appearance.rounding.normal
-        color: H.getEventColorRadial(root.timedMutationDayIndex, root.timedMutationStartMinutes, root.nextEventData, root.maxLogicalDistance, Appearance.colors)
+        color: H.chipColor(root.timedMutationEvent, Appearance.colors)
         opacity: 0.96
         x: {
             const point = eventsRow.mapToItem(root, root.timedMutationDayIndex * (root.dayColumnWidth + root.spacing) + 5, 0);

@@ -76,49 +76,6 @@ function getTimedEvents(events) {
     return events.filter(evt => !isAllDayEvent(evt));
 }
 
-function lerpColor(color1, color2, factor) {
-    let c1 = Qt.color(color1);
-    let c2 = Qt.color(color2);
-    let f = Math.max(0, Math.min(1, factor));
-    let r = c1.r + (c2.r - c1.r) * f;
-    let g = c1.g + (c2.g - c1.g) * f;
-    let b = c1.b + (c2.b - c1.b) * f;
-    let a = c1.a + (c2.a - c1.a) * f;
-    return Qt.rgba(r, g, b, a);
-}
-
-function getEventColorRadial(dayIndex, startMinutes, nextEvtData, maxDist, colors) {
-    if (!nextEvtData) return colors.colSurfaceContainerHigh;
-
-    let nextDay = nextEvtData.dayIndex;
-    let nextStart = nextEvtData.startMinutes;
-
-    let dx = dayIndex - nextDay;
-    let dy = (startMinutes - nextStart) / 60.0;
-
-    if (dx === 0 && dy === 0) return colors.colPrimary;
-
-    let distance = Math.sqrt(dx * dx + dy * dy);
-    let normalizedDist = Math.min(1.0, distance / maxDist);
-
-    let c1, c2, ratio;
-    if (normalizedDist < 0.33) {
-        c1 = colors.colPrimary;
-        c2 = colors.colSecondary;
-        ratio = normalizedDist / 0.33;
-    } else if (normalizedDist < 0.66) {
-        c1 = colors.colSecondary;
-        c2 = colors.colTertiary;
-        ratio = (normalizedDist - 0.33) / 0.33;
-    } else {
-        c1 = colors.colTertiary;
-        c2 = colors.colSurfaceContainerHighest;
-        ratio = (normalizedDist - 0.66) / 0.34;
-    }
-
-    return lerpColor(c1, c2, ratio);
-}
-
 function computeEventLayout(events, parseFn) {
     if (!events || events.length === 0) return [];
 

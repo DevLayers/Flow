@@ -1,5 +1,6 @@
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import qs.services
 import QtQuick
 import QtQuick.Layouts
@@ -151,7 +152,7 @@ Row {
                     delegate: Rectangle {
                         width: parent.width
                         height: allDayChipHeight
-                        color: Appearance.colors.colSecondaryContainer
+                        color: H.chipColor(modelData?.sourceEvent ?? modelData, Appearance.colors)
                         radius: Appearance.rounding.verysmall
                         border.width: 1
                         border.color: H.withOpacity(Appearance.colors.colOnSecondaryContainer, 0.1)
@@ -165,7 +166,7 @@ Row {
                             text: modelData.title
                             font.pixelSize: Appearance.font.pixelSize.smallest
                             font.weight: Font.Medium
-                            color: Appearance.colors.colOnSecondaryContainer
+                            color: ColorUtils.getContrastingTextColor(parent.color)
                             elide: Text.ElideRight
                         }
 

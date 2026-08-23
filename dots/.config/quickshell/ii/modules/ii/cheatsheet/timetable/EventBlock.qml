@@ -17,7 +17,6 @@ Rectangle {
     property int totalCols: 1
     property int dayIdx
     property var nextEventData
-    property real maxLogicalDistance: 1.0
     property real pixelsPerMinute
     property int startHour
     property int startMinute
@@ -60,7 +59,7 @@ Rectangle {
     z: isNextEvent ? 4 : 3
     color: eventBlock.sportEvent
         ? Appearance.colors.colTertiaryContainer
-        : H.getEventColorRadial(dayIdx, eventStartMinutes, nextEventData, maxLogicalDistance, Appearance.colors)
+        : H.chipColor(eventData?.sourceEvent ?? eventData, Appearance.colors)
     border.width: isNextEvent ? 2 : 0
     border.color: isNextEvent ? H.withOpacity(Appearance.colors.colOnPrimary, 0.8) : "transparent"
     y: H.minutesToY(eventStartMinutes, startHour, startMinute, pixelsPerMinute)
