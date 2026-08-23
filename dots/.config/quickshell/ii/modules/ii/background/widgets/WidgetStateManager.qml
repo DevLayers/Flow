@@ -104,7 +104,7 @@ QtObject {
     }
 
     function maybeMigrateWidgets() {
-        if (Persistent.states.background.widgetsMigrated)
+        if (!Persistent.ready || Persistent.states.background.widgetsMigrated)
             return;
 
         console.log("[Background] Migrating legacy desktop widgets configuration...");
@@ -263,23 +263,38 @@ QtObject {
         }
     }
 
+    // Both migrations below decide whether they have already run by reading a flag out of
+    // Persistent, and a JsonAdapter serves its QML defaults - false, here - until the file behind
+    // it has loaded. config.json and states.json load independently of each other, so on a boot
+    // where the config wins that race the legacy migration runs a second time and rebuilds
+    // activeWidgets from the old per-widget keys, discarding every lock behaviour the user had
+    // set. Migrate only once Persistent has actually spoken. The plain sync is not gated on it,
+    // so widgets still appear as soon as the config is readable.
+    function syncNow() {
+        if (!Config.ready)
+            return;
+        if (Persistent.ready) {
+            manager.maybeMigrateWidgets();
+            Config.migrateWidgetLockBehavior();
+        }
+        manager.syncActiveWidgets();
+    }
+
     property Connections configConn: Connections {
         target: Config
         ignoreUnknownSignals: true
         function onReadyChanged() {
-            if (Config.ready) {
-                manager.maybeMigrateWidgets();
-                Config.migrateWidgetLockBehavior();
-                manager.syncActiveWidgets();
-            }
+            manager.syncNow();
         }
     }
 
-    Component.onCompleted: {
-        if (Config.ready) {
-            manager.maybeMigrateWidgets();
-            Config.migrateWidgetLockBehavior();
-            manager.syncActiveWidgets();
+    property Connections persistentConn: Connections {
+        target: Persistent
+        ignoreUnknownSignals: true
+        function onReadyChanged() {
+            manager.syncNow();
         }
     }
+
+    Component.onCompleted: manager.syncNow()
 }

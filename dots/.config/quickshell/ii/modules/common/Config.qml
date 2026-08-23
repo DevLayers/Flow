@@ -548,7 +548,8 @@ Singleton {
     }
 
     function migrateWidgetLockBehavior() {
-        if (Persistent.states.background.lockBehaviorMigrated)
+        // Same trap as the widget migration: an unloaded Persistent reports "not migrated yet".
+        if (!Persistent.ready || Persistent.states.background.lockBehaviorMigrated)
             return;
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
         let changed = false;
