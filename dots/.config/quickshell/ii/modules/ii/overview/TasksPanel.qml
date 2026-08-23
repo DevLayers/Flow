@@ -209,7 +209,7 @@ Item {
 
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 0
+                            spacing: Appearance.sizes.elevationMargin / 4
 
                             StyledText {
                                 Layout.fillWidth: true

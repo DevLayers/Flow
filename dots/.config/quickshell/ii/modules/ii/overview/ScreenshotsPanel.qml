@@ -22,10 +22,6 @@ Item {
         : ""
     readonly property bool shouldBlurPreview: Config.options.search.modules.screenshots.blurPreviews
         || Config.options.workSafety.enable.clipboard
-    readonly property string statusText: root.selectedEntry.length > 0
-        ? root.imageDescription(root.selectedEntry)
-        : Translation.tr("%1 screenshots").arg(String(root.entries.length))
-
     implicitWidth: 720
     implicitHeight: scaffold.implicitHeight
 
@@ -35,15 +31,29 @@ Item {
             .slice(0, Config.options.search.modules.screenshots.maxItems);
         if (query.length === 0)
             return rows;
-        return rows.filter(entry => root.imageDescription(entry).toLocaleLowerCase().includes(query));
+        return rows.filter(entry => root.imageSearchText(entry).toLocaleLowerCase().includes(query));
     }
 
-    function imageDescription(entry) {
+    function imageId(entry) {
+        return String(entry ?? "").match(/^(\d+)\t/)?.[1] ?? "";
+    }
+
+    function imageTitle(entry) {
+        const id = root.imageId(entry);
+        return id.length > 0
+            ? Translation.tr("Screenshot #%1").arg(id)
+            : Translation.tr("Screenshot");
+    }
+
+    function imageMetadata(entry) {
         const size = String(entry ?? "").match(/(\d+)x(\d+)/);
-        const id = String(entry ?? "").match(/^(\d+)\t/);
         return size
-            ? `${size[1]} × ${size[2]} · #${id?.[1] ?? ""}`
-            : Translation.tr("Clipboard image");
+            ? `${size[1]} × ${size[2]}`
+            : Translation.tr("Image from clipboard");
+    }
+
+    function imageSearchText(entry) {
+        return `${root.imageTitle(entry)} ${root.imageMetadata(entry)}`;
     }
 
     function clampSelection() {
@@ -78,6 +88,7 @@ Item {
         if (root.selectedEntry.length === 0)
             return false;
         Cliphist.copy(root.selectedEntry);
+        GlobalStates.overviewOpen = false;
         return true;
     }
 
@@ -135,7 +146,6 @@ Item {
         title: Translation.tr("Screenshots")
         icon: "screenshot"
         accent: true
-        statusText: root.statusText
         primaryHint: ({ label: Translation.tr("Copy"), keys: ["↵"] })
         hints: [
             { label: Translation.tr("Save"), keys: ["Ctrl", "S"] },
@@ -188,14 +198,29 @@ Item {
                                 : Appearance.colors.colOnSurface
                         }
 
-                        StyledText {
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            text: root.imageDescription(modelData)
-                            elide: Text.ElideRight
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: root.selectedIndex === index
-                                ? Appearance.colors.colOnPrimaryContainer
-                                : Appearance.colors.colOnSurface
+                            spacing: Appearance.sizes.elevationMargin / 4
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.imageTitle(modelData)
+                                elide: Text.ElideRight
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: root.selectedIndex === index
+                                    ? Appearance.colors.colOnPrimaryContainer
+                                    : Appearance.colors.colOnSurface
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.imageMetadata(modelData)
+                                elide: Text.ElideRight
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: root.selectedIndex === index
+                                    ? Appearance.colors.colOnPrimaryContainer
+                                    : Appearance.colors.colSubtext
+                            }
                         }
                     }
                 }

@@ -6,6 +6,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Wayland
 
 Singleton {
     id: root
@@ -70,7 +71,7 @@ Singleton {
     property string searchTargetWindowAddress: ""
 
     function captureSearchTargetWindow(): void {
-        const rawAddress = String(HyprlandData.activeWindow?.address ?? "").trim();
+        const rawAddress = String(ToplevelManager.activeToplevel?.HyprlandToplevel?.address ?? "").trim();
         root.searchTargetWindowAddress = rawAddress.length === 0
             ? ""
             : (rawAddress.startsWith("0x") ? rawAddress : `0x${rawAddress}`);

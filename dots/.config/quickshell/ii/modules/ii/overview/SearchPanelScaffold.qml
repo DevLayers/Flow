@@ -15,22 +15,30 @@ Item {
     property var primaryHint: ({})
     property var hints: []
     property var onBack: null
+    // Panels are selected by the Search field, so repeating their icon and
+    // title immediately below it wastes the most valuable vertical space.
+    // Keep these opt-in for the rare panel that truly needs in-panel context.
+    property bool showHeader: false
+    property bool showStatus: false
+    readonly property real contentMargin: Appearance.sizes.elevationMargin
     default property alias content: contentSlot.data
 
-    implicitWidth: contentColumn.implicitWidth
-    implicitHeight: contentColumn.implicitHeight
+    implicitWidth: contentColumn.implicitWidth + root.contentMargin * 2
+    implicitHeight: contentColumn.implicitHeight + root.contentMargin * 2
 
     ColumnLayout {
         id: contentColumn
         anchors.fill: parent
-        spacing: 8
+        anchors.margins: root.contentMargin
+        spacing: Appearance.sizes.elevationMargin / 2
 
         RowLayout {
             Layout.fillWidth: true
+            visible: root.showHeader
 
             RippleButton {
                 visible: typeof root.onBack === "function"
-                implicitWidth: Appearance.sizes.normalIcon
+                implicitWidth: Appearance.sizes.elevationMargin * 4
                 implicitHeight: implicitWidth
                 buttonRadius: Appearance.rounding.full
                 onClicked: root.onBack()
@@ -66,14 +74,21 @@ Item {
 
         RowLayout {
             Layout.fillWidth: true
-            visible: root.statusText.length > 0 || root.hints.length > 0 || Object.keys(root.primaryHint).length > 0
+            visible: (root.showStatus && root.statusText.length > 0)
+                || root.hints.length > 0 || Object.keys(root.primaryHint).length > 0
 
             StyledText {
                 Layout.fillWidth: true
+                visible: root.showStatus && root.statusText.length > 0
                 text: root.statusText
                 elide: Text.ElideRight
                 color: Appearance.colors.colOnSurfaceVariant
                 font.pixelSize: Appearance.font.pixelSize.small
+            }
+
+            Item {
+                Layout.fillWidth: true
+                visible: !root.showStatus || root.statusText.length === 0
             }
 
             KeyHintBar {

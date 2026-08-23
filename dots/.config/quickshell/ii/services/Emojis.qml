@@ -20,6 +20,8 @@ Singleton {
     // structured entries for the Search panel's category grid.
     property list<var> entries
     property var preparedEntries: []
+    property bool loaded: false
+    property bool loading: false
     
     onListChanged: {
         const newList = list;
@@ -55,6 +57,9 @@ Singleton {
     }
 
     function load() {
+        if (root.loaded || root.loading)
+            return;
+        root.loading = true;
         emojiFileView.reload()
     }
 
@@ -87,13 +92,15 @@ Singleton {
             name: raw.replace(/^\s*\S+\s+/, ""),
             category: root.categoryFor(raw)
         }))
+        root.loaded = true;
+        root.loading = false;
         console.log(`[Emojis] Loaded ${root.list.length} emojis`)
     }
 
     FileView { 
         id: emojiFileView
         path: Qt.resolvedUrl(root.emojiScriptPath)
-        onLoadedChanged: {
+        onLoaded: {
             const fileContent = emojiFileView.text()
             root.updateEmojis(fileContent)
         }

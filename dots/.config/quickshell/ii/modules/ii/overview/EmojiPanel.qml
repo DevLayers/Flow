@@ -18,6 +18,10 @@ Item {
     property string selectedCategory: Config.options.search.modules.emojis.defaultCategory
 
     readonly property int gridColumns: Math.max(4, Config.options.search.modules.emojis.gridColumns)
+    // A GridView virtualizes delegates, but handing it thousands of plain
+    // JavaScript objects still stalls its model reset. The full corpus stays
+    // searchable; the browse view uses a responsive, bounded window.
+    readonly property int maxVisibleEntries: 240
     readonly property real gridSpacing: Appearance.sizes.elevationMargin / 2
     readonly property var categories: [
         { id: "all", label: Translation.tr("All") },
@@ -31,10 +35,6 @@ Item {
     readonly property var selectedEntry: root.selectedIndex >= 0 && root.selectedIndex < root.filteredEntries.length
         ? root.filteredEntries[root.selectedIndex]
         : null
-    readonly property string statusText: root.selectedEntry
-        ? root.selectedEntry.name
-        : Translation.tr("%1 emojis").arg(String(root.filteredEntries.length))
-
     implicitWidth: 720
     implicitHeight: scaffold.implicitHeight
 
@@ -46,19 +46,20 @@ Item {
 
     function filteredEmojiEntries() {
         const query = root.searchQuery.trim();
-        const allEntries = Array.from(Emojis.entries ?? []);
+        const allEntries = Emojis.entries ?? [];
         if (query.length > 0) {
             const matchingRawEntries = new Set(Emojis.fuzzyQuery(query));
-            return root.filterByCategory(allEntries.filter(entry => matchingRawEntries.has(entry.raw)));
+            return root.filterByCategory(allEntries.filter(entry => matchingRawEntries.has(entry.raw)))
+                .slice(0, root.maxVisibleEntries);
         }
 
         if (Config.options.search.modules.emojis.showRecents) {
             const recent = Array.from(Persistent.states.search.recentEmojis ?? []);
             const recentEntries = recent.map(raw => Emojis.entryFor(raw)).filter(Boolean);
             if (recentEntries.length > 0)
-                return root.filterByCategory(recentEntries);
+                return root.filterByCategory(recentEntries).slice(0, root.maxVisibleEntries);
         }
-        return root.filterByCategory(allEntries);
+        return root.filterByCategory(allEntries).slice(0, root.maxVisibleEntries);
     }
 
     function skinToneEmoji(entry) {
@@ -162,7 +163,6 @@ Item {
         title: Translation.tr("Emojis")
         icon: "mood"
         accent: true
-        statusText: root.statusText
         primaryHint: ({ label: Translation.tr("Copy"), keys: ["↵"] })
         hints: [{ label: Translation.tr("Navigate"), keys: ["↑", "↓", "←", "→"] }]
 
@@ -203,27 +203,6 @@ Item {
                                 : Appearance.colors.colOnSurface
                         }
                     }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.searchQuery.trim().length === 0 && Config.options.search.modules.emojis.showRecents
-                        && Persistent.states.search.recentEmojis.length > 0
-                        ? Translation.tr("Recent")
-                        : root.categories.find(category => category.id === root.selectedCategory)?.label ?? Translation.tr("All")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.DemiBold
-                    color: Appearance.colors.colOnSurface
-                }
-
-                StyledText {
-                    text: String(root.filteredEntries.length)
-                    font.pixelSize: Appearance.font.pixelSize.smallest
-                    color: Appearance.colors.colSubtext
                 }
             }
 
