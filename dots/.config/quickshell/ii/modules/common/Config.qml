@@ -3025,6 +3025,12 @@ Singleton {
 
             property JsonObject calendar: JsonObject {
                 property string locale: "en-GB"
+                property JsonObject holidays: JsonObject {
+                    property bool enable: true
+                    // ISO 3166-1 alpha-2, or "auto" to derive it from the system locale
+                    property string countryCode: "auto"
+                    property bool showInMonthView: true
+                }
             }
 
             property JsonObject cheatsheet: JsonObject {

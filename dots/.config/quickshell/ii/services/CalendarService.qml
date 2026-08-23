@@ -167,20 +167,132 @@ Singleton {
         return color;
     }
 
+    // ------------------------------------------------------------------
+    // Fetch window
+    // ------------------------------------------------------------------
+    // khal is queried for a bounded date range. The window starts at -3/+3
+    // months around today and only ever grows (see `ensureRangeCovers`), so
+    // navigating far away in the calendar still yields events.
+
+    function monthWindowStart(monthOffset) {
+        const d = new Date();
+        return new Date(d.getFullYear(), d.getMonth() + monthOffset, 1);
+    }
+
+    function monthWindowEnd(monthOffset) {
+        const d = new Date();
+        return new Date(d.getFullYear(), d.getMonth() + monthOffset + 1, 0);
+    }
+
+    property date rangeStart: root.monthWindowStart(-3)
+    property date rangeEnd: root.monthWindowEnd(3)
+    readonly property bool loading: getEventsProcess.running
+
+    // Set when a reload is requested while a fetch is already in flight.
+    property bool eventsReloadQueued: false
+
+    // Rebuilds the khal command from the current window and starts the fetch.
+    // `command` is assigned imperatively (no binding) so the window can change
+    // without re-triggering a fetch on every intermediate value.
+    function loadEvents() {
+        if (!root.khalAvailable)
+            return;
+        if (getEventsProcess.running) {
+            root.eventsReloadQueued = true;
+            return;
+        }
+        getEventsProcess.command = ["khal", "list", "--json", "title", "--json", "start-date", "--json", "start-time", "--json", "end-time", "--json", "description", "--json", "calendar", "--json", "uid", Qt.formatDate(root.rangeStart, "dd/MM/yyyy"), Qt.formatDate(root.rangeEnd, "dd/MM/yyyy")];
+        getEventsProcess.running = true;
+    }
+
+    // Grows the fetch window so that `date` is covered, with 3 months of slack
+    // in the direction that was extended. Never shrinks. Debounced so that
+    // flicking through months does not spawn one khal process per month.
+    function ensureRangeCovers(date) {
+        if (!date)
+            return;
+        const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        let changed = false;
+        if (d < root.rangeStart) {
+            root.rangeStart = new Date(d.getFullYear(), d.getMonth() - 3, 1);
+            changed = true;
+        }
+        if (d > root.rangeEnd) {
+            root.rangeEnd = new Date(d.getFullYear(), d.getMonth() + 4, 0);
+            changed = true;
+        }
+        if (changed)
+            rangeDebounceTimer.restart();
+    }
+
+    Timer {
+        id: rangeDebounceTimer
+        interval: 150
+        repeat: false
+        onTriggered: root.loadEvents()
+    }
+
+    // ------------------------------------------------------------------
+    // Per-day index
+    // ------------------------------------------------------------------
+
+    function dayKey(date) {
+        if (!date)
+            return "";
+        return Qt.formatDate(date, "yyyy-MM-dd");
+    }
+
+    // true when the event spans a whole day: starts at 00:00 and ends at
+    // 23:59 (khal's implicit all-day end) or 00:00.
+    function isAllDayEvent(event) {
+        if (!event || !event.startDate || !event.endDate)
+            return false;
+        if (event.startDate.getHours() !== 0 || event.startDate.getMinutes() !== 0)
+            return false;
+        const endHours = event.endDate.getHours();
+        const endMinutes = event.endDate.getMinutes();
+        return (endHours === 23 && endMinutes === 59) || (endHours === 0 && endMinutes === 0);
+    }
+
+    // { "yyyy-MM-dd": [event, ...] } — all-day events first, then by start time.
+    // khal always reports start and end on the same day, so one bucket per
+    // event is enough (no multi-day expansion).
+    readonly property var eventsByDay: {
+        const map = {};
+        const evts = root.events;
+        if (!evts)
+            return map;
+        for (let i = 0; i < evts.length; i++) {
+            const evt = evts[i];
+            if (!evt || !evt.startDate)
+                continue;
+            const key = root.dayKey(evt.startDate);
+            if (key.length === 0)
+                continue;
+            if (!map[key])
+                map[key] = [];
+            map[key].push(evt);
+        }
+        for (const key in map) {
+            map[key].sort((a, b) => {
+                const aRank = root.isAllDayEvent(a) ? 0 : 1;
+                const bRank = root.isAllDayEvent(b) ? 0 : 1;
+                if (aRank !== bRank)
+                    return aRank - bRank;
+                return a.startDate.getTime() - b.startDate.getTime();
+            });
+        }
+        return map;
+    }
+
+    function eventsForDay(date) {
+        return root.eventsByDay[root.dayKey(date)] ?? [];
+    }
+
     // Process for loading events
     Process {
         id: getEventsProcess
         running: false
-        // get events for 3 months - fetch uid for unique identification
-        command: ["khal", "list", "--json", "title", "--json", "start-date", "--json", "start-time", "--json", "end-time", "--json", "description", "--json", "calendar", "--json", "uid", Qt.formatDate((() => {
-                    let d = new Date();
-                    d.setMonth(d.getMonth() - 3);
-                    return d;
-                })(), "dd/MM/yyyy"), Qt.formatDate((() => {
-                    let d = new Date();
-                    d.setMonth(d.getMonth() + 3);
-                    return d;
-                })(), "dd/MM/yyyy")]
         stdout: StdioCollector {
 
             onStreamFinished: {
@@ -220,6 +332,12 @@ Singleton {
                 root.eventsInWeek = root.getEventsInWeek();
             }
         }
+        onExited: {
+            if (root.eventsReloadQueued) {
+                root.eventsReloadQueued = false;
+                rangeDebounceTimer.restart();
+            }
+        }
     }
 
     Timer {
@@ -228,7 +346,7 @@ Singleton {
         interval: 10
         repeat: true
         onTriggered: {
-            getEventsProcess.running = true;
+            root.loadEvents();
             interval.interval = 900000; // 15 minutes
         }
     }
@@ -246,7 +364,7 @@ Singleton {
             if (exitCode === 0) {
                 console.log("[CalendarService] Event added successfully");
                 vdirsyncerProcess.running = true;
-                getEventsProcess.running = true;
+                root.loadEvents();
             } else {
                 console.log("[CalendarService] Failed to add event, exit code: " + exitCode);
             }
@@ -283,6 +401,27 @@ Singleton {
         khalAddTaskProcess.running = true;
     }
 
+    // Create an all-day event (no start/end time — khal treats a date-only
+    // `new` as all-day).
+    function addAllDayEvent(date, title, description) {
+        if (!root.khalAvailable) {
+            console.log("[CalendarService] khal not available, cannot create event");
+            return;
+        }
+        if (!title || title.length === 0)
+            return;
+
+        let formattedDate = Qt.formatDate(date, "dd/MM/yyyy");
+        let summary = title;
+        if (description && description.length > 0) {
+            summary = title + " :: " + description;
+        }
+
+        khalAddTaskProcess.command = ["khal", "new", formattedDate, summary];
+        console.log("[CalendarService] Creating all-day event:", khalAddTaskProcess.command.join(" "));
+        khalAddTaskProcess.running = true;
+    }
+
     Process {
         id: khalRemoveProcess
         running: false
@@ -304,9 +443,20 @@ Singleton {
             if (exitCode === 0) {
                 console.log("[CalendarService] Event removed successfully");
                 vdirsyncerProcess.running = true;
-                getEventsProcess.running = true;
+                // khalRemoveProcess and khalAddTaskProcess are separate processes
+                // fighting over the same khal db, so a move/update defers its
+                // creation until the removal has actually exited.
+                const pending = root.pendingCreate;
+                root.pendingCreate = null;
+                if (pending) {
+                    root.applyPendingCreate(pending);
+                } else {
+                    root.loadEvents();
+                }
             } else {
                 console.log("[CalendarService] Failed to remove event, exit code: " + exitCode);
+                root.pendingCreate = null;
+                root.loadEvents();
             }
         }
     }
@@ -353,6 +503,92 @@ Singleton {
         khalRemoveProcess.running = true;
     }
 
+    // ------------------------------------------------------------------
+    // Mutations that need remove -> add serialization
+    // ------------------------------------------------------------------
+
+    // Creation deferred until khalRemoveProcess exits. Shape:
+    // { date: Date, title: string, description: string, allDay: bool,
+    //   startTime: "HH:MM", endTime: "HH:MM" }
+    property var pendingCreate: null
+
+    function applyPendingCreate(op) {
+        if (!op)
+            return;
+        if (op.allDay)
+            root.addAllDayEvent(op.date, op.title, op.description);
+        else
+            root.addEvent(op.date, op.startTime, op.endTime, op.title, op.description);
+    }
+
+    // Removes `event` (by uid when available, else by title) and queues `op`
+    // to run once the removal process has exited.
+    function removeThenCreate(event, op) {
+        const uid = event.uid ?? "";
+        const title = event.content ?? "";
+        if (uid.length === 0 && title.length === 0) {
+            // Nothing identifies the old event; just create the new one.
+            root.applyPendingCreate(op);
+            return;
+        }
+        root.pendingCreate = op;
+        if (uid.length > 0)
+            root.removeEventByUid(uid);
+        else
+            root.removeEvent(title);
+    }
+
+    // Moves an event to another day, keeping its time of day. An all-day event
+    // stays all-day.
+    function moveEvent(event, newDate) {
+        if (!root.khalAvailable) {
+            console.log("[CalendarService] khal not available, cannot move event");
+            return;
+        }
+        if (!event || !newDate)
+            return;
+
+        const allDay = root.isAllDayEvent(event);
+        let op = {
+            "date": new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate()),
+            "title": event.content ?? "",
+            "description": event.description ?? "",
+            "allDay": allDay,
+            "startTime": allDay ? "" : Qt.formatDateTime(event.startDate, "hh:mm"),
+            "endTime": allDay ? "" : Qt.formatDateTime(event.endDate, "hh:mm")
+        };
+        root.removeThenCreate(event, op);
+    }
+
+    // Full edit: date, times, title, description and all-day flag. Any of
+    // newDate/startTimeHHMM/endTimeHHMM/title may be left empty to keep the
+    // current value; `allDay` falls back to the event's current kind when
+    // undefined.
+    function updateEvent(event, newDate, startTimeHHMM, endTimeHHMM, title, description, allDay) {
+        if (!root.khalAvailable) {
+            console.log("[CalendarService] khal not available, cannot update event");
+            return;
+        }
+        if (!event)
+            return;
+
+        const base = newDate ?? event.startDate;
+        const isAllDay = (allDay === undefined || allDay === null) ? root.isAllDayEvent(event) : !!allDay;
+        let op = {
+            "date": new Date(base.getFullYear(), base.getMonth(), base.getDate()),
+            "title": (title && title.length > 0) ? title : (event.content ?? ""),
+            "description": description ?? (event.description ?? ""),
+            "allDay": isAllDay,
+            "startTime": "",
+            "endTime": ""
+        };
+        if (!isAllDay) {
+            op.startTime = (startTimeHHMM && startTimeHHMM.length > 0) ? startTimeHHMM : Qt.formatDateTime(event.startDate, "hh:mm");
+            op.endTime = (endTimeHHMM && endTimeHHMM.length > 0) ? endTimeHHMM : Qt.formatDateTime(event.endDate, "hh:mm");
+        }
+        root.removeThenCreate(event, op);
+    }
+
     Process {
         id: icsImportProcess
         property string targetPath: ""
@@ -380,7 +616,7 @@ Singleton {
         repeat: false
         onTriggered: {
             vdirsyncerProcess.running = true;
-            getEventsProcess.running = true;
+            root.loadEvents();
         }
     }
 

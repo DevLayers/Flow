@@ -300,6 +300,9 @@ Singleton {
             property JsonObject cheatsheet: JsonObject {
                 property int tabIndex: 0
                 property list<string> sectionOrder: []
+                // "week" | "month" — which calendar shape the timetable tab shows.
+                property string timetableView: "month"
+                property bool timetableShowUpcoming: true
             }
 
             property JsonObject clipboard: JsonObject {

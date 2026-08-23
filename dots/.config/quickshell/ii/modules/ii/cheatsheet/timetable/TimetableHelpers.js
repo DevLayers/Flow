@@ -191,3 +191,122 @@ function computeEventLayout(events, parseFn) {
 
     return timedEvents;
 }
+
+// ─── Month view ───────────────────────────────────────────────
+// `firstDayOfWeek` follows Config.options.time.firstDayOfWeek:
+// 0 = Monday … 6 = Sunday. The JS weekday index of the first column is
+// therefore (firstDayOfWeek + 1) % 7.
+
+function pad2(value) {
+    return (value < 10 ? "0" : "") + value;
+}
+
+function dayKeyOf(date) {
+    if (!date)
+        return "";
+    return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate());
+}
+
+function sameDate(a, b) {
+    if (!a || !b)
+        return false;
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function startOfDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addDays(date, count) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate() + count);
+}
+
+// Clamps the day so "31 Jan + 1 month" lands in February instead of March.
+function addMonths(date, count) {
+    const firstOfTarget = new Date(date.getFullYear(), date.getMonth() + count, 1);
+    const available = daysInMonth(firstOfTarget.getFullYear(), firstOfTarget.getMonth());
+    return new Date(firstOfTarget.getFullYear(), firstOfTarget.getMonth(), Math.min(date.getDate(), available));
+}
+
+function daysInMonth(year, month) {
+    return new Date(year, month + 1, 0).getDate();
+}
+
+function columnForJsDay(jsDay, firstDayOfWeek) {
+    return (jsDay - firstDayOfWeek + 6) % 7;
+}
+
+function monthRowCount(year, month, firstDayOfWeek) {
+    const lead = columnForJsDay(new Date(year, month, 1).getDay(), firstDayOfWeek);
+    return Math.ceil((lead + daysInMonth(year, month)) / 7);
+}
+
+// One descriptor per grid cell, including the leading/trailing days that belong
+// to the neighbouring months. Only whole weeks are produced.
+function buildMonthCells(year, month, firstDayOfWeek, todayDate) {
+    const lead = columnForJsDay(new Date(year, month, 1).getDay(), firstDayOfWeek);
+    const cellCount = Math.ceil((lead + daysInMonth(year, month)) / 7) * 7;
+    const cells = [];
+    for (let i = 0; i < cellCount; i++) {
+        const date = new Date(year, month, 1 - lead + i);
+        cells.push({
+            date: date,
+            key: dayKeyOf(date),
+            day: date.getDate(),
+            inMonth: date.getMonth() === month && date.getFullYear() === year,
+            isWeekend: date.getDay() === 0 || date.getDay() === 6,
+            isToday: sameDate(date, todayDate),
+            row: Math.floor(i / 7),
+            column: i % 7
+        });
+    }
+    return cells;
+}
+
+// `format` is Locale.ShortFormat and friends, passed in because this is a
+// pragma library: the Locale enum only exists on the QML side.
+function weekdayLabels(firstDayOfWeek, localeName, format) {
+    const locale = localeName ? Qt.locale(localeName) : Qt.locale();
+    const labels = [];
+    for (let i = 0; i < 7; i++) {
+        labels.push(locale.dayName((firstDayOfWeek + 1 + i) % 7, format));
+    }
+    return labels;
+}
+
+function isWeekendColumn(column, firstDayOfWeek) {
+    const jsDay = (firstDayOfWeek + 1 + column) % 7;
+    return jsDay === 0 || jsDay === 6;
+}
+
+// ─── Month view: event formatting ─────────────────────────────
+// Month cells read CalendarService.events directly, so these work on Date
+// objects rather than the "HH:mm" strings the week view uses.
+
+function eventStartText(event, format) {
+    if (!event || !event.startDate)
+        return "";
+    return Qt.formatTime(event.startDate, format || "hh:mm");
+}
+
+function eventRangeText(event, format) {
+    if (!event || !event.startDate || !event.endDate)
+        return "";
+    return Qt.formatTime(event.startDate, format || "hh:mm") + " – " + Qt.formatTime(event.endDate, format || "hh:mm");
+}
+
+function khalTimeOf(date) {
+    if (!date)
+        return "00:00";
+    return pad2(date.getHours()) + ":" + pad2(date.getMinutes());
+}
+
+// Distinct hue per event so a month full of chips stays readable. The palette
+// is derived from the active theme, never hardcoded.
+function chipColor(event, palette) {
+    if (!event)
+        return palette.colSecondaryContainer;
+    if (event.color)
+        return event.color;
+    return palette.colSecondaryContainer;
+}

@@ -12,6 +12,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import "commands"
+import "timetable"
 
 Scope {
     id: root
@@ -324,6 +325,24 @@ Scope {
                     }
                 }
 
+                // Left counterpart of the close button: only the timetable tab
+                // has two shapes to choose between, so it only appears there.
+                TimetableViewSwitch {
+                    id: timetableViewSwitch
+                    visible: root.tabButtonList[swipeView.currentIndex]?.icon === "calendar_month"
+                    animateIn: cheatsheetBackground.animateIn && timetableViewSwitch.visible
+                    compact: cheatsheetBackground.width < 1100
+                    // Anchored to the column (a sibling) rather than the tab
+                    // bar itself: an anchor may only target a parent or a
+                    // sibling, and the tab bar is a grandchild.
+                    anchors {
+                        left: parent.left
+                        leftMargin: 20
+                        top: cheatsheetColumnLayout.top
+                        topMargin: Math.max(0, (topToolbar.height - timetableViewSwitch.height) / 2)
+                    }
+                }
+
                 ColumnLayout {
                     id: cheatsheetColumnLayout
                     anchors.centerIn: parent
@@ -385,7 +404,9 @@ Scope {
                         spacing: 10
                         currentIndex: Persistent.states.cheatsheet.tabIndex
                         onCurrentIndexChanged: {
-                            Persistent.states.cheatsheet.tabIndex = currentIndex;
+                            if (Persistent.states.cheatsheet.tabIndex !== currentIndex) {
+                                Persistent.states.cheatsheet.tabIndex = currentIndex;
+                            }
                             if (currentItem && currentItem.status === Loader.Ready && currentItem.item) {
                                 currentItem.item.forceActiveFocus();
                             }

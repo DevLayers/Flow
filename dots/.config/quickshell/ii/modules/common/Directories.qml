@@ -61,6 +61,8 @@ Singleton {
     property string wallpaperPreviewColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/wallpaper_preview_colors.json`)
     property string lockscreenColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/lockscreen_colors.json`)
     property string desktopColorsBackupPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/desktop_colors.json`)
+    // Public holidays fetched from Nager.Date, one entry per "<COUNTRY>-<YEAR>".
+    property string holidaysCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/holidays.json`)
     property string generateLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/generate-lockscreen-colors.sh`)
     property string gammaControlScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/brightness/ii-gamma-control`)
     property string swapLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/swap-lockscreen-colors.sh`)
@@ -125,6 +127,7 @@ Singleton {
         Quickshell.execDetached(["mkdir", "-p", `${aiRagIndexDir}`]);
         Quickshell.execDetached(["mkdir", "-p", `${aiDrafts}`]);
         Quickshell.execDetached(["mkdir", "-p", `${appStats}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${FileUtils.parentDirectory(holidaysCachePath)}`]);
         Quickshell.execDetached(["mkdir", "-p", `${userActions}`]);
         Quickshell.execDetached(["mkdir", "-p", `${userWidgetsPath}`]);
         Quickshell.execDetached(["rm", "-rf", `${tempImages}`]);
