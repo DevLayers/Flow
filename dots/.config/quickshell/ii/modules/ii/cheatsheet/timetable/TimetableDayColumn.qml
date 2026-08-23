@@ -21,6 +21,8 @@ Item {
     property int startHour
     property int startMinute
     property int snapInterval
+    property Item coordinateRoot: null
+    property var draggedEvent: null
     
     // Ghost state
     property bool ghostVisible
@@ -50,6 +52,14 @@ Item {
     signal dragReleased(int dayIndex, real startY, real currentY)
     signal editRequested(var event, int dayIndex)
     signal deleteRequested(var event, int dayIndex)
+    signal eventMoveStarted(var event, real x, real y, real pointerOffsetY)
+    signal eventMoveMoved(real x, real y)
+    signal eventMoveEnded
+    signal eventMoveCanceled
+    signal eventResizeStarted(var event, real x, real y)
+    signal eventResizeMoved(real x, real y)
+    signal eventResizeEnded
+    signal eventResizeCanceled
 
     width: dayColumnWidth
     height: contentHeight
@@ -200,8 +210,18 @@ Item {
             pixelsPerMinute: dayColumn.pixelsPerMinute
             startHour: dayColumn.startHour
             startMinute: dayColumn.startMinute
+            coordinateRoot: dayColumn.coordinateRoot
+            manipulating: dayColumn.draggedEvent === (modelData.event.sourceEvent ?? modelData.event)
             onEditRequested: (evt, dIdx) => dayColumn.editRequested(evt, dIdx)
             onDeleteRequested: (evt, dIdx) => dayColumn.deleteRequested(evt, dIdx)
+            onMoveDragStarted: (evt, x, y, offsetY) => dayColumn.eventMoveStarted(evt, x, y, offsetY)
+            onMoveDragMoved: (x, y) => dayColumn.eventMoveMoved(x, y)
+            onMoveDragEnded: dayColumn.eventMoveEnded()
+            onMoveDragCanceled: dayColumn.eventMoveCanceled()
+            onResizeDragStarted: (evt, x, y) => dayColumn.eventResizeStarted(evt, x, y)
+            onResizeDragMoved: (x, y) => dayColumn.eventResizeMoved(x, y)
+            onResizeDragEnded: dayColumn.eventResizeEnded()
+            onResizeDragCanceled: dayColumn.eventResizeCanceled()
         }
     }
 }

@@ -56,6 +56,7 @@ Item {
     property var upcomingOccurrences: []
     property bool showExceptions: false
     property var pendingPayload: null
+    property var pendingMutationFields: null
     property string pendingAction: ""
     property bool showCalendarSelector: false
 
@@ -70,6 +71,7 @@ Item {
     signal saveRequested(var payload)
     signal taskCreateRequested(var task)
     signal deleteRequested(var eventData, string scope)
+    signal eventFieldsMutationRequested(var eventData, var fields, string scope)
     signal moveRequested(var eventData, var newDate)
     signal closeRequested
     signal timePickerRequested(string which, int startHour, int startMinute)
@@ -145,6 +147,20 @@ Item {
         root.eventDetails = Object.assign({}, root.eventDetails, { exdates: exdates });
         CalendarService.saveEventFields(root.event, { exdates: exdates });
         root.loadUpcomingOccurrences(root.event);
+    }
+
+    function requestTimedMutation(eventData, fields, action) {
+        if (!eventData?.uid || eventData.readOnly === true)
+            return;
+        root.event = eventData;
+        if (String(eventData.repeatSymbol ?? "").length > 0) {
+            root.pendingAction = action;
+            root.pendingMutationFields = fields;
+            root.setMode("scope");
+            return;
+        }
+        root.eventFieldsMutationRequested(eventData, fields, "all");
+        root.close();
     }
 
     function exceptionLabel(value) {
@@ -388,8 +404,12 @@ Item {
 
     function chooseScope(scope) {
         if (root.pendingAction === "delete") root.deleteRequested(root.event, scope);
+        else if (root.pendingMutationFields) root.eventFieldsMutationRequested(root.event, root.pendingMutationFields, scope);
         else if (root.pendingPayload) { root.pendingPayload.scope = scope; root.saveRequested(root.pendingPayload); }
-        root.pendingPayload = null; root.pendingAction = ""; root.close();
+        root.pendingPayload = null;
+        root.pendingMutationFields = null;
+        root.pendingAction = "";
+        root.close();
     }
 
     // ─── Derived ───
@@ -414,7 +434,10 @@ Item {
         case "details":
             return root.sportsEvent ? Translation.tr("Match details") : Translation.tr("Event details");
         case "scope":
-            return root.pendingAction === "delete" ? Translation.tr("Delete recurring event") : Translation.tr("Edit recurring event");
+            if (root.pendingAction === "delete") return Translation.tr("Delete recurring event");
+            if (root.pendingAction === "move") return Translation.tr("Move recurring event");
+            if (root.pendingAction === "resize") return Translation.tr("Resize recurring event");
+            return Translation.tr("Edit recurring event");
         default:
             return root.sportsListOnly ? Translation.tr("Sports") : Qt.formatDate(root.day, "MMMM yyyy");
         }
@@ -878,7 +901,8 @@ Item {
 
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                visible: (root.eventDetails?.recurrence || root.event?.repeatSymbol) && root.upcomingOccurrences.length > 0
+                                visible: Boolean(root.eventDetails?.recurrence || root.event?.repeatSymbol)
+                                    && root.upcomingOccurrences.length > 0
                                 spacing: 6
 
                                 StyledText {
@@ -1469,8 +1493,8 @@ Item {
                     visible: root.mode === "scope"
                     ColumnLayout {
                         anchors.centerIn: parent; width: Math.min(parent.width, 300); spacing: 10
-                        StyledText { Layout.fillWidth: true; text: root.pendingAction === "delete" ? Translation.tr("Delete recurring event") : Translation.tr("Edit recurring event"); font.pixelSize: Appearance.font.pixelSize.large; font.weight: Font.Bold; wrapMode: Text.Wrap; color: Appearance.colors.colOnSurface }
-                        StyledText { Layout.fillWidth: true; text: Translation.tr("Choose how much of this series changes."); wrapMode: Text.Wrap; color: Appearance.colors.colOnSurfaceVariant }
+                        StyledText { Layout.fillWidth: true; text: root.headerTitle; font.pixelSize: Appearance.font.pixelSize.large; font.weight: Font.Bold; wrapMode: Text.Wrap; color: Appearance.colors.colOnSurface }
+                        StyledText { Layout.fillWidth: true; text: root.pendingMutationFields ? Translation.tr("Only this event becomes an exception in the series.") : Translation.tr("Choose how much of this series changes."); wrapMode: Text.Wrap; color: Appearance.colors.colOnSurfaceVariant }
                         SecondaryAction { Layout.fillWidth: true; label: Translation.tr("Only this event"); symbol: "event"; onTriggered: root.chooseScope("this") }
                         SecondaryAction { Layout.fillWidth: true; label: Translation.tr("This and future"); symbol: "event_repeat"; onTriggered: root.chooseScope("future") }
                         PrimaryAction { Layout.fillWidth: true; label: Translation.tr("Entire series"); symbol: "all_inclusive"; onTriggered: root.chooseScope("all") }

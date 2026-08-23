@@ -104,6 +104,12 @@ Item {
     property int ghostDayIndex: -1
     property real ghostTopY: 0
     property real ghostHeight: 0
+    property var timedMutationEvent: null
+    property string timedMutationKind: ""
+    property real timedMutationPointerOffsetY: 0
+    property int timedMutationStartMinutes: 0
+    property int timedMutationEndMinutes: 0
+    property int timedMutationDayIndex: -1
 
     // ─── Helpers ───
     function updateCurrentTimeLine() {
@@ -229,6 +235,119 @@ Item {
             return isToday || !overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? ""));
         });
         return isToday ? overdueTasks.concat(dueTasks) : dueTasks;
+    }
+
+    function eventMinutes(date) {
+        return date.getHours() * 60 + date.getMinutes();
+    }
+
+    function eventEndMinutes(event) {
+        const start = root.eventMinutes(event.startDate);
+        let end = root.eventMinutes(event.endDate);
+        if (end <= start)
+            end = 24 * 60;
+        return end;
+    }
+
+    function dayIndexForDate(date) {
+        for (let index = 0; index < root.days.length; index++) {
+            if (H.sameDate(root.days[index]?.sportsDate, date))
+                return index;
+        }
+        return -1;
+    }
+
+    function gridPointAt(x, y) {
+        const point = root.mapToItem(contentRow, x, y);
+        const relativeX = point.x - root.timeColumnWidth - root.spacing;
+        const stride = root.dayColumnWidth + root.spacing;
+        const dayIndex = Math.floor(relativeX / stride);
+        if (dayIndex < 0 || dayIndex >= root.dayCount || relativeX - dayIndex * stride > root.dayColumnWidth)
+            return null;
+        return { dayIndex: dayIndex, contentY: point.y };
+    }
+
+    function clampStart(minutes, duration) {
+        const snapped = H.snapToGrid(minutes, 15);
+        return Math.max(root.startHour * 60 + root.startMinute, Math.min(24 * 60 - duration, snapped));
+    }
+
+    function beginEventMove(event, x, y, pointerOffsetY) {
+        if (!event?.uid || event.readOnly === true)
+            return;
+        const dayIndex = root.dayIndexForDate(event.startDate);
+        if (dayIndex < 0)
+            return;
+        root.timedMutationEvent = event;
+        root.timedMutationKind = "move";
+        root.timedMutationPointerOffsetY = pointerOffsetY;
+        root.timedMutationStartMinutes = root.eventMinutes(event.startDate);
+        root.timedMutationEndMinutes = root.eventEndMinutes(event);
+        root.timedMutationDayIndex = dayIndex;
+        root.updateEventMove(x, y);
+    }
+
+    function updateEventMove(x, y) {
+        if (!root.timedMutationEvent || root.timedMutationKind !== "move")
+            return;
+        const target = root.gridPointAt(x, y);
+        if (!target)
+            return;
+        const duration = root.timedMutationEndMinutes - root.timedMutationStartMinutes;
+        const topY = target.contentY - root.timedMutationPointerOffsetY;
+        root.timedMutationStartMinutes = root.clampStart(H.yToMinutes(topY, root.startHour, root.startMinute, root.pixelsPerMinute), duration);
+        root.timedMutationEndMinutes = root.timedMutationStartMinutes + duration;
+        root.timedMutationDayIndex = target.dayIndex;
+    }
+
+    function beginEventResize(event, x, y) {
+        if (!event?.uid || event.readOnly === true)
+            return;
+        const dayIndex = root.dayIndexForDate(event.startDate);
+        if (dayIndex < 0)
+            return;
+        root.timedMutationEvent = event;
+        root.timedMutationKind = "resize";
+        root.timedMutationStartMinutes = root.eventMinutes(event.startDate);
+        root.timedMutationEndMinutes = root.eventEndMinutes(event);
+        root.timedMutationDayIndex = dayIndex;
+        root.updateEventResize(x, y);
+    }
+
+    function updateEventResize(x, y) {
+        if (!root.timedMutationEvent || root.timedMutationKind !== "resize")
+            return;
+        const target = root.gridPointAt(x, y);
+        if (!target)
+            return;
+        const end = H.snapToGrid(H.yToMinutes(target.contentY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
+        root.timedMutationEndMinutes = Math.max(root.timedMutationStartMinutes + 15, Math.min(24 * 60, end));
+    }
+
+    function isoForDayMinutes(date, minutes) {
+        const value = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        value.setMinutes(minutes);
+        return CalendarService.localIso(value, Qt.formatTime(value, "hh:mm"));
+    }
+
+    function commitTimedMutation() {
+        const event = root.timedMutationEvent;
+        const day = root.days[root.timedMutationDayIndex]?.sportsDate;
+        const action = root.timedMutationKind;
+        if (event?.uid && day && root.timedMutationEndMinutes > root.timedMutationStartMinutes) {
+            eventSidebar.requestTimedMutation(event, {
+                allDay: false,
+                start: root.isoForDayMinutes(day, root.timedMutationStartMinutes),
+                end: root.isoForDayMinutes(day, root.timedMutationEndMinutes)
+            }, action);
+        }
+        root.cancelTimedMutation();
+    }
+
+    function cancelTimedMutation() {
+        root.timedMutationEvent = null;
+        root.timedMutationKind = "";
+        root.timedMutationDayIndex = -1;
     }
 
     function requestWeekDelete(event) {
@@ -446,6 +565,8 @@ Item {
                                 startHour: root.startHour
                                 startMinute: root.startMinute
                                 snapInterval: 15
+                                coordinateRoot: root
+                                draggedEvent: root.timedMutationEvent
                                 ghostVisible: root.ghostVisible
                                 ghostDayIndex: root.ghostDayIndex
                                 ghostTopY: root.ghostTopY
@@ -508,6 +629,14 @@ Item {
                                 }
                                 onEditRequested: (evt, dIdx) => root.openPopupForEdit(evt, dIdx)
                                 onDeleteRequested: (evt, dIdx) => root.requestWeekDelete(evt)
+                                onEventMoveStarted: (evt, x, y, offsetY) => root.beginEventMove(evt, x, y, offsetY)
+                                onEventMoveMoved: (x, y) => root.updateEventMove(x, y)
+                                onEventMoveEnded: root.commitTimedMutation()
+                                onEventMoveCanceled: root.cancelTimedMutation()
+                                onEventResizeStarted: (evt, x, y) => root.beginEventResize(evt, x, y)
+                                onEventResizeMoved: (x, y) => root.updateEventResize(x, y)
+                                onEventResizeEnded: root.commitTimedMutation()
+                                onEventResizeCanceled: root.cancelTimedMutation()
                             }
                         }
                     }
@@ -538,6 +667,37 @@ Item {
         onScrollRequested: y => styledFlickable.contentY = Math.min(y, Math.max(0, styledFlickable.contentHeight - styledFlickable.height))
     }
 
+    Rectangle {
+        id: timedMutationProxy
+        visible: root.timedMutationEvent !== null && root.timedMutationDayIndex >= 0
+        z: 24
+        width: Math.max(32, root.dayColumnWidth - 10)
+        height: Math.max((root.timedMutationEndMinutes - root.timedMutationStartMinutes) * root.pixelsPerMinute - 4, 48)
+        radius: Appearance.rounding.normal
+        color: H.getEventColorRadial(root.timedMutationDayIndex, root.timedMutationStartMinutes, root.nextEventData, root.maxLogicalDistance, Appearance.colors)
+        opacity: 0.96
+        x: {
+            const point = eventsRow.mapToItem(root, root.timedMutationDayIndex * (root.dayColumnWidth + root.spacing) + 5, 0);
+            return point.x;
+        }
+        y: {
+            const point = eventsRow.mapToItem(root, 0, H.minutesToY(root.timedMutationStartMinutes, root.startHour, root.startMinute, root.pixelsPerMinute));
+            return point.y;
+        }
+
+        StyledText {
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            verticalAlignment: Text.AlignVCenter
+            text: root.timedMutationEvent?.content ?? ""
+            font.pixelSize: Appearance.font.pixelSize.small
+            font.weight: Font.DemiBold
+            color: ColorUtils.getContrastingTextColor(timedMutationProxy.color)
+            elide: Text.ElideRight
+        }
+    }
+
     Item {
         anchors {
             top: parent.top
@@ -563,6 +723,7 @@ Item {
             onSaveRequested: payload => root.applySidebarPayload(payload)
             onTaskCreateRequested: task => Todo.addItem(task)
             onDeleteRequested: (eventData, scope) => CalendarService.deleteEventWithScope(eventData, scope)
+            onEventFieldsMutationRequested: (eventData, fields, scope) => CalendarService.saveEventFields(eventData, fields, scope)
             onTimePickerRequested: (which, startHour, startMinute) => {
                 timePicker.target = which;
                 timePicker.open(startHour, startMinute, which === "start" ? Translation.tr("Starts at") : Translation.tr("Ends at"));

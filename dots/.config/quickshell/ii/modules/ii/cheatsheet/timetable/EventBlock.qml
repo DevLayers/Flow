@@ -21,9 +21,19 @@ Rectangle {
     property real pixelsPerMinute
     property int startHour
     property int startMinute
+    property Item coordinateRoot: null
+    property bool manipulating: false
 
     signal editRequested(var event, int dayIndex)
     signal deleteRequested(var event, int dayIndex)
+    signal moveDragStarted(var event, real x, real y, real pointerOffsetY)
+    signal moveDragMoved(real x, real y)
+    signal moveDragEnded
+    signal moveDragCanceled
+    signal resizeDragStarted(var event, real x, real y)
+    signal resizeDragMoved(real x, real y)
+    signal resizeDragEnded
+    signal resizeDragCanceled
 
     readonly property bool isNextEvent: nextEventData && nextEventData.dayIndex === dayIdx && nextEventData.startMinutes === eventStartMinutes
     readonly property bool sportEvent: eventData?.sportEvent === true
@@ -55,6 +65,7 @@ Rectangle {
     border.color: isNextEvent ? H.withOpacity(Appearance.colors.colOnPrimary, 0.8) : "transparent"
     y: H.minutesToY(eventStartMinutes, startHour, startMinute, pixelsPerMinute)
     height: Math.max((eventEndMinutes - eventStartMinutes) * pixelsPerMinute - 4, 48)
+    opacity: eventBlock.manipulating ? 0.24 : 1
 
     // Decorative watermark icon for the next event
     MaterialSymbol {
@@ -86,11 +97,133 @@ Rectangle {
         }
     }
 
-    // Click to edit
+    // Click to edit, drag the body to move. The proxy itself belongs to the
+    // WeekView so it can stay above columns and outlive a clipped delegate.
     MouseArea {
+        id: eventPointer
         anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        onClicked: editRequested(eventData, dayIdx)
+        hoverEnabled: true
+        preventStealing: true
+        cursorShape: eventPointer.started ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+        z: 2
+
+        readonly property int dragThreshold: 6
+        property real pressX: 0
+        property real pressY: 0
+        property bool started: false
+
+        function scenePoint(mouse) {
+            if (!eventBlock.coordinateRoot)
+                return Qt.point(mouse.x, mouse.y);
+            return eventBlock.mapToItem(eventBlock.coordinateRoot, mouse.x, mouse.y);
+        }
+
+        onPressed: mouse => {
+            eventPointer.pressX = mouse.x;
+            eventPointer.pressY = mouse.y;
+            eventPointer.started = false;
+        }
+
+        onPositionChanged: mouse => {
+            if (eventBlock.readOnly || !eventPointer.pressedButtons)
+                return;
+            const point = eventPointer.scenePoint(mouse);
+            if (!eventPointer.started) {
+                if (Math.abs(mouse.x - eventPointer.pressX) + Math.abs(mouse.y - eventPointer.pressY) < eventPointer.dragThreshold)
+                    return;
+                eventPointer.started = true;
+                eventBlock.moveDragStarted(eventBlock.eventData.sourceEvent ?? eventBlock.eventData, point.x, point.y, eventPointer.pressY);
+            }
+            eventBlock.moveDragMoved(point.x, point.y);
+        }
+
+        onReleased: {
+            if (eventPointer.started) {
+                eventPointer.started = false;
+                eventBlock.moveDragEnded();
+                return;
+            }
+            eventBlock.editRequested(eventData, dayIdx);
+        }
+
+        onCanceled: {
+            if (!eventPointer.started)
+                return;
+            eventPointer.started = false;
+            eventBlock.moveDragCanceled();
+        }
+    }
+
+    MouseArea {
+        id: resizeHandle
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(parent.width - 20, 44)
+        height: 14
+        hoverEnabled: true
+        preventStealing: true
+        visible: !eventBlock.readOnly
+        cursorShape: Qt.SizeVerCursor
+        z: 12
+
+        readonly property int dragThreshold: 4
+        property real pressY: 0
+        property bool started: false
+
+        function scenePoint(mouse) {
+            if (!eventBlock.coordinateRoot)
+                return Qt.point(mouse.x, mouse.y);
+            return resizeHandle.mapToItem(eventBlock.coordinateRoot, mouse.x, mouse.y);
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width, 26)
+            height: 3
+            radius: Appearance.rounding.full
+            color: ColorUtils.getContrastingTextColor(eventBlock.color)
+            opacity: resizeHandle.hovered || resizeHandle.pressed ? 0.9 : 0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+        }
+
+        onPressed: mouse => {
+            resizeHandle.pressY = mouse.y;
+            resizeHandle.started = false;
+        }
+
+        onPositionChanged: mouse => {
+            if (!resizeHandle.pressedButtons)
+                return;
+            const point = resizeHandle.scenePoint(mouse);
+            if (!resizeHandle.started) {
+                if (Math.abs(mouse.y - resizeHandle.pressY) < resizeHandle.dragThreshold)
+                    return;
+                resizeHandle.started = true;
+                eventBlock.resizeDragStarted(eventBlock.eventData.sourceEvent ?? eventBlock.eventData, point.x, point.y);
+            }
+            eventBlock.resizeDragMoved(point.x, point.y);
+        }
+
+        onReleased: {
+            if (!resizeHandle.started)
+                return;
+            resizeHandle.started = false;
+            eventBlock.resizeDragEnded();
+        }
+
+        onCanceled: {
+            if (!resizeHandle.started)
+                return;
+            resizeHandle.started = false;
+            eventBlock.resizeDragCanceled();
+        }
     }
 
     // Delete button
