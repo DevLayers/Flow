@@ -23,7 +23,6 @@ Item {
     property var holidays: []
     property bool sportsEnabled: false
     property bool dropTarget: false
-    property bool selected: false
     property int entranceKey: 0
 
     signal createRequested(var date)

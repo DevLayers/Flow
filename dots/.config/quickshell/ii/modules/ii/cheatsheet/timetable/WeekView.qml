@@ -38,11 +38,6 @@ Item {
     readonly property int dayCount: root.days?.length ?? 0
     readonly property bool initialLoadComplete: root.dayCount > 0 && root.loadedDayCount >= root.dayCount
 
-    onLoadedDayCountChanged: {
-        if (root.dayCount > 0 && root.loadedDayCount >= root.dayCount)
-            console.info("[TimetableLoad][Week] completed=" + root.loadedDayCount);
-    }
-
     readonly property real eventRailWidth: Math.max(300, Math.min(390, root.width * 0.29))
     readonly property real usableWidth: root.width - (eventSidebar.open ? root.eventRailWidth + 14 : 0)
     readonly property real dayColumnWidth: {
@@ -416,18 +411,17 @@ Item {
     Connections {
         target: Config.options.cheatsheet
         function onTimetableTodayFirstChanged() {
-            root.restartDayLoading();
+            root.refreshVisibleRange();
         }
     }
     Connections {
         target: Config.options.time
         function onFirstDayOfWeekChanged() {
-            root.restartDayLoading();
+            root.refreshVisibleRange();
         }
     }
 
     function requestSportsRange() {
-        console.info("[TimetableSports][Week] attempt enabled=" + root.sportsEnabled + " complete=" + root.initialLoadComplete + " active=" + SportsService.timetableActive);
         if (!root.sportsEnabled || !root.initialLoadComplete)
             return;
         const fromDate = H.getDateForDayIndex(0, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
@@ -436,8 +430,13 @@ Item {
         if (range === root.requestedSportsRange)
             return;
         root.requestedSportsRange = range;
-        console.info("[TimetableSports][Week] request=" + range);
         SportsService.requestTimetableRange(fromDate, toDate);
+    }
+
+    function refreshVisibleRange() {
+        root.requestedSportsRange = "";
+        root.updateNextEvent();
+        Qt.callLater(root.requestSportsRange);
     }
 
     function restartDayLoading() {

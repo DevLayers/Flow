@@ -17,6 +17,8 @@ Item {
     property int horizonDays: 60
     property int maxRows: 90
     property int entranceKey: 0
+    property string categoryFilter: ""
+    property var holidaysByDay: ({})
 
     signal eventActivated(var eventData)
     signal dateActivated(var date)
@@ -27,21 +29,39 @@ Item {
     // in Upcoming below; overdue work must not be presented as due today.
     readonly property var todayTasks: Todo.getTasksByDate(root.todayDate)
         .filter(task => task?.hasDate === true)
+    readonly property var overdueTasks: Todo.getOverdueTasks(root.todayDate)
 
     readonly property var rows: {
         const out = [];
         const now = DateTime.clock.date;
         const today = H.startOfDay(now);
-        const holidayMap = (Config.options.calendar.holidays.enable && Config.options.calendar.holidays.showInMonthView) ? Holidays.byDayKey : ({});
+
+        if (root.overdueTasks.length > 0) {
+            out.push({
+                rowType: "overdue",
+                rowKey: "overdue",
+                date: today,
+                count: root.overdueTasks.length
+            });
+            for (let i = 0; i < root.overdueTasks.length; i++) {
+                out.push({
+                    rowType: "task",
+                    rowKey: "task:overdue:" + (root.overdueTasks[i].id || root.overdueTasks[i].content || i),
+                    date: today,
+                    task: root.overdueTasks[i]
+                });
+            }
+        }
 
         for (let offset = 0; offset < root.horizonDays; offset++) {
             const date = H.addDays(today, offset);
             const key = H.dayKeyOf(date);
-            const dayHolidays = holidayMap[key] ?? [];
+            const dayHolidays = root.holidaysByDay[key] ?? [];
             let dayEvents = CalendarService.eventsByDay[key] ?? [];
+            if (root.categoryFilter)
+                dayEvents = dayEvents.filter(event => (event.categories ?? []).includes(root.categoryFilter));
             const dayBirthdays = BirthdaysService.birthdaysForDate(date);
-            const overdueTasks = Todo.getOverdueTasks(today);
-            const dayTasks = Todo.getTasksByDate(date).filter(task => !overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")));
+            const dayTasks = Todo.getTasksByDate(date).filter(task => !root.overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")));
 
             // Today's list is about what is left of today, not what already ran.
             if (offset === 0)
@@ -317,7 +337,9 @@ Item {
                     readonly property string rowType: rowItem.modelData?.rowType ?? "day"
 
                     width: list.width
-                    implicitHeight: rowItem.rowType === "day" ? 30 : 40
+                    readonly property bool separatorRow: rowItem.rowType === "day" || rowItem.rowType === "overdue"
+
+                    implicitHeight: rowItem.separatorRow ? 30 : 40
                     height: implicitHeight
 
                     // ─── Day separator ───
@@ -326,13 +348,15 @@ Item {
                         anchors.leftMargin: 4
                         anchors.rightMargin: 4
                         anchors.topMargin: 8
-                        visible: rowItem.rowType === "day"
+                        visible: rowItem.separatorRow
                         spacing: 8
 
                         StyledText {
                             text: {
-                                if (rowItem.rowType !== "day")
+                                if (!rowItem.separatorRow)
                                     return "";
+                                if (rowItem.rowType === "overdue")
+                                    return Translation.tr("Overdue") + " · " + String(rowItem.modelData.count);
                                 if (rowItem.modelData.offset === 0)
                                     return Translation.tr("Today");
                                 if (rowItem.modelData.offset === 1)
@@ -341,7 +365,9 @@ Item {
                             }
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             font.weight: Font.Bold
-                            color: rowItem.rowType === "day" && rowItem.modelData.offset === 0 ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+                            color: rowItem.rowType === "overdue"
+                                ? Appearance.colors.colError
+                                : (rowItem.modelData.offset === 0 ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
                         }
 
                         Rectangle {
@@ -393,6 +419,7 @@ Item {
 
                             readonly property color accent: H.chipColor(rowItem.modelData.event, Appearance.colors)
                             readonly property bool allDay: CalendarService.isAllDayEvent(rowItem.modelData.event)
+                            readonly property bool cancelled: String(rowItem.modelData.event?.status ?? "").toUpperCase() === "CANCELLED"
                             readonly property bool featured: rowItem.modelData.rowKey === root.featuredEventRowKey
                             readonly property color foreground: featured
                                 ? ColorUtils.getContrastingTextColor(accent)
@@ -429,6 +456,7 @@ Item {
                                         text: rowItem.modelData.event.content
                                         font.pixelSize: Appearance.font.pixelSize.smallie
                                         font.weight: eventButton.featured ? Font.Bold : Font.DemiBold
+                                        font.strikeout: eventButton.cancelled
                                         color: eventButton.foreground
                                         elide: Text.ElideRight
                                         maximumLineCount: 1

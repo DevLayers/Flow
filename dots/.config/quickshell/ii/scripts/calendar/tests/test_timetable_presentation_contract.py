@@ -115,6 +115,32 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("colBackground: featured ? accent : Appearance.colors.colLayer1", panel)
         self.assertIn("ColorUtils.getContrastingTextColor(accent)", panel)
 
+    def test_upcoming_rail_shares_filters_and_lists_overdue_tasks(self) -> None:
+        month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
+        panel = (TIMETABLE / "MonthUpcomingPanel.qml").read_text(encoding="utf-8")
+
+        self.assertEqual(panel.count("Todo.getOverdueTasks("), 1)
+        self.assertIn('rowType: "overdue"', panel)
+        self.assertIn("property string categoryFilter", panel)
+        self.assertIn("property var holidaysByDay", panel)
+        self.assertNotIn("Config.options.calendar.holidays", panel)
+        self.assertIn("categoryFilter: root.categoryFilter", month)
+        self.assertIn("holidaysByDay: root.holidayMap", month)
+
+    def test_cancelled_events_are_struck_in_both_sidebars(self) -> None:
+        upcoming = (TIMETABLE / "MonthUpcomingPanel.qml").read_text(encoding="utf-8")
+        day_row = (TIMETABLE / "MonthDayEventRow.qml").read_text(encoding="utf-8")
+
+        self.assertIn("font.strikeout: eventButton.cancelled", upcoming)
+        self.assertIn("font.strikeout: root.cancelled", day_row)
+
+    def test_timetable_hot_paths_do_not_log_unconditionally(self) -> None:
+        host = (ROOT / "modules" / "ii" / "cheatsheet" / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
+
+        self.assertNotIn('console.info("[Timetable', host + week + month)
+
     def test_lineups_use_a_valid_material_apparel_symbol(self) -> None:
         details = (TIMETABLE / "SportsEventDetails.qml").read_text(encoding="utf-8")
 

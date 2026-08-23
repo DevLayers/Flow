@@ -13,6 +13,7 @@ RippleButton {
     required property var eventData
     readonly property bool sports: root.eventData?.sportEvent === true
     readonly property bool rowAllDay: CalendarService.isAllDayEvent(root.eventData)
+    readonly property bool cancelled: String(root.eventData?.status ?? "").toUpperCase() === "CANCELLED"
 
     signal activated
 
@@ -57,6 +58,7 @@ RippleButton {
                 text: root.eventData?.content ?? ""
                 font.pixelSize: Appearance.font.pixelSize.smallie
                 font.weight: Font.Bold
+                font.strikeout: root.cancelled
                 color: root.sports ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSurface
                 elide: Text.ElideRight
                 maximumLineCount: 1

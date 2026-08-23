@@ -71,6 +71,15 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertNotIn("Qt.callLater(root.maybeApplyInitialScroll);", initial_scroll)
         self.assertIn("id: initialScrollRetryTimer", week)
 
+    def test_week_preferences_refresh_without_replaying_column_stagger(self) -> None:
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        calendar = (ROOT / "services" / "CalendarService.qml").read_text(encoding="utf-8")
+
+        self.assertEqual(week.count("root.restartDayLoading();"), 1)
+        self.assertGreaterEqual(week.count("root.refreshVisibleRange();"), 2)
+        self.assertIn("function onFirstDayOfWeekChanged()", calendar)
+        self.assertIn("root.eventsInWeek = root.getEventsInWeek();", calendar)
+
     def test_week_view_excludes_task_projection(self) -> None:
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
         header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")

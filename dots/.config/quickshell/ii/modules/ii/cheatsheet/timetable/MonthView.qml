@@ -35,13 +35,9 @@ Item {
     readonly property int rowCount: Math.max(1, root.cellCount / 7)
     readonly property bool initialLoadComplete: root.cellCount > 0 && root.loadedCellCount >= root.cellCount
 
-    onLoadedCellCountChanged: {
-        if (root.cellCount > 0 && root.loadedCellCount >= root.cellCount)
-            console.info("[TimetableLoad][Month] completed=" + root.loadedCellCount);
-    }
-
     readonly property bool holidaysVisible: (Config.options.calendar.holidays.enable ?? false) && (Config.options.calendar.holidays.showInMonthView ?? false)
     readonly property var holidayMap: root.holidaysVisible ? Holidays.byDayKey : ({})
+    readonly property var overdueTasks: Todo.getOverdueTasks(DateTime.clock.date)
     readonly property var availableCategories: {
         const seen = new Set();
         for (const event of CalendarService.events ?? []) {
@@ -72,17 +68,12 @@ Item {
 
     function tasksForDay(date) {
         const isToday = H.sameDate(date, DateTime.clock.date);
-        const overdueTasks = Todo.getOverdueTasks(DateTime.clock.date);
-        const dueToday = Todo.getTasksByDate(date).filter(task => {
-            if (!task?.hasDate || task.done)
-                return true;
-            return isToday || !overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? ""));
-        });
+        const dueToday = Todo.getTasksByDate(date).filter(task => !root.overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")));
         if (!isToday)
             return dueToday;
         // Overdue tasks live on today only: a calendar user sees the action
         // where it matters now, rather than in a past cell and today.
-        return overdueTasks.concat(dueToday);
+        return root.overdueTasks.concat(dueToday);
     }
 
     // ─── Month navigation ───
@@ -184,7 +175,6 @@ Item {
     }
 
     function requestSportsRange() {
-        console.info("[TimetableSports][Month] attempt enabled=" + root.sportsEnabled + " complete=" + root.initialLoadComplete + " active=" + SportsService.timetableActive);
         if (!root.sportsEnabled || !root.initialLoadComplete || root.cellCount === 0)
             return;
         const fromDate = root.cells[0].date;
@@ -193,7 +183,6 @@ Item {
         if (range === root.requestedSportsRange)
             return;
         root.requestedSportsRange = range;
-        console.info("[TimetableSports][Month] request=" + range);
         SportsService.requestTimetableRange(fromDate, toDate);
     }
 
@@ -353,6 +342,8 @@ Item {
                 anchors.fill: parent
                 anchors.rightMargin: 2
                 entranceKey: root.entranceKey
+                categoryFilter: root.categoryFilter
+                holidaysByDay: root.holidayMap
                 onEventActivated: eventData => root.requestOpen(eventData)
                 onDateActivated: date => root.goToMonth(date.getFullYear(), date.getMonth(), 0)
             }

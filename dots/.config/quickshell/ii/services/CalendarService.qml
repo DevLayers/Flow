@@ -654,4 +654,11 @@ Singleton {
             root.eventsInWeek = root.getEventsInWeek();
         }
     }
+
+    Connections {
+        target: Config.options.time
+        function onFirstDayOfWeekChanged() {
+            root.eventsInWeek = root.getEventsInWeek();
+        }
+    }
 }

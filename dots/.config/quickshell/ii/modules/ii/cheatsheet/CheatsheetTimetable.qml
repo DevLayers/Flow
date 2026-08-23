@@ -48,8 +48,6 @@ Item {
         }
     }
 
-    onSportsReadyChanged: console.info("[TimetableSports][Host] sportsReady=" + root.sportsReady + " subscribers=" + SportsService.timetableSubscribers)
-
     onActiveViewReadyChanged: {
         if (root.activeViewReady && !root.sportsSubscriberAcquired)
             sportsActivationTimer.restart();
@@ -72,23 +70,6 @@ Item {
         sportsActivationTimer.stop();
         if (root.sportsSubscriberAcquired)
             SportsService.releaseTimetableSubscriber();
-    }
-
-    Connections {
-        target: SportsService
-        function onCacheReadyChanged() {
-            console.info("[TimetableSports][Service] cacheReady=" + SportsService.cacheReady);
-        }
-        function onTimetableLoadingChanged() {
-            console.info("[TimetableSports][Service] loading=" + SportsService.timetableLoading);
-        }
-        function onTimetableGamesChanged() {
-            console.info("[TimetableSports][Service] games=" + (SportsService.timetableGames?.length ?? 0));
-        }
-        function onTimetableErrorChanged() {
-            if (SportsService.timetableError.length > 0)
-                console.info("[TimetableSports][Service] error=" + SportsService.timetableError);
-        }
     }
 
     Rectangle {
