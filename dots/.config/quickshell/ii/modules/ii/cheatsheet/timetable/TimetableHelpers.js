@@ -178,6 +178,13 @@ function addDays(date, count) {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate() + count);
 }
 
+function weekStartFor(date, firstDayOfWeek, todayFirst) {
+    const day = startOfDay(date);
+    if (todayFirst)
+        return day;
+    return addDays(day, -columnForJsDay(day.getDay(), firstDayOfWeek));
+}
+
 // Clamps the day so "31 Jan + 1 month" lands in February instead of March.
 function addMonths(date, count) {
     const firstOfTarget = new Date(date.getFullYear(), date.getMonth() + count, 1);

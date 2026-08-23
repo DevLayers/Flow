@@ -12,6 +12,20 @@ TIMETABLE = ROOT / "modules" / "ii" / "cheatsheet" / "timetable"
 
 
 class TimetablePresentationContractTests(unittest.TestCase):
+    def test_week_navigation_uses_a_real_anchor_and_shared_picker(self) -> None:
+        helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+
+        self.assertIn("function weekStartFor(date, firstDayOfWeek, todayFirst)", helper)
+        self.assertIn("property date viewWeekStart", week)
+        self.assertIn("function shiftWeek(delta)", week)
+        self.assertIn("function goToday()", week)
+        self.assertIn('datePicker.purpose = "navigate"', week)
+        self.assertIn('if (datePicker.purpose === "navigate")', week)
+        self.assertIn("const calendarEvents = CalendarService.eventsByDay", week)
+        self.assertNotIn("CalendarService.eventsInWeek", week)
+        self.assertIn("onRevealKeyChanged: dayColDelegate.replayEntrance()", week)
+
     def test_week_and_month_share_semantic_event_colors(self) -> None:
         helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")

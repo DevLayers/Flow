@@ -18,9 +18,7 @@ Row {
     property int currentDayIndex
     property int allDayChipHeight
     property int allDayChipSpacing
-    property bool createEnabled: true
 
-    signal createRequested
     signal dayActivated(var date)
     signal sportsDayActivated(var date)
 
@@ -30,25 +28,6 @@ Row {
     Item {
         width: timeColumnWidth
         height: headerHeight
-
-        FloatingActionButton {
-            id: createFab
-            anchors.centerIn: parent
-            baseSize: 48
-            buttonRadius: Appearance.rounding.full
-            iconText: "add"
-            enabled: headerRow.createEnabled
-            colBackground: Appearance.colors.colPrimary
-            colBackgroundHover: Appearance.colors.colPrimaryHover
-            colRipple: Appearance.colors.colPrimaryActive
-            colOnBackground: Appearance.colors.colOnPrimary
-            onClicked: headerRow.createRequested()
-
-            StyledToolTip {
-                extraVisibleCondition: createFab.hovered
-                text: CalendarService.khalAvailable ? Translation.tr("New event") : Translation.tr("Calendar service unavailable")
-            }
-        }
     }
 
     Repeater {

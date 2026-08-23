@@ -23,6 +23,7 @@ Item {
     property int slotHeight: 120 // in pixels
     property int timeColumnWidth: 100
     property real maxContentWidth: 1600
+    property real navBarHeight: 56
 
     readonly property int totalSlots: Math.floor(((endHour * 60) - (startHour * 60 + startMinute)) / slotDuration)
     readonly property real pixelsPerMinute: slotHeight / slotDuration
@@ -35,33 +36,57 @@ Item {
     property bool sportsEnabled: false
     property int loadedDayCount: 0
     property string requestedSportsRange: ""
+    property date viewWeekStart: H.weekStartFor(DateTime.clock.date, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst)
+    property bool followingCurrentWeek: true
+    property int entranceKey: 0
+    property real weekOpacity: 1
+    property real weekShiftX: 0
     readonly property int dayCount: root.days?.length ?? 0
     readonly property bool initialLoadComplete: root.dayCount > 0 && root.loadedDayCount >= root.dayCount
+    readonly property date currentWeekStart: H.weekStartFor(DateTime.clock.date, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst)
+    readonly property date viewWeekEnd: H.addDays(root.viewWeekStart, 6)
+    readonly property bool viewingCurrentWeek: H.sameDate(root.viewWeekStart, root.currentWeekStart)
 
     readonly property real eventRailWidth: Math.max(300, Math.min(390, root.width * 0.29))
     readonly property real usableWidth: root.width - (eventSidebar.open ? root.eventRailWidth + 14 : 0)
+    readonly property bool compactNav: root.usableWidth < 830
     readonly property real dayColumnWidth: {
         let availableWidth = root.usableWidth > 0 ? root.usableWidth : maxContentWidth;
         return Math.max(80, (availableWidth - timeColumnWidth - root.dayCount * spacing) / Math.max(1, root.dayCount));
     }
-    readonly property int currentDayIndex: Config.options.cheatsheet.timetableTodayFirst ? 0 : ((DateTime.clock.date.getDay() - Config.options.time.firstDayOfWeek + 6) % 7)
+    readonly property int currentDayIndex: {
+        for (let index = 0; index < root.days.length; index++) {
+            if (H.sameDate(root.days[index]?.sportsDate, DateTime.clock.date))
+                return index;
+        }
+        return -1;
+    }
     readonly property string clockDayKey: Qt.formatDate(DateTime.clock.date, "yyyy-MM-dd")
 
     implicitWidth: maxContentWidth
-    implicitHeight: Math.min(headerHeight + contentHeight, maxHeight)
-    readonly property var calendarDays: CalendarService.eventsInWeek
+    implicitHeight: Math.min(navBarHeight + headerHeight + contentHeight, maxHeight)
     readonly property var days: {
+        const calendarEvents = CalendarService.eventsByDay;
         // gamesForDate() reads a plain array, so depend explicitly on the
         // replacement that SportsService publishes after each refresh.
         const sportsGames = root.sportsEnabled ? SportsService.timetableGames : [];
         const result = [];
         for (let i = 0; i < 7; i++) {
-            const date = H.getDateForDayIndex(i, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
-            const calendarDay = root.calendarDays?.[i] ?? ({});
+            const date = H.addDays(root.viewWeekStart, i);
+            const sourceEvents = calendarEvents?.[H.dayKeyOf(date)] ?? [];
+            const events = sourceEvents.map(event => {
+                const allDay = CalendarService.isAllDayEvent(event);
+                return Object.assign({}, event, {
+                    start: allDay ? "00:00" : H.khalTimeOf(event.startDate),
+                    end: allDay ? "23:59" : H.khalTimeOf(event.endDate),
+                    title: event.content ?? Translation.tr("Event"),
+                    sourceEvent: event
+                });
+            });
             const games = root.sportsEnabled && Array.isArray(sportsGames) ? SportsService.gamesForDate(date) : [];
             result.push({
-                name: String(calendarDay.name || Qt.formatDate(date, "dddd")),
-                events: calendarDay.events ?? [],
+                name: Qt.formatDate(date, "dddd"),
+                events: events,
                 sportsDate: date,
                 sportsCount: games.length
             });
@@ -230,6 +255,68 @@ Item {
         eventSidebar.startCreate(date);
     }
 
+    function weekRangeLabel(compact) {
+        const start = root.viewWeekStart;
+        const end = root.viewWeekEnd;
+        const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
+        const sameYear = start.getFullYear() === end.getFullYear();
+        if (compact) {
+            if (sameMonth)
+                return String(start.getDate()) + " – " + Qt.formatDate(end, "d MMM");
+            if (sameYear)
+                return Qt.formatDate(start, "d MMM") + " – " + Qt.formatDate(end, "d MMM");
+            return Qt.formatDate(start, "d MMM yy") + " – " + Qt.formatDate(end, "d MMM yy");
+        }
+        if (sameMonth)
+            return String(start.getDate()) + " – " + Qt.formatDate(end, "d MMMM yyyy");
+        if (sameYear)
+            return Qt.formatDate(start, "d MMMM") + " – " + Qt.formatDate(end, "d MMMM yyyy");
+        return Qt.formatDate(start, "d MMMM yyyy") + " – " + Qt.formatDate(end, "d MMMM yyyy");
+    }
+
+    function ensureDataForView() {
+        CalendarService.ensureRangeCovers(root.viewWeekStart);
+        CalendarService.ensureRangeCovers(root.viewWeekEnd);
+    }
+
+    function playWeekTransition(direction) {
+        weekAnim.stop();
+        root.weekShiftX = direction * 44;
+        root.weekOpacity = 0;
+        root.entranceKey++;
+        weekAnim.start();
+    }
+
+    function goToWeek(date, direction = 0) {
+        const target = H.weekStartFor(date, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
+        const currentMs = root.viewWeekStart.getTime();
+        const targetMs = target.getTime();
+        root.followingCurrentWeek = H.sameDate(target, root.currentWeekStart);
+        if (targetMs === currentMs) {
+            root.playWeekTransition(0);
+            return;
+        }
+        root.viewWeekStart = target;
+        root.playWeekTransition(direction === 0 ? (targetMs > currentMs ? 1 : -1) : direction);
+    }
+
+    function shiftWeek(delta) {
+        root.goToWeek(H.addDays(root.viewWeekStart, delta * 7), delta >= 0 ? 1 : -1);
+    }
+
+    function goToday() {
+        root.followingCurrentWeek = true;
+        root.goToWeek(DateTime.clock.date, 0);
+    }
+
+    function toggleDayRail() {
+        if (eventSidebar.open) {
+            eventSidebar.close();
+            return;
+        }
+        root.toggleDay(root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart);
+    }
+
     function eventMinutes(date) {
         return date.getHours() * 60 + date.getMinutes();
     }
@@ -358,7 +445,8 @@ Item {
     function openPopupForGhost() {
         let topMin = H.snapToGrid(H.yToMinutes(root.ghostTopY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
         let botMin = H.snapToGrid(H.yToMinutes(root.ghostTopY + root.ghostHeight, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-        let eventDate = H.getDateForDayIndex(root.ghostDayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
+        let eventDate = root.days[root.ghostDayIndex]?.sportsDate ?? root.viewWeekStart;
+        eventSidebar.sportsListOnly = false;
         eventSidebar.startCreateAt(eventDate, topMin, botMin);
         root.ghostVisible = false;
     }
@@ -398,12 +486,14 @@ Item {
     }
 
     onClockDayKeyChanged: {
+        if (root.followingCurrentWeek)
+            root.viewWeekStart = root.currentWeekStart;
         root.requestedSportsRange = "";
         root.requestSportsRange();
     }
     Connections {
         target: CalendarService
-        function onEventsInWeekChanged() {
+        function onEventsByDayChanged() {
             root.updateNextEvent();
             root.maybeApplyInitialScroll();
         }
@@ -411,12 +501,16 @@ Item {
     Connections {
         target: Config.options.cheatsheet
         function onTimetableTodayFirstChanged() {
+            const focus = root.followingCurrentWeek ? DateTime.clock.date : root.viewWeekStart;
+            root.viewWeekStart = H.weekStartFor(focus, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
             root.refreshVisibleRange();
         }
     }
     Connections {
         target: Config.options.time
         function onFirstDayOfWeekChanged() {
+            const focus = root.followingCurrentWeek ? DateTime.clock.date : root.viewWeekStart;
+            root.viewWeekStart = H.weekStartFor(focus, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
             root.refreshVisibleRange();
         }
     }
@@ -424,8 +518,8 @@ Item {
     function requestSportsRange() {
         if (!root.sportsEnabled || !root.initialLoadComplete)
             return;
-        const fromDate = H.getDateForDayIndex(0, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
-        const toDate = H.getDateForDayIndex(6, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
+        const fromDate = root.viewWeekStart;
+        const toDate = root.viewWeekEnd;
         const range = Qt.formatDate(fromDate, "yyyy-MM-dd") + "|" + Qt.formatDate(toDate, "yyyy-MM-dd");
         if (range === root.requestedSportsRange)
             return;
@@ -435,9 +529,12 @@ Item {
 
     function refreshVisibleRange() {
         root.requestedSportsRange = "";
+        root.ensureDataForView();
         root.updateNextEvent();
         Qt.callLater(root.requestSportsRange);
     }
+
+    onViewWeekStartChanged: root.refreshVisibleRange()
 
     function restartDayLoading() {
         root.loadedDayCount = -1;
@@ -463,9 +560,31 @@ Item {
 
     Component.onCompleted: {
         root.restartDayLoading();
+        root.ensureDataForView();
         root.updateCurrentTimeLine();
         root.updateNextEvent();
         root.maybeApplyInitialScroll();
+    }
+
+    ParallelAnimation {
+        id: weekAnim
+
+        NumberAnimation {
+            target: root
+            property: "weekShiftX"
+            to: 0
+            duration: Appearance.animation.elementMoveEnter.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+
+        NumberAnimation {
+            target: root
+            property: "weekOpacity"
+            to: 1
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Easing.OutCubic
+        }
     }
 
     // The surface is owned by CheatsheetTimetable so both views sit on the
@@ -486,39 +605,214 @@ Item {
             }
         }
 
-        TimetableHeader {
-            id: headerRow
+        RowLayout {
+            id: navBar
             Layout.fillWidth: true
-            headerHeight: root.headerHeight
-            itemSpacing: root.spacing
-            timeColumnWidth: root.timeColumnWidth
-            dayColumnWidth: root.dayColumnWidth
-            days: (root.days ?? []).slice(0, Math.max(0, root.loadedDayCount))
-            currentDayIndex: root.currentDayIndex
-            allDayChipHeight: root.allDayChipHeight
-            allDayChipSpacing: root.allDayChipSpacing
-            createEnabled: CalendarService.khalAvailable
-            onCreateRequested: root.startCreate(DateTime.clock.date)
-            onDayActivated: date => root.toggleDay(date)
-            onSportsDayActivated: date => root.toggleSportsDay(date)
+            Layout.preferredHeight: root.navBarHeight
+            spacing: 8
+
+            RippleButton {
+                id: weekTitleButton
+                Layout.fillWidth: true
+                implicitHeight: 52
+                buttonRadius: Appearance.rounding.normal
+                colBackgroundHover: Appearance.colors.colLayer1Hover
+                colBackgroundActive: Appearance.colors.colLayer1Active
+                onClicked: {
+                    datePicker.purpose = "navigate";
+                    datePicker.open(root.viewWeekStart, Translation.tr("Go to week"));
+                }
+
+                contentItem: Column {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 12
+                    spacing: -2
+
+                    StyledText {
+                        width: parent.width
+                        text: root.weekRangeLabel(root.compactNav)
+                        font.family: Appearance.font.family.title
+                        font.pixelSize: root.compactNav ? Appearance.font.pixelSize.huge : Appearance.font.pixelSize.hugeass
+                        font.weight: Font.Bold
+                        font.variableAxes: Appearance.font.variableAxes.title
+                        color: Appearance.colors.colOnSurface
+                        elide: Text.ElideRight
+                        animateChange: true
+                        animationDistanceX: 0
+                        animationDistanceY: 10
+                    }
+
+                    StyledText {
+                        width: parent.width
+                        text: root.viewingCurrentWeek
+                            ? Translation.tr("This week")
+                            : (root.viewWeekStart.getFullYear() === root.viewWeekEnd.getFullYear()
+                                ? String(root.viewWeekStart.getFullYear())
+                                : String(root.viewWeekStart.getFullYear()) + " – " + String(root.viewWeekEnd.getFullYear()))
+                        font.pixelSize: Appearance.font.pixelSize.smallie
+                        font.weight: Font.Bold
+                        color: root.viewingCurrentWeek ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+                        elide: Text.ElideRight
+                    }
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: weekTitleButton.hovered
+                    text: Translation.tr("Choose week")
+                }
+            }
+
+            RippleButton {
+                id: dayRailToggle
+                visible: root.usableWidth >= 1000
+                implicitWidth: 42
+                implicitHeight: 42
+                buttonRadius: Appearance.rounding.full
+                toggled: eventSidebar.open
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colBackgroundToggled: Appearance.colors.colSecondaryContainer
+                colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+                onClicked: root.toggleDayRail()
+
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "view_sidebar"
+                    iconSize: Appearance.font.pixelSize.larger
+                    color: eventSidebar.open ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: dayRailToggle.hovered
+                    text: eventSidebar.open ? Translation.tr("Hide day details") : Translation.tr("Show day details")
+                }
+            }
+
+            RippleButtonWithIcon {
+                id: todayButton
+                implicitWidth: root.compactNav ? 42 : todayButton.contentImplicitWidth + 32
+                implicitHeight: 42
+                buttonRadius: Appearance.rounding.full
+                centerContent: true
+                materialIcon: "today"
+                materialIconFill: false
+                mainText: root.compactNav ? "" : Translation.tr("Today")
+                iconPixelSize: Appearance.font.pixelSize.larger
+                textPixelSize: Appearance.font.pixelSize.small
+                mainTextWeight: Font.Bold
+                colText: Appearance.colors.colOnSurface
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colBackgroundActive: Appearance.colors.colLayer2Active
+                onClicked: root.goToday()
+
+                StyledToolTip {
+                    extraVisibleCondition: todayButton.hovered && root.compactNav
+                    text: Translation.tr("Today")
+                }
+            }
+
+            RippleButton {
+                implicitWidth: 42
+                implicitHeight: 42
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colBackgroundActive: Appearance.colors.colLayer2Active
+                onClicked: root.shiftWeek(-1)
+
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "chevron_left"
+                    iconSize: Appearance.font.pixelSize.huge
+                    color: Appearance.colors.colOnSurface
+                }
+            }
+
+            RippleButton {
+                implicitWidth: 42
+                implicitHeight: 42
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colBackgroundActive: Appearance.colors.colLayer2Active
+                onClicked: root.shiftWeek(1)
+
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "chevron_right"
+                    iconSize: Appearance.font.pixelSize.huge
+                    color: Appearance.colors.colOnSurface
+                }
+            }
+
+            FloatingActionButton {
+                id: newEventButton
+                Layout.alignment: Qt.AlignVCenter
+                baseSize: 48
+                buttonRadius: Appearance.rounding.full
+                iconText: "add"
+                colBackground: Appearance.colors.colPrimary
+                colBackgroundHover: Appearance.colors.colPrimaryHover
+                colRipple: Appearance.colors.colPrimaryActive
+                colOnBackground: Appearance.colors.colOnPrimary
+                enabled: CalendarService.khalAvailable
+                onClicked: root.startCreate(root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart)
+
+                StyledToolTip {
+                    extraVisibleCondition: newEventButton.hovered
+                    text: CalendarService.khalAvailable ? Translation.tr("New event") : Translation.tr("Calendar service unavailable")
+                }
+            }
         }
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            color: Appearance.colors.colOutlineVariant
-            Layout.bottomMargin: 8
-        }
-
-        StyledFlickable {
-            id: styledFlickable
+        Item {
+            id: weekContent
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
-            contentWidth: width
-            contentHeight: root.contentHeight
-            topMargin: 20
-            bottomMargin: 20
+            opacity: root.weekOpacity
+            transform: Translate {
+                x: root.weekShiftX
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 0
+
+                TimetableHeader {
+                    id: headerRow
+                    Layout.fillWidth: true
+                    headerHeight: root.headerHeight
+                    itemSpacing: root.spacing
+                    timeColumnWidth: root.timeColumnWidth
+                    dayColumnWidth: root.dayColumnWidth
+                    days: (root.days ?? []).slice(0, Math.max(0, root.loadedDayCount))
+                    currentDayIndex: root.currentDayIndex
+                    allDayChipHeight: root.allDayChipHeight
+                    allDayChipSpacing: root.allDayChipSpacing
+                    onDayActivated: date => root.toggleDay(date)
+                    onSportsDayActivated: date => root.toggleSportsDay(date)
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    color: Appearance.colors.colOutlineVariant
+                    Layout.bottomMargin: 8
+                }
+
+                StyledFlickable {
+                    id: styledFlickable
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    contentWidth: width
+                    contentHeight: root.contentHeight
+                    topMargin: 20
+                    bottomMargin: 20
 
             Row {
                 id: contentRow
@@ -555,6 +849,8 @@ Item {
                             sourceComponent: TimetableDayColumn {
                                 id: dayColDelegate
 
+                                property int revealKey: root.entranceKey
+
                                 dayIdx: dayLoader.index
                                 dayData: dayLoader.modelData
                                 isToday: dayLoader.index === root.currentDayIndex
@@ -578,7 +874,16 @@ Item {
                                 opacity: 0
                                 transform: Translate { id: colTrans; y: 15 }
 
-                                Component.onCompleted: animTimer.start()
+                                function replayEntrance() {
+                                    colAnim.stop();
+                                    animTimer.stop();
+                                    dayColDelegate.opacity = 0;
+                                    colTrans.y = 15;
+                                    animTimer.start();
+                                }
+
+                                onRevealKeyChanged: dayColDelegate.replayEntrance()
+                                Component.onCompleted: dayColDelegate.replayEntrance()
 
                                 Timer {
                                     id: animTimer
@@ -593,14 +898,15 @@ Item {
                                         target: colTrans
                                         property: "y"
                                         to: 0
-                                        duration: 300
-                                        easing.type: Easing.OutCubic
+                                        duration: Appearance.animation.elementMoveEnter.duration
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                                     }
                                     NumberAnimation {
                                         target: dayColDelegate
                                         property: "opacity"
                                         to: 1
-                                        duration: 300
+                                        duration: Appearance.animation.elementMoveFast.duration
                                         easing.type: Easing.OutCubic
                                     }
                                 }
@@ -644,14 +950,16 @@ Item {
                 currentTimeY: root.currentTimeY
                 contentRowWidth: contentRow.width
                 timeColumnWidth: root.timeColumnWidth
-                visible: root.currentTimeY >= 0 && root.currentTimeY <= contentRow.height
+                visible: root.currentDayIndex >= 0 && root.currentTimeY >= 0 && root.currentTimeY <= contentRow.height
             }
+        }
+    }
         }
     }
 
     TimetableNextEventFAB {
         nextEventData: root.nextEventData
-        headerHeight: root.headerHeight
+        headerHeight: root.navBarHeight + root.headerHeight
         timeColumnWidth: root.timeColumnWidth
         dayColumnWidth: root.dayColumnWidth
         spacing: root.spacing
@@ -745,6 +1053,12 @@ Item {
         anchors.fill: parent
         z: 50
         property string purpose: "form"
-        onAccepted: pickedDate => eventSidebar.applyPickedDate(datePicker.purpose, pickedDate)
+        onAccepted: pickedDate => {
+            if (datePicker.purpose === "navigate") {
+                root.goToWeek(pickedDate);
+                return;
+            }
+            eventSidebar.applyPickedDate(datePicker.purpose, pickedDate);
+        }
     }
 }
