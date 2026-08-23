@@ -378,14 +378,36 @@ PanelWindow {
         // grabToImage returns false when the item can't be rendered; without
         // this, exporting sticks true and hides the toolbar for every later run.
         const started = target.grabToImage(function (result) {
-            var tempPath = "/tmp/quickshell-snip-" + Date.now() + ".png";
-            result.saveToFile(tempPath);
             root.exporting = false;
-            cb(tempPath);
+            // The render is already done at this point; only the synchronous
+            // PNG encode below is left, which can run to a second or more at
+            // native resolution. Close the overlay now and defer the encode
+            // to the next tick so the compositor gets a frame to unmap it in,
+            // instead of blocking the GUI thread first and closing late.
+            root.dismiss();
+            exportEncodeTimer.pendingResult = result;
+            exportEncodeTimer.pendingCb = cb;
+            exportEncodeTimer.start();
         }, Qt.size(targetW, targetH));
         if (!started) {
             console.warn("[Region Selector] grabToImage failed to start.");
             root.exporting = false;
+        }
+    }
+
+    Timer {
+        id: exportEncodeTimer
+        interval: 1
+        repeat: false
+        property var pendingResult: null
+        property var pendingCb: null
+        onTriggered: {
+            const tempPath = "/tmp/quickshell-snip-" + Date.now() + ".png";
+            const cb = exportEncodeTimer.pendingCb;
+            exportEncodeTimer.pendingResult.saveToFile(tempPath);
+            exportEncodeTimer.pendingResult = null;
+            exportEncodeTimer.pendingCb = null;
+            cb(tempPath);
         }
     }
 
