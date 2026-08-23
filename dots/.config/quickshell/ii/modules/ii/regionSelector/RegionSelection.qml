@@ -785,6 +785,15 @@ PanelWindow {
         // see ScreenshotAction.getCommand.
         const askingAi = snipAction === RegionSelection.SnipAction.AskAI;
         const aiPath = askingAi ? `${Directories.cliphistDecode}/ai-snip-${Date.now()}.png` : "";
+        const isRecording = snipAction === RegionSelection.SnipAction.Record || snipAction === RegionSelection.SnipAction.RecordWithSound;
+        const recordGeometry = isRecording ? {
+            // The selector is local to this monitor; wf-recorder matches
+            // regions against xdg-output's global logical coordinates.
+            x: rx + root.monitorOffsetX,
+            y: ry + root.monitorOffsetY,
+            width: rw,
+            height: rh
+        } : null;
         const command = ScreenshotAction.getCommand(rx * root.monitorScale //
         , ry * root.monitorScale //
         , rw * root.monitorScale//
@@ -792,7 +801,8 @@ PanelWindow {
         , root.screenshotPath //
         , screenshotAction //
         , screenshotDir //
-        , aiPath);
+        , aiPath
+        , recordGeometry);
         Quickshell.execDetached(command);
         ScreenshotAction.playShutterSound(screenshotAction);
         if (askingAi) {
@@ -805,7 +815,7 @@ PanelWindow {
             });
         }
         // Trigger screenshot overlay
-        if (Config.options.regionSelector.enableOverlay ?? true) {
+        if (!isRecording && (Config.options.regionSelector.enableOverlay ?? true)) {
             GlobalStates.screenshotOverlayMonitor = root.screen?.name ?? ""
             GlobalStates.screenshotOverlayImagePath = root.screenshotPath;
             GlobalStates.screenshotOverlayRegionX = rx * root.monitorScale;

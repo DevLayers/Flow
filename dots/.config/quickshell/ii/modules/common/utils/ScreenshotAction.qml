@@ -39,7 +39,7 @@ Singleton {
      * number of milliseconds for cliphist to have noticed it; a file it was
      * told the name of needs no guessing.
      */
-    function getCommand(x, y, width, height, screenshotPath, action, saveDir = "", aiPath = "") {
+    function getCommand(x, y, width, height, screenshotPath, action, saveDir = "", aiPath = "", recordGeometry = null) {
         // Set command for action
         const rx = Math.round(x);
         const ry = Math.round(y);
@@ -50,7 +50,14 @@ Singleton {
         const cropToStdout = `${cropBase} png:-`;
         const cropInPlace = `${cropBase} 'png:${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`;
         const cleanup = (Config.options.regionSelector.enableOverlay ?? true) ? ":" : `rm '${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`;
-        const slurpRegion = `${rx},${ry} ${rw}x${rh}`;
+        // Screenshot crops use native pixels, while wf-recorder expects the
+        // compositor's logical, global geometry. Callers provide that second
+        // coordinate space explicitly for recording actions.
+        const recordX = Math.round(recordGeometry ? recordGeometry.x : x);
+        const recordY = Math.round(recordGeometry ? recordGeometry.y : y);
+        const recordWidth = Math.round(recordGeometry ? recordGeometry.width : width);
+        const recordHeight = Math.round(recordGeometry ? recordGeometry.height : height);
+        const slurpRegion = `${recordX},${recordY} ${recordWidth}x${recordHeight}`;
         const uploadAndGetUrl = filePath => {
             return `curl -sF files[]=@'${StringUtils.shellSingleQuoteEscape(filePath)}' ${root.fileUploadApiEndpoint} | jq -r '.files[0].url'`;
         };

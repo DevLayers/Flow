@@ -86,9 +86,26 @@ getdate() {
 }
 
 getaudiooutput() {
-    local monitor=$(pactl list sources 2>/dev/null | grep 'Name' | grep 'monitor' | cut -d ' ' -f2 | head -n1)
+    local default_sink default_monitor monitor
+
+    # The first monitor returned by pactl is not necessarily the monitor of
+    # the current output (HDMI, USB and Bluetooth monitors can all precede it).
+    # Start with PipeWire/PulseAudio's actual default sink so desktop audio is
+    # captured from what the user is hearing.
+    default_sink=$(pactl get-default-sink 2>/dev/null)
+    if [[ -n "$default_sink" && "$default_sink" != "null" ]]; then
+        default_monitor="${default_sink}.monitor"
+        monitor=$(pactl list short sources 2>/dev/null | awk -v wanted="$default_monitor" '$2 == wanted { print $2; exit }')
+        if [[ -n "$monitor" ]]; then
+            echo "$monitor"
+            return
+        fi
+    fi
+
+    # Fallback for unusual PulseAudio setups without a matching default sink.
+    monitor=$(pactl list short sources 2>/dev/null | awk '$2 ~ /\.monitor$/ { print $2; exit }')
     if [[ -z "$monitor" ]]; then
-        pactl get-default-sink 2>/dev/null | sed 's/$/.monitor/'
+        return
     else
         echo "$monitor"
     fi
@@ -250,6 +267,19 @@ for ((i=0;i<${#ARGS[@]};i++)); do
         OBS_FLAG=1
     fi
 done
+
+AUDIO_ARGS=()
+if [[ $SOUND_FLAG -eq 1 ]]; then
+    AUDIO_DEVICE=$(getaudiooutput)
+    if [[ -n "$AUDIO_DEVICE" ]]; then
+        AUDIO_ARGS=("--audio=$AUDIO_DEVICE")
+    else
+        # Let wf-recorder select its backend's default source when pactl cannot
+        # expose a monitor name (for example during an audio-server restart).
+        AUDIO_ARGS=("--audio")
+    fi
+fi
+
 IS_OBS_RECORDING=0
 if [[ "$REC_SERVICE" == "obs" ]]; then
     if pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; then
@@ -441,11 +471,7 @@ else
     if [[ $FULLSCREEN_FLAG -eq 1 ]]; then
         notify-send "Starting recording" "$FILENAME" -a 'Recorder' & disown
         updatestate true
-        if [[ $SOUND_FLAG -eq 1 ]]; then
-            wf-recorder -o "$(getactivemonitor)" "${CODEC_OPTS[@]}" -f "$FILENAME" --audio="$(getaudiooutput)"
-        else
-            wf-recorder -o "$(getactivemonitor)" "${CODEC_OPTS[@]}" -f "$FILENAME" 
-        fi
+        wf-recorder -o "$(getactivemonitor)" "${CODEC_OPTS[@]}" -f "$FILENAME" "${AUDIO_ARGS[@]}"
     else
         # If a manual region was provided via --region, use it; otherwise run slurp as before.
         if [[ -n "$MANUAL_REGION" ]]; then
@@ -466,11 +492,11 @@ else
 
         notify-send "Starting recording" "$FILENAME" -a 'Recorder' & disown
         updatestate true
-        if [[ $SOUND_FLAG -eq 1 ]]; then
-            wf-recorder -o "$(getactivemonitor)" "${CODEC_OPTS[@]}" -f "$FILENAME"  --geometry "$geometry" --audio="$(getaudiooutput)"
-        else
-            wf-recorder -o "$(getactivemonitor)" "${CODEC_OPTS[@]}" -f "$FILENAME"  --geometry "$geometry"
-        fi
+        # With a geometry, wf-recorder detects the containing output from the
+        # global xdg-output coordinates. Forcing the focused output here makes
+        # selections on another monitor invalid and silently records the full
+        # output instead.
+        wf-recorder "${CODEC_OPTS[@]}" -f "$FILENAME" --geometry "$geometry" "${AUDIO_ARGS[@]}"
     fi
 
     # Post recording action (launch video editor)
