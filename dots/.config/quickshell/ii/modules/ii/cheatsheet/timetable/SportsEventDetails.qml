@@ -312,6 +312,12 @@ Item {
 
                 TeamSummary {
                     Layout.fillWidth: true
+                    // Both team columns must receive the same share of the
+                    // remaining row. Their implicit widths include the club
+                    // names, so leaving that as the preferred width shifts
+                    // the fixed score column toward the shorter name.
+                    Layout.preferredWidth: 0
+                    Layout.minimumWidth: 0
                     teamData: root.game?.home ?? null
                 }
 
@@ -347,6 +353,8 @@ Item {
 
                 TeamSummary {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 0
+                    Layout.minimumWidth: 0
                     teamData: root.game?.away ?? null
                 }
             }

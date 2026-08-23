@@ -116,6 +116,14 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertIn("text: detailRow.value", detail_component)
         self.assertNotIn("parent.parent.parent.caption", detail_component)
 
+    def test_scoreboard_keeps_the_score_centered_for_unequal_team_names(self) -> None:
+        details = (TIMETABLE / "SportsEventDetails.qml").read_text(encoding="utf-8")
+        scoreboard = details.split("Layout.preferredHeight: 176", 1)[1].split("        Flow {", 1)[0]
+
+        self.assertIn("Layout.preferredWidth: 82", scoreboard)
+        self.assertEqual(scoreboard.count("Layout.preferredWidth: 0"), 2)
+        self.assertEqual(scoreboard.count("Layout.minimumWidth: 0"), 2)
+
     def test_live_refresh_runs_only_for_an_active_timetable(self) -> None:
         host = (ROOT / "modules" / "ii" / "cheatsheet" / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
 
