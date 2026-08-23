@@ -130,8 +130,8 @@ Item {
         case "mediaDownloader": return mediaDownloaderPanelLoader.item;
         case "materialSymbols": return materialSymbolsPanelLoader.item;
         case "ai": return aiPanelLoader.item;
-        case "settings": return registeredPanelHost.activeItem;
-        case "keybinds": return registeredPanelHost.activeItem;
+        case "settings": return registeredPanelHostLoader.item?.activeItem ?? null;
+        case "keybinds": return registeredPanelHostLoader.item?.activeItem ?? null;
         default: return null;
         }
     }
@@ -1689,19 +1689,26 @@ Item {
                 }
             }
 
-            SearchPanelHost {
-                id: registeredPanelHost
+            Loader {
+                id: registeredPanelHostLoader
+
+                // GridLayout retains a cell for an item with zero height.
+                // Keeping this host unloaded outside its two panels prevents
+                // it from taking the results item's cell.
+                active: root.activePanelId === "settings" || root.activePanelId === "keybinds"
+                visible: active
                 Layout.fillWidth: true
-                Layout.preferredHeight: activePanelId === "settings" || activePanelId === "keybinds"
-                    ? implicitHeight
-                    : 0
+                Layout.preferredHeight: active && item ? item.implicitHeight : 0
                 height: Layout.preferredHeight
-                activePanelId: root.activePanelId === "settings" || root.activePanelId === "keybinds"
-                    ? root.activePanelId
-                    : ""
-                searchQuery: root.searchingText
-                inNotchMode: root.inNotchMode
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
+
+                sourceComponent: Component {
+                    SearchPanelHost {
+                        activePanelId: root.activePanelId
+                        searchQuery: root.searchingText
+                        inNotchMode: root.inNotchMode
+                    }
+                }
             }
 
             Loader {
