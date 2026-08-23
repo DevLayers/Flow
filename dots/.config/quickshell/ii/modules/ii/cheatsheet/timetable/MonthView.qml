@@ -31,8 +31,14 @@ Item {
     readonly property real gridGap: 6
 
     readonly property var cells: H.buildMonthCells(root.viewYear, root.viewMonth, root.firstDayOfWeek, DateTime.clock.date)
-    readonly property int rowCount: Math.max(1, root.cells.length / 7)
-    readonly property bool initialLoadComplete: root.cells.length > 0 && root.loadedCellCount >= root.cells.length
+    readonly property int cellCount: root.cells?.length ?? 0
+    readonly property int rowCount: Math.max(1, root.cellCount / 7)
+    readonly property bool initialLoadComplete: root.cellCount > 0 && root.loadedCellCount >= root.cellCount
+
+    onLoadedCellCountChanged: {
+        if (root.cellCount > 0 && root.loadedCellCount >= root.cellCount)
+            console.info("[TimetableLoad][Month] completed=" + root.loadedCellCount);
+    }
 
     readonly property bool holidaysVisible: (Config.options.calendar.holidays.enable ?? false) && (Config.options.calendar.holidays.showInMonthView ?? false)
     readonly property var holidayMap: root.holidaysVisible ? Holidays.byDayKey : ({})
@@ -161,37 +167,28 @@ Item {
     }
 
     function requestSportsRange() {
-        if (!root.sportsEnabled || !root.initialLoadComplete || root.cells.length === 0)
+        console.info("[TimetableSports][Month] attempt enabled=" + root.sportsEnabled + " complete=" + root.initialLoadComplete + " active=" + SportsService.timetableActive);
+        if (!root.sportsEnabled || !root.initialLoadComplete || root.cellCount === 0)
             return;
         const fromDate = root.cells[0].date;
-        const toDate = root.cells[root.cells.length - 1].date;
+        const toDate = root.cells[root.cellCount - 1].date;
         const range = Qt.formatDate(fromDate, "yyyy-MM-dd") + "|" + Qt.formatDate(toDate, "yyyy-MM-dd");
         if (range === root.requestedSportsRange)
             return;
         root.requestedSportsRange = range;
+        console.info("[TimetableSports][Month] request=" + range);
         SportsService.requestTimetableRange(fromDate, toDate);
     }
 
     function restartCellLoading() {
-        cellLoadTimer.stop();
-        root.loadedCellCount = 0;
-        if (root.cells.length > 0)
-            cellLoadTimer.start();
+        root.loadedCellCount = -1;
+        Qt.callLater(() => root.loadedCellCount = 0);
     }
 
-    Timer {
-        id: cellLoadTimer
-        interval: 0
-        repeat: true
-        onTriggered: {
-            if (root.loadedCellCount >= root.cells.length) {
-                stop();
-                return;
-            }
-            root.loadedCellCount += 1;
-            if (root.loadedCellCount >= root.cells.length)
-                stop();
-        }
+    function advanceCellLoading(index) {
+        if (index !== root.loadedCellCount || index >= root.cellCount)
+            return;
+        root.loadedCellCount = index + 1;
     }
 
     onInitialLoadCompleteChanged: {
@@ -583,34 +580,43 @@ Item {
                 }
 
                 Repeater {
-                    model: root.loadedCellCount
+                    model: root.cells ?? []
 
-                    delegate: MonthDayCell {
+                    delegate: Loader {
+                        id: cellLoader
+
                         required property int index
+                        required property var modelData
 
                         x: index % 7 * (gridArea.cellWidth + root.gridGap)
                         y: Math.floor(index / 7) * (gridArea.cellHeight + root.gridGap)
                         width: gridArea.cellWidth
                         height: gridArea.cellHeight
+                        active: index <= root.loadedCellCount
+                        asynchronous: true
 
-                        cellData: root.cells[index]
-                        events: root.filteredEvents(CalendarService.eventsByDay[root.cells[index].key])
-                        tasks: root.tasksForDay(root.cells[index].date)
-                        holidays: root.holidayMap[root.cells[index].key] ?? []
-                        sportsEnabled: root.sportsEnabled
-                        dropTarget: root.dropIndex === index && root.dragEvent !== null
-                        coordinateRoot: root
-                        draggedEvent: root.dragEvent
-                        entranceKey: root.entranceKey
+                        onLoaded: root.advanceCellLoading(index)
 
-                        onCreateRequested: date => root.requestCreate(date)
-                        onDayActivated: date => root.requestDay(date)
-                        onEventActivated: eventData => root.requestOpen(eventData)
-                        onTaskCompletionRequested: task => Todo.markDone(task)
-                        onEventDragBegan: (eventData, x, y, w, h) => root.beginEventDrag(eventData, x, y, w, h)
-                        onEventDragMoved: (x, y) => root.moveEventDrag(x, y)
-                        onEventDragEnded: root.endEventDrag()
-                        onEventDragCanceled: root.cancelEventDrag()
+                        sourceComponent: MonthDayCell {
+                            cellData: cellLoader.modelData
+                            events: root.filteredEvents(CalendarService.eventsByDay[cellLoader.modelData.key])
+                            tasks: root.tasksForDay(cellLoader.modelData.date)
+                            holidays: root.holidayMap[cellLoader.modelData.key] ?? []
+                            sportsEnabled: root.sportsEnabled
+                            dropTarget: root.dropIndex === cellLoader.index && root.dragEvent !== null
+                            coordinateRoot: root
+                            draggedEvent: root.dragEvent
+                            entranceKey: root.entranceKey
+
+                            onCreateRequested: date => root.requestCreate(date)
+                            onDayActivated: date => root.requestDay(date)
+                            onEventActivated: eventData => root.requestOpen(eventData)
+                            onTaskCompletionRequested: task => Todo.markDone(task)
+                            onEventDragBegan: (eventData, x, y, w, h) => root.beginEventDrag(eventData, x, y, w, h)
+                            onEventDragMoved: (x, y) => root.moveEventDrag(x, y)
+                            onEventDragEnded: root.endEventDrag()
+                            onEventDragCanceled: root.cancelEventDrag()
+                        }
                     }
                 }
             }

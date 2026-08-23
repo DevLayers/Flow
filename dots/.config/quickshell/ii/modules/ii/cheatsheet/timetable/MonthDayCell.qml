@@ -46,6 +46,24 @@ Item {
         const key = H.dayKeyOf(root.cellData?.date);
         return (Weather.forecastData ?? []).find(day => String(day?.date ?? "") === key) ?? null;
     }
+
+    readonly property bool moonEnabled: Config.options.calendar.timetable.moonPhases?.enable ?? false
+    readonly property var moonInfo: H.moonPhaseInfo(root.cellData?.date)
+    readonly property string moonPhaseLabel: {
+        const info = root.moonInfo;
+        if (!info)
+            return "";
+        switch (info.index) {
+        case 0: return Translation.tr("New Moon");
+        case 1: return Translation.tr("Waxing Crescent");
+        case 2: return Translation.tr("First Quarter");
+        case 3: return Translation.tr("Waxing Gibbous");
+        case 4: return Translation.tr("Full Moon");
+        case 5: return Translation.tr("Waning Gibbous");
+        case 6: return Translation.tr("Last Quarter");
+        default: return Translation.tr("Waning Crescent");
+        }
+    }
     readonly property var sportEvents: root.sportsEnabled ? SportsService.gamesForDate(root.cellData?.date) : []
 
     readonly property real headerHeight: 30
@@ -197,7 +215,7 @@ Item {
         Image {
             id: weatherIcon
             anchors.verticalCenter: parent.verticalCenter
-            anchors.right: addButton.left
+            anchors.right: moonIcon.left
             anchors.rightMargin: 4
             width: Appearance.font.pixelSize.normal
             height: width
@@ -219,6 +237,36 @@ Item {
                     return Translation.tr("Forecast · %1° / %2°")
                         .arg(String(forecast.minC ?? ""))
                         .arg(String(forecast.maxC ?? ""));
+                }
+            }
+        }
+
+        Text {
+            id: moonIcon
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: addButton.left
+            anchors.rightMargin: 4
+            width: Appearance.font.pixelSize.normal
+            height: width
+            visible: root.inMonth && root.moonEnabled && root.moonInfo !== null && root.width > 92
+            text: H.moonGlyphFor(root.moonInfo?.index ?? 0)
+            font.family: Appearance.font.family.iconNerd
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnSurfaceVariant
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+
+            HoverHandler {
+                id: moonHover
+            }
+
+            StyledToolTip {
+                extraVisibleCondition: moonHover.hovered
+                text: {
+                    const info = root.moonInfo;
+                    if (!info)
+                        return "";
+                    return root.moonPhaseLabel + " · " + String(Math.round(info.illumination * 100)) + "% " + Translation.tr("illuminated");
                 }
             }
         }

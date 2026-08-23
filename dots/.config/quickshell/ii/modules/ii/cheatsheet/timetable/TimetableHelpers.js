@@ -368,3 +368,122 @@ function chipColor(event, palette) {
         return event.color;
     return palette.colSecondaryContainer;
 }
+
+// ─── Moon phases ──────────────────────────────────────────────
+// Local, offline computation. Sun/moon ecliptic longitudes follow Paul
+// Schlyter's compact method plus the main lunar perturbation terms, which
+// keeps phase timing within minutes — far beyond what a day-sized calendar
+// badge needs. Pure Math/Date on purpose: no Qt.* here, so the functions
+// stay testable outside the QML engine.
+
+const MOON_SYNODIC_MONTH = 29.530588853;
+const MOON_DEG = Math.PI / 180;
+
+// One Nerd Font glyph per canonical phase, in phase order. JetBrainsMono
+// Nerd Font ships the nf-md moon set on the supplementary plane
+// (U+F0F61…U+F0F68): these exceed \uXXXX's four hex digits, so they are
+// built from code points instead of escape literals.
+const MOON_GLYPHS = [
+    0xF0F64, // nf-md-moon_new
+    0xF0F67, // nf-md-moon_waxing_crescent
+    0xF0F61, // nf-md-moon_first_quarter
+    0xF0F68, // nf-md-moon_waxing_gibbous
+    0xF0F62, // nf-md-moon_full
+    0xF0F66, // nf-md-moon_waning_gibbous
+    0xF0F63, // nf-md-moon_last_quarter
+    0xF0F65  // nf-md-moon_waning_crescent
+].map(codePoint => String.fromCodePoint(codePoint));
+
+function _normalizeDegrees(deg) {
+    return ((deg % 360) + 360) % 360;
+}
+
+function _sinDeg(deg) {
+    return Math.sin(deg * MOON_DEG);
+}
+
+function _cosDeg(deg) {
+    return Math.cos(deg * MOON_DEG);
+}
+
+// Returns { index, illumination, elongationDeg, ageDays } or null.
+// `index`: 0 new … 4 full … 7 waning crescent. `illumination`: 0…1.
+function moonPhaseInfo(date) {
+    if (!date || isNaN(date.getTime()))
+        return null;
+    // Noon local: the badge represents the middle of that day.
+    const at = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12);
+    const d = at.getTime() / 86400000 + 2440587.5 - 2451543.5; // days since 2000 Jan 0.0
+
+    // Sun: true ecliptic longitude.
+    const sunMeanAnomaly = 356.0470 + 0.9856002585 * d;
+    const sunPerihelion = 282.9404 + 4.70935e-5 * d;
+    const sunEcc = 0.016709 - 1.151e-9 * d;
+    const sunEccAnomaly = sunMeanAnomaly + (180 / Math.PI) * sunEcc
+        * _sinDeg(sunMeanAnomaly) * (1 + sunEcc * _cosDeg(sunMeanAnomaly));
+    const sunTrueAnomaly = Math.atan2(
+        Math.sqrt(1 - sunEcc * sunEcc) * _sinDeg(sunEccAnomaly),
+        _cosDeg(sunEccAnomaly) - sunEcc
+    ) / MOON_DEG;
+    const sunLongitude = _normalizeDegrees(sunTrueAnomaly + sunPerihelion);
+
+    // Moon: geocentric ecliptic longitude from orbital elements.
+    const moonNode = 125.1228 - 0.0529538083 * d;
+    const moonInclination = 5.1454;
+    const moonPerigee = 318.0634 + 0.1643573223 * d;
+    const moonEcc = 0.054900;
+    const moonMeanAnomaly = 115.3654 + 13.0649929509 * d;
+    // First-order seed, then Newton on the true Kepler equation
+    // (E - deg*e*sin(E) - M = 0). Re-seeding with the first-order formula
+    // again would diverge for the moon's eccentricity.
+    let moonEccAnomaly = moonMeanAnomaly + (180 / Math.PI) * moonEcc
+        * _sinDeg(moonMeanAnomaly);
+    for (let keplerStep = 0; keplerStep < 2; keplerStep++) {
+        const f = moonEccAnomaly - (180 / Math.PI) * moonEcc * _sinDeg(moonEccAnomaly) - moonMeanAnomaly;
+        const df = 1 - (180 / Math.PI) * moonEcc * _cosDeg(moonEccAnomaly);
+        moonEccAnomaly -= f / df;
+    }
+    const moonArgument = Math.atan2(
+        Math.sqrt(1 - moonEcc * moonEcc) * _sinDeg(moonEccAnomaly),
+        _cosDeg(moonEccAnomaly) - moonEcc
+    ) / MOON_DEG + moonPerigee;
+    // The node is already baked into this projection (Schlyter's xeclip/yeclip);
+    // adding it again here would double-count it.
+    let moonLongitude = _normalizeDegrees(Math.atan2(
+        _sinDeg(moonNode) * _cosDeg(moonArgument) + _cosDeg(moonNode) * _sinDeg(moonArgument) * _cosDeg(moonInclination),
+        _cosDeg(moonNode) * _cosDeg(moonArgument) - _sinDeg(moonNode) * _sinDeg(moonArgument) * _cosDeg(moonInclination)
+    ) / MOON_DEG);
+
+    // Main perturbation terms (evection, variation, yearly equation, …).
+    const sunMeanLongitude = _normalizeDegrees(sunMeanAnomaly + sunPerihelion);
+    const moonMeanLongitude = 218.316 + 13.176396 * d;
+    const meanElongation = moonMeanLongitude - sunMeanLongitude;
+    const latitudeArgument = moonMeanLongitude - moonNode;
+    moonLongitude = _normalizeDegrees(moonLongitude
+        - 1.274 * _sinDeg(moonMeanAnomaly - 2 * meanElongation)
+        + 0.658 * _sinDeg(2 * meanElongation)
+        - 0.186 * _sinDeg(sunMeanAnomaly)
+        - 0.059 * _sinDeg(2 * moonMeanAnomaly - 2 * meanElongation)
+        - 0.057 * _sinDeg(moonMeanAnomaly - 2 * meanElongation + sunMeanAnomaly)
+        + 0.053 * _sinDeg(moonMeanAnomaly + 2 * meanElongation)
+        + 0.046 * _sinDeg(2 * meanElongation - sunMeanAnomaly)
+        + 0.041 * _sinDeg(moonMeanAnomaly - sunMeanAnomaly)
+        - 0.035 * _sinDeg(meanElongation)
+        - 0.031 * _sinDeg(moonMeanAnomaly + sunMeanAnomaly)
+        - 0.015 * _sinDeg(2 * latitudeArgument - 2 * meanElongation)
+        + 0.011 * _sinDeg(moonMeanAnomaly - 4 * meanElongation));
+
+    // Elongation 0° = new moon, 180° = full moon.
+    const elongationDeg = _normalizeDegrees(moonLongitude - sunLongitude);
+    const illumination = (1 - Math.cos(elongationDeg * MOON_DEG)) / 2;
+    return {
+        index: Math.round(elongationDeg / 45) % 8,
+        illumination: illumination,
+        elongationDeg: elongationDeg,
+        ageDays: (elongationDeg / 360) * MOON_SYNODIC_MONTH
+    };
+}
+
+function moonGlyphFor(index) {
+    return MOON_GLYPHS[index] || MOON_GLYPHS[0];
+}

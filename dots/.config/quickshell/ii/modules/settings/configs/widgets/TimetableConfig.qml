@@ -44,10 +44,33 @@ ContentPage {
         }
 
         StyledText {
-            text: Translation.tr("Timetable notifications")
+            text: Translation.tr("Timetable Settings")
             font.pixelSize: Appearance.font.pixelSize.large
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
+        }
+    }
+
+    ContentSection {
+        icon: "tune"
+        title: Translation.tr("General Options")
+
+        ConfigSwitch {
+            buttonIcon: "calendar_today"
+            text: Translation.tr("Start with today")
+            checked: Config.options.cheatsheet.timetableTodayFirst
+            onCheckedChanged: {
+                Config.options.cheatsheet.timetableTodayFirst = checked;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "nightlight"
+            text: Translation.tr("Moon phases in month view")
+            checked: Config.options.calendar.timetable.moonPhases.enable
+            onCheckedChanged: {
+                Config.options.calendar.timetable.moonPhases.enable = checked;
+            }
         }
     }
 

@@ -3033,6 +3033,11 @@ Singleton {
                 }
                 property JsonObject timetable: JsonObject {
                     property list<string> subscriptions: []
+                    property JsonObject moonPhases: JsonObject {
+                        // Moon phase badges in the month grid; computed locally,
+                        // never fetched from the network.
+                        property bool enable: false
+                    }
                     property JsonObject notifications: JsonObject {
                         property bool enable: true
                         property list<string> offsets: ["-15m"]
@@ -3349,6 +3354,7 @@ Singleton {
                 property bool materialShapeChars: true
                 property bool rippleEffect: true
                 property bool nowPlaying: true
+                property bool sports: true
                 property bool showAlarm: true
                 property bool showWeather: true
                 property JsonObject zoomAnimation: JsonObject {

@@ -11,6 +11,7 @@ import "TimetableHelpers.js" as H
 
 Item {
     id: root
+
     property real spacing: 8
 
     readonly property bool eventPopupVisible: eventPopup.visible || eventSidebar.open
@@ -34,12 +35,19 @@ Item {
     property bool sportsEnabled: false
     property int loadedDayCount: 0
     property string requestedSportsRange: ""
-    readonly property bool initialLoadComplete: root.days.length > 0 && root.loadedDayCount >= root.days.length
+    readonly property int dayCount: root.days?.length ?? 0
+    readonly property bool initialLoadComplete: root.dayCount > 0 && root.loadedDayCount >= root.dayCount
+
+    onLoadedDayCountChanged: {
+        if (root.dayCount > 0 && root.loadedDayCount >= root.dayCount)
+            console.info("[TimetableLoad][Week] completed=" + root.loadedDayCount);
+    }
+
     readonly property real eventRailWidth: Math.max(300, Math.min(390, root.width * 0.29))
     readonly property real usableWidth: root.width - (eventSidebar.open ? root.eventRailWidth + 14 : 0)
     readonly property real dayColumnWidth: {
         let availableWidth = root.usableWidth > 0 ? root.usableWidth : maxContentWidth;
-        return Math.max(80, (availableWidth - timeColumnWidth - days.length * spacing) / Math.max(1, days.length));
+        return Math.max(80, (availableWidth - timeColumnWidth - root.dayCount * spacing) / Math.max(1, root.dayCount));
     }
     readonly property int currentDayIndex: Config.options.cheatsheet.timetableTodayFirst ? 0 : ((DateTime.clock.date.getDay() - Config.options.time.firstDayOfWeek + 6) % 7)
     readonly property string clockDayKey: Qt.formatDate(DateTime.clock.date, "yyyy-MM-dd")
@@ -266,6 +274,7 @@ Item {
     }
 
     function requestSportsRange() {
+        console.info("[TimetableSports][Week] attempt enabled=" + root.sportsEnabled + " complete=" + root.initialLoadComplete + " active=" + SportsService.timetableActive);
         if (!root.sportsEnabled || !root.initialLoadComplete)
             return;
         const fromDate = H.getDateForDayIndex(0, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
@@ -274,29 +283,20 @@ Item {
         if (range === root.requestedSportsRange)
             return;
         root.requestedSportsRange = range;
+        console.info("[TimetableSports][Week] request=" + range);
         SportsService.requestTimetableRange(fromDate, toDate);
     }
 
     function restartDayLoading() {
-        dayLoadTimer.stop();
-        root.loadedDayCount = 0;
+        root.loadedDayCount = -1;
         root.requestedSportsRange = "";
-        dayLoadTimer.start();
+        Qt.callLater(() => root.loadedDayCount = 0);
     }
 
-    Timer {
-        id: dayLoadTimer
-        interval: 0
-        repeat: true
-        onTriggered: {
-            if (root.loadedDayCount >= root.days.length) {
-                stop();
-                return;
-            }
-            root.loadedDayCount += 1;
-            if (root.loadedDayCount >= root.days.length)
-                stop();
-        }
+    function advanceDayLoading(index) {
+        if (index !== root.loadedDayCount || index >= root.dayCount)
+            return;
+        root.loadedDayCount = index + 1;
     }
 
     onInitialLoadCompleteChanged: {
@@ -341,7 +341,7 @@ Item {
             itemSpacing: root.spacing
             timeColumnWidth: root.timeColumnWidth
             dayColumnWidth: root.dayColumnWidth
-            days: root.days.slice(0, root.loadedDayCount)
+            days: (root.days ?? []).slice(0, Math.max(0, root.loadedDayCount))
             currentDayIndex: root.currentDayIndex
             allDayChipHeight: root.allDayChipHeight
             allDayChipSpacing: root.allDayChipSpacing
@@ -382,83 +382,95 @@ Item {
                     height: root.contentHeight
                     spacing: root.spacing
                     Repeater {
-                        model: root.loadedDayCount
-                        delegate: TimetableDayColumn {
-                            dayIdx: index
-                            dayData: root.days[index]
-                            isToday: index === root.currentDayIndex
-                            dayColumnWidth: root.dayColumnWidth
-                            contentHeight: root.contentHeight
-                            pixelsPerMinute: root.pixelsPerMinute
-                            startHour: root.startHour
-                            startMinute: root.startMinute
-                            snapInterval: 15
-                            ghostVisible: root.ghostVisible
-                            ghostDayIndex: root.ghostDayIndex
-                            ghostTopY: root.ghostTopY
-                            ghostHeight: root.ghostHeight
-                            nextEventData: root.nextEventData
-                            maxLogicalDistance: root.maxLogicalDistance
-                            todayHighlightFill: root.todayHighlightFill
-                            todayHighlightBorder: root.todayHighlightBorder
-                            dayBackgroundFill: root.dayBackgroundFill
-                            dayBackgroundFillVariant: root.dayBackgroundFillVariant
+                        model: root.days ?? []
 
-                            id: dayColDelegate
-                            opacity: 0
-                            transform: Translate { id: colTrans; y: 15 }
+                        delegate: Loader {
+                            id: dayLoader
 
-                            Component.onCompleted: {
-                                animTimer.start();
-                            }
+                            required property int index
+                            required property var modelData
 
-                            Timer {
-                                id: animTimer
-                                interval: index * 70
-                                repeat: false
-                                onTriggered: {
-                                    colAnim.start();
+                            width: root.dayColumnWidth
+                            height: root.contentHeight
+                            active: index <= root.loadedDayCount
+                            asynchronous: true
+
+                            onLoaded: root.advanceDayLoading(index)
+
+                            sourceComponent: TimetableDayColumn {
+                                id: dayColDelegate
+
+                                dayIdx: dayLoader.index
+                                dayData: dayLoader.modelData
+                                isToday: dayLoader.index === root.currentDayIndex
+                                dayColumnWidth: root.dayColumnWidth
+                                contentHeight: root.contentHeight
+                                pixelsPerMinute: root.pixelsPerMinute
+                                startHour: root.startHour
+                                startMinute: root.startMinute
+                                snapInterval: 15
+                                ghostVisible: root.ghostVisible
+                                ghostDayIndex: root.ghostDayIndex
+                                ghostTopY: root.ghostTopY
+                                ghostHeight: root.ghostHeight
+                                nextEventData: root.nextEventData
+                                maxLogicalDistance: root.maxLogicalDistance
+                                todayHighlightFill: root.todayHighlightFill
+                                todayHighlightBorder: root.todayHighlightBorder
+                                dayBackgroundFill: root.dayBackgroundFill
+                                dayBackgroundFillVariant: root.dayBackgroundFillVariant
+
+                                opacity: 0
+                                transform: Translate { id: colTrans; y: 15 }
+
+                                Component.onCompleted: animTimer.start()
+
+                                Timer {
+                                    id: animTimer
+                                    interval: dayLoader.index * 70
+                                    repeat: false
+                                    onTriggered: colAnim.start()
                                 }
-                            }
 
-                            ParallelAnimation {
-                                id: colAnim
-                                NumberAnimation {
-                                    target: colTrans
-                                    property: "y"
-                                    to: 0
-                                    duration: 300
-                                    easing.type: Easing.OutCubic
+                                ParallelAnimation {
+                                    id: colAnim
+                                    NumberAnimation {
+                                        target: colTrans
+                                        property: "y"
+                                        to: 0
+                                        duration: 300
+                                        easing.type: Easing.OutCubic
+                                    }
+                                    NumberAnimation {
+                                        target: dayColDelegate
+                                        property: "opacity"
+                                        to: 1
+                                        duration: 300
+                                        easing.type: Easing.OutCubic
+                                    }
                                 }
-                                NumberAnimation {
-                                    target: dayColDelegate
-                                    property: "opacity"
-                                    to: 1
-                                    duration: 300
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
 
-                            onDragRequestInteractivity: i => styledFlickable.interactive = i
-                            onDragReleased: (dIdx, sY, cY) => {
-                                let dist = Math.abs(cY - sY);
-                                if (dist < 10) {
-                                    let clickMin = H.snapToGrid(H.yToMinutes(sY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                    root.ghostTopY = H.minutesToY(clickMin, root.startHour, root.startMinute, root.pixelsPerMinute);
-                                    root.ghostHeight = H.minutesToY(clickMin + 60, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
-                                } else {
-                                    let topMin = H.snapToGrid(H.yToMinutes(Math.min(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                    let botMin = H.snapToGrid(H.yToMinutes(Math.max(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                    if (botMin - topMin < 15)
-                                        botMin = topMin + 15;
-                                    root.ghostTopY = H.minutesToY(topMin, root.startHour, root.startMinute, root.pixelsPerMinute);
-                                    root.ghostHeight = H.minutesToY(botMin, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
+                                onDragRequestInteractivity: i => styledFlickable.interactive = i
+                                onDragReleased: (dIdx, sY, cY) => {
+                                    let dist = Math.abs(cY - sY);
+                                    if (dist < 10) {
+                                        let clickMin = H.snapToGrid(H.yToMinutes(sY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
+                                        root.ghostTopY = H.minutesToY(clickMin, root.startHour, root.startMinute, root.pixelsPerMinute);
+                                        root.ghostHeight = H.minutesToY(clickMin + 60, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
+                                    } else {
+                                        let topMin = H.snapToGrid(H.yToMinutes(Math.min(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
+                                        let botMin = H.snapToGrid(H.yToMinutes(Math.max(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
+                                        if (botMin - topMin < 15)
+                                            botMin = topMin + 15;
+                                        root.ghostTopY = H.minutesToY(topMin, root.startHour, root.startMinute, root.pixelsPerMinute);
+                                        root.ghostHeight = H.minutesToY(botMin, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
+                                    }
+                                    root.ghostDayIndex = dIdx;
+                                    root.ghostVisible = true;
+                                    Qt.callLater(root.openPopupForGhost);
                                 }
-                                root.ghostDayIndex = dIdx;
-                                root.ghostVisible = true;
-                                Qt.callLater(root.openPopupForGhost);
+                                onEditRequested: (evt, dIdx) => root.openPopupForEdit(evt, dIdx)
                             }
-                            onEditRequested: (evt, dIdx) => root.openPopupForEdit(evt, dIdx)
                         }
                     }
                 }
