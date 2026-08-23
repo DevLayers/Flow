@@ -402,12 +402,38 @@ PanelWindow {
         property var pendingResult: null
         property var pendingCb: null
         onTriggered: {
-            const tempPath = "/tmp/quickshell-snip-" + Date.now() + ".png";
+            // Qt's own PNG writer (QImage::save) has no adaptive filtering and
+            // compresses noticeably worse than magick on photo-like content —
+            // worse than the annotations pushing the file over cliphist's
+            // undocumented ~5MB store cutoff. Dump the grab as PPM (trivial,
+            // uncompressed write) and let magick do the actual PNG encode,
+            // matching what the non-annotated crop path already uses.
+            const base = "/tmp/quickshell-snip-" + Date.now();
+            const ppmPath = base + ".ppm";
+            const pngPath = base + ".png";
             const cb = exportEncodeTimer.pendingCb;
-            exportEncodeTimer.pendingResult.saveToFile(tempPath);
+            exportEncodeTimer.pendingResult.saveToFile(ppmPath);
             exportEncodeTimer.pendingResult = null;
             exportEncodeTimer.pendingCb = null;
-            cb(tempPath);
+            const esc = StringUtils.shellSingleQuoteEscape;
+            exportEncodeProcess.pendingCb = cb;
+            exportEncodeProcess.pngPath = pngPath;
+            exportEncodeProcess.command = ["bash", "-c", `magick '${esc(ppmPath)}' -strip 'png:${esc(pngPath)}' && rm -f '${esc(ppmPath)}'`];
+            exportEncodeProcess.running = true;
+        }
+    }
+
+    Process {
+        id: exportEncodeProcess
+        running: false
+        property string pngPath: ""
+        property var pendingCb: null
+        onExited: (exitCode, exitStatus) => {
+            const cb = exportEncodeProcess.pendingCb;
+            exportEncodeProcess.pendingCb = null;
+            if (exitCode !== 0)
+                console.warn("[Region Selector] magick re-encode failed, exit code", exitCode);
+            cb(exportEncodeProcess.pngPath);
         }
     }
 
