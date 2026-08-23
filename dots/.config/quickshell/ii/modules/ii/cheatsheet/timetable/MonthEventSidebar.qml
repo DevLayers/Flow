@@ -38,6 +38,7 @@ Item {
     property int formStartMinutes: 9 * 60
     property int formEndMinutes: 10 * 60
     property bool formAllDay: false
+    property string createKind: "event"
     property string formUrl: ""
     property string formLocation: ""
     property string formCalendar: ""
@@ -57,6 +58,7 @@ Item {
     readonly property bool canSave: root.formTitle.trim().length > 0 && root.rangeValid
 
     signal saveRequested(var payload)
+    signal taskCreateRequested(var task)
     signal deleteRequested(var eventData, string scope)
     signal moveRequested(var eventData, var newDate)
     signal closeRequested
@@ -86,6 +88,7 @@ Item {
         root.event = null;
         root.formDate = H.startOfDay(date);
         root.formAllDay = false;
+        root.createKind = "event";
         root.formStartMinutes = startHour * 60;
         root.formEndMinutes = Math.min(24 * 60, (startHour + 1) * 60);
         titleInput.text = "";
@@ -250,6 +253,17 @@ Item {
     function submit() {
         if (!root.canSave)
             return;
+        if (root.mode === "create" && root.createKind === "task") {
+            root.taskCreateRequested({
+                content: root.formTitle.trim(),
+                date: H.startOfDay(root.formDate),
+                dueDate: Qt.formatDate(root.formDate, "yyyy-MM-dd"),
+                hasDate: true,
+                done: false
+            });
+            root.close();
+            return;
+        }
         const payload = {
             editMode: root.mode === "edit",
             event: root.event,
@@ -857,9 +871,28 @@ Item {
                                 }
                             }
 
+                            Flow {
+                                Layout.fillWidth: true
+                                visible: root.mode === "create"
+                                spacing: 6
+
+                                DurationChip {
+                                    label: Translation.tr("Event")
+                                    selected: root.createKind === "event"
+                                    onTriggered: root.createKind = "event"
+                                }
+
+                                DurationChip {
+                                    label: Translation.tr("Task")
+                                    selected: root.createKind === "task"
+                                    onTriggered: root.createKind = "task"
+                                }
+                            }
+
                             // All day
                             Rectangle {
                                 id: allDayRow
+                                visible: root.createKind === "event"
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 56
                                 radius: Appearance.rounding.small
@@ -920,6 +953,7 @@ Item {
                             // Times
                             RowLayout {
                                 id: timeRow
+                                visible: root.createKind === "event"
                                 Layout.fillWidth: true
                                 spacing: 8
                                 opacity: root.formAllDay ? 0.35 : 1
@@ -949,6 +983,7 @@ Item {
                             // Quick durations
                             Flow {
                                 id: durationFlow
+                                visible: root.createKind === "event"
                                 Layout.fillWidth: true
                                 spacing: 6
                                 opacity: root.formAllDay ? 0.35 : 1
@@ -992,6 +1027,7 @@ Item {
                             // remains usable without covering the month grid.
                             PickerRow {
                                 Layout.fillWidth: true
+                                visible: root.createKind === "event"
                                 symbol: "folder"
                                 caption: Translation.tr("Calendar")
                                 value: root.formCalendar || Translation.tr("Default calendar")
@@ -1000,6 +1036,7 @@ Item {
 
                             StyledText {
                                 Layout.fillWidth: true
+                                visible: root.createKind === "event"
                                 text: Translation.tr("Color")
                                 font.pixelSize: Appearance.font.pixelSize.smallest
                                 font.weight: Font.Bold
@@ -1008,12 +1045,14 @@ Item {
 
                             ColorPickerRow {
                                 Layout.fillWidth: true
+                                visible: root.createKind === "event"
                                 currentToken: root.formColorToken
                                 onTokenSelected: token => root.formColorToken = token
                             }
 
                             StyledText {
                                 Layout.fillWidth: true
+                                visible: root.createKind === "event"
                                 text: Translation.tr("Labels")
                                 font.pixelSize: Appearance.font.pixelSize.smallest
                                 font.weight: Font.Bold
@@ -1022,6 +1061,7 @@ Item {
 
                             Rectangle {
                                 Layout.fillWidth: true
+                                visible: root.createKind === "event"
                                 Layout.preferredHeight: 46
                                 radius: Appearance.rounding.small
                                 color: Appearance.m3colors.m3surfaceContainerHighest
@@ -1065,7 +1105,7 @@ Item {
 
                             Flow {
                                 Layout.fillWidth: true
-                                visible: root.formCategories.length > 0
+                                visible: root.createKind === "event" && root.formCategories.length > 0
                                 spacing: 6
 
                                 Repeater {
@@ -1080,6 +1120,7 @@ Item {
                             }
 
                             Rectangle {
+                                visible: root.createKind === "event"
                                 Layout.fillWidth: true; Layout.preferredHeight: 66
                                 radius: Appearance.rounding.small; color: Appearance.m3colors.m3surfaceContainerHighest
                                 RowLayout { anchors.fill: parent; anchors.margins: 10; spacing: 10
@@ -1090,6 +1131,7 @@ Item {
                             }
 
                             Rectangle {
+                                visible: root.createKind === "event"
                                 Layout.fillWidth: true; Layout.preferredHeight: 66
                                 radius: Appearance.rounding.small; color: Appearance.m3colors.m3surfaceContainerHighest
                                 RowLayout { anchors.fill: parent; anchors.margins: 10; spacing: 10
@@ -1099,15 +1141,15 @@ Item {
                                 }
                             }
 
-                            StyledText { Layout.fillWidth: true; text: Translation.tr("Repeats"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
-                            Flow { Layout.fillWidth: true; spacing: 6
+                            StyledText { Layout.fillWidth: true; visible: root.createKind === "event"; text: Translation.tr("Repeats"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
+                            Flow { Layout.fillWidth: true; visible: root.createKind === "event"; spacing: 6
                                 Repeater { model: [["", Translation.tr("Never")], ["DAILY", Translation.tr("Daily")], ["WEEKLY", Translation.tr("Weekly")], ["MONTHLY", Translation.tr("Monthly")], ["YEARLY", Translation.tr("Yearly")]]
                                     delegate: DurationChip { required property var modelData; label: modelData[1]; selected: root.formRepeat === modelData[0]; onTriggered: root.selectRepeat(modelData[0]) }
                                 }
                             }
                             Flow {
                                 Layout.fillWidth: true
-                                visible: root.formRepeat === "WEEKLY"
+                                visible: root.createKind === "event" && root.formRepeat === "WEEKLY"
                                 spacing: 6
                                 Repeater {
                                     model: [["MO", Translation.tr("Mon")], ["TU", Translation.tr("Tue")], ["WE", Translation.tr("Wed")], ["TH", Translation.tr("Thu")], ["FR", Translation.tr("Fri")], ["SA", Translation.tr("Sat")], ["SU", Translation.tr("Sun")]]
@@ -1121,26 +1163,26 @@ Item {
                             }
                             PickerRow {
                                 Layout.fillWidth: true
-                                visible: root.formRepeat !== ""
+                                visible: root.createKind === "event" && root.formRepeat !== ""
                                 symbol: "event_upcoming"
                                 caption: Translation.tr("Repeats until")
                                 value: root.formRepeatUntil ? Qt.formatDate(new Date(root.formRepeatUntil + "T00:00:00"), "dd MMM yyyy") : Translation.tr("No end date")
                                 onTriggered: root.datePickerRequested("repeatUntil", root.formRepeatUntil ? new Date(root.formRepeatUntil + "T00:00:00") : root.formDate)
                             }
                             DurationChip {
-                                visible: root.formRepeat !== "" && root.formRepeatUntil !== ""
+                                visible: root.createKind === "event" && root.formRepeat !== "" && root.formRepeatUntil !== ""
                                 label: Translation.tr("No end date")
                                 selected: false
                                 onTriggered: root.formRepeatUntil = ""
                             }
-                            StyledText { Layout.fillWidth: true; text: Translation.tr("Reminders"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
-                            Flow { Layout.fillWidth: true; spacing: 6
+                            StyledText { Layout.fillWidth: true; visible: root.createKind === "event"; text: Translation.tr("Reminders"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
+                            Flow { Layout.fillWidth: true; visible: root.createKind === "event"; spacing: 6
                                 Repeater { model: [["0", Translation.tr("At time")], ["5", "5m"], ["15", "15m"], ["60", "1h"], ["1440", "1d"]]
                                     delegate: DurationChip { required property var modelData; label: modelData[1]; selected: root.formAlarms.includes(modelData[0]); onTriggered: { const next = root.formAlarms.slice(); const index = next.indexOf(modelData[0]); if (index >= 0) next.splice(index, 1); else next.push(modelData[0]); root.formAlarms = next; } }
                                 }
                             }
-                            StyledText { Layout.fillWidth: true; text: Translation.tr("Status"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
-                            Flow { Layout.fillWidth: true; spacing: 6
+                            StyledText { Layout.fillWidth: true; visible: root.createKind === "event"; text: Translation.tr("Status"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Bold; color: Appearance.colors.colOnSurfaceVariant }
+                            Flow { Layout.fillWidth: true; visible: root.createKind === "event"; spacing: 6
                                 Repeater { model: [["CONFIRMED", Translation.tr("Confirmed")], ["TENTATIVE", Translation.tr("Tentative")], ["CANCELLED", Translation.tr("Cancelled")]]
                                     delegate: DurationChip { required property var modelData; label: modelData[1]; selected: root.formStatus === modelData[0]; onTriggered: root.formStatus = modelData[0] }
                                 }
@@ -1229,8 +1271,8 @@ Item {
                         }
 
                         PrimaryAction {
-                            label: root.mode === "edit" ? Translation.tr("Save changes") : Translation.tr("Create event")
-                            symbol: root.mode === "edit" ? "check" : "add"
+                            label: root.mode === "edit" ? Translation.tr("Save changes") : (root.createKind === "task" ? Translation.tr("Create task") : Translation.tr("Create event"))
+                            symbol: root.mode === "edit" ? "check" : (root.createKind === "task" ? "checklist" : "add")
                             enabled: root.canSave
                             onTriggered: root.submit()
                         }

@@ -202,12 +202,13 @@ Singleton {
     function addItem(item) {
         if (!item)
             return;
+        const dueDate = root.serializedDueDate(item);
         switch (root.provider) {
         case "ticktick":
-            TickTickService.createTask(item.content);
+            TickTickService.createTask(item.content, dueDate ? { dueDate: dueDate } : null);
             return;
         case "googleTasks":
-            GoogleTasksService.createTask(item.content);
+            GoogleTasksService.createTask(item.content, dueDate);
             return;
         default:
             root.addLocalItem(item);
@@ -221,6 +222,16 @@ Singleton {
             "done": false,
         };
         addItem(item);
+    }
+
+    function serializedDueDate(item) {
+        const value = item?.dueDate ?? item?.date;
+        if (!value)
+            return "";
+        const date = value instanceof Date ? value : new Date(value);
+        if (isNaN(date.getTime()))
+            return "";
+        return Qt.formatDate(date, "yyyy-MM-dd") + "T00:00:00.000Z";
     }
 
     function getTasksByDate(currentDate) {
@@ -244,8 +255,21 @@ Singleton {
         return res;
     }
 
-    function markDone(index) {
-        const task = root.list[index];
+    function getOverdueTasks(currentDate = new Date()) {
+        const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()).getTime();
+        return root.list.filter(task => {
+            if (!task?.hasDate || task.done)
+                return false;
+            const due = new Date(task.date);
+            const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+            return !isNaN(dueDay) && dueDay < today;
+        });
+    }
+
+    // Existing callers pass the position in Todo.list. Month chips deliberately
+    // pass the task object: their filtered/overdue list has a different index.
+    function markDone(taskOrIndex) {
+        const task = typeof taskOrIndex === "number" ? root.list[taskOrIndex] : taskOrIndex;
         if (!task)
             return;
 
@@ -256,9 +280,14 @@ Singleton {
         case "googleTasks":
             GoogleTasksService.setTaskDone(task, true);
             return;
-        default:
-            root.setLocalTaskDone(index, true);
+        default: {
+            const index = typeof taskOrIndex === "number"
+                ? taskOrIndex
+                : root.localList.findIndex(item => item === task || String(item?.id ?? "") === String(task?.id ?? ""));
+            if (index >= 0)
+                root.setLocalTaskDone(index, true);
             return;
+        }
         }
     }
 

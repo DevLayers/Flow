@@ -60,6 +60,21 @@ Item {
         return (events ?? []).filter(event => (event.categories ?? []).includes(root.categoryFilter));
     }
 
+    function tasksForDay(date) {
+        const isToday = H.sameDate(date, DateTime.clock.date);
+        const overdueTasks = Todo.getOverdueTasks(DateTime.clock.date);
+        const dueToday = Todo.getTasksByDate(date).filter(task => {
+            if (!task?.hasDate || task.done)
+                return true;
+            return isToday || !overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? ""));
+        });
+        if (!isToday)
+            return dueToday;
+        // Overdue tasks live on today only: a calendar user sees the action
+        // where it matters now, rather than in a past cell and today.
+        return overdueTasks.concat(dueToday);
+    }
+
     // ─── Month navigation ───
     property int entranceKey: 0
     property real gridOpacity: 1
@@ -522,6 +537,7 @@ Item {
 
                         cellData: modelData
                         events: root.filteredEvents(CalendarService.eventsByDay[modelData.key])
+                        tasks: root.tasksForDay(modelData.date)
                         holidays: root.holidayMap[modelData.key] ?? []
                         dropTarget: root.dropIndex === index && root.dragEvent !== null
                         coordinateRoot: root
@@ -531,6 +547,7 @@ Item {
                         onCreateRequested: date => root.requestCreate(date)
                         onDayActivated: date => root.requestDay(date)
                         onEventActivated: eventData => root.requestOpen(eventData)
+                        onTaskCompletionRequested: task => Todo.markDone(task)
                         onEventDragBegan: (eventData, x, y, w, h) => root.beginEventDrag(eventData, x, y, w, h)
                         onEventDragMoved: (x, y) => root.moveEventDrag(x, y)
                         onEventDragEnded: root.endEventDrag()
@@ -559,6 +576,7 @@ Item {
                 anchors.right: parent.right
 
                 onSaveRequested: payload => root.applySidebarPayload(payload)
+                onTaskCreateRequested: task => Todo.addItem(task)
                 onDeleteRequested: (eventData, scope) => root.deleteEvent(eventData, scope)
                 onMoveRequested: (eventData, newDate) => {
                     if (!eventData || !newDate)

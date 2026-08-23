@@ -18,6 +18,7 @@ Item {
 
     required property var cellData
     property var events: []
+    property var tasks: []
     property var holidays: []
     property bool dropTarget: false
     property bool selected: false
@@ -26,6 +27,7 @@ Item {
     signal createRequested(var date)
     signal dayActivated(var date)
     signal eventActivated(var eventData)
+    signal taskCompletionRequested(var task)
     signal eventDragBegan(var eventData, real x, real y, real w, real h)
     signal eventDragMoved(real x, real y)
     signal eventDragEnded
@@ -47,12 +49,22 @@ Item {
     readonly property real chipHeight: root.compactChips ? 20 : 24
     readonly property real chipAreaHeight: Math.max(0, root.height - root.headerHeight - root.cellPadding)
     readonly property int chipCapacity: Math.max(0, Math.floor((root.chipAreaHeight + root.chipSpacing) / (root.chipHeight + root.chipSpacing)))
-    readonly property int eventCount: root.events?.length ?? 0
-    readonly property bool overflowing: root.eventCount > root.chipCapacity
-    readonly property int visibleCount: root.overflowing ? Math.max(0, root.chipCapacity - 1) : root.eventCount
-    readonly property int hiddenCount: root.eventCount - root.visibleCount
+    // Keep events and tasks in one capacity calculation. Otherwise a busy day
+    // could silently overflow below the cell after task integration.
+    readonly property var entries: {
+        const result = [];
+        for (const eventData of (root.events ?? []))
+            result.push({ kind: "event", data: eventData });
+        for (const taskData of (root.tasks ?? []))
+            result.push({ kind: "task", data: taskData });
+        return result;
+    }
+    readonly property int entryCount: root.entries.length
+    readonly property bool overflowing: root.entryCount > root.chipCapacity
+    readonly property int visibleCount: root.overflowing ? Math.max(0, root.chipCapacity - 1) : root.entryCount
+    readonly property int hiddenCount: root.entryCount - root.visibleCount
 
-    readonly property var visibleEvents: root.visibleCount >= root.eventCount ? (root.events ?? []) : (root.events ?? []).slice(0, root.visibleCount)
+    readonly property var visibleEntries: root.visibleCount >= root.entryCount ? root.entries : root.entries.slice(0, root.visibleCount)
 
     Rectangle {
         id: surface
@@ -204,7 +216,7 @@ Item {
         }
     }
 
-    // ─── Events ───
+    // ─── Events and tasks ───
     Column {
         id: chipColumn
         anchors {
@@ -218,28 +230,42 @@ Item {
         spacing: root.chipSpacing
 
         Repeater {
-            model: root.visibleEvents
+            model: root.visibleEntries
 
-            delegate: MonthEventChip {
+            delegate: Item {
                 required property var modelData
                 required property int index
 
                 width: chipColumn.width
                 height: root.chipHeight
-                eventData: modelData
-                allDay: CalendarService.isAllDayEvent(modelData)
-                compact: root.compactChips
-                coordinateRoot: root.coordinateRoot
-                dragging: root.draggedEvent === modelData
-                entranceKey: root.entranceKey
-                entranceIndex: index
-                opacity: root.inMonth ? 1 : 0.6
 
-                onActivated: root.eventActivated(modelData)
-                onDragBegan: (evt, x, y, w, h) => root.eventDragBegan(evt, x, y, w, h)
-                onDragMoved: (x, y) => root.eventDragMoved(x, y)
-                onDragEnded: root.eventDragEnded()
-                onDragCanceled: root.eventDragCanceled()
+                MonthEventChip {
+                    anchors.fill: parent
+                    visible: parent.modelData.kind === "event"
+                    eventData: parent.modelData.data
+                    allDay: CalendarService.isAllDayEvent(parent.modelData.data)
+                    compact: root.compactChips
+                    coordinateRoot: root.coordinateRoot
+                    dragging: root.draggedEvent === parent.modelData.data
+                    entranceKey: root.entranceKey
+                    entranceIndex: parent.index
+                    opacity: root.inMonth ? 1 : 0.6
+
+                    onActivated: root.eventActivated(parent.modelData.data)
+                    onDragBegan: (evt, x, y, w, h) => root.eventDragBegan(evt, x, y, w, h)
+                    onDragMoved: (x, y) => root.eventDragMoved(x, y)
+                    onDragEnded: root.eventDragEnded()
+                    onDragCanceled: root.eventDragCanceled()
+                }
+
+                TaskChip {
+                    anchors.fill: parent
+                    visible: parent.modelData.kind === "task"
+                    taskData: parent.modelData.data
+                    compact: root.compactChips
+                    opacity: root.inMonth ? 1 : 0.6
+                    onCompletionRequested: task => root.taskCompletionRequested(task)
+                }
             }
         }
 
@@ -262,6 +288,104 @@ Item {
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
             }
+        }
+    }
+
+    // Tasks deliberately use a compact rectangular plate and a square checkbox
+    // rather than an event band. This preserves the meaning of the all-day
+    // event colour while making incomplete work scannable at a glance.
+    component TaskChip: Item {
+        id: taskChip
+
+        required property var taskData
+        property bool compact: false
+
+        readonly property bool completed: taskChip.taskData?.done === true
+        readonly property date dueDate: taskChip.taskData?.date ? new Date(taskChip.taskData.date) : new Date()
+        readonly property bool overdue: taskChip.taskData?.hasDate === true
+            && !taskChip.completed
+            && !isNaN(taskChip.dueDate.getTime())
+            && H.startOfDay(taskChip.dueDate).getTime() < H.startOfDay(DateTime.clock.date).getTime()
+        readonly property string titleText: String(taskChip.taskData?.content ?? taskChip.taskData?.title ?? Translation.tr("Task"))
+
+        signal completionRequested(var task)
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Appearance.rounding.verysmall
+            color: {
+                if (taskChip.completed)
+                    return Appearance.colors.colLayer3;
+                return taskChip.overdue ? Appearance.colors.colErrorContainer : Appearance.colors.colSecondaryContainer;
+            }
+
+            Row {
+                anchors.fill: parent
+                anchors.leftMargin: 3
+                anchors.rightMargin: 6
+                spacing: 3
+
+                RippleButton {
+                    id: completeButton
+                    anchors.verticalCenter: parent.verticalCenter
+                    implicitWidth: Math.min(parent.height, 22)
+                    implicitHeight: implicitWidth
+                    buttonRadius: Appearance.rounding.verysmall
+                    enabled: !taskChip.completed
+                    colBackground: "transparent"
+                    colBackgroundHover: taskChip.overdue ? Appearance.colors.colErrorContainerHover : Appearance.colors.colSecondaryContainerHover
+                    onClicked: taskChip.completionRequested(taskChip.taskData)
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: taskChip.completed ? "check_box" : "check_box_outline_blank"
+                        iconSize: taskChip.compact ? Appearance.font.pixelSize.small : Appearance.font.pixelSize.normal
+                        color: taskChip.completed
+                            ? Appearance.colors.colOnLayer3
+                            : (taskChip.overdue ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer)
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: completeButton.hovered
+                        text: taskChip.completed ? Translation.tr("Completed") : Translation.tr("Mark as completed")
+                    }
+                }
+
+                MaterialSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: taskChip.overdue && !taskChip.compact
+                    text: "priority_high"
+                    iconSize: Appearance.font.pixelSize.smallest
+                    color: Appearance.colors.colOnErrorContainer
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(0, parent.width - x)
+                    text: taskChip.titleText
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                    font.pixelSize: taskChip.compact ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.smaller
+                    font.weight: Font.DemiBold
+                    font.strikeout: taskChip.completed
+                    color: {
+                        if (taskChip.completed)
+                            return Appearance.colors.colOnLayer3;
+                        return taskChip.overdue ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer;
+                    }
+                }
+            }
+        }
+
+        StyledToolTip {
+            extraVisibleCondition: taskPointer.containsMouse
+            text: taskChip.overdue
+                ? Translation.tr("Overdue · %1").arg(Qt.formatDate(taskChip.dueDate, Locale.ShortFormat))
+                : taskChip.titleText
+        }
+
+        HoverHandler {
+            id: taskPointer
         }
     }
 }
