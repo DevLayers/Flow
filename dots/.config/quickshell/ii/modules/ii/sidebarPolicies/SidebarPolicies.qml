@@ -372,6 +372,18 @@ Scope { // Scope
                             root.toggleDetach();
                         } else if (event.key === Qt.Key_P) {
                             root.togglePoliciesPin();
+                        } else if (event.key === Qt.Key_Tab) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab((event.modifiers & Qt.ShiftModifier) ? -1 : 1);
+                        } else if (event.key === Qt.Key_Backtab) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(-1);
+                        } else if (event.key === Qt.Key_PageDown) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(1);
+                        } else if (event.key === Qt.Key_PageUp) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(-1);
                         }
                         event.accepted = true;
                     }
@@ -442,7 +454,7 @@ Scope { // Scope
 
             visible: GlobalStates.sidebarLeftOpen
             screen: Quickshell.screens.find(s => s.name === root.policyMonitorName)
-                ?? Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name)
+                ?? Quickshell.screens.find(s => s.name === (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""))
                 ?? Quickshell.screens[0]
                 ?? null
             width: root.sidebarWidth
@@ -508,6 +520,18 @@ Scope { // Scope
                             root.togglePoliciesExtended();
                         } else if (event.key === Qt.Key_P) {
                             root.togglePoliciesPin();
+                        } else if (event.key === Qt.Key_Tab) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab((event.modifiers & Qt.ShiftModifier) ? -1 : 1);
+                        } else if (event.key === Qt.Key_Backtab) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(-1);
+                        } else if (event.key === Qt.Key_PageDown) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(1);
+                        } else if (event.key === Qt.Key_PageUp) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(-1);
                         }
                         event.accepted = true;
                     }
