@@ -234,6 +234,7 @@ Singleton {
 
             property JsonObject search: JsonObject {
                 property list<var> aliases: []
+                property list<string> recentEmojis: []
             }
 
             property JsonObject googleDrive: JsonObject {

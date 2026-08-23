@@ -45,7 +45,7 @@ Singleton {
     function ensurePrefix(prefix) {
         const knownPrefixes = SearchPanelRegistry.activePrefixes.concat([
             Config.options.search.prefix.action, Config.options.search.prefix.app,
-            Config.options.search.prefix.emojis, Config.options.search.prefix.math,
+            Config.options.search.prefix.math,
             Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch,
             Config.options.search.prefix.windowSearch, Config.options.search.prefix.fileBrowser,
             Config.options.search.prefix.fileSearch
@@ -78,7 +78,7 @@ Singleton {
             return false;
         const prefixes = Config.options.search.prefix;
         const reserved = SearchPanelRegistry.activePrefixes.concat([
-            prefixes.action, prefixes.app, prefixes.emojis, prefixes.fileBrowser,
+            prefixes.action, prefixes.app, prefixes.fileBrowser,
             prefixes.fileSearch, prefixes.math, prefixes.shellCommand, prefixes.webSearch,
             prefixes.windowSearch
         ]).filter(prefix => String(prefix ?? "").length > 0);
@@ -195,6 +195,35 @@ Singleton {
                     execute: () => GlobalStates.openCheatsheet("keybinds")
                 })
             ]
+        });
+    }
+
+    function searchPanelMatches(queryText: string): var {
+        const terms = String(queryText ?? "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+        if (terms.length === 0)
+            return [];
+        const panelIds = ["emojis", "screenshots", "windows"];
+        return SearchPanelRegistry.enabledPanels.filter(panel => {
+            if (!panelIds.includes(panel.id))
+                return false;
+            const searchable = [panel.id, panel.label, ...(panel.keywords ?? [])]
+                .join(" ").toLocaleLowerCase();
+            return terms.every(term => searchable.includes(term));
+        });
+    }
+
+    function createSearchPanelResult(panel: var): var {
+        return resultComp.createObject(null, {
+            key: "panel:" + panel.id,
+            name: panel.label,
+            iconName: panel.icon,
+            iconType: LauncherSearchResult.IconType.Material,
+            type: Translation.tr("Search panel"),
+            verb: Translation.tr("Open"),
+            comment: Translation.tr("Search tools"),
+            panelId: panel.id,
+            keepOverviewOpen: true,
+            execute: () => GlobalStates.openSearchPanel(panel.id)
         });
     }
 
@@ -722,38 +751,10 @@ Singleton {
                 });
             }).filter(Boolean);
         } else if (root.query.startsWith(Config.options.search.prefix.emojis)) {
-            const searchString = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.emojis);
-            return Emojis.fuzzyQuery(searchString).slice(0, 60).map(entry => {
-                const emoji = entry.match(/^\s*(\S+)/)?.[1] || "";
-                const emojiName = entry.replace(/^\s*\S+\s+/, "");
-                return resultComp.createObject(null, {
-                    key: "emoji:" + emoji,
-                    rawValue: entry,
-                    name: emojiName,
-                    iconName: emoji,
-                    iconType: LauncherSearchResult.IconType.Text,
-                    verb: Translation.tr("Copy"),
-                    type: Translation.tr("Emoji"),
-                    execute: () => {
-                        Quickshell.clipboardText = emoji;
-                    },
-                    actions: [resultComp.createObject(null, {
-                            name: Translation.tr("Copy emoji"),
-                            iconName: "content_copy",
-                            iconType: LauncherSearchResult.IconType.Material,
-                            execute: () => {
-                                Quickshell.clipboardText = emoji;
-                            }
-                        }), resultComp.createObject(null, {
-                            name: Translation.tr("Copy name"),
-                            iconName: "label",
-                            iconType: LauncherSearchResult.IconType.Material,
-                            execute: () => {
-                                Quickshell.clipboardText = emojiName;
-                            }
-                        })]
-                });
-            }).filter(Boolean);
+            // `:` resolves to the registered grid panel. Keeping this branch
+            // empty prevents a second, hidden list of emoji rows from being
+            // built on every query.
+            return [];
         } else if (root.query.startsWith(Config.options.search.prefix.windowSearch)) {
             const searchString = root.query.slice(Config.options.search.prefix.windowSearch.length);
             const windows = getWindowResults(searchString);
@@ -1245,6 +1246,11 @@ Singleton {
         if (Config.options.search.modules.keybinds.enable && root.isSettingsSearchQuery(root.query)) {
             for (const binding of root.keybindMatches(root.query, 3))
                 result.push(root.createKeybindResultObject(binding));
+        }
+
+        if (root.query.trim().length >= 2) {
+            for (const panel of root.searchPanelMatches(root.query))
+                result.push(root.createSearchPanelResult(panel));
         }
 
         // Panels with no prefix stay discoverable through explicit, compact

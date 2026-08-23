@@ -16,6 +16,9 @@ Singleton {
 	property string lineBeforeData: "### DATA ###"
     property bool levenshteinSearch: (Config.options?.search.levenshtein ?? false) || (Config.options?.search.algorithm === "levenshtein")
     property list<var> list
+    // Keep the legacy string list for existing fuzzy consumers, and expose
+    // structured entries for the Search panel's category grid.
+    property list<var> entries
     property var preparedEntries: []
     
     onListChanged: {
@@ -55,6 +58,20 @@ Singleton {
         emojiFileView.reload()
     }
 
+    function categoryFor(entry: string): string {
+        const text = String(entry ?? "").toLowerCase();
+        if (/(face|heart|emotion|kiss|cat|monkey|skull|ghost|alien|robot)/.test(text)) return "people";
+        if (/(hand|person|woman|man|baby|body|gesture|thumb|fist|leg|ear|eye|mouth)/.test(text)) return "people";
+        if (/(animal|plant|flower|tree|nature|weather|moon|sun|earth|water|fire)/.test(text)) return "nature";
+        if (/(food|drink|fruit|vegetable|meat|bread|cake|coffee|beer|wine)/.test(text)) return "food";
+        if (/(symbol|arrow|number|letter|sign|flag|keycap|button|warning|check)/.test(text)) return "symbols";
+        return "objects";
+    }
+
+    function entryFor(raw: string): var {
+        return root.entries.find(entry => entry.raw === raw) ?? null;
+    }
+
     function updateEmojis(fileContent) {
         const lines = fileContent.split("\n")
         const dataIndex = lines.indexOf(root.lineBeforeData)
@@ -64,6 +81,12 @@ Singleton {
         }
         const emojis = lines.slice(dataIndex + 1).filter(line => line.trim() !== "")
         root.list = emojis.map(line => line.trim())
+        root.entries = root.list.map(raw => ({
+            raw,
+            emoji: raw.match(/^\s*(\S+)/)?.[1] ?? "",
+            name: raw.replace(/^\s*\S+\s+/, ""),
+            category: root.categoryFor(raw)
+        }))
         console.log(`[Emojis] Loaded ${root.list.length} emojis`)
     }
 

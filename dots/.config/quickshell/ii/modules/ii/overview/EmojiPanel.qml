@@ -2,447 +2,277 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls
-import Qt5Compat.GraphicalEffects
 import Quickshell
-import Quickshell.Io
-
 import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import "../../common/functions/emojiHues.js" as EmojiHues
 
 Item {
     id: root
+
     property string searchQuery: ""
+    property int selectedIndex: 0
+    property string selectedCategory: Config.options.search.modules.emojis.defaultCategory
 
-    readonly property int panelWidth: 620
-    readonly property int gridColumns: 6
-    readonly property int maxItems: 120
+    readonly property int gridColumns: Math.max(4, Config.options.search.modules.emojis.gridColumns)
+    readonly property real gridSpacing: Appearance.sizes.elevationMargin / 2
+    readonly property var categories: [
+        { id: "all", label: Translation.tr("All") },
+        { id: "people", label: Translation.tr("People") },
+        { id: "nature", label: Translation.tr("Nature") },
+        { id: "food", label: Translation.tr("Food") },
+        { id: "objects", label: Translation.tr("Objects") },
+        { id: "symbols", label: Translation.tr("Symbols") }
+    ]
+    readonly property var filteredEntries: root.filteredEmojiEntries()
+    readonly property var selectedEntry: root.selectedIndex >= 0 && root.selectedIndex < root.filteredEntries.length
+        ? root.filteredEntries[root.selectedIndex]
+        : null
+    readonly property string statusText: root.selectedEntry
+        ? root.selectedEntry.name
+        : Translation.tr("%1 emojis").arg(String(root.filteredEntries.length))
 
-    implicitWidth: panelWidth
-    implicitHeight: 520
+    implicitWidth: 720
+    implicitHeight: scaffold.implicitHeight
 
-    property var allEmojis: Emojis.list
-    property var filteredEmojis: []
-    property bool dataLoaded: Emojis.list.length > 0
+    function filterByCategory(entries) {
+        if (root.selectedCategory === "all")
+            return entries;
+        return entries.filter(entry => entry.category === root.selectedCategory);
+    }
 
-    property color colItemBgHover: Appearance.colors.colSurfaceContainerHighest
-    property color colItemSelected: Appearance.colors.colPrimaryContainer
-    property color colText: Appearance.colors.colOnSurface
-    property color colSubtext: Appearance.colors.colSubtext
+    function filteredEmojiEntries() {
+        const query = root.searchQuery.trim();
+        const allEntries = Array.from(Emojis.entries ?? []);
+        if (query.length > 0) {
+            const matchingRawEntries = new Set(Emojis.fuzzyQuery(query));
+            return root.filterByCategory(allEntries.filter(entry => matchingRawEntries.has(entry.raw)));
+        }
 
-    property int focusedControlIndex: 0
+        if (Config.options.search.modules.emojis.showRecents) {
+            const recent = Array.from(Persistent.states.search.recentEmojis ?? []);
+            const recentEntries = recent.map(raw => Emojis.entryFor(raw)).filter(Boolean);
+            if (recentEntries.length > 0)
+                return root.filterByCategory(recentEntries);
+        }
+        return root.filterByCategory(allEntries);
+    }
 
-    readonly property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
-    readonly property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
-    readonly property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
+    function skinToneEmoji(entry) {
+        const emoji = String(entry?.emoji ?? "");
+        const tone = String(Config.options.search.modules.emojis.skinTone ?? "none");
+        const modifiers = {
+            light: "\ud83c\udffb",
+            mediumLight: "\ud83c\udffc",
+            medium: "\ud83c\udffd",
+            mediumDark: "\ud83c\udffe",
+            dark: "\ud83c\udfff"
+        };
+        if (tone === "none" || !modifiers[tone] || entry?.category !== "people" || /[\ud83c\udffb-\ud83c\udfff]/.test(emoji))
+            return emoji;
+        return emoji + modifiers[tone];
+    }
 
-    readonly property int cellWidth: Math.floor((gridFlickable.width - (root.gridSpacing * (root.gridColumns - 1))) / root.gridColumns)
-    readonly property int cellSize: root.cellWidth
-    readonly property int cellHeight: root.cellSize
-    readonly property int gridSpacing: 8
+    function remember(entry) {
+        if (!entry)
+            return;
+        const previous = Array.from(Persistent.states.search.recentEmojis ?? []).filter(raw => raw !== entry.raw);
+        Persistent.states.search.recentEmojis = [entry.raw].concat(previous).slice(0, 32);
+    }
 
-    function filterEmojis() {
-        if (!dataLoaded || allEmojis.length === 0) {
-            filteredEmojis = [];
-            updateSlots();
+    function clampSelection() {
+        if (root.filteredEntries.length === 0) {
+            root.selectedIndex = -1;
             return;
         }
-
-        const query = root.searchQuery.trim().toLowerCase();
-        if (query.length === 0) {
-            filteredEmojis = allEmojis.slice(0, maxItems);
-            updateSlots();
-            return;
-        }
-
-        filteredEmojis = Emojis.fuzzyQuery(query).slice(0, maxItems);
-        updateSlots();
-    }
-
-    function navigateUp() {
-        if (filteredEmojis.length === 0) return;
-        const cols = root.gridColumns;
-        if (focusedControlIndex < 0) {
-            focusedControlIndex = 0;
-        } else if (focusedControlIndex >= cols) {
-            focusedControlIndex -= cols;
-        } else {
-            focusedControlIndex = -1;
-            root.requestFocusSearchInput();
-        }
-        ensureVisible();
-    }
-
-    function navigateDown() {
-        if (filteredEmojis.length === 0) return;
-        const cols = root.gridColumns;
-        if (focusedControlIndex < 0) {
-            focusedControlIndex = 0;
-        } else {
-            const next = focusedControlIndex + cols;
-            if (next < filteredEmojis.length) {
-                focusedControlIndex = next;
-            }
-        }
-        ensureVisible();
-    }
-
-    function navigateLeft() {
-        if (filteredEmojis.length === 0) return;
-        if (focusedControlIndex < 0) {
-            focusedControlIndex = 0;
-        } else if (focusedControlIndex > 0) {
-            focusedControlIndex--;
-        } else {
-            focusedControlIndex = -1;
-            root.requestFocusSearchInput();
-        }
-        ensureVisible();
-    }
-
-    function navigateRight() {
-        if (filteredEmojis.length === 0) return;
-        if (focusedControlIndex < 0) {
-            focusedControlIndex = 0;
-        } else if (focusedControlIndex < filteredEmojis.length - 1) {
-            focusedControlIndex++;
-        }
-        ensureVisible();
-    }
-
-    function activateSelected() {
-        if (focusedControlIndex >= 0 && focusedControlIndex < filteredEmojis.length) {
-            copyEmoji(filteredEmojis[focusedControlIndex]);
-        } else if (filteredEmojis.length > 0) {
-            copyEmoji(filteredEmojis[0]);
-        }
-        GlobalStates.overviewOpen = false;
-    }
-
-    function focusInput() {
-        focusedControlIndex = -1;
-        root.requestFocusSearchInput();
+        root.selectedIndex = Math.max(0, Math.min(root.selectedIndex, root.filteredEntries.length - 1));
     }
 
     function ensureVisible() {
-        if (focusedControlIndex < 0) return;
-        const cols = root.gridColumns;
-        const row = Math.floor(focusedControlIndex / cols);
-        const itemTop = row * (root.cellHeight + root.gridSpacing);
-        const itemBottom = itemTop + root.cellSize;
-        const viewTop = gridFlickable.contentY;
-        const viewBottom = viewTop + gridFlickable.height;
-
-        if (itemTop < viewTop) {
-            gridFlickable.contentY = itemTop - 8;
-        } else if (itemBottom > viewBottom) {
-            gridFlickable.contentY = itemBottom - gridFlickable.height + 8;
-        }
+        if (root.selectedIndex >= 0)
+            emojiGrid.positionViewAtIndex(root.selectedIndex, GridView.Contain);
     }
 
-    function copyEmoji(fullString) {
-        if (!fullString) return;
-        const parts = fullString.split(" ");
-        const emoji = parts[0];
-        Quickshell.clipboardText = emoji;
+    function navigateUp(): bool {
+        if (root.selectedIndex < root.gridColumns)
+            return false;
+        root.selectedIndex -= root.gridColumns;
+        root.ensureVisible();
+        return true;
     }
 
-    property var emojiMap: ({})
-
-    function updateSlots() {
-        const newUids = filteredEmojis;
-        const slots = [];
-        for (let i = 0; i < iconRepeater.count; i++) {
-            slots.push(iconRepeater.itemAt(i));
-        }
-
-        const oldUids = [];
-        for (let i = 0; i < slots.length; i++) {
-            oldUids.push(slots[i] ? slots[i].uniqueId : "");
-        }
-
-        for (let i = 0; i < slots.length; i++) {
-            if (slots[i]) {
-                slots[i].uniqueId = "";
-                slots[i].hasData = false;
-                slots[i].currentPosition = -1;
-            }
-        }
-
-        const slotToNewPos = {};
-        const usedNewPositions = new Set();
-
-        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
-            const oldUid = oldUids[slotIdx];
-            if (!oldUid) continue;
-            const newPos = newUids.indexOf(oldUid);
-            if (newPos >= 0) {
-                slotToNewPos[slotIdx] = newPos;
-                usedNewPositions.add(newPos);
-            }
-        }
-
-        for (let newPos = 0; newPos < newUids.length; newPos++) {
-            if (usedNewPositions.has(newPos)) continue;
-            for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
-                if (!(slotIdx in slotToNewPos)) {
-                    slotToNewPos[slotIdx] = newPos;
-                    usedNewPositions.add(newPos);
-                    break;
-                }
-            }
-        }
-
-        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
-            const slot = slots[slotIdx];
-            if (!slot) continue;
-            const newPos = slotToNewPos[slotIdx];
-            if (newPos === undefined) continue;
-            const uid = newUids[newPos];
-            slot.uniqueId = uid;
-            slot.hasData = true;
-            slot.currentPosition = newPos;
-        }
-
-        updatePositions();
+    function navigateDown(): bool {
+        if (root.selectedIndex < 0 || root.selectedIndex + root.gridColumns >= root.filteredEntries.length)
+            return false;
+        root.selectedIndex += root.gridColumns;
+        root.ensureVisible();
+        return true;
     }
 
-    function updatePositions() {
-        const cols = root.gridColumns;
-        const ch = root.cellHeight;
-        const spacing = root.gridSpacing;
-        let visibleCount = 0;
-        for (let i = 0; i < iconRepeater.count; i++) {
-            const slot = iconRepeater.itemAt(i);
-            if (!slot) continue;
-            if (slot.hasData && slot.currentPosition >= 0) {
-                visibleCount++;
-            }
-        }
-        const totalRows = Math.ceil(visibleCount / cols);
-        const totalHeight = totalRows > 0 ? totalRows * ch + (totalRows - 1) * spacing : 0;
-        contentContainer.height = Math.max(0, totalHeight);
+    function navigateLeft(): bool {
+        if (root.selectedIndex <= 0)
+            return false;
+        root.selectedIndex--;
+        root.ensureVisible();
+        return true;
     }
 
-    signal requestFocusSearchInput()
-
-    onSearchQueryChanged: {
-        root.filterEmojis();
-        focusedControlIndex = -1;
+    function navigateRight(): bool {
+        if (root.selectedIndex < 0 || root.selectedIndex >= root.filteredEntries.length - 1)
+            return false;
+        root.selectedIndex++;
+        root.ensureVisible();
+        return true;
     }
 
-    Connections {
-        target: Emojis
-        function onListChanged() {
-            root.allEmojis = Emojis.list;
-            root.dataLoaded = Emojis.list.length > 0;
-            root.filterEmojis();
-        }
+    function activateSelected(): bool {
+        const entry = root.selectedEntry;
+        if (!entry)
+            return false;
+        Quickshell.clipboardText = root.skinToneEmoji(entry);
+        root.remember(entry);
+        GlobalStates.overviewOpen = false;
+        return true;
     }
+
+    function focusInput(): bool {
+        return false;
+    }
+
+    function selectCategory(category) {
+        root.selectedCategory = category;
+        Config.options.search.modules.emojis.defaultCategory = category;
+        root.selectedIndex = 0;
+    }
+
+    onSearchQueryChanged: root.selectedIndex = 0
+    onFilteredEntriesChanged: root.clampSelection()
 
     Component.onCompleted: {
         Emojis.load();
-        root.filterEmojis();
+        root.clampSelection();
     }
 
-    ColumnLayout {
+    SearchPanelScaffold {
+        id: scaffold
         anchors.fill: parent
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
-        anchors.bottomMargin: 10
-        anchors.topMargin: 0
-        spacing: 6
+        title: Translation.tr("Emojis")
+        icon: "mood"
+        accent: true
+        statusText: root.statusText
+        primaryHint: ({ label: Translation.tr("Copy"), keys: ["↵"] })
+        hints: [{ label: Translation.tr("Navigate"), keys: ["↑", "↓", "←", "→"] }]
 
-        Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+        ColumnLayout {
+            width: parent.width
+            spacing: Appearance.sizes.elevationMargin
 
-            Flickable {
-                id: gridFlickable
-                anchors.fill: parent
-                anchors.margins: 8
-                clip: true
-                contentHeight: contentContainer.height
-                contentWidth: width
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: root.gridSpacing
 
-                maximumFlickVelocity: 3500
-                boundsBehavior: Flickable.DragOverBounds
-                pixelAligned: true
-                property real scrollTargetY: 0
+                Repeater {
+                    model: root.categories
 
-                Behavior on contentY {
-                    NumberAnimation {
-                        id: scrollAnim
-                        alwaysRunToEnd: true
-                        duration: Appearance.animation.scroll.duration
-                        easing.type: Appearance.animation.scroll.type
-                        easing.bezierCurve: Appearance.animation.scroll.bezierCurve
-                    }
-                }
+                    delegate: RippleButton {
+                        required property var modelData
+                        implicitWidth: categoryText.implicitWidth + Appearance.sizes.elevationMargin * 2
+                        implicitHeight: categoryText.implicitHeight + Appearance.sizes.elevationMargin
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: root.selectedCategory === modelData.id
+                            ? Appearance.colors.colPrimaryContainer
+                            : Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: root.selectedCategory === modelData.id
+                            ? Appearance.colors.colPrimaryContainerHover
+                            : Appearance.colors.colSurfaceContainerHighHover
+                        colRipple: root.selectedCategory === modelData.id
+                            ? Appearance.colors.colPrimaryContainerActive
+                            : Appearance.colors.colSurfaceContainerHighActive
+                        onClicked: root.selectCategory(modelData.id)
 
-                onContentYChanged: {
-                    if (!scrollAnim.running) {
-                        gridFlickable.scrollTargetY = gridFlickable.contentY;
-                    }
-                }
-
-                MouseArea {
-                    z: 99
-                    visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
-                    anchors.fill: parent
-                    acceptedButtons: Qt.NoButton
-                    onWheel: function(wheelEvent) {
-                        const delta = wheelEvent.angleDelta.y / root.mouseScrollDeltaThreshold;
-                        var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= root.mouseScrollDeltaThreshold ? root.mouseScrollFactor : root.touchpadScrollFactor;
-                        const maxY = Math.max(0, gridFlickable.contentHeight - gridFlickable.height);
-                        const base = scrollAnim.running ? gridFlickable.scrollTargetY : gridFlickable.contentY;
-                        var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
-                        gridFlickable.scrollTargetY = targetY;
-                        gridFlickable.contentY = targetY;
-                        wheelEvent.accepted = true;
-                    }
-                }
-
-                Item {
-                    id: gridArea
-                    width: gridFlickable.width
-                    implicitHeight: contentContainer.height
-
-                    Item {
-                        id: contentContainer
-                        width: gridArea.width
-                        height: 0
-
-                        Repeater {
-                            id: iconRepeater
-                            model: root.maxItems
-
-                            delegate: Item {
-                                id: delegateItem
-                                required property int index
-
-                                readonly property int slotIndex: index
-                                property string uniqueId: ""
-                                property int currentPosition: -1
-                                property bool hasData: uniqueId !== ""
-
-                                readonly property bool isFocused: {
-                                    const fi = root.focusedControlIndex;
-                                    const cp = currentPosition;
-                                    if (fi < 0 || cp < 0) return false;
-                                    return (fi === cp) && hasData;
-                                }
-
-                                readonly property int targetCol: currentPosition >= 0 ? currentPosition % root.gridColumns : 0
-                                readonly property int targetRow: currentPosition >= 0 ? Math.floor(currentPosition / root.gridColumns) : 0
-                                x: targetCol * (root.cellWidth + root.gridSpacing)
-                                y: targetRow * (root.cellHeight + root.gridSpacing)
-                                width: root.cellWidth
-                                height: hasData ? root.cellHeight : 0
-                                opacity: hasData ? 1.0 : 0.0
-                                visible: hasData || opacity > 0.01
-                                clip: true
-
-                                Behavior on x {
-                                    NumberAnimation {
-                                        duration: 220
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
-                                }
-                                Behavior on y {
-                                    NumberAnimation {
-                                        duration: 220
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
-                                }
-                                Behavior on height {
-                                    NumberAnimation {
-                                        duration: 180
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
-                                }
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 180
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
-                                }
-
-                                RippleButton {
-                                    id: iconMouseArea
-                                    anchors.fill: parent
-                                    buttonRadius: Appearance.rounding.normal
-                                    colBackground: delegateItem.isFocused ? root.colItemSelected : "transparent"
-                                    colBackgroundHover: root.colItemBgHover
-                                    enabled: delegateItem.hasData
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: {
-                                            if (!delegateItem.uniqueId) return "";
-                                            const parts = delegateItem.uniqueId.split(" ");
-                                            return parts[0] || "";
-                                        }
-                                        font.pixelSize: 26
-                                        font.family: "Noto Color Emoji"
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    onClicked: {
-                                        root.focusedControlIndex = delegateItem.currentPosition;
-                                        root.copyEmoji(delegateItem.uniqueId);
-                                        GlobalStates.overviewOpen = false;
-                                    }
-                                }
-                            }
+                        StyledText {
+                            id: categoryText
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: root.selectedCategory === modelData.id
+                                ? Appearance.colors.colOnPrimaryContainer
+                                : Appearance.colors.colOnSurface
                         }
                     }
                 }
             }
 
-            Item {
-                anchors.centerIn: parent
-                visible: root.filteredEmojis.length === 0 && root.dataLoaded && root.searchQuery.trim().length > 0
-                implicitWidth: noResultsColumn.implicitWidth
-                implicitHeight: noResultsColumn.implicitHeight
+            RowLayout {
+                Layout.fillWidth: true
 
-                ColumnLayout {
-                    id: noResultsColumn
-                    anchors.centerIn: parent
-                    spacing: 8
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.searchQuery.trim().length === 0 && Config.options.search.modules.emojis.showRecents
+                        && Persistent.states.search.recentEmojis.length > 0
+                        ? Translation.tr("Recent")
+                        : root.categories.find(category => category.id === root.selectedCategory)?.label ?? Translation.tr("All")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnSurface
+                }
 
-                    MaterialSymbol {
-                        text: "search_off"
-                        iconSize: 48
-                        color: Appearance.colors.colSubtext
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: 0.5
-                    }
-
-                    StyledText {
-                        text: Translation.tr("No emojis found")
-                        color: Appearance.colors.colSubtext
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        Layout.alignment: Qt.AlignHCenter
-                    }
+                StyledText {
+                    text: String(root.filteredEntries.length)
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    color: Appearance.colors.colSubtext
                 }
             }
-        }
 
-        StyledText {
-            text: Translation.tr("Enter to copy emoji • ↑↓←→ to navigate")
-            color: Appearance.colors.colSubtext
-            font.pixelSize: Appearance.font.pixelSize.smallest
-            opacity: 0.6
-            Layout.alignment: Qt.AlignHCenter
+            GridView {
+                id: emojiGrid
+                Layout.fillWidth: true
+                Layout.preferredHeight: Appearance.sizes.elevationMargin * 32
+                clip: true
+                model: root.filteredEntries
+                cellWidth: (width + root.gridSpacing) / root.gridColumns
+                cellHeight: Appearance.sizes.elevationMargin * 5
+
+                delegate: Item {
+                    required property int index
+                    required property var modelData
+                    width: emojiGrid.cellWidth - root.gridSpacing
+                    height: emojiGrid.cellHeight - root.gridSpacing
+
+                    RippleButton {
+                        anchors.fill: parent
+                        buttonRadius: Appearance.rounding.normal
+                        colBackground: root.selectedIndex === index
+                            ? ColorUtils.categoryAccent(EmojiHues.hueForCategory(modelData.category), 1, Appearance.m3colors.m3primary)
+                            : Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighHover
+                        colRipple: Appearance.colors.colPrimaryContainerActive
+                        onClicked: {
+                            root.selectedIndex = index;
+                            root.activateSelected();
+                        }
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            text: root.skinToneEmoji(modelData)
+                            font.pixelSize: Appearance.font.pixelSize.huge
+                            color: root.selectedIndex === index
+                                ? Appearance.colors.colOnPrimaryContainer
+                                : Appearance.colors.colOnSurface
+                        }
+                    }
+                }
+
+                StyledText {
+                    anchors.centerIn: parent
+                    visible: root.filteredEntries.length === 0
+                    text: Translation.tr("No emojis found")
+                    color: Appearance.colors.colSubtext
+                }
+            }
         }
     }
 }

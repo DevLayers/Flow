@@ -3655,7 +3655,13 @@ Singleton {
                     property bool translator: true
                     property bool mediaDownloader: true
                     property bool materialSymbols: true
-                    property bool emojis: true
+                    property JsonObject emojis: JsonObject {
+                        property bool enable: true
+                        property string skinTone: "none"
+                        property int gridColumns: 8
+                        property bool showRecents: true
+                        property string defaultCategory: "all"
+                    }
                     property bool windowSearch: true
                     property bool fileBrowser: true
                     property bool fileSearch: true

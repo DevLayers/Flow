@@ -65,6 +65,10 @@ RowLayout {
     signal togglePanelSection
     signal copySelected
     signal openSelectedInCheatsheet
+    signal saveSelected
+    signal editSelected
+    signal ocrSelected
+    signal copyDispatchSelected
     // Fired when Esc is pressed while the text is empty in AI mode — asks the
     // host to leave AI chat and return to the plain search.
     signal escapeToSearch
@@ -382,7 +386,8 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
-            if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
+            if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)
+                    && !(event.modifiers & Qt.ShiftModifier)) {
                 root.ctrlKPressed();
                 event.accepted = true;
                 return;
@@ -395,6 +400,32 @@ RowLayout {
             }
             if (event.key === Qt.Key_C && (event.modifiers & Qt.ControlModifier) && root.activePanelMode) {
                 root.copySelected();
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
+                root.saveSelected();
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && event.key === Qt.Key_E && (event.modifiers & Qt.ControlModifier)) {
+                root.editSelected();
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && event.key === Qt.Key_O && (event.modifiers & Qt.ControlModifier)) {
+                root.ocrSelected();
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && event.key === Qt.Key_K
+                    && (event.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) === (Qt.ControlModifier | Qt.ShiftModifier)) {
+                root.copyDispatchSelected();
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && event.key === Qt.Key_Delete && (event.modifiers & Qt.ShiftModifier)) {
+                root.deleteSelected();
                 event.accepted = true;
                 return;
             }

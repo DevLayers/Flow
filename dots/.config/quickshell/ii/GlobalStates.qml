@@ -65,6 +65,16 @@ Singleton {
     property bool overlayOpen: false
     property bool overviewOpen: false
     property bool searchOnlyMode: false
+    // Snapshot before the Overview receives focus. Window-management actions
+    // must never target the layer-shell surface that hosts Search itself.
+    property string searchTargetWindowAddress: ""
+
+    function captureSearchTargetWindow(): void {
+        const rawAddress = String(HyprlandData.activeWindow?.address ?? "").trim();
+        root.searchTargetWindowAddress = rawAddress.length === 0
+            ? ""
+            : (rawAddress.startsWith("0x") ? rawAddress : `0x${rawAddress}`);
+    }
 
     function openTimetableAt(dateValue): void {
         const text = String(dateValue ?? "").trim();
@@ -855,12 +865,18 @@ Singleton {
         if (root.overviewOpen) {
             root.overviewOpen = false;
         } else {
+            root.captureSearchTargetWindow();
             root.activeSearchMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
             root.overviewOpen = true;
         }
     }
 
     function openSearch(monitorName) {
+        // A panel can be requested from a row after Search is already open.
+        // Keep the opening snapshot in that case: the active surface is now
+        // the Overview, not the application the action must operate on.
+        if (!root.overviewOpen)
+            root.captureSearchTargetWindow();
         root.activeSearchMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.overviewOpen = true;
     }

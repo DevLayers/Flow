@@ -36,7 +36,7 @@ Item {
         const query = LauncherSearch.query;
         if (!query)
             return 15;
-        const isPrefixed = query.startsWith(Config.options.search.prefix.app) || query.startsWith(Config.options.search.prefix.fileBrowser) || query.startsWith(Config.options.search.prefix.emojis) || query.startsWith(Config.options.search.prefix.windowSearch) || query.startsWith(Config.options.search.prefix.fileSearch);
+        const isPrefixed = query.startsWith(Config.options.search.prefix.app) || query.startsWith(Config.options.search.prefix.fileBrowser) || query.startsWith(Config.options.search.prefix.windowSearch) || query.startsWith(Config.options.search.prefix.fileSearch);
         return isPrefixed ? 500 : 15;
     }
     readonly property bool isSearching: false
@@ -116,7 +116,7 @@ Item {
     readonly property bool aiAutoTriggerEnabled: Ai.enabled && (Config.options.search.ai?.trigger ?? "prefix") === "auto"
     readonly property var searchPrefixValues: SearchPanelRegistry.activePrefixes.concat([
         Config.options.search.prefix.action, Config.options.search.prefix.app,
-        Config.options.search.prefix.fileSearch, Config.options.search.prefix.emojis,
+        Config.options.search.prefix.fileSearch,
         Config.options.search.prefix.math, Config.options.search.prefix.shellCommand,
         Config.options.search.prefix.webSearch, Config.options.search.prefix.windowSearch,
         Config.options.search.prefix.fileBrowser
@@ -128,6 +128,8 @@ Item {
     readonly property bool isAnySpecialMode: root.activePanelId.length > 0
 
     readonly property var activePanelItem: {
+        if (root.activePanelUsesHost)
+            return registeredPanelHostLoader.item?.activeItem ?? null;
         switch (root.activePanelId) {
         case "clipboard": return clipboardPanelLoader.item;
         case "bluetooth": return bluetoothPanelLoader.item;
@@ -135,8 +137,6 @@ Item {
         case "mediaDownloader": return mediaDownloaderPanelLoader.item;
         case "materialSymbols": return materialSymbolsPanelLoader.item;
         case "ai": return aiPanelLoader.item;
-        case "settings": return registeredPanelHostLoader.item?.activeItem ?? null;
-        case "keybinds": return registeredPanelHostLoader.item?.activeItem ?? null;
         default: return null;
         }
     }
@@ -888,8 +888,14 @@ Item {
                 }
 
                 onOpenSelectedInCheatsheet: {
-                    searchKeyRouter.dispatch("openSelectedInCheatsheet");
+                    if (!searchKeyRouter.dispatch("secondaryActivateSelected"))
+                        searchKeyRouter.dispatch("openSelectedInCheatsheet");
                 }
+
+                onSaveSelected: searchKeyRouter.dispatch("saveSelected")
+                onEditSelected: searchKeyRouter.dispatch("editSelected")
+                onOcrSelected: searchKeyRouter.dispatch("ocrSelected")
+                onCopyDispatchSelected: searchKeyRouter.dispatch("copyDispatchSelected")
 
                 onEscapeToSearch: {
                     if (root.isAiMode)
@@ -1336,7 +1342,7 @@ Item {
                                 listCurrentIndex: appResults.currentIndex
                                 // modelData is {key, modelRef} from ListModel — pass the actual result object
                                 entry: resultDelegate.modelData.modelRef
-                                query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.emojis, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
+                                query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
 
                                 Connections {
                                     target: root
