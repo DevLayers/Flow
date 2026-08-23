@@ -29,6 +29,10 @@ Item {
 
     readonly property int firstDayOfWeek: Config.options.time.firstDayOfWeek
     readonly property real gridGap: 6
+    readonly property var densityModes: ["comfortable", "compact", "dots"]
+    readonly property string densityMode: root.densityModes.includes(Persistent.states.cheatsheet.timetableMonthDensity)
+        ? Persistent.states.cheatsheet.timetableMonthDensity
+        : "compact"
 
     readonly property var cells: H.buildMonthCells(root.viewYear, root.viewMonth, root.firstDayOfWeek, DateTime.clock.date)
     readonly property int cellCount: root.cells?.length ?? 0
@@ -418,6 +422,38 @@ Item {
                     }
                 }
 
+                ToolbarTabBar {
+                    id: densityTabs
+                    requestOnly: true
+                    currentIndex: Math.max(0, root.densityModes.indexOf(root.densityMode))
+                    tabButtonList: [
+                        {
+                            "icon": "density_large",
+                            "name": ""
+                        },
+                        {
+                            "icon": "density_medium",
+                            "name": ""
+                        },
+                        {
+                            "icon": "scatter_plot",
+                            "name": ""
+                        }
+                    ]
+                    onIndexSelected: index => Persistent.states.cheatsheet.timetableMonthDensity = root.densityModes[index]
+
+                    HoverHandler {
+                        id: densityHover
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: densityHover.hovered
+                        text: root.densityMode === "dots"
+                            ? Translation.tr("Month density: dots")
+                            : (root.densityMode === "comfortable" ? Translation.tr("Month density: comfortable") : Translation.tr("Month density: compact"))
+                    }
+                }
+
                 RippleButtonWithIcon {
                     id: todayButton
                     implicitWidth: root.compactNav ? 42 : todayButton.contentImplicitWidth + 32
@@ -615,6 +651,7 @@ Item {
 
                         sourceComponent: MonthDayCell {
                             cellData: cellLoader.modelData
+                            densityMode: root.densityMode
                             events: root.filteredEvents(CalendarService.eventsByDay[cellLoader.modelData.key])
                             tasks: root.tasksForDay(cellLoader.modelData.date)
                             birthdays: BirthdaysService.birthdaysForDate(cellLoader.modelData.date)

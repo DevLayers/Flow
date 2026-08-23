@@ -24,6 +24,7 @@ Item {
     property bool sportsEnabled: false
     property bool dropTarget: false
     property int entranceKey: 0
+    property string densityMode: "compact"
 
     signal createRequested(var date)
     signal dayActivated(var date)
@@ -41,6 +42,7 @@ Item {
     readonly property bool inMonth: root.cellData?.inMonth ?? true
     readonly property bool isWeekend: root.cellData?.isWeekend ?? false
     readonly property bool isHoliday: (root.holidays?.length ?? 0) > 0
+    readonly property bool isTomorrow: H.sameDate(root.cellData?.date, H.addDays(DateTime.clock.date, 1))
     readonly property string holidayLabel: root.isHoliday ? (root.holidays[0].localName || root.holidays[0].name || "") : ""
     readonly property var forecast: {
         const key = H.dayKeyOf(root.cellData?.date);
@@ -66,12 +68,12 @@ Item {
     }
     readonly property var sportEvents: root.sportsEnabled ? SportsService.gamesForDate(root.cellData?.date) : []
 
-    readonly property real headerHeight: 30
-    readonly property real headerEventSpacing: 4
-    readonly property real chipSpacing: 3
+    readonly property real headerHeight: 22
+    readonly property real headerEventSpacing: 2
+    readonly property real chipSpacing: 2
     readonly property real cellPadding: 7
-    readonly property bool compactChips: root.height < 96
-    readonly property real chipHeight: root.compactChips ? 20 : 24
+    readonly property bool compactChips: root.densityMode !== "comfortable"
+    readonly property real chipHeight: root.densityMode === "comfortable" ? 24 : 16
     readonly property real chipAreaHeight: Math.max(0, root.height - root.headerHeight - root.headerEventSpacing - root.cellPadding)
     readonly property int chipCapacity: Math.max(0, Math.floor((root.chipAreaHeight + root.chipSpacing) / (root.chipHeight + root.chipSpacing)))
     // Keep events and tasks in one capacity calculation. Otherwise a busy day
@@ -94,6 +96,25 @@ Item {
     readonly property int hiddenCount: root.entryCount - root.visibleCount
 
     readonly property var visibleEntries: root.visibleCount >= root.entryCount ? root.entries : root.entries.slice(0, root.visibleCount)
+    readonly property int dotCapacity: Math.max(1, Math.min(12, Math.floor((root.width - root.cellPadding * 2 - 26) / 11)))
+    readonly property var dotEntries: root.entries.slice(0, root.dotCapacity)
+    readonly property int hiddenDotCount: Math.max(0, root.entryCount - root.dotEntries.length)
+
+    function entryColor(entry) {
+        if (entry?.kind === "birthday" || entry?.kind === "sport")
+            return Appearance.colors.colTertiary;
+        if (entry?.kind === "task")
+            return Appearance.colors.colSecondary;
+        return H.chipColor(entry?.data, Appearance.colors);
+    }
+
+    function entryTitle(entry) {
+        if (entry?.kind === "task")
+            return entry.data?.content ?? entry.data?.title ?? Translation.tr("Task");
+        if (entry?.kind === "birthday")
+            return entry.data?.name ?? entry.data?.content ?? Translation.tr("Birthday");
+        return entry?.data?.content ?? entry?.data?.title ?? Translation.tr("Event");
+    }
 
     Rectangle {
         id: surface
@@ -141,18 +162,18 @@ Item {
             top: parent.top
             left: parent.left
             right: parent.right
-            topMargin: 4
+            topMargin: 2
             leftMargin: root.cellPadding - 1
             rightMargin: 4
         }
-        height: root.headerHeight - 4
+        height: root.headerHeight - 2
 
         Rectangle {
             id: dayBadge
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
             width: Math.max(height, dayNumber.implicitWidth + 12)
-            height: 26
+            height: 20
             radius: Appearance.rounding.full
             color: root.isToday ? Appearance.colors.colPrimary : (dayHover.hovered ? Appearance.colors.colLayer3 : "transparent")
 
@@ -164,7 +185,7 @@ Item {
                 id: dayNumber
                 anchors.centerIn: parent
                 text: String(root.cellData?.day ?? "")
-                font.pixelSize: root.isToday ? Appearance.font.pixelSize.larger : Appearance.font.pixelSize.normal
+                font.pixelSize: root.isToday ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.smallie
                 font.weight: root.isToday ? Font.Bold : (root.inMonth ? Font.DemiBold : Font.Medium)
                 color: {
                     if (root.isToday)
@@ -221,7 +242,7 @@ Item {
             anchors.rightMargin: 4
             width: Appearance.font.pixelSize.normal
             height: width
-            visible: root.inMonth && root.forecast !== null && root.width > 92
+            visible: root.inMonth && root.forecast !== null && root.width > 92 && (root.isToday || root.isTomorrow || cellPointer.containsMouse)
             source: WeatherIcons.getWeatherIcon(root.forecast?.code ?? 113, false)
             sourceSize: Qt.size(width, height)
             fillMode: Image.PreserveAspectFit
@@ -250,7 +271,7 @@ Item {
             anchors.rightMargin: 4
             width: Appearance.font.pixelSize.normal
             height: width
-            visible: root.inMonth && root.moonEnabled && root.moonInfo !== null && root.width > 92
+            visible: root.inMonth && root.moonEnabled && root.moonInfo !== null && root.width > 92 && (root.isToday || root.isTomorrow || cellPointer.containsMouse)
             text: H.moonGlyphFor(root.moonInfo?.index ?? 0)
             font.family: Appearance.font.family.iconNerd
             font.pixelSize: Appearance.font.pixelSize.small
@@ -277,8 +298,8 @@ Item {
             id: addButton
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
-            implicitWidth: 24
-            implicitHeight: 24
+            implicitWidth: 20
+            implicitHeight: 20
             buttonRadius: Appearance.rounding.full
             colBackground: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.16)
             colBackgroundHover: Appearance.colors.colPrimary
@@ -307,6 +328,7 @@ Item {
     // ─── Events and tasks ───
     Column {
         id: chipColumn
+        visible: root.densityMode !== "dots"
         anchors {
             top: header.bottom
             left: parent.left
@@ -389,6 +411,57 @@ Item {
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
             }
+        }
+    }
+
+    Row {
+        id: densityDots
+        visible: root.densityMode === "dots" && root.entryCount > 0
+        anchors {
+            top: header.bottom
+            left: parent.left
+            right: parent.right
+            topMargin: 5
+            leftMargin: root.cellPadding
+            rightMargin: root.cellPadding
+        }
+        height: 16
+        spacing: 4
+
+        Repeater {
+            model: root.dotEntries
+
+            delegate: Rectangle {
+                required property var modelData
+                anchors.verticalCenter: parent.verticalCenter
+                width: 7
+                height: 7
+                radius: Appearance.rounding.full
+                color: root.entryColor(modelData)
+                opacity: root.inMonth ? 1 : 0.55
+            }
+        }
+
+        StyledText {
+            visible: root.hiddenDotCount > 0
+            anchors.verticalCenter: parent.verticalCenter
+            text: "+" + String(root.hiddenDotCount)
+            font.pixelSize: Appearance.font.pixelSize.smallest
+            font.weight: Font.Bold
+            color: Appearance.colors.colOnSurfaceVariant
+        }
+
+        HoverHandler {
+            id: dotsHover
+        }
+
+        TapHandler {
+            onTapped: root.dayActivated(root.cellData.date)
+        }
+
+        StyledToolTip {
+            extraVisibleCondition: dotsHover.hovered
+            text: Translation.tr("%1 items").arg(String(root.entryCount)) + "\n" + root.entries.map(entry => root.entryTitle(entry)).join("\n")
         }
     }
 

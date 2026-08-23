@@ -36,6 +36,22 @@ class TimetablePresentationContractTests(unittest.TestCase):
         self.assertIn("anchors.right: parent.right", time_column)
         self.assertIn("horizontalAlignment: Text.AlignRight", time_column)
 
+    def test_month_density_modes_are_persistent_and_reduce_cell_chrome(self) -> None:
+        persistent = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
+        month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
+        cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
+
+        self.assertIn('property string timetableMonthDensity: "compact"', persistent)
+        self.assertIn('readonly property var densityModes: ["comfortable", "compact", "dots"]', month)
+        self.assertIn("Persistent.states.cheatsheet.timetableMonthDensity = root.densityModes[index]", month)
+        self.assertIn("densityMode: root.densityMode", month)
+        self.assertIn("readonly property real headerHeight: 22", cell)
+        self.assertIn("readonly property real chipSpacing: 2", cell)
+        self.assertIn('readonly property real chipHeight: root.densityMode === "comfortable" ? 24 : 16', cell)
+        self.assertIn('visible: root.densityMode === "dots" && root.entryCount > 0', cell)
+        self.assertIn("id: densityDots", cell)
+        self.assertEqual(cell.count("root.isToday || root.isTomorrow || cellPointer.containsMouse"), 2)
+
     def test_week_navigation_uses_a_real_anchor_and_shared_picker(self) -> None:
         helper = (TIMETABLE / "TimetableHelpers.js").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
@@ -110,7 +126,7 @@ class TimetablePresentationContractTests(unittest.TestCase):
     def test_month_events_leave_space_below_the_day_header(self) -> None:
         day_cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
 
-        self.assertIn("readonly property real headerEventSpacing: 4", day_cell)
+        self.assertIn("readonly property real headerEventSpacing: 2", day_cell)
         self.assertIn("topMargin: root.headerEventSpacing", day_cell)
         self.assertIn("root.headerHeight - root.headerEventSpacing - root.cellPadding", day_cell)
 

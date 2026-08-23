@@ -304,6 +304,8 @@ Singleton {
                 // "week" | "month" — which calendar shape the timetable tab shows.
                 property string timetableView: "month"
                 property bool timetableShowUpcoming: true
+                // "comfortable" | "compact" | "dots" — month-cell density.
+                property string timetableMonthDensity: "compact"
                 // Pixels per hour in the timetable grid. WeekView constrains
                 // writes to its discrete zoom scale.
                 property int timetableSlotHeight: 56
