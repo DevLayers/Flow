@@ -19,6 +19,7 @@ Item {
     required property var cellData
     property var events: []
     property var tasks: []
+    property var birthdays: []
     property var holidays: []
     property bool sportsEnabled: false
     property bool dropTarget: false
@@ -80,6 +81,8 @@ Item {
         const result = [];
         for (const eventData of (root.events ?? []))
             result.push({ kind: "event", data: eventData });
+        for (const birthdayData of (root.birthdays ?? []))
+            result.push({ kind: "birthday", data: birthdayData });
         for (const sportData of root.sportEvents)
             result.push({ kind: "sport", data: sportData });
         for (const taskData of (root.tasks ?? []))
@@ -346,6 +349,15 @@ Item {
                     onDragMoved: (x, y) => root.eventDragMoved(x, y)
                     onDragEnded: root.eventDragEnded()
                     onDragCanceled: root.eventDragCanceled()
+                }
+
+                BirthdayChip {
+                    anchors.fill: parent
+                    visible: parent.modelData.kind === "birthday"
+                    birthdayData: parent.modelData.data
+                    compact: root.compactChips
+                    opacity: root.inMonth ? 1 : 0.6
+                    onActivated: birthday => root.eventActivated(birthday)
                 }
 
                 TaskChip {

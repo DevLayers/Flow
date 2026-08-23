@@ -139,6 +139,22 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "cake"
+        title: Translation.tr("Contact birthdays")
+
+        ConfigSwitch {
+            buttonIcon: "cake"
+            text: Translation.tr("Show contact birthdays")
+            checked: Config.options.calendar.timetable.birthdays.enable
+            onCheckedChanged: Config.options.calendar.timetable.birthdays.enable = checked
+
+            StyledToolTip {
+                text: Translation.tr("Projects birthdays from KDE Connect contacts without adding calendar events.")
+            }
+        }
+    }
+
+    ContentSection {
         icon: "summarize"
         title: Translation.tr("Daily summary")
 

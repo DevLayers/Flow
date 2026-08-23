@@ -39,6 +39,7 @@ Item {
             const key = H.dayKeyOf(date);
             const dayHolidays = holidayMap[key] ?? [];
             let dayEvents = CalendarService.eventsByDay[key] ?? [];
+            const dayBirthdays = BirthdaysService.birthdaysForDate(date);
             const overdueTasks = Todo.getOverdueTasks(today);
             const dayTasks = Todo.getTasksByDate(date).filter(task => !overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")));
 
@@ -46,7 +47,7 @@ Item {
             if (offset === 0)
                 dayEvents = dayEvents.filter(evt => CalendarService.isAllDayEvent(evt) || (evt.endDate && evt.endDate.getTime() >= now.getTime()));
 
-            if (dayEvents.length === 0 && dayHolidays.length === 0 && dayTasks.length === 0)
+            if (dayEvents.length === 0 && dayBirthdays.length === 0 && dayHolidays.length === 0 && dayTasks.length === 0)
                 continue;
 
             out.push({
@@ -54,7 +55,7 @@ Item {
                 rowKey: "day:" + key,
                 date: date,
                 offset: offset,
-                count: dayEvents.length + dayTasks.length
+                count: dayEvents.length + dayBirthdays.length + dayTasks.length
             });
 
             for (let i = 0; i < dayHolidays.length; i++) {
@@ -73,6 +74,14 @@ Item {
                     event: dayEvents[i]
                 });
             }
+            for (let i = 0; i < dayBirthdays.length; i++) {
+                out.push({
+                    rowType: "birthday",
+                    rowKey: "birthday:" + key + ":" + (dayBirthdays[i].contactId || dayBirthdays[i].id || i),
+                    date: date,
+                    birthday: dayBirthdays[i]
+                });
+            }
             for (let i = 0; i < dayTasks.length; i++) {
                 out.push({
                     rowType: "task",
@@ -88,7 +97,7 @@ Item {
         return out;
     }
 
-    readonly property int upcomingCount: root.rows.filter(row => row.rowType === "event" || row.rowType === "task").length
+    readonly property int upcomingCount: root.rows.filter(row => row.rowType === "event" || row.rowType === "birthday" || row.rowType === "task").length
 
     onEntranceKeyChanged: heroAnim.restart()
 
@@ -408,6 +417,16 @@ Item {
                             taskData: rowItem.modelData.task
                             compact: false
                             onCompletionRequested: task => Todo.markDone(task)
+                        }
+                    }
+
+                    Loader {
+                        anchors.fill: parent
+                        active: rowItem.rowType === "birthday"
+                        sourceComponent: BirthdayChip {
+                            birthdayData: rowItem.modelData.birthday
+                            compact: false
+                            onActivated: birthday => root.eventActivated(birthday)
                         }
                     }
                 }

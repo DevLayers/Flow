@@ -3038,6 +3038,11 @@ Singleton {
                         // never fetched from the network.
                         property bool enable: false
                     }
+                    property JsonObject birthdays: JsonObject {
+                        // Contact birthdays are a read-only projection; they
+                        // never create or mutate khal events.
+                        property bool enable: false
+                    }
                     property JsonObject notifications: JsonObject {
                         property bool enable: true
                         property list<string> offsets: ["-15m"]

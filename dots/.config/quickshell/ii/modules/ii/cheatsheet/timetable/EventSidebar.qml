@@ -63,6 +63,7 @@ Item {
     readonly property bool rangeValid: root.formAllDay || root.formEndMinutes > root.formStartMinutes
     readonly property bool canSave: root.formTitle.trim().length > 0 && root.rangeValid
     readonly property bool sportsEvent: root.event?.sportEvent === true
+    readonly property bool birthdayEvent: root.event?.birthdayEvent === true
     readonly property var sportsGame: root.sportsEvent ? (SportsService.gameById(root.event?.id) ?? root.event) : null
     readonly property var sportsDetails: root.sportsEvent ? SportsService.detailsForGame(root.event?.id) : null
     readonly property bool sportsDetailsLoading: root.sportsEvent && SportsService.detailsLoadingForGame(root.event?.id)
@@ -100,7 +101,7 @@ Item {
         root.showExceptions = false;
         if (eventData.sportEvent === true) {
             SportsService.focusGame(eventData);
-        } else {
+        } else if (eventData.birthdayEvent !== true) {
             CalendarService.readEvent(eventData.uid, reply => {
                 if (!reply?.ok || root.event !== eventData)
                     return;
@@ -414,13 +415,16 @@ Item {
 
     // ─── Derived ───
     readonly property var dayCalendarEvents: CalendarService.eventsByDay[H.dayKeyOf(root.day)] ?? []
+    readonly property var dayBirthdays: BirthdaysService.birthdaysForDate(root.day)
     readonly property var daySports: SportsService.gamesForDate(root.day)
-    readonly property var dayEvents: root.sportsListOnly ? root.daySports : root.dayCalendarEvents.concat(root.daySports)
+    readonly property var dayEvents: root.sportsListOnly ? root.daySports : root.dayCalendarEvents.concat(root.dayBirthdays, root.daySports)
     readonly property var dayHolidays: (Config.options.calendar.holidays.enable && Config.options.calendar.holidays.showInMonthView) ? (Holidays.byDayKey[H.dayKeyOf(root.day)] ?? []) : []
-    readonly property color accent: root.sportsEvent ? Appearance.colors.colTertiary : (root.event ? H.chipColor(root.event, Appearance.colors) : Appearance.colors.colPrimary)
+    readonly property color accent: (root.sportsEvent || root.birthdayEvent)
+        ? Appearance.colors.colTertiary
+        : (root.event ? H.chipColor(root.event, Appearance.colors) : Appearance.colors.colPrimary)
     readonly property bool isDayToday: H.sameDate(root.day, DateTime.clock.date)
 
-    readonly property bool eventAllDay: root.event ? CalendarService.isAllDayEvent(root.event) : false
+    readonly property bool eventAllDay: root.birthdayEvent || (root.event ? CalendarService.isAllDayEvent(root.event) : false)
     readonly property bool eventReadOnly: root.event?.readOnly === true
     readonly property int eventStartMinutes: root.event ? root.event.startDate.getHours() * 60 + root.event.startDate.getMinutes() : 0
     readonly property int eventEndMinutes: root.event ? root.event.endDate.getHours() * 60 + root.event.endDate.getMinutes() : 0
@@ -432,7 +436,9 @@ Item {
         case "edit":
             return Translation.tr("Edit event");
         case "details":
-            return root.sportsEvent ? Translation.tr("Match details") : Translation.tr("Event details");
+            if (root.sportsEvent) return Translation.tr("Match details");
+            if (root.birthdayEvent) return Translation.tr("Birthday details");
+            return Translation.tr("Event details");
         case "scope":
             if (root.pendingAction === "delete") return Translation.tr("Delete recurring event");
             if (root.pendingAction === "move") return Translation.tr("Move recurring event");
@@ -699,7 +705,36 @@ Item {
                                 Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 12
-                                    visible: !root.sportsListOnly && root.dayCalendarEvents.length > 0 && root.daySports.length > 0
+                                    visible: !root.sportsListOnly && root.dayCalendarEvents.length > 0 && root.dayBirthdays.length > 0
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    visible: !root.sportsListOnly && root.dayBirthdays.length > 0
+                                    text: Translation.tr("Birthdays").toUpperCase()
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colTertiary
+                                }
+
+                                Repeater {
+                                    model: root.sportsListOnly ? [] : root.dayBirthdays
+
+                                    delegate: BirthdayChip {
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        implicitHeight: 40
+                                        birthdayData: modelData
+                                        compact: false
+                                        onActivated: birthday => root.showEvent(birthday)
+                                    }
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 12
+                                    visible: !root.sportsListOnly && root.daySports.length > 0
+                                        && (root.dayCalendarEvents.length > 0 || root.dayBirthdays.length > 0)
                                 }
 
                                 StyledText {
@@ -783,7 +818,69 @@ Item {
 
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                visible: !root.sportsEvent
+                                visible: root.birthdayEvent
+                                spacing: 12
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 12
+
+                                    MaterialShapeWrappedMaterialSymbol {
+                                        text: "cake"
+                                        iconSize: Appearance.font.pixelSize.huge
+                                        padding: Appearance.rounding.small
+                                        shape: MaterialShape.Shape.Clover4Leaf
+                                        color: Appearance.colors.colTertiary
+                                        colSymbol: Appearance.colors.colOnTertiary
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: root.event?.content ?? ""
+                                        font.pixelSize: Appearance.font.pixelSize.huge
+                                        font.weight: Font.Bold
+                                        color: Appearance.colors.colOnSurface
+                                        wrapMode: Text.Wrap
+                                        maximumLineCount: 3
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                InfoRow {
+                                    Layout.fillWidth: true
+                                    symbol: "cake"
+                                    caption: Translation.tr("Birthday")
+                                    value: Qt.formatDate(root.event?.startDate ?? root.day, "d MMMM")
+                                }
+
+                                InfoRow {
+                                    Layout.fillWidth: true
+                                    visible: Number(root.event?.age ?? -1) >= 0
+                                    symbol: "celebration"
+                                    caption: Translation.tr("Turning")
+                                    value: Translation.tr("%1 years old").arg(String(root.event?.age ?? ""))
+                                }
+
+                                RippleButtonWithIcon {
+                                    readonly property var contact: PhoneContactsService.contactById(root.event?.contactId ?? "")
+                                    readonly property string phoneNumber: contact?.phones?.[0]?.value ?? ""
+                                    Layout.fillWidth: true
+                                    visible: phoneNumber.length > 0
+                                    implicitHeight: 40
+                                    buttonRadius: Appearance.rounding.full
+                                    centerContent: true
+                                    materialIcon: "contact_phone"
+                                    mainText: Translation.tr("Contact %1").arg(root.event?.contactName ?? "")
+                                    colText: Appearance.colors.colOnSecondaryContainer
+                                    colBackground: Appearance.colors.colSecondaryContainer
+                                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                                    onClicked: PhoneContactsService.openDialer(phoneNumber)
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: !root.sportsEvent && !root.birthdayEvent
                                 spacing: 12
 
                             RowLayout {

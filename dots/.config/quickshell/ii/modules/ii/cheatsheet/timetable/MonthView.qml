@@ -601,6 +601,7 @@ Item {
                             cellData: cellLoader.modelData
                             events: root.filteredEvents(CalendarService.eventsByDay[cellLoader.modelData.key])
                             tasks: root.tasksForDay(cellLoader.modelData.date)
+                            birthdays: BirthdaysService.birthdaysForDate(cellLoader.modelData.date)
                             holidays: root.holidayMap[cellLoader.modelData.key] ?? []
                             sportsEnabled: root.sportsEnabled
                             dropTarget: root.dropIndex === cellLoader.index && root.dragEvent !== null
