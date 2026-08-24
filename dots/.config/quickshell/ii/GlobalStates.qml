@@ -167,6 +167,11 @@ Singleton {
     // because the settings window may not exist yet when the deep link is
     // made — the same reason the page and sub-page wait here.
     property string settingsPendingSection: ""
+    // Which tab the Network page was left on. The page itself is destroyed the
+    // moment another settings page is picked, so it cannot remember anything;
+    // held here it survives until the shell reloads, which is where the Wi-Fi
+    // default comes back.
+    property int settingsNetworkTab: 0
     // Welcome is an in-process window. Keep its lifecycle in the shared state
     // graph so first-run, keybinds and Settings deep links all use one owner.
     property bool welcomeOpen: false

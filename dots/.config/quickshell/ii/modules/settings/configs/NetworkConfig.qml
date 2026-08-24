@@ -1,4 +1,5 @@
 import QtQuick
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -75,10 +76,36 @@ Item {
         const needle = title.toLowerCase();
         for (let i = 0; i < root.tabs.length; i++) {
             if (root.tabs[i].sections.some(section => section.toLowerCase() === needle)) {
-                root.currentTab = i;
+                root.selectTab(i);
                 return;
             }
         }
+    }
+
+    /**
+     * The tab that is actually wanted.
+     *
+     * The bar's own index cannot be trusted to hold it: the tab list is
+     * recomputed whenever a translation or the wired device changes, every
+     * button is rebuilt with it, and a rebuilt TabBar comes back pointing at the
+     * button added last — which is why this page kept opening on Hotspot. Only a
+     * deliberate pick is recorded here, and the bar is put back whenever it drifts.
+     */
+    property int wantedTab: 0
+
+    function selectTab(index: int): void {
+        if (index < 0 || index >= root.tabs.length)
+            return;
+        root.wantedTab = index;
+        GlobalStates.settingsNetworkTab = index;
+        tabBar.currentIndex = index;
+    }
+
+    function restoreWantedTab(): void {
+        if (root.wantedTab >= root.tabs.length)
+            root.wantedTab = 0;
+        if (tabBar.currentIndex !== root.wantedTab)
+            tabBar.currentIndex = root.wantedTab;
     }
 
     onContentYChanged: {
@@ -87,7 +114,21 @@ Item {
             page.contentY = root.contentY;
     }
     onCurrentSearchChanged: root.focusSectionTab(root.currentSearch)
-    Component.onCompleted: root.focusSectionTab(SearchRegistry.currentSearch)
+
+    // Come back to the tab this page was left on, but let a deep link or a
+    // search hit override it — those name a section and mean to go there.
+    Component.onCompleted: {
+        const remembered = GlobalStates.settingsNetworkTab;
+        root.selectTab(remembered >= 0 && remembered < root.tabs.length ? remembered : 0);
+        root.focusSectionTab(SearchRegistry.currentSearch);
+    }
+
+    onCurrentTabChanged: {
+        if (root.currentTab === root.wantedTab)
+            return;
+        Qt.callLater(root.restoreWantedTab);
+    }
+    onTabsChanged: Qt.callLater(root.restoreWantedTab)
 
     SecondaryTabBar {
         id: tabBar
@@ -105,9 +146,13 @@ Item {
 
             delegate: SecondaryTabButton {
                 required property var modelData
+                required property int index
 
                 buttonText: modelData.name
                 buttonIcon: modelData.icon
+                // A click is the one thing that genuinely means "go here", so
+                // it is recorded rather than read back off the bar afterwards.
+                onClicked: root.selectTab(index)
             }
         }
     }
