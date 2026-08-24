@@ -11,6 +11,7 @@ RippleButton {
 
     required property var event
     property bool selected: false
+    property bool showDate: false
     signal activated
 
     implicitHeight: content.implicitHeight + Appearance.sizes.elevationMargin * 2
@@ -21,8 +22,8 @@ RippleButton {
         : ColorUtils.mix(root.eventColor, Appearance.colors.colSurfaceContainerHigh, 0.30)
     colBackgroundHover: root.selected
         ? Appearance.colors.colPrimaryContainerHover
-        : ColorUtils.mix(root.eventColor, Appearance.colors.colSurfaceContainerHighHover, 0.30)
-    colRipple: root.selected ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighActive
+        : ColorUtils.mix(root.eventColor, Appearance.colors.colSurfaceContainerHighestHover, 0.30)
+    colRipple: root.selected ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
     onClicked: root.activated()
 
     RowLayout {
@@ -59,9 +60,12 @@ RippleButton {
             StyledText {
                 id: subtitle
                 Layout.fillWidth: true
-                text: root.event?.allDay
+                readonly property string datePrefix: root.showDate
+                    ? Qt.formatDate(root.event?.startDate ?? new Date(), "ddd dd MMM") + " · "
+                    : ""
+                text: datePrefix + (root.event?.allDay
                     ? Translation.tr("All day")
-                    : Qt.formatTime(root.event?.startDate ?? new Date(), "hh:mm") + "–" + Qt.formatTime(root.event?.endDate ?? new Date(), "hh:mm")
+                    : Qt.formatTime(root.event?.startDate ?? new Date(), "hh:mm") + "–" + Qt.formatTime(root.event?.endDate ?? new Date(), "hh:mm"))
                 elide: Text.ElideRight
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: root.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext

@@ -30,14 +30,13 @@ Item {
         for (const page of SettingsPageRegistry.pages) {
             const candidates = [Object.assign({}, page, { displayName: Translation.tr(page.name), subPage: "", parentName: "" })];
             for (const subPage of page.subPages ?? []) {
-                const fileName = String(subPage).split("/").pop().replace(/Config\.qml$/, "");
                 candidates.push({
                     id: page.id,
                     icon: page.icon,
-                    displayName: fileName,
+                    displayName: root.humanizeSubPage(subPage),
                     subPage,
                     parentName: Translation.tr(page.name),
-                    aliases: []
+                    aliases: page.aliases ?? []
                 });
             }
             for (const candidate of candidates) {
@@ -59,6 +58,21 @@ Item {
 
     implicitWidth: 720
     implicitHeight: scaffold.implicitHeight
+
+    function humanizeSubPage(path) {
+        const raw = String(path ?? "").split("/").pop().replace(/Config\.qml$/, "");
+        return raw.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^Launcher\s+/, "");
+    }
+
+    function openPage(row): bool {
+        if (!row?.id)
+            return false;
+        const pageId = String(row.id);
+        const subPage = String(row.subPage ?? "");
+        GlobalStates.overviewOpen = false;
+        Qt.callLater(() => GlobalStates.openSettingsPage(pageId, subPage));
+        return true;
+    }
 
     function focusInput(): bool {
         // The Overview search bar is the panel's filter input and should keep
@@ -165,10 +179,10 @@ Item {
                             : Appearance.colors.colSurfaceContainerHigh
                         colBackgroundHover: root.activeSection === modelData.section
                             ? Appearance.colors.colPrimaryContainerHover
-                            : Appearance.colors.colSurfaceContainerHighHover
+                            : Appearance.colors.colSurfaceContainerHighestHover
                         colRipple: root.activeSection === modelData.section
                             ? Appearance.colors.colPrimaryContainerActive
-                            : Appearance.colors.colSurfaceContainerHighActive
+                            : Appearance.colors.colSurfaceContainerHighestActive
                         onClicked: {
                             root.activeSection = modelData.section;
                             root.selectedIndex = 0;
@@ -235,15 +249,14 @@ Item {
                                 : Appearance.colors.colSurfaceContainerHigh
                             colBackgroundHover: root.selectedIndex === rowLoader.index
                                 ? Appearance.colors.colPrimaryContainerHover
-                                : Appearance.colors.colSurfaceContainerHighHover
+                                : Appearance.colors.colSurfaceContainerHighestHover
                             colRipple: root.selectedIndex === rowLoader.index
                                 ? Appearance.colors.colPrimaryContainerActive
-                                : Appearance.colors.colSurfaceContainerHighActive
-                            onClicked: GlobalStates.openSettingsPage(rowLoader.modelData.id, rowLoader.modelData.subPage)
+                                : Appearance.colors.colSurfaceContainerHighestActive
+                            onClicked: root.openPage(rowLoader.modelData)
 
                             function activate(): bool {
-                                GlobalStates.openSettingsPage(rowLoader.modelData.id, rowLoader.modelData.subPage);
-                                return true;
+                                return root.openPage(rowLoader.modelData);
                             }
 
                             RowLayout {

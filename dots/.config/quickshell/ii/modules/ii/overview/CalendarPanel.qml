@@ -15,6 +15,9 @@ Item {
     property string searchQuery: ""
     property int selectedIndex: 0
     property date selectedDate: new Date()
+    property bool upcomingMode: true
+    property bool createPageOpen: false
+    property string noticeText: ""
 
     readonly property string calendarSource: String(Config.options.search.modules.calendar.source ?? "khal")
     readonly property var sourceEvents: {
@@ -37,11 +40,13 @@ Item {
     readonly property var rows: root.filteredEvents()
     readonly property var selectedEvent: root.selectedIndex >= 0 && root.selectedIndex < root.rows.length ? root.rows[root.selectedIndex] : null
     readonly property var parsedCreate: Config.options.search.modules.calendar.allowCreate ? DateUtils.parseNaturalEvent(root.searchQuery) : null
-    readonly property string statusText: root.selectedEvent
+    readonly property string statusText: root.noticeText.length > 0
+        ? root.noticeText
+        : (root.selectedEvent
         ? String(root.selectedEvent.content ?? root.selectedEvent.title ?? "") + " · " + String(root.selectedEvent.calendar ?? "")
         : (root.calendarSource === "khal" && !CalendarService.khalAvailable
             ? Translation.tr("Calendar is not configured")
-            : Translation.tr("%1 events").arg(String(root.rows.length)))
+            : Translation.tr("%1 events").arg(String(root.rows.length))))
 
     implicitWidth: 720
     implicitHeight: scaffold.implicitHeight
@@ -49,9 +54,13 @@ Item {
     function filteredEvents() {
         const query = root.searchQuery.trim().toLocaleLowerCase();
         const day = Qt.formatDate(root.selectedDate, "yyyy-MM-dd");
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
         return root.sourceEvents.filter(event => {
             const start = event?.startDate instanceof Date ? event.startDate : new Date(event?.startDate);
-            if (isNaN(start.getTime()) || Qt.formatDate(start, "yyyy-MM-dd") !== day)
+            if (isNaN(start.getTime()))
+                return false;
+            if (root.upcomingMode ? start < todayStart : Qt.formatDate(start, "yyyy-MM-dd") !== day)
                 return false;
             if (!Config.options.search.modules.calendar.showDeclined && String(event?.status ?? "") === "cancelled")
                 return false;
@@ -67,7 +76,16 @@ Item {
     }
 
     function changeDay(offset) {
+        if (root.upcomingMode)
+            root.selectedDate = new Date();
+        root.upcomingMode = false;
         root.selectedDate = new Date(root.selectedDate.getFullYear(), root.selectedDate.getMonth(), root.selectedDate.getDate() + offset);
+        root.selectedIndex = 0;
+    }
+
+    function showUpcoming() {
+        root.selectedDate = new Date();
+        root.upcomingMode = true;
         root.selectedIndex = 0;
     }
 
@@ -109,19 +127,44 @@ Item {
     }
 
     function createFromQuery(): bool {
-        const parsed = root.parsedCreate;
-        if (!parsed)
-            return false;
-        const start = Qt.formatDateTime(parsed.start, "yyyy-MM-ddTHH:mm:ss");
-        const end = Qt.formatDateTime(parsed.end, "yyyy-MM-ddTHH:mm:ss");
-        const fields = { summary: parsed.title, start: start, end: end, allDay: false };
+        if (!root.createPageOpen) {
+            root.createPageOpen = true;
+            createForm.reset();
+            Qt.callLater(createForm.focusFirst);
+            return true;
+        }
+        return createForm.submit();
+    }
+
+    function submitFields(fields): bool {
         const prefersGoogle = root.calendarSource === "google" || root.calendarSource === "both";
         const created = prefersGoogle && GoogleCalendarService.available
-            ? GoogleCalendarService.createEvent(Config.options.search.modules.calendar.defaultCalendarId || parsed.calendar, fields)
-            : (CalendarService.khalAvailable ? (CalendarService.createEventFields(parsed.calendar, fields), true) : false);
-        if (created)
+            ? GoogleCalendarService.createEvent(Config.options.search.modules.calendar.defaultCalendarId || "primary", fields)
+            : (CalendarService.khalAvailable
+                ? CalendarService.createEventFields("", fields, reply => {
+                    root.noticeText = reply?.ok
+                        ? Translation.tr("Event created")
+                        : String(reply?.error ?? Translation.tr("Could not create event"));
+                    noticeTimer.restart();
+                })
+                : false);
+        if (created) {
+            root.noticeText = Translation.tr("Creating event…");
+            noticeTimer.restart();
+            root.createPageOpen = false;
             root.searchQuery = "";
+        } else {
+            createForm.errorText = Translation.tr("No writable calendar is available");
+        }
         return created;
+    }
+
+    function navigateBack(): bool {
+        if (!root.createPageOpen)
+            return false;
+        root.createPageOpen = false;
+        Qt.callLater(() => root.forceActiveFocus());
+        return true;
     }
 
     function focusInput(): bool { return false; }
@@ -134,6 +177,20 @@ Item {
             GoogleCalendarService.refresh();
     }
 
+    Connections {
+        target: GoogleCalendarService
+        function onMutationRevisionChanged() {
+            root.noticeText = GoogleCalendarService.mutationMessage;
+            noticeTimer.restart();
+        }
+    }
+
+    Timer {
+        id: noticeTimer
+        interval: 4000
+        onTriggered: root.noticeText = ""
+    }
+
     SearchPanelScaffold {
         id: scaffold
         anchors.fill: parent
@@ -142,76 +199,117 @@ Item {
         accent: true
         statusText: root.statusText
         showStatus: true
-        primaryHint: ({ label: Translation.tr("Open"), keys: ["↵"] })
+        primaryHint: root.createPageOpen
+            ? ({ label: Translation.tr("Create"), keys: ["Ctrl", "N"] })
+            : ({ label: Translation.tr("Open"), keys: ["↵"] })
         hints: [
             { label: Translation.tr("Day"), keys: ["←", "→"] },
             { label: Translation.tr("Create"), keys: ["Ctrl", "N"] }
         ]
 
-        ColumnLayout {
+        StackLayout {
             width: parent.width
             height: parent.height
-            spacing: Appearance.sizes.elevationMargin
+            currentIndex: root.createPageOpen ? 1 : 0
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
+            ColumnLayout {
+                spacing: Appearance.sizes.elevationMargin
 
-                RippleButton {
-                    implicitWidth: dateLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                    implicitHeight: dateLabel.implicitHeight + Appearance.sizes.elevationMargin
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colSurfaceContainerHigh
-                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighHover
-                    colRipple: Appearance.colors.colSurfaceContainerHighActive
-                    onClicked: root.selectedDate = new Date()
-                    StyledText {
-                        id: dateLabel
-                        anchors.centerIn: parent
-                        text: Qt.formatDate(root.selectedDate, "ddd dd MMM")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnSurface
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Appearance.sizes.elevationMargin / 2
+
+                    RippleButton {
+                        implicitWidth: Appearance.sizes.elevationMargin * 3
+                        implicitHeight: implicitWidth
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                        colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                        onClicked: root.changeDay(-1)
+                        MaterialSymbol { anchors.centerIn: parent; text: "chevron_left"; iconSize: Appearance.font.pixelSize.normal; color: Appearance.colors.colOnSurface }
+                    }
+
+                    RippleButton {
+                        implicitWidth: dateLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
+                        implicitHeight: dateLabel.implicitHeight + Appearance.sizes.elevationMargin
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                        colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                        onClicked: root.showUpcoming()
+                        StyledText {
+                            id: dateLabel
+                            anchors.centerIn: parent
+                            text: root.upcomingMode ? Translation.tr("Upcoming") : Qt.formatDate(root.selectedDate, "ddd dd MMM")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnSurface
+                        }
+                    }
+
+                    RippleButton {
+                        implicitWidth: Appearance.sizes.elevationMargin * 3
+                        implicitHeight: implicitWidth
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                        colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                        onClicked: root.changeDay(1)
+                        MaterialSymbol { anchors.centerIn: parent; text: "chevron_right"; iconSize: Appearance.font.pixelSize.normal; color: Appearance.colors.colOnSurface }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    RippleButton {
+                        visible: root.calendarSource !== "khal" && !GoogleCalendarService.available
+                        implicitWidth: setupLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
+                        implicitHeight: setupLabel.implicitHeight + Appearance.sizes.elevationMargin
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                        colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                        onClicked: GoogleCalendarService.startOAuth()
+                        StyledText {
+                            id: setupLabel
+                            anchors.centerIn: parent
+                            text: Translation.tr("Connect Google")
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colOnSurface
+                        }
                     }
                 }
 
-                Item { Layout.fillWidth: true }
+                CalendarQuickCreate {
+                    Layout.fillWidth: true
+                    parsed: root.parsedCreate
+                    onCreate: root.createFromQuery()
+                }
 
-                RippleButton {
-                    visible: root.calendarSource !== "khal" && !GoogleCalendarService.available
-                    implicitWidth: setupLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                    implicitHeight: setupLabel.implicitHeight + Appearance.sizes.elevationMargin
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colSurfaceContainerHigh
-                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighHover
-                    colRipple: Appearance.colors.colSurfaceContainerHighActive
-                    onClicked: GoogleCalendarService.startOAuth()
-                    StyledText {
-                        id: setupLabel
-                        anchors.centerIn: parent
-                        text: Translation.tr("Connect Google")
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        color: Appearance.colors.colOnSurface
+                CalendarAgendaList {
+                    id: agenda
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    rows: root.rows
+                    selectedIndex: root.selectedIndex
+                    showDate: root.upcomingMode
+                    emptyText: root.upcomingMode ? Translation.tr("No upcoming events") : Translation.tr("No events for this day")
+                    onSelected: index => root.selectedIndex = index
+                    onActivated: index => {
+                        root.selectedIndex = index;
+                        root.activateSelected();
                     }
                 }
             }
 
-            CalendarQuickCreate {
-                Layout.fillWidth: true
-                parsed: root.parsedCreate
-                onCreate: root.createFromQuery()
-            }
-
-            CalendarAgendaList {
-                id: agenda
+            CalendarCreateForm {
+                id: createForm
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                rows: root.rows
-                selectedIndex: root.selectedIndex
-                onSelected: index => root.selectedIndex = index
-                onActivated: index => {
-                    root.selectedIndex = index;
-                    root.activateSelected();
-                }
+                initialDate: root.selectedDate
+                defaultDurationMinutes: Config.options.search.modules.calendar.defaultDurationMin
+                busy: GoogleCalendarService.mutationState === "saving"
+                onSubmitted: fields => root.submitFields(fields)
+                onCancelled: root.navigateBack()
             }
         }
     }

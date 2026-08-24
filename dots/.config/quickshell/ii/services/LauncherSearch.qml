@@ -114,10 +114,11 @@ Singleton {
             settingRef: setting,
             keepOverviewOpen: true,
             execute: () => {
-                GlobalStates.openSettingsPage(
-                            String(setting?.pageId ?? ""),
-                            String(setting?.subPage ?? ""),
-                            String(setting?.sectionTitleLocalized ?? setting?.sectionTitle ?? ""));
+                const pageId = String(setting?.pageId ?? "");
+                const subPage = String(setting?.subPage ?? "");
+                const section = String(setting?.sectionTitleLocalized ?? setting?.sectionTitle ?? "");
+                GlobalStates.overviewOpen = false;
+                Qt.callLater(() => GlobalStates.openSettingsPage(pageId, subPage, section));
             }
         });
     }
@@ -213,9 +214,8 @@ Singleton {
         const terms = String(queryText ?? "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
         if (terms.length === 0)
             return [];
-        const panelIds = ["calendar", "emojis", "screenshots", "windows", "tasks", "timers", "commands", "gmail", "sports"];
         return SearchPanelRegistry.enabledPanels.filter(panel => {
-            if (!panelIds.includes(panel.id))
+            if (panel.id === "ai")
                 return false;
             const searchable = [panel.id, panel.label, ...(panel.keywords ?? [])]
                 .join(" ").toLocaleLowerCase();
@@ -312,18 +312,38 @@ Singleton {
         return true;
     }
 
+    function quicklinkFavicon(url) {
+        const host = String(url ?? "").match(/^https?:\/\/([^\/?#:]+)/i)?.[1] ?? "";
+        return host.length > 0
+            ? "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(host) + "&sz=64"
+            : "";
+    }
+
     function createQuicklinkResult(match: var): var {
         const link = match.link;
         const url = root.quicklinkUrl(match);
-        const icon = String(link?.icon ?? "").trim() || "link";
+        let customImage = String(link?.iconPath ?? "").trim();
+        if (customImage.startsWith("~/"))
+            customImage = "file://" + Directories.home + customImage.slice(1);
+        else if (customImage.startsWith("/"))
+            customImage = "file://" + customImage;
+        const fallbackImage = Config.options.search.modules.quicklinks.fetchFavicons
+            ? root.quicklinkFavicon(url)
+            : "";
+        const imageSource = customImage || fallbackImage;
+        const icon = imageSource || String(link?.icon ?? "").trim() || "link";
         return resultComp.createObject(null, {
             key: "quicklink:" + String(link.alias ?? url),
             name: String(link.name ?? link.alias ?? url),
             iconName: icon,
-            iconType: LauncherSearchResult.IconType.Material,
+            iconType: imageSource.length > 0
+                ? LauncherSearchResult.IconType.Image
+                : LauncherSearchResult.IconType.Material,
             type: Translation.tr("Quicklink"),
             verb: Config.options.search.modules.quicklinks.copyOnEnter ? Translation.tr("Copy") : Translation.tr("Open"),
             comment: url,
+            keepOverviewOpen: Config.options.search.modules.quicklinks.copyOnEnter,
+            feedbackText: Config.options.search.modules.quicklinks.copyOnEnter ? Translation.tr("Link copied to clipboard") : "",
             execute: () => root.openQuicklink(match),
             actions: [
                 resultComp.createObject(null, {
@@ -523,6 +543,8 @@ Singleton {
             iconName: entry.icon,
             iconType: LauncherSearchResult.IconType.Material,
             comment: Translation.tr("Press Enter to generate and copy locally"),
+            keepOverviewOpen: true,
+            feedbackText: Translation.tr("Generated value copied to clipboard"),
             execute: () => Quickshell.clipboardText = root.generatorValue(entry.id)
         });
     }
@@ -1823,8 +1845,11 @@ Singleton {
         ];
 
         const queryLower = root.query.toLowerCase();
+        const registryOwnedPrefixes = new Set(SearchPanelRegistry.enabledPanels
+            .map(panel => SearchPanelRegistry.prefixOf(panel))
+            .filter(prefix => String(prefix).length > 0));
         for (const mod of moduleShortcuts) {
-            if (!mod.enabled())
+            if (!mod.enabled() || registryOwnedPrefixes.has(mod.prefix))
                 continue;
             if (mod.names.some(n => n.startsWith(queryLower) && queryLower.length >= 2)) {
                 const execFn = () => {
@@ -1850,7 +1875,10 @@ Singleton {
             result = result.concat(root.fallbackResults());
 
         /// Math result, command, web search ///
-        if (Config.options.search.prefix.showDefaultActionsWithoutPrefix) {
+        // Generic command/AI/web continuations are progressive fallbacks. A
+        // broad query such as "bluetooth" must not append three unrelated
+        // actions after already finding apps, controls and its dedicated panel.
+        if (Config.options.search.prefix.showDefaultActionsWithoutPrefix && result.length === 0) {
             if (Config.options.search.modules.shellCommand && !startsWithShellCommandPrefix)
                 result.push(commandResultObject);
             if (!isMath && mathResultObject)
@@ -1953,7 +1981,8 @@ Singleton {
             matchTerms: properties.matchTerms || [],
             category: properties.category || properties.type || "",
             settingRef: properties.settingRef ?? null,
-            keyHints: properties.keyHints ?? []
+            keyHints: properties.keyHints ?? [],
+            feedbackText: properties.feedbackText || ""
         };
     }
 

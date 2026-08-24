@@ -12,11 +12,16 @@ Item {
     property string searchQuery: ""
     property int selectedIndex: 0
     property bool unreadOnly: false
+    property string noticeText: ""
 
     readonly property var rows: root.filteredMessages()
     readonly property var selectedMessage: root.selectedIndex >= 0 && root.selectedIndex < root.rows.length ? root.rows[root.selectedIndex] : null
-    readonly property string statusText: !EmailService.authenticated
+    readonly property string statusText: root.noticeText.length > 0
+        ? root.noticeText
+        : !EmailService.authenticated
         ? Translation.tr("Gmail is not connected")
+        : EmailService.loading
+            ? Translation.tr("Refreshing Gmail…")
         : root.selectedMessage
             ? String(root.selectedMessage.subject ?? "")
             : Translation.tr("%1 messages").arg(String(root.rows.length))
@@ -78,6 +83,7 @@ Item {
         EmailService.fetchEmailBody(root.selectedMessage.id);
         if (root.selectedMessage.unread)
             EmailService.markAsRead(root.selectedMessage.id);
+        root.showNotice(Translation.tr("Loading message…"));
         return true;
     }
 
@@ -86,7 +92,8 @@ Item {
             return false;
         EmailService.composeDraftTo = String(root.selectedMessage.from ?? "");
         EmailService.composeDraftSubject = Translation.tr("Re: %1").arg(String(root.selectedMessage.subject ?? ""));
-        GlobalStates.openCheatsheet("email");
+        GlobalStates.overviewOpen = false;
+        Qt.callLater(() => GlobalStates.openCheatsheet("email"));
         return true;
     }
 
@@ -94,7 +101,19 @@ Item {
         if (!root.selectedMessage?.id)
             return false;
         EmailService.markAsRead(root.selectedMessage.id);
+        root.showNotice(Translation.tr("Marked as read"));
         return true;
+    }
+
+    function openAccounts(): bool {
+        GlobalStates.overviewOpen = false;
+        Qt.callLater(() => GlobalStates.openCheatsheet("email"));
+        return true;
+    }
+
+    function showNotice(message) {
+        root.noticeText = String(message ?? "");
+        noticeTimer.restart();
     }
 
     function focusInput(): bool { return false; }
@@ -111,6 +130,12 @@ Item {
         interval: 350
         repeat: false
         onTriggered: EmailService.searchMessages(root.searchQuery.trim())
+    }
+
+    Timer {
+        id: noticeTimer
+        interval: 3200
+        onTriggered: root.noticeText = ""
     }
 
     SearchPanelScaffold {
@@ -148,8 +173,8 @@ Item {
                     implicitHeight: unreadLabel.implicitHeight + Appearance.sizes.elevationMargin
                     buttonRadius: Appearance.rounding.full
                     colBackground: root.unreadOnly ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-                    colBackgroundHover: root.unreadOnly ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighHover
-                    colRipple: root.unreadOnly ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighActive
+                    colBackgroundHover: root.unreadOnly ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
+                    colRipple: root.unreadOnly ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
                     onClicked: root.unreadOnly = !root.unreadOnly
                     StyledText {
                         id: unreadLabel
@@ -182,8 +207,8 @@ Item {
                         implicitHeight: messageContent.implicitHeight + Appearance.sizes.elevationMargin * 2
                         buttonRadius: Appearance.rounding.normal
                         colBackground: root.selectedIndex === index ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighHover
-                        colRipple: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighActive
+                        colBackgroundHover: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
+                        colRipple: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
                         onClicked: { root.selectedIndex = index; root.activateSelected(); }
 
                         ColumnLayout {
@@ -214,6 +239,40 @@ Item {
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
                             }
+                        }
+                    }
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        visible: root.rows.length === 0
+                        spacing: Appearance.sizes.elevationMargin / 2
+
+                        MaterialLoadingIndicator {
+                            Layout.alignment: Qt.AlignHCenter
+                            visible: EmailService.loading
+                            implicitWidth: Appearance.sizes.elevationMargin * 4
+                            implicitHeight: implicitWidth
+                        }
+
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignHCenter
+                            visible: !EmailService.loading
+                            text: root.unreadOnly ? "mark_email_read" : "inbox"
+                            iconSize: Appearance.font.pixelSize.huge
+                            color: Appearance.colors.colPrimary
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: EmailService.loading
+                                ? Translation.tr("Searching Gmail…")
+                                : root.searchQuery.trim().length > 0
+                                    ? Translation.tr("No messages match this search")
+                                    : root.unreadOnly
+                                        ? Translation.tr("No unread messages")
+                                        : Translation.tr("Inbox is empty")
+                            color: Appearance.colors.colSubtext
+                            font.pixelSize: Appearance.font.pixelSize.small
                         }
                     }
                 }
@@ -249,12 +308,45 @@ Item {
                 }
             }
 
-            StyledText {
+            ColumnLayout {
                 Layout.fillWidth: true
                 visible: !EmailService.authenticated
-                text: Translation.tr("Connect Gmail in Cheatsheet to search your inbox here.")
-                wrapMode: Text.Wrap
-                color: Appearance.colors.colSubtext
+                Layout.fillHeight: true
+                spacing: Appearance.sizes.elevationMargin
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "mark_email_unread"
+                    iconSize: Appearance.font.pixelSize.huge
+                    color: Appearance.colors.colPrimary
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Connect Gmail in Cheat Sheet to search your inbox here.")
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    color: Appearance.colors.colSubtext
+                }
+
+                RippleButton {
+                    Layout.alignment: Qt.AlignHCenter
+                    implicitWidth: accountButtonContent.implicitWidth + Appearance.sizes.elevationMargin * 2
+                    implicitHeight: Appearance.sizes.elevationMargin * 3
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colPrimaryContainer
+                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                    colRipple: Appearance.colors.colPrimaryContainerActive
+                    onClicked: root.openAccounts()
+
+                    RowLayout {
+                        id: accountButtonContent
+                        anchors.centerIn: parent
+                        spacing: Appearance.sizes.elevationMargin / 2
+                        MaterialSymbol { text: "account_circle"; iconSize: Appearance.font.pixelSize.normal; color: Appearance.colors.colOnPrimaryContainer }
+                        StyledText { text: Translation.tr("Open Gmail accounts"); color: Appearance.colors.colOnPrimaryContainer; font.weight: Font.DemiBold }
+                    }
+                }
             }
         }
     }

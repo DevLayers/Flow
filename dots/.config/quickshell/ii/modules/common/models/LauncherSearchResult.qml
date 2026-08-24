@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 
 QtObject {
-    enum IconType { Material, Text, System, None }
+    enum IconType { Material, Text, System, Image, None }
     enum FontType { Normal, Monospace }
 
     // General stuff
@@ -37,6 +37,8 @@ QtObject {
     property string panelId: ""
     property bool pinnable: true
     property list<string> matchTerms: []
+    property list<string> keyHints: []
+    property string feedbackText: ""
 
     // Extra stuff to allow for more flexibility
     property string category: type

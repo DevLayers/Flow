@@ -24,6 +24,9 @@ Singleton {
     property string lastErrorCode: ""
     property string lastErrorMessage: ""
     property int lastHttpStatus: 0
+    property string mutationState: "idle"
+    property string mutationMessage: ""
+    property int mutationRevision: 0
 
     property var _pendingAction: null
     property var _eventQueue: []
@@ -148,6 +151,8 @@ Singleton {
         if (String(body.summary ?? "").trim().length === 0)
             return false;
         root.syncing = true;
+        root.mutationState = "saving";
+        root.mutationMessage = Translation.tr("Creating event…");
         root._ensureValidToken({ operation: "create", calendarId: calendarId || "primary", body: body });
         return true;
     }
@@ -156,6 +161,8 @@ Singleton {
         if (!root.available || !event?.id)
             return false;
         root.syncing = true;
+        root.mutationState = "saving";
+        root.mutationMessage = Translation.tr("Saving event…");
         root._ensureValidToken({ operation: "update", calendarId: String(event.calendarId ?? "primary"), eventId: String(event.id), body: root.googleFields(fields) });
         return true;
     }
@@ -164,6 +171,8 @@ Singleton {
         if (!root.available || !event?.id)
             return false;
         root.syncing = true;
+        root.mutationState = "saving";
+        root.mutationMessage = Translation.tr("Deleting event…");
         root._ensureValidToken({ operation: "delete", calendarId: String(event.calendarId ?? "primary"), eventId: String(event.id) });
         return true;
     }
@@ -242,7 +251,14 @@ Singleton {
         root.lastErrorCode = String(result?.code ?? "api_error");
         root.lastErrorMessage = String(result?.message ?? "");
         root.lastHttpStatus = Number(result?.http_status ?? 0);
-        if (root.lastHttpStatus === 401) {
+        const operation = String(root._pendingAction?.operation ?? "");
+        const willRetryToken = root.lastHttpStatus === 401;
+        if (!willRetryToken && ["create", "update", "delete"].includes(operation)) {
+            root.mutationState = "error";
+            root.mutationMessage = root.lastErrorMessage || Translation.tr("Calendar change failed");
+            root.mutationRevision++;
+        }
+        if (willRetryToken) {
             root.accessToken = "";
             root.accessTokenExpiry = 0;
             root._ensureValidToken(root._pendingAction);
@@ -553,7 +569,14 @@ Singleton {
                 try {
                     const result = JSON.parse(text.trim());
                     if (!result.ok) { root._apiError(result); return; }
-                    root.refresh();
+                    const operation = String(root._pendingAction?.operation ?? "");
+                    root.syncing = false;
+                    root.mutationState = "success";
+                    root.mutationMessage = operation === "delete"
+                        ? Translation.tr("Event deleted")
+                        : (operation === "update" ? Translation.tr("Event updated") : Translation.tr("Event created"));
+                    root.mutationRevision++;
+                    Qt.callLater(root.refresh);
                 } catch (error) { root._apiError({ code: "parse_error", message: error.message }); }
             }
         }

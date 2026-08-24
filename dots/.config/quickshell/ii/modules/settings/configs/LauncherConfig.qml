@@ -21,6 +21,7 @@ Item {
         ContentSection {
             icon: "tune"
             title: Translation.tr("Search Behavior & Positioning")
+            tooltip: Translation.tr("Controls how the normal result list is ranked, positioned and sized. Panel-specific options are under Search modules.")
 
             ColumnLayout {
                 Layout.fillWidth: true
@@ -29,18 +30,21 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "trending_up"
                     text: Translation.tr("Frequency-based ranking")
+                    description: Translation.tr("Learns from launches and moves frequently used results closer to the top. Data stays on this device.")
                     checked: Config.options.search.frecency
                     onCheckedChanged: Config.options.search.frecency = checked
                 }
                 ConfigSwitch {
                     buttonIcon: "apps"
                     text: Translation.tr("Always list apps on empty query")
+                    description: Translation.tr("Shows applications before you type instead of keeping Search as a compact empty field.")
                     checked: Config.options.search.alwaysListApps
                     onCheckedChanged: Config.options.search.alwaysListApps = checked
                 }
                 ConfigSwitch {
                     buttonIcon: "center_focus_strong"
                     text: Translation.tr("Center Search on Screen")
+                    description: Translation.tr("Places Search at the screen center; disable it to keep the Overview-aligned position.")
                     checked: Config.options.search.positionStyle === "center"
                     onCheckedChanged: Config.options.search.positionStyle = checked ? "center" : "default"
                 }
@@ -60,6 +64,7 @@ Item {
         ContentSection {
             icon: "extension"
             title: Translation.tr("Search workspace")
+            tooltip: Translation.tr("Configure every searchable panel and see the words or prefixes that open it.")
 
             ColumnLayout {
                 Layout.fillWidth: true
@@ -107,6 +112,7 @@ Item {
         ContentSection {
             icon: "construction"
             title: Translation.tr("Advanced")
+            tooltip: Translation.tr("Customize explicit triggers, aliases and empty-query suggestions.")
 
             ColumnLayout {
                 Layout.fillWidth: true

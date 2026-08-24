@@ -17,13 +17,17 @@ Singleton {
             session: ["session", "logout", "desligar"], regionOcr: ["ocr", "texto da tela"],
             screenTranslate: ["translate screen", "traduzir tela"], regionRecord: ["record", "gravar"],
             regionScreenshot: ["screenshot", "print", "snip"], localSend: ["localsend", "enviar arquivo"],
-            videoEditor: ["video editor", "editar video"], scratchpad: ["scratchpad"],
+            videoEditor: ["video editor", "editar video"], notes: ["notes", "notas", "quick notes"], scratchpad: ["scratchpad"],
             mediaControls: ["media controls", "player"], barToggle: ["bar", "barra"]
         };
         return base.concat(extras[action.id] ?? []);
     }
 
-    readonly property var actions: TouchGestureActionRegistry.actions.map(action => Object.assign({}, action, {
+    readonly property var extraActions: [
+        { id: "notes", name: "Notes", icon: "note_stack", category: "shell", searchable: true, enabled: () => true }
+    ]
+
+    readonly property var actions: TouchGestureActionRegistry.actions.concat(root.extraActions).map(action => Object.assign({}, action, {
         keywords: action.keywords ?? root.keywordsFor(action),
         category: action.category ?? "shell",
         searchable: action.searchable !== false,
@@ -35,6 +39,10 @@ Singleton {
     }
 
     function trigger(actionId, screenName) {
+        if (actionId === "notes") {
+            GlobalStates.notesOpen = true;
+            return;
+        }
         TouchGestureActionRegistry.trigger(actionId, screenName);
     }
 }

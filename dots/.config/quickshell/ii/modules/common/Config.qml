@@ -3822,6 +3822,11 @@ Singleton {
                     property int imageHeight: 200
                     property int previewFontSize: 12
                     property bool enableSloppySearch: false
+                    property JsonObject autoDelete: JsonObject {
+                        property bool enable: false
+                        property int retentionDays: 30
+                        property bool wipeOnShutdown: false
+                    }
                     property JsonObject detectors: JsonObject {
                         property bool hexColor: true
                         property bool url: true

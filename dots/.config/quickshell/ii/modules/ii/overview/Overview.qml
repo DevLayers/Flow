@@ -685,6 +685,16 @@ Scope {
     }
 
     GlobalShortcut {
+        name: "overviewCommandsOpen"
+        description: "Open Search directly in the Commands panel"
+
+        onPressed: {
+            GlobalStates.superReleaseMightTrigger = false;
+            GlobalStates.openSearchPanel("commands");
+        }
+    }
+
+    GlobalShortcut {
         name: "overviewAiToggle"
         description: "Toggle AI chat on overview widget"
 

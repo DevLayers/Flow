@@ -12,12 +12,15 @@ Item {
 
     property string searchQuery: ""
     property int selectedIndex: 0
+    property string noticeText: ""
 
     readonly property var rows: root.filteredTasks()
     readonly property var selectedTask: root.selectedIndex >= 0 && root.selectedIndex < root.rows.length
         ? root.rows[root.selectedIndex]
         : null
-    readonly property string statusText: Todo.syncing
+    readonly property string statusText: root.noticeText.length > 0
+        ? root.noticeText
+        : Todo.syncing
         ? Translation.tr("Syncing %1…").arg(Todo.providerName)
         : root.selectedTask
             ? String(root.selectedTask.content ?? root.selectedTask.title ?? "")
@@ -75,6 +78,10 @@ Item {
     function createFromQuery(): bool {
         if (!Config.options.search.modules.tasks.allowCreate)
             return false;
+        if (!Todo.connected) {
+            root.showNotice(Translation.tr("Connect %1 before creating a task").arg(Todo.providerName));
+            return true;
+        }
         const parsed = root.parseQuickTask(root.searchQuery);
         if (parsed.title.length === 0)
             return false;
@@ -87,6 +94,7 @@ Item {
             hasDate: parsed.dueDate !== null
         });
         root.searchQuery = "";
+        root.showNotice(Translation.tr("Task created in %1").arg(Todo.providerName));
         return true;
     }
 
@@ -118,10 +126,12 @@ Item {
         const index = root.taskIndex(root.selectedTask);
         if (index < 0)
             return false;
-        if (root.selectedTask.done)
+        const wasDone = root.selectedTask.done === true;
+        if (wasDone)
             Todo.markUnfinished(index);
         else
             Todo.markDone(root.selectedTask);
+        root.showNotice(wasDone ? Translation.tr("Task reopened") : Translation.tr("Task completed"));
         return true;
     }
 
@@ -129,9 +139,16 @@ Item {
         const index = root.taskIndex(root.selectedTask);
         if (index < 0)
             return false;
+        const taskName = String(root.selectedTask.content ?? root.selectedTask.title ?? "");
         Todo.deleteItem(index);
         root.selectedIndex = Math.max(0, root.selectedIndex - 1);
+        root.showNotice(Translation.tr("Deleted %1").arg(taskName));
         return true;
+    }
+
+    function showNotice(message) {
+        root.noticeText = String(message ?? "");
+        noticeTimer.restart();
     }
 
     function focusInput(): bool {
@@ -139,6 +156,12 @@ Item {
     }
 
     onRowsChanged: root.clampSelection()
+
+    Timer {
+        id: noticeTimer
+        interval: 3200
+        onTriggered: root.noticeText = ""
+    }
 
     SearchPanelScaffold {
         id: scaffold
@@ -186,10 +209,10 @@ Item {
                         : Appearance.colors.colSurfaceContainerHigh
                     colBackgroundHover: root.selectedIndex === index
                         ? Appearance.colors.colPrimaryContainerHover
-                        : Appearance.colors.colSurfaceContainerHighHover
+                        : Appearance.colors.colSurfaceContainerHighestHover
                     colRipple: root.selectedIndex === index
                         ? Appearance.colors.colPrimaryContainerActive
-                        : Appearance.colors.colSurfaceContainerHighActive
+                        : Appearance.colors.colSurfaceContainerHighestActive
                     onClicked: {
                         root.selectedIndex = index;
                         root.activateSelected();

@@ -907,6 +907,14 @@ Singleton {
         return pending;
     }
 
+    IpcHandler {
+        target: "searchPanel"
+
+        function open(panelId: string): void {
+            root.openSearchPanel(panelId);
+        }
+    }
+
     Timer {
         id: resetSearchOnlyModeTimer
         interval: 300

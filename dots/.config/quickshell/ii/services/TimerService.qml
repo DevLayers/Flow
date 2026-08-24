@@ -53,13 +53,15 @@ Singleton {
     function addCountdown(minutes, label = "") {
         const durationMinutes = Math.max(1, Number(minutes) || 1);
         const next = Array.from(Persistent.states.timer.countdowns ?? []);
-        next.unshift({
+        const countdown = {
             id: "countdown-" + Date.now().toString(36),
             label: String(label ?? "").trim() || Translation.tr("%1 minute timer").arg(String(durationMinutes)),
             endsAt: Date.now() + durationMinutes * 60 * 1000,
             notified: false
-        });
+        };
+        next.unshift(countdown);
         Persistent.states.timer.countdowns = next;
+        return countdown;
     }
 
     function removeCountdown(countdownId) {

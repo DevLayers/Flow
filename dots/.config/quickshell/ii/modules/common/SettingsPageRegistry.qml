@@ -162,9 +162,15 @@ Singleton {
             "subPages": [
                 "widgets/LauncherSuggestionsConfig.qml",
                 "widgets/LauncherPrefixesConfig.qml",
-                "widgets/LauncherAliasesConfig.qml"
+                "widgets/LauncherAliasesConfig.qml",
+                "widgets/LauncherModulesConfig.qml",
+                "widgets/LauncherQuicklinksConfig.qml",
+                "widgets/LauncherSnippetsConfig.qml",
+                "widgets/LauncherShortcutsConfig.qml",
+                "widgets/LauncherAppearanceConfig.qml",
+                "widgets/LauncherDataConfig.qml"
             ],
-            "aliases": ["App Search", "Search Prefixes", "App Aliases"]
+            "aliases": ["App Search", "Search Prefixes", "App Aliases", "Search Modules", "Quicklinks", "Search Shortcuts", "Launcher Privacy"]
         },
         {
             "id": "dictation",

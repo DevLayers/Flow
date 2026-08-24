@@ -33,6 +33,7 @@ Item {
         ContentSection {
             icon: "dashboard_customize"
             title: Translation.tr("Search panels")
+            tooltip: Translation.tr("Each description lists the words that reveal the panel. A configured prefix opens it immediately.")
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
@@ -63,6 +64,7 @@ Item {
         ContentSection {
             icon: "manage_search"
             title: Translation.tr("Search providers")
+            tooltip: Translation.tr("Providers contribute results to normal Search; prefix providers run only when their prefix is typed.")
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
@@ -80,11 +82,12 @@ Item {
         ContentSection {
             icon: "database"
             title: Translation.tr("Data-backed modules")
+            tooltip: Translation.tr("These entries depend on local shell data or an account configured elsewhere in Settings or Cheat Sheet.")
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
                 ConfigSwitch { buttonIcon: "menu_book"; text: Translation.tr("Cheat Sheet shortcuts"); description: Translation.tr("Lets Search open Cheat Sheet pages such as timetable, elements, amino acids, workspaces, Gmail, and commands."); checked: Config.options.search.modules.cheatsheet.enable; onCheckedChanged: Config.options.search.modules.cheatsheet.enable = checked }
-                ConfigSwitch { buttonIcon: "terminal"; text: Translation.tr("Commands"); description: Translation.tr("Search for ‘commands’, ‘command’, ‘comando’, ‘cmd’, or the command name."); checked: Config.options.search.modules.cheatsheet.commandsPanel; onCheckedChanged: Config.options.search.modules.cheatsheet.commandsPanel = checked }
+                ConfigSwitch { buttonIcon: "terminal"; text: Translation.tr("Commands"); description: Translation.tr("Search for ‘commands’, ‘command’, ‘comando’, ‘cmd’, or the command name. Super+Alt+C opens the panel directly."); checked: Config.options.search.modules.cheatsheet.commandsPanel; onCheckedChanged: Config.options.search.modules.cheatsheet.commandsPanel = checked }
                 ConfigSwitch { buttonIcon: "mail"; text: Translation.tr("Gmail"); description: Translation.tr("Search for ‘gmail’, ‘email’, ‘mail’, ‘inbox’, or ‘unread’."); checked: Config.options.search.modules.cheatsheet.gmailPanel; onCheckedChanged: Config.options.search.modules.cheatsheet.gmailPanel = checked }
                 ConfigSwitch { buttonIcon: "sports_soccer"; text: Translation.tr("Today’s games"); description: Translation.tr("Search for ‘sports’, ‘games’, ‘jogos’, ‘football’, or ‘futebol’ to see every monitored game today."); checked: Config.options.search.modules.sports.enable; onCheckedChanged: Config.options.search.modules.sports.enable = checked }
                 ConfigSwitch { buttonIcon: "cancel"; text: Translation.tr("Quit process"); description: Translation.tr("Search for ‘process’, ‘kill’, ‘quit’, ‘fechar’, or a running process name. Enter requires confirmation."); checked: Config.options.search.modules.processes.enable; onCheckedChanged: Config.options.search.modules.processes.enable = checked }

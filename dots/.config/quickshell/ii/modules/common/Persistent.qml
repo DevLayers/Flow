@@ -328,6 +328,10 @@ Singleton {
 
             property JsonObject clipboard: JsonObject {
                 property list<string> pinnedEntries: []
+                // cliphist exposes stable IDs but no timestamps. These compact
+                // records let its opt-in retention policy age entries without
+                // guessing from their content or deleting pinned data.
+                property list<var> historySeen: []
             }
 
             property JsonObject sidebar: JsonObject {

@@ -485,8 +485,9 @@ Singleton {
         root.enqueueCalendarRequest(request);
     }
 
-    function createEventFields(calendar, fields) {
-        root.enqueueCalendarRequest({ op: "save", calendar: calendar || root.defaultCalendar, event: fields });
+    function createEventFields(calendar, fields, callback = null) {
+        root.enqueueCalendarRequest({ op: "save", calendar: calendar || root.defaultCalendar, event: fields }, callback);
+        return true;
     }
 
     function setCalendarColor(calendar, color) {

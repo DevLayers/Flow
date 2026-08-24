@@ -15,6 +15,7 @@ import Quickshell.Hyprland
 
 RippleButton {
     id: root
+    signal resultExecuted(string feedbackText)
     property var entry
     readonly property bool keepsOverviewOpen: entry?.keepOverviewOpen ?? false
     property string query
@@ -100,11 +101,9 @@ RippleButton {
     property int buttonVerticalPadding: 8
     property bool keyboardDown: false
     property real entryOpacity: 0.0
-    property real entryScale: 0.94
-    property real entryTranslateY: -20
+    property real entryTranslateY: -Appearance.sizes.elevationMargin
 
     opacity: entryOpacity
-    scale: entryScale
     transform: Translate {
         y: root.entryTranslateY
     }
@@ -116,8 +115,8 @@ RippleButton {
     property bool isFirst: listIndex === 0
     property bool isLast: listIndex === listCount - 1
     readonly property bool isSelected: listIndex === listCurrentIndex
-    readonly property bool isAboveSelected: listCurrentIndex === listIndex + 1 && listCurrentIndex !== -1
-    readonly property bool isBelowSelected: listCurrentIndex === listIndex - 1 && listCurrentIndex !== -1
+    readonly property bool isAboveSelected: !root.isLast && listCurrentIndex === listIndex + 1 && listCurrentIndex !== -1
+    readonly property bool isBelowSelected: !root.isFirst && listCurrentIndex === listIndex - 1 && listCurrentIndex !== -1
     readonly property real pillRadius: Math.min(height / 2, Appearance.rounding.large)
     readonly property int activeHIndex: root.actionPanelOpen ? root.actionSelectedIndex + 1 : 0
 
@@ -146,6 +145,7 @@ RippleButton {
                     GlobalStates.overviewOpen = false;
                 }
                 root.itemExecute();
+                root.resultExecuted(String(root.entry?.feedbackText ?? ""));
             }
         });
         if (root.entry?.type === Translation.tr("App") || root.itemType === Translation.tr("App")) {
@@ -176,7 +176,7 @@ RippleButton {
             });
         }
         if (root.contentType === "filepath" || root.itemType === Translation.tr("Directory") || root.itemType === Translation.tr("Folder Alias")) {
-            const isDir = root.itemType === Translation.tr("Directory") || root.itemType === Translation.tr("Folder Alias") || FileUtils.isDirectory(root.itemName);
+            const isDir = root.itemType === Translation.tr("Directory") || root.itemType === Translation.tr("Folder Alias");
             if (isDir) {
                 const pinnedFiles = Config.options?.dock?.pinnedFiles ?? [];
                 const cleanPath = root.itemName.toString().replace(/^file:\/\//, "");
@@ -460,24 +460,6 @@ RippleButton {
                                     }
                                 }
 
-                                transform: Scale {
-                                    origin.x: iconContainer.width / 2
-                                    origin.y: iconContainer.height / 2
-                                    xScale: root.isSelected && !root.actionPanelOpen ? 1.06 : 1.0
-                                    yScale: root.isSelected && !root.actionPanelOpen ? 1.06 : 1.0
-                                    Behavior on xScale {
-                                        NumberAnimation {
-                                            duration: 80
-                                            easing.type: Easing.OutBack
-                                        }
-                                    }
-                                    Behavior on yScale {
-                                        NumberAnimation {
-                                            duration: 80
-                                            easing.type: Easing.OutBack
-                                        }
-                                    }
-                                }
                             }
 
                             IconImage {
@@ -496,7 +478,8 @@ RippleButton {
                         MaterialSymbol {
                             anchors.centerIn: parent
                             visible: root.iconType === LauncherSearchResult.IconType.Material
-                            text: root.materialSymbol
+                                || (root.iconType === LauncherSearchResult.IconType.Image && resultImage.status !== Image.Ready)
+                            text: root.iconType === LauncherSearchResult.IconType.Image ? "link" : root.materialSymbol
                             iconSize: 26
                             fill: root.isSelected ? 1.0 : 0.0
                             color: root.colForeground
@@ -505,6 +488,16 @@ RippleButton {
                                     duration: 150
                                 }
                             }
+                        }
+
+                        StyledImage {
+                            id: resultImage
+                            anchors.fill: parent
+                            visible: root.iconType === LauncherSearchResult.IconType.Image
+                            source: visible ? root.iconName : ""
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            cache: true
                         }
 
                         Item {
@@ -536,8 +529,6 @@ RippleButton {
                         height: 14
                         radius: Appearance.rounding.full
                         color: root.itemName || "transparent"
-                        border.width: 1
-                        border.color: Appearance.colors.colOutlineVariant
                         visible: root.contentType === "hex-color" && !root.actionPanelOpen
                     }
 
@@ -744,18 +735,11 @@ RippleButton {
                         implicitWidth: 44
                         implicitHeight: 16
                         opacity: shouldShow ? 1.0 : 0.0
-                        scale: shouldShow ? 1.0 : 0.7
                         Behavior on opacity {
                             NumberAnimation {
                                 id: indicatorAnim
                                 duration: 100
                                 easing.type: Easing.OutQuad
-                            }
-                        }
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 100
-                                easing.type: Easing.OutBack
                             }
                         }
                         KeyHint {
@@ -780,8 +764,10 @@ RippleButton {
                         sizeScale: 0.62
                         checked: Boolean(root.entry?.controlValue)
                         onToggled: {
-                            if (typeof root.itemExecute === "function")
+                            if (typeof root.itemExecute === "function") {
                                 root.itemExecute();
+                                root.resultExecuted(String(root.entry?.feedbackText ?? ""));
+                            }
                         }
                     }
                 }
@@ -1031,6 +1017,7 @@ RippleButton {
             GlobalStates.overviewOpen = false;
         }
         root.itemExecute();
+        root.resultExecuted(String(root.entry?.feedbackText ?? ""));
     }
 
     Keys.onPressed: event => {
@@ -1072,7 +1059,7 @@ RippleButton {
         running: false
 
         PauseAnimation {
-            duration: Math.max(0, Math.min(6, root.listIndex) * 30)
+            duration: Math.max(0, Math.min(6, root.listIndex) * Appearance.animation.elementMoveFast.duration / 4)
         }
 
         ParallelAnimation {
@@ -1080,22 +1067,17 @@ RippleButton {
                 target: root
                 property: "entryOpacity"
                 to: 1.0
-                duration: 50
-                easing.type: Easing.OutQuad
-            }
-            NumberAnimation {
-                target: root
-                property: "entryScale"
-                to: 1.0
-                duration: 100
-                easing.type: Easing.OutBack
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
             NumberAnimation {
                 target: root
                 property: "entryTranslateY"
                 to: 0
-                duration: 50
-                easing.type: Easing.OutQuad
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
         }
     }

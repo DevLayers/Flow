@@ -14,6 +14,7 @@ Item {
 
     property string searchQuery: ""
     property int selectedIndex: 0
+    property string noticeText: ""
 
     readonly property real listSpacing: Appearance.sizes.elevationMargin / 2
     readonly property var entries: root.filteredEntries()
@@ -22,7 +23,10 @@ Item {
         : ""
     readonly property bool shouldBlurPreview: Config.options.search.modules.screenshots.blurPreviews
         || Config.options.workSafety.enable.clipboard
-    implicitWidth: 720
+    readonly property string statusText: root.noticeText.length > 0
+        ? root.noticeText
+        : (root.selectedEntry.length > 0 ? root.imageMetadata(root.selectedEntry) : Translation.tr("No screenshot selected"))
+    implicitWidth: Config.options.search.appearance.panelWidth
     implicitHeight: scaffold.implicitHeight
 
     function filteredEntries() {
@@ -108,6 +112,7 @@ Item {
         const path = root.savedPath();
         const directory = StringUtils.shellSingleQuoteEscape(`${Directories.pictures}/Screenshots`);
         Quickshell.execDetached(["bash", "-c", `mkdir -p '${directory}' && ${root.decodeCommand(path)}`]);
+        root.showNotice(Translation.tr("Saving to %1").arg(path));
         return true;
     }
 
@@ -118,6 +123,7 @@ Item {
         const directory = StringUtils.shellSingleQuoteEscape(`${Directories.pictures}/Screenshots`);
         const escapedPath = StringUtils.shellSingleQuoteEscape(path);
         Quickshell.execDetached(["bash", "-c", `mkdir -p '${directory}' && ${root.decodeCommand(path)} && exec swappy -f '${escapedPath}'`]);
+        root.showNotice(Translation.tr("Opening screenshot editor…"));
         return true;
     }
 
@@ -127,6 +133,7 @@ Item {
         const path = `${Directories.screenshotTemp}/search-ocr-${Date.now()}.png`;
         const escapedPath = StringUtils.shellSingleQuoteEscape(path);
         Quickshell.execDetached(["bash", "-c", `mkdir -p '${StringUtils.shellSingleQuoteEscape(Directories.screenshotTemp)}' && ${root.decodeCommand(path)} && langs=$(tesseract --list-langs 2>/dev/null | sed 1d | paste -sd+ -) && tesseract '${escapedPath}' stdout -l "${'${langs:-eng}'}" 2>/dev/null | wl-copy; rm -f '${escapedPath}'`]);
+        root.showNotice(Translation.tr("Reading text and copying it…"));
         return true;
     }
 
@@ -135,10 +142,22 @@ Item {
             return false;
         Cliphist.deleteEntry(root.selectedEntry);
         root.selectedIndex = Math.max(0, root.selectedIndex - 1);
+        root.showNotice(Translation.tr("Screenshot removed from history"));
         return true;
     }
 
+    function showNotice(message) {
+        root.noticeText = String(message ?? "");
+        noticeTimer.restart();
+    }
+
     onEntriesChanged: root.clampSelection()
+
+    Timer {
+        id: noticeTimer
+        interval: 3200
+        onTriggered: root.noticeText = ""
+    }
 
     SearchPanelScaffold {
         id: scaffold
@@ -146,6 +165,8 @@ Item {
         title: Translation.tr("Screenshots")
         icon: "screenshot"
         accent: true
+        showStatus: true
+        statusText: root.statusText
         primaryHint: ({ label: Translation.tr("Copy"), keys: ["↵"] })
         hints: [
             { label: Translation.tr("Save"), keys: ["Ctrl", "S"] },
@@ -161,10 +182,13 @@ Item {
 
             ListView {
                 id: screenshotList
-                Layout.preferredWidth: parent.width * Config.options.search.clipboard.listColumnRatio
+                Layout.preferredWidth: Math.max(parent.width * Config.options.search.clipboard.listColumnRatio
+                    - Appearance.sizes.elevationMargin * 4, Appearance.sizes.elevationMargin * 16)
                 Layout.fillHeight: true
                 clip: true
                 spacing: root.listSpacing
+                topMargin: 0
+                bottomMargin: 0
                 model: root.entries
 
                 delegate: RippleButton {
@@ -178,10 +202,10 @@ Item {
                         : Appearance.colors.colSurfaceContainerHigh
                     colBackgroundHover: root.selectedIndex === index
                         ? Appearance.colors.colPrimaryContainerHover
-                        : Appearance.colors.colSurfaceContainerHighHover
+                        : Appearance.colors.colSurfaceContainerHighestHover
                     colRipple: root.selectedIndex === index
                         ? Appearance.colors.colPrimaryContainerActive
-                        : Appearance.colors.colSurfaceContainerHighActive
+                        : Appearance.colors.colSurfaceContainerHighestActive
                     onClicked: root.selectedIndex = index
 
                     RowLayout {
@@ -239,33 +263,90 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
-                Loader {
+                Rectangle {
                     anchors.fill: parent
-                    active: root.selectedEntry.length > 0
-                    visible: active
+                    visible: root.selectedEntry.length > 0
+                    radius: Appearance.rounding.large
+                    color: Appearance.colors.colSurfaceContainerHigh
+                    clip: true
 
-                    sourceComponent: Rectangle {
-                        anchors.fill: parent
-                        radius: Appearance.rounding.normal
-                        color: Appearance.colors.colSurfaceContainerHigh
-                        clip: true
+                    CliphistImage {
+                        id: previewImage
+                        anchors.centerIn: parent
+                        entry: root.selectedEntry
+                        maxWidth: parent.width - Appearance.sizes.elevationMargin * 2
+                        maxHeight: parent.height - Appearance.sizes.elevationMargin * 2
+                        blur: root.shouldBlurPreview
+                        blurText: Translation.tr("Screenshot hidden")
+                    }
 
-                        CliphistImage {
-                            anchors.centerIn: parent
-                            entry: root.selectedEntry
-                            maxWidth: parent.width - Appearance.sizes.elevationMargin * 2
-                            maxHeight: parent.height - Appearance.sizes.elevationMargin * 2
-                            blur: root.shouldBlurPreview
-                            blurText: Translation.tr("Screenshot hidden")
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        visible: previewImage.loading
+                        spacing: Appearance.sizes.elevationMargin / 2
+
+                        MaterialLoadingIndicator {
+                            Layout.alignment: Qt.AlignHCenter
+                            implicitWidth: Appearance.sizes.elevationMargin * 3
+                            implicitHeight: implicitWidth
+                        }
+                        StyledText {
+                            text: Translation.tr("Preparing preview…")
+                            color: Appearance.colors.colOnSurfaceVariant
+                            font.pixelSize: Appearance.font.pixelSize.small
+                        }
+                    }
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        visible: previewImage.failed && !previewImage.loading
+                        spacing: Appearance.sizes.elevationMargin / 2
+
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: "broken_image"
+                            iconSize: Appearance.font.pixelSize.huge
+                            color: Appearance.colors.colError
+                        }
+                        StyledText {
+                            text: Translation.tr("Preview could not be decoded")
+                            color: Appearance.colors.colOnSurfaceVariant
+                        }
+                        RippleButton {
+                            Layout.alignment: Qt.AlignHCenter
+                            implicitWidth: retryLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
+                            implicitHeight: Appearance.sizes.elevationMargin * 3
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colErrorContainer
+                            colBackgroundHover: Appearance.colors.colErrorContainerHover
+                            colRipple: Appearance.colors.colErrorContainerActive
+                            onClicked: previewImage.requestDecode()
+                            StyledText {
+                                id: retryLabel
+                                anchors.centerIn: parent
+                                text: Translation.tr("Try again")
+                                color: Appearance.colors.colOnErrorContainer
+                            }
                         }
                     }
                 }
 
-                StyledText {
+                ColumnLayout {
                     anchors.centerIn: parent
                     visible: root.selectedEntry.length === 0
-                    text: Translation.tr("Select a screenshot")
-                    color: Appearance.colors.colSubtext
+                    spacing: Appearance.sizes.elevationMargin / 2
+                    MaterialSymbol {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: root.entries.length === 0 ? "screenshot_monitor" : "touch_app"
+                        iconSize: Appearance.font.pixelSize.huge
+                        color: Appearance.colors.colPrimary
+                    }
+                    StyledText {
+                        text: root.entries.length === 0
+                            ? Translation.tr("No images in clipboard history")
+                            : Translation.tr("Select a screenshot to preview")
+                        color: Appearance.colors.colSubtext
+                    }
                 }
             }
         }

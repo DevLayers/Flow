@@ -11,6 +11,8 @@ Item {
 
     property var rows: []
     property int selectedIndex: 0
+    property bool showDate: false
+    property string emptyText: Translation.tr("No events for this day")
     signal selected(int index)
     signal activated(int index)
 
@@ -33,6 +35,7 @@ Item {
             width: agenda.width
             event: modelData
             selected: root.selectedIndex === index
+            showDate: root.showDate
             opacity: String(modelData?.status ?? "") === "cancelled" ? 0.5 : 1.0
             onActivated: {
                 root.selected(index);
@@ -43,7 +46,7 @@ Item {
         StyledText {
             anchors.centerIn: parent
             visible: root.rows.length === 0
-            text: Translation.tr("No events for this day")
+            text: root.emptyText
             color: Appearance.colors.colSubtext
         }
     }

@@ -203,10 +203,10 @@ Item {
                                 : Appearance.colors.colSurfaceContainerHigh
                             colBackgroundHover: root.selectedIndex === rowLoader.index
                                 ? Appearance.colors.colPrimaryContainerHover
-                                : Appearance.colors.colSurfaceContainerHighHover
+                                : Appearance.colors.colSurfaceContainerHighestHover
                             colRipple: root.selectedIndex === rowLoader.index
                                 ? Appearance.colors.colPrimaryContainerActive
-                                : Appearance.colors.colSurfaceContainerHighActive
+                                : Appearance.colors.colSurfaceContainerHighestActive
                             onClicked: {
                                 root.selectedIndex = rowLoader.index;
                                 activate();

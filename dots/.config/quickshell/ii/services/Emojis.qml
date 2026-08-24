@@ -26,6 +26,8 @@ Singleton {
     property bool entriesPreparing: false
     property int preparationIndex: 0
     property var preparationBuffer: []
+    property int structureIndex: 0
+    property var structureBuffer: []
     
     onListChanged: {
         preparationTimer.stop();
@@ -110,15 +112,10 @@ Singleton {
         }
         const emojis = lines.slice(dataIndex + 1).filter(line => line.trim() !== "")
         root.list = emojis.map(line => line.trim())
-        root.entries = root.list.map(raw => ({
-            raw,
-            emoji: raw.match(/^\s*(\S+)/)?.[1] ?? "",
-            name: raw.replace(/^\s*\S+\s+/, ""),
-            category: root.categoryFor(raw)
-        }))
-        root.loaded = true;
-        root.loading = false;
-        console.log(`[Emojis] Loaded ${root.list.length} emojis`)
+        root.entries = [];
+        root.structureIndex = 0;
+        root.structureBuffer = [];
+        structureTimer.restart();
     }
 
     FileView { 
@@ -127,6 +124,35 @@ Singleton {
         onLoaded: {
             const fileContent = emojiFileView.text()
             root.updateEmojis(fileContent)
+        }
+    }
+
+    Timer {
+        id: structureTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            const batchSize = 96;
+            const end = Math.min(root.list.length, root.structureIndex + batchSize);
+            for (let index = root.structureIndex; index < end; index++) {
+                const raw = root.list[index];
+                root.structureBuffer.push({
+                    raw: raw,
+                    emoji: raw.match(/^\s*(\S+)/)?.[1] ?? "",
+                    name: raw.replace(/^\s*\S+\s+/, ""),
+                    category: root.categoryFor(raw)
+                });
+            }
+            root.structureIndex = end;
+            if (root.structureIndex < root.list.length) {
+                structureTimer.restart();
+                return;
+            }
+            root.entries = root.structureBuffer;
+            root.structureBuffer = [];
+            root.loaded = true;
+            root.loading = false;
+            console.log(`[Emojis] Loaded ${root.entries.length} emojis incrementally`);
         }
     }
 

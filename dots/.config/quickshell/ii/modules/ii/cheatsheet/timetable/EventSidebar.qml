@@ -193,6 +193,67 @@ Item {
         root.close();
     }
 
+    // ─── In-module integrations ──────────────────────────────────────────
+
+    EventNotesStore {
+        id: eventNotes
+    }
+
+    /** Stable identity used by the event→note mapping. */
+    readonly property string eventNoteKey: {
+        const event = root.event;
+        if (!event || event.sportEvent === true)
+            return "";
+        if (event.uid)
+            return "uid:" + String(event.uid);
+        return "k:" + String(event.content ?? "") + "@" + String(event.startDate?.getTime?.() ?? 0);
+    }
+
+    /** Resolves the stored link against live notes so tab deletion degrades gracefully. */
+    function attachedNoteIndex() {
+        const title = root.eventNoteKey.length > 0 ? eventNotes.titleFor(root.eventNoteKey) : "";
+        if (title.length === 0)
+            return -1;
+        const tabs = NotesService.tabsData?.tabs ?? [];
+        for (let i = 0; i < tabs.length; i++) {
+            if (String(tabs[i]?.title ?? "") === title)
+                return i;
+        }
+        return -1;
+    }
+
+    function attachNote() {
+        const event = root.event;
+        if (!event || event.sportEvent === true || root.eventNoteKey.length === 0)
+            return;
+        const title = String(event.content ?? Translation.tr("Event")).slice(0, 120);
+        let header = Qt.formatDateTime(event.startDate, "dddd, d MMM yyyy · hh:mm");
+        if (String(event.location ?? "").length > 0)
+            header += "\n" + String(event.location);
+        const created = NotesService.create(title, header, null);
+        if (!created.ok)
+            return;
+        eventNotes.setLink(root.eventNoteKey, created.title);
+    }
+
+    function openAttachedNote() {
+        const index = root.attachedNoteIndex();
+        if (index < 0)
+            return;
+        Persistent.states.overlay.notes.tabIndex = index;
+        GlobalStates.notesOpen = true;
+    }
+
+    /** Starts a countdown matching the event's remaining time (Focus action). */
+    function focusOnEvent() {
+        const event = root.event;
+        if (!event)
+            return;
+        const remainingMs = event.endDate.getTime() - DateTime.clock.date.getTime();
+        const minutes = Math.max(1, Math.ceil(remainingMs / 60000));
+        TimerService.addCountdown(minutes, Translation.tr("Focus") + " · " + String(event.content ?? "").slice(0, 40));
+    }
+
     function exceptionLabel(value) {
         const date = root.localCalendarDate(value);
         return isNaN(date.getTime()) ? String(value ?? "") : Qt.formatDate(date, "ddd, d MMM yyyy");
@@ -582,6 +643,53 @@ Item {
                 }
 
                 RippleButton {
+                    id: focusButton
+                    visible: root.mode === "details" && !root.sportsEvent
+                    implicitWidth: 38
+                    implicitHeight: 38
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                    onClicked: root.focusOnEvent()
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "timer"
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: focusButton.hovered
+                        text: Translation.tr("Start a countdown for the time left in this event")
+                    }
+                }
+
+                RippleButton {
+                    id: noteButton
+                    readonly property bool hasNote: root.attachedNoteIndex() >= 0
+                    visible: root.mode === "details" && !root.sportsEvent && !root.birthdayEvent
+                    implicitWidth: 38
+                    implicitHeight: 38
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                    onClicked: noteButton.hasNote ? root.openAttachedNote() : root.attachNote()
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: noteButton.hasNote ? "description" : "note_add"
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: noteButton.hasNote ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: noteButton.hovered
+                        text: noteButton.hasNote ? Translation.tr("Open attached note") : Translation.tr("Attach a note to this event")
+                    }
+                }
+
+                RippleButton {
                     implicitWidth: 38
                     implicitHeight: 38
                     buttonRadius: Appearance.rounding.full
@@ -675,6 +783,12 @@ Item {
                                     elide: Text.ElideRight
                                 }
                             }
+                        }
+
+                        DayBriefingCard {
+                            visible: !root.sportsListOnly && H.sameDate(root.day, DateTime.clock.date)
+                            day: root.day
+                            Layout.fillWidth: true
                         }
 
                         Repeater {

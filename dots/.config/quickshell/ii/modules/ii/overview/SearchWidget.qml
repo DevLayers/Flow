@@ -46,6 +46,21 @@ Item {
     // Left/Right stays available to edit the query unless the selected row is
     // one of the Settings controls that can consume a horizontal adjustment.
     property bool selectedResultHandlesHorizontalNavigation: false
+    property string actionFeedbackText: ""
+
+    function showActionFeedback(message) {
+        const text = String(message ?? "").trim();
+        if (text.length === 0)
+            return;
+        root.actionFeedbackText = text;
+        actionFeedbackTimer.restart();
+    }
+
+    Timer {
+        id: actionFeedbackTimer
+        interval: 3200
+        onTriggered: root.actionFeedbackText = ""
+    }
 
     function getFilteredResultsCount() {
         const results = LauncherSearch.results;
@@ -136,14 +151,21 @@ Item {
     readonly property var activePanelItem: {
         if (root.activePanelUsesHost)
             return registeredPanelHostLoader.item?.activeItem ?? null;
-        switch (root.activePanelId) {
-        case "clipboard": return clipboardPanelLoader.item;
-        case "bluetooth": return bluetoothPanelLoader.item;
-        case "translator": return translatorPanelLoader.item;
-        case "mediaDownloader": return mediaDownloaderPanelLoader.item;
-        case "materialSymbols": return materialSymbolsPanelLoader.item;
-        case "ai": return aiPanelLoader.item;
-        default: return null;
+        return root.activePanelId === "ai" ? aiPanelLoader.item : null;
+    }
+
+    // Legacy panels previously had bespoke Loaders and signal wiring. Hosted
+    // panels now share one lifecycle, while the active item's optional signals
+    // remain available without coupling SearchWidget to a concrete panel type.
+    Connections {
+        target: root.activePanelItem
+        ignoreUnknownSignals: true
+        function onRequestSetSearchQuery(query) {
+            const prefix = SearchPanelRegistry.prefixOf(root.activePanel);
+            root.setSearchingText(prefix + query);
+        }
+        function onRequestFocusSearchInput() {
+            root.focusSearchInput();
         }
     }
 
@@ -274,7 +296,12 @@ Item {
     }
     readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !root.isAnySpecialMode && root.searchingText === ""
     readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
-    property bool showResults: searchingText != "" || isAnySpecialMode || alwaysListAppsMode || (searchingText === "" && LauncherSearch.results.length > 0)
+    readonly property bool showIdleNowPlaying: searchingText === ""
+        && !isAnySpecialMode
+        && !alwaysListAppsMode
+        && Config.options.search.showNowPlayingBubble
+        && LauncherSearch.results.some(result => String(result?.key ?? "") === "mpris:now-playing")
+    property bool showResults: searchingText !== "" || isAnySpecialMode || alwaysListAppsMode || showIdleNowPlaying
     property string overviewPosition: (Config.options.bar?.bottom ? "bottom" : (Config.options.overview?.position ?? ""))
 
     // Re-enable item transitions after panel open animation completes
@@ -540,6 +567,9 @@ Item {
             root.exitAiMode();
             return true;
         }
+        if (root.activePanelItem && typeof root.activePanelItem.navigateBack === "function"
+                && root.activePanelItem.navigateBack())
+            return true;
         root.requestedPanelId = "";
         root.searchingText = "";
         LauncherSearch.query = "";
@@ -634,17 +664,114 @@ Item {
         LauncherSearch.query = text;
     }
 
+    function resultSection(item): var {
+        const key = String(item?.key ?? "");
+        if (key.startsWith("app:") || item?.type === Translation.tr("App Alias"))
+            return { id: "apps", label: Translation.tr("Applications"), icon: "apps" };
+        if (/^(setting:|panel:settings$|shortcut:openSettings$)/.test(key))
+            return { id: "settings", label: Translation.tr("Settings"), icon: "settings" };
+        if (/^(qtoggle:|bluetooth-device:|sys:|mode:)/.test(key))
+            return { id: "controls", label: Translation.tr("Controls"), icon: "tune" };
+        if (/^(panel:|keybind:|cheatsheet:|shortcut:)/.test(key))
+            return { id: "tools", label: Translation.tr("Search tools"), icon: "widgets" };
+        if (/^(file:|fsearch:|quicklink:|alias:|text-snippet:)/.test(key))
+            return { id: "content", label: Translation.tr("Files, links & text"), icon: "link" };
+        if (/^(cmd:shell|web:search|ai:ask|fallback:|math:)/.test(key))
+            return { id: "continue", label: Translation.tr("Continue with"), icon: "arrow_forward" };
+        if (/^(action:|snippet:|shell:|process:|generator:|sports:)/.test(key))
+            return { id: "actions", label: Translation.tr("Actions & shortcuts"), icon: "bolt" };
+        return { id: "other", label: Translation.tr("More results"), icon: "search" };
+    }
+
+    function sectionPresentation(sectionId: string): var {
+        switch (sectionId) {
+        case "best": return { label: Translation.tr("Best match"), icon: "stars" };
+        case "apps": return { label: Translation.tr("Applications"), icon: "apps" };
+        case "controls": return { label: Translation.tr("Controls"), icon: "tune" };
+        case "tools": return { label: Translation.tr("Search tools"), icon: "widgets" };
+        case "actions": return { label: Translation.tr("Actions & shortcuts"), icon: "bolt" };
+        case "content": return { label: Translation.tr("Files, links & text"), icon: "link" };
+        case "settings": return { label: Translation.tr("Settings"), icon: "settings" };
+        case "continue": return { label: Translation.tr("Continue with"), icon: "arrow_forward" };
+        default: return { label: Translation.tr("More results"), icon: "search" };
+        }
+    }
+
+    function organizeResults(results): var {
+        const query = root.searchingText.trim().toLocaleLowerCase();
+        const unique = [];
+        const seenKeys = new Set();
+        for (const item of results) {
+            if (!item)
+                continue;
+            const key = String(item.key ?? "");
+            if (key.length > 0 && seenKeys.has(key))
+                continue;
+            if (key.length > 0)
+                seenKeys.add(key);
+            unique.push(item);
+        }
+
+        // Applications are always the strongest result class. Only promote a
+        // command surface when no application matches, and never promote
+        // Settings: configuration discovery is useful, but intentionally
+        // secondary to things the user can launch or act on immediately.
+        let best = null;
+        const hasApplications = unique.some(item => root.resultSection(item).id === "apps");
+        if (!hasApplications && query.length >= 2) {
+            best = unique.find(item => {
+                const key = String(item?.key ?? "");
+                return key.startsWith("panel:") && key !== "panel:settings";
+            }) ?? null;
+            if (!best)
+                best = unique.find(item => item?.type === Translation.tr("App Alias") || String(item?.key ?? "").startsWith("quicklink:")) ?? null;
+        }
+
+        const definitions = [
+            { id: "apps", label: Translation.tr("Applications"), icon: "apps" },
+            { id: "controls", label: Translation.tr("Controls"), icon: "tune" },
+            { id: "tools", label: Translation.tr("Search tools"), icon: "widgets" },
+            { id: "actions", label: Translation.tr("Actions & shortcuts"), icon: "bolt" },
+            { id: "content", label: Translation.tr("Files, links & text"), icon: "link" },
+            { id: "other", label: Translation.tr("More results"), icon: "search" },
+            { id: "settings", label: Translation.tr("Settings"), icon: "settings" },
+            { id: "continue", label: Translation.tr("Continue with"), icon: "arrow_forward" }
+        ];
+        const groups = [];
+        if (best)
+            groups.push({ id: "best", label: Translation.tr("Best match"), icon: "stars", items: [best] });
+        for (const definition of definitions) {
+            const items = unique.filter(item => item !== best && root.resultSection(item).id === definition.id);
+            if (items.length > 0)
+                groups.push({ id: definition.id, label: definition.label, icon: definition.icon, items });
+        }
+
+        const organized = [];
+        for (const group of groups) {
+            for (let index = 0; index < group.items.length; index++) {
+                organized.push(Object.assign({}, group.items[index], {
+                    _searchSectionId: group.id,
+                    _searchSectionLabel: group.label,
+                    _searchSectionIcon: group.icon,
+                    _searchSectionStart: index === 0,
+                    _searchSectionEnd: index === group.items.length - 1,
+                    _searchSectionCount: group.items.length
+                }));
+            }
+        }
+        return organized;
+    }
+
     function processResults(results) {
         const q = LauncherSearch.query.trim().toLowerCase();
         const excludeMpris = Config.options.search.alwaysListApps || q !== "" || !Config.options.search.showNowPlayingBubble;
-        const out = [];
-        const limit = root.loadedResultsCount;
-        for (let i = 0; i < results.length && out.length < limit; i++) {
+        const filtered = [];
+        for (let i = 0; i < results.length; i++) {
             const item = results[i];
             if (item && (!excludeMpris || item.key !== "mpris:now-playing"))
-                out.push(item);
+                filtered.push(item);
         }
-        return out;
+        return root.organizeResults(filtered).slice(0, root.loadedResultsCount);
     }
 
     Keys.onPressed: event => {
@@ -805,7 +932,13 @@ Item {
                 return (root.activePanelItem?.implicitHeight ?? 520) + (root.isAiMode ? 16 : searchBar.height + searchBar.verticalPadding * 2 + bottomMargin);
             return gridLayout.implicitHeight;
         }
-        radius: root.isAiMode ? Appearance.rounding.verylarge : Appearance.rounding.windowRounding
+        // The collapsed field needs a pill; expanded content must use the same
+        // corner as the other shell windows. This switch is deliberately not
+        // animated: radius and height changing together creates a transient
+        // capsule/circle that covers the results.
+        radius: root.showResults
+            ? Appearance.rounding.windowRounding
+            : Appearance.rounding.verylarge
         color: GlobalStates.searchConnectActive ? "transparent"
              : (root.activePanel?.accent ? Appearance.colors.colBackgroundSurfaceContainerAccent
                                         : Appearance.colors.colBackgroundSurfaceContainer)
@@ -842,15 +975,6 @@ Item {
             }
         }
 
-        Behavior on radius {
-            enabled: !root.inNotchMode
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveSmall.duration
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-            }
-        }
-
         GridLayout {
             id: gridLayout
             anchors.left: parent.left
@@ -860,7 +984,7 @@ Item {
             anchors.rightMargin: (GlobalStates.searchConnectActive && !root.inNotchMode) ? 24 : 0
             anchors.top: parent.top
             columns: 1
-            rowSpacing: root.isAiMode ? 0 : 5
+            rowSpacing: 0
             clip: true
 
             SearchBar {
@@ -886,12 +1010,13 @@ Item {
                 clipboardMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
                 activePanelMode: root.isAnySpecialMode
                 activePanelQueryEmpty: root.activePanelQuery.trim().length === 0
-                supportsPanelSectionToggle: root.activePanelId === "settings"
+                supportsPanelSectionToggle: root.activePanelItem?.supportsSectionToggle === true
                 clipboardWidth: 830
                 currentResultIndex: appResults.currentIndex
-                isTranslatorPanelFocused: root.isTranslatorMode && translatorPanelLoader.item && translatorPanelLoader.item.focusedControlIndex !== -1
-                isMediaDownloaderPanelFocused: root.isMediaDownloaderMode && mediaDownloaderPanelLoader.item && mediaDownloaderPanelLoader.item.focusedControlIndex !== -1
-                isMaterialSymbolsPanelFocused: root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item && materialSymbolsPanelLoader.item.focusedControlIndex !== -1
+                selectedResultRef: LauncherSearch.selectedResult
+                isTranslatorPanelFocused: root.isTranslatorMode && root.activePanelItem && root.activePanelItem.focusedControlIndex !== -1
+                isMediaDownloaderPanelFocused: root.isMediaDownloaderMode && root.activePanelItem && root.activePanelItem.focusedControlIndex !== -1
+                isMaterialSymbolsPanelFocused: root.isMaterialSymbolsMode && root.activePanelItem && root.activePanelItem.focusedControlIndex !== -1
                 showSuggestionsPanel: root.showSuggestionsPanel
                 enabled: !root.isAiMode
                 opacity: root.isAiMode ? 0 : 1
@@ -939,8 +1064,7 @@ Item {
                 onHistoryPrevious: root.selectSearchHistory(1)
                 onHistoryNext: root.selectSearchHistory(-1)
                 onToggleFavorite: {
-                    const result = LauncherSearch.results[appResults.currentIndex];
-                    LauncherSearch.toggleFavorite(result);
+                    LauncherSearch.toggleFavorite(LauncherSearch.selectedResult);
                 }
 
                 onEscapeToSearch: {
@@ -1007,7 +1131,11 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: registeredPanelActive
                     ? (registeredPanelHostLoader.item?.implicitHeight ?? 0)
-                    : appResultsSurface.implicitHeight
+                    : (root.isAiMode
+                        ? (aiPanelLoader.item?.implicitHeight ?? 520) + Appearance.sizes.elevationMargin * 2
+                        : (root.showSuggestionsPanel
+                            ? (suggestionsPanelLoader.item?.implicitHeight ?? (Config.options.search.baseHeight ?? 500))
+                            : appResultsSurface.implicitHeight))
                 height: implicitHeight
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
@@ -1019,7 +1147,11 @@ Item {
                 readonly property bool resultsActive: root.showResults && !root.isAnySpecialMode
                 opacity: resultsActive ? 1.0 : 0.0
                 visible: opacity > 0.01
-                implicitHeight: root.showSkeletons ? searchSkeletons.implicitHeight + (GlobalStates.searchConnectActive ? 16 : 20) : Math.min(600, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin)
+                implicitHeight: !resultsActive
+                    ? 0
+                    : (root.showSkeletons
+                        ? searchSkeletons.implicitHeight + (GlobalStates.searchConnectActive ? 12 : 16)
+                        : Math.min(600, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin))
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -1052,11 +1184,44 @@ Item {
                         }
                     }
                     clip: true
-                    topMargin: 10
-                    bottomMargin: GlobalStates.searchConnectActive ? 16 : 10
+                    topMargin: 0
+                    bottomMargin: (GlobalStates.searchConnectActive ? 12 : 6)
+                        + (root.actionFeedbackText.length > 0 ? actionFeedbackBar.height + Appearance.sizes.elevationMargin / 2 : 0)
                     spacing: 2
                     KeyNavigation.up: searchBar
                     highlightMoveDuration: 100
+                    section.property: "sectionId"
+
+                    section.delegate: Item {
+                        id: sectionHeader
+                        required property string section
+                        width: appResults.width
+                        implicitHeight: 30
+
+                        RowLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.leftMargin: Appearance.sizes.elevationMargin + 6
+                            anchors.rightMargin: Appearance.sizes.elevationMargin + 6
+                            anchors.bottomMargin: 3
+                            spacing: 7
+
+                            MaterialSymbol {
+                                text: root.sectionPresentation(sectionHeader.section).icon
+                                iconSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.sectionPresentation(sectionHeader.section).label
+                                color: Appearance.colors.colOnSurfaceVariant
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.Medium
+                            }
+                        }
+                    }
 
                     layer.enabled: root.searchingText != "" && appResults.count > 0
                     layer.effect: OpacityMask {
@@ -1233,6 +1398,7 @@ Item {
                             if (currentIndex === -1) {
                                 resultModel.insert(newIndex, {
                                     key: item.key,
+                                    sectionId: String(item._searchSectionId ?? "other"),
                                     modelRef: item
                                 });
                                 currentKeys.splice(newIndex, 0, item.key);
@@ -1243,6 +1409,9 @@ Item {
                             }
 
                             const row = resultModel.get(newIndex);
+                            const sectionId = String(item._searchSectionId ?? "other");
+                            if (row.sectionId !== sectionId)
+                                resultModel.setProperty(newIndex, "sectionId", sectionId);
                             if (row.modelRef !== item)
                                 resultModel.setProperty(newIndex, "modelRef", item);
                         }
@@ -1310,6 +1479,11 @@ Item {
 
                     model: ListModel {
                         id: resultModel
+                        // Search rows intentionally carry heterogeneous result
+                        // objects (apps, panels, inline settings, files). Static
+                        // role inference locks `modelRef` to whichever shape is
+                        // inserted first and rejects later groups at runtime.
+                        dynamicRoles: true
                     }
 
                     Component.onCompleted: {
@@ -1387,7 +1561,10 @@ Item {
                                 listCurrentIndex: appResults.currentIndex
                                 // modelData is {key, modelRef} from ListModel — pass the actual result object
                                 entry: resultDelegate.modelData.modelRef
+                                isFirst: entry?._searchSectionStart ?? (listIndex === 0)
+                                isLast: entry?._searchSectionEnd ?? (listIndex === listCount - 1)
                                 query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
+                                onResultExecuted: feedbackText => root.showActionFeedback(feedbackText)
 
                                 Connections {
                                     target: root
@@ -1417,9 +1594,9 @@ Item {
                                     } else if (event.key === Qt.Key_Tab) {
                                         if (searchItem.actionPanelOpen)
                                             return;
-                                        if (LauncherSearch.results.length === 0)
+                                        if (!resultDelegate.modelData.modelRef)
                                             return;
-                                        const tabbedText = resultDelegate.modelData.name;
+                                        const tabbedText = resultDelegate.modelData.modelRef.name;
                                         LauncherSearch.query = tabbedText;
                                         searchBar.searchInput.text = tabbedText;
                                         event.accepted = true;
@@ -1477,6 +1654,49 @@ Item {
                     }
                 }
 
+                Rectangle {
+                    id: actionFeedbackBar
+                    z: 4
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.leftMargin: Appearance.sizes.elevationMargin
+                    anchors.rightMargin: Appearance.sizes.elevationMargin
+                    anchors.bottomMargin: Appearance.sizes.elevationMargin / 2
+                    implicitHeight: feedbackContent.implicitHeight + Appearance.sizes.elevationMargin
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colSecondaryContainer
+                    opacity: root.actionFeedbackText.length > 0 ? 1.0 : 0.0
+                    visible: opacity > 0.01
+
+                    transform: Translate {
+                        y: root.actionFeedbackText.length > 0 ? 0 : Appearance.sizes.elevationMargin
+                        Behavior on y {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                    }
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+
+                    RowLayout {
+                        id: feedbackContent
+                        anchors.centerIn: parent
+                        spacing: Appearance.sizes.elevationMargin / 2
+                        MaterialSymbol {
+                            text: "check_circle"
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: Appearance.colors.colOnSecondaryContainer
+                        }
+                        StyledText {
+                            text: root.actionFeedbackText
+                            color: Appearance.colors.colOnSecondaryContainer
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.Medium
+                        }
+                    }
+                }
+
                 ColumnLayout {
                     id: searchSkeletons
                     anchors.left: parent.left
@@ -1507,24 +1727,6 @@ Item {
                             radius: Appearance.rounding.small
                             color: Appearance.colors.colSurfaceContainerHigh
                             antialiasing: true
-
-                            // Shimmer animation with wave phase shift
-                            SequentialAnimation on opacity {
-                                loops: Animation.Infinite
-                                running: searchSkeletons.visible
-                                NumberAnimation {
-                                    from: 0.25
-                                    to: 0.65
-                                    duration: 600 + skeletonRow.index * 100
-                                    easing.type: Easing.InOutQuad
-                                }
-                                NumberAnimation {
-                                    from: 0.65
-                                    to: 0.25
-                                    duration: 600 + skeletonRow.index * 100
-                                    easing.type: Easing.InOutQuad
-                                }
-                            }
 
                             RowLayout {
                                 anchors.fill: parent
@@ -1583,11 +1785,108 @@ Item {
                         }
                     }
                 }
+
+                Loader {
+                    id: aiPanelLoader
+                    active: root.isAiMode || opacity > 0.01
+                    visible: opacity > 0.01
+                    anchors.fill: parent
+                    anchors.margins: Appearance.sizes.elevationMargin
+                    source: "AiChatPanel.qml"
+                    opacity: root.isAiMode ? 1.0 : 0.0
+
+                    transform: Translate {
+                        y: (1.0 - aiPanelLoader.opacity) * 16
+                    }
+                    layer.enabled: opacity > 0.001 && opacity < 0.999
+                    layer.effect: MultiEffect {
+                        blurEnabled: (1.0 - aiPanelLoader.opacity) > 0.001
+                        blurMax: 32.0
+                        blur: (1.0 - aiPanelLoader.opacity) * 0.5
+                    }
+                    Behavior on opacity {
+                        enabled: !root.inNotchMode
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+
+                    Connections {
+                        target: aiPanelLoader.item
+                        ignoreUnknownSignals: true
+                        function onRequestBackToSearch() {
+                            root.exitAiMode();
+                        }
+                        function onRequestFocusComposer() {
+                            if (aiPanelLoader.item && typeof aiPanelLoader.item.focusComposer === "function")
+                                aiPanelLoader.item.focusComposer();
+                        }
+                        function onRequestSendMessage(text) {
+                            root.sendAiMessage(text);
+                        }
+                        function onRequestContinueInSidebar() {
+                            root.continueInSidebar();
+                        }
+                    }
+
+                    Binding {
+                        target: aiPanelLoader.item
+                        property: "activeSurface"
+                        value: root.isAiMode
+                        when: aiPanelLoader.status === Loader.Ready
+                    }
+                    Binding {
+                        target: aiPanelLoader.item
+                        property: "searchHost"
+                        value: root
+                        when: aiPanelLoader.status === Loader.Ready
+                    }
+                }
+
+                Loader {
+                    id: suggestionsPanelLoader
+                    active: root.showSuggestionsPanel || opacity > 0.01
+                    visible: opacity > 0.01
+                    anchors.fill: parent
+                    source: "SuggestionsPanel.qml"
+                    opacity: root.showSuggestionsPanel ? 1.0 : 0.0
+
+                    transform: Translate {
+                        y: (1.0 - suggestionsPanelLoader.opacity) * -16
+                    }
+                    layer.enabled: opacity > 0.001 && opacity < 0.999
+                    layer.effect: MultiEffect {
+                        blurEnabled: (1.0 - suggestionsPanelLoader.opacity) > 0.001
+                        blurMax: 32.0
+                        blur: (1.0 - suggestionsPanelLoader.opacity) * 0.5
+                    }
+                    Behavior on opacity {
+                        enabled: !root.inNotchMode
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+                }
             }
+
+            // Kept temporarily as an inert compatibility bundle while the
+            // unified SearchPanelHost owns every non-AI panel. Wrapping the
+            // old delegates prevents multiple direct children from claiming
+            // the same GridLayout cell during hot reloads.
+            Item {
+                visible: false
+                enabled: false
+                implicitWidth: 0
+                implicitHeight: 0
+                Layout.row: 2
 
             Loader {
                 id: clipboardPanelLoader
-                active: root.isClipboardMode || opacity > 0.01
+                active: false
                 visible: opacity > 0.01
                 Layout.fillWidth: true
                 Layout.preferredHeight: (root.isClipboardMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
@@ -1624,7 +1923,7 @@ Item {
 
             Loader {
                 id: bluetoothPanelLoader
-                active: root.isBluetoothMode || opacity > 0.01
+                active: false
                 visible: opacity > 0.01
                 Layout.fillWidth: true
                 Layout.preferredHeight: (root.isBluetoothMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
@@ -1661,7 +1960,7 @@ Item {
 
             Loader {
                 id: translatorPanelLoader
-                active: root.isTranslatorMode || opacity > 0.01
+                active: false
                 visible: opacity > 0.01
                 Layout.fillWidth: true
                 Layout.preferredHeight: (root.isTranslatorMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
@@ -1709,7 +2008,7 @@ Item {
 
             Loader {
                 id: mediaDownloaderPanelLoader
-                active: root.isMediaDownloaderMode || opacity > 0.01
+                active: false
                 visible: opacity > 0.01
                 Layout.fillWidth: true
                 Layout.preferredHeight: (root.isMediaDownloaderMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
@@ -1746,7 +2045,7 @@ Item {
 
             Loader {
                 id: materialSymbolsPanelLoader
-                active: root.isMaterialSymbolsMode || opacity > 0.01
+                active: false
                 visible: opacity > 0.01
                 Layout.preferredWidth: 380
                 Layout.alignment: Qt.AlignHCenter
@@ -1783,8 +2082,8 @@ Item {
             }
 
             Loader {
-                id: aiPanelLoader
-                active: root.isAiMode || opacity > 0.01
+                id: legacyAiPanelLoader
+                active: false
                 visible: opacity > 0.01
                 Layout.fillWidth: true
                 Layout.leftMargin: 8
@@ -1798,7 +2097,7 @@ Item {
 
                 opacity: root.isAiMode ? 1.0 : 0.0
                 transform: Translate {
-                    y: (1.0 - aiPanelLoader.opacity) * 16
+                    y: (1.0 - legacyAiPanelLoader.opacity) * 16
                 }
                 layer.enabled: opacity > 0.001 && opacity < 0.999
                 layer.effect: MultiEffect {
@@ -1816,14 +2115,14 @@ Item {
                 }
 
                 Connections {
-                    target: aiPanelLoader.item
+                    target: legacyAiPanelLoader.item
                     ignoreUnknownSignals: true
                     function onRequestBackToSearch() {
                         root.exitAiMode();
                     }
                     function onRequestFocusComposer() {
-                        if (aiPanelLoader.item && typeof aiPanelLoader.item.focusComposer === "function")
-                            aiPanelLoader.item.focusComposer();
+                        if (legacyAiPanelLoader.item && typeof legacyAiPanelLoader.item.focusComposer === "function")
+                            legacyAiPanelLoader.item.focusComposer();
                     }
                     function onRequestSendMessage(text) {
                         root.sendAiMessage(text);
@@ -1834,10 +2133,10 @@ Item {
                 }
 
                 Binding {
-                    target: aiPanelLoader.item
+                    target: legacyAiPanelLoader.item
                     property: "activeSurface"
                     value: root.isAiMode
-                    when: aiPanelLoader.status === Loader.Ready
+                    when: legacyAiPanelLoader.status === Loader.Ready
                 }
 
                 // The panel remains reusable on its own, but when hosted by
@@ -1845,16 +2144,16 @@ Item {
                 // This avoids a Loader signal being the only path back to the
                 // normal search surface.
                 Binding {
-                    target: aiPanelLoader.item
+                    target: legacyAiPanelLoader.item
                     property: "searchHost"
                     value: root
-                    when: aiPanelLoader.status === Loader.Ready
+                    when: legacyAiPanelLoader.status === Loader.Ready
                 }
             }
 
             Loader {
-                id: suggestionsPanelLoader
-                active: root.showSuggestionsPanel || opacity > 0.01
+                id: legacySuggestionsPanelLoader
+                active: false
                 visible: opacity > 0.01
                 Layout.fillWidth: true
                 Layout.preferredHeight: (root.showSuggestionsPanel || opacity > 0.01) ? (item ? item.implicitHeight : (Config.options.search.baseHeight ?? 500)) : 0
@@ -1864,7 +2163,7 @@ Item {
 
                 opacity: root.showSuggestionsPanel ? 1.0 : 0.0
                 transform: Translate {
-                    y: (1.0 - suggestionsPanelLoader.opacity) * -16
+                    y: (1.0 - legacySuggestionsPanelLoader.opacity) * -16
                 }
                 layer.enabled: opacity > 0.001 && opacity < 0.999
                 layer.effect: MultiEffect {
@@ -1881,6 +2180,8 @@ Item {
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
                 }
+            }
+
             }
 
             // Service lifecycle: activate/deactivate with mode

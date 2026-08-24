@@ -13,12 +13,15 @@ Item {
     property string searchQuery: ""
     property int selectedIndex: 0
     property int tagIndex: 0
+    property string noticeText: ""
 
     readonly property var tags: [""].concat(CommandsService.allTags())
     readonly property string activeTag: root.tags[Math.max(0, Math.min(root.tagIndex, root.tags.length - 1))] ?? ""
     readonly property var rows: root.filteredCommands()
     readonly property var selectedCommand: root.selectedIndex >= 0 && root.selectedIndex < root.rows.length ? root.rows[root.selectedIndex] : null
-    readonly property string statusText: root.selectedCommand
+    readonly property string statusText: root.noticeText.length > 0
+        ? root.noticeText
+        : root.selectedCommand
         ? String(root.selectedCommand.command ?? "")
         : Translation.tr("%1 commands").arg(String(root.rows.length))
 
@@ -92,6 +95,7 @@ Item {
         if (!root.selectedCommand)
             return false;
         Quickshell.clipboardText = root.selectedCommand.command;
+        root.showNotice(Translation.tr("Command copied to clipboard"));
         return true;
     }
 
@@ -101,7 +105,13 @@ Item {
         if (!root.selectedCommand?.command)
             return false;
         Quickshell.execDetached(["bash", "-lc", root.selectedCommand.command]);
+        root.showNotice(Translation.tr("Command started"));
         return true;
+    }
+
+    function showNotice(message) {
+        root.noticeText = String(message ?? "");
+        noticeTimer.restart();
     }
 
     function focusInput(): bool { return false; }
@@ -109,6 +119,12 @@ Item {
     onRowsChanged: root.clampSelection()
     onTagsChanged: root.clampSelection()
     onSearchQueryChanged: root.selectedIndex = 0
+
+    Timer {
+        id: noticeTimer
+        interval: 3200
+        onTriggered: root.noticeText = ""
+    }
 
     SearchPanelScaffold {
         id: scaffold
@@ -143,8 +159,8 @@ Item {
                         implicitHeight: tagLabel.implicitHeight + Appearance.sizes.elevationMargin
                         buttonRadius: Appearance.rounding.full
                         colBackground: root.activeTag === modelData ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: root.activeTag === modelData ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighHover
-                        colRipple: root.activeTag === modelData ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighActive
+                        colBackgroundHover: root.activeTag === modelData ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
+                        colRipple: root.activeTag === modelData ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
                         onClicked: { root.tagIndex = index; root.selectedIndex = 0; }
 
                         StyledText {
@@ -173,8 +189,8 @@ Item {
                     implicitHeight: commandContent.implicitHeight + Appearance.sizes.elevationMargin * 2
                     buttonRadius: Appearance.rounding.normal
                     colBackground: root.selectedIndex === index ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-                    colBackgroundHover: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighHover
-                    colRipple: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighActive
+                    colBackgroundHover: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
+                    colRipple: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
                     onClicked: { root.selectedIndex = index; root.copySelected(); }
 
                     RowLayout {
@@ -197,7 +213,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: modelData.command
                                 elide: Text.ElideRight
-                                font.family: Appearance.font.family.mono
+                                font.family: Appearance.font.family.monospace
                                 color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                             }
 

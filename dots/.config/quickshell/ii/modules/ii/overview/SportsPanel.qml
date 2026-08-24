@@ -12,14 +12,19 @@ Item {
     property string searchQuery: ""
     property int selectedIndex: 0
     property bool subscribed: false
+    property string noticeText: ""
 
     readonly property var rows: root.filteredGames()
     readonly property var selectedGame: root.selectedIndex >= 0 && root.selectedIndex < root.rows.length ? root.rows[root.selectedIndex] : null
-    readonly property string statusText: root.selectedGame
-        ? String(root.selectedGame.name ?? "") + " · " + String(root.selectedGame.status ?? "")
-        : (SportsService.searchLoading ? Translation.tr("Loading today’s games…") : Translation.tr("%1 games today").arg(String(root.rows.length)))
+    readonly property string statusText: root.noticeText.length > 0
+        ? root.noticeText
+        : (SportsService.searchLoading
+            ? Translation.tr("Loading today’s games…")
+            : (SportsService.searchError.length > 0
+                ? SportsService.searchError
+                : Translation.tr("%1 games today").arg(String(root.rows.length))))
 
-    implicitWidth: 720
+    implicitWidth: Config.options.search.appearance.panelWidth
     implicitHeight: scaffold.implicitHeight
 
     function filteredGames() {
@@ -33,30 +38,26 @@ Item {
                 return false;
             if (query.length === 0)
                 return true;
-            return [game?.name, game?.league, game?.home?.name, game?.away?.name, game?.status].join(" ").toLocaleLowerCase().includes(query);
+            return [game?.name, game?.league, game?.home?.name, game?.away?.name, game?.status]
+                .join(" ").toLocaleLowerCase().includes(query);
         }).sort((left, right) => new Date(left?.date) - new Date(right?.date));
     }
 
     function clampSelection() {
         root.selectedIndex = root.rows.length === 0 ? -1 : Math.max(0, Math.min(root.selectedIndex, root.rows.length - 1));
     }
-
     function navigateUp(): bool {
-        if (root.selectedIndex <= 0)
-            return false;
-        root.selectedIndex--;
+        if (root.selectedIndex > 0)
+            root.selectedIndex--;
         gamesList.positionViewAtIndex(root.selectedIndex, ListView.Contain);
         return true;
     }
-
     function navigateDown(): bool {
-        if (root.selectedIndex < 0 || root.selectedIndex >= root.rows.length - 1)
-            return false;
-        root.selectedIndex++;
+        if (root.selectedIndex >= 0 && root.selectedIndex < root.rows.length - 1)
+            root.selectedIndex++;
         gamesList.positionViewAtIndex(root.selectedIndex, ListView.Contain);
         return true;
     }
-
     function activateSelected(): bool {
         if (!root.selectedGame)
             return false;
@@ -67,33 +68,36 @@ Item {
         } else {
             SportsService.currentGame = root.selectedGame;
         }
+        root.showNotice(Translation.tr("Selected %1").arg(String(root.selectedGame.name ?? Translation.tr("game"))));
         return true;
     }
-
     function createFromQuery(): bool {
         if (!root.selectedGame?.date)
             return false;
         const seconds = Math.floor((new Date(root.selectedGame.date).getTime() - Date.now()) / 1000) - 600;
-        if (seconds <= 0)
+        if (seconds <= 0) {
+            root.showNotice(Translation.tr("This game has already started"));
             return false;
-        TimerService.addCountdown(Math.max(1, Math.ceil(seconds / 60)), String(root.selectedGame.name ?? Translation.tr("Game")));
+        }
+        const minutes = Math.max(1, Math.ceil(seconds / 60));
+        const countdown = TimerService.addCountdown(minutes, String(root.selectedGame.name ?? Translation.tr("Game")));
+        if (!countdown)
+            return false;
+        root.showNotice(Translation.tr("Reminder set for 10 minutes before kickoff"));
         return true;
     }
-
     function focusInput(): bool { return false; }
+    function showNotice(message) {
+        root.noticeText = String(message ?? "");
+        noticeTimer.restart();
+    }
 
     onRowsChanged: root.clampSelection()
     onSearchQueryChanged: root.selectedIndex = 0
+    Component.onCompleted: { SportsService.acquireSearchSubscriber(); root.subscribed = true; }
+    Component.onDestruction: if (root.subscribed) SportsService.releaseSearchSubscriber()
 
-    Component.onCompleted: {
-        SportsService.acquireSearchSubscriber();
-        root.subscribed = true;
-    }
-
-    Component.onDestruction: {
-        if (root.subscribed)
-            SportsService.releaseSearchSubscriber();
-    }
+    Timer { id: noticeTimer; interval: 3200; onTriggered: root.noticeText = "" }
 
     SearchPanelScaffold {
         id: scaffold
@@ -110,6 +114,7 @@ Item {
             id: gamesList
             width: parent.width
             height: parent.height
+            visible: root.rows.length > 0
             clip: true
             spacing: Appearance.sizes.elevationMargin / 2
             model: root.rows
@@ -119,11 +124,12 @@ Item {
                 required property var modelData
                 width: gamesList.width
                 implicitHeight: gameContent.implicitHeight + Appearance.sizes.elevationMargin * 2
-                buttonRadius: Appearance.rounding.normal
+                buttonRadius: root.selectedIndex === index ? Appearance.rounding.large : Appearance.rounding.normal
                 colBackground: root.selectedIndex === index ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-                colBackgroundHover: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighHover
-                colRipple: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighActive
-                onClicked: { root.selectedIndex = index; root.activateSelected(); }
+                colBackgroundHover: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
+                colRipple: root.selectedIndex === index ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
+                onClicked: root.selectedIndex = index
+                onDoubleClicked: root.activateSelected()
 
                 RowLayout {
                     id: gameContent
@@ -131,42 +137,165 @@ Item {
                     anchors.margins: Appearance.sizes.elevationMargin
                     spacing: Appearance.sizes.elevationMargin
 
-                    MaterialSymbol {
-                        text: modelData.state === "in" ? "sensors" : "sports_soccer"
-                        iconSize: Appearance.font.pixelSize.normal
-                        color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colPrimary
-                    }
-
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 0
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: String(modelData.home?.name ?? "") + " " + String(modelData.home?.score ?? "") + " × " + String(modelData.away?.score ?? "") + " " + String(modelData.away?.name ?? "")
-                            elide: Text.ElideRight
-                            color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                        spacing: Appearance.sizes.elevationMargin / 2
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            implicitWidth: Appearance.sizes.elevationMargin * 4
+                            implicitHeight: implicitWidth
+                            radius: Appearance.rounding.normal
+                            color: Appearance.colors.colSurfaceContainerHighest
+                            StyledImage {
+                                anchors.centerIn: parent
+                                width: parent.width - Appearance.sizes.elevationMargin
+                                height: width
+                                source: String(modelData.home?.logo ?? "")
+                                fillMode: Image.PreserveAspectFit
+                            }
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                visible: String(modelData.home?.logo ?? "").length === 0
+                                text: "shield"
+                                iconSize: Appearance.font.pixelSize.large
+                                color: Appearance.colors.colPrimary
+                            }
                         }
                         StyledText {
                             Layout.fillWidth: true
-                            text: String(modelData.league ?? "") + " · " + String(modelData.status ?? "")
+                            text: String(modelData.home?.name ?? Translation.tr("Home"))
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
+                            font.weight: Font.DemiBold
+                            color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.preferredWidth: parent.width / 3
+                        spacing: Appearance.sizes.elevationMargin / 2
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            implicitWidth: scoreText.implicitWidth + Appearance.sizes.elevationMargin * 2
+                            implicitHeight: scoreText.implicitHeight + Appearance.sizes.elevationMargin
+                            radius: Appearance.rounding.full
+                            color: modelData.state === "in" ? Appearance.colors.colErrorContainer : Appearance.colors.colSecondaryContainer
+                            StyledText {
+                                id: scoreText
+                                anchors.centerIn: parent
+                                text: modelData.state === "pre"
+                                    ? Qt.formatTime(new Date(modelData.date), Config.options.time.format)
+                                    : String(modelData.home?.score ?? "0") + "  ×  " + String(modelData.away?.score ?? "0")
+                                font.family: Appearance.font.family.monospace
+                                font.pixelSize: Appearance.font.pixelSize.large
+                                font.weight: Font.DemiBold
+                                color: modelData.state === "in" ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer
+                            }
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: String(modelData.status ?? "")
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: String(modelData.league ?? "")
+                            horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
                         }
                     }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Appearance.sizes.elevationMargin / 2
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            implicitWidth: Appearance.sizes.elevationMargin * 4
+                            implicitHeight: implicitWidth
+                            radius: Appearance.rounding.normal
+                            color: Appearance.colors.colSurfaceContainerHighest
+                            StyledImage {
+                                anchors.centerIn: parent
+                                width: parent.width - Appearance.sizes.elevationMargin
+                                height: width
+                                source: String(modelData.away?.logo ?? "")
+                                fillMode: Image.PreserveAspectFit
+                            }
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                visible: String(modelData.away?.logo ?? "").length === 0
+                                text: "shield"
+                                iconSize: Appearance.font.pixelSize.large
+                                color: Appearance.colors.colTertiary
+                            }
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: String(modelData.away?.name ?? Translation.tr("Away"))
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
+                            font.weight: Font.DemiBold
+                            color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                        }
+                    }
                 }
             }
+        }
 
+        ColumnLayout {
+            anchors.centerIn: parent
+            visible: root.rows.length === 0
+            spacing: Appearance.sizes.elevationMargin
+            MaterialLoadingIndicator {
+                Layout.alignment: Qt.AlignHCenter
+                visible: SportsService.searchLoading
+                implicitWidth: Appearance.sizes.elevationMargin * 4
+                implicitHeight: implicitWidth
+            }
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                visible: !SportsService.searchLoading
+                implicitWidth: Appearance.sizes.elevationMargin * 6
+                implicitHeight: implicitWidth
+                radius: Appearance.rounding.full
+                color: SportsService.searchError.length > 0 ? Appearance.colors.colErrorContainer : Appearance.colors.colSecondaryContainer
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: SportsService.searchError.length > 0 ? "cloud_off" : "sports_score"
+                    iconSize: Appearance.font.pixelSize.huge
+                    color: SportsService.searchError.length > 0 ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer
+                }
+            }
             StyledText {
-                anchors.centerIn: parent
-                visible: root.rows.length === 0
+                Layout.alignment: Qt.AlignHCenter
                 text: SportsService.searchLoading
-                    ? Translation.tr("Loading today’s games…")
-                    : (SportsService.searchError.length > 0
-                        ? SportsService.searchError
-                        : Translation.tr("No games today"))
+                    ? Translation.tr("Checking today’s scoreboards…")
+                    : (SportsService.searchError.length > 0 ? SportsService.searchError : Translation.tr("No games today"))
+                horizontalAlignment: Text.AlignHCenter
+                color: Appearance.colors.colOnSurface
+            }
+            StyledText {
+                Layout.alignment: Qt.AlignHCenter
+                visible: !SportsService.searchLoading && SportsService.searchError.length === 0
+                text: Translation.tr("There are no scheduled games in your selected leagues")
                 color: Appearance.colors.colSubtext
+            }
+            RippleButton {
+                Layout.alignment: Qt.AlignHCenter
+                visible: !SportsService.searchLoading && SportsService.searchError.length > 0
+                implicitWidth: retryLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
+                implicitHeight: Appearance.sizes.elevationMargin * 3
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colErrorContainer
+                colBackgroundHover: Appearance.colors.colErrorContainerHover
+                colRipple: Appearance.colors.colErrorContainerActive
+                onClicked: SportsService.fetchSearchGamesForToday()
+                StyledText { id: retryLabel; anchors.centerIn: parent; text: Translation.tr("Try again"); color: Appearance.colors.colOnErrorContainer }
             }
         }
     }

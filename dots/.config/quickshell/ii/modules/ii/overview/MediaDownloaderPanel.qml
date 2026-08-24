@@ -1586,7 +1586,7 @@ Item {
                 implicitHeight: 48
                 buttonRadius: Appearance.rounding.large
                 colBackground: Appearance.colors.colSurfaceContainerHigh
-                colBackgroundHover: Appearance.colors.colSurfaceContainerHighHover
+                colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                 colRipple: Appearance.colors.colPrimary
 
                 HoverHandler { cursorShape: Qt.PointingHandCursor }

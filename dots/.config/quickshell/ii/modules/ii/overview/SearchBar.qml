@@ -23,15 +23,13 @@ RowLayout {
     property alias searchInput: searchInput
     property string searchingText
     property int currentResultIndex: 0
+    property var selectedResultRef: null
     property bool isTranslatorPanelFocused: false
     property bool isMediaDownloaderPanelFocused: false
     property bool isMaterialSymbolsPanelFocused: false
     property bool showSuggestionsPanel: false
     readonly property bool selectedResultSupportsHorizontalNavigation: {
-        const results = LauncherSearch.results;
-        if (root.currentResultIndex < 0 || root.currentResultIndex >= results.length)
-            return false;
-        const type = String(results[root.currentResultIndex]?.settingRef?.type ?? "");
+        const type = String(root.selectedResultRef?.settingRef?.type ?? "");
         return type === "bool" || type === "int" || type === "real" || type === "enum";
     }
     // True while the overview search widget is in AI chat mode — the field
@@ -175,7 +173,6 @@ RowLayout {
         Layout.alignment: Qt.AlignVCenter
         iconSize: Appearance.font.pixelSize.huge
         opacity: 1.0
-        scale: 1.0
 
         property string _lastText: ""
         property bool _initialized: false
@@ -230,31 +227,13 @@ RowLayout {
 
         SequentialAnimation {
             id: iconTransitionAnim
-            ParallelAnimation {
-                NumberAnimation {
-                    target: searchIcon
-                    property: "rotation"
-                    from: 0
-                    to: 360
-                    duration: Appearance.animation.elementMove.duration
-                    easing.type: Easing.OutBack
-                }
-                SequentialAnimation {
-                    NumberAnimation {
-                        target: searchIcon
-                        property: "scale"
-                        to: 0.75
-                        duration: Appearance.animation.elementMove.duration / 2
-                        easing.type: Easing.InQuad
-                    }
-                    NumberAnimation {
-                        target: searchIcon
-                        property: "scale"
-                        to: 1.0
-                        duration: Appearance.animation.elementMove.duration / 2
-                        easing.type: Easing.OutBack
-                    }
-                }
+            NumberAnimation {
+                target: searchIcon
+                property: "rotation"
+                from: 0
+                to: 360
+                duration: Appearance.animation.elementMove.duration
+                easing.type: Easing.OutBack
             }
         }
 
@@ -360,7 +339,9 @@ RowLayout {
         placeholderText: root.aiModeActive ? Translation.tr("Message the model — Esc to go back") : Translation.tr("Search, calculate or run")
 
         // Placeholder fades smoothly when text is entered or mode changes
-        placeholderTextColor: (root.searchingText === "" && !root.clipboardMode) ? Appearance.colors.colSubtext : Qt.rgba(Appearance.colors.colSubtext.r, Appearance.colors.colSubtext.g, Appearance.colors.colSubtext.b, 0)
+        placeholderTextColor: (root.searchingText === "" && !root.clipboardMode)
+            ? Appearance.colors.colSubtext
+            : ColorUtils.transparentize(Appearance.colors.colSubtext)
 
         Behavior on placeholderTextColor {
             ColorAnimation {
@@ -569,12 +550,10 @@ RowLayout {
                 }
             }
             if (event.key === Qt.Key_Tab) {
-                if (LauncherSearch.results.length === 0)
+                if (!root.selectedResultRef)
                     return;
 
-                // Get the result at the active keyboard-navigated index
-                const activeIndex = (root.currentResultIndex >= 0 && root.currentResultIndex < LauncherSearch.results.length) ? root.currentResultIndex : 0;
-                const activeResult = LauncherSearch.results[activeIndex];
+                const activeResult = root.selectedResultRef;
                 if (!activeResult)
                     return;
                 const prefix = Config.options.search.prefix.fileBrowser;
