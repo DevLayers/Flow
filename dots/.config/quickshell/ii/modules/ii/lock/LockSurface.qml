@@ -271,7 +271,7 @@ MouseArea {
             Layout.rightMargin: 2
             Layout.fillHeight: true
             Layout.preferredWidth: height
-            active: root.context.fingerprintsConfigured
+            active: root.context.fingerprintIndicatorVisible
             visible: active
 
             sourceComponent: Rectangle {
@@ -281,7 +281,10 @@ MouseArea {
 
                 readonly property int triesLeft: root.context.fingerprintTriesLeft
                 readonly property bool exhausted: triesLeft === 0
-                readonly property color colContent: (failureFlash || exhausted) ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
+                // The reader is gone or has stopped answering. Say so rather
+                // than leaving a live-looking icon over a dead sensor.
+                readonly property bool unavailable: root.context.fingerprintUnavailable
+                readonly property color colContent: unavailable ? Appearance.colors.colOutline : (failureFlash || exhausted) ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
                 property bool failureFlash: false
 
                 Connections {
@@ -316,10 +319,10 @@ MouseArea {
                     MaterialSymbol {
                         Layout.alignment: Qt.AlignHCenter
                         fill: 1
-                        text: "fingerprint"
+                        text: fingerprintStatus.unavailable ? "fingerprint_off" : "fingerprint"
                         iconSize: Appearance.font.pixelSize.hugeass
                         color: fingerprintStatus.colContent
-                        opacity: fingerprintStatus.exhausted ? 0.5 : 1
+                        opacity: (fingerprintStatus.exhausted || fingerprintStatus.unavailable) ? 0.5 : 1
                         Behavior on color {
                             ColorAnimation { duration: 200 }
                         }
@@ -331,6 +334,9 @@ MouseArea {
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 3
+                        // Remaining attempts mean nothing against a reader that
+                        // is not answering.
+                        visible: !fingerprintStatus.unavailable
                         Repeater {
                             model: root.context.fingerprintMaxTries
                             Rectangle {

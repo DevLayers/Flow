@@ -3320,6 +3320,14 @@ Singleton {
                 property JsonObject security: JsonObject {
                     property bool unlockKeyring: true
                     property bool requirePasswordToPower: false
+                    property JsonObject fingerprint: JsonObject {
+                        // Default on so an existing setup with enrolled prints keeps
+                        // unlocking by finger exactly as it did before the toggle existed.
+                        property bool enable: true
+                        property bool showIndicator: true
+                        // [{ finger: "right-index-finger", label: "Trigger finger" }]
+                        property list<var> labels: []
+                    }
                 }
                 property bool materialShapeChars: true
                 property bool rippleEffect: true
